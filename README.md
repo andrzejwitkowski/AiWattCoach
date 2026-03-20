@@ -32,6 +32,8 @@ The backend loads `.env` automatically from the repo root during local startup.
 ## CI
 
 GitHub Actions runs:
+- `cargo fmt -- --check`
+- `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test`
 - `docker build -t aiwattcoach:ci .`
 
