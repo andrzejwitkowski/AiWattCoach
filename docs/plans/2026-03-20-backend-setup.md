@@ -79,7 +79,6 @@ Expected: test fails because the settings loader has not been implemented yet.
 - Create: `src/adapters/mongo/mod.rs`
 - Create: `src/adapters/mongo/client.rs`
 - Create: `src/domain/mod.rs`
-- Create: `src/domain/system/mod.rs`
 
 **Step 1: Implement settings loader and app state**
 
