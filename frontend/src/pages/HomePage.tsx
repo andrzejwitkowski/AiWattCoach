@@ -1,18 +1,12 @@
 import type { BackendStatus } from '../lib/api/system';
+import { getStatusPanelClass } from '../lib/statusUi';
 
 type HomePageProps = {
   backendStatus: BackendStatus;
 };
 
 export function HomePage({ backendStatus }: HomePageProps) {
-  const statusPanelClass =
-    backendStatus.state === 'online'
-      ? 'border-cyan-300/20 bg-cyan-300/10'
-      : backendStatus.state === 'degraded'
-        ? 'border-amber-300/25 bg-amber-300/12'
-        : backendStatus.state === 'loading'
-          ? 'border-slate-300/15 bg-slate-300/10'
-          : 'border-rose-300/25 bg-rose-300/12';
+  const statusPanelClass = getStatusPanelClass(backendStatus.state);
 
   return (
     <section className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">

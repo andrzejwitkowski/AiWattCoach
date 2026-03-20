@@ -11,7 +11,7 @@ afterEach(() => {
 
 describe('loadBackendStatus', () => {
   it('loads health and readiness payloads from the backend API', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>()
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ status: 'ok', service: 'AiWattCoach' }), {
           status: 200,
@@ -38,7 +38,7 @@ describe('loadBackendStatus', () => {
   });
 
   it('keeps degraded readiness as degraded instead of offline', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>()
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ status: 'ok', service: 'AiWattCoach' }), {
           status: 200,

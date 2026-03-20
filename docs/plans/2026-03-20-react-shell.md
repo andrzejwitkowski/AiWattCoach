@@ -1,6 +1,6 @@
 # React Shell Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Note: This implementation plan is meant to be followed task-by-task and kept current as the work evolves.
 
 **Goal:** Add a separate React frontend with a minimal shell, a settings entry point, and a real connection to the Rust backend health endpoints.
 
@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Save planning artifacts
+## Task 1: Save planning artifacts
 
 **Files:**
 - Create: `docs/plans/2026-03-20-react-shell-design.md`
@@ -24,7 +24,7 @@ Expected: the design exists in `docs/plans/` and explains the split frontend/bac
 
 Expected: the plan exists in `docs/plans/` and lists concrete frontend, integration, and verification tasks.
 
-### Task 2: Scaffold the frontend workspace
+## Task 2: Scaffold the frontend workspace
 
 **Files:**
 - Create: `frontend/package.json`
@@ -41,7 +41,7 @@ Expected: `frontend/` builds as an independent Bun + Vite React app.
 
 Expected: the frontend can run tests and Tailwind styles.
 
-### Task 3: Write failing frontend tests
+## Task 3: Write failing frontend tests
 
 **Files:**
 - Create: `frontend/src/app/AppShell.test.tsx`
@@ -49,15 +49,15 @@ Expected: the frontend can run tests and Tailwind styles.
 
 **Step 1: Write a failing shell test**
 
-Run: `bun --cwd frontend test`
+Run: `bun run --cwd frontend test`
 Expected: FAIL because the application shell and backend status UI do not exist yet.
 
 **Step 2: Write a failing API client test**
 
-Run: `bun --cwd frontend test`
+Run: `bun run --cwd frontend test`
 Expected: FAIL because the health client and parsing logic do not exist yet.
 
-### Task 4: Implement the minimal frontend shell
+## Task 4: Implement the minimal frontend shell
 
 **Files:**
 - Create: `frontend/src/main.tsx`
@@ -75,7 +75,7 @@ Expected: the app renders a responsive shell with home and settings entry points
 
 Expected: the app uses Tailwind styling and looks intentional on desktop and mobile.
 
-### Task 5: Implement backend connectivity
+## Task 5: Implement backend connectivity
 
 **Files:**
 - Create: `frontend/src/config/env.ts`
@@ -90,7 +90,7 @@ Expected: the frontend resolves the backend base URL from environment safely.
 
 Expected: the frontend loads backend status from the real Rust API.
 
-### Task 6: Integrate repo workflows
+## Task 6: Integrate repo workflows
 
 **Files:**
 - Modify: `README.md`
@@ -109,7 +109,7 @@ Expected: `bun test:all` runs repo-level verification that includes backend and 
 
 Expected: CI verifies frontend install, tests, and build in addition to the Rust checks.
 
-### Task 7: Run final verification
+## Task 7: Run final verification
 
 **Files:**
 - Verify: `frontend/src/app/AppShell.test.tsx`
@@ -118,12 +118,12 @@ Expected: CI verifies frontend install, tests, and build in addition to the Rust
 
 **Step 1: Run frontend tests**
 
-Run: `bun --cwd frontend test`
+Run: `bun run --cwd frontend test`
 Expected: PASS
 
 **Step 2: Run frontend build**
 
-Run: `bun --cwd frontend build`
+Run: `bun run --cwd frontend build`
 Expected: PASS
 
 **Step 3: Run backend tests**
@@ -133,5 +133,5 @@ Expected: PASS
 
 **Step 4: Run repo-level verification**
 
-Run: `bun test:all`
+Run: `bun run test:all`
 Expected: PASS

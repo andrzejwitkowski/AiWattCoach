@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { normalizeApiBaseUrl } from './env';
+import { getApiBaseUrl, normalizeApiBaseUrl } from './env';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe('normalizeApiBaseUrl', () => {
   it('defaults to same-origin when no override is provided', () => {
@@ -17,5 +22,13 @@ describe('normalizeApiBaseUrl', () => {
     expect(() => normalizeApiBaseUrl('api')).toThrow(
       'VITE_API_BASE_URL must be empty, an absolute http(s) URL, or a root-relative path'
     );
+  });
+
+  it('falls back to same-origin when the environment value is invalid', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('VITE_API_BASE_URL', 'api');
+
+    expect(getApiBaseUrl()).toBe('');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });

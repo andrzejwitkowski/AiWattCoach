@@ -16,7 +16,7 @@ describe('App', () => {
   });
 
   it('shows loading first and then renders degraded backend state from the API', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>()
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ status: 'ok', service: 'AiWattCoach' }), {
           status: 200,

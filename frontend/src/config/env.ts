@@ -23,5 +23,14 @@ export function normalizeApiBaseUrl(rawValue?: string | null): string {
 }
 
 export function getApiBaseUrl(): string {
-  return normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+  try {
+    return normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+  } catch (error) {
+    console.warn(
+      'Invalid VITE_API_BASE_URL. Falling back to same-origin requests.',
+      error
+    );
+
+    return '';
+  }
 }

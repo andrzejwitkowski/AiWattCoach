@@ -10,10 +10,10 @@ Keep the frontend isolated in `frontend/` so the existing Rust backend stays API
 
 ## Structure
 
-- `frontend/src/app/*` owns shell composition and layout.
-- `frontend/src/pages/*` owns route-level screens.
-- `frontend/src/lib/api/*` owns HTTP calls and DTO mapping.
-- `frontend/src/config/*` owns environment-driven frontend configuration.
+- `frontend/src/app/*` is responsible for shell composition and layout.
+- `frontend/src/pages/*` contains route-level screens.
+- `frontend/src/lib/api/*` handles HTTP calls and DTO mapping.
+- `frontend/src/config/*` contains environment-driven frontend configuration.
 - Backend remains responsible for service truth and health semantics.
 
 ## First Delivered Behavior

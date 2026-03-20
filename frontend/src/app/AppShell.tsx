@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 import type { BackendStatus } from '../lib/api/system';
+import { getStatusToneClass } from '../lib/statusUi';
 
 type AppShellProps = {
   backendStatus: BackendStatus;
@@ -12,14 +13,7 @@ const navigationItems = [
 ];
 
 export function AppShell({ backendStatus }: AppShellProps) {
-  const statusAccentClass =
-    backendStatus.state === 'online'
-      ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-200'
-      : backendStatus.state === 'degraded'
-        ? 'border-amber-300/25 bg-amber-300/12 text-amber-100'
-        : backendStatus.state === 'loading'
-          ? 'border-slate-300/15 bg-slate-300/10 text-slate-200'
-          : 'border-rose-300/25 bg-rose-300/12 text-rose-100';
+  const statusAccentClass = getStatusToneClass(backendStatus.state);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(251,191,36,0.18),_transparent_24%),linear-gradient(180deg,_#04111f_0%,_#0f172a_55%,_#111827_100%)] text-slate-100">

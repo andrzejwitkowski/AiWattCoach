@@ -1,4 +1,5 @@
 import type { BackendStatus } from '../lib/api/system';
+import { getReadinessMessage, getStatusToneClass } from '../lib/statusUi';
 
 type SettingsPageProps = {
   apiBaseUrlLabel: string;
@@ -13,14 +14,11 @@ export function SettingsPage({
   onRefresh,
   isRefreshing
 }: SettingsPageProps) {
-  const readinessPanelClass =
-    backendStatus.state === 'online'
-      ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
-      : backendStatus.state === 'degraded'
-        ? 'border-amber-300/25 bg-amber-300/12 text-amber-100'
-        : backendStatus.state === 'loading'
-          ? 'border-slate-300/15 bg-slate-300/10 text-slate-100'
-          : 'border-rose-300/25 bg-rose-300/12 text-rose-100';
+  const readinessPanelClass = getStatusToneClass(backendStatus.state);
+  const readinessMessage = getReadinessMessage(
+    backendStatus.state,
+    backendStatus.readiness.reason
+  );
 
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,1fr)]">
@@ -41,9 +39,7 @@ export function SettingsPage({
       <aside className={`rounded-[2rem] border p-6 backdrop-blur ${readinessPanelClass}`}>
         <p className="text-sm font-semibold uppercase tracking-[0.3em]">Readiness</p>
         <p className="mt-4 text-3xl font-semibold text-white">{backendStatus.readiness.status}</p>
-        <p className="mt-3 text-sm text-slate-200">
-          {backendStatus.readiness.reason ?? 'Backend reports ready for requests.'}
-        </p>
+        <p className="mt-3 text-sm text-slate-200">{readinessMessage}</p>
         <button
           className="mt-6 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isRefreshing}
