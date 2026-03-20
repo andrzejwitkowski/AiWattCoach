@@ -43,10 +43,20 @@ impl Settings {
             "MONGODB_URI",
             "MONGODB_DATABASE",
         ];
-        let values = keys
-            .into_iter()
-            .filter_map(|key| env::var(key).ok().map(|value| (key.to_string(), value)))
-            .collect::<BTreeMap<_, _>>();
+        let mut values = BTreeMap::new();
+        for key in keys {
+            match env::var(key) {
+                Ok(value) => {
+                    values.insert(key.to_string(), value);
+                }
+                Err(env::VarError::NotPresent) => {}
+                Err(env::VarError::NotUnicode(_)) => {
+                    return Err(SettingsError::new(format!(
+                        "Environment variable {key} is not valid UTF-8"
+                    )));
+                }
+            }
+        }
 
         Self::from_map(&values)
     }
@@ -84,7 +94,11 @@ impl Settings {
 
 impl ServerSettings {
     pub fn address(&self) -> String {
-        format!("{}:{}", self.host, self.port)
+        if self.host.contains(':') && !self.host.starts_with('[') {
+            format!("[{}]:{}", self.host, self.port)
+        } else {
+            format!("{}:{}", self.host, self.port)
+        }
     }
 }
 
@@ -110,11 +124,13 @@ fn required(values: &BTreeMap<String, String>, key: &str) -> Result<String, Sett
         .cloned()
         .ok_or_else(|| SettingsError::new(format!("Missing required setting: {key}")))?;
 
-    if value.trim().is_empty() {
+    let trimmed = value.trim();
+
+    if trimmed.is_empty() {
         return Err(SettingsError::new(format!(
             "Setting {key} must not be empty"
         )));
     }
 
-    Ok(value)
+    Ok(trimmed.to_string())
 }

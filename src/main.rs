@@ -3,7 +3,7 @@ use std::{error::Error, net::SocketAddr, time::Duration};
 use aiwattcoach::{
     adapters::mongo::client::{create_client, verify_connection},
     build_app,
-    config::{ServerSettings, Settings},
+    config::Settings,
     AppState,
 };
 use tokio::net::TcpListener;
@@ -16,8 +16,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         server,
         mongo,
     } = settings;
-    let ServerSettings { host, port } = server;
-    let address: SocketAddr = format!("{host}:{port}").parse()?;
+    let address: SocketAddr = server.address().parse()?;
     let mongo_client = create_client(&mongo.uri).await?;
     verify_connection(&mongo_client, &mongo.database, Duration::from_secs(5)).await?;
 

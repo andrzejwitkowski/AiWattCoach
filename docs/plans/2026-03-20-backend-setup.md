@@ -1,6 +1,6 @@
 # Backend Setup Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> This implementation plan is intended to be executed task by task, in order.
 
 **Goal:** Bootstrap the AiWattCoach Rust backend with Axum, MongoDB wiring, environment configuration, and a matching Obsidian handbook for the project.
 
@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Branch and planning artifacts
+## Task 1: Branch and planning artifacts
 
 **Files:**
 - Create: `docs/plans/2026-03-20-backend-setup-design.md`
@@ -25,7 +25,7 @@ Expected: branch created and checked out
 
 Expected: both files exist under `docs/plans/`
 
-### Task 2: Create minimal Obsidian project handbook
+## Task 2: Create minimal Obsidian project handbook
 
 **Files:**
 - Create: external vault folder `obsidian/andrzej.witkowski/`
@@ -39,7 +39,7 @@ Expected: note links into the project handbook and explains how to start OpenCod
 
 Expected: the handbook covers architecture boundaries, Rust backend rules, Mongo reliability, HTTP adapter rules, clean code, and completion checks.
 
-### Task 3: Write the failing health-route test
+## Task 3: Write the failing health-route test
 
 **Files:**
 - Create: `tests/health_check.rs`
@@ -53,7 +53,7 @@ Expected: `axum`, `tokio`, `tower`, `serde`, `serde_json`, and test support depe
 
 Expected: test compiles once app factory exists and initially fails because the route/app bootstrap does not exist yet.
 
-### Task 4: Write the failing settings test
+## Task 4: Write the failing settings test
 
 **Files:**
 - Create: `src/config/settings.rs`
@@ -63,7 +63,7 @@ Expected: test compiles once app factory exists and initially fails because the 
 
 Expected: test fails because the settings loader has not been implemented yet.
 
-### Task 5: Implement minimal application bootstrap
+## Task 5: Implement minimal application bootstrap
 
 **Files:**
 - Create: `Cargo.toml`
@@ -97,7 +97,7 @@ Expected: route returns a small JSON payload with service status.
 
 Expected: server binds using configured host/port and serves the application.
 
-### Task 6: Verify tests and baseline build
+## Task 6: Verify tests and baseline build
 
 **Files:**
 - Verify: `tests/health_check.rs`

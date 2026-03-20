@@ -25,6 +25,7 @@ USER appuser
 ENV APP_NAME=AiWattCoach
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=3000
+# Set MONGODB_URI and MONGODB_DATABASE at runtime for the target environment.
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

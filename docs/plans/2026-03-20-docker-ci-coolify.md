@@ -1,6 +1,6 @@
 # Docker CI Coolify Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> This plan is intended to be implemented task by task, in the order listed below.
 
 **Goal:** Add local Docker development, GitHub Actions CI, manual tag-based releases, and manual Coolify deployment support.
 
@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add container runtime files
+## Task 1: Add container runtime files
 
 **Files:**
 - Create: `Dockerfile`
@@ -29,7 +29,7 @@ Expected: `target`, `.git`, and local env files stay out of build context.
 
 Expected: app and Mongo run together for local development.
 
-### Task 2: Add CI workflow
+## Task 2: Add CI workflow
 
 **Files:**
 - Create: `.github/workflows/ci.yml`
@@ -42,7 +42,7 @@ Expected: `cargo test` runs in CI.
 
 Expected: Docker image builds successfully in CI.
 
-### Task 3: Add manual release workflow
+## Task 3: Add manual release workflow
 
 **Files:**
 - Create: `.github/workflows/release-manual.yml`
@@ -55,7 +55,7 @@ Expected: release is manually triggered with a version like `v0.1.0`.
 
 Expected: workflow creates and pushes the tag, then opens a GitHub release.
 
-### Task 4: Add manual Coolify deploy workflow
+## Task 4: Add manual Coolify deploy workflow
 
 **Files:**
 - Create: `.github/workflows/deploy-coolify-manual.yml`
@@ -68,7 +68,7 @@ Expected: workflow can be run manually against a chosen ref.
 
 Expected: if webhook secret exists and user requests it, workflow triggers Coolify deployment.
 
-### Task 5: Update developer docs
+## Task 5: Update developer docs
 
 **Files:**
 - Modify: `README.md`
@@ -81,7 +81,7 @@ Expected: README explains how to run Mongo + app locally.
 
 Expected: README explains manual tag releases and manual Coolify deployment.
 
-### Task 6: Verify end-to-end
+## Task 6: Verify end-to-end
 
 **Files:**
 - Verify: `Dockerfile`
