@@ -20,13 +20,15 @@ WORKDIR /app
 
 COPY --from=builder /app/target/release/aiwattcoach /usr/local/bin/aiwattcoach
 
-USER appuser
-
 ENV APP_NAME=AiWattCoach
 ENV SERVER_HOST=0.0.0.0
-ENV SERVER_PORT=3000
+ENV SERVER_PORT=3002
+ENV RUST_BACKTRACE=1
+
+USER appuser
+
 # Set MONGODB_URI and MONGODB_DATABASE at runtime for the target environment.
-EXPOSE 3000
+EXPOSE 3002
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl --fail --silent http://127.0.0.1:${SERVER_PORT}/health || exit 1

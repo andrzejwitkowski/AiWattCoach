@@ -84,7 +84,9 @@ async fn wait_for_sigterm(
 mod tests {
     use std::io::Error as IoError;
 
-    use super::{wait_for_ctrl_c, wait_for_sigterm};
+    use super::wait_for_ctrl_c;
+    #[cfg(unix)]
+    use super::wait_for_sigterm;
     use std::sync::Arc;
     use tokio::sync::Notify;
     use tokio::time::{timeout, Duration};

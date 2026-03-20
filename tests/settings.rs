@@ -86,11 +86,37 @@ fn settings_trim_required_values() {
 }
 
 #[test]
+fn settings_load_custom_server_port_from_map() {
+    let settings = Settings::from_map(&BTreeMap::from([
+        ("APP_NAME".to_string(), "AiWattCoach TEST".to_string()),
+        ("SERVER_HOST".to_string(), "0.0.0.0".to_string()),
+        ("SERVER_PORT".to_string(), "3002".to_string()),
+        (
+            "MONGODB_URI".to_string(),
+            "mongodb://mongodb-sandbox:27017/?directConnection=true".to_string(),
+        ),
+        ("MONGODB_DATABASE".to_string(), "default".to_string()),
+    ]))
+    .unwrap();
+
+    assert_eq!(settings.server.port, 3002);
+    assert_eq!(settings.server.address(), "0.0.0.0:3002");
+}
+
+#[test]
+fn test_defaults_keep_local_runtime_on_port_3002() {
+    let settings = Settings::test_defaults();
+
+    assert_eq!(settings.server.port, 3002);
+    assert_eq!(settings.server.address(), "127.0.0.1:3002");
+}
+
+#[test]
 fn server_settings_wrap_ipv6_hosts_in_brackets() {
     let mut settings = Settings::test_defaults();
     settings.server.host = "::1".to_string();
 
-    assert_eq!(settings.server.address(), "[::1]:3000");
+    assert_eq!(settings.server.address(), "[::1]:3002");
 }
 
 #[cfg(unix)]
