@@ -313,7 +313,7 @@ async fn existing_extensionless_static_asset_is_served_directly() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/apple-app-site-association")
+                .uri("/no-extension-file")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -322,7 +322,7 @@ async fn existing_extensionless_static_asset_is_served_directly() {
 
     assert_static_response(
         response,
-        fixture.apple_app_site_association(),
+        fixture.no_extension_file(),
         "application/octet-stream",
     )
     .await;
@@ -788,20 +788,16 @@ fn frontend_fixture() -> FrontendFixture {
 
     let index_html = "<!doctype html><html><head><title>Test SPA</title></head><body><div id=\"root\">fixture</div></body></html>".to_string();
     let app_js = "console.log('fixture asset');".to_string();
-    let apple_app_site_association = "{\"applinks\":{\"apps\":[],\"details\":[]}}".to_string();
+    let no_extension_file = "fixture file without an extension".to_string();
     fs::write(dist_dir.join("index.html"), &index_html).unwrap();
     fs::write(dist_dir.join("assets").join("app.js"), &app_js).unwrap();
-    fs::write(
-        dist_dir.join("apple-app-site-association"),
-        &apple_app_site_association,
-    )
-    .unwrap();
+    fs::write(dist_dir.join("no-extension-file"), &no_extension_file).unwrap();
 
     FrontendFixture {
         root,
         index_html,
         app_js,
-        apple_app_site_association,
+        no_extension_file,
     }
 }
 
@@ -809,7 +805,7 @@ struct FrontendFixture {
     root: PathBuf,
     index_html: String,
     app_js: String,
-    apple_app_site_association: String,
+    no_extension_file: String,
 }
 
 impl FrontendFixture {
@@ -825,8 +821,8 @@ impl FrontendFixture {
         &self.app_js
     }
 
-    fn apple_app_site_association(&self) -> &str {
-        &self.apple_app_site_association
+    fn no_extension_file(&self) -> &str {
+        &self.no_extension_file
     }
 }
 
