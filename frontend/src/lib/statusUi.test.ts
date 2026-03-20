@@ -41,6 +41,15 @@ describe('getReadinessMessage', () => {
     );
   });
 
+  it('does not apply degraded reason overrides to non-degraded states', () => {
+    expect(getReadinessMessage('online', 'mongo_unreachable')).toBe(
+      'Backend reports ready for requests.'
+    );
+    expect(getReadinessMessage('offline', 'mongo_unreachable')).toBe(
+      'Backend is offline or unreachable.'
+    );
+  });
+
   it('falls back to the state message for unknown non-empty reasons', () => {
     expect(getReadinessMessage('degraded', 'cache_timeout')).toBe(
       'Backend is degraded; some features may be unavailable.'

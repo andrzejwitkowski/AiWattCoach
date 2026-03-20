@@ -385,6 +385,60 @@ async fn missing_root_level_asset_path_stays_not_found_and_non_html() {
 }
 
 #[tokio::test]
+async fn missing_html_file_path_stays_not_found_and_non_html() {
+    let settings = unreachable_mongo_settings();
+    let fixture = frontend_fixture();
+    let app = build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        ),
+        fixture.dist_dir(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/missing-page.html")
+                .header(header::ACCEPT, HeaderValue::from_static(DOCUMENT_ACCEPT))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_not_found_non_html_response(response).await;
+}
+
+#[tokio::test]
+async fn missing_apple_app_site_association_path_stays_not_found_and_non_html() {
+    let settings = unreachable_mongo_settings();
+    let fixture = frontend_fixture();
+    let app = build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        ),
+        fixture.dist_dir(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/apple-app-site-association")
+                .header(header::ACCEPT, HeaderValue::from_static(DOCUMENT_ACCEPT))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_not_found_non_html_response(response).await;
+}
+
+#[tokio::test]
 async fn missing_root_level_file_like_path_with_html_accept_stays_not_found_and_non_html() {
     let settings = unreachable_mongo_settings();
     let fixture = frontend_fixture();

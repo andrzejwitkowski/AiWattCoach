@@ -35,7 +35,7 @@ export function getStatusToneClass(state: BackendStatusKind): string {
 }
 
 export function getReadinessMessage(state: BackendStatusKind, reason: string | null): string {
-  if (reason) {
+  if (state === 'degraded' && reason) {
     const message = readinessReasonMessages[reason];
 
     if (message) {

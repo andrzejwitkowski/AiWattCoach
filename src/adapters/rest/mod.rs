@@ -96,10 +96,13 @@ fn is_file_like_path(path: &str) -> bool {
 
     path.starts_with("/assets/")
         || path.starts_with("/.well-known/")
+        || matches!(last_segment, "apple-app-site-association")
         || matches!(
             extension,
             Some(
                 "txt"
+                    | "htm"
+                    | "html"
                     | "webmanifest"
                     | "ico"
                     | "json"
