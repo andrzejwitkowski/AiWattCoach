@@ -85,9 +85,9 @@ mod tests {
     use std::io::Error as IoError;
 
     use super::{wait_for_ctrl_c, wait_for_sigterm};
-    use tokio::time::{timeout, Duration};
-    use tokio::sync::Notify;
     use std::sync::Arc;
+    use tokio::sync::Notify;
+    use tokio::time::{timeout, Duration};
 
     #[tokio::test]
     async fn ctrl_c_registration_error_does_not_finish_shutdown_future() {
@@ -108,10 +108,7 @@ mod tests {
     async fn sigterm_registration_error_does_not_finish_shutdown_future() {
         let result = timeout(
             Duration::from_millis(50),
-            wait_for_sigterm(
-                Err(IoError::other("boom")),
-                Arc::new(Notify::new()),
-            ),
+            wait_for_sigterm(Err(IoError::other("boom")), Arc::new(Notify::new())),
         )
         .await;
 
