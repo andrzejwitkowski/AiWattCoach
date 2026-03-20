@@ -11,7 +11,7 @@ export function normalizeApiBaseUrl(rawValue?: string | null): string {
     );
   }
 
-  const normalized = trimmed === '/' ? trimmed : trimmed.replace(/\/+$/, '');
+  const normalized = trimmed === '/' ? '' : trimmed.replace(/\/+$/, '');
 
   if (!normalized) {
     return '';
