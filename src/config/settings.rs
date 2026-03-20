@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, env, error::Error, fmt};
+use std::{collections::BTreeMap, env, error::Error, fmt, io::ErrorKind};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
@@ -26,6 +26,16 @@ pub struct SettingsError {
 
 impl Settings {
     pub fn from_env() -> Result<Self, SettingsError> {
+        match dotenvy::dotenv() {
+            Ok(_) => {}
+            Err(dotenvy::Error::Io(error)) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(SettingsError::new(format!(
+                    "Failed to load .env configuration: {error}"
+                )))
+            }
+        }
+
         let keys = [
             "APP_NAME",
             "SERVER_HOST",
@@ -95,8 +105,16 @@ impl fmt::Display for SettingsError {
 impl Error for SettingsError {}
 
 fn required(values: &BTreeMap<String, String>, key: &str) -> Result<String, SettingsError> {
-    values
+    let value = values
         .get(key)
         .cloned()
-        .ok_or_else(|| SettingsError::new(format!("Missing required setting: {key}")))
+        .ok_or_else(|| SettingsError::new(format!("Missing required setting: {key}")))?;
+
+    if value.trim().is_empty() {
+        return Err(SettingsError::new(format!(
+            "Setting {key} must not be empty"
+        )));
+    }
+
+    Ok(value)
 }

@@ -19,15 +19,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
 
       - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae
 
       - name: Validate version format
         env:
@@ -35,6 +35,16 @@ jobs:
         run: |
           if ! echo "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Version must match vX.Y.Z"
+            exit 1
+          fi
+
+      - name: Validate Cargo version matches tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | cut -d '"' -f 2)
+          if [ "${VERSION#v}" != "$CARGO_VERSION" ]; then
+            echo "Tag $VERSION does not match Cargo.toml version $CARGO_VERSION"
             exit 1
           fi
 
@@ -63,7 +73,7 @@ jobs:
           git push origin "$VERSION"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
         with:
           tag_name: ${{ inputs.version }}
           generate_release_notes: true

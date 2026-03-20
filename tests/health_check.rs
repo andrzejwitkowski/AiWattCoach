@@ -8,11 +8,20 @@ use tower::util::ServiceExt;
 
 #[tokio::test]
 async fn health_check_returns_service_status() {
-    let settings = Settings::test_defaults();
-    let app = build_app(AppState::without_mongo(settings));
+    let settings = unreachable_mongo_settings();
+    let app = build_app(AppState::new(
+        settings.app_name,
+        settings.mongo.database,
+        test_mongo_client(&settings.mongo.uri).await,
+    ));
 
     let response = app
-        .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -23,16 +32,24 @@ async fn health_check_returns_service_status() {
 
     assert_eq!(payload["status"], "ok");
     assert_eq!(payload["service"], "AiWattCoach");
-    assert_eq!(payload["mongo_configured"], false);
 }
 
 #[tokio::test]
 async fn readiness_returns_service_unavailable_without_mongo() {
-    let settings = Settings::test_defaults();
-    let app = build_app(AppState::without_mongo(settings));
+    let settings = unreachable_mongo_settings();
+    let app = build_app(AppState::new(
+        settings.app_name,
+        settings.mongo.database,
+        test_mongo_client(&settings.mongo.uri).await,
+    ));
 
     let response = app
-        .oneshot(Request::builder().uri("/ready").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/ready")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -42,5 +59,17 @@ async fn readiness_returns_service_unavailable_without_mongo() {
     let payload: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(payload["status"], "degraded");
-    assert_eq!(payload["reason"], "mongo_unavailable");
+    assert_eq!(payload["reason"], "mongo_unreachable");
+}
+
+async fn test_mongo_client(uri: &str) -> mongodb::Client {
+    mongodb::Client::with_uri_str(uri)
+        .await
+        .expect("test mongo client should be created")
+}
+
+fn unreachable_mongo_settings() -> Settings {
+    let mut settings = Settings::test_defaults();
+    settings.mongo.uri = "mongodb://127.0.0.1:27099".to_string();
+    settings
 }

@@ -12,23 +12,22 @@ docker compose up --build
 
 This starts:
 - app on `http://localhost:3000`
-- MongoDB on `mongodb://localhost:27017`
+- MongoDB on `mongodb://127.0.0.1:27017`
 
 Compose waits for MongoDB readiness before starting the app and exposes:
 - `/health` for liveness
-- `/ready` for readiness against app state
+- `/ready` for readiness against the configured Mongo database
 
 ### Run locally without Docker
 
-Copy `.env.example` to `.env` and set values as needed, then export the variables into your shell before running the app:
+Copy `.env.example` to `.env` and set values as needed, then run:
 
 ```bash
-set -a
-source .env
-set +a
 cargo test
 cargo run
 ```
+
+The backend loads `.env` automatically from the repo root during local startup.
 
 ## CI
 
@@ -36,7 +35,7 @@ GitHub Actions runs:
 - `cargo test`
 - `docker build -t aiwattcoach:ci .`
 
-on pushes and pull requests.
+on pull requests and pushes to `main` or `feature/**` branches.
 
 ## Releases
 
@@ -52,10 +51,10 @@ Deployment is manual for now.
 `docker-compose.yml` is for local development only. Do not reuse it as the production topology for Coolify.
 
 Use the `Deploy Coolify Manual` workflow to:
-- validate Docker build for a chosen ref
+- validate Docker build for the workflow ref
 - optionally trigger the Coolify webhook configured in `COOLIFY_WEBHOOK_URL`
 
-The selected ref is used for GitHub-side validation. The webhook triggers whatever source Coolify is currently configured to deploy.
+When webhook triggering is enabled, the workflow also checks `COOLIFY_DEPLOY_REF` so GitHub-side validation matches the branch Coolify is configured to deploy.
 
 If you prefer, you can also deploy directly from Coolify against the branch or tag configured there.
 
@@ -68,6 +67,11 @@ Set these in Coolify for the container:
 - `SERVER_PORT=3000`
 - `MONGODB_URI=<your mongo connection string>`
 - `MONGODB_DATABASE=aiwattcoach`
+
+### GitHub Actions secrets for manual deploy
+
+- `COOLIFY_WEBHOOK_URL=<Coolify deployment webhook>`
+- `COOLIFY_DEPLOY_REF=<branch configured in Coolify>`
 
 ### Recommended manual flow
 
