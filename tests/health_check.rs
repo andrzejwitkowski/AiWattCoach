@@ -25,9 +25,9 @@ async fn health_check_returns_service_status() {
     let fixture = frontend_fixture();
     let app = build_app_with_frontend_dist(
         AppState::new(
-        settings.app_name,
-        settings.mongo.database,
-        test_mongo_client(&settings.mongo.uri).await,
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
         ),
         fixture.dist_dir(),
     );
@@ -59,9 +59,9 @@ async fn readiness_returns_service_unavailable_without_mongo() {
     let fixture = frontend_fixture();
     let app = build_app_with_frontend_dist(
         AppState::new(
-        settings.app_name,
-        settings.mongo.database,
-        test_mongo_client(&settings.mongo.uri).await,
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
         ),
         fixture.dist_dir(),
     );
@@ -93,20 +93,15 @@ async fn root_serves_spa_html() {
     let fixture = frontend_fixture();
     let app = build_app_with_frontend_dist(
         AppState::new(
-        settings.app_name,
-        settings.mongo.database,
-        test_mongo_client(&settings.mongo.uri).await,
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
         ),
         fixture.dist_dir(),
     );
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -128,12 +123,7 @@ async fn built_frontend_fixture_serves_spa_at_root_while_health_stays_json() {
 
     let root_response = app
         .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -176,9 +166,9 @@ async fn unknown_non_api_route_serves_spa_html() {
     let fixture = frontend_fixture();
     let app = build_app_with_frontend_dist(
         AppState::new(
-        settings.app_name,
-        settings.mongo.database,
-        test_mongo_client(&settings.mongo.uri).await,
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
         ),
         fixture.dist_dir(),
     );
@@ -231,9 +221,9 @@ async fn nested_non_api_route_serves_spa_html() {
     let fixture = frontend_fixture();
     let app = build_app_with_frontend_dist(
         AppState::new(
-        settings.app_name,
-        settings.mongo.database,
-        test_mongo_client(&settings.mongo.uri).await,
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
         ),
         fixture.dist_dir(),
     );
@@ -330,7 +320,12 @@ async fn existing_extensionless_static_asset_is_served_directly() {
         .await
         .unwrap();
 
-    assert_static_response(response, fixture.apple_app_site_association(), "application/octet-stream").await;
+    assert_static_response(
+        response,
+        fixture.apple_app_site_association(),
+        "application/octet-stream",
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -562,9 +557,9 @@ async fn unknown_api_route_does_not_fall_back_to_spa_html() {
     let fixture = frontend_fixture();
     let app = build_app_with_frontend_dist(
         AppState::new(
-        settings.app_name,
-        settings.mongo.database,
-        test_mongo_client(&settings.mongo.uri).await,
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
         ),
         fixture.dist_dir(),
     );
@@ -598,20 +593,15 @@ async fn bare_api_route_does_not_fall_back_to_spa_html() {
     let fixture = frontend_fixture();
     let app = build_app_with_frontend_dist(
         AppState::new(
-        settings.app_name,
-        settings.mongo.database,
-        test_mongo_client(&settings.mongo.uri).await,
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
         ),
         fixture.dist_dir(),
     );
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/api").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -634,9 +624,9 @@ async fn post_to_spa_route_does_not_fall_back_to_spa_html() {
     let fixture = frontend_fixture();
     let app = build_app_with_frontend_dist(
         AppState::new(
-        settings.app_name,
-        settings.mongo.database,
-        test_mongo_client(&settings.mongo.uri).await,
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
         ),
         fixture.dist_dir(),
     );

@@ -81,18 +81,18 @@ fn is_api_route(path: &str) -> bool {
 fn accepts_html(headers: &HeaderMap, path: &str) -> bool {
     !is_file_like_path(path)
         && (path == "/"
-        || headers
-            .get(header::ACCEPT)
-            .and_then(|value| value.to_str().ok())
-            .map(|value| {
-                value.contains("text/html") || value.contains("application/xhtml+xml")
-            })
-            .unwrap_or(false))
+            || headers
+                .get(header::ACCEPT)
+                .and_then(|value| value.to_str().ok())
+                .map(|value| value.contains("text/html") || value.contains("application/xhtml+xml"))
+                .unwrap_or(false))
 }
 
 fn is_file_like_path(path: &str) -> bool {
     let last_segment = path.rsplit('/').next().unwrap_or_default();
-    let extension = last_segment.rsplit_once('.').map(|(_, extension)| extension);
+    let extension = last_segment
+        .rsplit_once('.')
+        .map(|(_, extension)| extension);
 
     path.starts_with("/assets/")
         || path.starts_with("/.well-known/")
