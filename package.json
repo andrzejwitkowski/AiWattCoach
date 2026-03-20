@@ -1,0 +1,8 @@
+{
+  "name": "aiwattcoach",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test:all": "cargo test && bun run --cwd frontend test && bun run --cwd frontend build"
+  }
+}
