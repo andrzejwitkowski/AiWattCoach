@@ -76,6 +76,6 @@ async fn test_mongo_client(uri: &str) -> mongodb::Client {
 
 fn unreachable_mongo_settings() -> Settings {
     let mut settings = Settings::test_defaults();
-    settings.mongo.uri = "mongodb://127.0.0.1:27099".to_string();
+    settings.mongo.uri = "mongodb://unresolvable.invalid:27017".to_string();
     settings
 }

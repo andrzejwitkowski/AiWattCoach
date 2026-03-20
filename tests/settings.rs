@@ -49,6 +49,23 @@ fn settings_reject_empty_required_values() {
 }
 
 #[test]
+fn settings_reject_invalid_server_port() {
+    let error = Settings::from_map(&BTreeMap::from([
+        ("APP_NAME".to_string(), "AiWattCoach".to_string()),
+        ("SERVER_HOST".to_string(), "127.0.0.1".to_string()),
+        ("SERVER_PORT".to_string(), "70000".to_string()),
+        (
+            "MONGODB_URI".to_string(),
+            "mongodb://localhost:27017".to_string(),
+        ),
+        ("MONGODB_DATABASE".to_string(), "aiwattcoach".to_string()),
+    ]))
+    .unwrap_err();
+
+    assert_eq!(error.to_string(), "SERVER_PORT must be a valid u16");
+}
+
+#[test]
 fn settings_trim_required_values() {
     let settings = Settings::from_map(&BTreeMap::from([
         ("APP_NAME".to_string(), "  AiWattCoach  ".to_string()),

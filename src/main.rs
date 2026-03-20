@@ -1,4 +1,4 @@
-use std::{error::Error, net::SocketAddr, time::Duration};
+use std::{error::Error, future::Future, net::SocketAddr, sync::Arc, time::Duration};
 
 use aiwattcoach::{
     adapters::mongo::client::{create_client, verify_connection},
@@ -7,6 +7,7 @@ use aiwattcoach::{
     AppState,
 };
 use tokio::net::TcpListener;
+use tokio::sync::Notify;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -31,18 +32,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn shutdown_signal() {
-    let ctrl_c = async {
-        let _ = tokio::signal::ctrl_c().await;
-    };
+    let shutdown = Arc::new(Notify::new());
+    let ctrl_c = wait_for_ctrl_c(tokio::signal::ctrl_c(), shutdown.clone());
 
     #[cfg(unix)]
-    let terminate = async {
-        if let Ok(mut signal) =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        {
-            let _ = signal.recv().await;
-        }
-    };
+    let terminate = wait_for_sigterm(
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()),
+        shutdown,
+    );
 
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
@@ -50,5 +47,74 @@ async fn shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {},
         _ = terminate => {},
+    }
+}
+
+async fn wait_for_ctrl_c<F>(ctrl_c: F, shutdown: Arc<Notify>)
+where
+    F: Future<Output = std::io::Result<()>>,
+{
+    match ctrl_c.await {
+        Ok(()) => shutdown.notify_waiters(),
+        Err(error) => {
+            eprintln!("Failed to listen for Ctrl+C: {error}");
+            shutdown.notified().await;
+        }
+    }
+}
+
+#[cfg(unix)]
+async fn wait_for_sigterm(
+    signal: std::io::Result<tokio::signal::unix::Signal>,
+    shutdown: Arc<Notify>,
+) {
+    match signal {
+        Ok(mut signal) => {
+            signal.recv().await;
+            shutdown.notify_waiters();
+        }
+        Err(error) => {
+            eprintln!("Failed to listen for SIGTERM: {error}");
+            shutdown.notified().await;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Error as IoError;
+
+    use super::{wait_for_ctrl_c, wait_for_sigterm};
+    use tokio::time::{timeout, Duration};
+    use tokio::sync::Notify;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn ctrl_c_registration_error_does_not_finish_shutdown_future() {
+        let result = timeout(
+            Duration::from_millis(50),
+            wait_for_ctrl_c(
+                async { Err(IoError::other("boom")) },
+                Arc::new(Notify::new()),
+            ),
+        )
+        .await;
+
+        assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sigterm_registration_error_does_not_finish_shutdown_future() {
+        let result = timeout(
+            Duration::from_millis(50),
+            wait_for_sigterm(
+                Err(IoError::other("boom")),
+                Arc::new(Notify::new()),
+            ),
+        )
+        .await;
+
+        assert!(result.is_err());
     }
 }

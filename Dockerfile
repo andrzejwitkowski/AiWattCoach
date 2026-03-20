@@ -29,6 +29,6 @@ ENV SERVER_PORT=3000
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl --fail --silent http://127.0.0.1:${SERVER_PORT}/ready || exit 1
+  CMD curl --fail --silent http://127.0.0.1:${SERVER_PORT}/health || exit 1
 
 CMD ["aiwattcoach"]
