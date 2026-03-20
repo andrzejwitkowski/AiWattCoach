@@ -14,6 +14,8 @@ export function getStatusPanelClass(state: BackendStatusKind): string {
       return 'border-slate-300/15 bg-slate-300/10';
     case 'offline':
       return 'border-rose-300/25 bg-rose-300/12';
+    default:
+      return 'border-rose-300/25 bg-rose-300/12';
   }
 }
 
@@ -27,6 +29,8 @@ export function getStatusToneClass(state: BackendStatusKind): string {
       return `${getStatusPanelClass(state)} text-slate-200`;
     case 'offline':
       return `${getStatusPanelClass(state)} text-rose-100`;
+    default:
+      return `${getStatusPanelClass('offline')} text-rose-100`;
   }
 }
 
