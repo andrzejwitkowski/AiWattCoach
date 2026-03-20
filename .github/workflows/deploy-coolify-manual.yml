@@ -1,0 +1,56 @@
+name: Deploy Coolify Manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      trigger_coolify:
+        description: Trigger Coolify webhook if configured
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout workflow ref
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Validate Docker image build
+        run: docker build -t aiwattcoach:deploy .
+
+      - name: Verify Coolify target ref matches workflow ref
+        if: ${{ inputs.trigger_coolify }}
+        env:
+          COOLIFY_DEPLOY_REF: ${{ secrets.COOLIFY_DEPLOY_REF }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -z "$COOLIFY_DEPLOY_REF" ]; then
+            echo "COOLIFY_DEPLOY_REF secret is not configured"
+            exit 1
+          fi
+
+          if [ "$COOLIFY_DEPLOY_REF" != "$GITHUB_REF_NAME" ]; then
+            echo "Workflow is running for ref '$GITHUB_REF_NAME' but Coolify is configured for '$COOLIFY_DEPLOY_REF'"
+            exit 1
+          fi
+
+      - name: Trigger Coolify webhook
+        if: ${{ inputs.trigger_coolify }}
+        env:
+          COOLIFY_WEBHOOK_URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
+        run: |
+          if [ -z "$COOLIFY_WEBHOOK_URL" ]; then
+            echo "COOLIFY_WEBHOOK_URL secret is not configured"
+            exit 1
+          fi
+
+          curl --fail --show-error --silent -X POST "$COOLIFY_WEBHOOK_URL"
+
+      - name: Skip Coolify webhook
+        if: ${{ !inputs.trigger_coolify }}
+        run: echo "Docker validation complete for the current workflow ref. Coolify webhook was not triggered."

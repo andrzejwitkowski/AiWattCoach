@@ -1,0 +1,11 @@
+target/
+.git/
+.github/
+.env*
+!.env.example
+.DS_Store
+docs/
+README.md
+*.pem
+*.key
+*.crt
