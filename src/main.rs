@@ -1,7 +1,7 @@
 use std::{error::Error, future::Future, net::SocketAddr, sync::Arc, time::Duration};
 
 use aiwattcoach::{
-    adapters::mongo::client::{create_client, verify_connection},
+    adapters::mongo::client::{create_client, ensure_database_exists, verify_connection},
     build_app,
     config::Settings,
     AppState,
@@ -19,6 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } = settings;
     let address: SocketAddr = server.address().parse()?;
     let mongo_client = create_client(&mongo.uri).await?;
+    ensure_database_exists(&mongo_client, &mongo.database).await?;
     verify_connection(&mongo_client, &mongo.database, Duration::from_secs(5)).await?;
 
     let app = build_app(AppState::new(app_name, mongo.database, mongo_client));
