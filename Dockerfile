@@ -11,7 +11,7 @@ RUN cargo build --release
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl wget \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system appuser \
     && useradd --system --gid appuser --create-home --home-dir /app appuser
@@ -31,6 +31,6 @@ USER appuser
 EXPOSE 3002
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl --fail --silent http://127.0.0.1:${SERVER_PORT}/health || exit 1
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:${SERVER_PORT}/health || exit 1
 
 CMD ["aiwattcoach"]
