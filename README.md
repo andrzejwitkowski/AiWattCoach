@@ -2,6 +2,8 @@
 
 Rust-based coaching backend for Intervals.icu sync, AI-assisted training planning, and future Wahoo delivery through Intervals planned workouts.
 
+The repository now also includes a separate frontend shell in `frontend/` built with Bun, Vite, React, and Tailwind.
+
 ## Local development
 
 ### Run with Docker Compose
@@ -29,15 +31,44 @@ cargo run
 
 The backend loads `.env` automatically from the repo root during local startup.
 
+### Run the frontend shell
+
+In a second terminal, copy `frontend/.env.example` to `frontend/.env` only if you need to override the API origin with a directly reachable backend or gateway, then run:
+
+```bash
+bun install --cwd frontend
+bun run --cwd frontend dev
+```
+
+The frontend runs on `http://localhost:5173`. By default it uses same-origin requests, and the Vite dev proxy forwards `GET /health` and `GET /ready` to the backend on `http://127.0.0.1:3002`.
+
+If you set `VITE_API_BASE_URL`, point it at an origin the browser can reach directly, or expose the backend through the same public origin via a reverse proxy.
+
+The first integrated UI path uses the real backend endpoints:
+
+- `GET /health`
+- `GET /ready`
+
+The app shell shows backend connectivity state and exposes a dedicated settings/configuration entry point.
+
 ## CI
 
 GitHub Actions runs:
 - `cargo fmt -- --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test`
+- `bun run --cwd frontend test`
+- `bun run --cwd frontend build`
 - `docker build -t aiwattcoach:ci .`
 
 on pull requests and pushes to `main` or `feature/**` branches.
+
+For local end-to-end verification, run:
+
+```bash
+bun install --cwd frontend
+bun test:all
+```
 
 ## Releases
 
