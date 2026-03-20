@@ -1,5 +1,9 @@
 import type { BackendStatusKind } from './api/system';
 
+const readinessReasonMessages: Record<string, string> = {
+  mongo_unreachable: 'Backend cannot reach MongoDB right now.'
+};
+
 export function getStatusPanelClass(state: BackendStatusKind): string {
   switch (state) {
     case 'online':
@@ -28,7 +32,11 @@ export function getStatusToneClass(state: BackendStatusKind): string {
 
 export function getReadinessMessage(state: BackendStatusKind, reason: string | null): string {
   if (reason) {
-    return reason;
+    const message = readinessReasonMessages[reason];
+
+    if (message) {
+      return message;
+    }
   }
 
   switch (state) {

@@ -3,7 +3,15 @@ export function normalizeApiBaseUrl(rawValue?: string | null): string {
     return '';
   }
 
-  const normalized = rawValue.trim().replace(/\/+$/, '');
+  const trimmed = rawValue.trim();
+
+  if (/^\/{2,}/.test(trimmed)) {
+    throw new Error(
+      'VITE_API_BASE_URL must be empty, an absolute http(s) URL, or a root-relative path'
+    );
+  }
+
+  const normalized = trimmed === '/' ? trimmed : trimmed.replace(/\/+$/, '');
 
   if (!normalized) {
     return '';

@@ -18,8 +18,21 @@ describe('normalizeApiBaseUrl', () => {
   });
 
   it('accepts root-relative paths and rejects ambiguous relative values', () => {
+    expect(normalizeApiBaseUrl('/')).toBe('/');
     expect(normalizeApiBaseUrl('/api/')).toBe('/api');
     expect(() => normalizeApiBaseUrl('api')).toThrow(
+      'VITE_API_BASE_URL must be empty, an absolute http(s) URL, or a root-relative path'
+    );
+  });
+
+  it('rejects protocol-relative values', () => {
+    expect(() => normalizeApiBaseUrl('//evil.example')).toThrow(
+      'VITE_API_BASE_URL must be empty, an absolute http(s) URL, or a root-relative path'
+    );
+    expect(() => normalizeApiBaseUrl('//')).toThrow(
+      'VITE_API_BASE_URL must be empty, an absolute http(s) URL, or a root-relative path'
+    );
+    expect(() => normalizeApiBaseUrl(' /// ')).toThrow(
       'VITE_API_BASE_URL must be empty, an absolute http(s) URL, or a root-relative path'
     );
   });
