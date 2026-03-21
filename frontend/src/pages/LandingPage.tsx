@@ -40,7 +40,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
 
       <footer className="fixed bottom-0 w-full z-50 px-4 py-8">
         <div className="flex justify-center space-x-8 font-['Inter'] text-[10px] tracking-[0.05em] uppercase font-medium">
-          <span className="text-slate-500">© 2024 WATTLY PERFORMANCE LABS</span>
+          <span className="text-slate-500">© {new Date().getFullYear()} WATTLY PERFORMANCE LABS</span>
           <a className="text-slate-500 hover:text-[#d2ff9a] transition-colors" href="#">Privacy Policy</a>
           <a className="text-slate-500 hover:text-[#d2ff9a] transition-colors" href="#">Terms of Service</a>
           <a className="text-slate-500 hover:text-[#d2ff9a] transition-colors" href="#">Cookie Settings</a>

@@ -38,11 +38,3 @@ select {
   color: #d2ff9a;
   text-shadow: 0 0 15px rgba(210, 255, 154, 0.3);
 }
-
-.font-headline {
-  font-family: "Manrope", sans-serif;
-}
-
-.font-body {
-  font-family: "Inter", sans-serif;
-}
