@@ -27,11 +27,31 @@ Compose waits for MongoDB readiness before starting the app and exposes:
 Copy `.env.example` to `.env` and set values as needed, then run:
 
 ```bash
+bun install
 cargo test
 cargo run
 ```
 
 The backend loads `.env` automatically from the repo root during local startup.
+
+`bun install` also runs the Husky `prepare` script and installs the local git hooks for this repo.
+
+Backend auth-related environment variables:
+
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URL`
+- `SESSION_COOKIE_NAME`
+- `SESSION_COOKIE_SAME_SITE`
+- `SESSION_TTL_HOURS`
+- `SESSION_COOKIE_SECURE`
+- `ADMIN_EMAILS` (comma-separated list, optional)
+
+Cookie notes:
+
+- Default local and same-origin setup uses `SESSION_COOKIE_SAME_SITE=lax`.
+- If the frontend is served from a different site and uses an absolute `VITE_API_BASE_URL`, set `SESSION_COOKIE_SAME_SITE=none` and `SESSION_COOKIE_SECURE=true`.
+- Browsers reject `SameSite=None` cookies that are not also `Secure`.
 
 ### Run the frontend shell
 
@@ -70,9 +90,16 @@ on pull requests and pushes to `main` or `feature/**` branches.
 For local end-to-end verification, run:
 
 ```bash
+bun install
 bun install --cwd frontend
-bun test:all
+bun run verify:rust
+bun run test:all
 ```
+
+Git hooks enforce part of this automatically:
+
+- `pre-commit` runs `bun run verify:rust` when staged Rust files are present
+- `pre-push` runs `bun run verify:all`
 
 ## Releases
 

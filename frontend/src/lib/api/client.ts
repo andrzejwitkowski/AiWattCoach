@@ -11,13 +11,26 @@ export type JsonResponse<T> = {
   body: T;
 };
 
-export async function getJsonResponse<T>(url: string): Promise<JsonResponse<T>> {
-  const response = await fetch(url, {
+type GetJsonResponseOptions = {
+  credentials?: RequestCredentials;
+};
+
+export async function getJsonResponse<T>(
+  url: string,
+  options: GetJsonResponseOptions = {}
+): Promise<JsonResponse<T>> {
+  const requestInit: RequestInit = {
     method: 'GET',
     headers: {
       Accept: 'application/json'
     }
-  });
+  };
+
+  if (options.credentials) {
+    requestInit.credentials = options.credentials;
+  }
+
+  const response = await fetch(url, requestInit);
 
   let body: T;
 

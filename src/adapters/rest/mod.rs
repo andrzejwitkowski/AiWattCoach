@@ -1,3 +1,6 @@
+mod admin;
+mod auth;
+mod cookies;
 mod health;
 
 use std::path::PathBuf;
@@ -7,7 +10,7 @@ use axum::{
     extract::Request,
     http::{header, HeaderMap, Method, StatusCode},
     response::Response,
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use tower::util::ServiceExt;
@@ -29,6 +32,11 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
     Router::new()
         .route("/health", get(health::health_check))
         .route("/ready", get(health::readiness_check))
+        .route("/api/auth/google/start", get(auth::start_google_login))
+        .route("/api/auth/google/callback", get(auth::finish_google_login))
+        .route("/api/auth/me", get(auth::current_user))
+        .route("/api/auth/logout", post(auth::logout))
+        .route("/api/admin/system-info", get(admin::system_info))
         .fallback(move |request| serve_frontend(request, static_files.clone(), spa_index.clone()))
         .with_state(state)
 }

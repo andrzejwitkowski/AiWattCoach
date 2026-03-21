@@ -3,6 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test:all": "cargo test && bun run --cwd frontend test && bun run --cwd frontend build"
+    "prepare": "bun -e \"const { existsSync } = require('node:fs'); if (process.env.HUSKY === '0' || !existsSync('.git')) process.exit(0); const { spawnSync } = require('node:child_process'); const command = process.platform === 'win32' ? 'husky.cmd' : 'husky'; const result = spawnSync(command, { stdio: 'inherit', shell: true }); process.exit(result.status ?? 0);\"",
+    "verify:rust": "cargo fmt -- --check && cargo clippy --all-targets --all-features -- -D warnings",
+    "verify:frontend": "bun run --cwd frontend test && bun run --cwd frontend build",
+    "verify:all": "bun run verify:rust && cargo test && bun run verify:frontend",
+    "test:all": "bun run verify:all"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }
