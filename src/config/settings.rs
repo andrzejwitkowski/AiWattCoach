@@ -227,7 +227,7 @@ fn parse_admin_emails(raw_value: Option<&String>) -> Vec<String> {
 }
 
 fn parse_session_ttl_hours(raw_value: &str) -> Result<u64, SettingsError> {
-    const MAX_SESSION_TTL_HOURS: u64 = i64::MAX as u64 / 3600;
+    const MAX_SESSION_TTL_HOURS: u64 = (i64::MAX as u64 / 1000) / 3600;
 
     let ttl_hours = raw_value
         .parse()

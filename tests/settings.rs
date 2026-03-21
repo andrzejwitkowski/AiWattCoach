@@ -112,7 +112,7 @@ fn settings_reject_oversized_session_ttl_hours() {
     let mut values = required_settings_map();
     values.insert(
         "SESSION_TTL_HOURS".to_string(),
-        (i64::MAX as u64 / 3600 + 1).to_string(),
+        (i64::MAX as u64 / 1000 / 3600 + 1).to_string(),
     );
 
     let error = Settings::from_map(&values).unwrap_err();

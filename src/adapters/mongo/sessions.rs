@@ -8,6 +8,8 @@ use std::time::Duration;
 
 use crate::domain::identity::{AuthSession, BoxFuture, IdentityError, SessionRepository};
 
+use super::time::epoch_seconds_to_bson_datetime;
+
 #[derive(Clone)]
 pub struct MongoSessionRepository {
     collection: Collection<SessionDocument>,
@@ -70,8 +72,8 @@ impl SessionRepository for MongoSessionRepository {
 
     fn save(&self, session: AuthSession) -> BoxFuture<Result<AuthSession, IdentityError>> {
         let collection = self.collection.clone();
-        let document = SessionDocument::from_session(&session);
         Box::pin(async move {
+            let document = SessionDocument::from_session(&session)?;
             collection
                 .replace_one(doc! { "session_id": &document.session_id }, &document)
                 .upsert(true)
@@ -108,15 +110,15 @@ struct SessionDocument {
 }
 
 impl SessionDocument {
-    fn from_session(session: &AuthSession) -> Self {
-        Self {
+    fn from_session(session: &AuthSession) -> Result<Self, IdentityError> {
+        Ok(Self {
             id: None,
             session_id: session.id.clone(),
             user_id: session.user_id.clone(),
             expires_at_epoch_seconds: session.expires_at_epoch_seconds,
             created_at_epoch_seconds: session.created_at_epoch_seconds,
-            expires_at: DateTime::from_millis(session.expires_at_epoch_seconds * 1000),
-        }
+            expires_at: epoch_seconds_to_bson_datetime(session.expires_at_epoch_seconds)?,
+        })
     }
 }
 
@@ -127,4 +129,27 @@ fn map_session_document(document: SessionDocument) -> AuthSession {
         document.expires_at_epoch_seconds,
         document.created_at_epoch_seconds,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::identity::{AuthSession, IdentityError};
+
+    use super::SessionDocument;
+
+    #[test]
+    fn rejects_session_expiry_that_cannot_be_converted_to_bson_datetime() {
+        let session = AuthSession::new(
+            "session-1".to_string(),
+            "user-1".to_string(),
+            i64::MAX / 1000 + 1,
+            100,
+        );
+
+        let error = SessionDocument::from_session(&session).unwrap_err();
+
+        assert!(
+            matches!(error, IdentityError::Repository(message) if message.contains("expires_at timestamp exceeds BSON DateTime range"))
+        );
+    }
 }
