@@ -11,6 +11,8 @@ use crate::{
     domain::identity::{AppUser, IdentityError, Role},
 };
 
+use super::cookies::read_cookie;
+
 #[derive(Deserialize)]
 pub struct StartGoogleLoginQuery {
     #[serde(rename = "returnTo")]
@@ -165,21 +167,6 @@ fn map_current_user(user: AppUser) -> CurrentUserDto {
             })
             .collect(),
     }
-}
-
-fn read_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
-    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
-
-    cookie_header.split(';').find_map(|entry| {
-        let trimmed = entry.trim();
-        let (name, value) = trimmed.split_once('=')?;
-
-        if name == cookie_name {
-            Some(value.to_string())
-        } else {
-            None
-        }
-    })
 }
 
 fn build_session_cookie(

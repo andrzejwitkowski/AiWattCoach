@@ -1,10 +1,14 @@
 use mongodb::{
     bson::{doc, oid::ObjectId},
-    Collection,
+    error::{ErrorKind, WriteFailure},
+    options::IndexOptions,
+    Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::domain::identity::{AppUser, BoxFuture, IdentityError, Role, UserRepository};
+use crate::domain::identity::{
+    AppUser, BoxFuture, GoogleIdentity, IdentityError, Role, UserRepository,
+};
 
 #[derive(Clone)]
 pub struct MongoUserRepository {
@@ -16,6 +20,59 @@ impl MongoUserRepository {
         Self {
             collection: client.database(database.as_ref()).collection("app_users"),
         }
+    }
+
+    pub async fn ensure_indexes(&self) -> Result<(), IdentityError> {
+        self.collection
+            .create_indexes([
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("app_users_user_id_unique".to_string())
+                            .unique(true)
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "google_subject": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("app_users_google_subject_unique".to_string())
+                            .unique(true)
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "email_normalized": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("app_users_email_normalized_unique".to_string())
+                            .unique(true)
+                            .build(),
+                    )
+                    .build(),
+            ])
+            .await
+            .map_err(|error| IdentityError::Repository(error.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn find_one_by_identity(
+        collection: &Collection<UserDocument>,
+        google_subject: &str,
+        email_normalized: &str,
+    ) -> Result<Option<UserDocument>, IdentityError> {
+        collection
+            .find_one(doc! {
+                "$or": [
+                    { "google_subject": google_subject },
+                    { "email_normalized": email_normalized },
+                ]
+            })
+            .await
+            .map_err(|error| IdentityError::Repository(error.to_string()))
     }
 }
 
@@ -76,6 +133,74 @@ impl UserRepository for MongoUserRepository {
                 .map_err(|error| IdentityError::Repository(error.to_string()))?;
 
             Ok(user)
+        })
+    }
+
+    fn upsert_google_user(
+        &self,
+        new_user_id: String,
+        google_identity: GoogleIdentity,
+        roles: Vec<Role>,
+    ) -> BoxFuture<Result<AppUser, IdentityError>> {
+        let collection = self.collection.clone();
+        Box::pin(async move {
+            let user = AppUser::new(
+                new_user_id,
+                google_identity.subject.clone(),
+                google_identity.email.clone(),
+                roles,
+                google_identity.display_name.clone(),
+                google_identity.avatar_url.clone(),
+                google_identity.email_verified,
+            );
+            let document = UserDocument::from_user(&user);
+
+            let filter = doc! {
+                "$or": [
+                    { "google_subject": &google_identity.subject },
+                    { "email_normalized": &google_identity.email_normalized },
+                ]
+            };
+            let update = doc! {
+                "$set": {
+                    "google_subject": &document.google_subject,
+                    "email": &document.email,
+                    "email_normalized": &document.email_normalized,
+                    "email_verified": document.email_verified,
+                    "display_name": &document.display_name,
+                    "avatar_url": &document.avatar_url,
+                    "roles": &document.roles,
+                },
+                "$setOnInsert": {
+                    "user_id": &document.user_id,
+                }
+            };
+
+            match collection
+                .update_one(filter.clone(), update)
+                .upsert(true)
+                .await
+            {
+                Ok(_) => {}
+                Err(error)
+                    if matches!(
+                        error.kind.as_ref(),
+                        ErrorKind::Write(WriteFailure::WriteError(write_error)) if write_error.code == 11000
+                    ) => {}
+                Err(error) => return Err(IdentityError::Repository(error.to_string())),
+            }
+
+            let saved = Self::find_one_by_identity(
+                &collection,
+                &google_identity.subject,
+                &google_identity.email_normalized,
+            )
+            .await?
+            .ok_or_else(|| {
+                IdentityError::Repository("upserted user missing after save".to_string())
+            })?;
+
+            Ok(map_user_document(saved))
         })
     }
 }

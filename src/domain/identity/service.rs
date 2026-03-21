@@ -167,61 +167,18 @@ where
         let now = self.clock.now_epoch_seconds();
         let login_state = self
             .login_states
-            .find_by_id(state)
+            .consume(state)
             .await?
             .filter(|saved_state| !saved_state.is_expired(now))
             .ok_or(IdentityError::InvalidLoginState)?;
 
-        self.login_states.delete(state).await?;
-
         let google_identity = self.google_oauth.exchange_code_for_identity(code).await?;
 
         let roles = assign_roles(&google_identity.email, &self.admin_emails);
-        let user = if let Some(existing_user) = self
+        let user = self
             .users
-            .find_by_google_subject(&google_identity.subject)
-            .await?
-        {
-            self.users
-                .save(AppUser::new(
-                    existing_user.id,
-                    google_identity.subject.clone(),
-                    google_identity.email.clone(),
-                    roles,
-                    google_identity.display_name.clone(),
-                    google_identity.avatar_url.clone(),
-                    google_identity.email_verified,
-                ))
-                .await?
-        } else if let Some(existing_user) = self
-            .users
-            .find_by_normalized_email(&google_identity.email_normalized)
-            .await?
-        {
-            self.users
-                .save(AppUser::new(
-                    existing_user.id,
-                    google_identity.subject.clone(),
-                    google_identity.email.clone(),
-                    roles,
-                    google_identity.display_name.clone(),
-                    google_identity.avatar_url.clone(),
-                    google_identity.email_verified,
-                ))
-                .await?
-        } else {
-            self.users
-                .save(AppUser::new(
-                    self.ids.new_id("user"),
-                    google_identity.subject.clone(),
-                    google_identity.email.clone(),
-                    roles,
-                    google_identity.display_name.clone(),
-                    google_identity.avatar_url.clone(),
-                    google_identity.email_verified,
-                ))
-                .await?
-        };
+            .upsert_google_user(self.ids.new_id("user"), google_identity, roles)
+            .await?;
 
         let session = self
             .sessions
@@ -260,7 +217,7 @@ where
         let user = self
             .get_current_user(session_id)
             .await?
-            .ok_or(IdentityError::Forbidden)?;
+            .ok_or(IdentityError::Unauthenticated)?;
         authorize_admin_access(&user)?;
         Ok(user)
     }

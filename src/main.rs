@@ -38,6 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let session_repository = MongoSessionRepository::new(mongo_client.clone(), &mongo_database);
     let login_state_repository =
         MongoLoginStateRepository::new(mongo_client.clone(), &mongo_database);
+    user_repository.ensure_indexes().await?;
     session_repository.ensure_indexes().await?;
     login_state_repository.ensure_indexes().await?;
     let google_oauth_client = GoogleOAuthClient::new(

@@ -90,6 +90,19 @@ impl LoginStateRepository for MongoLoginStateRepository {
             Ok(())
         })
     }
+
+    fn consume(&self, state_id: &str) -> BoxFuture<Result<Option<LoginState>, IdentityError>> {
+        let collection = self.collection.clone();
+        let state_id = state_id.to_string();
+        Box::pin(async move {
+            let document = collection
+                .find_one_and_delete(doc! { "state_id": &state_id })
+                .await
+                .map_err(|error| IdentityError::Repository(error.to_string()))?;
+
+            Ok(document.map(map_login_state_document))
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

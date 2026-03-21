@@ -27,11 +27,21 @@ pub struct AuthSettings {
     pub admin_emails: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct GoogleOAuthSettings {
     pub client_id: String,
     pub client_secret: String,
     pub redirect_url: String,
+}
+
+impl fmt::Debug for GoogleOAuthSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GoogleOAuthSettings")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"<redacted>")
+            .field("redirect_url", &self.redirect_url)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -217,6 +227,8 @@ fn parse_admin_emails(raw_value: Option<&String>) -> Vec<String> {
 }
 
 fn parse_session_ttl_hours(raw_value: &str) -> Result<u64, SettingsError> {
+    const MAX_SESSION_TTL_HOURS: u64 = i64::MAX as u64 / 3600;
+
     let ttl_hours = raw_value
         .parse()
         .map_err(|_| SettingsError::new("SESSION_TTL_HOURS must be a valid u64"))?;
@@ -224,6 +236,12 @@ fn parse_session_ttl_hours(raw_value: &str) -> Result<u64, SettingsError> {
     if ttl_hours == 0 {
         return Err(SettingsError::new(
             "SESSION_TTL_HOURS must be greater than 0",
+        ));
+    }
+
+    if ttl_hours > MAX_SESSION_TTL_HOURS {
+        return Err(SettingsError::new(
+            "SESSION_TTL_HOURS exceeds supported range",
         ));
     }
 

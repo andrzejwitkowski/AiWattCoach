@@ -1,5 +1,6 @@
 mod admin;
 mod auth;
+mod cookies;
 mod health;
 
 use std::path::PathBuf;

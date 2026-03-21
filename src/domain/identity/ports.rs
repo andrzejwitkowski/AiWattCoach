@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use super::{AppUser, AuthSession, GoogleIdentity, IdentityError, LoginState};
+use super::{AppUser, AuthSession, GoogleIdentity, IdentityError, LoginState, Role};
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -15,6 +15,12 @@ pub trait UserRepository: Clone + Send + Sync + 'static {
         normalized_email: &str,
     ) -> BoxFuture<Result<Option<AppUser>, IdentityError>>;
     fn save(&self, user: AppUser) -> BoxFuture<Result<AppUser, IdentityError>>;
+    fn upsert_google_user(
+        &self,
+        new_user_id: String,
+        google_identity: GoogleIdentity,
+        roles: Vec<Role>,
+    ) -> BoxFuture<Result<AppUser, IdentityError>>;
 }
 
 pub trait SessionRepository: Clone + Send + Sync + 'static {
@@ -28,6 +34,7 @@ pub trait LoginStateRepository: Clone + Send + Sync + 'static {
     fn create(&self, login_state: LoginState) -> BoxFuture<Result<LoginState, IdentityError>>;
     fn find_by_id(&self, state_id: &str) -> BoxFuture<Result<Option<LoginState>, IdentityError>>;
     fn delete(&self, state_id: &str) -> BoxFuture<Result<(), IdentityError>>;
+    fn consume(&self, state_id: &str) -> BoxFuture<Result<Option<LoginState>, IdentityError>>;
 }
 
 pub trait GoogleOAuthPort: Clone + Send + Sync + 'static {

@@ -6,6 +6,7 @@ pub enum Role {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IdentityError {
+    Unauthenticated,
     EmailNotVerified,
     InvalidLoginState,
     Forbidden,
@@ -16,6 +17,7 @@ pub enum IdentityError {
 impl std::fmt::Display for IdentityError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Unauthenticated => write!(f, "Authentication is required"),
             Self::EmailNotVerified => write!(f, "Google account email must be verified"),
             Self::InvalidLoginState => write!(f, "Login state is invalid or expired"),
             Self::Forbidden => write!(f, "User does not have the required role"),

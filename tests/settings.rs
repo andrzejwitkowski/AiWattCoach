@@ -108,6 +108,32 @@ fn settings_reject_zero_session_ttl_hours() {
 }
 
 #[test]
+fn settings_reject_oversized_session_ttl_hours() {
+    let mut values = required_settings_map();
+    values.insert(
+        "SESSION_TTL_HOURS".to_string(),
+        (i64::MAX as u64 / 3600 + 1).to_string(),
+    );
+
+    let error = Settings::from_map(&values).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "SESSION_TTL_HOURS exceeds supported range"
+    );
+}
+
+#[test]
+fn google_oauth_settings_debug_redacts_client_secret() {
+    let settings = Settings::from_map(&required_settings_map()).unwrap();
+
+    let debug = format!("{:?}", settings.auth.google);
+
+    assert!(debug.contains("<redacted>"));
+    assert!(!debug.contains("super-secret"));
+}
+
+#[test]
 fn settings_reject_invalid_session_cookie_secure_value() {
     let mut values = required_settings_map();
     values.insert("SESSION_COOKIE_SECURE".to_string(), "yes".to_string());

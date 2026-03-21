@@ -219,6 +219,24 @@ async fn admin_system_info_rejects_non_admin_user() {
 }
 
 #[tokio::test]
+async fn admin_system_info_rejects_stale_cookie_as_unauthorized() {
+    let app = auth_test_app(TestIdentityService::default()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/system-info")
+                .header(header::COOKIE, "aiwattcoach_session=missing-session")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn admin_system_info_returns_payload_for_admin() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -380,7 +398,7 @@ impl IdentityUseCases for TestIdentityService {
         let session_id = session_id.to_string();
         Box::pin(async move {
             if session_id != "session-1" {
-                return Err(IdentityError::Forbidden);
+                return Err(IdentityError::Unauthenticated);
             }
 
             if role != Role::Admin {

@@ -119,6 +119,27 @@ async fn handle_google_callback_consumes_login_state_before_side_effects() {
 }
 
 #[tokio::test]
+async fn handle_google_callback_consumes_login_state_atomically() {
+    let login_states = Arc::new(Mutex::new(vec![LoginState::new(
+        "state-1".to_string(),
+        Some("/app".to_string()),
+        200,
+        100,
+    )]));
+    let service = test_service(login_states, vec![]);
+
+    let first = service
+        .handle_google_callback("state-1", "oauth-code")
+        .await;
+    let second = service
+        .handle_google_callback("state-1", "oauth-code")
+        .await;
+
+    assert!(first.is_ok());
+    assert_eq!(second.unwrap_err(), IdentityError::InvalidLoginState);
+}
+
+#[tokio::test]
 async fn logout_deletes_session() {
     let service = test_service(Arc::new(Mutex::new(Vec::new())), Vec::new());
     let session = AuthSession::new("session-1".to_string(), "user-1".to_string(), 200, 100);
@@ -202,6 +223,15 @@ async fn require_admin_rejects_non_admin_user() {
     let error = service.require_admin("session-1").await.unwrap_err();
 
     assert_eq!(error, IdentityError::Forbidden);
+}
+
+#[tokio::test]
+async fn require_admin_rejects_missing_session_as_unauthenticated() {
+    let service = test_service(Arc::new(Mutex::new(Vec::new())), Vec::new());
+
+    let error = service.require_admin("missing-session").await.unwrap_err();
+
+    assert_eq!(error, IdentityError::Unauthenticated);
 }
 
 #[tokio::test]
@@ -345,6 +375,46 @@ impl UserRepository for InMemoryUsers {
             Ok(user)
         })
     }
+
+    fn upsert_google_user(
+        &self,
+        new_user_id: String,
+        google_identity: GoogleIdentity,
+        roles: Vec<aiwattcoach::domain::identity::Role>,
+    ) -> BoxFuture<Result<AppUser, IdentityError>> {
+        let data = self.by_google_subject.clone();
+        Box::pin(async move {
+            let mut users = data.lock().unwrap();
+            let existing = users
+                .values()
+                .find(|user| {
+                    user.google_subject == google_identity.subject
+                        || user.email_normalized == google_identity.email_normalized
+                })
+                .cloned();
+
+            let user = AppUser::new(
+                existing.map(|user| user.id).unwrap_or(new_user_id),
+                google_identity.subject.clone(),
+                google_identity.email.clone(),
+                roles,
+                google_identity.display_name.clone(),
+                google_identity.avatar_url.clone(),
+                google_identity.email_verified,
+            );
+
+            if let Some(previous_subject) = users
+                .iter()
+                .find(|(_, existing_user)| existing_user.id == user.id)
+                .map(|(subject, _)| subject.clone())
+            {
+                users.remove(&previous_subject);
+            }
+
+            users.insert(user.google_subject.clone(), user.clone());
+            Ok(user)
+        })
+    }
 }
 
 #[derive(Clone, Default)]
@@ -415,6 +485,16 @@ impl LoginStateRepository for InMemoryLoginStates {
         Box::pin(async move {
             data.lock().unwrap().retain(|state| state.id != id);
             Ok(())
+        })
+    }
+
+    fn consume(&self, state_id: &str) -> BoxFuture<Result<Option<LoginState>, IdentityError>> {
+        let id = state_id.to_string();
+        let data = self.items.clone();
+        Box::pin(async move {
+            let mut items = data.lock().unwrap();
+            let index = items.iter().position(|state| state.id == id);
+            Ok(index.map(|position| items.remove(position)))
         })
     }
 }

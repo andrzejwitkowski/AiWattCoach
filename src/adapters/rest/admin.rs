@@ -1,6 +1,6 @@
 use axum::{
     extract::State,
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -8,6 +8,8 @@ use serde::Serialize;
 
 use crate::config::AppState;
 use crate::domain::identity::IdentityError;
+
+use super::cookies::read_cookie;
 
 #[derive(Serialize)]
 pub struct SystemInfoResponse {
@@ -32,6 +34,7 @@ pub async fn system_info(State(state): State<AppState>, headers: HeaderMap) -> i
             mongo_database: state.mongo_database,
         })
         .into_response(),
+        Err(IdentityError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
         Err(crate::domain::identity::IdentityError::Forbidden) => {
             StatusCode::FORBIDDEN.into_response()
         }
@@ -40,19 +43,4 @@ pub async fn system_info(State(state): State<AppState>, headers: HeaderMap) -> i
         }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
-}
-
-fn read_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
-    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
-
-    cookie_header.split(';').find_map(|entry| {
-        let trimmed = entry.trim();
-        let (name, value) = trimmed.split_once('=')?;
-
-        if name == cookie_name {
-            Some(value.to_string())
-        } else {
-            None
-        }
-    })
 }

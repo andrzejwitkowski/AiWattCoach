@@ -144,6 +144,7 @@ Role rules:
 - `_id`
 - `session_id`
 - `user_id`
+- `expires_at`
 - `expires_at_epoch_seconds`
 - `created_at_epoch_seconds`
 
@@ -152,10 +153,11 @@ Role rules:
 - `_id`
 - `state_id`
 - `return_to`
+- `expires_at`
 - `expires_at_epoch_seconds`
 - `created_at_epoch_seconds`
 
-The current persisted Mongo schema uses explicit document keys (`user_id` / `session_id` / `state_id`) and epoch-second timestamp fields where present.
+The current persisted Mongo schema uses explicit document keys (`user_id` / `session_id` / `state_id`), keeps epoch-second timestamp fields for domain logic, and also persists BSON `expires_at` date fields for Mongo TTL indexes on sessions and login states.
 
 ## API contract
 
