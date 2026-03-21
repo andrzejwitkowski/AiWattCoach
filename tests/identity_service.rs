@@ -4,9 +4,9 @@ use std::{
 };
 
 use aiwattcoach::domain::identity::{
-    assign_roles, AppUser, AuthSession, BoxFuture, Clock, GoogleIdentity, GoogleOAuthPort,
-    IdGenerator, IdentityError, IdentityService, IdentityServiceConfig, LoginState,
-    LoginStateRepository, SessionRepository, UserRepository,
+    assign_roles, validate_session_ttl_against_current_time, AppUser, AuthSession, BoxFuture,
+    Clock, GoogleIdentity, GoogleOAuthPort, IdGenerator, IdentityError, IdentityService,
+    IdentityServiceConfig, LoginState, LoginStateRepository, SessionRepository, UserRepository,
 };
 
 #[tokio::test]
@@ -318,6 +318,15 @@ async fn handle_google_callback_rejects_overflowing_session_ttl() {
         .handle_google_callback("state-1", "oauth-code")
         .await
         .unwrap_err();
+
+    assert!(
+        matches!(error, IdentityError::External(message) if message.contains("SESSION_TTL_HOURS"))
+    );
+}
+
+#[test]
+fn validate_session_ttl_against_current_time_rejects_bson_overflowing_ttl() {
+    let error = validate_session_ttl_against_current_time(i64::MAX / 1000, 1).unwrap_err();
 
     assert!(
         matches!(error, IdentityError::External(message) if message.contains("SESSION_TTL_HOURS"))

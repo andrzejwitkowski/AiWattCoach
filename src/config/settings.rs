@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, env, error::Error, fmt, io::ErrorKind};
 
+use crate::domain::identity::MAX_BSON_EPOCH_SECONDS;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub app_name: String,
@@ -234,7 +236,7 @@ fn parse_admin_emails(raw_value: Option<&String>) -> Vec<String> {
 }
 
 fn parse_session_ttl_hours(raw_value: &str) -> Result<u64, SettingsError> {
-    const MAX_SESSION_TTL_HOURS: u64 = (i64::MAX as u64 / 1000) / 3600;
+    const MAX_SESSION_TTL_HOURS: u64 = MAX_BSON_EPOCH_SECONDS as u64 / 3600;
 
     let ttl_hours = raw_value
         .parse()

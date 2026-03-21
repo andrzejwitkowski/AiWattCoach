@@ -62,6 +62,8 @@ pub struct IdentityServiceConfig {
     pub session_ttl_hours: u64,
 }
 
+pub const MAX_BSON_EPOCH_SECONDS: i64 = i64::MAX / 1000;
+
 impl IdentityServiceConfig {
     pub fn new(admin_emails: Vec<String>, session_ttl_hours: u64) -> Self {
         Self {
@@ -227,8 +229,6 @@ fn compute_session_expiry(
     now_epoch_seconds: i64,
     session_ttl_hours: u64,
 ) -> Result<i64, IdentityError> {
-    const MAX_BSON_EPOCH_SECONDS: i64 = i64::MAX / 1000;
-
     let ttl_hours = i64::try_from(session_ttl_hours).map_err(|_| {
         IdentityError::External("SESSION_TTL_HOURS exceeds supported range".to_string())
     })?;
@@ -247,6 +247,13 @@ fn compute_session_expiry(
     }
 
     Ok(expires_at)
+}
+
+pub fn validate_session_ttl_against_current_time(
+    now_epoch_seconds: i64,
+    session_ttl_hours: u64,
+) -> Result<(), IdentityError> {
+    compute_session_expiry(now_epoch_seconds, session_ttl_hours).map(|_| ())
 }
 
 impl<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids> IdentityUseCases

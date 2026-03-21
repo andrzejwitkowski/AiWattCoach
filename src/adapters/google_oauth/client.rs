@@ -5,12 +5,16 @@ use crate::{
     domain::identity::{BoxFuture, GoogleIdentity, GoogleOAuthPort, IdentityError},
 };
 
+const GOOGLE_AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const GOOGLE_USERINFO_URL: &str = "https://openidconnect.googleapis.com/v1/userinfo";
+
 #[derive(Clone)]
 pub struct GoogleOAuthClient {
-    pub client: reqwest::Client,
-    pub client_id: String,
-    pub client_secret: String,
-    pub redirect_url: String,
+    client: reqwest::Client,
+    client_id: String,
+    client_secret: String,
+    redirect_url: String,
 }
 
 impl GoogleOAuthClient {
@@ -31,7 +35,7 @@ impl GoogleOAuthClient {
 
 impl GoogleOAuthPort for GoogleOAuthClient {
     fn build_authorize_url(&self, state: &str) -> Result<String, IdentityError> {
-        let mut url = Url::parse("https://accounts.google.com/o/oauth2/v2/auth")
+        let mut url = Url::parse(GOOGLE_AUTHORIZE_URL)
             .map_err(|error| IdentityError::External(error.to_string()))?;
         url.query_pairs_mut()
             .append_pair("response_type", "code")
@@ -55,7 +59,7 @@ impl GoogleOAuthPort for GoogleOAuthClient {
 
         Box::pin(async move {
             let token_response = client
-                .post("https://oauth2.googleapis.com/token")
+                .post(GOOGLE_TOKEN_URL)
                 .form(&[
                     ("code", code.as_str()),
                     ("client_id", client_id.as_str()),
@@ -76,7 +80,7 @@ impl GoogleOAuthPort for GoogleOAuthClient {
                 .map_err(|error| IdentityError::External(error.to_string()))?;
 
             let user_info_response = client
-                .get("https://openidconnect.googleapis.com/v1/userinfo")
+                .get(GOOGLE_USERINFO_URL)
                 .bearer_auth(&token_payload.access_token)
                 .send()
                 .await

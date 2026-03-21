@@ -13,7 +13,9 @@ use aiwattcoach::{
     },
     build_app,
     config::Settings,
-    domain::identity::{IdentityService, IdentityServiceConfig},
+    domain::identity::{
+        validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
+    },
     AppState,
 };
 use tokio::net::TcpListener;
@@ -50,6 +52,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         auth.google.client_secret,
         auth.google.redirect_url,
     );
+    validate_session_ttl_against_current_time(
+        SystemClock.now_epoch_seconds(),
+        auth.session.ttl_hours,
+    )?;
     let identity_service = IdentityService::new(
         user_repository,
         session_repository,

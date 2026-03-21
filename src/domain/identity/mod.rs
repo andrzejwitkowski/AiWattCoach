@@ -11,5 +11,6 @@ pub use ports::{
     UserRepository,
 };
 pub use service::{
-    GoogleLoginStart, GoogleLoginSuccess, IdentityService, IdentityServiceConfig, IdentityUseCases,
+    validate_session_ttl_against_current_time, GoogleLoginStart, GoogleLoginSuccess,
+    IdentityService, IdentityServiceConfig, IdentityUseCases, MAX_BSON_EPOCH_SECONDS,
 };
