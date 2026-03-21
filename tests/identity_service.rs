@@ -14,7 +14,10 @@ async fn begin_google_login_persists_state_before_returning_redirect() {
     let login_states = Arc::new(Mutex::new(Vec::new()));
     let service = test_service(login_states.clone(), Vec::new());
 
-    let result = service.begin_google_login(Some("/settings".to_string())).await.unwrap();
+    let result = service
+        .begin_google_login(Some("/settings".to_string()))
+        .await
+        .unwrap();
 
     let states = login_states.lock().unwrap();
     assert_eq!(states.len(), 1);
@@ -170,7 +173,9 @@ struct TestGoogleOAuthAdapter;
 
 impl GoogleOAuthPort for TestGoogleOAuthAdapter {
     fn build_authorize_url(&self, state: &str) -> Result<String, IdentityError> {
-        Ok(format!("https://accounts.google.com/o/oauth2/v2/auth?state={state}"))
+        Ok(format!(
+            "https://accounts.google.com/o/oauth2/v2/auth?state={state}"
+        ))
     }
 
     fn exchange_code_for_identity(
@@ -279,7 +284,10 @@ struct InMemorySessions {
 }
 
 impl SessionRepository for InMemorySessions {
-    fn find_by_id(&self, session_id: &str) -> BoxFuture<Result<Option<AuthSession>, IdentityError>> {
+    fn find_by_id(
+        &self,
+        session_id: &str,
+    ) -> BoxFuture<Result<Option<AuthSession>, IdentityError>> {
         let id = session_id.to_string();
         let data = self.items.clone();
         Box::pin(async move { Ok(data.lock().unwrap().get(&id).cloned()) })
@@ -288,7 +296,9 @@ impl SessionRepository for InMemorySessions {
     fn save(&self, session: AuthSession) -> BoxFuture<Result<AuthSession, IdentityError>> {
         let data = self.items.clone();
         Box::pin(async move {
-            data.lock().unwrap().insert(session.id.clone(), session.clone());
+            data.lock()
+                .unwrap()
+                .insert(session.id.clone(), session.clone());
             Ok(session)
         })
     }
@@ -358,7 +368,9 @@ fn test_service(
 ) -> TestIdentityService {
     let users = InMemoryUsers::default();
     let sessions = InMemorySessions::default();
-    let states = InMemoryLoginStates { items: login_states };
+    let states = InMemoryLoginStates {
+        items: login_states,
+    };
 
     let service = IdentityService::new(
         users,

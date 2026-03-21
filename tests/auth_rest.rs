@@ -253,7 +253,11 @@ async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
             settings.mongo.database,
             test_mongo_client(&settings.mongo.uri).await,
         )
-        .with_identity_service(std::sync::Arc::new(identity_service), "aiwattcoach_session", false),
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            "aiwattcoach_session",
+            false,
+        ),
         fixture.dist_dir(),
     )
 }
@@ -279,7 +283,8 @@ impl IdentityUseCases for TestIdentityService {
         Box::pin(async {
             Ok(GoogleLoginStart {
                 state: "state-1".to_string(),
-                redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=state-1".to_string(),
+                redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=state-1"
+                    .to_string(),
             })
         })
     }
@@ -301,7 +306,12 @@ impl IdentityUseCases for TestIdentityService {
                     Some("https://example.com/avatar.png".to_string()),
                     true,
                 ),
-                session: AuthSession::new("session-1".to_string(), "user-1".to_string(), 999999, 100),
+                session: AuthSession::new(
+                    "session-1".to_string(),
+                    "user-1".to_string(),
+                    999999,
+                    100,
+                ),
                 redirect_to: "/app".to_string(),
             })
         })

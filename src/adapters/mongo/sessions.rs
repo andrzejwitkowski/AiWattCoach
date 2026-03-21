@@ -22,7 +22,10 @@ impl MongoSessionRepository {
 }
 
 impl SessionRepository for MongoSessionRepository {
-    fn find_by_id(&self, session_id: &str) -> BoxFuture<Result<Option<AuthSession>, IdentityError>> {
+    fn find_by_id(
+        &self,
+        session_id: &str,
+    ) -> BoxFuture<Result<Option<AuthSession>, IdentityError>> {
         let collection = self.collection.clone();
         let session_id = session_id.to_string();
         Box::pin(async move {

@@ -14,9 +14,7 @@ pub struct MongoUserRepository {
 impl MongoUserRepository {
     pub fn new(client: mongodb::Client, database: impl AsRef<str>) -> Self {
         Self {
-            collection: client
-                .database(database.as_ref())
-                .collection("app_users"),
+            collection: client.database(database.as_ref()).collection("app_users"),
         }
     }
 }
@@ -35,7 +33,10 @@ impl UserRepository for MongoUserRepository {
         })
     }
 
-    fn find_by_google_subject(&self, google_subject: &str) -> BoxFuture<Result<Option<AppUser>, IdentityError>> {
+    fn find_by_google_subject(
+        &self,
+        google_subject: &str,
+    ) -> BoxFuture<Result<Option<AppUser>, IdentityError>> {
         let collection = self.collection.clone();
         let google_subject = google_subject.to_string();
         Box::pin(async move {
@@ -48,7 +49,10 @@ impl UserRepository for MongoUserRepository {
         })
     }
 
-    fn find_by_normalized_email(&self, normalized_email: &str) -> BoxFuture<Result<Option<AppUser>, IdentityError>> {
+    fn find_by_normalized_email(
+        &self,
+        normalized_email: &str,
+    ) -> BoxFuture<Result<Option<AppUser>, IdentityError>> {
         let collection = self.collection.clone();
         let normalized_email = normalized_email.to_string();
         Box::pin(async move {

@@ -6,7 +6,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{config::AppState, domain::identity::{AppUser, Role}};
+use crate::{
+    config::AppState,
+    domain::identity::{AppUser, Role},
+};
 
 #[derive(Deserialize)]
 pub struct StartGoogleLoginQuery {
@@ -34,7 +37,9 @@ struct CurrentUserDto {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum AuthMeResponse {
-    Unauthenticated { authenticated: bool },
+    Unauthenticated {
+        authenticated: bool,
+    },
     Authenticated {
         authenticated: bool,
         user: CurrentUserDto,

@@ -31,7 +31,9 @@ pub async fn system_info(State(state): State<AppState>, headers: HeaderMap) -> i
             mongo_database: state.mongo_database,
         })
         .into_response(),
-        Err(crate::domain::identity::IdentityError::Forbidden) => StatusCode::FORBIDDEN.into_response(),
+        Err(crate::domain::identity::IdentityError::Forbidden) => {
+            StatusCode::FORBIDDEN.into_response()
+        }
         Err(_) => StatusCode::UNAUTHORIZED.into_response(),
     }
 }

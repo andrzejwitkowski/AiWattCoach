@@ -12,8 +12,8 @@ use aiwattcoach::{
         support::{SystemClock, UuidIdGenerator},
     },
     build_app,
-    domain::identity::IdentityService,
     config::Settings,
+    domain::identity::IdentityService,
     AppState,
 };
 use tokio::net::TcpListener;
@@ -36,7 +36,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mongo_database = mongo.database.clone();
     let user_repository = MongoUserRepository::new(mongo_client.clone(), &mongo_database);
     let session_repository = MongoSessionRepository::new(mongo_client.clone(), &mongo_database);
-    let login_state_repository = MongoLoginStateRepository::new(mongo_client.clone(), &mongo_database);
+    let login_state_repository =
+        MongoLoginStateRepository::new(mongo_client.clone(), &mongo_database);
     let google_oauth_client = GoogleOAuthClient::new(
         reqwest::Client::new(),
         auth.google.client_id,

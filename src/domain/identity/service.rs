@@ -1,7 +1,7 @@
 use super::{
-    assign_roles, authorize_admin_access, AppUser, AuthSession, BoxFuture, Clock,
-    GoogleOAuthPort, IdGenerator, IdentityError, LoginState, LoginStateRepository,
-    SessionRepository, UserRepository,
+    assign_roles, authorize_admin_access, AppUser, AuthSession, BoxFuture, Clock, GoogleOAuthPort,
+    IdGenerator, IdentityError, LoginState, LoginStateRepository, SessionRepository,
+    UserRepository,
 };
 
 pub trait IdentityUseCases: Send + Sync {
@@ -103,7 +103,10 @@ where
         }
     }
 
-    async fn get_valid_session(&self, session_id: &str) -> Result<Option<AuthSession>, IdentityError> {
+    async fn get_valid_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<AuthSession>, IdentityError> {
         let now = self.clock.now_epoch_seconds();
         let session = self.sessions.find_by_id(session_id).await?;
 
@@ -125,7 +128,8 @@ where
     ) -> Result<GoogleLoginStart, IdentityError> {
         let now = self.clock.now_epoch_seconds();
         let state = self.ids.new_id("login-state");
-        let login_state = LoginState::new(state.clone(), sanitize_return_to(return_to), now + 600, now);
+        let login_state =
+            LoginState::new(state.clone(), sanitize_return_to(return_to), now + 600, now);
 
         self.login_states.create(login_state).await?;
         let redirect_url = self.google_oauth.build_authorize_url(&state)?;
@@ -222,7 +226,10 @@ where
         self.sessions.delete(session_id).await
     }
 
-    pub async fn get_current_user(&self, session_id: &str) -> Result<Option<AppUser>, IdentityError> {
+    pub async fn get_current_user(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<AppUser>, IdentityError> {
         let Some(session) = self.get_valid_session(session_id).await? else {
             return Ok(None);
         };
