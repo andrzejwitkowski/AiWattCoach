@@ -24,10 +24,10 @@ export function SettingsPage({
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,1fr)]">
       <div className="rounded-[2rem] border border-white/15 bg-white/8 p-8 backdrop-blur">
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-200">Settings</p>
-        <h2 className="mt-4 font-serif text-3xl text-white">Configuration entry point</h2>
+        <h2 className="mt-4 font-serif text-3xl text-white">Authenticated configuration</h2>
         <p className="mt-4 max-w-2xl leading-7 text-slate-300">
-          This screen anchors future athlete preferences and integration settings. For now it proves
-          frontend-to-backend communication with a real API target.
+          This screen anchors future athlete preferences and integration settings after sign-in. The
+          heavier operational diagnostics now live in the admin-only System Info area.
         </p>
 
         <div className="mt-8 rounded-3xl border border-white/10 bg-slate-950/60 p-5">

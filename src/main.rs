@@ -1,8 +1,18 @@
 use std::{error::Error, future::Future, net::SocketAddr, sync::Arc, time::Duration};
 
 use aiwattcoach::{
-    adapters::mongo::client::{create_client, ensure_database_exists, verify_connection},
+    adapters::{
+        google_oauth::client::GoogleOAuthClient,
+        mongo::{
+            client::{create_client, ensure_database_exists, verify_connection},
+            login_state::MongoLoginStateRepository,
+            sessions::MongoSessionRepository,
+            users::MongoUserRepository,
+        },
+        support::{SystemClock, UuidIdGenerator},
+    },
     build_app,
+    domain::identity::IdentityService,
     config::Settings,
     AppState,
 };
@@ -16,13 +26,41 @@ async fn main() -> Result<(), Box<dyn Error>> {
         app_name,
         server,
         mongo,
+        auth,
     } = settings;
     let address: SocketAddr = server.address().parse()?;
     let mongo_client = create_client(&mongo.uri).await?;
     ensure_database_exists(&mongo_client, &mongo.database).await?;
     verify_connection(&mongo_client, &mongo.database, Duration::from_secs(5)).await?;
 
-    let app = build_app(AppState::new(app_name, mongo.database, mongo_client));
+    let mongo_database = mongo.database.clone();
+    let user_repository = MongoUserRepository::new(mongo_client.clone(), &mongo_database);
+    let session_repository = MongoSessionRepository::new(mongo_client.clone(), &mongo_database);
+    let login_state_repository = MongoLoginStateRepository::new(mongo_client.clone(), &mongo_database);
+    let google_oauth_client = GoogleOAuthClient::new(
+        reqwest::Client::new(),
+        auth.google.client_id,
+        auth.google.client_secret,
+        auth.google.redirect_url,
+    );
+    let identity_service = IdentityService::new(
+        user_repository,
+        session_repository,
+        login_state_repository,
+        google_oauth_client,
+        SystemClock,
+        UuidIdGenerator,
+        auth.admin_emails,
+        auth.session.ttl_hours,
+    );
+
+    let app = build_app(
+        AppState::new(app_name, mongo_database, mongo_client).with_identity_service(
+            Arc::new(identity_service),
+            auth.session.cookie_name,
+            auth.session.secure,
+        ),
+    );
     let listener = TcpListener::bind(address).await?;
 
     axum::serve(listener, app)

@@ -1,1 +1,1 @@
-// Domain modules will be added as business capabilities land.
+pub mod identity;

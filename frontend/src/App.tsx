@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 
-import { AppShell } from './app/AppShell';
+import { AuthenticatedLayout } from './app/AuthenticatedLayout';
+import { PublicLayout } from './app/PublicLayout';
 import { getApiBaseUrl } from './config/env';
-import { HomePage } from './pages/HomePage';
+import { buildGoogleLoginUrl } from './features/auth/api/auth';
+import { AuthProvider } from './features/auth/context/AuthProvider';
+import { RequireAuth } from './features/auth/guards/RequireAuth';
+import { RequireRole } from './features/auth/guards/RequireRole';
+import { AppHomePage } from './pages/AppHomePage';
+import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
+import { LandingPage } from './pages/LandingPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { loadBackendStatus, type BackendStatus } from './lib/api/system';
 
@@ -58,25 +65,60 @@ export function App() {
   }, [refreshBackendStatus]);
 
   return (
-    <HashRouter>
-      <Routes>
-        <Route element={<AppShell backendStatus={backendStatus} />} path="/">
-          <Route element={<HomePage backendStatus={backendStatus} />} index />
-          <Route
-            element={
-              <SettingsPage
-                apiBaseUrlLabel={API_BASE_URL_LABEL}
-                backendStatus={backendStatus}
-                isRefreshing={isRefreshing}
-                onRefresh={() => {
-                  void refreshBackendStatus();
-                }}
+    <AuthProvider apiBaseUrl={API_BASE_URL}>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<PublicLayout />}>
+            <Route
+              element={
+                <LandingPage
+                  onLogin={() => {
+                    window.location.assign(buildGoogleLoginUrl(API_BASE_URL));
+                  }}
+                />
+              }
+              path="/"
+            />
+          </Route>
+
+          <Route element={<RequireAuth />}>
+            <Route
+              element={<AuthenticatedLayout apiBaseUrl={API_BASE_URL} backendStatus={backendStatus} />}
+            >
+              <Route element={<AppHomePage />} path="/app" />
+              <Route
+                element={
+                  <SettingsPage
+                    apiBaseUrlLabel={API_BASE_URL_LABEL}
+                    backendStatus={backendStatus}
+                    isRefreshing={isRefreshing}
+                    onRefresh={() => {
+                      void refreshBackendStatus();
+                    }}
+                  />
+                }
+                path="/settings"
               />
-            }
-            path="settings"
-          />
-        </Route>
-      </Routes>
-    </HashRouter>
+              <Route element={<RequireRole role="admin" />}>
+                <Route
+                  element={
+                    <AdminSystemInfoPage
+                      apiBaseUrl={API_BASE_URL}
+                      apiBaseUrlLabel={API_BASE_URL_LABEL}
+                      backendStatus={backendStatus}
+                      isRefreshing={isRefreshing}
+                      onRefresh={() => {
+                        void refreshBackendStatus();
+                      }}
+                    />
+                  }
+                  path="/admin/system-info"
+                />
+              </Route>
+            </Route>
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

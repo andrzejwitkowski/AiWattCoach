@@ -33,6 +33,16 @@ cargo run
 
 The backend loads `.env` automatically from the repo root during local startup.
 
+Backend auth-related environment variables:
+
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URL`
+- `SESSION_COOKIE_NAME`
+- `SESSION_TTL_HOURS`
+- `SESSION_COOKIE_SECURE`
+- `ADMIN_EMAILS` (comma-separated list, optional)
+
 ### Run the frontend shell
 
 In a second terminal, copy `frontend/.env.example` to `frontend/.env` only if you need to override the API origin with a directly reachable backend or gateway, then run:

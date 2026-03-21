@@ -7,7 +7,7 @@ const originalFetch = global.fetch;
 
 describe('App', () => {
   beforeEach(() => {
-    window.location.hash = '#/';
+    window.history.replaceState({}, '', '/');
   });
 
   afterEach(() => {
@@ -15,8 +15,14 @@ describe('App', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows loading first and then renders degraded backend state from the API', async () => {
+  it('bootstraps auth and renders the public landing page for unauthenticated users', async () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ authenticated: false }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ status: 'ok', service: 'AiWattCoach' }), {
           status: 200,
@@ -34,13 +40,14 @@ describe('App', () => {
 
     render(<App />);
 
-    expect(screen.getAllByText(/loading/i).length).toBeGreaterThan(0);
-
     await waitFor(() => {
-      expect(screen.getAllByText(/degraded/i).length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
     });
 
-    expect(screen.getAllByText(/backend status/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/readiness/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/me', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include'
+    });
   });
 });

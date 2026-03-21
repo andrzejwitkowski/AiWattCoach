@@ -11,12 +11,20 @@ export type JsonResponse<T> = {
   body: T;
 };
 
-export async function getJsonResponse<T>(url: string): Promise<JsonResponse<T>> {
+type GetJsonResponseOptions = {
+  credentials?: RequestCredentials;
+};
+
+export async function getJsonResponse<T>(
+  url: string,
+  options: GetJsonResponseOptions = {}
+): Promise<JsonResponse<T>> {
   const response = await fetch(url, {
     method: 'GET',
     headers: {
       Accept: 'application/json'
-    }
+    },
+    credentials: options.credentials
   });
 
   let body: T;
