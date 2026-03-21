@@ -21,6 +21,12 @@ pub trait UserRepository: Clone + Send + Sync + 'static {
         google_identity: GoogleIdentity,
         roles: Vec<Role>,
     ) -> BoxFuture<Result<AppUser, IdentityError>>;
+    fn save_google_user_for_identity(
+        &self,
+        new_user_id: String,
+        google_identity: GoogleIdentity,
+        roles: Vec<Role>,
+    ) -> BoxFuture<Result<AppUser, IdentityError>>;
 }
 
 pub trait SessionRepository: Clone + Send + Sync + 'static {

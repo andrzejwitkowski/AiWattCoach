@@ -100,6 +100,63 @@ async fn handle_google_callback_rejects_missing_state() {
 }
 
 #[tokio::test]
+async fn handle_google_callback_rejects_conflicting_subject_and_email_matches() {
+    let login_states = Arc::new(Mutex::new(vec![LoginState::new(
+        "state-1".to_string(),
+        Some("/app".to_string()),
+        200,
+        100,
+    )]));
+    let users = InMemoryUsers::default();
+    users
+        .save(AppUser::new(
+            "user-subject".to_string(),
+            "google-subject-1".to_string(),
+            "old-subject@example.com".to_string(),
+            vec![aiwattcoach::domain::identity::Role::User],
+            Some("Subject Match".to_string()),
+            None,
+            true,
+        ))
+        .await
+        .unwrap();
+    users
+        .save(AppUser::new(
+            "user-email".to_string(),
+            "google-subject-2".to_string(),
+            "admin@example.com".to_string(),
+            vec![aiwattcoach::domain::identity::Role::User],
+            Some("Email Match".to_string()),
+            None,
+            true,
+        ))
+        .await
+        .unwrap();
+    let sessions = InMemorySessions::default();
+    let states = InMemoryLoginStates {
+        items: login_states,
+    };
+    let service = IdentityService::new(
+        users,
+        sessions,
+        states,
+        TestGoogleOAuthAdapter,
+        TestClock,
+        TestIdGenerator,
+        IdentityServiceConfig::new(vec![], 24),
+    );
+
+    let error = service
+        .handle_google_callback("state-1", "oauth-code")
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(error, IdentityError::Repository(message) if message.contains("conflicting google subject/email mapping"))
+    );
+}
+
+#[tokio::test]
 async fn handle_google_callback_consumes_login_state_before_side_effects() {
     let login_states = Arc::new(Mutex::new(vec![LoginState::new(
         "state-1".to_string(),
@@ -413,6 +470,60 @@ impl UserRepository for InMemoryUsers {
 
             users.insert(user.google_subject.clone(), user.clone());
             Ok(user)
+        })
+    }
+
+    fn save_google_user_for_identity(
+        &self,
+        new_user_id: String,
+        google_identity: GoogleIdentity,
+        roles: Vec<aiwattcoach::domain::identity::Role>,
+    ) -> BoxFuture<Result<AppUser, IdentityError>> {
+        let repository = self.clone();
+        Box::pin(async move {
+            let by_subject = repository
+                .find_by_google_subject(&google_identity.subject)
+                .await?;
+            let by_email = repository
+                .find_by_normalized_email(&google_identity.email_normalized)
+                .await?;
+
+            match (by_subject, by_email) {
+                (Some(subject_user), Some(email_user)) if subject_user.id != email_user.id => {
+                    Err(IdentityError::Repository(
+                        "conflicting google subject/email mapping".to_string(),
+                    ))
+                }
+                (Some(_), _) => {
+                    repository
+                        .upsert_google_user(new_user_id, google_identity, roles)
+                        .await
+                }
+                (None, Some(email_user)) => {
+                    if email_user.google_subject != google_identity.subject {
+                        return Err(IdentityError::Repository(
+                            "conflicting google subject/email mapping".to_string(),
+                        ));
+                    }
+
+                    repository
+                        .save(AppUser::new(
+                            email_user.id,
+                            google_identity.subject,
+                            google_identity.email,
+                            roles,
+                            google_identity.display_name,
+                            google_identity.avatar_url,
+                            google_identity.email_verified,
+                        ))
+                        .await
+                }
+                (None, None) => {
+                    repository
+                        .upsert_google_user(new_user_id, google_identity, roles)
+                        .await
+                }
+            }
         })
     }
 }

@@ -1,6 +1,5 @@
 use mongodb::{
     bson::{doc, oid::ObjectId},
-    error::{ErrorKind, WriteFailure},
     options::IndexOptions,
     Collection, IndexModel,
 };
@@ -59,20 +58,40 @@ impl MongoUserRepository {
         Ok(())
     }
 
-    async fn find_one_by_identity(
+    async fn find_one_by_google_subject(
         collection: &Collection<UserDocument>,
         google_subject: &str,
+    ) -> Result<Option<UserDocument>, IdentityError> {
+        collection
+            .find_one(doc! { "google_subject": google_subject })
+            .await
+            .map_err(|error| IdentityError::Repository(error.to_string()))
+    }
+
+    async fn find_one_by_normalized_email(
+        collection: &Collection<UserDocument>,
         email_normalized: &str,
     ) -> Result<Option<UserDocument>, IdentityError> {
         collection
-            .find_one(doc! {
-                "$or": [
-                    { "google_subject": google_subject },
-                    { "email_normalized": email_normalized },
-                ]
-            })
+            .find_one(doc! { "email_normalized": email_normalized })
             .await
             .map_err(|error| IdentityError::Repository(error.to_string()))
+    }
+
+    fn build_user_document(
+        new_user_id: String,
+        google_identity: &GoogleIdentity,
+        roles: Vec<Role>,
+    ) -> UserDocument {
+        UserDocument::from_user(&AppUser::new(
+            new_user_id,
+            google_identity.subject.clone(),
+            google_identity.email.clone(),
+            roles,
+            google_identity.display_name.clone(),
+            google_identity.avatar_url.clone(),
+            google_identity.email_verified,
+        ))
     }
 }
 
@@ -113,10 +132,8 @@ impl UserRepository for MongoUserRepository {
         let collection = self.collection.clone();
         let normalized_email = normalized_email.to_string();
         Box::pin(async move {
-            let document = collection
-                .find_one(doc! { "email_normalized": &normalized_email })
-                .await
-                .map_err(|error| IdentityError::Repository(error.to_string()))?;
+            let document =
+                Self::find_one_by_normalized_email(&collection, &normalized_email).await?;
 
             Ok(document.map(map_user_document))
         })
@@ -144,23 +161,8 @@ impl UserRepository for MongoUserRepository {
     ) -> BoxFuture<Result<AppUser, IdentityError>> {
         let collection = self.collection.clone();
         Box::pin(async move {
-            let user = AppUser::new(
-                new_user_id,
-                google_identity.subject.clone(),
-                google_identity.email.clone(),
-                roles,
-                google_identity.display_name.clone(),
-                google_identity.avatar_url.clone(),
-                google_identity.email_verified,
-            );
-            let document = UserDocument::from_user(&user);
-
-            let filter = doc! {
-                "$or": [
-                    { "google_subject": &google_identity.subject },
-                    { "email_normalized": &google_identity.email_normalized },
-                ]
-            };
+            let document = Self::build_user_document(new_user_id, &google_identity, roles);
+            let filter = doc! { "google_subject": &google_identity.subject };
             let update = doc! {
                 "$set": {
                     "google_subject": &document.google_subject,
@@ -176,31 +178,75 @@ impl UserRepository for MongoUserRepository {
                 }
             };
 
-            match collection
+            collection
                 .update_one(filter.clone(), update)
                 .upsert(true)
                 .await
-            {
-                Ok(_) => {}
-                Err(error)
-                    if matches!(
-                        error.kind.as_ref(),
-                        ErrorKind::Write(WriteFailure::WriteError(write_error)) if write_error.code == 11000
-                    ) => {}
-                Err(error) => return Err(IdentityError::Repository(error.to_string())),
-            }
+                .map_err(|error| IdentityError::Repository(error.to_string()))?;
 
-            let saved = Self::find_one_by_identity(
-                &collection,
-                &google_identity.subject,
-                &google_identity.email_normalized,
-            )
-            .await?
-            .ok_or_else(|| {
-                IdentityError::Repository("upserted user missing after save".to_string())
-            })?;
+            let saved = Self::find_one_by_google_subject(&collection, &google_identity.subject)
+                .await?
+                .ok_or_else(|| {
+                    IdentityError::Repository("upserted user missing after save".to_string())
+                })?;
 
             Ok(map_user_document(saved))
+        })
+    }
+
+    fn save_google_user_for_identity(
+        &self,
+        new_user_id: String,
+        google_identity: GoogleIdentity,
+        roles: Vec<Role>,
+    ) -> BoxFuture<Result<AppUser, IdentityError>> {
+        let repository = self.clone();
+        Box::pin(async move {
+            let by_subject = repository
+                .find_by_google_subject(&google_identity.subject)
+                .await?;
+            let by_email = repository
+                .find_by_normalized_email(&google_identity.email_normalized)
+                .await?;
+
+            match (by_subject, by_email) {
+                (Some(subject_user), Some(email_user)) if subject_user.id != email_user.id => {
+                    Err(IdentityError::Repository(
+                        "conflicting google subject/email mapping".to_string(),
+                    ))
+                }
+                (Some(_), _) => {
+                    repository
+                        .upsert_google_user(new_user_id, google_identity, roles)
+                        .await
+                }
+                (None, Some(email_user)) => {
+                    if !email_user.google_subject.is_empty()
+                        && email_user.google_subject != google_identity.subject
+                    {
+                        return Err(IdentityError::Repository(
+                            "conflicting google subject/email mapping".to_string(),
+                        ));
+                    }
+
+                    repository
+                        .save(AppUser::new(
+                            email_user.id,
+                            google_identity.subject,
+                            google_identity.email,
+                            roles,
+                            google_identity.display_name,
+                            google_identity.avatar_url,
+                            google_identity.email_verified,
+                        ))
+                        .await
+                }
+                (None, None) => {
+                    repository
+                        .upsert_google_user(new_user_id, google_identity, roles)
+                        .await
+                }
+            }
         })
     }
 }

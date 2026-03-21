@@ -132,41 +132,27 @@ pub async fn current_user(State(state): State<AppState>, headers: HeaderMap) -> 
 pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let clear_cookie =
         clear_session_cookie(&state.session_cookie_name, state.secure_session_cookie);
+    let session_id = read_cookie(&headers, &state.session_cookie_name);
 
-    if let Some(identity_service) = state.identity_service.clone() {
-        if let Some(session_id) = read_cookie(&headers, &state.session_cookie_name) {
+    let status = match (state.identity_service.clone(), session_id) {
+        (Some(identity_service), Some(session_id)) => {
             match identity_service.logout(&session_id).await {
-                Ok(()) => {}
+                Ok(()) => StatusCode::NO_CONTENT,
                 Err(IdentityError::Repository(_) | IdentityError::External(_)) => {
-                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    StatusCode::SERVICE_UNAVAILABLE
                 }
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
-    }
+        (None, Some(_)) => StatusCode::SERVICE_UNAVAILABLE,
+        _ => StatusCode::NO_CONTENT,
+    };
 
-    let mut response = StatusCode::NO_CONTENT.into_response();
+    let mut response = status.into_response();
     response
         .headers_mut()
         .insert(header::SET_COOKIE, clear_cookie);
     response
-}
-
-fn map_current_user(user: AppUser) -> CurrentUserDto {
-    CurrentUserDto {
-        id: user.id,
-        email: user.email,
-        display_name: user.display_name,
-        avatar_url: user.avatar_url,
-        roles: user
-            .roles
-            .into_iter()
-            .map(|role| match role {
-                Role::User => "user",
-                Role::Admin => "admin",
-            })
-            .collect(),
-    }
 }
 
 fn build_session_cookie(
@@ -191,4 +177,21 @@ fn clear_session_cookie(cookie_name: &str, secure: bool) -> HeaderValue {
         if secure { "; Secure" } else { "" }
     ))
     .expect("validated cookie name should build a valid clearing cookie")
+}
+
+fn map_current_user(user: AppUser) -> CurrentUserDto {
+    CurrentUserDto {
+        id: user.id,
+        email: user.email,
+        display_name: user.display_name,
+        avatar_url: user.avatar_url,
+        roles: user
+            .roles
+            .into_iter()
+            .map(|role| match role {
+                Role::User => "user",
+                Role::Admin => "admin",
+            })
+            .collect(),
+    }
 }

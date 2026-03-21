@@ -82,7 +82,7 @@ where
     Ids: IdGenerator,
 {
     users: Users,
-    pub sessions: Sessions,
+    sessions: Sessions,
     login_states: LoginStates,
     google_oauth: GoogleOAuth,
     clock: Time,
@@ -177,7 +177,7 @@ where
         let roles = assign_roles(&google_identity.email, &self.admin_emails);
         let user = self
             .users
-            .upsert_google_user(self.ids.new_id("user"), google_identity, roles)
+            .save_google_user_for_identity(self.ids.new_id("user"), google_identity, roles)
             .await?;
 
         let session = self
