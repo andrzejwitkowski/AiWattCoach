@@ -1,6 +1,6 @@
 use aiwattcoach::domain::identity::{
-    assign_roles, authorize_admin_access, normalize_email, AppUser, GoogleIdentity, IdentityError,
-    Role,
+    assign_roles, authorize_admin_access, normalize_email, AppUser, AuthSession, GoogleIdentity,
+    IdentityError, LoginState, Role,
 };
 
 #[test]
@@ -69,4 +69,18 @@ fn authorize_admin_access_rejects_non_admins() {
     let error = authorize_admin_access(&user).unwrap_err();
 
     assert_eq!(error, IdentityError::Forbidden);
+}
+
+#[test]
+fn auth_session_is_expired_at_exact_expiry_boundary() {
+    let session = AuthSession::new("session-1".to_string(), "user-1".to_string(), 100, 10);
+
+    assert!(session.is_expired(100));
+}
+
+#[test]
+fn login_state_is_expired_at_exact_expiry_boundary() {
+    let login_state = LoginState::new("state-1".to_string(), Some("/app".to_string()), 100, 10);
+
+    assert!(login_state.is_expired(100));
 }

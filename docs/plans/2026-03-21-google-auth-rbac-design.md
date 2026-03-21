@@ -129,7 +129,8 @@ Role rules:
 
 ### `app_users`
 
-- `id`
+- `_id`
+- `user_id`
 - `google_subject`
 - `email`
 - `email_normalized`
@@ -137,24 +138,24 @@ Role rules:
 - `display_name`
 - `avatar_url`
 - `roles`
-- `created_at`
-- `updated_at`
-- `last_login_at`
 
 ### `auth_sessions`
 
-- `id`
+- `_id`
+- `session_id`
 - `user_id`
-- `expires_at`
-- `created_at`
-- `last_seen_at`
+- `expires_at_epoch_seconds`
+- `created_at_epoch_seconds`
 
 ### `oauth_login_states`
 
-- `id`
+- `_id`
+- `state_id`
 - `return_to`
-- `expires_at`
-- `created_at`
+- `expires_at_epoch_seconds`
+- `created_at_epoch_seconds`
+
+The current persisted Mongo schema uses explicit document keys (`user_id` / `session_id` / `state_id`) and epoch-second timestamp fields where present.
 
 ## API contract
 

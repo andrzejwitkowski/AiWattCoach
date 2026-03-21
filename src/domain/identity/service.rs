@@ -25,11 +25,16 @@ pub trait IdentityUseCases: Send + Sync {
 fn sanitize_return_to(raw_return_to: Option<String>) -> Option<String> {
     raw_return_to.and_then(|value| {
         let trimmed = value.trim();
+        let lower = trimmed.to_ascii_lowercase();
 
         if trimmed.is_empty()
             || !trimmed.starts_with('/')
             || trimmed.starts_with("//")
             || trimmed.contains(':')
+            || trimmed.contains('\\')
+            || trimmed.chars().any(|character| character.is_control())
+            || lower.contains("%0d")
+            || lower.contains("%0a")
         {
             None
         } else {
@@ -125,7 +130,7 @@ where
         let session = self.sessions.find_by_id(session_id).await?;
 
         if let Some(session) = session {
-            if session.expires_at_epoch_seconds < now {
+            if session.is_expired(now) {
                 self.sessions.delete(session_id).await?;
                 return Ok(None);
             }
@@ -223,7 +228,7 @@ where
             .save(AuthSession::new(
                 self.ids.new_id("session"),
                 user.id.clone(),
-                now + (self.session_ttl_hours as i64 * 3600),
+                compute_session_expiry(now, self.session_ttl_hours)?,
                 now,
             ))
             .await?;
@@ -259,6 +264,22 @@ where
         authorize_admin_access(&user)?;
         Ok(user)
     }
+}
+
+fn compute_session_expiry(
+    now_epoch_seconds: i64,
+    session_ttl_hours: u64,
+) -> Result<i64, IdentityError> {
+    let ttl_hours = i64::try_from(session_ttl_hours).map_err(|_| {
+        IdentityError::External("SESSION_TTL_HOURS exceeds supported range".to_string())
+    })?;
+    let ttl_seconds = ttl_hours.checked_mul(3600).ok_or_else(|| {
+        IdentityError::External("SESSION_TTL_HOURS exceeds supported range".to_string())
+    })?;
+
+    now_epoch_seconds.checked_add(ttl_seconds).ok_or_else(|| {
+        IdentityError::External("SESSION_TTL_HOURS exceeds supported range".to_string())
+    })
 }
 
 impl<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids> IdentityUseCases

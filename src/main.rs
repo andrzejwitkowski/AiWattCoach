@@ -38,8 +38,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let session_repository = MongoSessionRepository::new(mongo_client.clone(), &mongo_database);
     let login_state_repository =
         MongoLoginStateRepository::new(mongo_client.clone(), &mongo_database);
+    session_repository.ensure_indexes().await?;
+    login_state_repository.ensure_indexes().await?;
     let google_oauth_client = GoogleOAuthClient::new(
-        reqwest::Client::new(),
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(15))
+            .build()?,
         auth.google.client_id,
         auth.google.client_secret,
         auth.google.redirect_url,
@@ -59,6 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Arc::new(identity_service),
             auth.session.cookie_name,
             auth.session.secure,
+            auth.session.ttl_hours,
         ),
     );
     let listener = TcpListener::bind(address).await?;

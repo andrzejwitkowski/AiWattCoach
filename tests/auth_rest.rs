@@ -200,6 +200,7 @@ async fn admin_system_info_requires_authentication() {
 async fn admin_system_info_rejects_non_admin_user() {
     let app = auth_test_app(TestIdentityService {
         admin_cookie_role: Role::User,
+        ..Default::default()
     })
     .await;
 
@@ -257,6 +258,7 @@ async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
             std::sync::Arc::new(identity_service),
             "aiwattcoach_session",
             false,
+            24,
         ),
         fixture.dist_dir(),
     )
@@ -265,12 +267,20 @@ async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
 #[derive(Clone)]
 struct TestIdentityService {
     admin_cookie_role: Role,
+    callback_error: Option<IdentityError>,
+    current_user_error: Option<IdentityError>,
+    logout_error: Option<IdentityError>,
+    require_admin_error: Option<IdentityError>,
 }
 
 impl Default for TestIdentityService {
     fn default() -> Self {
         Self {
             admin_cookie_role: Role::Admin,
+            callback_error: None,
+            current_user_error: None,
+            logout_error: None,
+            require_admin_error: None,
         }
     }
 }
@@ -294,6 +304,10 @@ impl IdentityUseCases for TestIdentityService {
         _state: &str,
         _code: &str,
     ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>> {
+        if let Some(error) = self.callback_error.clone() {
+            return Box::pin(async move { Err(error) });
+        }
+
         let role = self.admin_cookie_role.clone();
         Box::pin(async move {
             Ok(GoogleLoginSuccess {
@@ -321,6 +335,10 @@ impl IdentityUseCases for TestIdentityService {
         &self,
         session_id: &str,
     ) -> BoxFuture<Result<Option<AppUser>, IdentityError>> {
+        if let Some(error) = self.current_user_error.clone() {
+            return Box::pin(async move { Err(error) });
+        }
+
         let role = self.admin_cookie_role.clone();
         let session_id = session_id.to_string();
         Box::pin(async move {
@@ -346,10 +364,18 @@ impl IdentityUseCases for TestIdentityService {
     }
 
     fn logout(&self, _session_id: &str) -> BoxFuture<Result<(), IdentityError>> {
+        if let Some(error) = self.logout_error.clone() {
+            return Box::pin(async move { Err(error) });
+        }
+
         Box::pin(async { Ok(()) })
     }
 
     fn require_admin(&self, session_id: &str) -> BoxFuture<Result<AppUser, IdentityError>> {
+        if let Some(error) = self.require_admin_error.clone() {
+            return Box::pin(async move { Err(error) });
+        }
+
         let role = self.admin_cookie_role.clone();
         let session_id = session_id.to_string();
         Box::pin(async move {
@@ -372,6 +398,115 @@ impl IdentityUseCases for TestIdentityService {
             ))
         })
     }
+}
+
+#[tokio::test]
+async fn google_callback_returns_bad_request_for_invalid_login_state() {
+    let app = auth_test_app(TestIdentityService {
+        callback_error: Some(IdentityError::InvalidLoginState),
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/google/callback?state=state-1&code=oauth-code")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn google_callback_returns_service_unavailable_for_provider_failures() {
+    let app = auth_test_app(TestIdentityService {
+        callback_error: Some(IdentityError::External("google timeout".to_string())),
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/google/callback?state=state-1&code=oauth-code")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn me_returns_service_unavailable_when_identity_backend_errors() {
+    let app = auth_test_app(TestIdentityService {
+        current_user_error: Some(IdentityError::Repository("mongo down".to_string())),
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/me")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn logout_returns_service_unavailable_when_session_invalidation_fails() {
+    let app = auth_test_app(TestIdentityService {
+        logout_error: Some(IdentityError::Repository("mongo down".to_string())),
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/logout")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn admin_system_info_returns_service_unavailable_for_backend_errors() {
+    let app = auth_test_app(TestIdentityService {
+        require_admin_error: Some(IdentityError::Repository("mongo down".to_string())),
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/system-info")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 async fn test_mongo_client(uri: &str) -> Client {

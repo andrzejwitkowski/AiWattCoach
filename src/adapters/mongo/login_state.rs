@@ -1,8 +1,10 @@
 use mongodb::{
-    bson::{doc, oid::ObjectId},
-    Collection,
+    bson::{doc, oid::ObjectId, DateTime},
+    options::IndexOptions,
+    Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::domain::identity::{BoxFuture, IdentityError, LoginState, LoginStateRepository};
 
@@ -18,6 +20,34 @@ impl MongoLoginStateRepository {
                 .database(database.as_ref())
                 .collection("oauth_login_states"),
         }
+    }
+
+    pub async fn ensure_indexes(&self) -> Result<(), IdentityError> {
+        self.collection
+            .create_indexes([
+                IndexModel::builder()
+                    .keys(doc! { "state_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("oauth_login_states_state_id_unique".to_string())
+                            .unique(true)
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "expires_at": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("oauth_login_states_expires_at_ttl".to_string())
+                            .expire_after(Duration::from_secs(0))
+                            .build(),
+                    )
+                    .build(),
+            ])
+            .await
+            .map_err(|error| IdentityError::Repository(error.to_string()))?;
+
+        Ok(())
     }
 }
 
@@ -70,6 +100,7 @@ struct LoginStateDocument {
     return_to: Option<String>,
     expires_at_epoch_seconds: i64,
     created_at_epoch_seconds: i64,
+    expires_at: DateTime,
 }
 
 impl LoginStateDocument {
@@ -80,6 +111,7 @@ impl LoginStateDocument {
             return_to: login_state.return_to.clone(),
             expires_at_epoch_seconds: login_state.expires_at_epoch_seconds,
             created_at_epoch_seconds: login_state.created_at_epoch_seconds,
+            expires_at: DateTime::from_millis(login_state.expires_at_epoch_seconds * 1000),
         }
     }
 }

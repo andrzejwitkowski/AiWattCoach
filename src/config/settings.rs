@@ -110,7 +110,9 @@ impl Settings {
                     redirect_url: required(values, "GOOGLE_OAUTH_REDIRECT_URL")?,
                 },
                 session: SessionSettings {
-                    cookie_name: required(values, "SESSION_COOKIE_NAME")?,
+                    cookie_name: parse_cookie_name(
+                        required(values, "SESSION_COOKIE_NAME")?.as_str(),
+                    )?,
                     ttl_hours: parse_session_ttl_hours(
                         required(values, "SESSION_TTL_HOURS")?.as_str(),
                     )?,
@@ -233,5 +235,35 @@ fn parse_bool_setting(raw_value: &str, key: &str) -> Result<bool, SettingsError>
         "true" => Ok(true),
         "false" => Ok(false),
         _ => Err(SettingsError::new(format!("{key} must be true or false"))),
+    }
+}
+
+fn parse_cookie_name(raw_value: &str) -> Result<String, SettingsError> {
+    let is_valid = raw_value.bytes().all(|byte| {
+        matches!(
+            byte,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        ) || byte.is_ascii_alphanumeric()
+    });
+
+    if is_valid {
+        Ok(raw_value.to_string())
+    } else {
+        Err(SettingsError::new(
+            "SESSION_COOKIE_NAME must be a valid cookie token",
+        ))
     }
 }

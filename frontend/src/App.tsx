@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 import { AuthenticatedLayout } from './app/AuthenticatedLayout';
 import { PublicLayout } from './app/PublicLayout';
@@ -69,16 +69,7 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<PublicLayout />}>
-            <Route
-              element={
-                <LandingPage
-                  onLogin={() => {
-                    window.location.assign(buildGoogleLoginUrl(API_BASE_URL));
-                  }}
-                />
-              }
-              path="/"
-            />
+            <Route element={<PublicLandingRoute apiBaseUrl={API_BASE_URL} />} path="/" />
           </Route>
 
           <Route element={<RequireAuth />}>
@@ -120,5 +111,25 @@ export function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+  );
+}
+
+function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const searchReturnTo = searchParams.get('returnTo');
+  const returnTo =
+    typeof searchReturnTo === 'string' && searchReturnTo.length > 0
+      ? searchReturnTo
+      : typeof (location.state as { from?: string } | null)?.from === 'string'
+      ? (location.state as { from: string }).from
+      : '/app';
+
+  return (
+    <LandingPage
+      onLogin={() => {
+        window.location.assign(buildGoogleLoginUrl(apiBaseUrl, returnTo));
+      }}
+    />
   );
 }

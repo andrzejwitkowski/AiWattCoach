@@ -19,13 +19,18 @@ export async function getJsonResponse<T>(
   url: string,
   options: GetJsonResponseOptions = {}
 ): Promise<JsonResponse<T>> {
-  const response = await fetch(url, {
+  const requestInit: RequestInit = {
     method: 'GET',
     headers: {
       Accept: 'application/json'
-    },
-    credentials: options.credentials
-  });
+    }
+  };
+
+  if (options.credentials) {
+    requestInit.credentials = options.credentials;
+  }
+
+  const response = await fetch(url, requestInit);
 
   let body: T;
 

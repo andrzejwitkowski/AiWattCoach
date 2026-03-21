@@ -26,7 +26,7 @@ export function LoginPanel({ onLogin }: LoginPanelProps) {
       </div>
 
       <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/4 p-4">
-        <label className="text-xs uppercase tracking-[0.25em] text-slate-400">Athlete ID</label>
+        <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Athlete ID</p>
         <div className="mt-3 rounded-full border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-500">
           Continue after Google sign-in
         </div>

@@ -1,7 +1,5 @@
 # Google Auth RBAC Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Add a Stitch-based landing and login page with Google OAuth, server-side sessions, automatic user provisioning, and RBAC-protected frontend and backend flows.
 
 **Architecture:** Introduce a new `identity` domain with ports for Google OAuth, Mongo user persistence, Mongo session persistence, and login-state persistence. Keep controllers thin, keep persistence behind adapters, and split the frontend into small feature-focused modules for auth, landing, and admin diagnostics.
@@ -9,6 +7,8 @@
 **Tech Stack:** Rust, Axum, MongoDB, reqwest, React, Vite, TypeScript, Tailwind, Vitest, Testing Library
 
 ---
+
+## Tasks
 
 ### Task 1: Save planning artifacts
 

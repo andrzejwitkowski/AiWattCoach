@@ -48,6 +48,22 @@ async fn begin_google_login_drops_unsafe_return_to_values() {
 }
 
 #[tokio::test]
+async fn begin_google_login_drops_control_character_return_to_values() {
+    let login_states = Arc::new(Mutex::new(Vec::new()));
+    let service = test_service(login_states.clone(), Vec::new());
+
+    let result = service
+        .begin_google_login(Some("/settings%0d%0aX-Test: injected".to_string()))
+        .await
+        .unwrap();
+
+    let states = login_states.lock().unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].return_to, None);
+    assert_eq!(result.state, "login-state-1");
+}
+
+#[tokio::test]
 async fn handle_google_callback_creates_new_user_and_session() {
     let login_states = Arc::new(Mutex::new(vec![LoginState::new(
         "state-1".to_string(),
@@ -124,6 +140,27 @@ async fn get_current_user_returns_none_for_unknown_session() {
 }
 
 #[tokio::test]
+async fn get_current_user_treats_boundary_expiry_as_expired() {
+    let service = test_service(Arc::new(Mutex::new(Vec::new())), Vec::new());
+    service
+        .sessions
+        .save(AuthSession::new(
+            "session-1".to_string(),
+            "user-1".to_string(),
+            100,
+            90,
+        ))
+        .await
+        .unwrap();
+
+    let user = service.get_current_user("session-1").await.unwrap();
+
+    assert!(user.is_none());
+    let session = service.sessions.find_by_id("session-1").await.unwrap();
+    assert!(session.is_none());
+}
+
+#[tokio::test]
 async fn require_admin_rejects_non_admin_user() {
     let users = InMemoryUsers::default();
     let sessions = InMemorySessions::default();
@@ -165,6 +202,39 @@ async fn require_admin_rejects_non_admin_user() {
     let error = service.require_admin("session-1").await.unwrap_err();
 
     assert_eq!(error, IdentityError::Forbidden);
+}
+
+#[tokio::test]
+async fn handle_google_callback_rejects_overflowing_session_ttl() {
+    let login_states = Arc::new(Mutex::new(vec![LoginState::new(
+        "state-1".to_string(),
+        Some("/app".to_string()),
+        200,
+        100,
+    )]));
+    let users = InMemoryUsers::default();
+    let sessions = InMemorySessions::default();
+    let states = InMemoryLoginStates {
+        items: login_states,
+    };
+    let service = IdentityService::new(
+        users,
+        sessions,
+        states,
+        TestGoogleOAuthAdapter,
+        TestClock,
+        TestIdGenerator,
+        IdentityServiceConfig::new(Vec::new(), (i64::MAX as u64) / 3600 + 1),
+    );
+
+    let error = service
+        .handle_google_callback("state-1", "oauth-code")
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(error, IdentityError::External(message) if message.contains("SESSION_TTL_HOURS"))
+    );
 }
 
 #[derive(Clone)]

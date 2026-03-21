@@ -29,8 +29,14 @@ describe('loadBackendStatus', () => {
 
     const result = await loadBackendStatus('');
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/health', expect.any(Object));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/ready', expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/health', {
+      method: 'GET',
+      headers: { Accept: 'application/json' }
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/ready', {
+      method: 'GET',
+      headers: { Accept: 'application/json' }
+    });
     expect(result.state).toBe('online');
     expect(result.health.service).toBe('AiWattCoach');
     expect(result.readiness.status).toBe('ok');
@@ -59,12 +65,18 @@ describe('loadBackendStatus', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'http://api.example.com/health',
-      expect.any(Object)
+      {
+        method: 'GET',
+        headers: { Accept: 'application/json' }
+      }
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       'http://api.example.com/ready',
-      expect.any(Object)
+      {
+        method: 'GET',
+        headers: { Accept: 'application/json' }
+      }
     );
     expect(result.state).toBe('degraded');
     expect(result.readiness.status).toBe('degraded');

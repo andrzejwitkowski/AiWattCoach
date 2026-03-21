@@ -11,7 +11,7 @@ export function RequireAuth() {
   }
 
   if (auth.status === 'unauthenticated') {
-    return <Navigate replace state={{ from: location.pathname }} to="/" />;
+    return <Navigate replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} to="/" />;
   }
 
   return <Outlet />;

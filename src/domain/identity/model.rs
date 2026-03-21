@@ -122,7 +122,7 @@ impl AuthSession {
     }
 
     pub fn is_expired(&self, now_epoch_seconds: i64) -> bool {
-        self.expires_at_epoch_seconds < now_epoch_seconds
+        self.expires_at_epoch_seconds <= now_epoch_seconds
     }
 }
 
@@ -150,7 +150,7 @@ impl LoginState {
     }
 
     pub fn is_expired(&self, now_epoch_seconds: i64) -> bool {
-        self.expires_at_epoch_seconds < now_epoch_seconds
+        self.expires_at_epoch_seconds <= now_epoch_seconds
     }
 }
 
@@ -164,7 +164,7 @@ pub fn assign_roles(email: &str, admin_emails: &[String]) -> Vec<Role> {
 
     if admin_emails
         .iter()
-        .any(|admin_email| admin_email == &normalized_email)
+        .any(|admin_email| normalize_email(admin_email) == normalized_email)
     {
         roles.push(Role::Admin);
     }

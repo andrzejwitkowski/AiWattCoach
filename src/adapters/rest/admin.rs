@@ -7,6 +7,7 @@ use axum::{
 use serde::Serialize;
 
 use crate::config::AppState;
+use crate::domain::identity::IdentityError;
 
 #[derive(Serialize)]
 pub struct SystemInfoResponse {
@@ -34,7 +35,10 @@ pub async fn system_info(State(state): State<AppState>, headers: HeaderMap) -> i
         Err(crate::domain::identity::IdentityError::Forbidden) => {
             StatusCode::FORBIDDEN.into_response()
         }
-        Err(_) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(IdentityError::Repository(_) | IdentityError::External(_)) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

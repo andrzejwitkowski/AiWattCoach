@@ -121,6 +121,19 @@ fn settings_reject_invalid_session_cookie_secure_value() {
 }
 
 #[test]
+fn settings_reject_invalid_session_cookie_name() {
+    let mut values = required_settings_map();
+    values.insert("SESSION_COOKIE_NAME".to_string(), "bad name".to_string());
+
+    let error = Settings::from_map(&values).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "SESSION_COOKIE_NAME must be a valid cookie token"
+    );
+}
+
+#[test]
 fn settings_require_google_client_id() {
     let mut values = required_settings_map();
     values.remove("GOOGLE_OAUTH_CLIENT_ID");

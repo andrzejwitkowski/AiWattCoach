@@ -1,8 +1,10 @@
 use mongodb::{
-    bson::{doc, oid::ObjectId},
-    Collection,
+    bson::{doc, oid::ObjectId, DateTime},
+    options::IndexOptions,
+    Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::domain::identity::{AuthSession, BoxFuture, IdentityError, SessionRepository};
 
@@ -18,6 +20,34 @@ impl MongoSessionRepository {
                 .database(database.as_ref())
                 .collection("auth_sessions"),
         }
+    }
+
+    pub async fn ensure_indexes(&self) -> Result<(), IdentityError> {
+        self.collection
+            .create_indexes([
+                IndexModel::builder()
+                    .keys(doc! { "session_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("auth_sessions_session_id_unique".to_string())
+                            .unique(true)
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "expires_at": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("auth_sessions_expires_at_ttl".to_string())
+                            .expire_after(Duration::from_secs(0))
+                            .build(),
+                    )
+                    .build(),
+            ])
+            .await
+            .map_err(|error| IdentityError::Repository(error.to_string()))?;
+
+        Ok(())
     }
 }
 
@@ -74,6 +104,7 @@ struct SessionDocument {
     user_id: String,
     expires_at_epoch_seconds: i64,
     created_at_epoch_seconds: i64,
+    expires_at: DateTime,
 }
 
 impl SessionDocument {
@@ -84,6 +115,7 @@ impl SessionDocument {
             user_id: session.user_id.clone(),
             expires_at_epoch_seconds: session.expires_at_epoch_seconds,
             created_at_epoch_seconds: session.created_at_epoch_seconds,
+            expires_at: DateTime::from_millis(session.expires_at_epoch_seconds * 1000),
         }
     }
 }

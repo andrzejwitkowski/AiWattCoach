@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AdminSystemInfoPage } from './AdminSystemInfoPage';
@@ -11,14 +11,16 @@ afterEach(() => {
 });
 
 describe('AdminSystemInfoPage', () => {
-  it('renders the migrated backend diagnostics area', () => {
-    global.fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+  it('renders the migrated backend diagnostics area', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValue(
         new Response(JSON.stringify({ appName: 'AiWattCoach', mongoDatabase: 'aiwattcoach' }), {
           status: 200,
           headers: { 'content-type': 'application/json' }
         })
-      ) as typeof fetch;
+      );
+
+    global.fetch = fetchMock as typeof fetch;
 
     render(
       <AdminSystemInfoPage
@@ -37,5 +39,17 @@ describe('AdminSystemInfoPage', () => {
 
     expect(screen.getByRole('heading', { name: /operational diagnostics for the admin workspace/i })).toBeInTheDocument();
     expect(screen.getByText(/backend status/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/admin/system-info', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include'
+      });
+    });
+    expect(await screen.findByText('Admin-only payload')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText('AiWattCoach')).toHaveLength(2);
+      expect(screen.getByText('aiwattcoach')).toBeInTheDocument();
+    });
   });
 });
