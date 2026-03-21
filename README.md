@@ -27,11 +27,14 @@ Compose waits for MongoDB readiness before starting the app and exposes:
 Copy `.env.example` to `.env` and set values as needed, then run:
 
 ```bash
+bun install
 cargo test
 cargo run
 ```
 
 The backend loads `.env` automatically from the repo root during local startup.
+
+`bun install` also runs the Husky `prepare` script and installs the local git hooks for this repo.
 
 Backend auth-related environment variables:
 
@@ -80,9 +83,16 @@ on pull requests and pushes to `main` or `feature/**` branches.
 For local end-to-end verification, run:
 
 ```bash
+bun install
 bun install --cwd frontend
-bun test:all
+bun run verify:rust
+bun run test:all
 ```
+
+Git hooks enforce part of this automatically:
+
+- `pre-commit` runs `bun run verify:rust` when staged Rust files are present
+- `pre-push` runs `bun run verify:all`
 
 ## Releases
 

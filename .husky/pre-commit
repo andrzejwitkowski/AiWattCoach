@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
+
+case "$staged_files" in
+  *".rs"*)
+    echo "Rust changes detected; running verify:rust"
+    bun run verify:rust
+    ;;
+  *)
+    echo "No staged Rust changes; skipping verify:rust"
+    ;;
+esac

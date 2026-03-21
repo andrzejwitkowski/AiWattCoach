@@ -3,6 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test:all": "cargo test && bun run --cwd frontend test && bun run --cwd frontend build"
+    "prepare": "husky",
+    "verify:rust": "cargo fmt -- --check && cargo clippy --all-targets --all-features -- -D warnings",
+    "verify:frontend": "bun run --cwd frontend test && bun run --cwd frontend build",
+    "verify:all": "cargo test && bun run verify:frontend",
+    "test:all": "bun run verify:all"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }
