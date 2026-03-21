@@ -227,6 +227,8 @@ fn compute_session_expiry(
     now_epoch_seconds: i64,
     session_ttl_hours: u64,
 ) -> Result<i64, IdentityError> {
+    const MAX_BSON_EPOCH_SECONDS: i64 = i64::MAX / 1000;
+
     let ttl_hours = i64::try_from(session_ttl_hours).map_err(|_| {
         IdentityError::External("SESSION_TTL_HOURS exceeds supported range".to_string())
     })?;
@@ -234,9 +236,17 @@ fn compute_session_expiry(
         IdentityError::External("SESSION_TTL_HOURS exceeds supported range".to_string())
     })?;
 
-    now_epoch_seconds.checked_add(ttl_seconds).ok_or_else(|| {
+    let expires_at = now_epoch_seconds.checked_add(ttl_seconds).ok_or_else(|| {
         IdentityError::External("SESSION_TTL_HOURS exceeds supported range".to_string())
-    })
+    })?;
+
+    if expires_at > MAX_BSON_EPOCH_SECONDS {
+        return Err(IdentityError::External(
+            "SESSION_TTL_HOURS exceeds supported range".to_string(),
+        ));
+    }
+
+    Ok(expires_at)
 }
 
 impl<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids> IdentityUseCases

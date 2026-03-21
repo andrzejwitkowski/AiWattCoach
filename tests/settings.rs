@@ -36,6 +36,7 @@ fn required_settings_map() -> BTreeMap<String, String> {
             "SESSION_COOKIE_NAME".to_string(),
             "aiwattcoach_session".to_string(),
         ),
+        ("SESSION_COOKIE_SAME_SITE".to_string(), "lax".to_string()),
         ("SESSION_TTL_HOURS".to_string(), "24".to_string()),
         ("SESSION_COOKIE_SECURE".to_string(), "false".to_string()),
     ])
@@ -59,9 +60,52 @@ fn settings_load_required_values_from_map() {
         "http://localhost:3002/api/auth/google/callback"
     );
     assert_eq!(settings.auth.session.cookie_name, "aiwattcoach_session");
+    assert_eq!(settings.auth.session.same_site, "lax");
     assert_eq!(settings.auth.session.ttl_hours, 24);
     assert!(!settings.auth.session.secure);
     assert!(settings.auth.admin_emails.is_empty());
+}
+
+#[test]
+fn settings_reject_invalid_session_cookie_same_site_value() {
+    let mut values = required_settings_map();
+    values.insert(
+        "SESSION_COOKIE_SAME_SITE".to_string(),
+        "strictly".to_string(),
+    );
+
+    let error = Settings::from_map(&values).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "SESSION_COOKIE_SAME_SITE must be lax, strict, or none"
+    );
+}
+
+#[test]
+fn settings_require_secure_cookie_when_same_site_is_none() {
+    let mut values = required_settings_map();
+    values.insert("SESSION_COOKIE_SAME_SITE".to_string(), "none".to_string());
+    values.insert("SESSION_COOKIE_SECURE".to_string(), "false".to_string());
+
+    let error = Settings::from_map(&values).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "SESSION_COOKIE_SECURE must be true when SESSION_COOKIE_SAME_SITE is none"
+    );
+}
+
+#[test]
+fn settings_allow_cross_site_cookie_when_secure_and_same_site_none() {
+    let mut values = required_settings_map();
+    values.insert("SESSION_COOKIE_SAME_SITE".to_string(), "none".to_string());
+    values.insert("SESSION_COOKIE_SECURE".to_string(), "true".to_string());
+
+    let settings = Settings::from_map(&values).unwrap();
+
+    assert_eq!(settings.auth.session.same_site, "none");
+    assert!(settings.auth.session.secure);
 }
 
 #[test]

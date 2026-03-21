@@ -64,6 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         AppState::new(app_name, mongo_database, mongo_client).with_identity_service(
             Arc::new(identity_service),
             auth.session.cookie_name,
+            auth.session.same_site,
             auth.session.secure,
             auth.session.ttl_hours,
         ),

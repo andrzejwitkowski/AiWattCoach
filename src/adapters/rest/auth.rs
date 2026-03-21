@@ -81,6 +81,7 @@ pub async fn finish_google_login(
             let mut response = Redirect::to(&result.redirect_to).into_response();
             let cookie = match build_session_cookie(
                 &state.session_cookie_name,
+                &state.session_cookie_same_site,
                 &result.session.id,
                 state.secure_session_cookie,
                 state.session_ttl_hours,
@@ -130,8 +131,11 @@ pub async fn current_user(State(state): State<AppState>, headers: HeaderMap) -> 
 }
 
 pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let clear_cookie =
-        clear_session_cookie(&state.session_cookie_name, state.secure_session_cookie);
+    let clear_cookie = clear_session_cookie(
+        &state.session_cookie_name,
+        &state.session_cookie_same_site,
+        state.secure_session_cookie,
+    );
     let session_id = read_cookie(&headers, &state.session_cookie_name);
 
     let status = match (state.identity_service.clone(), session_id) {
@@ -157,6 +161,7 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
 
 fn build_session_cookie(
     cookie_name: &str,
+    same_site: &str,
     session_id: &str,
     secure: bool,
     session_ttl_hours: u64,
@@ -165,18 +170,28 @@ fn build_session_cookie(
         .checked_mul(3600)
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
     HeaderValue::from_str(&format!(
-        "{cookie_name}={session_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{}",
+        "{cookie_name}={session_id}; Path=/; HttpOnly; SameSite={}; Max-Age={max_age}{}",
+        format_same_site_attribute(same_site),
         if secure { "; Secure" } else { "" }
     ))
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-fn clear_session_cookie(cookie_name: &str, secure: bool) -> HeaderValue {
+fn clear_session_cookie(cookie_name: &str, same_site: &str, secure: bool) -> HeaderValue {
     HeaderValue::from_str(&format!(
-        "{cookie_name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{}",
+        "{cookie_name}=; Path=/; Max-Age=0; HttpOnly; SameSite={}{}",
+        format_same_site_attribute(same_site),
         if secure { "; Secure" } else { "" }
     ))
     .expect("validated cookie name should build a valid clearing cookie")
+}
+
+fn format_same_site_attribute(value: &str) -> &'static str {
+    match value {
+        "strict" => "Strict",
+        "none" => "None",
+        _ => "Lax",
+    }
 }
 
 fn map_current_user(user: AppUser) -> CurrentUserDto {

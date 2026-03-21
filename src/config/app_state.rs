@@ -11,6 +11,7 @@ pub struct AppState {
     pub mongo_client: Client,
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub session_cookie_name: String,
+    pub session_cookie_same_site: String,
     pub secure_session_cookie: bool,
     pub session_ttl_hours: u64,
 }
@@ -27,6 +28,7 @@ impl AppState {
             mongo_client,
             identity_service: None,
             session_cookie_name: "aiwattcoach_session".to_string(),
+            session_cookie_same_site: "lax".to_string(),
             secure_session_cookie: false,
             session_ttl_hours: 24,
         }
@@ -36,11 +38,13 @@ impl AppState {
         mut self,
         identity_service: Arc<dyn IdentityUseCases>,
         session_cookie_name: impl Into<String>,
+        session_cookie_same_site: impl Into<String>,
         secure_session_cookie: bool,
         session_ttl_hours: u64,
     ) -> Self {
         self.identity_service = Some(identity_service);
         self.session_cookie_name = session_cookie_name.into();
+        self.session_cookie_same_site = session_cookie_same_site.into();
         self.secure_session_cookie = secure_session_cookie;
         self.session_ttl_hours = session_ttl_hours;
         self

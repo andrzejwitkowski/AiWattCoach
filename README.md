@@ -42,9 +42,16 @@ Backend auth-related environment variables:
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `GOOGLE_OAUTH_REDIRECT_URL`
 - `SESSION_COOKIE_NAME`
+- `SESSION_COOKIE_SAME_SITE`
 - `SESSION_TTL_HOURS`
 - `SESSION_COOKIE_SECURE`
 - `ADMIN_EMAILS` (comma-separated list, optional)
+
+Cookie notes:
+
+- Default local and same-origin setup uses `SESSION_COOKIE_SAME_SITE=lax`.
+- If the frontend is served from a different site and uses an absolute `VITE_API_BASE_URL`, set `SESSION_COOKIE_SAME_SITE=none` and `SESSION_COOKIE_SECURE=true`.
+- Browsers reject `SameSite=None` cookies that are not also `Secure`.
 
 ### Run the frontend shell
 

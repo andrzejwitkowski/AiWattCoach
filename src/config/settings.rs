@@ -47,6 +47,7 @@ impl fmt::Debug for GoogleOAuthSettings {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionSettings {
     pub cookie_name: String,
+    pub same_site: String,
     pub ttl_hours: u64,
     pub secure: bool,
 }
@@ -78,6 +79,7 @@ impl Settings {
             "GOOGLE_OAUTH_CLIENT_SECRET",
             "GOOGLE_OAUTH_REDIRECT_URL",
             "SESSION_COOKIE_NAME",
+            "SESSION_COOKIE_SAME_SITE",
             "SESSION_TTL_HOURS",
             "SESSION_COOKIE_SECURE",
             "ADMIN_EMAILS",
@@ -123,6 +125,9 @@ impl Settings {
                     cookie_name: parse_cookie_name(
                         required(values, "SESSION_COOKIE_NAME")?.as_str(),
                     )?,
+                    same_site: parse_same_site_setting(
+                        required(values, "SESSION_COOKIE_SAME_SITE")?.as_str(),
+                    )?,
                     ttl_hours: parse_session_ttl_hours(
                         required(values, "SESSION_TTL_HOURS")?.as_str(),
                     )?,
@@ -134,6 +139,7 @@ impl Settings {
                 admin_emails: parse_admin_emails(values.get("ADMIN_EMAILS")),
             },
         })
+        .and_then(validate_session_cookie_settings)
     }
 
     pub fn test_defaults() -> Self {
@@ -155,6 +161,7 @@ impl Settings {
                 },
                 session: SessionSettings {
                     cookie_name: "aiwattcoach_session".to_string(),
+                    same_site: "lax".to_string(),
                     ttl_hours: 24,
                     secure: false,
                 },
@@ -254,6 +261,27 @@ fn parse_bool_setting(raw_value: &str, key: &str) -> Result<bool, SettingsError>
         "false" => Ok(false),
         _ => Err(SettingsError::new(format!("{key} must be true or false"))),
     }
+}
+
+fn parse_same_site_setting(raw_value: &str) -> Result<String, SettingsError> {
+    let normalized = raw_value.trim().to_ascii_lowercase();
+
+    match normalized.as_str() {
+        "lax" | "strict" | "none" => Ok(normalized),
+        _ => Err(SettingsError::new(
+            "SESSION_COOKIE_SAME_SITE must be lax, strict, or none",
+        )),
+    }
+}
+
+fn validate_session_cookie_settings(settings: Settings) -> Result<Settings, SettingsError> {
+    if settings.auth.session.same_site == "none" && !settings.auth.session.secure {
+        return Err(SettingsError::new(
+            "SESSION_COOKIE_SECURE must be true when SESSION_COOKIE_SAME_SITE is none",
+        ));
+    }
+
+    Ok(settings)
 }
 
 fn parse_cookie_name(raw_value: &str) -> Result<String, SettingsError> {
