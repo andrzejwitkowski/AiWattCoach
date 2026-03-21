@@ -1,7 +1,4 @@
-import { FeatureGrid } from '../features/landing/components/FeatureGrid';
-import { HeroSection } from '../features/landing/components/HeroSection';
 import { LoginPanel } from '../features/landing/components/LoginPanel';
-import { TrustStrip } from '../features/landing/components/TrustStrip';
 import { BackgroundGlow } from '../features/landing/components/BackgroundGlow';
 
 type LandingPageProps = {
@@ -10,27 +7,41 @@ type LandingPageProps = {
 
 export function LandingPage({ onLogin }: LandingPageProps) {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,_#090b0f_0%,_#0f1418_45%,_#111827_100%)] text-slate-100">
+    <div className="relative min-h-screen overflow-hidden bg-[#0c0e11] text-slate-100">
       <BackgroundGlow />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-10 px-5 py-8 sm:px-8 lg:px-10">
-        <header className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.5em] text-lime-300">WATTLY</p>
-            <p className="mt-2 text-sm text-slate-400">Performance Lab</p>
+      <header className="fixed top-0 w-full z-50 px-6 py-4 md:px-12 bg-[#0c0e11]/80 backdrop-blur-2xl">
+        <nav className="flex justify-between items-center w-full">
+          <div className="text-2xl font-black tracking-tighter text-[#d2ff9a] uppercase italic font-['Manrope']">
+            WATTLY
           </div>
-        </header>
-
-        <main className="grid flex-1 items-center gap-8 lg:grid-cols-[minmax(0,1.2fr)_26rem]">
-          <div className="space-y-8">
-            <HeroSection />
-            <TrustStrip />
-            <FeatureGrid />
+          <div className="hidden md:flex items-center space-x-8 font-['Manrope'] font-bold tracking-tight">
+            <a className="text-slate-400 hover:text-white transition-colors" href="#">Performance</a>
+            <a className="text-slate-400 hover:text-white transition-colors" href="#">Science</a>
+            <a className="text-slate-400 hover:text-white transition-colors" href="#">Community</a>
           </div>
+          <button
+            className="bg-[#d2ff9a] text-[#3d6500] px-6 py-2 rounded font-['Manrope'] font-bold tracking-tight hover:opacity-80 transition-opacity"
+            onClick={onLogin}
+            type="button"
+          >
+            Get Started
+          </button>
+        </nav>
+      </header>
 
-          <LoginPanel onLogin={onLogin} />
-        </main>
-      </div>
+      <main className="relative z-10 flex items-center justify-center min-h-screen px-4">
+        <LoginPanel onLogin={onLogin} />
+      </main>
+
+      <footer className="fixed bottom-0 w-full z-50 px-4 py-8">
+        <div className="flex justify-center space-x-8 font-['Inter'] text-[10px] tracking-[0.05em] uppercase font-medium">
+          <span className="text-slate-500">© 2024 WATTLY PERFORMANCE LABS</span>
+          <a className="text-slate-500 hover:text-[#d2ff9a] transition-colors" href="#">Privacy Policy</a>
+          <a className="text-slate-500 hover:text-[#d2ff9a] transition-colors" href="#">Terms of Service</a>
+          <a className="text-slate-500 hover:text-[#d2ff9a] transition-colors" href="#">Cookie Settings</a>
+        </div>
+      </footer>
     </div>
   );
 }
