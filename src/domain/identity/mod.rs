@@ -10,4 +10,6 @@ pub use ports::{
     BoxFuture, Clock, GoogleOAuthPort, IdGenerator, LoginStateRepository, SessionRepository,
     UserRepository,
 };
-pub use service::{GoogleLoginStart, GoogleLoginSuccess, IdentityService, IdentityUseCases};
+pub use service::{
+    GoogleLoginStart, GoogleLoginSuccess, IdentityService, IdentityServiceConfig, IdentityUseCases,
+};

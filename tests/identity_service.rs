@@ -5,8 +5,8 @@ use std::{
 
 use aiwattcoach::domain::identity::{
     assign_roles, AppUser, AuthSession, BoxFuture, Clock, GoogleIdentity, GoogleOAuthPort,
-    IdGenerator, IdentityError, IdentityService, LoginState, LoginStateRepository,
-    SessionRepository, UserRepository,
+    IdGenerator, IdentityError, IdentityService, IdentityServiceConfig, LoginState,
+    LoginStateRepository, SessionRepository, UserRepository,
 };
 
 #[tokio::test]
@@ -159,8 +159,7 @@ async fn require_admin_rejects_non_admin_user() {
         TestGoogleOAuthAdapter,
         TestClock,
         TestIdGenerator,
-        Vec::new(),
-        24,
+        IdentityServiceConfig::new(Vec::new(), 24),
     );
 
     let error = service.require_admin("session-1").await.unwrap_err();
@@ -379,8 +378,7 @@ fn test_service(
         TestGoogleOAuthAdapter,
         TestClock,
         TestIdGenerator,
-        admin_emails,
-        24,
+        IdentityServiceConfig::new(admin_emails, 24),
     );
 
     TestIdentityService {

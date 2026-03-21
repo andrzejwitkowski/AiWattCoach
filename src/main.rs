@@ -13,7 +13,7 @@ use aiwattcoach::{
     },
     build_app,
     config::Settings,
-    domain::identity::IdentityService,
+    domain::identity::{IdentityService, IdentityServiceConfig},
     AppState,
 };
 use tokio::net::TcpListener;
@@ -51,8 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         google_oauth_client,
         SystemClock,
         UuidIdGenerator,
-        auth.admin_emails,
-        auth.session.ttl_hours,
+        IdentityServiceConfig::new(auth.admin_emails, auth.session.ttl_hours),
     );
 
     let app = build_app(

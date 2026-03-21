@@ -51,6 +51,21 @@ pub struct GoogleLoginSuccess {
     pub redirect_to: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IdentityServiceConfig {
+    pub admin_emails: Vec<String>,
+    pub session_ttl_hours: u64,
+}
+
+impl IdentityServiceConfig {
+    pub fn new(admin_emails: Vec<String>, session_ttl_hours: u64) -> Self {
+        Self {
+            admin_emails,
+            session_ttl_hours,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct IdentityService<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids>
 where
@@ -88,8 +103,7 @@ where
         google_oauth: GoogleOAuth,
         clock: Time,
         ids: Ids,
-        admin_emails: Vec<String>,
-        session_ttl_hours: u64,
+        config: IdentityServiceConfig,
     ) -> Self {
         Self {
             users,
@@ -98,8 +112,8 @@ where
             google_oauth,
             clock,
             ids,
-            admin_emails,
-            session_ttl_hours,
+            admin_emails: config.admin_emails,
+            session_ttl_hours: config.session_ttl_hours,
         }
     }
 
