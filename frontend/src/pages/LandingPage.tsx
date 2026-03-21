@@ -5,9 +5,13 @@ type LandingPageProps = {
   onLogin: () => void;
 };
 
+/**
+ * Wattly public landing page — centered glass-panel login card over a full-screen
+ * cyclist background, with a fixed navbar and footer.
+ */
 export function LandingPage({ onLogin }: LandingPageProps) {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0c0e11] text-slate-100">
+    <div className="relative min-h-screen overflow-y-auto bg-[#0c0e11] text-slate-100">
       <BackgroundGlow />
 
       <header className="fixed top-0 w-full z-50 px-6 py-4 md:px-12 bg-[#0c0e11]/80 backdrop-blur-2xl">
@@ -30,7 +34,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
         </nav>
       </header>
 
-      <main className="relative z-10 flex items-center justify-center min-h-screen px-4">
+      <main className="relative z-10 flex items-center justify-center min-h-screen px-4 pt-16">
         <LoginPanel onLogin={onLogin} />
       </main>
 

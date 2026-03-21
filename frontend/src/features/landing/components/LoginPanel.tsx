@@ -1,8 +1,17 @@
+import { useState } from 'react';
+
 type LoginPanelProps = {
   onLogin: () => void;
+  onContinue?: (athleteId: string) => void;
 };
 
-export function LoginPanel({ onLogin }: LoginPanelProps) {
+/**
+ * Centered glass-panel login card for the Wattly landing page.
+ * Offers Google OAuth sign-in and an optional Athlete ID fallback.
+ */
+export function LoginPanel({ onLogin, onContinue }: LoginPanelProps) {
+  const [athleteId, setAthleteId] = useState('');
+
   return (
     <div className="glass-panel w-full max-w-md p-10 rounded-xl shadow-2xl border border-white/5 flex flex-col items-center text-center">
       <div className="mb-8">
@@ -50,11 +59,15 @@ export function LoginPanel({ onLogin }: LoginPanelProps) {
               id="athlete-id"
               placeholder="username@performance.lab"
               type="text"
+              value={athleteId}
+              onChange={(e) => setAthleteId(e.target.value)}
             />
           </div>
           <button
-            className="w-full bg-[#292c31] text-[#d2ff9a] border border-[#d2ff9a]/20 py-3 px-6 rounded-lg font-['Inter'] font-bold hover:bg-[#d2ff9a] hover:text-[#3d6500] transition-all duration-300"
+            className="w-full bg-[#292c31] text-[#d2ff9a] border border-[#d2ff9a]/20 py-3 px-6 rounded-lg font-['Inter'] font-bold hover:bg-[#d2ff9a] hover:text-[#3d6500] transition-all duration-300 disabled:opacity-40"
             type="button"
+            onClick={() => onContinue?.(athleteId.trim())}
+            disabled={!athleteId.trim() || !onContinue}
           >
             Continue
           </button>
