@@ -1,12 +1,22 @@
+FROM oven/bun:1 AS frontend-builder
+
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY frontend ./
+
+RUN bun run build
+
 FROM rust:1.88-bookworm AS builder
 
 WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-COPY tests ./tests
 
-RUN cargo build --release
+RUN cargo build --release --locked
 
 FROM debian:bookworm-slim AS runtime
 
@@ -19,6 +29,7 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY --from=builder /app/target/release/aiwattcoach /usr/local/bin/aiwattcoach
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 ENV APP_NAME=AiWattCoach
 ENV SERVER_HOST=0.0.0.0
