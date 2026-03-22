@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs,
     future::Future,
     path::PathBuf,
@@ -129,6 +130,57 @@ async fn list_events_returns_422_when_credentials_not_configured() {
 }
 
 #[tokio::test]
+async fn list_events_are_scoped_to_authenticated_user() {
+    let app = intervals_test_app(
+        SessionMappedIdentityService::with_users([
+            ("session-1", "user-1", "athlete1@example.com"),
+            ("session-2", "user-2", "athlete2@example.com"),
+        ]),
+        ScopedIntervalsService::with_user_events([
+            (
+                "user-1",
+                vec![sample_event(101, "User One Workout", Some("- 1x10min 90%".to_string()))],
+            ),
+            (
+                "user-2",
+                vec![sample_event(202, "User Two Workout", Some("- 4x4min 120%".to_string()))],
+            ),
+        ]),
+    )
+    .await;
+
+    let response_user_1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let response_user_2 = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-2"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body_user_1: Value = get_json(response_user_1).await;
+    let body_user_2: Value = get_json(response_user_2).await;
+
+    assert_eq!(body_user_1.as_array().unwrap().len(), 1);
+    assert_eq!(body_user_2.as_array().unwrap().len(), 1);
+    assert_eq!(body_user_1.as_array().unwrap()[0].get("id").unwrap().as_i64(), Some(101));
+    assert_eq!(body_user_2.as_array().unwrap()[0].get("id").unwrap().as_i64(), Some(202));
+}
+
+#[tokio::test]
 async fn get_event_returns_single_event() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),
@@ -235,6 +287,83 @@ async fn create_event_returns_201() {
             .unwrap()
             .len(),
         2
+    );
+}
+
+#[tokio::test]
+async fn create_event_is_scoped_to_authenticated_user() {
+    let service = ScopedIntervalsService::with_user_events([
+        (
+            "user-1",
+            vec![sample_event(301, "User One Existing", Some("- 5min 55%".to_string()))],
+        ),
+        (
+            "user-2",
+            vec![sample_event(401, "User Two Existing", Some("- 3x3min 120%".to_string()))],
+        ),
+    ]);
+    let app = intervals_test_app(
+        SessionMappedIdentityService::with_users([
+            ("session-1", "user-1", "athlete1@example.com"),
+            ("session-2", "user-2", "athlete2@example.com"),
+        ]),
+        service,
+    )
+    .await;
+
+    let request_body = serde_json::json!({
+        "category": "WORKOUT",
+        "startDateLocal": "2026-03-26",
+        "name": "Created For User One",
+        "indoor": true,
+        "workoutDoc": "- 2x15min 90%"
+    });
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/events")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    let list_user_1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let list_user_2 = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-2"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let user_1_body: Value = get_json(list_user_1).await;
+    let user_2_body: Value = get_json(list_user_2).await;
+
+    assert_eq!(user_1_body.as_array().unwrap().len(), 2);
+    assert_eq!(user_2_body.as_array().unwrap().len(), 1);
+    assert_eq!(
+        user_2_body.as_array().unwrap()[0].get("id").unwrap().as_i64(),
+        Some(401)
     );
 }
 
@@ -675,6 +804,248 @@ struct TestIdentityServiceWithSession {
     session_id: String,
     user_id: String,
     roles: Vec<Role>,
+}
+
+#[derive(Clone, Default)]
+struct SessionMappedIdentityService {
+    users_by_session: HashMap<String, AppUser>,
+}
+
+impl SessionMappedIdentityService {
+    fn with_users<const N: usize>(entries: [(&str, &str, &str); N]) -> Self {
+        let users_by_session = entries
+            .into_iter()
+            .map(|(session_id, user_id, email)| {
+                (
+                    session_id.to_string(),
+                    AppUser::new(
+                        user_id.to_string(),
+                        format!("google-subject-{user_id}"),
+                        email.to_string(),
+                        vec![Role::User],
+                        Some(format!("User {user_id}")),
+                        None,
+                        true,
+                    ),
+                )
+            })
+            .collect();
+
+        Self { users_by_session }
+    }
+}
+
+impl IdentityUseCases for SessionMappedIdentityService {
+    fn begin_google_login(
+        &self,
+        _return_to: Option<String>,
+    ) -> BoxFuture<
+        Result<
+            aiwattcoach::domain::identity::GoogleLoginStart,
+            aiwattcoach::domain::identity::IdentityError,
+        >,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::identity::GoogleLoginStart {
+                state: "state-1".to_string(),
+                redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=state-1"
+                    .to_string(),
+            })
+        })
+    }
+
+    fn handle_google_callback(
+        &self,
+        _state: &str,
+        _code: &str,
+    ) -> BoxFuture<
+        Result<
+            aiwattcoach::domain::identity::GoogleLoginSuccess,
+            aiwattcoach::domain::identity::IdentityError,
+        >,
+    > {
+        Box::pin(async {
+            Err(aiwattcoach::domain::identity::IdentityError::External(
+                "not used in test".to_string(),
+            ))
+        })
+    }
+
+    fn get_current_user(
+        &self,
+        session_id: &str,
+    ) -> BoxFuture<Result<Option<AppUser>, aiwattcoach::domain::identity::IdentityError>> {
+        let user = self.users_by_session.get(session_id).cloned();
+        Box::pin(async move { Ok(user) })
+    }
+
+    fn logout(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<(), aiwattcoach::domain::identity::IdentityError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn require_admin(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<AppUser, aiwattcoach::domain::identity::IdentityError>> {
+        Box::pin(async {
+            Err(aiwattcoach::domain::identity::IdentityError::Forbidden)
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+struct ScopedIntervalsService {
+    events_by_user: Arc<Mutex<HashMap<String, Vec<Event>>>>,
+}
+
+impl ScopedIntervalsService {
+    fn with_user_events<const N: usize>(entries: [(&str, Vec<Event>); N]) -> Self {
+        let events_by_user = entries
+            .into_iter()
+            .map(|(user_id, events)| (user_id.to_string(), events))
+            .collect();
+
+        Self {
+            events_by_user: Arc::new(Mutex::new(events_by_user)),
+        }
+    }
+}
+
+impl IntervalsUseCases for ScopedIntervalsService {
+    fn list_events(
+        &self,
+        user_id: &str,
+        _range: &DateRange,
+    ) -> BoxFuture<Result<Vec<Event>, IntervalsError>> {
+        let user_id = user_id.to_string();
+        let store = self.events_by_user.clone();
+        Box::pin(async move {
+            Ok(store
+                .lock()
+                .unwrap()
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default())
+        })
+    }
+
+    fn get_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+    ) -> BoxFuture<Result<Event, IntervalsError>> {
+        let user_id = user_id.to_string();
+        let store = self.events_by_user.clone();
+        Box::pin(async move {
+            store
+                .lock()
+                .unwrap()
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|event| event.id == event_id)
+                .ok_or(IntervalsError::NotFound)
+        })
+    }
+
+    fn create_event(
+        &self,
+        user_id: &str,
+        event: CreateEvent,
+    ) -> BoxFuture<Result<Event, IntervalsError>> {
+        let user_id = user_id.to_string();
+        let store = self.events_by_user.clone();
+        Box::pin(async move {
+            let mut store = store.lock().unwrap();
+            let events = store.entry(user_id).or_default();
+            let next_id = events.iter().map(|existing| existing.id).max().unwrap_or(0) + 1;
+            let event = Event {
+                id: next_id,
+                start_date_local: event.start_date_local,
+                name: event.name,
+                category: event.category,
+                description: event.description,
+                indoor: event.indoor,
+                color: event.color,
+                workout_doc: event.workout_doc,
+            };
+            events.push(event.clone());
+            Ok(event)
+        })
+    }
+
+    fn update_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+        event: UpdateEvent,
+    ) -> BoxFuture<Result<Event, IntervalsError>> {
+        let user_id = user_id.to_string();
+        let store = self.events_by_user.clone();
+        Box::pin(async move {
+            let mut store = store.lock().unwrap();
+            let events = store.entry(user_id).or_default();
+            let existing = events
+                .iter_mut()
+                .find(|existing| existing.id == event_id)
+                .ok_or(IntervalsError::NotFound)?;
+
+            if let Some(category) = event.category {
+                existing.category = category;
+            }
+            if let Some(start_date_local) = event.start_date_local {
+                existing.start_date_local = start_date_local;
+            }
+            if let Some(name) = event.name {
+                existing.name = Some(name);
+            }
+            if let Some(description) = event.description {
+                existing.description = Some(description);
+            }
+            if let Some(indoor) = event.indoor {
+                existing.indoor = indoor;
+            }
+            if let Some(color) = event.color {
+                existing.color = Some(color);
+            }
+            if let Some(workout_doc) = event.workout_doc {
+                existing.workout_doc = Some(workout_doc);
+            }
+
+            Ok(existing.clone())
+        })
+    }
+
+    fn delete_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+    ) -> BoxFuture<Result<(), IntervalsError>> {
+        let user_id = user_id.to_string();
+        let store = self.events_by_user.clone();
+        Box::pin(async move {
+            let mut store = store.lock().unwrap();
+            let events = store.entry(user_id).or_default();
+            let before = events.len();
+            events.retain(|event| event.id != event_id);
+            if events.len() == before {
+                return Err(IntervalsError::NotFound);
+            }
+            Ok(())
+        })
+    }
+
+    fn download_fit(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+    ) -> BoxFuture<Result<Vec<u8>, IntervalsError>> {
+        Box::pin(async move { Ok(vec![1, 2, 3]) })
+    }
 }
 
 impl IdentityUseCases for TestIdentityServiceWithSession {
