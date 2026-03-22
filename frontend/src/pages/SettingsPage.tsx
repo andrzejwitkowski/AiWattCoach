@@ -1,54 +1,67 @@
-import type { BackendStatus } from '../lib/api/system';
-import { getReadinessMessage, getStatusToneClass } from '../lib/statusUi';
+import { useSettings } from '../features/settings/context/SettingsContext';
+import { AiAgentsCard } from '../features/settings/components/AiAgentsCard';
+import { IntervalsCard } from '../features/settings/components/IntervalsCard';
+import { OptionsCard } from '../features/settings/components/OptionsCard';
+import { CyclingSettingsCard } from '../features/settings/components/CyclingSettingsCard';
 
 type SettingsPageProps = {
-  apiBaseUrlLabel: string;
-  backendStatus: BackendStatus;
-  onRefresh: () => void;
-  isRefreshing: boolean;
+  apiBaseUrl: string;
 };
 
-export function SettingsPage({
-  apiBaseUrlLabel,
-  backendStatus,
-  onRefresh,
-  isRefreshing
-}: SettingsPageProps) {
-  const readinessPanelClass = getStatusToneClass(backendStatus.state);
-  const readinessMessage = getReadinessMessage(
-    backendStatus.state,
-    backendStatus.readiness.reason
-  );
+export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
+  const { settings, isLoading, error, refreshSettings } = useSettings();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center">
+        <p className="text-red-400">Failed to load settings: {error}</p>
+        <button
+          type="button"
+          className="mt-3 rounded-lg bg-red-500/20 px-4 py-2 text-sm text-red-300 hover:bg-red-500/30"
+          onClick={() => { void refreshSettings(); }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!settings) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
+        <p className="text-slate-400">No settings found.</p>
+      </div>
+    );
+  }
+
+  function handleSave() {
+    void refreshSettings();
+  }
 
   return (
-    <section className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,1fr)]">
-      <div className="rounded-[2rem] border border-white/15 bg-white/8 p-8 backdrop-blur">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-200">Settings</p>
-        <h2 className="mt-4 font-serif text-3xl text-white">Authenticated configuration</h2>
-        <p className="mt-4 max-w-2xl leading-7 text-slate-300">
-          This screen anchors future athlete preferences and integration settings after sign-in. The
-          heavier operational diagnostics now live in the admin-only System Info area.
+    <div className="space-y-6">
+      <div className="mb-4">
+        <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-400">Settings</p>
+        <h1 className="mt-1 font-serif text-3xl text-white">User Configuration</h1>
+        <p className="mt-2 max-w-2xl text-sm text-slate-400">
+          Manage your AI agents, integrations, analysis preferences, and cycling biometrics.
         </p>
-
-        <div className="mt-8 rounded-3xl border border-white/10 bg-slate-950/60 p-5">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">API base URL</p>
-          <p className="mt-3 break-all text-base font-medium text-cyan-200">{apiBaseUrlLabel}</p>
-        </div>
       </div>
 
-      <aside className={`rounded-[2rem] border p-6 backdrop-blur ${readinessPanelClass}`}>
-        <p className="text-sm font-semibold uppercase tracking-[0.3em]">Readiness</p>
-        <p className="mt-4 text-3xl font-semibold text-white">{backendStatus.readiness.status}</p>
-        <p className="mt-3 text-sm text-slate-200">{readinessMessage}</p>
-        <button
-          className="mt-6 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isRefreshing}
-          onClick={onRefresh}
-          type="button"
-        >
-          {isRefreshing ? 'Refreshing...' : 'Re-check backend'}
-        </button>
-      </aside>
-    </section>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <AiAgentsCard settings={settings} apiBaseUrl={apiBaseUrl} onSave={handleSave} />
+        <IntervalsCard settings={settings} apiBaseUrl={apiBaseUrl} onSave={handleSave} />
+        <OptionsCard settings={settings} apiBaseUrl={apiBaseUrl} onSave={handleSave} />
+        <CyclingSettingsCard settings={settings} apiBaseUrl={apiBaseUrl} onSave={handleSave} />
+      </div>
+    </div>
   );
 }

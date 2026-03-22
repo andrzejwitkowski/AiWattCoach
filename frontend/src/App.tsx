@@ -8,10 +8,13 @@ import { buildGoogleLoginUrl } from './features/auth/api/auth';
 import { AuthProvider } from './features/auth/context/AuthProvider';
 import { RequireAuth } from './features/auth/guards/RequireAuth';
 import { RequireRole } from './features/auth/guards/RequireRole';
+import { SettingsProvider } from './features/settings/context/SettingsContext';
 import { AppHomePage } from './pages/AppHomePage';
 import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
 import { LandingPage } from './pages/LandingPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { CalendarPage } from './pages/CalendarPage';
+import { AICoachPage } from './pages/AICoachPage';
 import { loadBackendStatus, type BackendStatus } from './lib/api/system';
 
 const API_BASE_URL = getApiBaseUrl();
@@ -74,22 +77,16 @@ export function App() {
 
           <Route element={<RequireAuth />}>
             <Route
-              element={<AuthenticatedLayout apiBaseUrl={API_BASE_URL} backendStatus={backendStatus} />}
+              element={
+                <SettingsProvider apiBaseUrl={API_BASE_URL}>
+                  <AuthenticatedLayout apiBaseUrl={API_BASE_URL} backendStatus={backendStatus} />
+                </SettingsProvider>
+              }
             >
               <Route element={<AppHomePage />} path="/app" />
-              <Route
-                element={
-                  <SettingsPage
-                    apiBaseUrlLabel={API_BASE_URL_LABEL}
-                    backendStatus={backendStatus}
-                    isRefreshing={isRefreshing}
-                    onRefresh={() => {
-                      void refreshBackendStatus();
-                    }}
-                  />
-                }
-                path="/settings"
-              />
+              <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
+              <Route element={<CalendarPage />} path="/calendar" />
+              <Route element={<AICoachPage />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
                 <Route
                   element={
