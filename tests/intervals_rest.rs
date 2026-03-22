@@ -223,6 +223,40 @@ async fn get_event_returns_single_event() {
 }
 
 #[tokio::test]
+async fn get_event_is_scoped_to_authenticated_user() {
+    let app = intervals_test_app(
+        SessionMappedIdentityService::with_users([
+            ("session-1", "user-1", "athlete1@example.com"),
+            ("session-2", "user-2", "athlete2@example.com"),
+        ]),
+        ScopedIntervalsService::with_user_events([
+            (
+                "user-1",
+                vec![sample_event(501, "User One Workout", Some("- 1x20min 90%".to_string()))],
+            ),
+            (
+                "user-2",
+                vec![sample_event(502, "User Two Workout", Some("- 6x2min 130%".to_string()))],
+            ),
+        ]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events/502")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn get_event_returns_404_when_not_found() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),
@@ -400,6 +434,47 @@ async fn update_event_returns_200() {
 }
 
 #[tokio::test]
+async fn update_event_is_scoped_to_authenticated_user() {
+    let app = intervals_test_app(
+        SessionMappedIdentityService::with_users([
+            ("session-1", "user-1", "athlete1@example.com"),
+            ("session-2", "user-2", "athlete2@example.com"),
+        ]),
+        ScopedIntervalsService::with_user_events([
+            (
+                "user-1",
+                vec![sample_event(601, "User One Workout", Some("- 5min 55%".to_string()))],
+            ),
+            (
+                "user-2",
+                vec![sample_event(602, "User Two Workout", Some("- 4x4min 120%".to_string()))],
+            ),
+        ]),
+    )
+    .await;
+
+    let request_body = serde_json::json!({
+        "name": "Hijack Attempt",
+        "workoutDoc": "- 99min 999w"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/intervals/events/602")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn create_event_rejects_invalid_category() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),
@@ -476,6 +551,41 @@ async fn delete_event_returns_204() {
 }
 
 #[tokio::test]
+async fn delete_event_is_scoped_to_authenticated_user() {
+    let app = intervals_test_app(
+        SessionMappedIdentityService::with_users([
+            ("session-1", "user-1", "athlete1@example.com"),
+            ("session-2", "user-2", "athlete2@example.com"),
+        ]),
+        ScopedIntervalsService::with_user_events([
+            (
+                "user-1",
+                vec![sample_event(701, "User One Workout", Some("- 5min 55%".to_string()))],
+            ),
+            (
+                "user-2",
+                vec![sample_event(702, "User Two Workout", Some("- 3x3min 120%".to_string()))],
+            ),
+        ]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/intervals/events/702")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn download_fit_returns_binary_file() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),
@@ -508,6 +618,40 @@ async fn download_fit_returns_binary_file() {
     );
     let body = to_bytes(response.into_body(), RESPONSE_LIMIT_BYTES).await.unwrap();
     assert_eq!(body.as_ref(), &[1, 9, 9, 4]);
+}
+
+#[tokio::test]
+async fn download_fit_is_scoped_to_authenticated_user() {
+    let app = intervals_test_app(
+        SessionMappedIdentityService::with_users([
+            ("session-1", "user-1", "athlete1@example.com"),
+            ("session-2", "user-2", "athlete2@example.com"),
+        ]),
+        ScopedIntervalsService::with_user_events([
+            (
+                "user-1",
+                vec![sample_event(801, "User One Workout", Some("- 5min 55%".to_string()))],
+            ),
+            (
+                "user-2",
+                vec![sample_event(802, "User Two Workout", Some("- 4x4min 120%".to_string()))],
+            ),
+        ]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events/802/download.fit")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -1041,10 +1185,27 @@ impl IntervalsUseCases for ScopedIntervalsService {
 
     fn download_fit(
         &self,
-        _user_id: &str,
-        _event_id: i64,
+        user_id: &str,
+        event_id: i64,
     ) -> BoxFuture<Result<Vec<u8>, IntervalsError>> {
-        Box::pin(async move { Ok(vec![1, 2, 3]) })
+        let user_id = user_id.to_string();
+        let store = self.events_by_user.clone();
+        Box::pin(async move {
+            let has_event = store
+                .lock()
+                .unwrap()
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .any(|event| event.id == event_id);
+
+            if !has_event {
+                return Err(IntervalsError::NotFound);
+            }
+
+            Ok(vec![1, 2, 3])
+        })
     }
 }
 
