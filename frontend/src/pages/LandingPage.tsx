@@ -34,7 +34,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
         </nav>
       </header>
 
-      <main className="relative z-10 flex items-center justify-center min-h-screen px-4 pt-16">
+      <main className="relative z-10 flex items-center justify-center min-h-screen px-4 pt-16 pb-24">
         <LoginPanel onLogin={onLogin} />
       </main>
 

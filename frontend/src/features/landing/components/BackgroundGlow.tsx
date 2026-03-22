@@ -6,7 +6,8 @@ export function BackgroundGlow() {
   return (
     <div aria-hidden="true" className="fixed inset-0 z-0 bg-[#0c0e11]">
       <img
-        alt="Professional cyclist in aero gear riding towards the camera on a moody coastal road"
+        alt=""
+        role="presentation"
         className="w-full h-full object-cover"
         src="/images/cyclist-bg.jpg"
         style={{ clipPath: 'inset(0 0 5% 0)' }}
