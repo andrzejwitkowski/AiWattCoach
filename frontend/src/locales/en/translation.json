@@ -1,0 +1,82 @@
+{
+  "settings": {
+    "title": "Settings",
+    "loading": "Loading settings...",
+    "loadError": "Error loading settings",
+    "retry": "Retry",
+    "noSettings": "No settings found.",
+    "userConfiguration": "User Configuration",
+    "description": "Manage your AI agents, integrations, analysis preferences, and cycling biometrics."
+  },
+  "nav": {
+    "settings": "Settings",
+    "calendar": "Calendar",
+    "aiCoach": "AI Coach",
+    "workspace": "Workspace",
+    "systemInfo": "System Info"
+  },
+  "aiAgents": {
+    "title": "AI Agents",
+    "subtitle": "Customize your intelligence",
+    "description": "Bring Your Own Key (BYOK). Enter your API keys to unlock advanced AI-powered training analysis.",
+    "openaiKey": "OpenAI API Key",
+    "geminiKey": "Gemini API Key",
+    "save": "Save AI Config",
+    "saving": "Saving...",
+    "saved": "Saved!",
+    "configured": "Configured"
+  },
+  "intervals": {
+    "title": "Intervals.icu",
+    "subtitle": "Sync workout data",
+    "description": "Connect your Intervals.icu account to sync workout data and performance metrics automatically.",
+    "apiKey": "API Key",
+    "athleteId": "Athlete ID",
+    "connect": "Connect Intervals",
+    "connecting": "Connecting...",
+    "connected": "Connected!",
+    "configured": "Connected",
+    "connectedStatus": "Connected",
+    "notConnectedStatus": "Not connected",
+    "connectPrompt": "Connect Intervals"
+  },
+  "cycling": {
+    "title": "Cycling Settings",
+    "subtitle": "Your profile data",
+    "description": "Enter your cycling profile to enable accurate power-based training load calculations.",
+    "fullName": "Full Name",
+    "age": "Age",
+    "heightCm": "Height (cm)",
+    "weightKg": "Weight (kg)",
+    "ftpWatts": "FTP (Watts)",
+    "hrMaxBpm": "Max HR (BPM)",
+    "vo2Max": "VO2 Max",
+    "save": "Save Cycling Settings",
+    "saving": "Saving...",
+    "saved": "Saved!",
+    "profileAccuracy": "Profile Accuracy",
+    "complete": "Complete",
+    "lastZoneUpdate": "Last Zone Update",
+    "lastZoneDaysAgo": "days ago",
+    "never": "Never",
+    "wattsUnit": "Watts"
+  },
+  "options": {
+    "title": "Options",
+    "subtitle": "Analysis configuration",
+    "analyzeWithoutHR": "Analyze without heart rate",
+    "analyzeWithoutHRLabel": "ANALIZUJ BEZ TĘTNA",
+    "analyzeWithoutHRDescription": "Enabling this will use Power (Watts) as the sole metric for training load calculations when HR data is missing.",
+    "allEnginesNominal": "All engines nominal",
+    "systemStatus": "System Status",
+    "save": "Save Options",
+    "saving": "Saving...",
+    "saved": "Saved!"
+  },
+  "common": {
+    "saveError": "Failed to save",
+    "configured": "Configured",
+    "showKey": "Show API key",
+    "hideKey": "Hide API key"
+  }
+}

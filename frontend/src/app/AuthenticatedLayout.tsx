@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import { UserMenu } from '../features/auth/components/UserMenu';
 import { useAuth } from '../features/auth/context/AuthProvider';
@@ -11,16 +12,17 @@ type AuthenticatedLayoutProps = {
 };
 
 export function AuthenticatedLayout({ apiBaseUrl, backendStatus }: AuthenticatedLayoutProps) {
+  const { t } = useTranslation();
   const auth = useAuth();
   const statusAccentClass = getStatusToneClass(backendStatus.state);
   const navigationItems = [
-    { to: '/app', label: 'Workspace' },
-    { to: '/settings', label: 'Settings' }
+    { to: '/app', label: t('nav.workspace') },
+    { to: '/settings', label: t('nav.settings') }
   ];
   const currentUser = auth.user;
 
   if (auth.status === 'authenticated' && currentUser && currentUser.roles.includes('admin')) {
-    navigationItems.push({ to: '/admin/system-info', label: 'System Info' });
+    navigationItems.push({ to: '/admin/system-info', label: t('nav.systemInfo') });
   }
 
   return (
@@ -39,7 +41,7 @@ export function AuthenticatedLayout({ apiBaseUrl, backendStatus }: Authenticated
             </div>
 
             <div className="flex flex-col gap-4 xl:items-end">
-              <section className={`rounded-[1.6rem] border px-5 py-4 ${statusAccentClass}`}>
+              <section className={"rounded-[1.6rem] border px-5 py-4 " + statusAccentClass}>
                 <p className="text-xs uppercase tracking-[0.3em]">Backend status</p>
                 <p className="mt-2 text-2xl font-semibold text-white">{backendStatus.state}</p>
                 <p className="mt-1 text-sm text-slate-200">
