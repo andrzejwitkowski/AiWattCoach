@@ -10,9 +10,11 @@ import { RequireAuth } from './features/auth/guards/RequireAuth';
 import { RequireRole } from './features/auth/guards/RequireRole';
 import { AppHomePage } from './pages/AppHomePage';
 import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
+import { CalendarPage } from './pages/CalendarPage';
+import { AICoachPage } from './pages/AICoachPage';
 import { LandingPage } from './pages/LandingPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { SettingsProvider } from './features/settings/context/SettingsProvider';
+import { SettingsProvider } from './features/settings/context/SettingsContext';
 import { loadBackendStatus, type BackendStatus } from './lib/api/system';
 
 const API_BASE_URL = getApiBaseUrl();
@@ -77,13 +79,15 @@ export function App() {
           <Route element={<RequireAuth />}>
             <Route
               element={
-                <SettingsProvider>
+                <SettingsProvider apiBaseUrl={API_BASE_URL}>
                   <AuthenticatedLayout apiBaseUrl={API_BASE_URL} />
                 </SettingsProvider>
               }
             >
               <Route element={<AppHomePage />} path="/app" />
-              <Route element={<SettingsPage />} path="/settings" />
+              <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
+              <Route element={<CalendarPage />} path="/calendar" />
+              <Route element={<AICoachPage />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
                 <Route
                   element={

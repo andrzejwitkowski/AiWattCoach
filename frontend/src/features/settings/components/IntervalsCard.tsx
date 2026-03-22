@@ -1,25 +1,42 @@
 import { useState } from 'react';
 import { Eye, EyeOff, RefreshCw } from 'lucide-react';
 
-import type { IntervalsSettings, UpdateIntervalsRequest } from '../types';
+import type { UserSettingsResponse } from '../types';
+import { updateIntervals } from '../api/settings';
 
 type IntervalsCardProps = {
-  settings: IntervalsSettings;
-  onSave: (data: UpdateIntervalsRequest) => Promise<void>;
-  isSaving: boolean;
+  settings: UserSettingsResponse;
+  apiBaseUrl: string;
+  onSave: () => void;
 };
 
-export function IntervalsCard({ settings, onSave, isSaving }: IntervalsCardProps) {
+export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardProps) {
   const [apiKey, setApiKey] = useState('');
   const [athleteId, setAthleteId] = useState('');
   const [showKey, setShowKey] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const intervals = settings.intervals;
 
   const handleSave = async () => {
-    await onSave({
-      apiKey: apiKey || null,
-      athleteId: athleteId || null,
-    });
-    setApiKey('');
+    const trimmedApiKey = apiKey.trim();
+    const trimmedAthleteId = athleteId.trim();
+    if (!trimmedApiKey && !trimmedAthleteId) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await updateIntervals(apiBaseUrl, {
+        apiKey: trimmedApiKey || undefined,
+        athleteId: trimmedAthleteId || undefined,
+      });
+      setApiKey('');
+      onSave();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to connect to Intervals.icu');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -34,7 +51,7 @@ export function IntervalsCard({ settings, onSave, isSaving }: IntervalsCardProps
             External Ecosystem
           </p>
         </div>
-        {settings.connected && (
+        {intervals.connected && (
           <span className="text-[10px] font-semibold bg-emerald-400/20 text-emerald-400 rounded-full px-2 py-0.5 uppercase tracking-wider">
             Connected
           </span>
@@ -54,7 +71,7 @@ export function IntervalsCard({ settings, onSave, isSaving }: IntervalsCardProps
             <input
               className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
               type={showKey ? 'text' : 'password'}
-              placeholder={settings.apiKeySet ? 'Already configured' : 'Enter API key'}
+              placeholder={intervals.apiKeySet ? 'Already configured' : 'Enter API key'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
             />
@@ -67,8 +84,8 @@ export function IntervalsCard({ settings, onSave, isSaving }: IntervalsCardProps
               {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          {settings.apiKeySet && (
-            <p className="mt-1.5 text-xs text-emerald-400">Configured: {settings.apiKey}</p>
+          {intervals.apiKeySet && (
+            <p className="mt-1.5 text-xs text-emerald-400">API key is configured</p>
           )}
         </div>
 
@@ -79,20 +96,26 @@ export function IntervalsCard({ settings, onSave, isSaving }: IntervalsCardProps
           <input
             className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
             type="text"
-            placeholder="i123456"
+            placeholder={intervals.athleteId ?? 'i123456'}
             value={athleteId}
             onChange={(e) => setAthleteId(e.target.value)}
           />
-          {settings.athleteId && (
-            <p className="mt-1.5 text-xs text-slate-400">Current: {settings.athleteId}</p>
+          {intervals.athleteId && (
+            <p className="mt-1.5 text-xs text-slate-400">Current: {intervals.athleteId}</p>
           )}
         </div>
       </div>
 
+      {saveError && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
+
       <button
         className="mt-6 w-full flex items-center justify-center gap-2 bg-cyan-400 text-slate-950 font-semibold rounded-xl py-3 text-sm hover:bg-cyan-300 transition disabled:opacity-60 disabled:cursor-not-allowed"
-        onClick={handleSave}
-        disabled={isSaving}
+        onClick={() => { void handleSave(); }}
+        disabled={isSaving || (!apiKey.trim() && !athleteId.trim())}
         type="button"
       >
         {isSaving ? 'Connecting...' : <><RefreshCw size={15} />Connect Intervals</>}

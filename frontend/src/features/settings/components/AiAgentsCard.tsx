@@ -1,27 +1,44 @@
 import { useState } from 'react';
 import { Bot, Eye, EyeOff, Save } from 'lucide-react';
 
-import type { AiAgentsSettings, UpdateAiAgentsRequest } from '../types';
+import type { UserSettingsResponse } from '../types';
+import { updateAiAgents } from '../api/settings';
 
 type AiAgentsCardProps = {
-  settings: AiAgentsSettings;
-  onSave: (data: UpdateAiAgentsRequest) => Promise<void>;
-  isSaving: boolean;
+  settings: UserSettingsResponse;
+  apiBaseUrl: string;
+  onSave: () => void;
 };
 
-export function AiAgentsCard({ settings, onSave, isSaving }: AiAgentsCardProps) {
+export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps) {
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [showOpenai, setShowOpenai] = useState(false);
   const [showGemini, setShowGemini] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const aiAgents = settings.aiAgents;
 
   const handleSave = async () => {
-    await onSave({
-      openaiApiKey: openaiKey || null,
-      geminiApiKey: geminiKey || null,
-    });
-    setOpenaiKey('');
-    setGeminiKey('');
+    const trimmedOpenai = openaiKey.trim();
+    const trimmedGemini = geminiKey.trim();
+    if (!trimmedOpenai && !trimmedGemini) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await updateAiAgents(apiBaseUrl, {
+        openaiApiKey: trimmedOpenai || undefined,
+        geminiApiKey: trimmedGemini || undefined,
+      });
+      setOpenaiKey('');
+      setGeminiKey('');
+      onSave();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save AI configuration');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -56,7 +73,7 @@ export function AiAgentsCard({ settings, onSave, isSaving }: AiAgentsCardProps) 
             <input
               className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
               type={showOpenai ? 'text' : 'password'}
-              placeholder={settings.openaiApiKeySet ? 'Already configured' : 'sk-...'}
+              placeholder={aiAgents.openaiApiKeySet ? 'Already configured' : 'sk-...'}
               value={openaiKey}
               onChange={(e) => setOpenaiKey(e.target.value)}
             />
@@ -69,8 +86,8 @@ export function AiAgentsCard({ settings, onSave, isSaving }: AiAgentsCardProps) 
               {showOpenai ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          {settings.openaiApiKeySet && (
-            <p className="mt-1.5 text-xs text-emerald-400">Configured: {settings.openaiApiKey}</p>
+          {aiAgents.openaiApiKeySet && (
+            <p className="mt-1.5 text-xs text-emerald-400">API key is configured</p>
           )}
         </div>
 
@@ -82,7 +99,7 @@ export function AiAgentsCard({ settings, onSave, isSaving }: AiAgentsCardProps) 
             <input
               className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
               type={showGemini ? 'text' : 'password'}
-              placeholder={settings.geminiApiKeySet ? 'Already configured' : 'AI...'}
+              placeholder={aiAgents.geminiApiKeySet ? 'Already configured' : 'AIza...'}
               value={geminiKey}
               onChange={(e) => setGeminiKey(e.target.value)}
             />
@@ -95,16 +112,22 @@ export function AiAgentsCard({ settings, onSave, isSaving }: AiAgentsCardProps) 
               {showGemini ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          {settings.geminiApiKeySet && (
-            <p className="mt-1.5 text-xs text-emerald-400">Configured: {settings.geminiApiKey}</p>
+          {aiAgents.geminiApiKeySet && (
+            <p className="mt-1.5 text-xs text-emerald-400">API key is configured</p>
           )}
         </div>
       </div>
 
+      {saveError && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
+
       <button
         className="mt-6 w-full flex items-center justify-center gap-2 bg-cyan-400 text-slate-950 font-semibold rounded-xl py-3 text-sm hover:bg-cyan-300 transition disabled:opacity-60 disabled:cursor-not-allowed"
-        onClick={handleSave}
-        disabled={isSaving}
+        onClick={() => { void handleSave(); }}
+        disabled={isSaving || (!openaiKey.trim() && !geminiKey.trim())}
         type="button"
       >
         {isSaving ? (

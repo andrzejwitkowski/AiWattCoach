@@ -8,6 +8,7 @@ import {
   Settings,
   ShieldCheck,
 } from 'lucide-react';
+import type { ComponentType } from 'react';
 
 import { UserMenu } from '../features/auth/components/UserMenu';
 import { useAuth } from '../features/auth/context/AuthProvider';
@@ -20,6 +21,8 @@ type AuthenticatedLayoutProps = {
 const PAGE_TITLES: Record<string, string> = {
   '/app': 'Dashboard',
   '/settings': 'Settings',
+  '/calendar': 'Calendar',
+  '/ai-coach': 'AI Coach',
   '/admin/system-info': 'System Info',
 };
 
@@ -30,7 +33,6 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
   const currentUser = auth.user;
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'WATTLY';
-
   const cycling = settingsCtx.settings.cycling;
 
   return (
@@ -45,8 +47,8 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
 
         <nav className="mt-4 flex-1 px-3 space-y-1">
           <NavItem to="/app" icon={LayoutDashboard} label="Dashboard" />
-          <NavItem to="/app" icon={Calendar} label="Calendar" />
-          <NavItem to="/app" icon={Bot} label="AI Coach" />
+          <NavItem to="/calendar" icon={Calendar} label="Calendar" />
+          <NavItem to="/ai-coach" icon={Bot} label="AI Coach" />
           <NavItem to="/settings" icon={Settings} label="Settings" />
           {currentUser && currentUser.roles.includes('admin') && (
             <NavItem to="/admin/system-info" icon={ShieldCheck} label="System Info" />
@@ -105,7 +107,7 @@ function MetricPill({ label }: { label: string }) {
 
 type NavItemProps = {
   to: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: ComponentType<{ size?: number; className?: string }>;
   label: string;
 };
 
@@ -117,7 +119,7 @@ function NavItem({ to, icon: Icon, label }: NavItemProps) {
       className={({ isActive }) =>
         [
           'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition group',
-          isActive && label === 'Settings'
+          isActive
             ? 'bg-white/8 text-cyan-300 border-l-2 border-cyan-400 pl-[10px]'
             : 'text-slate-400 hover:text-slate-200 hover:bg-white/5',
         ].join(' ')

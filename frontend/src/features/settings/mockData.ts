@@ -4,13 +4,13 @@ const twelveDaysAgo = Math.floor(Date.now() / 1000) - 12 * 24 * 60 * 60;
 
 export const mockSettings: UserSettingsResponse = {
   aiAgents: {
-    openaiApiKey: 'sk-...abc1',
+    openaiApiKey: 'sk_test_REDACTED',
     openaiApiKeySet: true,
-    geminiApiKey: '***...xyz9',
+    geminiApiKey: '<redacted>',
     geminiApiKeySet: true,
   },
   intervals: {
-    apiKey: '***...xyz9',
+    apiKey: '<redacted>',
     apiKeySet: true,
     athleteId: 'i123456',
     connected: true,

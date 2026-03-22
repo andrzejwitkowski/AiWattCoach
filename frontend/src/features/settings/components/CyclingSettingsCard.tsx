@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useState, type ChangeEvent, type ComponentType } from 'react';
 import { ChevronRight, Heart, RefreshCw, Zap } from 'lucide-react';
 
-import type { CyclingSettingsData, UpdateCyclingRequest } from '../types';
+import type { UserSettingsResponse } from '../types';
+import { updateCycling } from '../api/settings';
 
 type CyclingSettingsCardProps = {
-  settings: CyclingSettingsData;
-  onSave: (data: UpdateCyclingRequest) => Promise<void>;
-  isSaving: boolean;
+  settings: UserSettingsResponse;
+  apiBaseUrl: string;
+  onSave: () => void;
 };
 
-function computeProfileAccuracy(s: CyclingSettingsData): number {
+function computeProfileAccuracy(s: UserSettingsResponse['cycling']): number {
   const fields = [s.fullName, s.age, s.heightCm, s.weightKg, s.ftpWatts, s.hrMaxBpm, s.vo2Max];
   const filled = fields.filter((v) => v != null).length;
   return Math.round((filled / fields.length) * 100);
@@ -24,33 +25,63 @@ function formatLastZoneUpdate(epochSeconds: number | null): string {
   return `${days} days ago`;
 }
 
-export function CyclingSettingsCard({ settings, onSave, isSaving }: CyclingSettingsCardProps) {
+export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSettingsCardProps) {
+  const cycling = settings.cycling;
   const [form, setForm] = useState<Record<string, string>>({
-    fullName: settings.fullName ?? '',
-    age: settings.age?.toString() ?? '',
-    heightCm: settings.heightCm?.toString() ?? '',
-    weightKg: settings.weightKg?.toString() ?? '',
-    ftpWatts: settings.ftpWatts?.toString() ?? '',
-    hrMaxBpm: settings.hrMaxBpm?.toString() ?? '',
-    vo2Max: settings.vo2Max?.toString() ?? '',
+    fullName: cycling.fullName ?? '',
+    age: cycling.age?.toString() ?? '',
+    heightCm: cycling.heightCm?.toString() ?? '',
+    weightKg: cycling.weightKg?.toString() ?? '',
+    ftpWatts: cycling.ftpWatts?.toString() ?? '',
+    hrMaxBpm: cycling.hrMaxBpm?.toString() ?? '',
+    vo2Max: cycling.vo2Max?.toString() ?? '',
   });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const accuracy = computeProfileAccuracy(settings);
+  const accuracy = computeProfileAccuracy(cycling);
 
-  const handleChange = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (field: string) => (e: ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    setSaveError(null);
   };
 
   const handleSave = async () => {
-    await onSave({
-      fullName: form.fullName || null,
-      age: form.age ? Number(form.age) : null,
-      heightCm: form.heightCm ? Number(form.heightCm) : null,
-      weightKg: form.weightKg ? Number(form.weightKg) : null,
-      ftpWatts: form.ftpWatts ? Number(form.ftpWatts) : null,
-      hrMaxBpm: form.hrMaxBpm ? Number(form.hrMaxBpm) : null,
-      vo2Max: form.vo2Max ? Number(form.vo2Max) : null,
-    });
+    setIsSaving(true);
+    try {
+      const req: Record<string, unknown> = {};
+      if (form.fullName) req.fullName = form.fullName;
+      if (form.age) {
+        const age = parseInt(form.age, 10);
+        if (!Number.isNaN(age)) req.age = age;
+      }
+      if (form.heightCm) {
+        const h = parseInt(form.heightCm, 10);
+        if (!Number.isNaN(h)) req.heightCm = h;
+      }
+      if (form.weightKg) {
+        const w = parseFloat(form.weightKg);
+        if (!Number.isNaN(w)) req.weightKg = w;
+      }
+      if (form.ftpWatts) {
+        const ftp = parseInt(form.ftpWatts, 10);
+        if (!Number.isNaN(ftp)) req.ftpWatts = ftp;
+      }
+      if (form.hrMaxBpm) {
+        const hr = parseInt(form.hrMaxBpm, 10);
+        if (!Number.isNaN(hr)) req.hrMaxBpm = hr;
+      }
+      if (form.vo2Max) {
+        const vo2 = parseFloat(form.vo2Max);
+        if (!Number.isNaN(vo2)) req.vo2Max = vo2;
+      }
+      await updateCycling(apiBaseUrl, req);
+      onSave();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save cycling settings');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -121,7 +152,7 @@ export function CyclingSettingsCard({ settings, onSave, isSaving }: CyclingSetti
           </div>
           <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
             <RefreshCw size={12} />
-            Last Zone Update: {formatLastZoneUpdate(settings.lastZoneUpdateEpochSeconds)}
+            Last Zone Update: {formatLastZoneUpdate(cycling.lastZoneUpdateEpochSeconds)}
           </div>
         </div>
       </div>
@@ -132,7 +163,7 @@ export function CyclingSettingsCard({ settings, onSave, isSaving }: CyclingSetti
           iconBg="bg-yellow-400/20"
           iconColor="text-yellow-400"
           label="Functional Threshold Power"
-          value={settings.ftpWatts ? `${settings.ftpWatts} Watts` : '—'}
+          value={cycling.ftpWatts ? `${cycling.ftpWatts} Watts` : '—'}
           editable
           inputValue={form.ftpWatts}
           onChange={handleChange('ftpWatts')}
@@ -143,7 +174,7 @@ export function CyclingSettingsCard({ settings, onSave, isSaving }: CyclingSetti
           iconBg="bg-red-400/20"
           iconColor="text-red-400"
           label="HR Max"
-          value={settings.hrMaxBpm ? `${settings.hrMaxBpm} BPM` : '—'}
+          value={cycling.hrMaxBpm ? `${cycling.hrMaxBpm} BPM` : '—'}
           editable
           inputValue={form.hrMaxBpm}
           onChange={handleChange('hrMaxBpm')}
@@ -162,9 +193,15 @@ export function CyclingSettingsCard({ settings, onSave, isSaving }: CyclingSetti
         />
       </div>
 
+      {saveError && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
+
       <button
         className="mt-6 w-full flex items-center justify-center gap-2 bg-slate-800 border border-white/10 text-slate-300 font-semibold rounded-xl py-3 text-sm uppercase tracking-wider hover:bg-slate-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
-        onClick={handleSave}
+        onClick={() => { void handleSave(); }}
         disabled={isSaving}
         type="button"
       >
@@ -187,7 +224,7 @@ function FormField({
   sublabel: string;
   type?: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
   suffix?: string;
 }) {
@@ -225,14 +262,14 @@ function MetricCard({
   onChange,
   placeholder,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: ComponentType<{ size?: number; className?: string }>;
   iconBg: string;
   iconColor: string;
   label: string;
   value: string;
   editable?: boolean;
   inputValue?: string;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
 }) {
   return (

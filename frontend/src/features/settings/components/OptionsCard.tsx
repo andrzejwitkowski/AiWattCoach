@@ -1,13 +1,46 @@
+import { useEffect, useRef, useState } from 'react';
 import { Info, Settings2 } from 'lucide-react';
 
-import type { AnalysisOptionsSettings, UpdateOptionsRequest } from '../types';
+import type { UserSettingsResponse } from '../types';
+import { updateOptions } from '../api/settings';
 
 type OptionsCardProps = {
-  settings: AnalysisOptionsSettings;
-  onToggle: (data: UpdateOptionsRequest) => Promise<void>;
+  settings: UserSettingsResponse;
+  apiBaseUrl: string;
+  onSave: () => void;
 };
 
-export function OptionsCard({ settings, onToggle }: OptionsCardProps) {
+export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) {
+  const [analyzeWithoutHR, setAnalyzeWithoutHR] = useState(settings.options.analyzeWithoutHeartRate);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  async function handleToggle(value: boolean) {
+    if (isSaving) return;
+    setIsSaving(true);
+    setAnalyzeWithoutHR(value);
+    setSaveError(null);
+    try {
+      await updateOptions(apiBaseUrl, { analyzeWithoutHeartRate: value });
+      onSave();
+    } catch (err) {
+      setAnalyzeWithoutHR(!value);
+      setSaveError(err instanceof Error ? err.message : 'Failed to update option');
+      timeoutRef.current = setTimeout(() => setSaveError(null), 4000);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
       <div className="flex items-center gap-3">
@@ -25,17 +58,17 @@ export function OptionsCard({ settings, onToggle }: OptionsCardProps) {
           </div>
           <button
             className="relative w-12 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400/50 shrink-0"
-            style={{ backgroundColor: settings.analyzeWithoutHeartRate ? '#22d3ee' : '#475569' }}
-            onClick={() => {
-              void onToggle({ analyzeWithoutHeartRate: !settings.analyzeWithoutHeartRate });
-            }}
+            style={{ backgroundColor: analyzeWithoutHR ? '#22d3ee' : '#475569' }}
+            onClick={() => { void handleToggle(!analyzeWithoutHR); }}
             type="button"
             role="switch"
-            aria-checked={settings.analyzeWithoutHeartRate}
+            aria-checked={analyzeWithoutHR}
+            aria-label="Analyze without heart rate"
+            disabled={isSaving}
           >
             <span
               className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                settings.analyzeWithoutHeartRate ? 'translate-x-6' : 'translate-x-0'
+                analyzeWithoutHR ? 'translate-x-6' : 'translate-x-0'
               }`}
             />
           </button>
@@ -48,6 +81,12 @@ export function OptionsCard({ settings, onToggle }: OptionsCardProps) {
             is unavailable or unreliable. FTP and stress scores will still be calculated.
           </p>
         </div>
+
+        {saveError && (
+          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {saveError}
+          </div>
+        )}
 
         <div className="mt-4 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
