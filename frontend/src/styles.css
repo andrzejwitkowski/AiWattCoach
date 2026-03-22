@@ -2,9 +2,9 @@
 
 :root {
   color-scheme: dark;
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
-  background: #04111f;
-  color: #e5eef7;
+  font-family: Inter, "Segoe UI", sans-serif;
+  background: #0c0e11;
+  color: #f9f9fd;
 }
 
 body {
@@ -26,4 +26,15 @@ select {
 
 * {
   box-sizing: border-box;
+}
+
+.glass-panel {
+  background: rgba(17, 20, 23, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.text-neon {
+  color: #d2ff9a;
+  text-shadow: 0 0 15px rgba(210, 255, 154, 0.3);
 }
