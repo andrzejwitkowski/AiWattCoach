@@ -70,6 +70,7 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
     vo2Max: cycling.vo2Max?.toString() ?? '',
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   function setField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -80,16 +81,34 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
     try {
       const req: UpdateCyclingRequest = {};
       if (form.fullName) req.fullName = form.fullName;
-      if (form.age) req.age = parseInt(form.age, 10) || undefined;
-      if (form.heightCm) req.heightCm = parseInt(form.heightCm, 10) || undefined;
-      if (form.weightKg) req.weightKg = parseFloat(form.weightKg) || undefined;
-      if (form.ftpWatts) req.ftpWatts = parseInt(form.ftpWatts, 10) || undefined;
-      if (form.hrMaxBpm) req.hrMaxBpm = parseInt(form.hrMaxBpm, 10) || undefined;
-      if (form.vo2Max) req.vo2Max = parseFloat(form.vo2Max) || undefined;
+      if (form.age) {
+        const age = parseInt(form.age, 10);
+        if (!Number.isNaN(age)) req.age = age;
+      }
+      if (form.heightCm) {
+        const h = parseInt(form.heightCm, 10);
+        if (!Number.isNaN(h)) req.heightCm = h;
+      }
+      if (form.weightKg) {
+        const w = parseFloat(form.weightKg);
+        if (!Number.isNaN(w)) req.weightKg = w;
+      }
+      if (form.ftpWatts) {
+        const ftp = parseInt(form.ftpWatts, 10);
+        if (!Number.isNaN(ftp)) req.ftpWatts = ftp;
+      }
+      if (form.hrMaxBpm) {
+        const hr = parseInt(form.hrMaxBpm, 10);
+        if (!Number.isNaN(hr)) req.hrMaxBpm = hr;
+      }
+      if (form.vo2Max) {
+        const vo2 = parseFloat(form.vo2Max);
+        if (!Number.isNaN(vo2)) req.vo2Max = vo2;
+      }
       await updateCycling(apiBaseUrl, req);
       onSave();
-    } catch {
-      // handle error
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save cycling settings');
     } finally {
       setIsSaving(false);
     }
@@ -150,6 +169,12 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
         <Field label="FTP / PRóg MOCY" id="ftp-watts" value={form.ftpWatts} onChange={(v) => setField('ftpWatts', v)} type="number" placeholder="280" />
         <Field label="HR MAX / TĘTNO MAKSYMALNE" id="hr-max" value={form.hrMaxBpm} onChange={(v) => setField('hrMaxBpm', v)} type="number" placeholder="192" />
       </div>
+
+      {saveError && (
+        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
 
       <button
         type="button"

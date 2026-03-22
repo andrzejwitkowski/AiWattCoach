@@ -32,19 +32,19 @@ function Toggle({ enabled, onChange, id }: { enabled: boolean; onChange: (v: boo
 
 export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) {
   const [analyzeWithoutHR, setAnalyzeWithoutHR] = useState(settings.options.analyzeWithoutHeartRate);
-  const [, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   async function handleToggle(value: boolean) {
     setAnalyzeWithoutHR(value);
-    setIsSaving(true);
+    setSaveError(null);
     try {
       const req: UpdateOptionsRequest = { analyzeWithoutHeartRate: value };
       await updateOptions(apiBaseUrl, req);
       onSave();
-    } catch {
+    } catch (err) {
       setAnalyzeWithoutHR(!value);
-    } finally {
-      setIsSaving(false);
+      setSaveError(err instanceof Error ? err.message : 'Failed to update option');
+      setTimeout(() => setSaveError(null), 4000);
     }
   }
 
@@ -81,6 +81,12 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
             Enabling this will use Power (Watts) as the sole metric for training load calculations when HR data is missing.
           </p>
         </div>
+
+        {saveError && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {saveError}
+          </div>
+        )}
 
         <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
           <div className="flex items-center gap-2">

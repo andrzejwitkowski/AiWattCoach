@@ -14,12 +14,15 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
   const [athleteId, setAthleteId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const intervals = settings.intervals;
 
   async function handleSave() {
+    if (!apiKey && !athleteId) return;
     setIsSaving(true);
     setSaved(false);
+    setSaveError(null);
     try {
       const req: UpdateIntervalsRequest = {};
       if (apiKey) req.apiKey = apiKey;
@@ -28,11 +31,23 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
       setApiKey('');
       setSaved(true);
       onSave();
-    } catch {
-      // handle error
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to connect to Intervals.icu');
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function handleApiKeyChange(value: string) {
+    setApiKey(value);
+    setSaved(false);
+    setSaveError(null);
+  }
+
+  function handleAthleteIdChange(value: string) {
+    setAthleteId(value);
+    setSaved(false);
+    setSaveError(null);
   }
 
   return (
@@ -65,7 +80,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
               placeholder={intervals.apiKeySet ? '••••••••••••••••' : 'Enter your Intervals API key'}
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) => handleApiKeyChange(e.target.value)}
             />
             {intervals.apiKeySet && (
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-emerald-400">Configured</span>
@@ -83,7 +98,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
             placeholder={intervals.athleteId ?? 'i12345678'}
             value={athleteId}
-            onChange={(e) => setAthleteId(e.target.value)}
+            onChange={(e) => handleAthleteIdChange(e.target.value)}
           />
         </div>
 
@@ -95,6 +110,12 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
             </span>
           </div>
         </div>
+
+        {saveError && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {saveError}
+          </div>
+        )}
 
         <button
           type="button"

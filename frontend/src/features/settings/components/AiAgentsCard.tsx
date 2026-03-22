@@ -13,12 +13,15 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
   const [geminiKey, setGeminiKey] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const aiAgents = settings.aiAgents;
 
   async function handleSave() {
+    if (!openaiKey && !geminiKey) return;
     setIsSaving(true);
     setSaved(false);
+    setSaveError(null);
     try {
       const req: UpdateAiAgentsRequest = {};
       if (openaiKey) req.openaiApiKey = openaiKey;
@@ -28,11 +31,23 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       setGeminiKey('');
       setSaved(true);
       onSave();
-    } catch {
-      // handle error
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save AI configuration');
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function handleOpenAiChange(value: string) {
+    setOpenaiKey(value);
+    setSaved(false);
+    setSaveError(null);
+  }
+
+  function handleGeminiChange(value: string) {
+    setGeminiKey(value);
+    setSaved(false);
+    setSaveError(null);
   }
 
   return (
@@ -65,7 +80,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
               placeholder={aiAgents.openaiApiKeySet ? '••••••••••••••••••••••' : 'sk-...'}
               value={openaiKey}
-              onChange={(e) => setOpenaiKey(e.target.value)}
+              onChange={(e) => handleOpenAiChange(e.target.value)}
             />
             {aiAgents.openaiApiKeySet && (
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-cyan-400">Configured</span>
@@ -84,13 +99,19 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
               placeholder={aiAgents.geminiApiKeySet ? '••••••••••••••••••••••' : 'AIza...'}
               value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
+              onChange={(e) => handleGeminiChange(e.target.value)}
             />
             {aiAgents.geminiApiKeySet && (
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-cyan-400">Configured</span>
             )}
           </div>
         </div>
+
+        {saveError && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {saveError}
+          </div>
+        )}
 
         <button
           type="button"
