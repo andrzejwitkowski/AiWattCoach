@@ -38,6 +38,9 @@ export async function loadSettings(apiBaseUrl: string): Promise<UserSettingsResp
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('401: Unauthorized');
+    }
     throw new Error(`Failed to load settings: ${response.status}`);
   }
 

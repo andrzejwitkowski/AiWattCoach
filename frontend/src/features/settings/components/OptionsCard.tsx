@@ -9,13 +9,14 @@ type OptionsCardProps = {
   onSave: () => void;
 };
 
-function Toggle({ enabled, onChange, id, disabled }: { enabled: boolean; onChange: (v: boolean) => void; id: string; disabled?: boolean }) {
+function Toggle({ enabled, onChange, id, labelledBy, disabled }: { enabled: boolean; onChange: (v: boolean) => void; id: string; labelledBy: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={enabled}
       aria-disabled={disabled}
+      aria-labelledby={labelledBy}
       id={id}
       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed ${
         enabled ? 'bg-cyan-500' : 'bg-white/10'
@@ -84,12 +85,12 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <label className="text-sm font-medium text-white" htmlFor="analyze-without-hr">
+            <label id="analyze-without-hr-label" className="text-sm font-medium text-white">
               Analyze without heart rate
             </label>
             <p className="text-xs font-medium uppercase tracking-wider text-amber-300">ANALIZUJ BEZ TĘTNA</p>
           </div>
-          <Toggle enabled={analyzeWithoutHR} onChange={handleToggle} id="analyze-without-hr" disabled={isSaving} />
+          <Toggle enabled={analyzeWithoutHR} onChange={handleToggle} id="analyze-without-hr" labelledBy="analyze-without-hr-label" disabled={isSaving} />
         </div>
 
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">

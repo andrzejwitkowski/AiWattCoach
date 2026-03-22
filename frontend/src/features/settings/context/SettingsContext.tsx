@@ -29,6 +29,10 @@ export function SettingsProvider({
       const data = await loadSettings(apiBaseUrl);
       setSettings(data);
     } catch (err) {
+      if (err instanceof Error && err.message.includes('401')) {
+        window.location.href = '/';
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to load settings');
     } finally {
       setIsLoading(false);

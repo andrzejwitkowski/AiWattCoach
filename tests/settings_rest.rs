@@ -482,17 +482,6 @@ struct TestIdentityServiceWithSession {
     roles: Vec<Role>,
 }
 
-impl TestIdentityServiceWithSession {
-    #[allow(dead_code)]
-    fn session(session_id: &str, user_id: &str, roles: Vec<Role>) -> Self {
-        Self {
-            session_id: session_id.to_string(),
-            user_id: user_id.to_string(),
-            roles,
-        }
-    }
-}
-
 impl IdentityUseCases for TestIdentityServiceWithSession {
     fn begin_google_login(
         &self,
