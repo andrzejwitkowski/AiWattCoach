@@ -12,35 +12,37 @@ import { AppHomePage } from './pages/AppHomePage';
 import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
 import { LandingPage } from './pages/LandingPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SettingsProvider } from './features/settings/context/SettingsProvider';
 import { loadBackendStatus, type BackendStatus } from './lib/api/system';
 
 const API_BASE_URL = getApiBaseUrl();
-const API_BASE_URL_LABEL = API_BASE_URL || 'same-origin requests (Vite proxy in local development)';
+const API_BASE_URL_LABEL =
+  API_BASE_URL || 'same-origin requests (Vite proxy in local development)';
 
 const offlineFallback: BackendStatus = {
   health: {
     status: 'unknown',
-    service: 'AiWattCoach'
+    service: 'AiWattCoach',
   },
   readiness: {
     status: 'offline',
-    reason: 'backend_unreachable'
+    reason: 'backend_unreachable',
   },
   state: 'offline',
-  checkedAtLabel: 'not available'
+  checkedAtLabel: 'not available',
 };
 
 const loadingFallback: BackendStatus = {
   health: {
     status: 'checking',
-    service: 'AiWattCoach'
+    service: 'AiWattCoach',
   },
   readiness: {
     status: 'checking',
-    reason: 'checking_backend_status'
+    reason: 'checking_backend_status',
   },
   state: 'loading',
-  checkedAtLabel: 'pending'
+  checkedAtLabel: 'pending',
 };
 
 export function App() {
@@ -74,22 +76,14 @@ export function App() {
 
           <Route element={<RequireAuth />}>
             <Route
-              element={<AuthenticatedLayout apiBaseUrl={API_BASE_URL} backendStatus={backendStatus} />}
+              element={
+                <SettingsProvider>
+                  <AuthenticatedLayout apiBaseUrl={API_BASE_URL} />
+                </SettingsProvider>
+              }
             >
               <Route element={<AppHomePage />} path="/app" />
-              <Route
-                element={
-                  <SettingsPage
-                    apiBaseUrlLabel={API_BASE_URL_LABEL}
-                    backendStatus={backendStatus}
-                    isRefreshing={isRefreshing}
-                    onRefresh={() => {
-                      void refreshBackendStatus();
-                    }}
-                  />
-                }
-                path="/settings"
-              />
+              <Route element={<SettingsPage />} path="/settings" />
               <Route element={<RequireRole role="admin" />}>
                 <Route
                   element={
@@ -122,8 +116,8 @@ function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
     typeof searchReturnTo === 'string' && searchReturnTo.length > 0
       ? searchReturnTo
       : typeof (location.state as { from?: string } | null)?.from === 'string'
-      ? (location.state as { from: string }).from
-      : '/app';
+        ? (location.state as { from: string }).from
+        : '/app';
 
   return (
     <LandingPage
