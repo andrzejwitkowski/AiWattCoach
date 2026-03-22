@@ -7,6 +7,7 @@ use aiwattcoach::{
             client::{create_client, ensure_database_exists, verify_connection},
             login_state::MongoLoginStateRepository,
             sessions::MongoSessionRepository,
+            settings::MongoUserSettingsRepository,
             users::MongoUserRepository,
         },
         support::{SystemClock, UuidIdGenerator},
@@ -16,6 +17,7 @@ use aiwattcoach::{
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
     },
+    domain::settings::UserSettingsService,
     AppState,
 };
 use tokio::net::TcpListener;
@@ -66,14 +68,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         IdentityServiceConfig::new(auth.admin_emails, auth.session.ttl_hours),
     );
 
+    let settings_repository =
+        MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
+    settings_repository.ensure_indexes().await?;
+    let settings_service = UserSettingsService::new(settings_repository, SystemClock);
+
     let app = build_app(
-        AppState::new(app_name, mongo_database, mongo_client).with_identity_service(
-            Arc::new(identity_service),
-            auth.session.cookie_name,
-            auth.session.same_site,
-            auth.session.secure,
-            auth.session.ttl_hours,
-        ),
+        AppState::new(app_name, mongo_database, mongo_client)
+            .with_identity_service(
+                Arc::new(identity_service),
+                auth.session.cookie_name,
+                auth.session.same_site,
+                auth.session.secure,
+                auth.session.ttl_hours,
+            )
+            .with_settings_service(Arc::new(settings_service)),
     );
     let listener = TcpListener::bind(address).await?;
 
