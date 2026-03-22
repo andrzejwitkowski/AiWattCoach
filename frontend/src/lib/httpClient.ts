@@ -17,7 +17,9 @@ export class AuthenticationError extends Error {
 
 function buildUrl(apiBaseUrl: string, path: string): string {
   if (!apiBaseUrl) return path;
-  return `${apiBaseUrl}${path}`;
+  const base = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${normalizedPath}`;
 }
 
 async function request<TRes>(
@@ -53,7 +55,11 @@ async function request<TRes>(
     return undefined as TRes;
   }
 
-  return (await response.json()) as TRes;
+  try {
+    return (await response.json()) as TRes;
+  } catch {
+    throw new HttpError(response.status, `${method} ${path}: invalid JSON response`);
+  }
 }
 
 export function get<TRes>(apiBaseUrl: string, path: string): Promise<TRes> {

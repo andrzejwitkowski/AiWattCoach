@@ -39,7 +39,7 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
   if (!settings) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
-        <p className="text-slate-400">No settings found.</p>
+        <p className="text-slate-400">{t('settings.noSettings')}</p>
       </div>
     );
   }
@@ -52,9 +52,9 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
     <div className="space-y-6">
       <div className="mb-4">
         <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-400">{t('settings.title')}</p>
-        <h1 className="mt-1 font-serif text-3xl text-white">User Configuration</h1>
+        <h1 className="mt-1 font-serif text-3xl text-white">{t('settings.userConfiguration')}</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-400">
-          Manage your AI agents, integrations, analysis preferences, and cycling biometrics.
+          {t('settings.description')}
         </p>
       </div>
 

@@ -68,7 +68,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           placeholder="sk-..."
           isConfigured={aiAgents.openaiApiKeySet}
           value={openaiKey}
-          onChange={setOpenaiKey}
+          onChange={(v) => { setOpenaiKey(v); setSaved(false); setSaveError(null); }}
           accentColor="cyan"
         />
 
@@ -78,7 +78,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           placeholder="AIza..."
           isConfigured={aiAgents.geminiApiKeySet}
           value={geminiKey}
-          onChange={setGeminiKey}
+          onChange={(v) => { setGeminiKey(v); setSaved(false); setSaveError(null); }}
           accentColor="cyan"
         />
 

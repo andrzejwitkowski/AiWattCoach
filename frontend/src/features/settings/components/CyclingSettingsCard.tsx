@@ -117,8 +117,11 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
   }
 
   const accuracy = computeProfileAccuracy(cycling);
-  const lastZoneLabel = cycling.lastZoneUpdateEpochSeconds
-    ? Math.floor((Date.now() / 1000 - cycling.lastZoneUpdateEpochSeconds) / 86400) + ' ' + (t('cycling.lastZoneDaysAgo') || 'days ago')
+  const daysAgo = cycling.lastZoneUpdateEpochSeconds
+    ? Math.floor((Date.now() / 1000 - cycling.lastZoneUpdateEpochSeconds) / 86400)
+    : null;
+  const lastZoneLabel = daysAgo !== null
+    ? t('cycling.lastZoneDaysAgo', { count: daysAgo })
     : t('cycling.never');
 
   return (

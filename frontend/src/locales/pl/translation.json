@@ -3,7 +3,10 @@
     "title": "Ustawienia",
     "loading": "Ładowanie ustawień...",
     "loadError": "Błąd podczas ładowania ustawień",
-    "retry": "Ponów"
+    "retry": "Ponów",
+    "noSettings": "Nie znaleziono ustawień.",
+    "userConfiguration": "Konfiguracja użytkownika",
+    "description": "Zarządzaj agentami AI, integracjami, preferencjami analizy i danymi biometrycznymi kolarskimi."
   },
   "nav": {
     "settings": "Ustawienia",
@@ -72,6 +75,8 @@
   },
   "common": {
     "saveError": "Błąd podczas zapisywania",
-    "configured": "Skonfigurowano"
+    "configured": "Skonfigurowano",
+    "showKey": "Pokaż klucz API",
+    "hideKey": "Ukryj klucz API"
   }
 }

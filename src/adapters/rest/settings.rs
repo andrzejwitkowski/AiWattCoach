@@ -125,7 +125,10 @@ async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String
     let user = identity_service
         .get_current_user(&session_id)
         .await
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?
+        .map_err(|e| {
+            eprintln!("Identity service error in get_settings: {:?}", e);
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        })?
         .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
 
     Ok(user.id)
@@ -144,9 +147,7 @@ pub async fn get_settings(State(state): State<AppState>, headers: HeaderMap) -> 
 
     match settings_service.get_settings(&user_id).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
-        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
+        Err(err) => map_settings_error(&err),
     }
 }
 
