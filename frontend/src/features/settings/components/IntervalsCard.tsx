@@ -1,7 +1,7 @@
 import { useState } from 'react';
+import { ApiKeyInput } from './ApiKeyInput';
 import type { UserSettingsResponse } from '../types';
 import { updateIntervals } from '../api/settings';
-import type { UpdateIntervalsRequest } from '../types';
 
 type IntervalsCardProps = {
   settings: UserSettingsResponse;
@@ -26,7 +26,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
     setSaved(false);
     setSaveError(null);
     try {
-      const req: UpdateIntervalsRequest = {};
+      const req: Record<string, string> = {};
       if (trimmedApiKey) req.apiKey = trimmedApiKey;
       if (trimmedAthleteId) req.athleteId = trimmedAthleteId;
       await updateIntervals(apiBaseUrl, req);
@@ -38,18 +38,6 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
     } finally {
       setIsSaving(false);
     }
-  }
-
-  function handleApiKeyChange(value: string) {
-    setApiKey(value);
-    setSaved(false);
-    setSaveError(null);
-  }
-
-  function handleAthleteIdChange(value: string) {
-    setAthleteId(value);
-    setSaved(false);
-    setSaveError(null);
   }
 
   return (
@@ -71,27 +59,19 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
       </p>
 
       <div className="space-y-4">
-        <div>
-          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400" htmlFor="intervals-api-key">
-            API Key
-          </label>
-          <div className="relative">
-            <input
-              id="intervals-api-key"
-              type="password"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-              placeholder={intervals.apiKeySet ? '••••••••••••••••' : 'Enter your Intervals API key'}
-              value={apiKey}
-              onChange={(e) => handleApiKeyChange(e.target.value)}
-            />
-            {intervals.apiKeySet && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-emerald-400">Configured</span>
-            )}
-          </div>
-        </div>
+        <ApiKeyInput
+          id="intervals-api-key"
+          label="API Key"
+          placeholder="Enter your Intervals API key"
+          isConfigured={intervals.apiKeySet}
+          configuredLabel="Connected"
+          value={apiKey}
+          onChange={setApiKey}
+          accentColor="emerald"
+        />
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400" htmlFor="athlete-id">
+          <label htmlFor="athlete-id" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400">
             Athlete ID
           </label>
           <input
@@ -100,7 +80,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
             placeholder={intervals.athleteId ?? 'i12345678'}
             value={athleteId}
-            onChange={(e) => handleAthleteIdChange(e.target.value)}
+            onChange={(e) => setAthleteId(e.target.value)}
           />
         </div>
 

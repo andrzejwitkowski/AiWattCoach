@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { UpdateAiAgentsRequest, UserSettingsResponse } from '../types';
+import { ApiKeyInput } from './ApiKeyInput';
+import type { UserSettingsResponse } from '../types';
 import { updateAiAgents } from '../api/settings';
 
 type AiAgentsCardProps = {
@@ -25,7 +26,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     setSaved(false);
     setSaveError(null);
     try {
-      const req: UpdateAiAgentsRequest = {};
+      const req: Record<string, string> = {};
       if (trimmedOpenai) req.openaiApiKey = trimmedOpenai;
       if (trimmedGemini) req.geminiApiKey = trimmedGemini;
       await updateAiAgents(apiBaseUrl, req);
@@ -38,18 +39,6 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     } finally {
       setIsSaving(false);
     }
-  }
-
-  function handleOpenAiChange(value: string) {
-    setOpenaiKey(value);
-    setSaved(false);
-    setSaveError(null);
-  }
-
-  function handleGeminiChange(value: string) {
-    setGeminiKey(value);
-    setSaved(false);
-    setSaveError(null);
   }
 
   return (
@@ -71,43 +60,25 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       </p>
 
       <div className="space-y-4">
-        <div>
-          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400" htmlFor="openai-key">
-            OpenAI API Key
-          </label>
-          <div className="relative">
-            <input
-              id="openai-key"
-              type="password"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
-              placeholder={aiAgents.openaiApiKeySet ? '••••••••••••••••••••••' : 'sk-...'}
-              value={openaiKey}
-              onChange={(e) => handleOpenAiChange(e.target.value)}
-            />
-            {aiAgents.openaiApiKeySet && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-cyan-400">Configured</span>
-            )}
-          </div>
-        </div>
+        <ApiKeyInput
+          id="openai-key"
+          label="OpenAI API Key"
+          placeholder="sk-..."
+          isConfigured={aiAgents.openaiApiKeySet}
+          value={openaiKey}
+          onChange={setOpenaiKey}
+          accentColor="cyan"
+        />
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400" htmlFor="gemini-key">
-            Gemini API Key
-          </label>
-          <div className="relative">
-            <input
-              id="gemini-key"
-              type="password"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
-              placeholder={aiAgents.geminiApiKeySet ? '••••••••••••••••••••••' : 'AIza...'}
-              value={geminiKey}
-              onChange={(e) => handleGeminiChange(e.target.value)}
-            />
-            {aiAgents.geminiApiKeySet && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-cyan-400">Configured</span>
-            )}
-          </div>
-        </div>
+        <ApiKeyInput
+          id="gemini-key"
+          label="Gemini API Key"
+          placeholder="AIza..."
+          isConfigured={aiAgents.geminiApiKeySet}
+          value={geminiKey}
+          onChange={setGeminiKey}
+          accentColor="cyan"
+        />
 
         {saveError && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">

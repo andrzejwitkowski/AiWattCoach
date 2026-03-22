@@ -1,76 +1,44 @@
-import type {
-  UserSettingsResponse,
-  UpdateAiAgentsRequest,
-  UpdateIntervalsRequest,
-  UpdateOptionsRequest,
-  UpdateCyclingRequest,
+import { get, patch, AuthenticationError } from '../../../lib/httpClient';
+import {
+  userSettingsResponseSchema,
+  updateAiAgentsRequestSchema,
+  updateIntervalsRequestSchema,
+  updateOptionsRequestSchema,
+  updateCyclingRequestSchema,
 } from '../types';
 
-function buildSettingsUrl(apiBaseUrl: string, path: string): string {
-  if (!apiBaseUrl) return path;
-  return `${apiBaseUrl}${path}`;
-}
-
-async function patchSettings<TReq, TRes>(
-  apiBaseUrl: string,
-  path: string,
-  body: TReq
-): Promise<TRes> {
-  const response = await fetch(buildSettingsUrl(apiBaseUrl, path), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Settings update failed: ${response.status}`);
-  }
-
-  return (await response.json()) as TRes;
-}
-
-export async function loadSettings(apiBaseUrl: string): Promise<UserSettingsResponse> {
-  const response = await fetch(buildSettingsUrl(apiBaseUrl, '/api/settings'), {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('401: Unauthorized');
+export async function loadSettings(apiBaseUrl: string) {
+  try {
+    const data = await get(apiBaseUrl, '/api/settings');
+    return userSettingsResponseSchema.parse(data);
+  } catch (err) {
+    if (err instanceof AuthenticationError) {
+      throw err;
     }
-    throw new Error(`Failed to load settings: ${response.status}`);
+    throw new Error(`Failed to load settings: ${err instanceof Error ? err.message : String(err)}`);
   }
-
-  return (await response.json()) as UserSettingsResponse;
 }
 
-export async function updateAiAgents(
-  apiBaseUrl: string,
-  data: UpdateAiAgentsRequest
-): Promise<UserSettingsResponse> {
-  return patchSettings(apiBaseUrl, '/api/settings/ai-agents', data);
+export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
+  const validated = updateAiAgentsRequestSchema.parse(data);
+  const trimmed = {
+    openaiApiKey: validated.openaiApiKey?.trim() ?? undefined,
+    geminiApiKey: validated.geminiApiKey?.trim() ?? undefined,
+  };
+  return patch(apiBaseUrl, '/api/settings/ai-agents', trimmed);
 }
 
-export async function updateIntervals(
-  apiBaseUrl: string,
-  data: UpdateIntervalsRequest
-): Promise<UserSettingsResponse> {
-  return patchSettings(apiBaseUrl, '/api/settings/intervals', data);
+export async function updateIntervals(apiBaseUrl: string, data: unknown) {
+  const validated = updateIntervalsRequestSchema.parse(data);
+  return patch(apiBaseUrl, '/api/settings/intervals', validated);
 }
 
-export async function updateOptions(
-  apiBaseUrl: string,
-  data: UpdateOptionsRequest
-): Promise<UserSettingsResponse> {
-  return patchSettings(apiBaseUrl, '/api/settings/options', data);
+export async function updateOptions(apiBaseUrl: string, data: unknown) {
+  const validated = updateOptionsRequestSchema.parse(data);
+  return patch(apiBaseUrl, '/api/settings/options', validated);
 }
 
-export async function updateCycling(
-  apiBaseUrl: string,
-  data: UpdateCyclingRequest
-): Promise<UserSettingsResponse> {
-  return patchSettings(apiBaseUrl, '/api/settings/cycling', data);
+export async function updateCycling(apiBaseUrl: string, data: unknown) {
+  const validated = updateCyclingRequestSchema.parse(data);
+  return patch(apiBaseUrl, '/api/settings/cycling', validated);
 }

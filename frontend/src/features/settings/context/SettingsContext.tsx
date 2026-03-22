@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { loadSettings } from '../api/settings';
+import { AuthenticationError } from '../../../lib/httpClient';
 import type { UserSettingsResponse } from '../types';
 
 type SettingsContextValue = {
@@ -29,7 +30,7 @@ export function SettingsProvider({
       const data = await loadSettings(apiBaseUrl);
       setSettings(data);
     } catch (err) {
-      if (err instanceof Error && err.message.includes('401')) {
+      if (err instanceof AuthenticationError) {
         window.location.href = '/';
         return;
       }
