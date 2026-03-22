@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { UserSettingsResponse } from '../types';
 import { updateOptions } from '../api/settings';
 import type { UpdateOptionsRequest } from '../types';
@@ -33,6 +34,7 @@ function Toggle({ enabled, onChange, id, labelledBy, disabled }: { enabled: bool
 }
 
 export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) {
+  const { t } = useTranslation();
   const [analyzeWithoutHR, setAnalyzeWithoutHR] = useState(settings.options.analyzeWithoutHeartRate);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -77,8 +79,8 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
           </svg>
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-white">Options</h3>
-          <p className="text-xs text-slate-400">Analysis configuration</p>
+          <h3 className="text-lg font-semibold text-white">{t('options:title')}</h3>
+          <p className="text-xs text-slate-400">{t('options:subtitle')}</p>
         </div>
       </div>
 
@@ -98,7 +100,7 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
             <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
           </svg>
           <p className="text-xs leading-relaxed text-slate-300">
-            Enabling this will use Power (Watts) as the sole metric for training load calculations when HR data is missing.
+            {t('options:analyzeWithoutHRDescription')}
           </p>
         </div>
 
@@ -111,9 +113,9 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
         <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="text-sm text-emerald-300">All engines nominal</span>
+            <span className="text-sm text-emerald-300">{t('options:allEnginesNominal')}</span>
           </div>
-          <span className="text-xs text-slate-500">System Status</span>
+          <span className="text-xs text-slate-500">{t('options:systemStatus')}</span>
         </div>
       </div>
     </div>

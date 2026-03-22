@@ -1,0 +1,69 @@
+{
+  "settings": {
+    "title": "Ustawienia",
+    "loading": "Ładowanie ustawień...",
+    "loadError": "Błąd podczas ładowania ustawień",
+    "retry": "Ponów"
+  },
+  "nav": {
+    "settings": "Ustawienia",
+    "calendar": "Kalendarz",
+    "aiCoach": "AI Trener"
+  },
+  "aiAgents": {
+    "title": "Agenci AI",
+    "subtitle": "Dostosuj swoją inteligencję",
+    "description": "Wprowadź własny klucz (BYOK). Wprowadź klucze API, aby odblokować zaawansowaną analizę treningową opartą na sztucznej inteligencji.",
+    "openaiKey": "Klucz API OpenAI",
+    "geminiKey": "Klucz API Gemini",
+    "save": "Zapisz konfigurację AI",
+    "saving": "Zapisywanie...",
+    "saved": "Zapisano!",
+    "configured": "Skonfigurowano"
+  },
+  "intervals": {
+    "title": "Intervals.icu",
+    "subtitle": "Synchronizuj dane treningowe",
+    "description": "Połącz swoje konto Intervals.icu, aby automatycznie synchronizować dane treningowe i metryki wydajności.",
+    "apiKey": "Klucz API",
+    "athleteId": "ID sportowca",
+    "connect": "Połącz Intervals",
+    "connecting": "Łączenie...",
+    "connected": "Połączono!",
+    "configured": "Połączono",
+    "connectedStatus": "Połączono",
+    "notConnectedStatus": "Nie połączono",
+    "connectPrompt": "Połącz Intervals"
+  },
+  "cycling": {
+    "title": "Ustawienia kolarskie",
+    "subtitle": "Dane profilu",
+    "description": "Wprowadź swój profil kolarski, aby włączyć dokładne obliczenia obciążenia treningowego oparte na mocy.",
+    "fullName": "Pełne imię i nazwisko",
+    "age": "Wiek",
+    "heightCm": "Wzrost (cm)",
+    "weightKg": "Waga (kg)",
+    "ftpWatts": "FTP (Waty)",
+    "hrMaxBpm": "Max HR (uderzenia/min)",
+    "vo2Max": "VO2 Max",
+    "save": "Zapisz ustawienia",
+    "saving": "Zapisywanie...",
+    "saved": "Zapisano!"
+  },
+  "options": {
+    "title": "Opcje",
+    "subtitle": "Konfiguracja analizy",
+    "analyzeWithoutHR": "Analizuj bez tętna",
+    "analyzeWithoutHRLabel": "ANALIZUJ BEZ TĘTNA",
+    "analyzeWithoutHRDescription": "Włączenie tej opcji spowoduje użycie mocy (watów) jako jedynej metryki do obliczania obciążenia treningowego, gdy dane HR są niedostępne.",
+    "allEnginesNominal": "Wszystkie silniki sprawne",
+    "systemStatus": "Status systemu",
+    "save": "Zapisz opcje",
+    "saving": "Zapisywanie...",
+    "saved": "Zapisano!"
+  },
+  "common": {
+    "saveError": "Błąd podczas zapisywania",
+    "configured": "Skonfigurowano"
+  }
+}
