@@ -68,7 +68,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         IdentityServiceConfig::new(auth.admin_emails, auth.session.ttl_hours),
     );
 
-    let settings_repository = MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
+    let settings_repository =
+        MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
     settings_repository.ensure_indexes().await?;
     let settings_service = UserSettingsService::new(settings_repository, SystemClock);
 

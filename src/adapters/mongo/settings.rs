@@ -6,8 +6,8 @@ use mongodb::{
 use serde::{Deserialize, Serialize};
 
 use crate::domain::settings::{
-    AiAgentsConfig, AnalysisOptions, BoxFuture, CyclingSettings,
-    IntervalsConfig, SettingsError, UserSettings, UserSettingsRepository,
+    AiAgentsConfig, AnalysisOptions, BoxFuture, CyclingSettings, IntervalsConfig, SettingsError,
+    UserSettings, UserSettingsRepository,
 };
 
 #[derive(Clone)]
@@ -100,10 +100,7 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
         })
     }
 
-    fn upsert(
-        &self,
-        settings: UserSettings,
-    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+    fn upsert(&self, settings: UserSettings) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let collection = self.collection.clone();
         let user_id = settings.user_id.clone();
         let doc = map_domain_to_document(&settings);

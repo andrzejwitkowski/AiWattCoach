@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::AppState,
     domain::settings::{
-        mask_sensitive, AiAgentsConfig, AnalysisOptions,
-        CyclingSettings, IntervalsConfig, SettingsError,
+        mask_sensitive, AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig,
+        SettingsError,
     },
 };
 
@@ -112,18 +112,14 @@ pub struct UpdateCyclingRequest {
     vo2_max: Option<f64>,
 }
 
-async fn resolve_user_id(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<String, Response> {
+async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String, Response> {
     let identity_service = state
         .identity_service
         .as_ref()
         .ok_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
 
-    let session_id =
-        read_cookie(headers, &state.session_cookie_name)
-            .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
+    let session_id = read_cookie(headers, &state.session_cookie_name)
+        .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
 
     let user = identity_service
         .get_current_user(&session_id)
@@ -134,10 +130,7 @@ async fn resolve_user_id(
     Ok(user.id)
 }
 
-pub async fn get_settings(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn get_settings(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let user_id = match resolve_user_id(&state, &headers).await {
         Ok(id) => id,
         Err(response) => return response,

@@ -12,8 +12,8 @@ use aiwattcoach::{
     config::AppState,
     domain::identity::{AppUser, IdentityUseCases, Role},
     domain::settings::{
-        AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig,
-        SettingsError, UserSettings, UserSettingsUseCases,
+        AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError,
+        UserSettings, UserSettingsUseCases,
     },
     Settings,
 };
@@ -121,7 +121,9 @@ impl TestSettingsService {
     }
 
     fn with_settings(settings: UserSettings) -> Self {
-        Self { settings: Some(settings) }
+        Self {
+            settings: Some(settings),
+        }
     }
 }
 
@@ -136,9 +138,7 @@ impl UserSettingsUseCases for TestSettingsService {
         let settings = self.settings.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            Ok(settings.unwrap_or_else(|| {
-                UserSettings::new_defaults(user_id, 1000)
-            }))
+            Ok(settings.unwrap_or_else(|| UserSettings::new_defaults(user_id, 1000)))
         })
     }
 
@@ -248,14 +248,30 @@ async fn get_settings_returns_default_settings_for_authenticated_user() {
     assert!(body.get("cycling").is_some());
 
     let ai_agents = body.get("aiAgents").unwrap();
-    assert_eq!(ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(), false);
-    assert_eq!(ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap(), false);
+    assert_eq!(
+        ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(),
+        false
+    );
+    assert_eq!(
+        ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap(),
+        false
+    );
 
     let intervals = body.get("intervals").unwrap();
-    assert_eq!(intervals.get("connected").unwrap().as_bool().unwrap(), false);
+    assert_eq!(
+        intervals.get("connected").unwrap().as_bool().unwrap(),
+        false
+    );
 
     let options = body.get("options").unwrap();
-    assert_eq!(options.get("analyzeWithoutHeartRate").unwrap().as_bool().unwrap(), false);
+    assert_eq!(
+        options
+            .get("analyzeWithoutHeartRate")
+            .unwrap()
+            .as_bool()
+            .unwrap(),
+        false
+    );
 }
 
 #[tokio::test]
@@ -286,9 +302,17 @@ async fn get_settings_masks_api_keys() {
     let body: Value = get_json(response).await;
     let ai_agents = body.get("aiAgents").unwrap();
 
-    assert_eq!(ai_agents.get("openaiApiKey").unwrap().as_str().unwrap(), "***...1234");
-    assert_eq!(ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(), true);
-    assert!(ai_agents.get("geminiApiKey").is_none() || ai_agents.get("geminiApiKey").unwrap().is_null());
+    assert_eq!(
+        ai_agents.get("openaiApiKey").unwrap().as_str().unwrap(),
+        "***...1234"
+    );
+    assert_eq!(
+        ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(),
+        true
+    );
+    assert!(
+        ai_agents.get("geminiApiKey").is_none() || ai_agents.get("geminiApiKey").unwrap().is_null()
+    );
 }
 
 #[tokio::test]
@@ -325,11 +349,28 @@ async fn update_ai_agents_saves_and_returns_updated_settings() {
     let openai_masked = ai_agents.get("openaiApiKey").unwrap().as_str().unwrap();
     let gemini_masked = ai_agents.get("geminiApiKey").unwrap().as_str().unwrap();
 
-    assert!(openai_masked.starts_with("***..."), "expected openaiApiKey to be masked, got: {}", openai_masked);
-    assert!(gemini_masked.starts_with("***..."), "expected geminiApiKey to be masked, got: {}", gemini_masked);
-    assert!(!gemini_masked.ends_with("ey-1"), "gemini should not mask to ey-1");
-    assert_eq!(ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(), true);
-    assert_eq!(ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap(), true);
+    assert!(
+        openai_masked.starts_with("***..."),
+        "expected openaiApiKey to be masked, got: {}",
+        openai_masked
+    );
+    assert!(
+        gemini_masked.starts_with("***..."),
+        "expected geminiApiKey to be masked, got: {}",
+        gemini_masked
+    );
+    assert!(
+        !gemini_masked.ends_with("ey-1"),
+        "gemini should not mask to ey-1"
+    );
+    assert_eq!(
+        ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(),
+        true
+    );
+    assert_eq!(
+        ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap(),
+        true
+    );
 }
 
 #[tokio::test]
@@ -363,7 +404,10 @@ async fn update_intervals_saves_athlete_id() {
     let response_body: Value = get_json(response).await;
     let intervals = response_body.get("intervals").unwrap();
 
-    assert_eq!(intervals.get("athleteId").unwrap().as_str().unwrap(), "i12345678");
+    assert_eq!(
+        intervals.get("athleteId").unwrap().as_str().unwrap(),
+        "i12345678"
+    );
     assert_eq!(intervals.get("apiKeySet").unwrap().as_bool().unwrap(), true);
 }
 
@@ -397,7 +441,14 @@ async fn update_options_sets_analyze_without_heart_rate() {
     let response_body: Value = get_json(response).await;
     let options = response_body.get("options").unwrap();
 
-    assert_eq!(options.get("analyzeWithoutHeartRate").unwrap().as_bool().unwrap(), true);
+    assert_eq!(
+        options
+            .get("analyzeWithoutHeartRate")
+            .unwrap()
+            .as_bool()
+            .unwrap(),
+        true
+    );
 }
 
 #[tokio::test]
@@ -436,7 +487,10 @@ async fn update_cycling_saves_biometrics() {
     let response_body: Value = get_json(response).await;
     let cycling = response_body.get("cycling").unwrap();
 
-    assert_eq!(cycling.get("fullName").unwrap().as_str().unwrap(), "Alex Rivier");
+    assert_eq!(
+        cycling.get("fullName").unwrap().as_str().unwrap(),
+        "Alex Rivier"
+    );
     assert_eq!(cycling.get("age").unwrap().as_i64().unwrap(), 28);
     assert_eq!(cycling.get("heightCm").unwrap().as_i64().unwrap(), 182);
     assert_eq!(cycling.get("weightKg").unwrap().as_f64().unwrap(), 74.0);
@@ -466,15 +520,31 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
     fn begin_google_login(
         &self,
         _return_to: Option<String>,
-    ) -> BoxFuture<Result<aiwattcoach::domain::identity::GoogleLoginStart, aiwattcoach::domain::identity::IdentityError>> {
-        Box::pin(async { Ok(aiwattcoach::domain::identity::GoogleLoginStart { state: "state-1".to_string(), redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=state-1".to_string() }) })
+    ) -> BoxFuture<
+        Result<
+            aiwattcoach::domain::identity::GoogleLoginStart,
+            aiwattcoach::domain::identity::IdentityError,
+        >,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::identity::GoogleLoginStart {
+                state: "state-1".to_string(),
+                redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=state-1"
+                    .to_string(),
+            })
+        })
     }
 
     fn handle_google_callback(
         &self,
         _state: &str,
         _code: &str,
-    ) -> BoxFuture<Result<aiwattcoach::domain::identity::GoogleLoginSuccess, aiwattcoach::domain::identity::IdentityError>> {
+    ) -> BoxFuture<
+        Result<
+            aiwattcoach::domain::identity::GoogleLoginSuccess,
+            aiwattcoach::domain::identity::IdentityError,
+        >,
+    > {
         let roles = self.roles.clone();
         let user_id = self.user_id.clone();
         let session_id = self.session_id.clone();
@@ -490,10 +560,7 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
                     true,
                 ),
                 session: aiwattcoach::domain::identity::AuthSession::new(
-                    session_id,
-                    user_id,
-                    999999,
-                    100,
+                    session_id, user_id, 999999, 100,
                 ),
                 redirect_to: "/app".to_string(),
             })
@@ -523,11 +590,27 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
         })
     }
 
-    fn logout(&self, _session_id: &str) -> BoxFuture<Result<(), aiwattcoach::domain::identity::IdentityError>> {
+    fn logout(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<(), aiwattcoach::domain::identity::IdentityError>> {
         Box::pin(async { Ok(()) })
     }
 
-    fn require_admin(&self, _session_id: &str) -> BoxFuture<Result<AppUser, aiwattcoach::domain::identity::IdentityError>> {
-        Box::pin(async { Ok(AppUser::new("user-1".to_string(), "google-subject-1".to_string(), "admin@example.com".to_string(), vec![Role::User, Role::Admin], Some("Admin".to_string()), None, true)) })
+    fn require_admin(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<AppUser, aiwattcoach::domain::identity::IdentityError>> {
+        Box::pin(async {
+            Ok(AppUser::new(
+                "user-1".to_string(),
+                "google-subject-1".to_string(),
+                "admin@example.com".to_string(),
+                vec![Role::User, Role::Admin],
+                Some("Admin".to_string()),
+                None,
+                true,
+            ))
+        })
     }
 }
