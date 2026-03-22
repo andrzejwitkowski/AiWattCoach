@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiKeyInput } from './ApiKeyInput';
 import type { UserSettingsResponse } from '../types';
 import { updateIntervals } from '../api/settings';
@@ -10,6 +11,7 @@ type IntervalsCardProps = {
 };
 
 export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardProps) {
+  const { t } = useTranslation();
   const [apiKey, setApiKey] = useState('');
   const [athleteId, setAthleteId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -49,22 +51,22 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
           </svg>
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-white">Intervals.icu</h3>
-          <p className="text-xs text-slate-400">Sync workout data</p>
+          <h3 className="text-lg font-semibold text-white">{t('intervals.title')}</h3>
+          <p className="text-xs text-slate-400">{t('intervals.subtitle')}</p>
         </div>
       </div>
 
       <p className="mb-5 text-sm leading-relaxed text-slate-400">
-        Connect your Intervals.icu account to sync workout data and performance metrics automatically.
+        {t('intervals.description')}
       </p>
 
       <div className="space-y-4">
         <ApiKeyInput
           id="intervals-api-key"
-          label="API Key"
+          label={t('intervals.apiKey')}
           placeholder="Enter your Intervals API key"
           isConfigured={intervals.apiKeySet}
-          configuredLabel="Connected"
+          configuredLabel={t('intervals.configured')}
           value={apiKey}
           onChange={setApiKey}
           accentColor="emerald"
@@ -72,7 +74,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
 
         <div>
           <label htmlFor="athlete-id" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400">
-            Athlete ID
+            {t('intervals.athleteId')}
           </label>
           <input
             id="athlete-id"
@@ -88,7 +90,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
           <div className="flex items-center gap-2">
             <div className={`h-2 w-2 rounded-full ${intervals.connected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
             <span className="text-sm text-emerald-300">
-              {intervals.connected ? 'Connected' : 'Not connected'}
+              {intervals.connected ? t('intervals.connectedStatus') : t('intervals.notConnectedStatus')}
             </span>
           </div>
         </div>
@@ -105,7 +107,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
           disabled={isSaving || (!apiKey.trim() && !athleteId.trim())}
           onClick={() => { void handleSave(); }}
         >
-          {isSaving ? 'Connecting...' : saved ? 'Connected!' : 'Connect Intervals'}
+          {isSaving ? t('intervals.connecting') : saved ? t('intervals.connected') : t('intervals.connect')}
         </button>
       </div>
     </div>

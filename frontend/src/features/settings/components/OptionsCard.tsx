@@ -19,9 +19,9 @@ function Toggle({ enabled, onChange, id, labelledBy, disabled }: { enabled: bool
       aria-disabled={disabled}
       aria-labelledby={labelledBy}
       id={id}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed ${
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-50 ${
         enabled ? 'bg-cyan-500' : 'bg-white/10'
-      } disabled:opacity-50`}
+      }`}
       onClick={() => { if (!disabled) onChange(!enabled); }}
     >
       <span
@@ -88,9 +88,9 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
         <div className="flex items-center justify-between">
           <div>
             <label id="analyze-without-hr-label" className="text-sm font-medium text-white">
-              Analyze without heart rate
+              {t('options:analyzeWithoutHR')}
             </label>
-            <p className="text-xs font-medium uppercase tracking-wider text-amber-300">ANALIZUJ BEZ TĘTNA</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-amber-300">{t('options:analyzeWithoutHRLabel')}</p>
           </div>
           <Toggle enabled={analyzeWithoutHR} onChange={handleToggle} id="analyze-without-hr" labelledBy="analyze-without-hr-label" disabled={isSaving} />
         </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CyclingSettingsData, UserSettingsResponse } from '../types';
 import { updateCycling } from '../api/settings';
-import type { UpdateCyclingRequest } from '../types';
 
 type CyclingSettingsCardProps = {
   settings: UserSettingsResponse;
@@ -36,7 +36,7 @@ function Field({ label, id, value, onChange, type = 'text', placeholder }: {
 
 function MetricCard({ label, value, unit, accent }: { label: string; value: number | null; unit: string; accent: string }) {
   return (
-    <div className={`flex flex-col items-center rounded-xl border p-4 ${accent}`}>
+    <div className={"flex flex-col items-center rounded-xl border p-4 " + accent}>
       <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
       <span className="mt-1 text-2xl font-bold text-white">{value ?? '--'}</span>
       <span className="text-xs text-slate-400">{unit}</span>
@@ -59,6 +59,7 @@ function computeProfileAccuracy(settings: CyclingSettingsData): number {
 }
 
 export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSettingsCardProps) {
+  const { t } = useTranslation();
   const cycling = settings.cycling;
   const [form, setForm] = useState({
     fullName: cycling.fullName ?? '',
@@ -80,7 +81,7 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
   async function handleSave() {
     setIsSaving(true);
     try {
-      const req: UpdateCyclingRequest = {};
+      const req: Record<string, unknown> = {};
       if (form.fullName) req.fullName = form.fullName;
       if (form.age) {
         const age = parseInt(form.age, 10);
@@ -109,7 +110,7 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
       await updateCycling(apiBaseUrl, req);
       onSave();
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save cycling settings');
+      setSaveError(err instanceof Error ? err.message : t('common.saveError'));
     } finally {
       setIsSaving(false);
     }
@@ -117,58 +118,54 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
 
   const accuracy = computeProfileAccuracy(cycling);
   const lastZoneLabel = cycling.lastZoneUpdateEpochSeconds
-    ? `${Math.floor((Date.now() / 1000 - cycling.lastZoneUpdateEpochSeconds) / 86400)} days ago`
-    : 'Never';
+    ? Math.floor((Date.now() / 1000 - cycling.lastZoneUpdateEpochSeconds) / 86400) + ' ' + (t('cycling.lastZoneDaysAgo') || 'days ago')
+    : t('cycling.never');
 
   return (
     <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6">
       <div className="mb-5">
-        <h3 className="text-lg font-semibold text-white">Cycling Settings</h3>
-        <p className="text-xs font-medium uppercase tracking-wider text-amber-300">USTAWIENIA KOLARSKIE</p>
+        <h3 className="text-lg font-semibold text-white">{t('cycling.title')}</h3>
+        <p className="text-xs font-medium uppercase tracking-wider text-amber-300">{t('cycling.subtitle')}</p>
         <p className="mt-2 text-sm text-slate-400">
-          Physiological metrics used for training load calculations and performance analysis.
+          {t('cycling.description')}
         </p>
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Full Name / IME I NAZWISKO" id="full-name" value={form.fullName} onChange={(v) => setField('fullName', v)} placeholder="Alex Rivier" />
-        <Field label="Age / WIEK" id="age" value={form.age} onChange={(v) => setField('age', v)} type="number" placeholder="28" />
-        <Field label="Height cm / WZROST" id="height-cm" value={form.heightCm} onChange={(v) => setField('heightCm', v)} type="number" placeholder="182" />
-        <Field label="Weight kg / WAGA" id="weight-kg" value={form.weightKg} onChange={(v) => setField('weightKg', v)} type="number" placeholder="74.0" />
+        <Field label={t('cycling.fullName')} id="full-name" value={form.fullName} onChange={(v) => setField('fullName', v)} placeholder="Alex Rivier" />
+        <Field label={t('cycling.age')} id="age" value={form.age} onChange={(v) => setField('age', v)} type="number" placeholder="28" />
+        <Field label={t('cycling.heightCm')} id="height-cm" value={form.heightCm} onChange={(v) => setField('heightCm', v)} type="number" placeholder="182" />
+        <Field label={t('cycling.weightKg')} id="weight-kg" value={form.weightKg} onChange={(v) => setField('weightKg', v)} type="number" placeholder="74.0" />
       </div>
 
-      {/* Profile Accuracy & Last Zone */}
       <div className="mb-6 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
         <div className="flex items-center gap-4">
           <div>
-            <p className="text-xs text-slate-400">Profile Accuracy</p>
-            <p className="text-sm font-semibold text-cyan-300">{accuracy}% Complete</p>
+            <p className="text-xs text-slate-400">{t('cycling.profileAccuracy')}</p>
+            <p className="text-sm font-semibold text-cyan-300">{accuracy}% {t('cycling.complete')}</p>
           </div>
           <div className="h-2 w-24 overflow-hidden rounded-full bg-white/10">
             <div className="h-full rounded-full bg-cyan-500" style={{ width: `${accuracy}%` }} />
           </div>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400">Last Zone Update</p>
+          <p className="text-xs text-slate-400">{t('cycling.lastZoneUpdate')}</p>
           <p className="text-sm font-semibold text-slate-300">{lastZoneLabel}</p>
         </div>
       </div>
 
-      {/* Metric Cards */}
       <div className="mb-6 grid grid-cols-2 gap-4">
-        <MetricCard label="FTP" value={cycling.ftpWatts} unit="Watts" accent="border-amber-500/30 bg-amber-500/10" />
+        <MetricCard label="FTP" value={cycling.ftpWatts} unit={t('cycling.wattsUnit')} accent="border-amber-500/30 bg-amber-500/10" />
         <MetricCard label="HR MAX" value={cycling.hrMaxBpm} unit="BPM" accent="border-red-500/30 bg-red-500/10" />
       </div>
 
-      {/* VO2 Max */}
       <div className="mb-6">
-        <Field label="VO2 Max / POJEMNOŚĆ TLENOWA" id="vo2-max" value={form.vo2Max} onChange={(v) => setField('vo2Max', v)} type="number" placeholder="58.0" />
+        <Field label={t('cycling.vo2Max')} id="vo2-max" value={form.vo2Max} onChange={(v) => setField('vo2Max', v)} type="number" placeholder="58.0" />
       </div>
 
-      {/* FTP and HR Max from form */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
-        <Field label="FTP / PRóg MOCY" id="ftp-watts" value={form.ftpWatts} onChange={(v) => setField('ftpWatts', v)} type="number" placeholder="280" />
-        <Field label="HR MAX / TĘTNO MAKSYMALNE" id="hr-max" value={form.hrMaxBpm} onChange={(v) => setField('hrMaxBpm', v)} type="number" placeholder="192" />
+        <Field label={t('cycling.ftpWatts')} id="ftp-watts" value={form.ftpWatts} onChange={(v) => setField('ftpWatts', v)} type="number" placeholder="280" />
+        <Field label={t('cycling.hrMaxBpm')} id="hr-max" value={form.hrMaxBpm} onChange={(v) => setField('hrMaxBpm', v)} type="number" placeholder="192" />
       </div>
 
       {saveError && (
@@ -186,7 +183,7 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
         </svg>
-        {isSaving ? 'Syncing...' : 'SYNCHRONIZE BIO-METRICS'}
+        {isSaving ? t('cycling.saving') : t('cycling.save')}
       </button>
     </div>
   );

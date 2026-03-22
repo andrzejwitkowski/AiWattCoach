@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useSettings } from '../features/settings/context/SettingsContext';
 import { AiAgentsCard } from '../features/settings/components/AiAgentsCard';
 import { IntervalsCard } from '../features/settings/components/IntervalsCard';
@@ -9,6 +10,7 @@ type SettingsPageProps = {
 };
 
 export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
+  const { t } = useTranslation();
   const { settings, isLoading, error, refreshSettings } = useSettings();
 
   if (isLoading) {
@@ -22,13 +24,13 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
   if (error) {
     return (
       <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center">
-        <p className="text-red-400">Failed to load settings: {error}</p>
+        <p className="text-red-400">{t('settings.loadError')}: {error}</p>
         <button
           type="button"
           className="mt-3 rounded-lg bg-red-500/20 px-4 py-2 text-sm text-red-300 hover:bg-red-500/30"
           onClick={() => { void refreshSettings(); }}
         >
-          Retry
+          {t('settings.retry')}
         </button>
       </div>
     );
@@ -49,7 +51,7 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
   return (
     <div className="space-y-6">
       <div className="mb-4">
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-400">Settings</p>
+        <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-400">{t('settings.title')}</p>
         <h1 className="mt-1 font-serif text-3xl text-white">User Configuration</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-400">
           Manage your AI agents, integrations, analysis preferences, and cycling biometrics.

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type ApiKeyInputProps = {
   id: string;
@@ -16,11 +17,12 @@ export function ApiKeyInput({
   label,
   placeholder,
   isConfigured,
-  configuredLabel = 'Configured',
+  configuredLabel,
   value,
   onChange,
   accentColor = 'cyan',
 }: ApiKeyInputProps) {
+  const { t } = useTranslation();
   const [showKey, setShowKey] = useState(false);
 
   const accentStyles = {
@@ -39,6 +41,7 @@ export function ApiKeyInput({
   };
 
   const styles = accentStyles[accentColor];
+  const displayLabel = configuredLabel ?? t('common.configured');
 
   return (
     <div>
@@ -53,7 +56,7 @@ export function ApiKeyInput({
           id={id}
           type={showKey ? 'text' : 'password'}
           autoComplete="off"
-          className={`w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-10 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 ${styles.border} ${styles.ring}`}
+          className={"w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-10 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 " + styles.border + " " + styles.ring}
           placeholder={isConfigured ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -75,8 +78,8 @@ export function ApiKeyInput({
           )}
         </button>
         {isConfigured && (
-          <span className={`absolute right-10 top-1/2 -translate-y-1/2 text-xs ${styles.text}`}>
-            {configuredLabel}
+          <span className={"absolute right-10 top-1/2 -translate-y-1/2 text-xs " + styles.text}>
+            {displayLabel}
           </span>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiKeyInput } from './ApiKeyInput';
 import type { UserSettingsResponse } from '../types';
 import { updateAiAgents } from '../api/settings';
@@ -10,6 +11,7 @@ type AiAgentsCardProps = {
 };
 
 export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps) {
+  const { t } = useTranslation();
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -50,19 +52,19 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           </svg>
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-white">AI Agents</h3>
-          <p className="text-xs text-slate-400">Customize your intelligence</p>
+          <h3 className="text-lg font-semibold text-white">{t('aiAgents.title')}</h3>
+          <p className="text-xs text-slate-400">{t('aiAgents.subtitle')}</p>
         </div>
       </div>
 
       <p className="mb-5 text-sm leading-relaxed text-slate-400">
-        Bring Your Own Key (BYOK). Enter your API keys to unlock advanced AI-powered training analysis.
+        {t('aiAgents.description')}
       </p>
 
       <div className="space-y-4">
         <ApiKeyInput
           id="openai-key"
-          label="OpenAI API Key"
+          label={t('aiAgents.openaiKey')}
           placeholder="sk-..."
           isConfigured={aiAgents.openaiApiKeySet}
           value={openaiKey}
@@ -72,7 +74,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
 
         <ApiKeyInput
           id="gemini-key"
-          label="Gemini API Key"
+          label={t('aiAgents.geminiKey')}
           placeholder="AIza..."
           isConfigured={aiAgents.geminiApiKeySet}
           value={geminiKey}
@@ -92,7 +94,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           disabled={isSaving || (!openaiKey.trim() && !geminiKey.trim())}
           onClick={() => { void handleSave(); }}
         >
-          {isSaving ? 'Saving...' : saved ? 'Saved!' : 'Save AI Config'}
+          {isSaving ? t('aiAgents.saving') : saved ? t('aiAgents.saved') : t('aiAgents.save')}
         </button>
       </div>
     </div>
