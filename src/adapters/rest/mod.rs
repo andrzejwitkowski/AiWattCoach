@@ -2,6 +2,7 @@ mod admin;
 mod auth;
 mod cookies;
 mod health;
+mod settings;
 
 use std::path::PathBuf;
 
@@ -10,7 +11,7 @@ use axum::{
     extract::Request,
     http::{header, HeaderMap, Method, StatusCode},
     response::Response,
-    routing::{get, post},
+    routing::{get, patch, post},
     Router,
 };
 use tower::util::ServiceExt;
@@ -37,6 +38,11 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/admin/system-info", get(admin::system_info))
+        .route("/api/settings", get(settings::get_settings))
+        .route("/api/settings/ai-agents", patch(settings::update_ai_agents))
+        .route("/api/settings/intervals", patch(settings::update_intervals))
+        .route("/api/settings/options", patch(settings::update_options))
+        .route("/api/settings/cycling", patch(settings::update_cycling))
         .fallback(move |request| serve_frontend(request, static_files.clone(), spa_index.clone()))
         .with_state(state)
 }

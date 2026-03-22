@@ -3,6 +3,7 @@ use std::sync::Arc;
 use mongodb::Client;
 
 use crate::domain::identity::IdentityUseCases;
+use crate::domain::settings::UserSettingsUseCases;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -10,6 +11,7 @@ pub struct AppState {
     pub mongo_database: String,
     pub mongo_client: Client,
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
+    pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub session_cookie_name: String,
     pub session_cookie_same_site: String,
     pub secure_session_cookie: bool,
@@ -27,6 +29,7 @@ impl AppState {
             mongo_database: mongo_database.into(),
             mongo_client,
             identity_service: None,
+            settings_service: None,
             session_cookie_name: "aiwattcoach_session".to_string(),
             session_cookie_same_site: "lax".to_string(),
             secure_session_cookie: false,
@@ -47,6 +50,14 @@ impl AppState {
         self.session_cookie_same_site = session_cookie_same_site.into();
         self.secure_session_cookie = secure_session_cookie;
         self.session_ttl_hours = session_ttl_hours;
+        self
+    }
+
+    pub fn with_settings_service(
+        mut self,
+        settings_service: Arc<dyn UserSettingsUseCases>,
+    ) -> Self {
+        self.settings_service = Some(settings_service);
         self
     }
 }

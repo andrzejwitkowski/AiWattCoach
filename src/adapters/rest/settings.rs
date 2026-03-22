@@ -1,0 +1,300 @@
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    config::AppState,
+    domain::settings::{
+        mask_sensitive, AiAgentsConfig, AnalysisOptions,
+        CyclingSettings, IntervalsConfig, SettingsError,
+    },
+};
+
+use super::cookies::read_cookie;
+
+#[derive(Serialize)]
+pub struct UserSettingsDto {
+    #[serde(rename = "aiAgents")]
+    ai_agents: AiAgentsDto,
+    intervals: IntervalsDto,
+    options: OptionsDto,
+    cycling: CyclingDto,
+}
+
+#[derive(Serialize)]
+struct AiAgentsDto {
+    #[serde(rename = "openaiApiKey")]
+    openai_api_key: Option<String>,
+    #[serde(rename = "openaiApiKeySet")]
+    openai_api_key_set: bool,
+    #[serde(rename = "geminiApiKey")]
+    gemini_api_key: Option<String>,
+    #[serde(rename = "geminiApiKeySet")]
+    gemini_api_key_set: bool,
+}
+
+#[derive(Serialize)]
+struct IntervalsDto {
+    #[serde(rename = "apiKey")]
+    api_key: Option<String>,
+    #[serde(rename = "apiKeySet")]
+    api_key_set: bool,
+    #[serde(rename = "athleteId")]
+    athlete_id: Option<String>,
+    connected: bool,
+}
+
+#[derive(Serialize)]
+struct OptionsDto {
+    #[serde(rename = "analyzeWithoutHeartRate")]
+    analyze_without_heart_rate: bool,
+}
+
+#[derive(Serialize)]
+struct CyclingDto {
+    #[serde(rename = "fullName")]
+    full_name: Option<String>,
+    age: Option<u32>,
+    #[serde(rename = "heightCm")]
+    height_cm: Option<u32>,
+    #[serde(rename = "weightKg")]
+    weight_kg: Option<f64>,
+    #[serde(rename = "ftpWatts")]
+    ftp_watts: Option<u32>,
+    #[serde(rename = "hrMaxBpm")]
+    hr_max_bpm: Option<u32>,
+    #[serde(rename = "vo2Max")]
+    vo2_max: Option<f64>,
+    #[serde(rename = "lastZoneUpdateEpochSeconds")]
+    last_zone_update_epoch_seconds: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateAiAgentsRequest {
+    #[serde(rename = "openaiApiKey")]
+    openai_api_key: Option<String>,
+    #[serde(rename = "geminiApiKey")]
+    gemini_api_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateIntervalsRequest {
+    #[serde(rename = "apiKey")]
+    api_key: Option<String>,
+    #[serde(rename = "athleteId")]
+    athlete_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateOptionsRequest {
+    #[serde(rename = "analyzeWithoutHeartRate")]
+    analyze_without_heart_rate: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateCyclingRequest {
+    #[serde(rename = "fullName")]
+    full_name: Option<String>,
+    age: Option<u32>,
+    #[serde(rename = "heightCm")]
+    height_cm: Option<u32>,
+    #[serde(rename = "weightKg")]
+    weight_kg: Option<f64>,
+    #[serde(rename = "ftpWatts")]
+    ftp_watts: Option<u32>,
+    #[serde(rename = "hrMaxBpm")]
+    hr_max_bpm: Option<u32>,
+    #[serde(rename = "vo2Max")]
+    vo2_max: Option<f64>,
+}
+
+async fn resolve_user_id(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<String, Response> {
+    let identity_service = state
+        .identity_service
+        .as_ref()
+        .ok_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+
+    let session_id =
+        read_cookie(headers, &state.session_cookie_name)
+            .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
+
+    let user = identity_service
+        .get_current_user(&session_id)
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?
+        .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
+
+    Ok(user.id)
+}
+
+pub async fn get_settings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+
+    let settings_service = match state.settings_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    match settings_service.get_settings(&user_id).await {
+        Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
+        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn update_ai_agents(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateAiAgentsRequest>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+
+    let settings_service = match state.settings_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let config = AiAgentsConfig {
+        openai_api_key: body.openai_api_key,
+        gemini_api_key: body.gemini_api_key,
+    };
+
+    match settings_service.update_ai_agents(&user_id, config).await {
+        Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
+        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn update_intervals(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateIntervalsRequest>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+
+    let settings_service = match state.settings_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let config = IntervalsConfig {
+        api_key: body.api_key,
+        athlete_id: body.athlete_id,
+        connected: false,
+    };
+
+    match settings_service.update_intervals(&user_id, config).await {
+        Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
+        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn update_options(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateOptionsRequest>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+
+    let settings_service = match state.settings_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let options = AnalysisOptions {
+        analyze_without_heart_rate: body.analyze_without_heart_rate.unwrap_or(false),
+    };
+
+    match settings_service.update_options(&user_id, options).await {
+        Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
+        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn update_cycling(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateCyclingRequest>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+
+    let settings_service = match state.settings_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let cycling = CyclingSettings {
+        full_name: body.full_name,
+        age: body.age,
+        height_cm: body.height_cm,
+        weight_kg: body.weight_kg,
+        ftp_watts: body.ftp_watts,
+        hr_max_bpm: body.hr_max_bpm,
+        vo2_max: body.vo2_max,
+        last_zone_update_epoch_seconds: None,
+    };
+
+    match settings_service.update_cycling(&user_id, cycling).await {
+        Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
+        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+fn map_settings_to_dto(settings: &crate::domain::settings::UserSettings) -> UserSettingsDto {
+    UserSettingsDto {
+        ai_agents: AiAgentsDto {
+            openai_api_key: mask_sensitive(&settings.ai_agents.openai_api_key),
+            openai_api_key_set: settings.ai_agents.openai_api_key.is_some(),
+            gemini_api_key: mask_sensitive(&settings.ai_agents.gemini_api_key),
+            gemini_api_key_set: settings.ai_agents.gemini_api_key.is_some(),
+        },
+        intervals: IntervalsDto {
+            api_key: mask_sensitive(&settings.intervals.api_key),
+            api_key_set: settings.intervals.api_key.is_some(),
+            athlete_id: settings.intervals.athlete_id.clone(),
+            connected: settings.intervals.connected,
+        },
+        options: OptionsDto {
+            analyze_without_heart_rate: settings.options.analyze_without_heart_rate,
+        },
+        cycling: CyclingDto {
+            full_name: settings.cycling.full_name.clone(),
+            age: settings.cycling.age,
+            height_cm: settings.cycling.height_cm,
+            weight_kg: settings.cycling.weight_kg,
+            ftp_watts: settings.cycling.ftp_watts,
+            hr_max_bpm: settings.cycling.hr_max_bpm,
+            vo2_max: settings.cycling.vo2_max,
+            last_zone_update_epoch_seconds: settings.cycling.last_zone_update_epoch_seconds,
+        },
+    }
+}
