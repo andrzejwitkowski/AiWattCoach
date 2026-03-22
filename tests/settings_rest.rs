@@ -248,30 +248,18 @@ async fn get_settings_returns_default_settings_for_authenticated_user() {
     assert!(body.get("cycling").is_some());
 
     let ai_agents = body.get("aiAgents").unwrap();
-    assert_eq!(
-        ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(),
-        false
-    );
-    assert_eq!(
-        ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap(),
-        false
-    );
+    assert!(!ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap());
+    assert!(!ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap());
 
     let intervals = body.get("intervals").unwrap();
-    assert_eq!(
-        intervals.get("connected").unwrap().as_bool().unwrap(),
-        false
-    );
+    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
 
     let options = body.get("options").unwrap();
-    assert_eq!(
-        options
-            .get("analyzeWithoutHeartRate")
-            .unwrap()
-            .as_bool()
-            .unwrap(),
-        false
-    );
+    assert!(!options
+        .get("analyzeWithoutHeartRate")
+        .unwrap()
+        .as_bool()
+        .unwrap());
 }
 
 #[tokio::test]
@@ -306,10 +294,7 @@ async fn get_settings_masks_api_keys() {
         ai_agents.get("openaiApiKey").unwrap().as_str().unwrap(),
         "***...1234"
     );
-    assert_eq!(
-        ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(),
-        true
-    );
+    assert!(ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap());
     assert!(
         ai_agents.get("geminiApiKey").is_none() || ai_agents.get("geminiApiKey").unwrap().is_null()
     );
@@ -363,14 +348,8 @@ async fn update_ai_agents_saves_and_returns_updated_settings() {
         !gemini_masked.ends_with("ey-1"),
         "gemini should not mask to ey-1"
     );
-    assert_eq!(
-        ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap(),
-        true
-    );
-    assert_eq!(
-        ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap(),
-        true
-    );
+    assert!(ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap());
+    assert!(ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -408,7 +387,7 @@ async fn update_intervals_saves_athlete_id() {
         intervals.get("athleteId").unwrap().as_str().unwrap(),
         "i12345678"
     );
-    assert_eq!(intervals.get("apiKeySet").unwrap().as_bool().unwrap(), true);
+    assert!(intervals.get("apiKeySet").unwrap().as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -441,14 +420,11 @@ async fn update_options_sets_analyze_without_heart_rate() {
     let response_body: Value = get_json(response).await;
     let options = response_body.get("options").unwrap();
 
-    assert_eq!(
-        options
-            .get("analyzeWithoutHeartRate")
-            .unwrap()
-            .as_bool()
-            .unwrap(),
-        true
-    );
+    assert!(options
+        .get("analyzeWithoutHeartRate")
+        .unwrap()
+        .as_bool()
+        .unwrap());
 }
 
 #[tokio::test]
@@ -507,6 +483,7 @@ struct TestIdentityServiceWithSession {
 }
 
 impl TestIdentityServiceWithSession {
+    #[allow(dead_code)]
     fn session(session_id: &str, user_id: &str, roles: Vec<Role>) -> Self {
         Self {
             session_id: session_id.to_string(),
