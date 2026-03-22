@@ -69,3 +69,5 @@ export const updateCyclingRequestSchema = z.object({
 });
 
 export type UpdateCyclingRequest = z.infer<typeof updateCyclingRequestSchema>;
+
+export type CyclingSettingsData = z.infer<typeof cyclingSettingsDataSchema>;

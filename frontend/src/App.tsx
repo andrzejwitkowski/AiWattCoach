@@ -8,13 +8,14 @@ import { buildGoogleLoginUrl } from './features/auth/api/auth';
 import { AuthProvider } from './features/auth/context/AuthProvider';
 import { RequireAuth } from './features/auth/guards/RequireAuth';
 import { RequireRole } from './features/auth/guards/RequireRole';
+import { SettingsProvider } from './features/settings/context/SettingsContext';
 import { AppHomePage } from './pages/AppHomePage';
 import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { AICoachPage } from './pages/AICoachPage';
 import { LandingPage } from './pages/LandingPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { SettingsProvider } from './features/settings/context/SettingsContext';
+
 import { loadBackendStatus, type BackendStatus } from './lib/api/system';
 
 const API_BASE_URL = getApiBaseUrl();
@@ -80,7 +81,7 @@ export function App() {
             <Route
               element={
                 <SettingsProvider apiBaseUrl={API_BASE_URL}>
-                  <AuthenticatedLayout apiBaseUrl={API_BASE_URL} />
+                  <AuthenticatedLayout apiBaseUrl={API_BASE_URL} backendStatus={backendStatus} />
                 </SettingsProvider>
               }
             >

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Bot, Eye, EyeOff, Save } from 'lucide-react';
-
 import type { UserSettingsResponse } from '../types';
 import { updateAiAgents } from '../api/settings';
 
@@ -16,6 +15,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
   const [showOpenai, setShowOpenai] = useState(false);
   const [showGemini, setShowGemini] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const aiAgents = settings.aiAgents;
@@ -25,14 +25,16 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     const trimmedGemini = geminiKey.trim();
     if (!trimmedOpenai && !trimmedGemini) return;
     setIsSaving(true);
+    setSaved(false);
     setSaveError(null);
     try {
-      await updateAiAgents(apiBaseUrl, {
-        openaiApiKey: trimmedOpenai || undefined,
-        geminiApiKey: trimmedGemini || undefined,
-      });
+      const req: Record<string, string> = {};
+      if (trimmedOpenai) req.openaiApiKey = trimmedOpenai;
+      if (trimmedGemini) req.geminiApiKey = trimmedGemini;
+      await updateAiAgents(apiBaseUrl, req);
       setOpenaiKey('');
       setGeminiKey('');
+      setSaved(true);
       onSave();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save AI configuration');
@@ -132,6 +134,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       >
         {isSaving ? (
           'Saving...'
+        ) : saved ? (
+          'Saved!'
         ) : (
           <>
             <Save size={15} />

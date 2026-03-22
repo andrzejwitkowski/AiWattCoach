@@ -12,10 +12,11 @@ import type { ComponentType } from 'react';
 
 import { UserMenu } from '../features/auth/components/UserMenu';
 import { useAuth } from '../features/auth/context/AuthProvider';
-import { useSettings } from '../features/settings/context/SettingsProvider';
+import { useSettings } from '../features/settings/context/SettingsContext';
 
 type AuthenticatedLayoutProps = {
   apiBaseUrl: string;
+  backendStatus?: { state: string; health: { service: string; status: string }; readiness: { status: string } };
 };
 
 const PAGE_TITLES: Record<string, string> = {
@@ -33,7 +34,7 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
   const currentUser = auth.user;
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'WATTLY';
-  const cycling = settingsCtx.settings.cycling;
+  const cycling = settingsCtx.settings?.cycling ?? null;
 
   return (
     <div className="flex min-h-screen bg-[#0a0f1a]">
@@ -72,9 +73,9 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              {cycling.hrMaxBpm && <MetricPill label={`HR ${cycling.hrMaxBpm}`} />}
-              {cycling.ftpWatts && <MetricPill label={`FTP ${cycling.ftpWatts}`} />}
-              {cycling.vo2Max && <MetricPill label={`VO2 ${cycling.vo2Max}`} />}
+              {cycling?.hrMaxBpm && <MetricPill label={`HR ${cycling.hrMaxBpm}`} />}
+              {cycling?.ftpWatts && <MetricPill label={`FTP ${cycling.ftpWatts}`} />}
+              {cycling?.vo2Max && <MetricPill label={`VO2 ${cycling.vo2Max}`} />}
             </div>
 
             <button

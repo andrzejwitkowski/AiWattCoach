@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Eye, EyeOff, RefreshCw } from 'lucide-react';
-
 import type { UserSettingsResponse } from '../types';
 import { updateIntervals } from '../api/settings';
 
@@ -15,6 +14,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
   const [athleteId, setAthleteId] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const intervals = settings.intervals;
@@ -24,13 +24,15 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
     const trimmedAthleteId = athleteId.trim();
     if (!trimmedApiKey && !trimmedAthleteId) return;
     setIsSaving(true);
+    setSaved(false);
     setSaveError(null);
     try {
-      await updateIntervals(apiBaseUrl, {
-        apiKey: trimmedApiKey || undefined,
-        athleteId: trimmedAthleteId || undefined,
-      });
+      const req: Record<string, string> = {};
+      if (trimmedApiKey) req.apiKey = trimmedApiKey;
+      if (trimmedAthleteId) req.athleteId = trimmedAthleteId;
+      await updateIntervals(apiBaseUrl, req);
       setApiKey('');
+      setSaved(true);
       onSave();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to connect to Intervals.icu');
@@ -64,11 +66,12 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
 
       <div className="mt-6 space-y-4">
         <div>
-          <label className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
+          <label htmlFor="intervals-api-key" className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
             API Key
           </label>
           <div className="relative">
             <input
+              id="intervals-api-key"
               className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
               type={showKey ? 'text' : 'password'}
               placeholder={intervals.apiKeySet ? 'Already configured' : 'Enter API key'}
@@ -90,10 +93,11 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
+          <label htmlFor="intervals-athlete-id" className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
             Athlete ID
           </label>
           <input
+            id="intervals-athlete-id"
             className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
             type="text"
             placeholder={intervals.athleteId ?? 'i123456'}
@@ -118,7 +122,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
         disabled={isSaving || (!apiKey.trim() && !athleteId.trim())}
         type="button"
       >
-        {isSaving ? 'Connecting...' : <><RefreshCw size={15} />Connect Intervals</>}
+        {isSaving ? 'Connecting...' : saved ? 'Connected!' : <><RefreshCw size={15} />Connect Intervals</>}
       </button>
     </div>
   );

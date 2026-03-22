@@ -1,8 +1,8 @@
+import { useSettings } from '../features/settings/context/SettingsContext';
 import { AiAgentsCard } from '../features/settings/components/AiAgentsCard';
 import { CyclingSettingsCard } from '../features/settings/components/CyclingSettingsCard';
 import { IntervalsCard } from '../features/settings/components/IntervalsCard';
 import { OptionsCard } from '../features/settings/components/OptionsCard';
-import { useSettings } from '../features/settings/context/SettingsContext';
 
 type SettingsPageProps = {
   apiBaseUrl: string;
@@ -42,29 +42,33 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
     );
   }
 
+  function handleSave() {
+    void refreshSettings();
+  }
+
   return (
     <section className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2">
         <AiAgentsCard
           settings={settings}
           apiBaseUrl={apiBaseUrl}
-          onSave={() => { void refreshSettings(); }}
+          onSave={handleSave}
         />
         <IntervalsCard
           settings={settings}
           apiBaseUrl={apiBaseUrl}
-          onSave={() => { void refreshSettings(); }}
+          onSave={handleSave}
         />
       </div>
       <OptionsCard
         settings={settings}
         apiBaseUrl={apiBaseUrl}
-        onSave={() => { void refreshSettings(); }}
+        onSave={handleSave}
       />
       <CyclingSettingsCard
         settings={settings}
         apiBaseUrl={apiBaseUrl}
-        onSave={() => { void refreshSettings(); }}
+        onSave={handleSave}
       />
     </section>
   );

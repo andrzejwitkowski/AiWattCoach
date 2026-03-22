@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Info, Settings2 } from 'lucide-react';
-
 import type { UserSettingsResponse } from '../types';
 import { updateOptions } from '../api/settings';
+import type { UpdateOptionsRequest } from '../types';
 
 type OptionsCardProps = {
   settings: UserSettingsResponse;
@@ -29,8 +29,13 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
     setIsSaving(true);
     setAnalyzeWithoutHR(value);
     setSaveError(null);
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     try {
-      await updateOptions(apiBaseUrl, { analyzeWithoutHeartRate: value });
+      const req: UpdateOptionsRequest = { analyzeWithoutHeartRate: value };
+      await updateOptions(apiBaseUrl, req);
       onSave();
     } catch (err) {
       setAnalyzeWithoutHR(!value);
@@ -82,17 +87,17 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
           </p>
         </div>
 
-        {saveError && (
-          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {saveError}
-          </div>
-        )}
-
         <div className="mt-4 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span className="text-sm text-emerald-400 font-medium">All engines nominal</span>
         </div>
       </div>
+
+      {saveError && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
     </div>
   );
 }

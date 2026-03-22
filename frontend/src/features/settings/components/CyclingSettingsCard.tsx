@@ -1,6 +1,5 @@
-import { useState, type ChangeEvent, type ComponentType } from 'react';
-import { ChevronRight, Heart, RefreshCw, Zap } from 'lucide-react';
-
+import { useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import type { UserSettingsResponse } from '../types';
 import { updateCycling } from '../api/settings';
 
@@ -25,9 +24,44 @@ function formatLastZoneUpdate(epochSeconds: number | null): string {
   return `${days} days ago`;
 }
 
+function Field({ label, id, value, onChange, type = 'text', placeholder }: {
+  label: string;
+  id: string;
+  value: string | number | null;
+  onChange: (v: string) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+        placeholder={placeholder}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+function MetricCard({ label, value, unit, accent }: { label: string; value: number | null; unit: string; accent: string }) {
+  return (
+    <div className={"flex flex-col items-center rounded-xl border p-4 " + accent}>
+      <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
+      <span className="mt-1 text-2xl font-bold text-white">{value ?? '--'}</span>
+      <span className="text-xs text-slate-400">{unit}</span>
+    </div>
+  );
+}
+
 export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSettingsCardProps) {
   const cycling = settings.cycling;
-  const [form, setForm] = useState<Record<string, string>>({
+  const [form, setForm] = useState({
     fullName: cycling.fullName ?? '',
     age: cycling.age?.toString() ?? '',
     heightCm: cycling.heightCm?.toString() ?? '',
@@ -40,11 +74,6 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const accuracy = computeProfileAccuracy(cycling);
-
-  const handleChange = (field: string) => (e: ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
-    setSaveError(null);
-  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -102,37 +131,35 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
+            <Field
               label="Full Name"
-              sublabel="Imie i Nazwisko"
+              id="full-name"
               value={form.fullName}
-              onChange={handleChange('fullName')}
+              onChange={(v) => { setForm((p) => ({ ...p, fullName: v })); setSaveError(null); }}
               placeholder="Alex Rivier"
             />
-            <FormField
+            <Field
               label="Age"
-              sublabel="Wiek"
+              id="age"
               type="number"
               value={form.age}
-              onChange={handleChange('age')}
+              onChange={(v) => { setForm((p) => ({ ...p, age: v })); setSaveError(null); }}
               placeholder="28"
             />
-            <FormField
+            <Field
               label="Height"
-              sublabel="Wzrost"
+              id="height-cm"
               type="number"
-              suffix="CM"
               value={form.heightCm}
-              onChange={handleChange('heightCm')}
+              onChange={(v) => { setForm((p) => ({ ...p, heightCm: v })); setSaveError(null); }}
               placeholder="182"
             />
-            <FormField
+            <Field
               label="Weight"
-              sublabel="Waga"
+              id="weight-kg"
               type="number"
-              suffix="KG"
               value={form.weightKg}
-              onChange={handleChange('weightKg')}
+              onChange={(v) => { setForm((p) => ({ ...p, weightKg: v })); setSaveError(null); }}
               placeholder="74"
             />
           </div>
@@ -159,36 +186,45 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <MetricCard
-          icon={Zap}
-          iconBg="bg-yellow-400/20"
-          iconColor="text-yellow-400"
-          label="Functional Threshold Power"
-          value={cycling.ftpWatts ? `${cycling.ftpWatts} Watts` : '—'}
-          editable
-          inputValue={form.ftpWatts}
-          onChange={handleChange('ftpWatts')}
-          placeholder="280"
+          label="FTP"
+          value={cycling.ftpWatts}
+          unit="Watts"
+          accent="border-amber-500/30 bg-amber-500/10"
         />
         <MetricCard
-          icon={Heart}
-          iconBg="bg-red-400/20"
-          iconColor="text-red-400"
-          label="HR Max"
-          value={cycling.hrMaxBpm ? `${cycling.hrMaxBpm} BPM` : '—'}
-          editable
-          inputValue={form.hrMaxBpm}
-          onChange={handleChange('hrMaxBpm')}
+          label="HR MAX"
+          value={cycling.hrMaxBpm}
+          unit="BPM"
+          accent="border-red-500/30 bg-red-500/10"
+        />
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Field
+          label="FTP (watts)"
+          id="ftp-watts"
+          type="number"
+          value={form.ftpWatts}
+          onChange={(v) => { setForm((p) => ({ ...p, ftpWatts: v })); setSaveError(null); }}
+          placeholder="280"
+        />
+        <Field
+          label="HR Max (BPM)"
+          id="hr-max"
+          type="number"
+          value={form.hrMaxBpm}
+          onChange={(v) => { setForm((p) => ({ ...p, hrMaxBpm: v })); setSaveError(null); }}
           placeholder="192"
         />
       </div>
 
       <div className="mt-6">
-        <FormField
+        <Field
           label="VO2 Max"
-          sublabel="Maximal Oxygen Uptake"
+          id="vo2-max"
           type="number"
           value={form.vo2Max}
-          onChange={handleChange('vo2Max')}
+          onChange={(v) => { setForm((p) => ({ ...p, vo2Max: v })); setSaveError(null); }}
           placeholder="62.0"
         />
       </div>
@@ -207,93 +243,6 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
       >
         {isSaving ? 'Synchronizing...' : <><RefreshCw size={15} />Synchronize Bio-Metrics</>}
       </button>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  sublabel,
-  type = 'text',
-  value,
-  onChange,
-  placeholder,
-  suffix,
-}: {
-  label: string;
-  sublabel: string;
-  type?: string;
-  value: string;
-  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-  suffix?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
-        {label} <span className="text-slate-600 normal-case tracking-normal">/ {sublabel}</span>
-      </label>
-      <div className="relative">
-        <input
-          className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition pr-16"
-          type={type}
-          placeholder={placeholder}
-          value={value}
-          onChange={onChange}
-        />
-        {suffix && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-medium">
-            {suffix}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({
-  icon: Icon,
-  iconBg,
-  iconColor,
-  label,
-  value,
-  editable,
-  inputValue,
-  onChange,
-  placeholder,
-}: {
-  icon: ComponentType<{ size?: number; className?: string }>;
-  iconBg: string;
-  iconColor: string;
-  label: string;
-  value: string;
-  editable?: boolean;
-  inputValue?: string;
-  onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
-      <div className="flex items-center gap-3">
-        <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center`}>
-          <Icon size={18} className={iconColor} />
-        </div>
-        <div className="flex-1">
-          <p className="text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-          {editable ? (
-            <input
-              className="mt-1 bg-transparent text-xl font-bold text-white placeholder:text-slate-600 focus:outline-none w-full"
-              type="number"
-              placeholder={placeholder}
-              value={inputValue}
-              onChange={onChange}
-            />
-          ) : (
-            <p className="mt-1 text-xl font-bold text-white">{value}</p>
-          )}
-        </div>
-        <ChevronRight size={16} className="text-slate-500" />
-      </div>
     </div>
   );
 }
