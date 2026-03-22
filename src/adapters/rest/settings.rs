@@ -10,8 +10,8 @@ use crate::{
     config::AppState,
     domain::identity::IdentityError,
     domain::settings::{
-        mask_sensitive, AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig,
-        SettingsError,
+        mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, CyclingSettings,
+        IntervalsConfig, SettingsError,
     },
 };
 
@@ -266,14 +266,43 @@ pub async fn update_cycling(
         Err(err) => return map_settings_error(&err),
     };
 
+    let age = match validation::validate_cycling_age(body.age.or(current.cycling.age)) {
+        Ok(v) => v,
+        Err(e) => return map_settings_error(&e),
+    };
+    let height_cm =
+        match validation::validate_cycling_height(body.height_cm.or(current.cycling.height_cm)) {
+            Ok(v) => v,
+            Err(e) => return map_settings_error(&e),
+        };
+    let weight_kg =
+        match validation::validate_cycling_weight(body.weight_kg.or(current.cycling.weight_kg)) {
+            Ok(v) => v,
+            Err(e) => return map_settings_error(&e),
+        };
+    let ftp_watts =
+        match validation::validate_cycling_ftp(body.ftp_watts.or(current.cycling.ftp_watts)) {
+            Ok(v) => v,
+            Err(e) => return map_settings_error(&e),
+        };
+    let hr_max_bpm =
+        match validation::validate_cycling_hr(body.hr_max_bpm.or(current.cycling.hr_max_bpm)) {
+            Ok(v) => v,
+            Err(e) => return map_settings_error(&e),
+        };
+    let vo2_max = match validation::validate_cycling_vo2(body.vo2_max.or(current.cycling.vo2_max)) {
+        Ok(v) => v,
+        Err(e) => return map_settings_error(&e),
+    };
+
     let cycling = CyclingSettings {
         full_name: body.full_name.or(current.cycling.full_name),
-        age: body.age.or(current.cycling.age),
-        height_cm: body.height_cm.or(current.cycling.height_cm),
-        weight_kg: body.weight_kg.or(current.cycling.weight_kg),
-        ftp_watts: body.ftp_watts.or(current.cycling.ftp_watts),
-        hr_max_bpm: body.hr_max_bpm.or(current.cycling.hr_max_bpm),
-        vo2_max: body.vo2_max.or(current.cycling.vo2_max),
+        age,
+        height_cm,
+        weight_kg,
+        ftp_watts,
+        hr_max_bpm,
+        vo2_max,
         last_zone_update_epoch_seconds: current.cycling.last_zone_update_epoch_seconds,
     };
 
