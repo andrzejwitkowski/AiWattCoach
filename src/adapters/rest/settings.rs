@@ -164,16 +164,19 @@ pub async fn update_ai_agents(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
+    let current = match settings_service.get_settings(&user_id).await {
+        Ok(s) => s,
+        Err(err) => return map_settings_error(&err),
+    };
+
     let config = AiAgentsConfig {
-        openai_api_key: body.openai_api_key,
-        gemini_api_key: body.gemini_api_key,
+        openai_api_key: body.openai_api_key.or(current.ai_agents.openai_api_key),
+        gemini_api_key: body.gemini_api_key.or(current.ai_agents.gemini_api_key),
     };
 
     match settings_service.update_ai_agents(&user_id, config).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
-        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
+        Err(err) => map_settings_error(&err),
     }
 }
 
@@ -192,17 +195,20 @@ pub async fn update_intervals(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
+    let current = match settings_service.get_settings(&user_id).await {
+        Ok(s) => s,
+        Err(err) => return map_settings_error(&err),
+    };
+
     let config = IntervalsConfig {
-        api_key: body.api_key,
-        athlete_id: body.athlete_id,
-        connected: false,
+        api_key: body.api_key.or(current.intervals.api_key),
+        athlete_id: body.athlete_id.or(current.intervals.athlete_id),
+        connected: current.intervals.connected,
     };
 
     match settings_service.update_intervals(&user_id, config).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
-        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
+        Err(err) => map_settings_error(&err),
     }
 }
 
@@ -221,15 +227,20 @@ pub async fn update_options(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
+    let current = match settings_service.get_settings(&user_id).await {
+        Ok(s) => s,
+        Err(err) => return map_settings_error(&err),
+    };
+
     let options = AnalysisOptions {
-        analyze_without_heart_rate: body.analyze_without_heart_rate.unwrap_or(false),
+        analyze_without_heart_rate: body
+            .analyze_without_heart_rate
+            .unwrap_or(current.options.analyze_without_heart_rate),
     };
 
     match settings_service.update_options(&user_id, options).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
-        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
+        Err(err) => map_settings_error(&err),
     }
 }
 
@@ -248,22 +259,33 @@ pub async fn update_cycling(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
+    let current = match settings_service.get_settings(&user_id).await {
+        Ok(s) => s,
+        Err(err) => return map_settings_error(&err),
+    };
+
     let cycling = CyclingSettings {
-        full_name: body.full_name,
-        age: body.age,
-        height_cm: body.height_cm,
-        weight_kg: body.weight_kg,
-        ftp_watts: body.ftp_watts,
-        hr_max_bpm: body.hr_max_bpm,
-        vo2_max: body.vo2_max,
-        last_zone_update_epoch_seconds: None,
+        full_name: body.full_name.or(current.cycling.full_name),
+        age: body.age.or(current.cycling.age),
+        height_cm: body.height_cm.or(current.cycling.height_cm),
+        weight_kg: body.weight_kg.or(current.cycling.weight_kg),
+        ftp_watts: body.ftp_watts.or(current.cycling.ftp_watts),
+        hr_max_bpm: body.hr_max_bpm.or(current.cycling.hr_max_bpm),
+        vo2_max: body.vo2_max.or(current.cycling.vo2_max),
+        last_zone_update_epoch_seconds: current.cycling.last_zone_update_epoch_seconds,
     };
 
     match settings_service.update_cycling(&user_id, cycling).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
-        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
+        Err(err) => map_settings_error(&err),
+    }
+}
+
+fn map_settings_error(err: &SettingsError) -> Response {
+    match err {
+        SettingsError::Repository(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        SettingsError::Unauthenticated => StatusCode::UNAUTHORIZED.into_response(),
+        SettingsError::Validation(_) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
 

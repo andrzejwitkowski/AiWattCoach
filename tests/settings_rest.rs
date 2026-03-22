@@ -110,19 +110,20 @@ async fn test_mongo_client(uri: &str) -> Client {
         .expect("test mongo client should be created")
 }
 
-#[derive(Clone)]
 struct TestSettingsService {
-    settings: Option<UserSettings>,
+    settings: std::sync::Mutex<Option<UserSettings>>,
 }
 
 impl TestSettingsService {
     fn new() -> Self {
-        Self { settings: None }
+        Self {
+            settings: std::sync::Mutex::new(None),
+        }
     }
 
     fn with_settings(settings: UserSettings) -> Self {
         Self {
-            settings: Some(settings),
+            settings: std::sync::Mutex::new(Some(settings)),
         }
     }
 }
@@ -135,8 +136,8 @@ impl Default for TestSettingsService {
 
 impl UserSettingsUseCases for TestSettingsService {
     fn get_settings(&self, user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
-        let settings = self.settings.clone();
         let user_id = user_id.to_string();
+        let settings = { self.settings.lock().unwrap().clone() };
         Box::pin(async move {
             Ok(settings.unwrap_or_else(|| UserSettings::new_defaults(user_id, 1000)))
         })
@@ -148,12 +149,18 @@ impl UserSettingsUseCases for TestSettingsService {
         ai_agents: AiAgentsConfig,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let mut settings = UserSettings::new_defaults(user_id, 1000);
-            settings.ai_agents = ai_agents;
-            settings.updated_at_epoch_seconds = 2000;
-            Ok(settings)
-        })
+        let mut settings = {
+            self.settings
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| UserSettings::new_defaults(user_id.clone(), 1000))
+        };
+        settings.ai_agents = ai_agents;
+        settings.updated_at_epoch_seconds = 2000;
+        let result = settings.clone();
+        *self.settings.lock().unwrap() = Some(settings);
+        Box::pin(async move { Ok(result) })
     }
 
     fn update_intervals(
@@ -162,12 +169,18 @@ impl UserSettingsUseCases for TestSettingsService {
         intervals: IntervalsConfig,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let mut settings = UserSettings::new_defaults(user_id, 1000);
-            settings.intervals = intervals;
-            settings.updated_at_epoch_seconds = 2000;
-            Ok(settings)
-        })
+        let mut settings = {
+            self.settings
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| UserSettings::new_defaults(user_id.clone(), 1000))
+        };
+        settings.intervals = intervals;
+        settings.updated_at_epoch_seconds = 2000;
+        let result = settings.clone();
+        *self.settings.lock().unwrap() = Some(settings);
+        Box::pin(async move { Ok(result) })
     }
 
     fn update_options(
@@ -176,12 +189,18 @@ impl UserSettingsUseCases for TestSettingsService {
         options: AnalysisOptions,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let mut settings = UserSettings::new_defaults(user_id, 1000);
-            settings.options = options;
-            settings.updated_at_epoch_seconds = 2000;
-            Ok(settings)
-        })
+        let mut settings = {
+            self.settings
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| UserSettings::new_defaults(user_id.clone(), 1000))
+        };
+        settings.options = options;
+        settings.updated_at_epoch_seconds = 2000;
+        let result = settings.clone();
+        *self.settings.lock().unwrap() = Some(settings);
+        Box::pin(async move { Ok(result) })
     }
 
     fn update_cycling(
@@ -190,12 +209,18 @@ impl UserSettingsUseCases for TestSettingsService {
         cycling: CyclingSettings,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let mut settings = UserSettings::new_defaults(user_id, 1000);
-            settings.cycling = cycling;
-            settings.updated_at_epoch_seconds = 2000;
-            Ok(settings)
-        })
+        let mut settings = {
+            self.settings
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| UserSettings::new_defaults(user_id.clone(), 1000))
+        };
+        settings.cycling = cycling;
+        settings.updated_at_epoch_seconds = 2000;
+        let result = settings.clone();
+        *self.settings.lock().unwrap() = Some(settings);
+        Box::pin(async move { Ok(result) })
     }
 }
 
@@ -473,6 +498,54 @@ async fn update_cycling_saves_biometrics() {
     assert_eq!(cycling.get("ftpWatts").unwrap().as_i64().unwrap(), 280);
     assert_eq!(cycling.get("hrMaxBpm").unwrap().as_i64().unwrap(), 192);
     assert_eq!(cycling.get("vo2Max").unwrap().as_f64().unwrap(), 58.0);
+}
+
+#[tokio::test]
+async fn update_ai_agents_partial_body_preserves_existing_key() {
+    let existing_settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    let mut with_existing_keys = existing_settings;
+    with_existing_keys.ai_agents.openai_api_key = Some("sk-existing-openai".to_string());
+    with_existing_keys.ai_agents.gemini_api_key = Some("AIza-existing-gemini".to_string());
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(with_existing_keys),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openaiApiKey": "sk-new-openai-key"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let ai_agents = response_body.get("aiAgents").unwrap();
+
+    assert!(ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap());
+    assert!(
+        ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap(),
+        "gemini key should still be set after partial update"
+    );
+    let gemini_key = ai_agents.get("geminiApiKey").unwrap().as_str().unwrap();
+    assert!(
+        gemini_key.starts_with("***..."),
+        "geminiApiKey should be masked, got: {}",
+        gemini_key
+    );
 }
 
 #[derive(Clone, Default)]
