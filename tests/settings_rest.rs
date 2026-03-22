@@ -548,6 +548,58 @@ async fn update_ai_agents_partial_body_preserves_existing_key() {
     );
 }
 
+
+
+#[tokio::test]
+async fn admin_can_view_any_user_settings() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession {
+            roles: vec![Role::User, Role::Admin],
+            ..Default::default()
+        },
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/settings/user-999")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn non_admin_cannot_view_other_user_settings() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession {
+            roles: vec![Role::User],
+            ..Default::default()
+        },
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/settings/user-999")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
 #[derive(Clone, Default)]
 struct TestIdentityServiceWithSession {
     session_id: String,
@@ -638,14 +690,23 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
 
     fn require_admin(
         &self,
-        _session_id: &str,
+        session_id: &str,
     ) -> BoxFuture<Result<AppUser, aiwattcoach::domain::identity::IdentityError>> {
-        Box::pin(async {
+        let roles = self.roles.clone();
+        let user_id = self.user_id.clone();
+        let session_id_check = session_id.to_string();
+        Box::pin(async move {
+            if session_id_check != "session-1" {
+                return Err(aiwattcoach::domain::identity::IdentityError::Unauthenticated);
+            }
+            if !roles.contains(&Role::Admin) {
+                return Err(aiwattcoach::domain::identity::IdentityError::Forbidden);
+            }
             Ok(AppUser::new(
-                "user-1".to_string(),
+                user_id,
                 "google-subject-1".to_string(),
                 "admin@example.com".to_string(),
-                vec![Role::User, Role::Admin],
+                roles,
                 Some("Admin".to_string()),
                 None,
                 true,

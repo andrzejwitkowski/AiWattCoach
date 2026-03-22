@@ -38,6 +38,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/admin/system-info", get(admin::system_info))
+        .route(
+            "/api/admin/settings/{user_id}",
+            get(settings::admin_get_user_settings),
+        )
         .route("/api/settings", get(settings::get_settings))
         .route("/api/settings/ai-agents", patch(settings::update_ai_agents))
         .route("/api/settings/intervals", patch(settings::update_intervals))

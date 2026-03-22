@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::AppState,
+    domain::identity::IdentityError,
     domain::settings::{
         mask_sensitive, AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig,
         SettingsError,
@@ -278,6 +279,41 @@ pub async fn update_cycling(
     match settings_service.update_cycling(&user_id, cycling).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
         Err(err) => map_settings_error(&err),
+    }
+}
+
+pub async fn admin_get_user_settings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(user_id): axum::extract::Path<String>,
+) -> Response {
+    let identity_service = match state.identity_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let session_id = match read_cookie(&headers, &state.session_cookie_name) {
+        Some(id) => id,
+        None => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    match identity_service.require_admin(&session_id).await {
+        Ok(_) => {}
+        Err(IdentityError::Unauthenticated) => return StatusCode::UNAUTHORIZED.into_response(),
+        Err(IdentityError::Forbidden) => return StatusCode::FORBIDDEN.into_response(),
+        Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
+
+    let settings_service = match state.settings_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    match settings_service.get_settings(&user_id).await {
+        Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
+        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
 
