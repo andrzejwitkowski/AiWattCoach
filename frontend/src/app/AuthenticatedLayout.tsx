@@ -1,83 +1,133 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import {
+  Bell,
+  Bot,
+  Calendar,
+  LayoutDashboard,
+  Play,
+  Settings,
+  ShieldCheck,
+} from 'lucide-react';
+import type { ComponentType } from 'react';
 
 import { UserMenu } from '../features/auth/components/UserMenu';
 import { useAuth } from '../features/auth/context/AuthProvider';
-import type { BackendStatus } from '../lib/api/system';
-import { getStatusToneClass } from '../lib/statusUi';
+import { useSettings } from '../features/settings/context/SettingsContext';
 
 type AuthenticatedLayoutProps = {
   apiBaseUrl: string;
-  backendStatus: BackendStatus;
+  backendStatus?: { state: string; health: { service: string; status: string }; readiness: { status: string } };
 };
 
-export function AuthenticatedLayout({ apiBaseUrl, backendStatus }: AuthenticatedLayoutProps) {
-  const { t } = useTranslation();
+const PAGE_TITLES: Record<string, string> = {
+  '/app': 'Dashboard',
+  '/settings': 'Settings',
+  '/calendar': 'Calendar',
+  '/ai-coach': 'AI Coach',
+  '/admin/system-info': 'System Info',
+};
+
+export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
   const auth = useAuth();
-  const statusAccentClass = getStatusToneClass(backendStatus.state);
-  const navigationItems = [
-    { to: '/app', label: t('nav.workspace') },
-    { to: '/settings', label: t('nav.settings') }
-  ];
+  const location = useLocation();
+  const settingsCtx = useSettings();
   const currentUser = auth.user;
 
-  if (auth.status === 'authenticated' && currentUser && currentUser.roles.includes('admin')) {
-    navigationItems.push({ to: '/admin/system-info', label: t('nav.systemInfo') });
-  }
+  const pageTitle = PAGE_TITLES[location.pathname] ?? 'WATTLY';
+  const cycling = settingsCtx.settings?.cycling ?? null;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(251,191,36,0.18),_transparent_24%),linear-gradient(180deg,_#04111f_0%,_#0f172a_55%,_#111827_100%)] text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-10 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="rounded-[2.2rem] border border-white/10 bg-slate-950/55 px-6 py-6 shadow-[0_25px_80px_rgba(2,6,23,0.45)] backdrop-blur md:px-8">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.4em] text-cyan-300">AiWattCoach</p>
-              <h1 className="mt-4 font-serif text-4xl leading-tight text-white md:text-5xl">
-                AiWattCoach Control Center
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-                Authenticated workspace for settings, diagnostics, and future coaching flows.
-              </p>
+    <div className="flex min-h-screen bg-[#0a0f1a]">
+      <aside className="fixed left-0 top-0 h-screen w-56 flex flex-col bg-[#070b12] border-r border-white/10 z-20">
+        <div className="p-5">
+          <p className="text-lg font-bold text-white tracking-wide">WATTLY</p>
+          <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 mt-0.5">
+            Elite Performance
+          </p>
+        </div>
+
+        <nav className="mt-4 flex-1 px-3 space-y-1">
+          <NavItem to="/app" icon={LayoutDashboard} label="Dashboard" />
+          <NavItem to="/calendar" icon={Calendar} label="Calendar" />
+          <NavItem to="/ai-coach" icon={Bot} label="AI Coach" />
+          <NavItem to="/settings" icon={Settings} label="Settings" />
+          {currentUser && currentUser.roles.includes('admin') && (
+            <NavItem to="/admin/system-info" icon={ShieldCheck} label="System Info" />
+          )}
+        </nav>
+
+        <div className="p-3">
+          <button
+            className="w-full flex items-center justify-center gap-2 bg-cyan-400 text-slate-950 font-semibold rounded-xl py-3 text-sm hover:bg-cyan-300 transition"
+            type="button"
+          >
+            <Play size={14} />
+            START WORKOUT
+          </button>
+        </div>
+      </aside>
+
+      <div className="ml-56 flex-1 flex flex-col min-h-screen">
+        <header className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-[#0a0f1a]/80 backdrop-blur border-b border-white/10">
+          <h1 className="text-xl font-bold text-white">{pageTitle}</h1>
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              {cycling?.hrMaxBpm && <MetricPill label={`HR ${cycling.hrMaxBpm}`} />}
+              {cycling?.ftpWatts && <MetricPill label={`FTP ${cycling.ftpWatts}`} />}
+              {cycling?.vo2Max && <MetricPill label={`VO2 ${cycling.vo2Max}`} />}
             </div>
 
-            <div className="flex flex-col gap-4 xl:items-end">
-              <section className={"rounded-[1.6rem] border px-5 py-4 " + statusAccentClass}>
-                <p className="text-xs uppercase tracking-[0.3em]">Backend status</p>
-                <p className="mt-2 text-2xl font-semibold text-white">{backendStatus.state}</p>
-                <p className="mt-1 text-sm text-slate-200">
-                  {backendStatus.health.service} · health {backendStatus.health.status} · ready{' '}
-                  {backendStatus.readiness.status}
-                </p>
-              </section>
+            <button
+              className="text-slate-400 hover:text-slate-200 transition"
+              type="button"
+              aria-label="Notifications"
+            >
+              <Bell size={18} />
+            </button>
 
-              <UserMenu apiBaseUrl={apiBaseUrl} />
-            </div>
+            <UserMenu apiBaseUrl={apiBaseUrl} />
           </div>
-
-          <nav className="mt-8 flex flex-wrap gap-3">
-            {navigationItems.map((item) => (
-              <NavLink
-                key={item.to}
-                className={({ isActive }) =>
-                  [
-                    'rounded-full px-5 py-2.5 text-sm font-semibold transition',
-                    isActive
-                      ? 'bg-white text-slate-950 shadow-[0_10px_30px_rgba(255,255,255,0.16)]'
-                      : 'bg-white/6 text-slate-200 hover:bg-white/12'
-                  ].join(' ')
-                }
-                to={item.to}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
         </header>
 
-        <main className="pb-10">
+        <main className="p-6">
           <Outlet />
         </main>
       </div>
     </div>
+  );
+}
+
+function MetricPill({ label }: { label: string }) {
+  return (
+    <span className="text-sm text-cyan-300 border border-cyan-400/40 rounded-full px-3 py-1 font-medium">
+      {label}
+    </span>
+  );
+}
+
+type NavItemProps = {
+  to: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
+  label: string;
+};
+
+function NavItem({ to, icon: Icon, label }: NavItemProps) {
+  return (
+    <NavLink
+      key={to + label}
+      to={to}
+      className={({ isActive }) =>
+        [
+          'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition group',
+          isActive
+            ? 'bg-white/8 text-cyan-300 border-l-2 border-cyan-400 pl-[10px]'
+            : 'text-slate-400 hover:text-slate-200 hover:bg-white/5',
+        ].join(' ')
+      }
+    >
+      <Icon size={17} className="shrink-0" />
+      {label}
+    </NavLink>
   );
 }

@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { ApiKeyInput } from './ApiKeyInput';
+import { Eye, EyeOff, RefreshCw } from 'lucide-react';
 import type { UserSettingsResponse } from '../types';
 import { updateIntervals } from '../api/settings';
 
@@ -11,16 +10,16 @@ type IntervalsCardProps = {
 };
 
 export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardProps) {
-  const { t } = useTranslation();
   const [apiKey, setApiKey] = useState('');
   const [athleteId, setAthleteId] = useState('');
+  const [showKey, setShowKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const intervals = settings.intervals;
 
-  async function handleSave() {
+  const handleSave = async () => {
     const trimmedApiKey = apiKey.trim();
     const trimmedAthleteId = athleteId.trim();
     if (!trimmedApiKey && !trimmedAthleteId) return;
@@ -40,76 +39,91 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
     } finally {
       setIsSaving(false);
     }
-  }
+  };
 
   return (
-    <div className="rounded-[1.5rem] border border-white/10 bg-gradient-to-br from-emerald-900/40 to-cyan-900/30 p-6">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15">
-          <svg className="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-          </svg>
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 rounded-xl bg-cyan-400/20 flex items-center justify-center shrink-0">
+          <RefreshCw size={20} className="text-cyan-400" />
         </div>
-        <div>
-          <h3 className="text-lg font-semibold text-white">{t('intervals.title')}</h3>
-          <p className="text-xs text-slate-400">{t('intervals.subtitle')}</p>
+        <div className="flex-1">
+          <h2 className="text-xl font-bold text-white">Intervals.icu</h2>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-0.5">
+            External Ecosystem
+          </p>
         </div>
+        {intervals.connected && (
+          <span className="text-[10px] font-semibold bg-emerald-400/20 text-emerald-400 rounded-full px-2 py-0.5 uppercase tracking-wider">
+            Connected
+          </span>
+        )}
       </div>
 
-      <p className="mb-5 text-sm leading-relaxed text-slate-400">
-        {t('intervals.description')}
+      <p className="mt-4 text-sm text-slate-300 leading-relaxed">
+        Connect your Intervals.icu account to sync training data, load zones, and enable AI-powered analysis.
       </p>
 
-      <div className="space-y-4">
-        <ApiKeyInput
-          id="intervals-api-key"
-          label={t('intervals.apiKey')}
-          placeholder="Enter your Intervals API key"
-          isConfigured={intervals.apiKeySet}
-          configuredLabel={t('intervals.configured')}
-          value={apiKey}
-          onChange={setApiKey}
-          accentColor="emerald"
-        />
+      <div className="mt-6 space-y-4">
+        <div>
+          <label htmlFor="intervals-api-key" className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
+            API Key
+          </label>
+          <div className="relative">
+            <input
+              id="intervals-api-key"
+              className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
+              type={showKey ? 'text' : 'password'}
+              placeholder={intervals.apiKeySet ? 'Already configured' : 'Enter API key'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
+              onClick={() => setShowKey((v) => !v)}
+              type="button"
+              aria-label={showKey ? 'Hide key' : 'Show key'}
+            >
+              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {intervals.apiKeySet && (
+            <p className="mt-1.5 text-xs text-emerald-400">API key is configured</p>
+          )}
+        </div>
 
         <div>
-          <label htmlFor="athlete-id" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400">
-            {t('intervals.athleteId')}
+          <label htmlFor="intervals-athlete-id" className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
+            Athlete ID
           </label>
           <input
-            id="athlete-id"
+            id="intervals-athlete-id"
+            className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
             type="text"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-            placeholder={intervals.athleteId ?? 'i12345678'}
+            placeholder={intervals.athleteId ?? 'i123456'}
             value={athleteId}
             onChange={(e) => setAthleteId(e.target.value)}
           />
+          {intervals.athleteId && (
+            <p className="mt-1.5 text-xs text-slate-400">Current: {intervals.athleteId}</p>
+          )}
         </div>
-
-        <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className={`h-2 w-2 rounded-full ${intervals.connected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-            <span className="text-sm text-emerald-300">
-              {intervals.connected ? t('intervals.connectedStatus') : t('intervals.notConnectedStatus')}
-            </span>
-          </div>
-        </div>
-
-        {saveError && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {saveError}
-          </div>
-        )}
-
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
-          disabled={isSaving || (!apiKey.trim() && !athleteId.trim())}
-          onClick={() => { void handleSave(); }}
-        >
-          {isSaving ? t('intervals.connecting') : saved ? t('intervals.connected') : t('intervals.connect')}
-        </button>
       </div>
+
+      {saveError && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
+
+      <button
+        className="mt-6 w-full flex items-center justify-center gap-2 bg-cyan-400 text-slate-950 font-semibold rounded-xl py-3 text-sm hover:bg-cyan-300 transition disabled:opacity-60 disabled:cursor-not-allowed"
+        onClick={() => { void handleSave(); }}
+        disabled={isSaving || (!apiKey.trim() && !athleteId.trim())}
+        type="button"
+      >
+        {isSaving ? 'Connecting...' : saved ? 'Connected!' : <><RefreshCw size={15} />Connect Intervals</>}
+      </button>
     </div>
   );
 }

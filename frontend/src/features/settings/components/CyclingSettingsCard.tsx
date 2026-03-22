@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import type { CyclingSettingsData, UserSettingsResponse } from '../types';
+import { RefreshCw } from 'lucide-react';
+import type { UserSettingsResponse } from '../types';
 import { updateCycling } from '../api/settings';
 
 type CyclingSettingsCardProps = {
@@ -8,6 +8,21 @@ type CyclingSettingsCardProps = {
   apiBaseUrl: string;
   onSave: () => void;
 };
+
+function computeProfileAccuracy(s: UserSettingsResponse['cycling']): number {
+  const fields = [s.fullName, s.age, s.heightCm, s.weightKg, s.ftpWatts, s.hrMaxBpm, s.vo2Max];
+  const filled = fields.filter((v) => v != null).length;
+  return Math.round((filled / fields.length) * 100);
+}
+
+function formatLastZoneUpdate(epochSeconds: number | null): string {
+  if (!epochSeconds) return 'Never';
+  const diff = Math.floor(Date.now() / 1000) - epochSeconds;
+  const days = Math.floor(diff / (24 * 60 * 60));
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
+}
 
 function Field({ label, id, value, onChange, type = 'text', placeholder }: {
   label: string;
@@ -44,22 +59,7 @@ function MetricCard({ label, value, unit, accent }: { label: string; value: numb
   );
 }
 
-function computeProfileAccuracy(settings: CyclingSettingsData): number {
-  const fields = [
-    settings.fullName,
-    settings.age,
-    settings.heightCm,
-    settings.weightKg,
-    settings.ftpWatts,
-    settings.hrMaxBpm,
-    settings.vo2Max,
-  ];
-  const filled = fields.filter((f) => f !== null && f !== undefined).length;
-  return Math.round((filled / fields.length) * 100);
-}
-
 export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSettingsCardProps) {
-  const { t } = useTranslation();
   const cycling = settings.cycling;
   const [form, setForm] = useState({
     fullName: cycling.fullName ?? '',
@@ -73,12 +73,9 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  function setField(key: keyof typeof form, value: string) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setSaveError(null);
-  }
+  const accuracy = computeProfileAccuracy(cycling);
 
-  async function handleSave() {
+  const handleSave = async () => {
     setIsSaving(true);
     try {
       const req: Record<string, unknown> = {};
@@ -110,83 +107,141 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
       await updateCycling(apiBaseUrl, req);
       onSave();
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : t('common.saveError'));
+      setSaveError(err instanceof Error ? err.message : 'Failed to save cycling settings');
     } finally {
       setIsSaving(false);
     }
-  }
-
-  const accuracy = computeProfileAccuracy(cycling);
-  const daysAgo = cycling.lastZoneUpdateEpochSeconds
-    ? Math.floor((Date.now() / 1000 - cycling.lastZoneUpdateEpochSeconds) / 86400)
-    : null;
-  const lastZoneLabel = daysAgo !== null
-    ? t('cycling.lastZoneDaysAgo', { count: daysAgo })
-    : t('cycling.never');
+  };
 
   return (
-    <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6">
-      <div className="mb-5">
-        <h3 className="text-lg font-semibold text-white">{t('cycling.title')}</h3>
-        <p className="text-xs font-medium uppercase tracking-wider text-amber-300">{t('cycling.subtitle')}</p>
-        <p className="mt-2 text-sm text-slate-400">
-          {t('cycling.description')}
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Cycling Settings</h2>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-0.5">
+            Ustawienia Kolarskie
+          </p>
+        </div>
+        <p className="text-sm text-slate-300 max-w-md leading-relaxed">
+          Physiological metrics used for power zone calculation, training load estimation, and AI coaching
+          insights. Accurate data improves analysis quality.
         </p>
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label={t('cycling.fullName')} id="full-name" value={form.fullName} onChange={(v) => setField('fullName', v)} placeholder="Alex Rivier" />
-        <Field label={t('cycling.age')} id="age" value={form.age} onChange={(v) => setField('age', v)} type="number" placeholder="28" />
-        <Field label={t('cycling.heightCm')} id="height-cm" value={form.heightCm} onChange={(v) => setField('heightCm', v)} type="number" placeholder="182" />
-        <Field label={t('cycling.weightKg')} id="weight-kg" value={form.weightKg} onChange={(v) => setField('weightKg', v)} type="number" placeholder="74.0" />
-      </div>
-
-      <div className="mb-6 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-        <div className="flex items-center gap-4">
-          <div>
-            <p className="text-xs text-slate-400">{t('cycling.profileAccuracy')}</p>
-            <p className="text-sm font-semibold text-cyan-300">{accuracy}% {t('cycling.complete')}</p>
-          </div>
-          <div className="h-2 w-24 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-cyan-500" style={{ width: `${accuracy}%` }} />
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Full Name"
+              id="full-name"
+              value={form.fullName}
+              onChange={(v) => { setForm((p) => ({ ...p, fullName: v })); setSaveError(null); }}
+              placeholder="Alex Rivier"
+            />
+            <Field
+              label="Age"
+              id="age"
+              type="number"
+              value={form.age}
+              onChange={(v) => { setForm((p) => ({ ...p, age: v })); setSaveError(null); }}
+              placeholder="28"
+            />
+            <Field
+              label="Height"
+              id="height-cm"
+              type="number"
+              value={form.heightCm}
+              onChange={(v) => { setForm((p) => ({ ...p, heightCm: v })); setSaveError(null); }}
+              placeholder="182"
+            />
+            <Field
+              label="Weight"
+              id="weight-kg"
+              type="number"
+              value={form.weightKg}
+              onChange={(v) => { setForm((p) => ({ ...p, weightKg: v })); setSaveError(null); }}
+              placeholder="74"
+            />
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-slate-400">{t('cycling.lastZoneUpdate')}</p>
-          <p className="text-sm font-semibold text-slate-300">{lastZoneLabel}</p>
+
+        <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+          <p className="text-[10px] uppercase tracking-widest text-slate-500">Profile Accuracy</p>
+          <div className="flex items-end gap-2 mt-3">
+            <span className="text-4xl font-bold text-cyan-400">{accuracy}%</span>
+            <span className="text-sm text-slate-400 mb-1">complete</span>
+          </div>
+          <div className="mt-3 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-cyan-400 rounded-full transition-all"
+              style={{ width: `${accuracy}%` }}
+            />
+          </div>
+          <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
+            <RefreshCw size={12} />
+            Last Zone Update: {formatLastZoneUpdate(cycling.lastZoneUpdateEpochSeconds)}
+          </div>
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4">
-        <MetricCard label="FTP" value={cycling.ftpWatts} unit={t('cycling.wattsUnit')} accent="border-amber-500/30 bg-amber-500/10" />
-        <MetricCard label="HR MAX" value={cycling.hrMaxBpm} unit="BPM" accent="border-red-500/30 bg-red-500/10" />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <MetricCard
+          label="FTP"
+          value={cycling.ftpWatts}
+          unit="Watts"
+          accent="border-amber-500/30 bg-amber-500/10"
+        />
+        <MetricCard
+          label="HR MAX"
+          value={cycling.hrMaxBpm}
+          unit="BPM"
+          accent="border-red-500/30 bg-red-500/10"
+        />
       </div>
 
-      <div className="mb-6">
-        <Field label={t('cycling.vo2Max')} id="vo2-max" value={form.vo2Max} onChange={(v) => setField('vo2Max', v)} type="number" placeholder="58.0" />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Field
+          label="FTP (watts)"
+          id="ftp-watts"
+          type="number"
+          value={form.ftpWatts}
+          onChange={(v) => { setForm((p) => ({ ...p, ftpWatts: v })); setSaveError(null); }}
+          placeholder="280"
+        />
+        <Field
+          label="HR Max (BPM)"
+          id="hr-max"
+          type="number"
+          value={form.hrMaxBpm}
+          onChange={(v) => { setForm((p) => ({ ...p, hrMaxBpm: v })); setSaveError(null); }}
+          placeholder="192"
+        />
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2">
-        <Field label={t('cycling.ftpWatts')} id="ftp-watts" value={form.ftpWatts} onChange={(v) => setField('ftpWatts', v)} type="number" placeholder="280" />
-        <Field label={t('cycling.hrMaxBpm')} id="hr-max" value={form.hrMaxBpm} onChange={(v) => setField('hrMaxBpm', v)} type="number" placeholder="192" />
+      <div className="mt-6">
+        <Field
+          label="VO2 Max"
+          id="vo2-max"
+          type="number"
+          value={form.vo2Max}
+          onChange={(v) => { setForm((p) => ({ ...p, vo2Max: v })); setSaveError(null); }}
+          placeholder="62.0"
+        />
       </div>
 
       {saveError && (
-        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {saveError}
         </div>
       )}
 
       <button
-        type="button"
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:opacity-50"
-        disabled={isSaving}
+        className="mt-6 w-full flex items-center justify-center gap-2 bg-slate-800 border border-white/10 text-slate-300 font-semibold rounded-xl py-3 text-sm uppercase tracking-wider hover:bg-slate-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
         onClick={() => { void handleSave(); }}
+        disabled={isSaving}
+        type="button"
       >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-        </svg>
-        {isSaving ? t('cycling.saving') : t('cycling.save')}
+        {isSaving ? 'Synchronizing...' : <><RefreshCw size={15} />Synchronize Bio-Metrics</>}
       </button>
     </div>
   );

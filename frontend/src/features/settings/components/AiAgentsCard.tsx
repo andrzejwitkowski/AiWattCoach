@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { ApiKeyInput } from './ApiKeyInput';
+import { Bot, Eye, EyeOff, Save } from 'lucide-react';
 import type { UserSettingsResponse } from '../types';
 import { updateAiAgents } from '../api/settings';
 
@@ -11,16 +10,17 @@ type AiAgentsCardProps = {
 };
 
 export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps) {
-  const { t } = useTranslation();
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
+  const [showOpenai, setShowOpenai] = useState(false);
+  const [showGemini, setShowGemini] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const aiAgents = settings.aiAgents;
 
-  async function handleSave() {
+  const handleSave = async () => {
     const trimmedOpenai = openaiKey.trim();
     const trimmedGemini = geminiKey.trim();
     if (!trimmedOpenai && !trimmedGemini) return;
@@ -41,62 +41,108 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     } finally {
       setIsSaving(false);
     }
-  }
+  };
 
   return (
-    <div className="rounded-[1.5rem] border border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-800/60 p-6">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/15">
-          <svg className="h-5 w-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-          </svg>
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center shrink-0">
+          <Bot size={20} className="text-cyan-400" />
         </div>
-        <div>
-          <h3 className="text-lg font-semibold text-white">{t('aiAgents.title')}</h3>
-          <p className="text-xs text-slate-400">{t('aiAgents.subtitle')}</p>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-bold text-white">AI Agents</h2>
+            <span className="text-[10px] font-semibold bg-cyan-400/20 text-cyan-300 rounded-full px-2 py-0.5 uppercase tracking-wider">
+              BYOK
+            </span>
+          </div>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-0.5">
+            Performance Intelligence
+          </p>
         </div>
       </div>
 
-      <p className="mb-5 text-sm leading-relaxed text-slate-400">
-        {t('aiAgents.description')}
+      <p className="mt-4 text-sm text-slate-300 leading-relaxed">
+        Configure your own API keys for AI model access. Keys are stored securely and masked on display.
       </p>
 
-      <div className="space-y-4">
-        <ApiKeyInput
-          id="openai-key"
-          label={t('aiAgents.openaiKey')}
-          placeholder="sk-..."
-          isConfigured={aiAgents.openaiApiKeySet}
-          value={openaiKey}
-          onChange={(v) => { setOpenaiKey(v); setSaved(false); setSaveError(null); }}
-          accentColor="cyan"
-        />
-
-        <ApiKeyInput
-          id="gemini-key"
-          label={t('aiAgents.geminiKey')}
-          placeholder="AIza..."
-          isConfigured={aiAgents.geminiApiKeySet}
-          value={geminiKey}
-          onChange={(v) => { setGeminiKey(v); setSaved(false); setSaveError(null); }}
-          accentColor="cyan"
-        />
-
-        {saveError && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {saveError}
+      <div className="mt-6 space-y-4">
+        <div>
+          <label className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
+            OpenAI API Key
+          </label>
+          <div className="relative">
+            <input
+              className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
+              type={showOpenai ? 'text' : 'password'}
+              placeholder={aiAgents.openaiApiKeySet ? 'Already configured' : 'sk-...'}
+              value={openaiKey}
+              onChange={(e) => setOpenaiKey(e.target.value)}
+            />
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
+              onClick={() => setShowOpenai((v) => !v)}
+              type="button"
+              aria-label={showOpenai ? 'Hide key' : 'Show key'}
+            >
+              {showOpenai ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
-        )}
+          {aiAgents.openaiApiKeySet && (
+            <p className="mt-1.5 text-xs text-emerald-400">API key is configured</p>
+          )}
+        </div>
 
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
-          disabled={isSaving || (!openaiKey.trim() && !geminiKey.trim())}
-          onClick={() => { void handleSave(); }}
-        >
-          {isSaving ? t('aiAgents.saving') : saved ? t('aiAgents.saved') : t('aiAgents.save')}
-        </button>
+        <div>
+          <label className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
+            Gemini API Key
+          </label>
+          <div className="relative">
+            <input
+              className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
+              type={showGemini ? 'text' : 'password'}
+              placeholder={aiAgents.geminiApiKeySet ? 'Already configured' : 'AIza...'}
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+            />
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
+              onClick={() => setShowGemini((v) => !v)}
+              type="button"
+              aria-label={showGemini ? 'Hide key' : 'Show key'}
+            >
+              {showGemini ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {aiAgents.geminiApiKeySet && (
+            <p className="mt-1.5 text-xs text-emerald-400">API key is configured</p>
+          )}
+        </div>
       </div>
+
+      {saveError && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
+
+      <button
+        className="mt-6 w-full flex items-center justify-center gap-2 bg-cyan-400 text-slate-950 font-semibold rounded-xl py-3 text-sm hover:bg-cyan-300 transition disabled:opacity-60 disabled:cursor-not-allowed"
+        onClick={() => { void handleSave(); }}
+        disabled={isSaving || (!openaiKey.trim() && !geminiKey.trim())}
+        type="button"
+      >
+        {isSaving ? (
+          'Saving...'
+        ) : saved ? (
+          'Saved!'
+        ) : (
+          <>
+            <Save size={15} />
+            Save AI Config
+          </>
+        )}
+      </button>
     </div>
   );
 }
