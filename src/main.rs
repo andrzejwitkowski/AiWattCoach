@@ -3,9 +3,7 @@ use std::{error::Error, future::Future, net::SocketAddr, sync::Arc, time::Durati
 use aiwattcoach::{
     adapters::{
         google_oauth::client::GoogleOAuthClient,
-        intervals_icu::{
-            client::IntervalsIcuClient, settings_adapter::SettingsIntervalsProvider,
-        },
+        intervals_icu::{client::IntervalsIcuClient, settings_adapter::SettingsIntervalsProvider},
         mongo::{
             client::{create_client, ensure_database_exists, verify_connection},
             login_state::MongoLoginStateRepository,

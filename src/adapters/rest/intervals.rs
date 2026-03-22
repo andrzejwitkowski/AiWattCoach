@@ -135,7 +135,9 @@ pub async fn list_events(
     }
 
     match intervals_service.list_events(&user_id, &range).await {
-        Ok(events) => Json(events.into_iter().map(map_event_to_dto).collect::<Vec<_>>()).into_response(),
+        Ok(events) => {
+            Json(events.into_iter().map(map_event_to_dto).collect::<Vec<_>>()).into_response()
+        }
         Err(error) => map_intervals_error(error),
     }
 }
@@ -265,7 +267,10 @@ pub async fn delete_event(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match intervals_service.delete_event(&user_id, path.event_id).await {
+    match intervals_service
+        .delete_event(&user_id, path.event_id)
+        .await
+    {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(error) => map_intervals_error(error),
     }
@@ -286,7 +291,10 @@ pub async fn download_fit(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match intervals_service.download_fit(&user_id, path.event_id).await {
+    match intervals_service
+        .download_fit(&user_id, path.event_id)
+        .await
+    {
         Ok(bytes) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "application/octet-stream")

@@ -4,7 +4,10 @@ use std::{
     future::Future,
     path::PathBuf,
     pin::Pin,
-    sync::{atomic::{AtomicU64, Ordering}, Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -83,7 +86,8 @@ async fn list_events_returns_events_for_authenticated_user() {
     let event = &body.as_array().unwrap()[0];
     assert_eq!(event.get("id").unwrap().as_i64().unwrap(), 11);
     assert_eq!(
-        event.get("eventDefinition")
+        event
+            .get("eventDefinition")
             .unwrap()
             .get("intervals")
             .unwrap()
@@ -93,7 +97,8 @@ async fn list_events_returns_events_for_authenticated_user() {
         2
     );
     assert_eq!(
-        event.get("eventDefinition")
+        event
+            .get("eventDefinition")
             .unwrap()
             .get("rawWorkoutDoc")
             .unwrap()
@@ -101,10 +106,7 @@ async fn list_events_returns_events_for_authenticated_user() {
             .unwrap(),
         "- 10min 55%\n- 5x3min 120%"
     );
-    assert!(event
-        .get("actualWorkout")
-        .unwrap()
-        .is_null());
+    assert!(event.get("actualWorkout").unwrap().is_null());
 }
 
 #[tokio::test]
@@ -139,11 +141,19 @@ async fn list_events_are_scoped_to_authenticated_user() {
         ScopedIntervalsService::with_user_events([
             (
                 "user-1",
-                vec![sample_event(101, "User One Workout", Some("- 1x10min 90%".to_string()))],
+                vec![sample_event(
+                    101,
+                    "User One Workout",
+                    Some("- 1x10min 90%".to_string()),
+                )],
             ),
             (
                 "user-2",
-                vec![sample_event(202, "User Two Workout", Some("- 4x4min 120%".to_string()))],
+                vec![sample_event(
+                    202,
+                    "User Two Workout",
+                    Some("- 4x4min 120%".to_string()),
+                )],
             ),
         ]),
     )
@@ -176,8 +186,20 @@ async fn list_events_are_scoped_to_authenticated_user() {
 
     assert_eq!(body_user_1.as_array().unwrap().len(), 1);
     assert_eq!(body_user_2.as_array().unwrap().len(), 1);
-    assert_eq!(body_user_1.as_array().unwrap()[0].get("id").unwrap().as_i64(), Some(101));
-    assert_eq!(body_user_2.as_array().unwrap()[0].get("id").unwrap().as_i64(), Some(202));
+    assert_eq!(
+        body_user_1.as_array().unwrap()[0]
+            .get("id")
+            .unwrap()
+            .as_i64(),
+        Some(101)
+    );
+    assert_eq!(
+        body_user_2.as_array().unwrap()[0]
+            .get("id")
+            .unwrap()
+            .as_i64(),
+        Some(202)
+    );
 }
 
 #[tokio::test]
@@ -232,11 +254,19 @@ async fn get_event_is_scoped_to_authenticated_user() {
         ScopedIntervalsService::with_user_events([
             (
                 "user-1",
-                vec![sample_event(501, "User One Workout", Some("- 1x20min 90%".to_string()))],
+                vec![sample_event(
+                    501,
+                    "User One Workout",
+                    Some("- 1x20min 90%".to_string()),
+                )],
             ),
             (
                 "user-2",
-                vec![sample_event(502, "User Two Workout", Some("- 6x2min 130%".to_string()))],
+                vec![sample_event(
+                    502,
+                    "User Two Workout",
+                    Some("- 6x2min 130%".to_string()),
+                )],
             ),
         ]),
     )
@@ -329,11 +359,19 @@ async fn create_event_is_scoped_to_authenticated_user() {
     let service = ScopedIntervalsService::with_user_events([
         (
             "user-1",
-            vec![sample_event(301, "User One Existing", Some("- 5min 55%".to_string()))],
+            vec![sample_event(
+                301,
+                "User One Existing",
+                Some("- 5min 55%".to_string()),
+            )],
         ),
         (
             "user-2",
-            vec![sample_event(401, "User Two Existing", Some("- 3x3min 120%".to_string()))],
+            vec![sample_event(
+                401,
+                "User Two Existing",
+                Some("- 3x3min 120%".to_string()),
+            )],
         ),
     ]);
     let app = intervals_test_app(
@@ -396,7 +434,10 @@ async fn create_event_is_scoped_to_authenticated_user() {
     assert_eq!(user_1_body.as_array().unwrap().len(), 2);
     assert_eq!(user_2_body.as_array().unwrap().len(), 1);
     assert_eq!(
-        user_2_body.as_array().unwrap()[0].get("id").unwrap().as_i64(),
+        user_2_body.as_array().unwrap()[0]
+            .get("id")
+            .unwrap()
+            .as_i64(),
         Some(401)
     );
 }
@@ -430,7 +471,10 @@ async fn update_event_returns_200() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let body: Value = get_json(response).await;
-    assert_eq!(body.get("name").unwrap().as_str().unwrap(), "Updated Workout");
+    assert_eq!(
+        body.get("name").unwrap().as_str().unwrap(),
+        "Updated Workout"
+    );
 }
 
 #[tokio::test]
@@ -443,11 +487,19 @@ async fn update_event_is_scoped_to_authenticated_user() {
         ScopedIntervalsService::with_user_events([
             (
                 "user-1",
-                vec![sample_event(601, "User One Workout", Some("- 5min 55%".to_string()))],
+                vec![sample_event(
+                    601,
+                    "User One Workout",
+                    Some("- 5min 55%".to_string()),
+                )],
             ),
             (
                 "user-2",
-                vec![sample_event(602, "User Two Workout", Some("- 4x4min 120%".to_string()))],
+                vec![sample_event(
+                    602,
+                    "User Two Workout",
+                    Some("- 4x4min 120%".to_string()),
+                )],
             ),
         ]),
     )
@@ -560,11 +612,19 @@ async fn delete_event_is_scoped_to_authenticated_user() {
         ScopedIntervalsService::with_user_events([
             (
                 "user-1",
-                vec![sample_event(701, "User One Workout", Some("- 5min 55%".to_string()))],
+                vec![sample_event(
+                    701,
+                    "User One Workout",
+                    Some("- 5min 55%".to_string()),
+                )],
             ),
             (
                 "user-2",
-                vec![sample_event(702, "User Two Workout", Some("- 3x3min 120%".to_string()))],
+                vec![sample_event(
+                    702,
+                    "User Two Workout",
+                    Some("- 3x3min 120%".to_string()),
+                )],
             ),
         ]),
     )
@@ -610,13 +670,12 @@ async fn download_fit_returns_binary_file() {
         "application/octet-stream"
     );
     assert_eq!(
-        response
-            .headers()
-            .get(header::CONTENT_DISPOSITION)
-            .unwrap(),
+        response.headers().get(header::CONTENT_DISPOSITION).unwrap(),
         "attachment; filename=\"event-123.fit\""
     );
-    let body = to_bytes(response.into_body(), RESPONSE_LIMIT_BYTES).await.unwrap();
+    let body = to_bytes(response.into_body(), RESPONSE_LIMIT_BYTES)
+        .await
+        .unwrap();
     assert_eq!(body.as_ref(), &[1, 9, 9, 4]);
 }
 
@@ -630,11 +689,19 @@ async fn download_fit_is_scoped_to_authenticated_user() {
         ScopedIntervalsService::with_user_events([
             (
                 "user-1",
-                vec![sample_event(801, "User One Workout", Some("- 5min 55%".to_string()))],
+                vec![sample_event(
+                    801,
+                    "User One Workout",
+                    Some("- 5min 55%".to_string()),
+                )],
             ),
             (
                 "user-2",
-                vec![sample_event(802, "User Two Workout", Some("- 4x4min 120%".to_string()))],
+                vec![sample_event(
+                    802,
+                    "User Two Workout",
+                    Some("- 4x4min 120%".to_string()),
+                )],
             ),
         ]),
     )
@@ -818,11 +885,7 @@ impl IntervalsUseCases for TestIntervalsService {
         })
     }
 
-    fn get_event(
-        &self,
-        _user_id: &str,
-        event_id: i64,
-    ) -> BoxFuture<Result<Event, IntervalsError>> {
+    fn get_event(&self, _user_id: &str, event_id: i64) -> BoxFuture<Result<Event, IntervalsError>> {
         let error = self.error.clone();
         let events = self.events.lock().unwrap().clone();
         Box::pin(async move {
@@ -906,11 +969,7 @@ impl IntervalsUseCases for TestIntervalsService {
         })
     }
 
-    fn delete_event(
-        &self,
-        _user_id: &str,
-        event_id: i64,
-    ) -> BoxFuture<Result<(), IntervalsError>> {
+    fn delete_event(&self, _user_id: &str, event_id: i64) -> BoxFuture<Result<(), IntervalsError>> {
         let error = self.error.clone();
         let store = self.events.clone();
         Box::pin(async move {
@@ -1034,9 +1093,7 @@ impl IdentityUseCases for SessionMappedIdentityService {
         &self,
         _session_id: &str,
     ) -> BoxFuture<Result<AppUser, aiwattcoach::domain::identity::IdentityError>> {
-        Box::pin(async {
-            Err(aiwattcoach::domain::identity::IdentityError::Forbidden)
-        })
+        Box::pin(async { Err(aiwattcoach::domain::identity::IdentityError::Forbidden) })
     }
 }
 
@@ -1076,11 +1133,7 @@ impl IntervalsUseCases for ScopedIntervalsService {
         })
     }
 
-    fn get_event(
-        &self,
-        user_id: &str,
-        event_id: i64,
-    ) -> BoxFuture<Result<Event, IntervalsError>> {
+    fn get_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<Event, IntervalsError>> {
         let user_id = user_id.to_string();
         let store = self.events_by_user.clone();
         Box::pin(async move {
@@ -1164,11 +1217,7 @@ impl IntervalsUseCases for ScopedIntervalsService {
         })
     }
 
-    fn delete_event(
-        &self,
-        user_id: &str,
-        event_id: i64,
-    ) -> BoxFuture<Result<(), IntervalsError>> {
+    fn delete_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<(), IntervalsError>> {
         let user_id = user_id.to_string();
         let store = self.events_by_user.clone();
         Box::pin(async move {

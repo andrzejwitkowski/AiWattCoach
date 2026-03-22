@@ -8,8 +8,7 @@ use std::{
 
 use aiwattcoach::{
     adapters::intervals_icu::{
-        client::IntervalsIcuClient,
-        settings_adapter::SettingsIntervalsProvider,
+        client::IntervalsIcuClient, settings_adapter::SettingsIntervalsProvider,
     },
     domain::{
         intervals::{
@@ -104,7 +103,10 @@ async fn intervals_client_uses_basic_auth_and_maps_event_payloads() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].method, "GET");
     assert_eq!(requests[0].path, "/api/v1/athlete/athlete-7/events.json");
-    assert_eq!(requests[0].query, Some("oldest=2026-03-01&newest=2026-03-31".to_string()));
+    assert_eq!(
+        requests[0].query,
+        Some("oldest=2026-03-01&newest=2026-03-31".to_string())
+    );
     assert_eq!(
         requests[0].authorization.as_deref(),
         Some("Basic QVBJX0tFWTpzZWNyZXQta2V5")
@@ -163,7 +165,10 @@ async fn intervals_client_posts_updates_and_downloads_fit() {
     let requests = server.requests();
     assert_eq!(requests[0].method, "POST");
     assert_eq!(requests[1].method, "PUT");
-    assert_eq!(requests[2].path, "/api/v1/athlete/athlete-7/events/202/download.fit");
+    assert_eq!(
+        requests[2].path,
+        "/api/v1/athlete/athlete-7/events/202/download.fit"
+    );
 }
 
 #[tokio::test]
@@ -296,11 +301,19 @@ impl TestIntervalsServer {
     async fn start() -> Self {
         let state = ServerState::default();
         let app = Router::new()
-            .route("/api/v1/athlete/{athlete_id}/events.json", get(list_events_handler))
-            .route("/api/v1/athlete/{athlete_id}/events", post(create_event_handler))
+            .route(
+                "/api/v1/athlete/{athlete_id}/events.json",
+                get(list_events_handler),
+            )
+            .route(
+                "/api/v1/athlete/{athlete_id}/events",
+                post(create_event_handler),
+            )
             .route(
                 "/api/v1/athlete/{athlete_id}/events/{event_id}",
-                get(get_event_handler).put(update_event_handler).delete(delete_event_handler),
+                get(get_event_handler)
+                    .put(update_event_handler)
+                    .delete(delete_event_handler),
             )
             .route(
                 "/api/v1/athlete/{athlete_id}/events/{event_id}/download.fit",
@@ -388,7 +401,10 @@ async fn get_event_handler(
     capture_request(
         &state,
         "GET",
-        format!("/api/v1/athlete/{}/events/{}", path.athlete_id, path.event_id),
+        format!(
+            "/api/v1/athlete/{}/events/{}",
+            path.athlete_id, path.event_id
+        ),
         None,
         headers,
         None,
@@ -436,7 +452,10 @@ async fn update_event_handler(
     capture_request(
         &state,
         "PUT",
-        format!("/api/v1/athlete/{}/events/{}", path.athlete_id, path.event_id),
+        format!(
+            "/api/v1/athlete/{}/events/{}",
+            path.athlete_id, path.event_id
+        ),
         None,
         headers,
         Some(body.to_string()),
@@ -460,7 +479,10 @@ async fn delete_event_handler(
     capture_request(
         &state,
         "DELETE",
-        format!("/api/v1/athlete/{}/events/{}", path.athlete_id, path.event_id),
+        format!(
+            "/api/v1/athlete/{}/events/{}",
+            path.athlete_id, path.event_id
+        ),
         None,
         headers,
         None,

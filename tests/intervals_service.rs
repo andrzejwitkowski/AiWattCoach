@@ -115,7 +115,10 @@ async fn update_event_forwards_to_api() {
     assert_eq!(result, updated);
     assert_eq!(
         calls.lock().unwrap().as_slice(),
-        &[ApiCall::Update { event_id: 10, event: input }]
+        &[ApiCall::Update {
+            event_id: 10,
+            event: input
+        }]
     );
 }
 
@@ -151,7 +154,10 @@ async fn api_error_propagated_to_caller() {
 
     let result = service.get_event("user-1", 99).await;
 
-    assert_eq!(result, Err(IntervalsError::ApiError("bad gateway".to_string())));
+    assert_eq!(
+        result,
+        Err(IntervalsError::ApiError("bad gateway".to_string()))
+    );
 }
 
 fn valid_credentials() -> IntervalsCredentials {
@@ -303,7 +309,10 @@ impl IntervalsApiPort for FakeIntervalsApi {
         _credentials: &IntervalsCredentials,
         event_id: i64,
     ) -> BoxFuture<Result<(), IntervalsError>> {
-        self.call_log.lock().unwrap().push(ApiCall::Delete(event_id));
+        self.call_log
+            .lock()
+            .unwrap()
+            .push(ApiCall::Delete(event_id));
         let result = self.delete_event_result.clone();
         Box::pin(async move { result })
     }
@@ -341,8 +350,6 @@ impl IntervalsSettingsPort for FakeSettingsPort {
         _user_id: &str,
     ) -> BoxFuture<Result<IntervalsCredentials, IntervalsError>> {
         let credentials = self.credentials.clone();
-        Box::pin(async move {
-            credentials.ok_or(IntervalsError::CredentialsNotConfigured)
-        })
+        Box::pin(async move { credentials.ok_or(IntervalsError::CredentialsNotConfigured) })
     }
 }

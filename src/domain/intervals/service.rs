@@ -10,11 +10,7 @@ pub trait IntervalsUseCases: Send + Sync {
         range: &DateRange,
     ) -> BoxFuture<Result<Vec<Event>, IntervalsError>>;
 
-    fn get_event(
-        &self,
-        user_id: &str,
-        event_id: i64,
-    ) -> BoxFuture<Result<Event, IntervalsError>>;
+    fn get_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<Event, IntervalsError>>;
 
     fn create_event(
         &self,
@@ -29,11 +25,7 @@ pub trait IntervalsUseCases: Send + Sync {
         event: UpdateEvent,
     ) -> BoxFuture<Result<Event, IntervalsError>>;
 
-    fn delete_event(
-        &self,
-        user_id: &str,
-        event_id: i64,
-    ) -> BoxFuture<Result<(), IntervalsError>>;
+    fn delete_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<(), IntervalsError>>;
 
     fn download_fit(
         &self,
@@ -81,11 +73,7 @@ where
         })
     }
 
-    fn get_event(
-        &self,
-        user_id: &str,
-        event_id: i64,
-    ) -> BoxFuture<Result<Event, IntervalsError>> {
+    fn get_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<Event, IntervalsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
@@ -117,15 +105,14 @@ where
         let user_id = user_id.to_string();
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
-            service.api.update_event(&credentials, event_id, event).await
+            service
+                .api
+                .update_event(&credentials, event_id, event)
+                .await
         })
     }
 
-    fn delete_event(
-        &self,
-        user_id: &str,
-        event_id: i64,
-    ) -> BoxFuture<Result<(), IntervalsError>> {
+    fn delete_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<(), IntervalsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {

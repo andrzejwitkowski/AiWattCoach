@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use crate::domain::{
-    intervals::{
-        BoxFuture, IntervalsCredentials, IntervalsError, IntervalsSettingsPort,
-    },
+    intervals::{BoxFuture, IntervalsCredentials, IntervalsError, IntervalsSettingsPort},
     settings::UserSettingsUseCases,
 };
 
@@ -27,14 +25,9 @@ impl IntervalsSettingsPort for SettingsIntervalsProvider {
         let user_id = user_id.to_string();
 
         Box::pin(async move {
-            let settings = settings_service
-                .get_settings(&user_id)
-                .await
-                .map_err(|_| {
-                    IntervalsError::Internal(
-                        "Failed to load Intervals.icu credentials".to_string(),
-                    )
-                })?;
+            let settings = settings_service.get_settings(&user_id).await.map_err(|_| {
+                IntervalsError::Internal("Failed to load Intervals.icu credentials".to_string())
+            })?;
 
             let api_key = settings
                 .intervals
@@ -48,7 +41,10 @@ impl IntervalsSettingsPort for SettingsIntervalsProvider {
                 .filter(|value| !value.trim().is_empty())
                 .ok_or(IntervalsError::CredentialsNotConfigured)?;
 
-            Ok(IntervalsCredentials { api_key, athlete_id })
+            Ok(IntervalsCredentials {
+                api_key,
+                athlete_id,
+            })
         })
     }
 }
