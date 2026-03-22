@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UserSettingsResponse } from '../types';
 import { updateOptions } from '../api/settings';
 import type { UpdateOptionsRequest } from '../types';
@@ -9,17 +9,18 @@ type OptionsCardProps = {
   onSave: () => void;
 };
 
-function Toggle({ enabled, onChange, id }: { enabled: boolean; onChange: (v: boolean) => void; id: string }) {
+function Toggle({ enabled, onChange, id, disabled }: { enabled: boolean; onChange: (v: boolean) => void; id: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={enabled}
+      aria-disabled={disabled}
       id={id}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed ${
         enabled ? 'bg-cyan-500' : 'bg-white/10'
-      }`}
-      onClick={() => onChange(!enabled)}
+      } disabled:opacity-50`}
+      onClick={() => { if (!disabled) onChange(!enabled); }}
     >
       <span
         className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
@@ -33,10 +34,26 @@ function Toggle({ enabled, onChange, id }: { enabled: boolean; onChange: (v: boo
 export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) {
   const [analyzeWithoutHR, setAnalyzeWithoutHR] = useState(settings.options.analyzeWithoutHeartRate);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   async function handleToggle(value: boolean) {
+    if (isSaving) return;
+    setIsSaving(true);
     setAnalyzeWithoutHR(value);
     setSaveError(null);
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     try {
       const req: UpdateOptionsRequest = { analyzeWithoutHeartRate: value };
       await updateOptions(apiBaseUrl, req);
@@ -44,7 +61,9 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
     } catch (err) {
       setAnalyzeWithoutHR(!value);
       setSaveError(err instanceof Error ? err.message : 'Failed to update option');
-      setTimeout(() => setSaveError(null), 4000);
+      timeoutRef.current = setTimeout(() => setSaveError(null), 4000);
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -70,7 +89,7 @@ export function OptionsCard({ settings, apiBaseUrl, onSave }: OptionsCardProps) 
             </label>
             <p className="text-xs font-medium uppercase tracking-wider text-amber-300">ANALIZUJ BEZ TĘTNA</p>
           </div>
-          <Toggle enabled={analyzeWithoutHR} onChange={handleToggle} id="analyze-without-hr" />
+          <Toggle enabled={analyzeWithoutHR} onChange={handleToggle} id="analyze-without-hr" disabled={isSaving} />
         </div>
 
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">

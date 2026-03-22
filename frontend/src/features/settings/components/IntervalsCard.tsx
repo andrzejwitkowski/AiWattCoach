@@ -19,14 +19,16 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
   const intervals = settings.intervals;
 
   async function handleSave() {
-    if (!apiKey && !athleteId) return;
+    const trimmedApiKey = apiKey.trim();
+    const trimmedAthleteId = athleteId.trim();
+    if (!trimmedApiKey && !trimmedAthleteId) return;
     setIsSaving(true);
     setSaved(false);
     setSaveError(null);
     try {
       const req: UpdateIntervalsRequest = {};
-      if (apiKey) req.apiKey = apiKey;
-      if (athleteId) req.athleteId = athleteId;
+      if (trimmedApiKey) req.apiKey = trimmedApiKey;
+      if (trimmedAthleteId) req.athleteId = trimmedAthleteId;
       await updateIntervals(apiBaseUrl, req);
       setApiKey('');
       setSaved(true);
@@ -120,7 +122,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
         <button
           type="button"
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
-          disabled={isSaving || (!apiKey && !athleteId)}
+          disabled={isSaving || (!apiKey.trim() && !athleteId.trim())}
           onClick={() => { void handleSave(); }}
         >
           {isSaving ? 'Connecting...' : saved ? 'Connected!' : 'Connect Intervals'}

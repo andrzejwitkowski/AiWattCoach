@@ -19,7 +19,7 @@ export function SettingsProvider({
   apiBaseUrl: string;
 }) {
   const [settings, setSettings] = useState<UserSettingsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refreshSettings = useCallback(async () => {

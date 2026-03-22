@@ -74,6 +74,7 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
 
   function setField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setSaveError(null);
   }
 
   async function handleSave() {

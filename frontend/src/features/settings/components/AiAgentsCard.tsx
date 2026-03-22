@@ -18,14 +18,16 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
   const aiAgents = settings.aiAgents;
 
   async function handleSave() {
-    if (!openaiKey && !geminiKey) return;
+    const trimmedOpenai = openaiKey.trim();
+    const trimmedGemini = geminiKey.trim();
+    if (!trimmedOpenai && !trimmedGemini) return;
     setIsSaving(true);
     setSaved(false);
     setSaveError(null);
     try {
       const req: UpdateAiAgentsRequest = {};
-      if (openaiKey) req.openaiApiKey = openaiKey;
-      if (geminiKey) req.geminiApiKey = geminiKey;
+      if (trimmedOpenai) req.openaiApiKey = trimmedOpenai;
+      if (trimmedGemini) req.geminiApiKey = trimmedGemini;
       await updateAiAgents(apiBaseUrl, req);
       setOpenaiKey('');
       setGeminiKey('');
@@ -116,7 +118,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         <button
           type="button"
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
-          disabled={isSaving || (!openaiKey && !geminiKey)}
+          disabled={isSaving || (!openaiKey.trim() && !geminiKey.trim())}
           onClick={() => { void handleSave(); }}
         >
           {isSaving ? 'Saving...' : saved ? 'Saved!' : 'Save AI Config'}

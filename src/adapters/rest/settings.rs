@@ -144,7 +144,8 @@ pub async fn get_settings(State(state): State<AppState>, headers: HeaderMap) -> 
     match settings_service.get_settings(&user_id).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
         Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
 
@@ -171,7 +172,8 @@ pub async fn update_ai_agents(
     match settings_service.update_ai_agents(&user_id, config).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
         Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
 
@@ -199,7 +201,8 @@ pub async fn update_intervals(
     match settings_service.update_intervals(&user_id, config).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
         Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
 
@@ -225,7 +228,8 @@ pub async fn update_options(
     match settings_service.update_options(&user_id, options).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
         Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
 
@@ -258,7 +262,8 @@ pub async fn update_cycling(
     match settings_service.update_cycling(&user_id, cycling).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
         Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
 

@@ -74,10 +74,12 @@ impl UserSettings {
 
 pub fn mask_sensitive(value: &Option<String>) -> Option<String> {
     value.as_ref().map(|v| {
-        if v.len() <= 4 {
+        let char_count = v.chars().count();
+        if char_count <= 4 {
             "***".to_string()
         } else {
-            format!("***...{}", &v[v.len() - 4..])
+            let last_four: String = v.chars().skip(char_count - 4).collect();
+            format!("***...{}", last_four)
         }
     })
 }
