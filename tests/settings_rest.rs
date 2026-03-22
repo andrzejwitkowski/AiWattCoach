@@ -548,8 +548,6 @@ async fn update_ai_agents_partial_body_preserves_existing_key() {
     );
 }
 
-
-
 #[tokio::test]
 async fn admin_can_view_any_user_settings() {
     let app = settings_test_app(

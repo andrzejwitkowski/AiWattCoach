@@ -8,7 +8,9 @@
   "nav": {
     "settings": "Settings",
     "calendar": "Calendar",
-    "aiCoach": "AI Coach"
+    "aiCoach": "AI Coach",
+    "workspace": "Workspace",
+    "systemInfo": "System Info"
   },
   "aiAgents": {
     "title": "AI Agents",
@@ -48,7 +50,13 @@
     "vo2Max": "VO2 Max",
     "save": "Save Cycling Settings",
     "saving": "Saving...",
-    "saved": "Saved!"
+    "saved": "Saved!",
+    "profileAccuracy": "Profile Accuracy",
+    "complete": "Complete",
+    "lastZoneUpdate": "Last Zone Update",
+    "lastZoneDaysAgo": "days ago",
+    "never": "Never",
+    "wattsUnit": "Watts"
   },
   "options": {
     "title": "Options",

@@ -8,7 +8,9 @@
   "nav": {
     "settings": "Ustawienia",
     "calendar": "Kalendarz",
-    "aiCoach": "AI Trener"
+    "aiCoach": "AI Trener",
+    "workspace": "Obszar roboczy",
+    "systemInfo": "Info systemowe"
   },
   "aiAgents": {
     "title": "Agenci AI",
@@ -48,7 +50,13 @@
     "vo2Max": "VO2 Max",
     "save": "Zapisz ustawienia",
     "saving": "Zapisywanie...",
-    "saved": "Zapisano!"
+    "saved": "Zapisano!",
+    "profileAccuracy": "Dokladnosc profilu",
+    "complete": "kompletne",
+    "lastZoneUpdate": "Ostatnia aktualizacja stref",
+    "lastZoneDaysAgo": "dni temu",
+    "never": "Nigdy",
+    "wattsUnit": "Watow"
   },
   "options": {
     "title": "Opcje",
