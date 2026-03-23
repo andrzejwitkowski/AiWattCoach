@@ -74,12 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
     settings_repository.ensure_indexes().await?;
     let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
-    let intervals_api_client = IntervalsIcuClient::new(
-        reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .build()?,
-    );
+    let intervals_api_client = IntervalsIcuClient::with_timeouts(10, 30)?;
     let intervals_settings_provider = SettingsIntervalsProvider::new(settings_service.clone());
     let intervals_service = Arc::new(IntervalsService::new(
         intervals_api_client,

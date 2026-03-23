@@ -503,8 +503,8 @@ pub async fn test_intervals_connection(
     let transient_api_key = normalize_optional_input(body.api_key);
     let transient_athlete_id = normalize_optional_input(body.athlete_id);
 
-    let transient_api_key_was_blank = transient_api_key.is_none();
-    let transient_athlete_id_was_blank = transient_athlete_id.is_none();
+    let transient_api_key_not_provided = transient_api_key.is_none();
+    let transient_athlete_id_not_provided = transient_athlete_id.is_none();
 
     let merged = merge_credentials(
         transient_api_key,
@@ -524,8 +524,8 @@ pub async fn test_intervals_connection(
             return Json(test_connection_response(
                 false,
                 "Both API key and athlete ID are required.",
-                transient_api_key_was_blank && current.intervals.api_key.is_some(),
-                transient_athlete_id_was_blank && current.intervals.athlete_id.is_some(),
+                transient_api_key_not_provided && current.intervals.api_key.is_some(),
+                transient_athlete_id_not_provided && current.intervals.athlete_id.is_some(),
             ))
             .into_response();
         }

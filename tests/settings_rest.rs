@@ -724,14 +724,12 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
 
 #[derive(Clone)]
 struct MockIntervalsConnectionTester {
-    result: std::sync::Arc<std::sync::Mutex<Result<(), IntervalsConnectionError>>>,
+    result: Result<(), IntervalsConnectionError>,
 }
 
 impl MockIntervalsConnectionTester {
     fn new(result: Result<(), IntervalsConnectionError>) -> Self {
-        Self {
-            result: std::sync::Arc::new(std::sync::Mutex::new(result)),
-        }
+        Self { result }
     }
 
     fn returning_ok() -> Self {
@@ -749,7 +747,7 @@ impl IntervalsConnectionTester for MockIntervalsConnectionTester {
         _api_key: &str,
         _athlete_id: &str,
     ) -> BoxFuture<Result<(), IntervalsConnectionError>> {
-        let result = self.result.lock().unwrap().clone();
+        let result = self.result.clone();
         Box::pin(async move { result })
     }
 }
