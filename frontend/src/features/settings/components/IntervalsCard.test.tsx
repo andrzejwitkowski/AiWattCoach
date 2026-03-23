@@ -207,6 +207,7 @@ describe('IntervalsCard', () => {
 
     fireEvent.change(screen.getByLabelText(/athlete id/i), { target: { value: 'athlete-555' } });
     expect(screen.queryByText(/testing current intervals\.icu values/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^test connection$/i })).not.toBeDisabled();
 
     await act(async () => {
       resolveTest?.({

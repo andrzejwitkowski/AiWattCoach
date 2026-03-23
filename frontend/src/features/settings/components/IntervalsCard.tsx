@@ -77,6 +77,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
 
   const clearTestStatusIfNeeded = () => {
     testRunIdRef.current += 1;
+    setIsTesting(false);
     setStatus((current) => {
       if (!current) return current;
       return null;
