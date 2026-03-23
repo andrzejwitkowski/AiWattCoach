@@ -580,6 +580,28 @@ async fn list_events_rejects_invalid_date_query() {
 }
 
 #[tokio::test]
+async fn list_events_rejects_impossible_calendar_date_query() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events?oldest=2026-02-31&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn delete_event_returns_204() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),
@@ -1002,11 +1024,39 @@ impl IntervalsUseCases for TestIntervalsService {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct TestIdentityServiceWithSession {
     session_id: String,
     user_id: String,
+    email: String,
     roles: Vec<Role>,
+    display_name: String,
+}
+
+impl Default for TestIdentityServiceWithSession {
+    fn default() -> Self {
+        Self {
+            session_id: "session-1".to_string(),
+            user_id: "user-1".to_string(),
+            email: "athlete@example.com".to_string(),
+            roles: vec![Role::User],
+            display_name: "Test User".to_string(),
+        }
+    }
+}
+
+impl TestIdentityServiceWithSession {
+    fn build_user(&self) -> AppUser {
+        AppUser::new(
+            self.user_id.clone(),
+            format!("google-subject-{}", self.user_id),
+            self.email.clone(),
+            self.roles.clone(),
+            Some(self.display_name.clone()),
+            None,
+            true,
+        )
+    }
 }
 
 #[derive(Clone, Default)]
@@ -1287,20 +1337,12 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
             aiwattcoach::domain::identity::IdentityError,
         >,
     > {
-        let roles = self.roles.clone();
         let user_id = self.user_id.clone();
         let session_id = self.session_id.clone();
+        let user = self.build_user();
         Box::pin(async move {
             Ok(aiwattcoach::domain::identity::GoogleLoginSuccess {
-                user: AppUser::new(
-                    user_id.clone(),
-                    "google-subject-1".to_string(),
-                    "athlete@example.com".to_string(),
-                    roles,
-                    Some("Test User".to_string()),
-                    None,
-                    true,
-                ),
+                user,
                 session: aiwattcoach::domain::identity::AuthSession::new(
                     session_id, user_id, 999999, 100,
                 ),
@@ -1313,22 +1355,14 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
         &self,
         session_id: &str,
     ) -> BoxFuture<Result<Option<AppUser>, aiwattcoach::domain::identity::IdentityError>> {
-        let roles = self.roles.clone();
-        let user_id = self.user_id.clone();
+        let expected_session_id = self.session_id.clone();
+        let user = self.build_user();
         let session_id_check = session_id.to_string();
         Box::pin(async move {
-            if session_id_check != "session-1" {
+            if session_id_check != expected_session_id {
                 return Ok(None);
             }
-            Ok(Some(AppUser::new(
-                user_id,
-                "google-subject-1".to_string(),
-                "athlete@example.com".to_string(),
-                roles,
-                Some("Test User".to_string()),
-                None,
-                true,
-            )))
+            Ok(Some(user))
         })
     }
 
@@ -1343,11 +1377,12 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
         &self,
         session_id: &str,
     ) -> BoxFuture<Result<AppUser, aiwattcoach::domain::identity::IdentityError>> {
+        let expected_session_id = self.session_id.clone();
         let roles = self.roles.clone();
         let user_id = self.user_id.clone();
         let session_id_check = session_id.to_string();
         Box::pin(async move {
-            if session_id_check != "session-1" {
+            if session_id_check != expected_session_id {
                 return Err(aiwattcoach::domain::identity::IdentityError::Unauthenticated);
             }
             if !roles.contains(&Role::Admin) {

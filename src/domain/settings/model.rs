@@ -79,7 +79,7 @@ pub fn mask_sensitive(value: &Option<String>) -> Option<String> {
             "***".to_string()
         } else {
             let last_four: String = v.chars().skip(char_count - 4).collect();
-            format!("***...{}", last_four)
+            format!("***...{last_four}")
         }
     })
 }

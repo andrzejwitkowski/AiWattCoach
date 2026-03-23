@@ -61,29 +61,6 @@ describe('intervals api', () => {
   it('creates, updates, loads and deletes interval events', async () => {
     const fetchMock = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            id: 2,
-            startDateLocal: '2026-03-25',
-            name: 'Updated',
-            category: 'WORKOUT',
-            description: null,
-            indoor: false,
-            color: null,
-            eventDefinition: { intervals: [] },
-            actualWorkout: {
-              powerValues: [],
-              cadenceValues: [],
-              heartRateValues: []
-            }
-          }),
-          {
-            status: 200,
-            headers: { 'content-type': 'application/json' }
-          }
-        )
-      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -150,8 +127,33 @@ describe('intervals api', () => {
           }
         )
       )
-      .mockResolvedValueOnce(new Response(null, { status: 204 }))
-      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(null, { status: 204 })
+      )
+      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 2,
+            startDateLocal: '2026-03-25',
+            name: 'Updated',
+            category: 'WORKOUT',
+            description: null,
+            indoor: false,
+            color: null,
+            eventDefinition: { intervals: [] },
+            actualWorkout: {
+              powerValues: [],
+              cadenceValues: [],
+              heartRateValues: []
+            }
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+          }
+        )
+      );
 
     global.fetch = fetchMock as typeof fetch;
 

@@ -361,13 +361,11 @@ async fn update_ai_agents_saves_and_returns_updated_settings() {
 
     assert!(
         openai_masked.starts_with("***..."),
-        "expected openaiApiKey to be masked, got: {}",
-        openai_masked
+        "expected openaiApiKey to be masked, got: {openai_masked}"
     );
     assert!(
         gemini_masked.starts_with("***..."),
-        "expected geminiApiKey to be masked, got: {}",
-        gemini_masked
+        "expected geminiApiKey to be masked, got: {gemini_masked}"
     );
     assert!(
         !gemini_masked.ends_with("ey-1"),
@@ -543,8 +541,7 @@ async fn update_ai_agents_partial_body_preserves_existing_key() {
     let gemini_key = ai_agents.get("geminiApiKey").unwrap().as_str().unwrap();
     assert!(
         gemini_key.starts_with("***..."),
-        "geminiApiKey should be masked, got: {}",
-        gemini_key
+        "geminiApiKey should be masked, got: {gemini_key}"
     );
 }
 

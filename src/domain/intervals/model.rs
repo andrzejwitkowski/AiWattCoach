@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum IntervalsError {
@@ -26,6 +27,39 @@ impl std::fmt::Display for IntervalsError {
 }
 
 impl std::error::Error for IntervalsError {}
+
+impl EventCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Workout => "WORKOUT",
+            Self::Race => "RACE",
+            Self::Note => "NOTE",
+            Self::Target => "TARGET",
+            Self::Season => "SEASON",
+            Self::Other => "OTHER",
+        }
+    }
+
+    pub fn from_api_str(value: &str) -> Self {
+        Self::from_str(value).unwrap_or(Self::Other)
+    }
+}
+
+impl FromStr for EventCategory {
+    type Err = ();
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "WORKOUT" => Ok(Self::Workout),
+            "RACE" => Ok(Self::Race),
+            "NOTE" => Ok(Self::Note),
+            "TARGET" => Ok(Self::Target),
+            "SEASON" => Ok(Self::Season),
+            "OTHER" => Ok(Self::Other),
+            _ => Err(()),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IntervalsCredentials {

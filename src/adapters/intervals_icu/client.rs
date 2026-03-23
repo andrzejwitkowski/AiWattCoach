@@ -217,13 +217,18 @@ impl IntervalsApiPort for IntervalsIcuClient {
 }
 
 fn map_connection_error(error: reqwest::Error) -> IntervalsError {
-    let _ = error;
-    IntervalsError::ConnectionError("Failed to reach Intervals.icu".to_string())
+    IntervalsError::ConnectionError(error.to_string())
 }
 
 fn map_api_error(error: reqwest::Error) -> IntervalsError {
-    let _ = error;
-    IntervalsError::ApiError("Intervals.icu request failed".to_string())
+    let message = error.to_string();
+
+    match error.status() {
+        Some(StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => {
+            IntervalsError::CredentialsNotConfigured
+        }
+        _ => IntervalsError::ApiError(message),
+    }
 }
 
 fn map_event_response(response: EventResponse) -> Event {
@@ -231,7 +236,7 @@ fn map_event_response(response: EventResponse) -> Event {
         id: response.id,
         start_date_local: response.start_date_local,
         name: response.name,
-        category: parse_category(&response.category),
+        category: EventCategory::from_api_str(&response.category),
         description: response.description,
         indoor: response.indoor.unwrap_or(false),
         color: response.color,
@@ -239,24 +244,6 @@ fn map_event_response(response: EventResponse) -> Event {
     }
 }
 
-fn parse_category(category: &str) -> EventCategory {
-    match category {
-        "WORKOUT" => EventCategory::Workout,
-        "RACE" => EventCategory::Race,
-        "NOTE" => EventCategory::Note,
-        "TARGET" => EventCategory::Target,
-        "SEASON" => EventCategory::Season,
-        _ => EventCategory::Other,
-    }
-}
-
 fn map_category_to_string(category: &EventCategory) -> String {
-    match category {
-        EventCategory::Workout => "WORKOUT".to_string(),
-        EventCategory::Race => "RACE".to_string(),
-        EventCategory::Note => "NOTE".to_string(),
-        EventCategory::Target => "TARGET".to_string(),
-        EventCategory::Season => "SEASON".to_string(),
-        EventCategory::Other => "OTHER".to_string(),
-    }
+    category.as_str().to_string()
 }

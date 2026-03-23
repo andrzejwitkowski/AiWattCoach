@@ -113,29 +113,8 @@ pub struct UpdateCyclingRequest {
     vo2_max: Option<f64>,
 }
 
-async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String, Response> {
-    let identity_service = state
-        .identity_service
-        .as_ref()
-        .ok_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
-
-    let session_id = read_cookie(headers, &state.session_cookie_name)
-        .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
-
-    let user = identity_service
-        .get_current_user(&session_id)
-        .await
-        .map_err(|e| {
-            eprintln!("Identity service error in get_settings: {:?}", e);
-            StatusCode::SERVICE_UNAVAILABLE.into_response()
-        })?
-        .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
-
-    Ok(user.id)
-}
-
 pub async fn get_settings(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
+    let user_id = match super::user_auth::resolve_user_id(&state, &headers).await {
         Ok(id) => id,
         Err(response) => return response,
     };
@@ -156,7 +135,7 @@ pub async fn update_ai_agents(
     headers: HeaderMap,
     Json(body): Json<UpdateAiAgentsRequest>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
+    let user_id = match super::user_auth::resolve_user_id(&state, &headers).await {
         Ok(id) => id,
         Err(response) => return response,
     };
@@ -187,7 +166,7 @@ pub async fn update_intervals(
     headers: HeaderMap,
     Json(body): Json<UpdateIntervalsRequest>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
+    let user_id = match super::user_auth::resolve_user_id(&state, &headers).await {
         Ok(id) => id,
         Err(response) => return response,
     };
@@ -219,7 +198,7 @@ pub async fn update_options(
     headers: HeaderMap,
     Json(body): Json<UpdateOptionsRequest>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
+    let user_id = match super::user_auth::resolve_user_id(&state, &headers).await {
         Ok(id) => id,
         Err(response) => return response,
     };
@@ -251,7 +230,7 @@ pub async fn update_cycling(
     headers: HeaderMap,
     Json(body): Json<UpdateCyclingRequest>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
+    let user_id = match super::user_auth::resolve_user_id(&state, &headers).await {
         Ok(id) => id,
         Err(response) => return response,
     };

@@ -1,4 +1,12 @@
-import { AuthenticationError, del, get, HttpError, post, put } from '../../../lib/httpClient';
+import {
+  AuthenticationError,
+  buildUrl,
+  del,
+  get,
+  HttpError,
+  post,
+  put,
+} from '../../../lib/httpClient';
 import {
   createIntervalEventRequestSchema,
   intervalEventSchema,
@@ -45,9 +53,8 @@ export async function deleteEvent(apiBaseUrl: string, eventId: number) {
 }
 
 export async function downloadFit(apiBaseUrl: string, eventId: number): Promise<Uint8Array> {
-  const base = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
   const path = `/api/intervals/events/${eventId}/download.fit`;
-  const url = base ? `${base}${path}` : path;
+  const url = buildUrl(apiBaseUrl, path);
 
   const response = await fetch(url, {
     method: 'GET',

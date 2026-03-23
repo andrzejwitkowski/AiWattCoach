@@ -15,7 +15,7 @@ export class AuthenticationError extends Error {
   }
 }
 
-function buildUrl(apiBaseUrl: string, path: string): string {
+export function buildUrl(apiBaseUrl: string, path: string): string {
   if (!apiBaseUrl) return path;
   const base = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;

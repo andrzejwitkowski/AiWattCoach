@@ -190,6 +190,25 @@ async fn intervals_client_maps_not_found_to_domain_error() {
     assert_eq!(result, Err(IntervalsError::NotFound));
 }
 
+#[tokio::test]
+async fn intervals_client_maps_upstream_auth_failures_to_credentials_error() {
+    let server = TestIntervalsServer::start().await;
+    server.set_get_status(StatusCode::UNAUTHORIZED);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .get_event(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            401,
+        )
+        .await;
+
+    assert_eq!(result, Err(IntervalsError::CredentialsNotConfigured));
+}
+
 #[derive(Clone)]
 struct FakeSettingsUseCases {
     settings: UserSettings,
@@ -411,7 +430,7 @@ async fn get_event_handler(
     );
 
     let status = *state.get_status.lock().unwrap();
-    if status == StatusCode::NOT_FOUND {
+    if status != StatusCode::OK {
         return status.into_response();
     }
 

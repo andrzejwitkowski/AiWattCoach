@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use crate::{
     config::AppState,
@@ -13,8 +14,6 @@ use crate::{
         CreateEvent, DateRange, Event, EventCategory, IntervalsError, UpdateEvent,
     },
 };
-
-use super::cookies::read_cookie;
 
 #[derive(Deserialize)]
 pub struct ListEventsQuery {
@@ -93,7 +92,7 @@ pub struct UpdateEventDto {
 }
 
 async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String, Response> {
-    super::settings::resolve_user_id(state, headers).await
+    super::user_auth::resolve_user_id(state, headers).await
 }
 
 pub async fn list_events(
@@ -340,38 +339,52 @@ fn parse_workout_doc(workout_doc: Option<&str>) -> Vec<IntervalDefinitionDto> {
 }
 
 fn parse_category(category: &str) -> Option<EventCategory> {
-    match category {
-        "WORKOUT" => Some(EventCategory::Workout),
-        "RACE" => Some(EventCategory::Race),
-        "NOTE" => Some(EventCategory::Note),
-        "TARGET" => Some(EventCategory::Target),
-        "SEASON" => Some(EventCategory::Season),
-        "OTHER" => Some(EventCategory::Other),
-        _ => None,
-    }
+    EventCategory::from_str(category).ok()
 }
 
 fn is_valid_date(date: &str) -> bool {
-    if date.len() != 10 {
+    let mut segments = date.split('-');
+    let (Some(year), Some(month), Some(day), None) = (
+        segments.next(),
+        segments.next(),
+        segments.next(),
+        segments.next(),
+    ) else {
+        return false;
+    };
+
+    if year.len() != 4
+        || month.len() != 2
+        || day.len() != 2
+        || !year.chars().all(|ch| ch.is_ascii_digit())
+        || !month.chars().all(|ch| ch.is_ascii_digit())
+        || !day.chars().all(|ch| ch.is_ascii_digit())
+    {
         return false;
     }
 
-    let bytes = date.as_bytes();
-    bytes[4] == b'-'
-        && bytes[7] == b'-'
-        && bytes
-            .iter()
-            .enumerate()
-            .all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit())
+    let Ok(year) = year.parse::<i32>() else {
+        return false;
+    };
+    let Ok(month) = month.parse::<u32>() else {
+        return false;
+    };
+    let Ok(day) = day.parse::<u32>() else {
+        return false;
+    };
+
+    let is_leap_year = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let max_day = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year => 29,
+        2 => 28,
+        _ => return false,
+    };
+
+    (1..=max_day).contains(&day)
 }
 
 fn category_to_string(category: &EventCategory) -> String {
-    match category {
-        EventCategory::Workout => "WORKOUT".to_string(),
-        EventCategory::Race => "RACE".to_string(),
-        EventCategory::Note => "NOTE".to_string(),
-        EventCategory::Target => "TARGET".to_string(),
-        EventCategory::Season => "SEASON".to_string(),
-        EventCategory::Other => "OTHER".to_string(),
-    }
+    category.as_str().to_string()
 }

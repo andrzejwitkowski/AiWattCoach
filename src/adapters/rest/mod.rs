@@ -4,6 +4,7 @@ mod cookies;
 mod health;
 mod intervals;
 mod settings;
+mod user_auth;
 
 use std::path::PathBuf;
 
