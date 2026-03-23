@@ -1,6 +1,6 @@
 # Intervals Settings Test Button Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Note: This implementation plan is intended to be followed step-by-step.
 
 **Goal:** Add a `Test Connection` action to the Settings Intervals.icu card, make both actions use the currently displayed draft values, and stop clearing the inputs after save.
 
@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add failing frontend tests for the new Intervals behavior
+## Task 1: Add failing frontend tests for the new Intervals behavior
 
 **Files:**
 - Create: `frontend/src/features/settings/api/settings.test.ts`
@@ -39,7 +39,7 @@ Add tests for:
 Run: `bun run --cwd frontend test src/features/settings/components/IntervalsCard.test.tsx`
 Expected: FAIL because the component does not support the new behavior yet.
 
-### Task 2: Add the new settings API helper and response types
+## Task 2: Add the new settings API helper and response types
 
 **Files:**
 - Modify: `frontend/src/features/settings/types.ts`
@@ -58,7 +58,7 @@ Use the currently shared fetch conventions (`Accept`, `Content-Type`, `credentia
 Run: `bun run --cwd frontend test src/features/settings/api/settings.test.ts`
 Expected: PASS.
 
-### Task 3: Refactor the Intervals card around draft-driven form state
+## Task 3: Refactor the Intervals card around draft-driven form state
 
 **Files:**
 - Modify: `frontend/src/features/settings/components/IntervalsCard.tsx`
@@ -88,7 +88,7 @@ If the user edits either field after a completed test, clear the last test resul
 Run: `bun run --cwd frontend test src/features/settings/components/IntervalsCard.test.tsx`
 Expected: PASS.
 
-### Task 4: Run focused and broader verification
+## Task 4: Run focused and broader verification
 
 **Files:**
 - Verify only

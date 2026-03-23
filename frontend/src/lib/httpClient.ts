@@ -22,11 +22,16 @@ export function buildUrl(apiBaseUrl: string, path: string): string {
   return `${base}${normalizedPath}`;
 }
 
+type RequestOptions = {
+  allowStatuses?: number[];
+};
+
 async function request<TRes>(
   method: string,
   apiBaseUrl: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  options?: RequestOptions,
 ): Promise<TRes> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -47,7 +52,7 @@ async function request<TRes>(
     throw new AuthenticationError();
   }
 
-  if (!response.ok) {
+  if (!response.ok && !options?.allowStatuses?.includes(response.status)) {
     throw new HttpError(response.status, `${method} ${path} failed: ${response.status}`);
   }
 
@@ -62,34 +67,37 @@ async function request<TRes>(
   }
 }
 
-export function get<TRes>(apiBaseUrl: string, path: string): Promise<TRes> {
-  return request<TRes>('GET', apiBaseUrl, path);
+export function get<TRes>(apiBaseUrl: string, path: string, options?: RequestOptions): Promise<TRes> {
+  return request<TRes>('GET', apiBaseUrl, path, undefined, options);
 }
 
 export function post<TReq, TRes>(
   apiBaseUrl: string,
   path: string,
-  body: TReq
+  body: TReq,
+  options?: RequestOptions,
 ): Promise<TRes> {
-  return request<TRes>('POST', apiBaseUrl, path, body);
+  return request<TRes>('POST', apiBaseUrl, path, body, options);
 }
 
 export function patch<TReq, TRes>(
   apiBaseUrl: string,
   path: string,
-  body: TReq
+  body: TReq,
+  options?: RequestOptions,
 ): Promise<TRes> {
-  return request<TRes>('PATCH', apiBaseUrl, path, body);
+  return request<TRes>('PATCH', apiBaseUrl, path, body, options);
 }
 
 export function put<TReq, TRes>(
   apiBaseUrl: string,
   path: string,
-  body: TReq
+  body: TReq,
+  options?: RequestOptions,
 ): Promise<TRes> {
-  return request<TRes>('PUT', apiBaseUrl, path, body);
+  return request<TRes>('PUT', apiBaseUrl, path, body, options);
 }
 
-export function del<TRes>(apiBaseUrl: string, path: string): Promise<TRes> {
-  return request<TRes>('DELETE', apiBaseUrl, path);
+export function del<TRes>(apiBaseUrl: string, path: string, options?: RequestOptions): Promise<TRes> {
+  return request<TRes>('DELETE', apiBaseUrl, path, undefined, options);
 }

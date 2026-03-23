@@ -33,6 +33,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
     apiKey: persistedApiKey,
     athleteId: persistedAthleteId,
   });
+  const testRunIdRef = useRef(0);
 
   useEffect(() => {
     const previousPersisted = previousPersistedRef.current;
@@ -75,12 +76,10 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
   }, [draft.apiKey, draft.athleteId, persistedApiKey]);
 
   const clearTestStatusIfNeeded = () => {
+    testRunIdRef.current += 1;
     setStatus((current) => {
       if (!current) return current;
-      if (current.label === 'OK' || current.label === 'FAILED') {
-        return null;
-      }
-      return current;
+      return null;
     });
   };
 
@@ -122,6 +121,8 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
 
   const handleTest = async () => {
     if (!canTest) return;
+    const testRunId = testRunIdRef.current + 1;
+    testRunIdRef.current = testRunId;
     setIsTesting(true);
     setStatus({
       tone: 'neutral',
@@ -130,15 +131,23 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
     });
     try {
       const result = await testIntervalsConnection(apiBaseUrl, visibleRequest);
+      if (testRunId !== testRunIdRef.current) {
+        return;
+      }
       setStatusFromTest(result);
     } catch (err) {
+      if (testRunId !== testRunIdRef.current) {
+        return;
+      }
       setStatus({
         tone: 'error',
         label: 'FAILED',
         message: err instanceof Error ? err.message : 'Failed to test Intervals.icu connection',
       });
     } finally {
-      setIsTesting(false);
+      if (testRunId === testRunIdRef.current) {
+        setIsTesting(false);
+      }
     }
   };
 

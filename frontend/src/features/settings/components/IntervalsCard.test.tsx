@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { IntervalsCard } from './IntervalsCard';
@@ -180,5 +180,46 @@ describe('IntervalsCard', () => {
     await waitFor(() => {
       expect(screen.queryByText(/^OK$/)).not.toBeInTheDocument();
     });
+  });
+
+  it('ignores stale in-flight test results after the draft changes', async () => {
+    let resolveTest:
+      | ((value: {
+          connected: boolean;
+          message: string;
+          usedSavedApiKey: boolean;
+          usedSavedAthleteId: boolean;
+          persistedStatusUpdated: boolean;
+        }) => void)
+      | undefined;
+
+    testIntervalsConnectionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveTest = resolve;
+        }),
+    );
+
+    render(<IntervalsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
+    expect(screen.getByText(/testing current intervals\.icu values/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/athlete id/i), { target: { value: 'athlete-555' } });
+    expect(screen.queryByText(/testing current intervals\.icu values/i)).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveTest?.({
+        connected: true,
+        message: 'Connection successful.',
+        usedSavedApiKey: false,
+        usedSavedAthleteId: false,
+        persistedStatusUpdated: false,
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText(/^OK$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/connection successful/i)).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { testIntervalsConnection } from './settings';
-import { AuthenticationError } from '../../../lib/httpClient';
+import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 
 const originalFetch = global.fetch;
 
@@ -88,6 +88,59 @@ describe('settings api', () => {
 
     await expect(testIntervalsConnection('', { athleteId: 'athlete-123' })).rejects.toBeInstanceOf(
       AuthenticationError,
+    );
+  });
+
+  it('parses handled 503 responses from the test endpoint', async () => {
+    global.fetch = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            connected: false,
+            message: 'Intervals.icu is currently unavailable. Please try again later.',
+            usedSavedApiKey: false,
+            usedSavedAthleteId: true,
+            persistedStatusUpdated: false,
+          }),
+          {
+            status: 503,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      ) as typeof fetch;
+
+    const result = await testIntervalsConnection('', {
+      apiKey: 'live-api-key',
+    });
+
+    expect(result.connected).toBe(false);
+    expect(result.usedSavedAthleteId).toBe(true);
+    expect(result.message).toContain('unavailable');
+  });
+
+  it('throws HttpError for unexpected statuses', async () => {
+    global.fetch = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(new Response(null, { status: 418 })) as typeof fetch;
+
+    await expect(testIntervalsConnection('', { apiKey: 'live-api-key' })).rejects.toBeInstanceOf(
+      HttpError,
+    );
+  });
+
+  it('throws HttpError for invalid json responses', async () => {
+    global.fetch = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('not-json', {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ) as typeof fetch;
+
+    await expect(testIntervalsConnection('', { apiKey: 'live-api-key' })).rejects.toBeInstanceOf(
+      HttpError,
     );
   });
 });

@@ -1,4 +1,4 @@
-import { get, patch, AuthenticationError, HttpError, buildUrl } from '../../../lib/httpClient';
+import { get, patch, post, AuthenticationError } from '../../../lib/httpClient';
 import {
   userSettingsResponseSchema,
   updateAiAgentsRequestSchema,
@@ -44,31 +44,9 @@ export async function testIntervalsConnection(apiBaseUrl: string, data: unknown)
     apiKey: validated.apiKey?.trim() || undefined,
     athleteId: validated.athleteId?.trim() || undefined,
   };
-  const response = await fetch(buildUrl(apiBaseUrl, '/api/settings/intervals/test'), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include',
-    body: JSON.stringify(body),
+  const parsed = await post<typeof body, unknown>(apiBaseUrl, '/api/settings/intervals/test', body, {
+    allowStatuses: [400, 503],
   });
-
-  if (response.status === 401) {
-    throw new AuthenticationError();
-  }
-
-  if (![200, 400, 503].includes(response.status)) {
-    throw new HttpError(response.status, `POST /api/settings/intervals/test failed: ${response.status}`);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = await response.json();
-  } catch {
-    throw new HttpError(response.status, 'POST /api/settings/intervals/test: invalid JSON response');
-  }
-
   return testIntervalsConnectionResponseSchema.parse(parsed);
 }
 
