@@ -1020,7 +1020,9 @@ async fn test_intervals_connection_incomplete_uses_saved_flags_when_available() 
     let app = settings_test_app_with_intervals(
         TestIdentityServiceWithSession::default(),
         TestSettingsService::with_settings(settings),
-        Some(std::sync::Arc::new(MockIntervalsConnectionTester::returning_ok())),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_ok(),
+        )),
     )
     .await;
 
