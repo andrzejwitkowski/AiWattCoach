@@ -2,6 +2,7 @@ mod admin;
 mod auth;
 mod cookies;
 mod health;
+mod intervals;
 mod settings;
 
 use std::path::PathBuf;
@@ -47,6 +48,20 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/settings/intervals", patch(settings::update_intervals))
         .route("/api/settings/options", patch(settings::update_options))
         .route("/api/settings/cycling", patch(settings::update_cycling))
+        .route(
+            "/api/intervals/events",
+            get(intervals::list_events).post(intervals::create_event),
+        )
+        .route(
+            "/api/intervals/events/{event_id}",
+            get(intervals::get_event)
+                .put(intervals::update_event)
+                .delete(intervals::delete_event),
+        )
+        .route(
+            "/api/intervals/events/{event_id}/download.fit",
+            get(intervals::download_fit),
+        )
         .fallback(move |request| serve_frontend(request, static_files.clone(), spa_index.clone()))
         .with_state(state)
 }

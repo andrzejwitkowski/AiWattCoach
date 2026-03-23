@@ -3,6 +3,7 @@ use std::{error::Error, future::Future, net::SocketAddr, sync::Arc, time::Durati
 use aiwattcoach::{
     adapters::{
         google_oauth::client::GoogleOAuthClient,
+        intervals_icu::{client::IntervalsIcuClient, settings_adapter::SettingsIntervalsProvider},
         mongo::{
             client::{create_client, ensure_database_exists, verify_connection},
             login_state::MongoLoginStateRepository,
@@ -17,6 +18,7 @@ use aiwattcoach::{
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
     },
+    domain::intervals::IntervalsService,
     domain::settings::UserSettingsService,
     AppState,
 };
@@ -71,7 +73,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let settings_repository =
         MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
     settings_repository.ensure_indexes().await?;
-    let settings_service = UserSettingsService::new(settings_repository, SystemClock);
+    let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
+    let intervals_api_client = IntervalsIcuClient::new(
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .build()?,
+    );
+    let intervals_settings_provider = SettingsIntervalsProvider::new(settings_service.clone());
+    let intervals_service = Arc::new(IntervalsService::new(
+        intervals_api_client,
+        intervals_settings_provider,
+    ));
 
     let app = build_app(
         AppState::new(app_name, mongo_database, mongo_client)
@@ -82,7 +95,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 auth.session.secure,
                 auth.session.ttl_hours,
             )
-            .with_settings_service(Arc::new(settings_service)),
+            .with_settings_service(settings_service)
+            .with_intervals_service(intervals_service),
     );
     let listener = TcpListener::bind(address).await?;
 
