@@ -1,10 +1,11 @@
-import { get, patch, AuthenticationError } from '../../../lib/httpClient';
+import { get, patch, post, AuthenticationError } from '../../../lib/httpClient';
 import {
   userSettingsResponseSchema,
   updateAiAgentsRequestSchema,
   updateIntervalsRequestSchema,
   updateOptionsRequestSchema,
   updateCyclingRequestSchema,
+  testIntervalsConnectionResponseSchema,
 } from '../types';
 
 export async function loadSettings(apiBaseUrl: string) {
@@ -30,7 +31,23 @@ export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
 
 export async function updateIntervals(apiBaseUrl: string, data: unknown) {
   const validated = updateIntervalsRequestSchema.parse(data);
-  return patch(apiBaseUrl, '/api/settings/intervals', validated);
+  const trimmed = {
+    apiKey: validated.apiKey?.trim() || undefined,
+    athleteId: validated.athleteId?.trim() || undefined,
+  };
+  return patch(apiBaseUrl, '/api/settings/intervals', trimmed);
+}
+
+export async function testIntervalsConnection(apiBaseUrl: string, data: unknown) {
+  const validated = updateIntervalsRequestSchema.parse(data);
+  const body = {
+    apiKey: validated.apiKey?.trim() || undefined,
+    athleteId: validated.athleteId?.trim() || undefined,
+  };
+  const parsed = await post<typeof body, unknown>(apiBaseUrl, '/api/settings/intervals/test', body, {
+    allowStatuses: [400, 503],
+  });
+  return testIntervalsConnectionResponseSchema.parse(parsed);
 }
 
 export async function updateOptions(apiBaseUrl: string, data: unknown) {

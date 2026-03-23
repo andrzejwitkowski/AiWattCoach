@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Eye, EyeOff, RefreshCw } from 'lucide-react';
-import type { UserSettingsResponse } from '../types';
-import { updateIntervals } from '../api/settings';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle2, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import type { TestIntervalsConnectionResponse, UserSettingsResponse } from '../types';
+import { testIntervalsConnection, updateIntervals } from '../api/settings';
 
 type IntervalsCardProps = {
   settings: UserSettingsResponse;
@@ -10,36 +10,156 @@ type IntervalsCardProps = {
 };
 
 export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardProps) {
-  const [apiKey, setApiKey] = useState('');
-  const [athleteId, setAthleteId] = useState('');
+  const intervals = settings.intervals;
+  const persistedApiKey = intervals.apiKey ?? '';
+  const persistedAthleteId = intervals.athleteId ?? '';
+  const [draft, setDraft] = useState({
+    apiKey: persistedApiKey,
+    athleteId: persistedAthleteId,
+  });
+  const [cleanDraft, setCleanDraft] = useState({
+    apiKey: persistedApiKey,
+    athleteId: persistedAthleteId,
+  });
   const [showKey, setShowKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [status, setStatus] = useState<{
+    tone: 'neutral' | 'success' | 'error';
+    label: string;
+    message: string;
+  } | null>(null);
+  const previousPersistedRef = useRef({
+    apiKey: persistedApiKey,
+    athleteId: persistedAthleteId,
+  });
+  const testRunIdRef = useRef(0);
 
-  const intervals = settings.intervals;
+  useEffect(() => {
+    const previousPersisted = previousPersistedRef.current;
+
+    setDraft((current) => ({
+      apiKey: current.apiKey === previousPersisted.apiKey ? persistedApiKey : current.apiKey,
+      athleteId:
+        current.athleteId === previousPersisted.athleteId ? persistedAthleteId : current.athleteId,
+    }));
+    setCleanDraft((current) => ({
+      apiKey: current.apiKey === previousPersisted.apiKey ? persistedApiKey : current.apiKey,
+      athleteId:
+        current.athleteId === previousPersisted.athleteId ? persistedAthleteId : current.athleteId,
+    }));
+    previousPersistedRef.current = {
+      apiKey: persistedApiKey,
+      athleteId: persistedAthleteId,
+    };
+  }, [persistedApiKey, persistedAthleteId]);
+
+  const hasPersistedCredentials = intervals.apiKeySet || Boolean(intervals.athleteId);
+  const hasDirtyDraft =
+    draft.apiKey !== cleanDraft.apiKey || draft.athleteId !== cleanDraft.athleteId;
+  const canSave = draft.apiKey.trim().length > 0 || draft.athleteId.trim().length > 0;
+  const canTest = canSave || hasPersistedCredentials;
+
+  const visibleRequest = useMemo(() => {
+    const trimmedApiKey = draft.apiKey.trim();
+    const trimmedAthleteId = draft.athleteId.trim();
+    const request: Record<string, string> = {};
+
+    if (trimmedApiKey && trimmedApiKey !== persistedApiKey) {
+      request.apiKey = trimmedApiKey;
+    }
+    if (trimmedAthleteId) {
+      request.athleteId = trimmedAthleteId;
+    }
+
+    return request;
+  }, [draft.apiKey, draft.athleteId, persistedApiKey]);
+
+  const clearTestStatusIfNeeded = () => {
+    testRunIdRef.current += 1;
+    setIsTesting(false);
+    setStatus((current) => {
+      if (!current) return current;
+      return null;
+    });
+  };
+
+  const setStatusFromTest = (result: TestIntervalsConnectionResponse) => {
+    setStatus({
+      tone: result.connected ? 'success' : 'error',
+      label: result.connected ? 'OK' : 'FAILED',
+      message: result.message,
+    });
+  };
 
   const handleSave = async () => {
-    const trimmedApiKey = apiKey.trim();
-    const trimmedAthleteId = athleteId.trim();
-    if (!trimmedApiKey && !trimmedAthleteId) return;
+    if (!canSave) return;
     setIsSaving(true);
-    setSaved(false);
-    setSaveError(null);
+    setStatus({
+      tone: 'neutral',
+      label: 'Saving',
+      message: 'Saving current Intervals.icu credentials...',
+    });
     try {
-      const req: Record<string, string> = {};
-      if (trimmedApiKey) req.apiKey = trimmedApiKey;
-      if (trimmedAthleteId) req.athleteId = trimmedAthleteId;
-      await updateIntervals(apiBaseUrl, req);
-      setApiKey('');
-      setSaved(true);
+      await updateIntervals(apiBaseUrl, visibleRequest);
+      setCleanDraft(draft);
+      setStatus({
+        tone: 'success',
+        label: 'Saved',
+        message: 'Credentials saved.',
+      });
       onSave();
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to connect to Intervals.icu');
+      setStatus({
+        tone: 'error',
+        label: 'Save failed',
+        message: err instanceof Error ? err.message : 'Failed to save Intervals.icu credentials',
+      });
     } finally {
       setIsSaving(false);
     }
   };
+
+  const handleTest = async () => {
+    if (!canTest) return;
+    const testRunId = testRunIdRef.current + 1;
+    testRunIdRef.current = testRunId;
+    setIsTesting(true);
+    setStatus({
+      tone: 'neutral',
+      label: 'Testing',
+      message: 'Testing current Intervals.icu values...',
+    });
+    try {
+      const result = await testIntervalsConnection(apiBaseUrl, visibleRequest);
+      if (testRunId !== testRunIdRef.current) {
+        return;
+      }
+      setStatusFromTest(result);
+    } catch (err) {
+      if (testRunId !== testRunIdRef.current) {
+        return;
+      }
+      setStatus({
+        tone: 'error',
+        label: 'FAILED',
+        message: err instanceof Error ? err.message : 'Failed to test Intervals.icu connection',
+      });
+    } finally {
+      if (testRunId === testRunIdRef.current) {
+        setIsTesting(false);
+      }
+    }
+  };
+
+  const statusClasses =
+    status?.tone === 'success'
+      ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+      : status?.tone === 'error'
+        ? 'border-red-500/30 bg-red-500/10 text-red-200'
+        : 'border-cyan-400/20 bg-cyan-400/10 text-cyan-100';
+
+  const StatusIcon = status?.tone === 'success' ? CheckCircle2 : status?.tone === 'error' ? AlertCircle : RefreshCw;
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
@@ -75,8 +195,12 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
               className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 pr-10 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
               type={showKey ? 'text' : 'password'}
               placeholder={intervals.apiKeySet ? 'Already configured' : 'Enter API key'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              value={draft.apiKey}
+              onChange={(e) => {
+                clearTestStatusIfNeeded();
+                const value = e.target.value;
+                setDraft((current) => ({ ...current, apiKey: value }));
+              }}
             />
             <button
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
@@ -96,34 +220,56 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
           <label htmlFor="intervals-athlete-id" className="block text-xs uppercase tracking-widest text-slate-400 mb-2">
             Athlete ID
           </label>
-          <input
-            id="intervals-athlete-id"
-            className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
-            type="text"
-            placeholder={intervals.athleteId ?? 'i123456'}
-            value={athleteId}
-            onChange={(e) => setAthleteId(e.target.value)}
-          />
+            <input
+              id="intervals-athlete-id"
+              className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-slate-200 text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/50 transition"
+              type="text"
+              placeholder={intervals.athleteId ?? 'i123456'}
+              value={draft.athleteId}
+              onChange={(e) => {
+                clearTestStatusIfNeeded();
+                const value = e.target.value;
+                setDraft((current) => ({ ...current, athleteId: value }));
+              }}
+            />
           {intervals.athleteId && (
             <p className="mt-1.5 text-xs text-slate-400">Current: {intervals.athleteId}</p>
           )}
         </div>
       </div>
 
-      {saveError && (
-        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          {saveError}
+      {status && (
+        <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${statusClasses}`}>
+          <div className="flex items-start gap-3">
+            <StatusIcon size={16} className={status?.tone === 'neutral' ? 'animate-spin shrink-0 mt-0.5' : 'shrink-0 mt-0.5'} />
+            <div>
+              <p className="font-semibold uppercase tracking-wider text-[11px]">{status.label}</p>
+              <p className="mt-1">{status.message}</p>
+            </div>
+          </div>
         </div>
       )}
 
-      <button
-        className="mt-6 w-full flex items-center justify-center gap-2 bg-cyan-400 text-slate-950 font-semibold rounded-xl py-3 text-sm hover:bg-cyan-300 transition disabled:opacity-60 disabled:cursor-not-allowed"
-        onClick={() => { void handleSave(); }}
-        disabled={isSaving || (!apiKey.trim() && !athleteId.trim())}
-        type="button"
-      >
-        {isSaving ? 'Connecting...' : saved ? 'Connected!' : <><RefreshCw size={15} />Connect Intervals</>}
-      </button>
+      <div className="mt-6 flex gap-3">
+        <button
+          className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-cyan-400/30 bg-transparent py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => { void handleTest(); }}
+          disabled={isSaving || isTesting || !canTest}
+          type="button"
+        >
+          <RefreshCw size={15} className={isTesting ? 'animate-spin' : undefined} />
+          {isTesting ? 'Testing...' : 'Test Connection'}
+        </button>
+        <button
+          className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-cyan-400 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => { void handleSave(); }}
+          disabled={isSaving || isTesting || !canSave || !hasDirtyDraft}
+          type="button"
+        >
+          <RefreshCw size={15} className={isSaving ? 'animate-spin' : undefined} />
+          {isSaving ? 'Saving...' : 'Connect Intervals'}
+        </button>
+      </div>
     </div>
   );
 }
