@@ -12,8 +12,8 @@ use aiwattcoach::{
     },
     domain::{
         intervals::{
-            CreateEvent, DateRange, EventCategory, IntervalsApiPort, IntervalsCredentials,
-            IntervalsError, IntervalsSettingsPort, UpdateEvent,
+            CreateEvent, DateRange, EventCategory, IntervalsApiPort, IntervalsConnectionTester,
+            IntervalsCredentials, IntervalsError, IntervalsSettingsPort, UpdateEvent,
         },
         settings::{
             AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError,
@@ -107,6 +107,26 @@ async fn intervals_client_uses_basic_auth_and_maps_event_payloads() {
         requests[0].query,
         Some("oldest=2026-03-01&newest=2026-03-31".to_string())
     );
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some("Basic QVBJX0tFWTpzZWNyZXQta2V5")
+    );
+}
+
+#[tokio::test]
+async fn intervals_connection_test_uses_api_key_basic_auth_username() {
+    let server = TestIntervalsServer::start().await;
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    client
+        .test_connection("secret-key", "athlete-7")
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].method, "GET");
+    assert_eq!(requests[0].path, "/api/v1/athlete/athlete-7");
     assert_eq!(
         requests[0].authorization.as_deref(),
         Some("Basic QVBJX0tFWTpzZWNyZXQta2V5")
@@ -320,6 +340,7 @@ impl TestIntervalsServer {
     async fn start() -> Self {
         let state = ServerState::default();
         let app = Router::new()
+            .route("/api/v1/athlete/{athlete_id}", get(test_connection_handler))
             .route(
                 "/api/v1/athlete/{athlete_id}/events.json",
                 get(list_events_handler),
@@ -410,6 +431,28 @@ async fn list_events_handler(
         None,
     );
     Json(state.list_events.lock().unwrap().clone())
+}
+
+async fn test_connection_handler(
+    State(state): State<ServerState>,
+    Path(path): Path<AthletePath>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    capture_request(
+        &state,
+        "GET",
+        format!("/api/v1/athlete/{}", path.athlete_id),
+        None,
+        headers,
+        None,
+    );
+
+    let status = *state.get_status.lock().unwrap();
+    if status != StatusCode::OK {
+        return status.into_response();
+    }
+
+    StatusCode::OK.into_response()
 }
 
 async fn get_event_handler(
