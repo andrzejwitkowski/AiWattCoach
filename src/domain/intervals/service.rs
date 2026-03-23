@@ -3,6 +3,33 @@ use super::{
     IntervalsSettingsPort, UpdateEvent,
 };
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum IntervalsConnectionError {
+    Unauthenticated,
+    InvalidConfiguration,
+    Unavailable,
+}
+
+impl std::fmt::Display for IntervalsConnectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unauthenticated => write!(f, "Invalid API key or athlete ID"),
+            Self::InvalidConfiguration => write!(f, "Invalid configuration"),
+            Self::Unavailable => write!(f, "Intervals.icu is currently unavailable"),
+        }
+    }
+}
+
+impl std::error::Error for IntervalsConnectionError {}
+
+pub trait IntervalsConnectionTester: Send + Sync + 'static {
+    fn test_connection(
+        &self,
+        api_key: &str,
+        athlete_id: &str,
+    ) -> BoxFuture<Result<(), IntervalsConnectionError>>;
+}
+
 pub trait IntervalsUseCases: Send + Sync {
     fn list_events(
         &self,

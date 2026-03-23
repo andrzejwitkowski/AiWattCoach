@@ -3,7 +3,7 @@ use std::sync::Arc;
 use mongodb::Client;
 
 use crate::domain::identity::IdentityUseCases;
-use crate::domain::intervals::IntervalsUseCases;
+use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::settings::UserSettingsUseCases;
 
 #[derive(Clone)]
@@ -14,6 +14,7 @@ pub struct AppState {
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
+    pub intervals_connection_tester: Option<Arc<dyn IntervalsConnectionTester>>,
     pub session_cookie_name: String,
     pub session_cookie_same_site: String,
     pub secure_session_cookie: bool,
@@ -33,6 +34,7 @@ impl AppState {
             identity_service: None,
             intervals_service: None,
             settings_service: None,
+            intervals_connection_tester: None,
             session_cookie_name: "aiwattcoach_session".to_string(),
             session_cookie_same_site: "lax".to_string(),
             secure_session_cookie: false,
@@ -66,6 +68,14 @@ impl AppState {
 
     pub fn with_intervals_service(mut self, intervals_service: Arc<dyn IntervalsUseCases>) -> Self {
         self.intervals_service = Some(intervals_service);
+        self
+    }
+
+    pub fn with_intervals_connection_tester(
+        mut self,
+        intervals_connection_tester: Arc<dyn IntervalsConnectionTester>,
+    ) -> Self {
+        self.intervals_connection_tester = Some(intervals_connection_tester);
         self
     }
 }

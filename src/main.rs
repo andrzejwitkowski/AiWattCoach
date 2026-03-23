@@ -86,6 +86,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         intervals_settings_provider,
     ));
 
+    let intervals_connection_tester = IntervalsIcuClient::with_timeouts(5, 15)?;
+
     let app = build_app(
         AppState::new(app_name, mongo_database, mongo_client)
             .with_identity_service(
@@ -96,7 +98,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 auth.session.ttl_hours,
             )
             .with_settings_service(settings_service)
-            .with_intervals_service(intervals_service),
+            .with_intervals_service(intervals_service)
+            .with_intervals_connection_tester(Arc::new(intervals_connection_tester)),
     );
     let listener = TcpListener::bind(address).await?;
 

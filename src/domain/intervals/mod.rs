@@ -6,4 +6,6 @@ pub use model::{
     CreateEvent, DateRange, Event, EventCategory, IntervalsCredentials, IntervalsError, UpdateEvent,
 };
 pub use ports::{BoxFuture, IntervalsApiPort, IntervalsSettingsPort};
-pub use service::{IntervalsService, IntervalsUseCases};
+pub use service::{
+    IntervalsConnectionError, IntervalsConnectionTester, IntervalsService, IntervalsUseCases,
+};

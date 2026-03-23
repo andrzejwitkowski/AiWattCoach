@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::AppState,
     domain::identity::IdentityError,
+    domain::intervals::IntervalsConnectionError,
     domain::settings::{
         mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, CyclingSettings,
         IntervalsConfig, SettingsError,
@@ -361,5 +362,132 @@ fn map_settings_to_dto(settings: &crate::domain::settings::UserSettings) -> User
             vo2_max: settings.cycling.vo2_max,
             last_zone_update_epoch_seconds: settings.cycling.last_zone_update_epoch_seconds,
         },
+    }
+}
+
+#[derive(Deserialize)]
+pub struct TestIntervalsConnectionRequest {
+    #[serde(rename = "apiKey")]
+    api_key: Option<String>,
+    #[serde(rename = "athleteId")]
+    athlete_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TestIntervalsConnectionResponse {
+    connected: bool,
+    message: String,
+    #[serde(rename = "usedSavedApiKey")]
+    used_saved_api_key: bool,
+    #[serde(rename = "usedSavedAthleteId")]
+    used_saved_athlete_id: bool,
+    #[serde(rename = "persistedStatusUpdated")]
+    persisted_status_updated: bool,
+}
+
+fn normalize_optional_input(value: Option<String>) -> Option<String> {
+    value.filter(|v| !v.trim().is_empty())
+}
+
+pub async fn test_intervals_connection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<TestIntervalsConnectionRequest>,
+) -> Response {
+    let user_id = match super::user_auth::resolve_user_id(&state, &headers).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+
+    let settings_service = match state.settings_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let connection_tester = match state.intervals_connection_tester.as_ref() {
+        Some(t) => t,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let current = match settings_service.get_settings(&user_id).await {
+        Ok(s) => s,
+        Err(err) => return map_settings_error(&err),
+    };
+
+    let transient_api_key = normalize_optional_input(body.api_key);
+    let transient_athlete_id = normalize_optional_input(body.athlete_id);
+
+    let effective_api_key = transient_api_key
+        .clone()
+        .or_else(|| current.intervals.api_key.clone());
+    let effective_athlete_id = transient_athlete_id
+        .clone()
+        .or_else(|| current.intervals.athlete_id.clone());
+
+    if effective_api_key.is_none() || effective_athlete_id.is_none() {
+        return Json(TestIntervalsConnectionResponse {
+            connected: false,
+            message: "Both API key and athlete ID are required.".to_string(),
+            used_saved_api_key: false,
+            used_saved_athlete_id: false,
+            persisted_status_updated: false,
+        })
+        .into_response();
+    }
+
+    let api_key = effective_api_key.unwrap();
+    let athlete_id = effective_athlete_id.unwrap();
+
+    let used_saved_api_key = transient_api_key.is_none() && current.intervals.api_key.is_some();
+    let used_saved_athlete_id =
+        transient_athlete_id.is_none() && current.intervals.athlete_id.is_some();
+
+    match connection_tester
+        .test_connection(&api_key, &athlete_id)
+        .await
+    {
+        Ok(_) => Json(TestIntervalsConnectionResponse {
+            connected: true,
+            message: "Connection successful.".to_string(),
+            used_saved_api_key,
+            used_saved_athlete_id,
+            persisted_status_updated: false,
+        })
+        .into_response(),
+        Err(IntervalsConnectionError::Unauthenticated) => (
+            StatusCode::BAD_REQUEST,
+            Json(TestIntervalsConnectionResponse {
+                connected: false,
+                message: "Invalid API key or athlete ID. Please check your credentials."
+                    .to_string(),
+                used_saved_api_key,
+                used_saved_athlete_id,
+                persisted_status_updated: false,
+            }),
+        )
+            .into_response(),
+        Err(IntervalsConnectionError::InvalidConfiguration) => (
+            StatusCode::BAD_REQUEST,
+            Json(TestIntervalsConnectionResponse {
+                connected: false,
+                message: "Invalid configuration. Please check athlete ID.".to_string(),
+                used_saved_api_key,
+                used_saved_athlete_id,
+                persisted_status_updated: false,
+            }),
+        )
+            .into_response(),
+        Err(IntervalsConnectionError::Unavailable) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(TestIntervalsConnectionResponse {
+                connected: false,
+                message: "Intervals.icu is currently unavailable. Please try again later."
+                    .to_string(),
+                used_saved_api_key,
+                used_saved_athlete_id,
+                persisted_status_updated: false,
+            }),
+        )
+            .into_response(),
     }
 }
