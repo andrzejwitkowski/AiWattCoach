@@ -44,7 +44,11 @@ impl IntervalsIcuClient {
     }
 
     fn athlete_url(&self, athlete_id: &str, path: &str) -> String {
-        format!("{}/api/v1/athlete/{}{}", self.base_url, athlete_id, path)
+        Self::athlete_url_impl(&self.base_url, athlete_id, path)
+    }
+
+    fn athlete_url_impl(base_url: &str, athlete_id: &str, path: &str) -> String {
+        format!("{}/api/v1/athlete/{}{}", base_url, athlete_id, path)
     }
 }
 
@@ -55,12 +59,12 @@ impl IntervalsConnectionTester for IntervalsIcuClient {
         athlete_id: &str,
     ) -> BoxFuture<Result<(), IntervalsConnectionError>> {
         let client = self.client.clone();
-        let athlete_id = athlete_id.to_string();
-        let api_key = api_key.to_string();
         let base_url = self.base_url.clone();
+        let api_key = api_key.to_string();
+        let athlete_id = athlete_id.to_string();
 
         Box::pin(async move {
-            let url = format!("{}/api/v1/athlete/{}", base_url, athlete_id);
+            let url = Self::athlete_url_impl(&base_url, &athlete_id, "");
 
             let response = client
                 .get(&url)
@@ -69,16 +73,18 @@ impl IntervalsConnectionTester for IntervalsIcuClient {
                 .await
                 .map_err(|_| IntervalsConnectionError::Unavailable)?;
 
-            if response.status() == StatusCode::UNAUTHORIZED {
+            let status = response.status();
+
+            if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
                 return Err(IntervalsConnectionError::Unauthenticated);
             }
 
-            if response.status() == StatusCode::NOT_FOUND {
+            if status == StatusCode::NOT_FOUND {
                 return Err(IntervalsConnectionError::InvalidConfiguration);
             }
 
-            if !response.status().is_success() {
-                return Err(IntervalsConnectionError::Unauthenticated);
+            if !status.is_success() {
+                return Err(IntervalsConnectionError::Unavailable);
             }
 
             Ok(())

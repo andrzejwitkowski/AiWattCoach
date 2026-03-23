@@ -976,7 +976,7 @@ async fn test_intervals_connection_uses_saved_credentials_when_transient_missing
 }
 
 #[tokio::test]
-async fn test_intervals_connection_returns_422_when_credentials_incomplete() {
+async fn test_intervals_connection_returns_200_when_credentials_incomplete() {
     let app = settings_test_app_with_intervals(
         TestIdentityServiceWithSession::default(),
         TestSettingsService::default(),
@@ -1009,4 +1009,38 @@ async fn test_intervals_connection_returns_422_when_credentials_incomplete() {
         .as_str()
         .unwrap()
         .contains("Both API key and athlete ID are required"));
+}
+
+#[tokio::test]
+async fn test_intervals_connection_incomplete_uses_saved_flags_when_available() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.intervals.api_key = Some("saved-api-key".to_string());
+    settings.intervals.athlete_id = None;
+
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+        Some(std::sync::Arc::new(MockIntervalsConnectionTester::returning_ok())),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"apiKey":""}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    assert!(!body.get("connected").unwrap().as_bool().unwrap());
+    assert!(body.get("usedSavedApiKey").unwrap().as_bool().unwrap());
+    assert!(!body.get("usedSavedAthleteId").unwrap().as_bool().unwrap());
 }

@@ -424,12 +424,16 @@ pub async fn test_intervals_connection(
         .clone()
         .or_else(|| current.intervals.athlete_id.clone());
 
+    let used_saved_api_key = transient_api_key.is_none() && current.intervals.api_key.is_some();
+    let used_saved_athlete_id =
+        transient_athlete_id.is_none() && current.intervals.athlete_id.is_some();
+
     if effective_api_key.is_none() || effective_athlete_id.is_none() {
         return Json(TestIntervalsConnectionResponse {
             connected: false,
             message: "Both API key and athlete ID are required.".to_string(),
-            used_saved_api_key: false,
-            used_saved_athlete_id: false,
+            used_saved_api_key,
+            used_saved_athlete_id,
             persisted_status_updated: false,
         })
         .into_response();
@@ -437,10 +441,6 @@ pub async fn test_intervals_connection(
 
     let api_key = effective_api_key.unwrap();
     let athlete_id = effective_athlete_id.unwrap();
-
-    let used_saved_api_key = transient_api_key.is_none() && current.intervals.api_key.is_some();
-    let used_saved_athlete_id =
-        transient_athlete_id.is_none() && current.intervals.athlete_id.is_some();
 
     match connection_tester
         .test_connection(&api_key, &athlete_id)
