@@ -14,6 +14,14 @@ const intervalsSettingsSchema = z.object({
   connected: z.boolean(),
 });
 
+export const testIntervalsConnectionResponseSchema = z.object({
+  connected: z.boolean(),
+  message: z.string(),
+  usedSavedApiKey: z.boolean(),
+  usedSavedAthleteId: z.boolean(),
+  persistedStatusUpdated: z.boolean(),
+});
+
 const analysisOptionsSettingsSchema = z.object({
   analyzeWithoutHeartRate: z.boolean(),
 });
@@ -51,6 +59,8 @@ export const updateIntervalsRequestSchema = z.object({
 });
 
 export type UpdateIntervalsRequest = z.infer<typeof updateIntervalsRequestSchema>;
+
+export type TestIntervalsConnectionResponse = z.infer<typeof testIntervalsConnectionResponseSchema>;
 
 export const updateOptionsRequestSchema = z.object({
   analyzeWithoutHeartRate: z.boolean().optional(),
