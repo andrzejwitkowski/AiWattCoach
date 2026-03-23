@@ -68,7 +68,7 @@ impl IntervalsConnectionTester for IntervalsIcuClient {
 
             let response = client
                 .get(&url)
-                .basic_auth("athlete", Some(&api_key))
+                .basic_auth("API_KEY", Some(&api_key))
                 .send()
                 .await
                 .map_err(|_| IntervalsConnectionError::Unavailable)?;
