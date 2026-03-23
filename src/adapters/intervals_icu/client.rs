@@ -2,7 +2,8 @@ use reqwest::{Client, StatusCode};
 
 use crate::domain::intervals::{
     BoxFuture, CreateEvent, DateRange, Event, EventCategory, IntervalsApiPort,
-    IntervalsCredentials, IntervalsError, UpdateEvent,
+    IntervalsConnectionError, IntervalsConnectionTester, IntervalsCredentials, IntervalsError,
+    UpdateEvent,
 };
 
 use super::dto::{CreateEventRequest, EventResponse, UpdateEventRequest};
@@ -23,13 +24,71 @@ impl IntervalsIcuClient {
         }
     }
 
+    pub fn with_timeouts(
+        connect_timeout_secs: u64,
+        timeout_secs: u64,
+    ) -> Result<Self, reqwest::Error> {
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(connect_timeout_secs))
+            .timeout(std::time::Duration::from_secs(timeout_secs))
+            .build()?;
+        Ok(Self {
+            client,
+            base_url: DEFAULT_BASE_URL.to_string(),
+        })
+    }
+
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into().trim_end_matches('/').to_string();
         self
     }
 
     fn athlete_url(&self, athlete_id: &str, path: &str) -> String {
-        format!("{}/api/v1/athlete/{}{}", self.base_url, athlete_id, path)
+        Self::athlete_url_impl(&self.base_url, athlete_id, path)
+    }
+
+    fn athlete_url_impl(base_url: &str, athlete_id: &str, path: &str) -> String {
+        format!("{}/api/v1/athlete/{}{}", base_url, athlete_id, path)
+    }
+}
+
+impl IntervalsConnectionTester for IntervalsIcuClient {
+    fn test_connection(
+        &self,
+        api_key: &str,
+        athlete_id: &str,
+    ) -> BoxFuture<Result<(), IntervalsConnectionError>> {
+        let client = self.client.clone();
+        let base_url = self.base_url.clone();
+        let api_key = api_key.to_string();
+        let athlete_id = athlete_id.to_string();
+
+        Box::pin(async move {
+            let url = Self::athlete_url_impl(&base_url, &athlete_id, "");
+
+            let response = client
+                .get(&url)
+                .basic_auth("athlete", Some(&api_key))
+                .send()
+                .await
+                .map_err(|_| IntervalsConnectionError::Unavailable)?;
+
+            let status = response.status();
+
+            if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
+                return Err(IntervalsConnectionError::Unauthenticated);
+            }
+
+            if status == StatusCode::NOT_FOUND {
+                return Err(IntervalsConnectionError::InvalidConfiguration);
+            }
+
+            if !status.is_success() {
+                return Err(IntervalsConnectionError::Unavailable);
+            }
+
+            Ok(())
+        })
     }
 }
 

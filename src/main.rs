@@ -74,17 +74,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
     settings_repository.ensure_indexes().await?;
     let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
-    let intervals_api_client = IntervalsIcuClient::new(
-        reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .build()?,
-    );
+    let intervals_api_client = IntervalsIcuClient::with_timeouts(10, 30)?;
     let intervals_settings_provider = SettingsIntervalsProvider::new(settings_service.clone());
     let intervals_service = Arc::new(IntervalsService::new(
         intervals_api_client,
         intervals_settings_provider,
     ));
+
+    let intervals_connection_tester = IntervalsIcuClient::with_timeouts(5, 15)?;
 
     let app = build_app(
         AppState::new(app_name, mongo_database, mongo_client)
@@ -96,7 +93,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 auth.session.ttl_hours,
             )
             .with_settings_service(settings_service)
-            .with_intervals_service(intervals_service),
+            .with_intervals_service(intervals_service)
+            .with_intervals_connection_tester(Arc::new(intervals_connection_tester)),
     );
     let listener = TcpListener::bind(address).await?;
 

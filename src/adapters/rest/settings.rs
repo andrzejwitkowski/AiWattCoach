@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::AppState,
     domain::identity::IdentityError,
+    domain::intervals::IntervalsConnectionError,
     domain::settings::{
         mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, CyclingSettings,
         IntervalsConfig, SettingsError,
@@ -361,5 +362,186 @@ fn map_settings_to_dto(settings: &crate::domain::settings::UserSettings) -> User
             vo2_max: settings.cycling.vo2_max,
             last_zone_update_epoch_seconds: settings.cycling.last_zone_update_epoch_seconds,
         },
+    }
+}
+
+#[derive(Deserialize)]
+pub struct TestIntervalsConnectionRequest {
+    #[serde(rename = "apiKey")]
+    api_key: Option<String>,
+    #[serde(rename = "athleteId")]
+    athlete_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TestIntervalsConnectionResponse {
+    connected: bool,
+    message: String,
+    #[serde(rename = "usedSavedApiKey")]
+    used_saved_api_key: bool,
+    #[serde(rename = "usedSavedAthleteId")]
+    used_saved_athlete_id: bool,
+    #[serde(rename = "persistedStatusUpdated")]
+    persisted_status_updated: bool,
+}
+
+fn normalize_optional_input(value: Option<String>) -> Option<String> {
+    value.filter(|v| !v.trim().is_empty())
+}
+
+struct MergedCredentials {
+    api_key: String,
+    athlete_id: String,
+    used_saved_api_key: bool,
+    used_saved_athlete_id: bool,
+}
+
+fn merge_credentials(
+    transient_api_key: Option<String>,
+    transient_athlete_id: Option<String>,
+    saved_api_key: Option<String>,
+    saved_athlete_id: Option<String>,
+) -> Option<MergedCredentials> {
+    let effective_api_key = transient_api_key.clone().or_else(|| saved_api_key.clone());
+    let effective_athlete_id = transient_athlete_id
+        .clone()
+        .or_else(|| saved_athlete_id.clone());
+
+    let used_saved_api_key = transient_api_key.is_none() && saved_api_key.is_some();
+    let used_saved_athlete_id = transient_athlete_id.is_none() && saved_athlete_id.is_some();
+
+    match (effective_api_key, effective_athlete_id) {
+        (Some(api_key), Some(athlete_id)) => Some(MergedCredentials {
+            api_key,
+            athlete_id,
+            used_saved_api_key,
+            used_saved_athlete_id,
+        }),
+        _ => None,
+    }
+}
+
+fn test_connection_response(
+    connected: bool,
+    message: &str,
+    used_saved_api_key: bool,
+    used_saved_athlete_id: bool,
+) -> TestIntervalsConnectionResponse {
+    TestIntervalsConnectionResponse {
+        connected,
+        message: message.to_string(),
+        used_saved_api_key,
+        used_saved_athlete_id,
+        persisted_status_updated: false,
+    }
+}
+
+fn map_connection_error_to_response(
+    error: IntervalsConnectionError,
+    used_saved_api_key: bool,
+    used_saved_athlete_id: bool,
+) -> Response {
+    match error {
+        IntervalsConnectionError::Unauthenticated => (
+            StatusCode::BAD_REQUEST,
+            Json(test_connection_response(
+                false,
+                "Invalid API key or athlete ID. Please check your credentials.",
+                used_saved_api_key,
+                used_saved_athlete_id,
+            )),
+        )
+            .into_response(),
+        IntervalsConnectionError::InvalidConfiguration => (
+            StatusCode::BAD_REQUEST,
+            Json(test_connection_response(
+                false,
+                "Invalid configuration. Please check athlete ID.",
+                used_saved_api_key,
+                used_saved_athlete_id,
+            )),
+        )
+            .into_response(),
+        IntervalsConnectionError::Unavailable => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(test_connection_response(
+                false,
+                "Intervals.icu is currently unavailable. Please try again later.",
+                used_saved_api_key,
+                used_saved_athlete_id,
+            )),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn test_intervals_connection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<TestIntervalsConnectionRequest>,
+) -> Response {
+    let user_id = match super::user_auth::resolve_user_id(&state, &headers).await {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+
+    let settings_service = match state.settings_service.as_ref() {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let connection_tester = match state.intervals_connection_tester.as_ref() {
+        Some(t) => t,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let current = match settings_service.get_settings(&user_id).await {
+        Ok(s) => s,
+        Err(err) => return map_settings_error(&err),
+    };
+
+    let transient_api_key = normalize_optional_input(body.api_key);
+    let transient_athlete_id = normalize_optional_input(body.athlete_id);
+
+    let transient_api_key_not_provided = transient_api_key.is_none();
+    let transient_athlete_id_not_provided = transient_athlete_id.is_none();
+
+    let merged = merge_credentials(
+        transient_api_key,
+        transient_athlete_id,
+        current.intervals.api_key.clone(),
+        current.intervals.athlete_id.clone(),
+    );
+
+    let (api_key, athlete_id, used_saved_api_key, used_saved_athlete_id) = match merged {
+        Some(m) => (
+            m.api_key,
+            m.athlete_id,
+            m.used_saved_api_key,
+            m.used_saved_athlete_id,
+        ),
+        None => {
+            return Json(test_connection_response(
+                false,
+                "Both API key and athlete ID are required.",
+                transient_api_key_not_provided && current.intervals.api_key.is_some(),
+                transient_athlete_id_not_provided && current.intervals.athlete_id.is_some(),
+            ))
+            .into_response();
+        }
+    };
+
+    match connection_tester
+        .test_connection(&api_key, &athlete_id)
+        .await
+    {
+        Ok(_) => Json(test_connection_response(
+            true,
+            "Connection successful.",
+            used_saved_api_key,
+            used_saved_athlete_id,
+        ))
+        .into_response(),
+        Err(e) => map_connection_error_to_response(e, used_saved_api_key, used_saved_athlete_id),
     }
 }
