@@ -801,10 +801,7 @@ async fn not_found_api_route_emits_warn_classification_log() {
     .await;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    assert!(
-        logs.contains("\"level\":\"WARN\"") && logs.contains("\"status\":404"),
-        "expected warn log for 404 response, got: {logs}"
-    );
+    assert_log_entry_contains(&logs, &["\"level\":\"WARN\"", "\"status\":404"]);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -833,9 +830,20 @@ async fn readiness_check_emits_error_classification_log_for_service_unavailable(
     .await;
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_log_entry_contains(&logs, &["\"level\":\"ERROR\"", "\"status\":503"]);
+}
+
+fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str]) {
+    let matched = logs.lines().any(|line| {
+        expected_fragments
+            .iter()
+            .all(|fragment| line.contains(fragment))
+    });
+
     assert!(
-        logs.contains("\"level\":\"ERROR\"") && logs.contains("\"status\":503"),
-        "expected error log for 503 response, got: {logs}"
+        matched,
+        "expected one log entry to contain {:?}, logs were: {logs}",
+        expected_fragments
     );
 }
 

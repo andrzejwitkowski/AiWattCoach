@@ -769,12 +769,14 @@ async fn api_error_returns_502() {
     .await;
 
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
-    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
-    assert!(
-        logs.contains("\"error_kind\":\"api_error\""),
-        "logs were: {logs}"
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"api_error\"",
+            "\"status\":502",
+        ],
     );
-    assert!(logs.contains("\"status\":502"), "logs were: {logs}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -799,12 +801,28 @@ async fn list_events_returns_422_and_logs_warn_when_credentials_not_configured()
     .await;
 
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
-    assert!(
-        logs.contains("\"error_kind\":\"credentials_not_configured\""),
-        "logs were: {logs}"
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"WARN\"",
+            "\"error_kind\":\"credentials_not_configured\"",
+            "\"status\":422",
+        ],
     );
-    assert!(logs.contains("\"status\":422"), "logs were: {logs}");
+}
+
+fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str]) {
+    let matched = logs.lines().any(|line| {
+        expected_fragments
+            .iter()
+            .all(|fragment| line.contains(fragment))
+    });
+
+    assert!(
+        matched,
+        "expected one log entry to contain {:?}, logs were: {logs}",
+        expected_fragments
+    );
 }
 
 async fn intervals_test_app(

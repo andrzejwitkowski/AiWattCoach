@@ -29,10 +29,7 @@ async fn valid_info_warn_and_error_payloads_are_accepted() {
         let (response, logs) = capture_tracing_logs(|| async {
             app.clone()
                 .oneshot(
-                    Request::builder()
-                        .method("POST")
-                        .uri("/api/logs")
-                        .header(header::CONTENT_TYPE, "application/json")
+                    logs_request()
                         .body(Body::from(
                             json!({
                                 "level": level,
@@ -109,10 +106,7 @@ async fn unsupported_level_is_rejected() {
 
     let response = app
         .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/logs")
-                .header(header::CONTENT_TYPE, "application/json")
+            logs_request()
                 .body(Body::from(
                     json!({
                         "level": "debug",
@@ -138,10 +132,7 @@ async fn oversized_message_is_rejected() {
 
     let response = app
         .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/logs")
-                .header(header::CONTENT_TYPE, "application/json")
+            logs_request()
                 .body(Body::from(
                     json!({
                         "level": "info",
@@ -167,10 +158,7 @@ async fn near_limit_valid_payload_is_still_accepted() {
 
     let response = app
         .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/logs")
-                .header(header::CONTENT_TYPE, "application/json")
+            logs_request()
                 .body(Body::from(
                     json!({
                         "level": "info",
@@ -196,10 +184,7 @@ async fn escaped_near_limit_valid_payload_is_still_accepted() {
 
     let response = app
         .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/logs")
-                .header(header::CONTENT_TYPE, "application/json")
+            logs_request()
                 .body(Body::from(
                     json!({
                         "level": "info",
@@ -225,10 +210,7 @@ async fn oversized_request_body_is_rejected_before_json_parsing() {
 
     let response = app
         .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/logs")
-                .header(header::CONTENT_TYPE, "application/json")
+            logs_request()
                 .body(Body::from(
                     json!({
                         "level": "info",
@@ -242,6 +224,67 @@ async fn oversized_request_body_is_rejected_before_json_parsing() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn log_ingestion_rejects_requests_without_origin() {
+    let app = logs_test_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/logs")
+                .header(header::HOST, "localhost:3002")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "level": "info",
+                        "message": "no origin",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        response_json(response).await,
+        json!({ "error": "invalid_origin" })
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn log_ingestion_rejects_requests_with_mismatched_origin() {
+    let app = logs_test_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/logs")
+                .header(header::HOST, "localhost:3002")
+                .header(header::ORIGIN, "https://evil.example")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "level": "info",
+                        "message": "bad origin",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        response_json(response).await,
+        json!({ "error": "invalid_origin" })
+    );
 }
 
 async fn logs_test_app() -> axum::Router {
@@ -264,6 +307,15 @@ async fn response_json(response: axum::response::Response) -> Value {
         .await
         .expect("response body to be collected");
     serde_json::from_slice(&body).expect("response to contain valid JSON")
+}
+
+fn logs_request() -> axum::http::request::Builder {
+    Request::builder()
+        .method("POST")
+        .uri("/api/logs")
+        .header(header::HOST, "localhost:3002")
+        .header(header::ORIGIN, "http://localhost:3002")
+        .header(header::CONTENT_TYPE, "application/json")
 }
 
 struct FrontendFixture {

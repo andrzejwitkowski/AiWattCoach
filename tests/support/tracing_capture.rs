@@ -1,12 +1,20 @@
 use std::{
+    collections::HashMap,
     future::Future,
     io::Write,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+    },
 };
 
 static TEST_TRACING_INIT: OnceLock<()> = OnceLock::new();
-static TRACE_CAPTURE_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-static ACTIVE_LOG_BUFFER: OnceLock<Mutex<Option<SharedLogBuffer>>> = OnceLock::new();
+static TRACE_CAPTURE_ID: AtomicU64 = AtomicU64::new(1);
+static ACTIVE_LOG_BUFFERS: OnceLock<Mutex<HashMap<String, SharedLogBuffer>>> = OnceLock::new();
+
+tokio::task_local! {
+    static CURRENT_CAPTURE_ID: String;
+}
 
 #[derive(Clone, Default)]
 struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
@@ -47,12 +55,16 @@ struct GlobalLogWriter;
 
 impl Write for GlobalLogWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let active_buffer = ACTIVE_LOG_BUFFER.get_or_init(|| Mutex::new(None));
-        let mut guard = active_buffer
-            .lock()
-            .expect("active log buffer mutex poisoned");
+        let Some(capture_id) = CURRENT_CAPTURE_ID.try_with(Clone::clone).ok() else {
+            return Ok(buf.len());
+        };
 
-        if let Some(buffer) = guard.as_mut() {
+        let active_buffers = ACTIVE_LOG_BUFFERS.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut guard = active_buffers
+            .lock()
+            .expect("active log buffers mutex poisoned");
+
+        if let Some(buffer) = guard.get_mut(&capture_id) {
             buffer.write(buf)
         } else {
             Ok(buf.len())
@@ -64,24 +76,28 @@ impl Write for GlobalLogWriter {
     }
 }
 
-struct ActiveLogBufferGuard;
+struct ActiveLogBufferGuard {
+    capture_id: String,
+}
 
 impl ActiveLogBufferGuard {
-    fn install(buffer: SharedLogBuffer) -> Self {
-        let active_buffer = ACTIVE_LOG_BUFFER.get_or_init(|| Mutex::new(None));
-        *active_buffer
+    fn install(capture_id: String, buffer: SharedLogBuffer) -> Self {
+        let active_buffers = ACTIVE_LOG_BUFFERS.get_or_init(|| Mutex::new(HashMap::new()));
+        active_buffers
             .lock()
-            .expect("active log buffer mutex poisoned") = Some(buffer);
-        Self
+            .expect("active log buffers mutex poisoned")
+            .insert(capture_id.clone(), buffer);
+        Self { capture_id }
     }
 }
 
 impl Drop for ActiveLogBufferGuard {
     fn drop(&mut self) {
-        let active_buffer = ACTIVE_LOG_BUFFER.get_or_init(|| Mutex::new(None));
-        *active_buffer
+        let active_buffers = ACTIVE_LOG_BUFFERS.get_or_init(|| Mutex::new(HashMap::new()));
+        active_buffers
             .lock()
-            .expect("active log buffer mutex poisoned") = None;
+            .expect("active log buffers mutex poisoned")
+            .remove(&self.capture_id);
     }
 }
 
@@ -90,14 +106,14 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = T>,
 {
-    let _capture_guard = TRACE_CAPTURE_LOCK
-        .get_or_init(|| tokio::sync::Mutex::new(()))
-        .lock()
-        .await;
     init_test_tracing_subscriber();
     let logs = SharedLogBuffer::default();
-    let _active_buffer = ActiveLogBufferGuard::install(logs.clone());
-    let output = run().await;
+    let capture_id = format!(
+        "capture-{}",
+        TRACE_CAPTURE_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    let _active_buffer = ActiveLogBufferGuard::install(capture_id.clone(), logs.clone());
+    let output = CURRENT_CAPTURE_ID.scope(capture_id, run()).await;
     // Drop the active buffer guard first so concurrent work finishes writing
     drop(_active_buffer);
     let captured = logs.contents();

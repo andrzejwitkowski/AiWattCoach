@@ -22,10 +22,11 @@ forward_signal() {
 
 trap forward_signal TERM INT
 
-wait "$app_pid" || true
-# Re-wait to capture the real exit code after signal interruption
-wait "$app_pid" 2>/dev/null
+# Wait once and capture the real exit code without aborting on non-zero exit
+set +e
+wait "$app_pid"
 app_status=$?
+set -e
 wait "$tee_pid" || true
 rm -f /tmp/aiwattcoach.stdout
 exit "$app_status"

@@ -18,7 +18,11 @@ use axum::{
     routing::{get, patch, post},
     Router,
 };
-use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _};
+use opentelemetry::{
+    propagation::TextMapPropagator,
+    trace::{SpanContext, SpanId, TraceContextExt as _, TraceFlags, TraceId, TraceState},
+    Context,
+};
 use opentelemetry_http::HeaderExtractor;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use tower::util::ServiceExt;
@@ -124,10 +128,33 @@ fn apply_incoming_trace_context(headers: &HeaderMap, span: &Span) {
     if let Some(trace_id) = incoming_trace_id {
         span.set_parent(parent_context);
         span.record("trace_id", tracing::field::display(trace_id));
-    } else {
-        // Generate a local trace_id for log correlation even without an incoming traceparent
-        let trace_id = uuid::Uuid::new_v4().to_string().replace('-', "");
-        span.record("trace_id", tracing::field::display(trace_id));
+        return;
+    }
+
+    let generated_trace_id = TraceId::from_hex(&uuid::Uuid::new_v4().to_string().replace('-', ""))
+        .expect("uuid v4 without dashes should be a valid 32-char hex trace id");
+    let generated_parent = Context::new().with_remote_span_context(SpanContext::new(
+        generated_trace_id,
+        SpanId::INVALID,
+        TraceFlags::default(),
+        true,
+        TraceState::default(),
+    ));
+    span.set_parent(generated_parent);
+    span.record(
+        "trace_id",
+        tracing::field::display(generated_trace_id.to_string()),
+    );
+}
+
+fn record_span_trace_id(span: &Span) {
+    let span_context = span.context().span().span_context().clone();
+
+    if span_context.is_valid() {
+        span.record(
+            "trace_id",
+            tracing::field::display(span_context.trace_id().to_string()),
+        );
     }
 }
 
@@ -135,6 +162,7 @@ fn log_response_event<B>(response: &Response<B>, latency: std::time::Duration, s
     let status = response.status();
     let status_class = status_class(status);
 
+    record_span_trace_id(span);
     span.record("http.status_code", status.as_u16());
 
     let _guard = span.enter();

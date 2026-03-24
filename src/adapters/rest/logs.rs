@@ -1,6 +1,6 @@
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -32,12 +32,23 @@ struct ErrorResponse {
 
 pub async fn ingest_logs(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<LogIngestionRequest>,
 ) -> Response {
     if !state.client_log_ingestion_enabled {
         return (
             StatusCode::NOT_FOUND,
             Json(ErrorResponse { error: "disabled" }),
+        )
+            .into_response();
+    }
+
+    if !request_has_same_origin(&headers) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "invalid_origin",
+            }),
         )
             .into_response();
     }
@@ -77,4 +88,32 @@ pub async fn ingest_logs(
         Json(StatusResponse { status: "accepted" }),
     )
         .into_response()
+}
+
+fn request_has_same_origin(headers: &HeaderMap) -> bool {
+    let Some(host) = header_value(headers, header::HOST) else {
+        return false;
+    };
+    let Some(origin) = header_value(headers, header::ORIGIN) else {
+        return false;
+    };
+
+    let Ok(origin_uri) = origin.parse::<axum::http::Uri>() else {
+        return false;
+    };
+
+    if let Some(fetch_site) =
+        header_value(headers, header::HeaderName::from_static("sec-fetch-site"))
+    {
+        if fetch_site != "same-origin" && fetch_site != "same-site" {
+            return false;
+        }
+    }
+
+    matches!(origin_uri.scheme_str(), Some("http" | "https"))
+        && origin_uri.authority().map(|authority| authority.as_str()) == Some(host)
+}
+
+fn header_value(headers: &HeaderMap, name: header::HeaderName) -> Option<&str> {
+    headers.get(name).and_then(|value| value.to_str().ok())
 }

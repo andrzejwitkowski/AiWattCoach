@@ -758,12 +758,14 @@ async fn admin_forbidden_logs_warn_before_returning_403() {
     .await;
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
-    assert!(
-        logs.contains("\"error_kind\":\"forbidden\""),
-        "logs were: {logs}"
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"WARN\"",
+            "\"error_kind\":\"forbidden\"",
+            "\"status\":403",
+        ],
     );
-    assert!(logs.contains("\"status\":403"), "logs were: {logs}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -790,12 +792,14 @@ async fn admin_identity_backend_error_logs_error_before_returning_503() {
     .await;
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
-    assert!(
-        logs.contains("\"error_kind\":\"repository_error\""),
-        "logs were: {logs}"
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"repository_error\"",
+            "\"status\":503",
+        ],
     );
-    assert!(logs.contains("\"status\":503"), "logs were: {logs}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -823,12 +827,28 @@ async fn admin_settings_repository_error_logs_error_kind_before_returning_503() 
     .await;
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
-    assert!(
-        logs.contains("\"error_kind\":\"repository_error\""),
-        "logs were: {logs}"
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"repository_error\"",
+            "\"status\":503",
+        ],
     );
-    assert!(logs.contains("\"status\":503"), "logs were: {logs}");
+}
+
+fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str]) {
+    let matched = logs.lines().any(|line| {
+        expected_fragments
+            .iter()
+            .all(|fragment| line.contains(fragment))
+    });
+
+    assert!(
+        matched,
+        "expected one log entry to contain {:?}, logs were: {logs}",
+        expected_fragments
+    );
 }
 
 #[derive(Clone, Default)]
@@ -1161,12 +1181,14 @@ async fn test_intervals_connection_returns_503_on_unavailable() {
         .as_str()
         .unwrap()
         .contains("unavailable"));
-    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
-    assert!(
-        logs.contains("\"error_kind\":\"unavailable\""),
-        "logs were: {logs}"
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"unavailable\"",
+            "\"status\":503",
+        ],
     );
-    assert!(logs.contains("\"status\":503"), "logs were: {logs}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1191,12 +1213,14 @@ async fn get_settings_returns_503_and_logs_error_kind_on_repository_error() {
     .await;
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
-    assert!(
-        logs.contains("\"error_kind\":\"repository_error\""),
-        "logs were: {logs}"
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"repository_error\"",
+            "\"status\":503",
+        ],
     );
-    assert!(logs.contains("\"status\":503"), "logs were: {logs}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1227,12 +1251,14 @@ async fn update_cycling_returns_400_and_logs_warn_on_validation_error() {
     .await;
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
-    assert!(
-        logs.contains("\"error_kind\":\"validation_error\""),
-        "logs were: {logs}"
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"WARN\"",
+            "\"error_kind\":\"validation_error\"",
+            "\"status\":400",
+        ],
     );
-    assert!(logs.contains("\"status\":400"), "logs were: {logs}");
 }
 
 #[tokio::test]
