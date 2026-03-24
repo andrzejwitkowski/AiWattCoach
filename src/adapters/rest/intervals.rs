@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use std::{error::Error as StdError, str::FromStr};
+use std::str::FromStr;
 use tracing::Level;
 
 use crate::{
@@ -15,6 +15,8 @@ use crate::{
         CreateEvent, DateRange, Event, EventCategory, IntervalsError, UpdateEvent,
     },
 };
+
+use super::logging::{format_error_chain, status_class};
 
 #[derive(Deserialize)]
 pub struct ListEventsQuery {
@@ -344,32 +346,6 @@ fn log_intervals_error(level: Level, status: StatusCode, error: &IntervalsError)
             "intervals request failed"
         ),
         _ => unreachable!("unexpected log level"),
-    }
-}
-
-fn format_error_chain(error: &dyn StdError) -> String {
-    let mut chain = vec![error.to_string()];
-    let mut source = error.source();
-
-    while let Some(err) = source {
-        chain.push(err.to_string());
-        source = err.source();
-    }
-
-    chain.join(": ")
-}
-
-fn status_class(status: StatusCode) -> &'static str {
-    if status.is_server_error() {
-        "server_error"
-    } else if status.is_client_error() {
-        "client_error"
-    } else if status.is_redirection() {
-        "redirection"
-    } else if status.is_success() {
-        "success"
-    } else {
-        "informational"
     }
 }
 

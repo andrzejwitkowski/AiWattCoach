@@ -1,14 +1,11 @@
+mod support;
+
 use std::{
-    cell::RefCell,
     fs,
     future::Future,
-    io::Write,
     path::PathBuf,
     pin::Pin,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex, OnceLock,
-    },
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -33,17 +30,12 @@ use mongodb::Client;
 use serde_json::Value;
 use tower::util::ServiceExt;
 
+use crate::support::tracing_capture::capture_tracing_logs;
+
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 static FRONTEND_FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
-static TEST_TRACING_INIT: OnceLock<()> = OnceLock::new();
-static TRACE_CAPTURE_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-
-thread_local! {
-    static ACTIVE_LOG_BUFFER: RefCell<Option<SharedLogBuffer>> = const { RefCell::new(None) };
-}
-
 #[tokio::test]
 async fn google_start_redirects_to_provider() {
     let app = auth_test_app(TestIdentityService::default()).await;
@@ -817,120 +809,4 @@ impl Drop for FrontendFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
-}
-
-#[derive(Clone, Default)]
-struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
-
-impl SharedLogBuffer {
-    fn contents(&self) -> String {
-        String::from_utf8(self.0.lock().expect("log buffer mutex poisoned").clone())
-            .expect("log buffer contained invalid utf-8")
-    }
-}
-
-impl Write for SharedLogBuffer {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0
-            .lock()
-            .expect("log buffer mutex poisoned")
-            .extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for SharedLogBuffer {
-    type Writer = SharedLogBuffer;
-
-    fn make_writer(&'a self) -> Self::Writer {
-        self.clone()
-    }
-}
-
-#[derive(Clone, Default)]
-struct ThreadLocalLogRouter;
-
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for ThreadLocalLogRouter {
-    type Writer = ThreadLocalLogWriter;
-
-    fn make_writer(&'a self) -> Self::Writer {
-        ThreadLocalLogWriter
-    }
-}
-
-struct ThreadLocalLogWriter;
-
-impl Write for ThreadLocalLogWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        ACTIVE_LOG_BUFFER.with(|slot| {
-            if let Some(buffer) = slot.borrow().as_ref() {
-                let mut buffer = buffer.clone();
-                buffer.write(buf)
-            } else {
-                Ok(buf.len())
-            }
-        })
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-struct ActiveLogBufferGuard;
-
-impl ActiveLogBufferGuard {
-    fn install(buffer: SharedLogBuffer) -> Self {
-        ACTIVE_LOG_BUFFER.with(|slot| {
-            *slot.borrow_mut() = Some(buffer);
-        });
-
-        Self
-    }
-}
-
-impl Drop for ActiveLogBufferGuard {
-    fn drop(&mut self) {
-        ACTIVE_LOG_BUFFER.with(|slot| {
-            *slot.borrow_mut() = None;
-        });
-    }
-}
-
-async fn capture_tracing_logs<F, Fut, T>(run: F) -> (T, String)
-where
-    F: FnOnce() -> Fut,
-    Fut: Future<Output = T>,
-{
-    let _capture_guard = TRACE_CAPTURE_LOCK
-        .get_or_init(|| tokio::sync::Mutex::new(()))
-        .lock()
-        .await;
-    init_test_tracing_subscriber();
-    let logs = SharedLogBuffer::default();
-    let _active_buffer = ActiveLogBufferGuard::install(logs.clone());
-    let output = run().await;
-
-    (output, logs.contents())
-}
-
-fn init_test_tracing_subscriber() {
-    TEST_TRACING_INIT.get_or_init(|| {
-        let subscriber = tracing_subscriber::fmt()
-            .json()
-            .with_ansi(false)
-            .without_time()
-            .with_target(false)
-            .with_current_span(true)
-            .with_span_list(true)
-            .with_writer(ThreadLocalLogRouter)
-            .finish();
-
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("test tracing subscriber should install once");
-    });
 }

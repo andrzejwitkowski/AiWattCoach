@@ -55,6 +55,7 @@ export function getFrontendTraceparent(): string {
 export async function sendFrontendLog(level: FrontendLogLevel, parts: unknown[]): Promise<void> {
   const message = formatLogMessage(parts);
   const payload = JSON.stringify({ level, message });
+  const traceparent = getFrontendTraceparent();
 
   if (typeof navigator.sendBeacon === 'function') {
     const beaconBody = new Blob([payload], { type: 'application/json' });
@@ -72,7 +73,7 @@ export async function sendFrontendLog(level: FrontendLogLevel, parts: unknown[])
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
-      traceparent: getFrontendTraceparent(),
+      traceparent,
     },
     body: payload,
     credentials: 'same-origin',

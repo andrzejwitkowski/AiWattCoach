@@ -3,6 +3,7 @@ mod auth;
 mod cookies;
 mod health;
 mod intervals;
+mod logging;
 mod logs;
 mod settings;
 mod user_auth;
@@ -27,6 +28,8 @@ use tracing::{field::Empty, Level, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::AppState;
+
+use self::logging::status_class;
 
 pub fn router(state: AppState) -> Router {
     router_with_frontend_dist(
@@ -164,20 +167,6 @@ fn status_level(status: StatusCode) -> Level {
         Level::WARN
     } else {
         Level::INFO
-    }
-}
-
-fn status_class(status: StatusCode) -> &'static str {
-    if status.is_server_error() {
-        "server_error"
-    } else if status.is_client_error() {
-        "client_error"
-    } else if status.is_redirection() {
-        "redirection"
-    } else if status.is_success() {
-        "success"
-    } else {
-        "informational"
     }
 }
 

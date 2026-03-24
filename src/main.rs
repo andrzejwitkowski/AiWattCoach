@@ -34,6 +34,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         server,
         mongo,
         auth,
+        client_log_ingestion_enabled,
     } = settings;
     let mut telemetry = init_telemetry(&app_name)?;
     let address: SocketAddr = server.address().parse()?;
@@ -87,6 +88,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let app = build_app(
         AppState::new(app_name, mongo_database, mongo_client)
+            .with_client_log_ingestion(client_log_ingestion_enabled)
             .with_identity_service(
                 Arc::new(identity_service),
                 auth.session.cookie_name,

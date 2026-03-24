@@ -11,6 +11,7 @@ pub struct AppState {
     pub app_name: String,
     pub mongo_database: String,
     pub mongo_client: Client,
+    pub client_log_ingestion_enabled: bool,
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
@@ -31,6 +32,7 @@ impl AppState {
             app_name: app_name.into(),
             mongo_database: mongo_database.into(),
             mongo_client,
+            client_log_ingestion_enabled: false,
             identity_service: None,
             intervals_service: None,
             settings_service: None,
@@ -63,6 +65,11 @@ impl AppState {
         settings_service: Arc<dyn UserSettingsUseCases>,
     ) -> Self {
         self.settings_service = Some(settings_service);
+        self
+    }
+
+    pub fn with_client_log_ingestion(mut self, enabled: bool) -> Self {
+        self.client_log_ingestion_enabled = enabled;
         self
     }
 

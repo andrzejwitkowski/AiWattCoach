@@ -30,14 +30,24 @@ impl Drop for TelemetryGuard {
 }
 
 pub fn init_telemetry(service_name: &str) -> Result<TelemetryGuard, Box<dyn Error + Send + Sync>> {
-    let tracer_provider = build_tracer_provider(service_name)?;
+    let effective_service_name = env::var("OTEL_SERVICE_NAME")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| service_name.to_string());
+    let tracer_provider = build_tracer_provider(&effective_service_name)?;
     let otel_layer = tracer_provider.as_ref().map(|provider| {
-        tracing_opentelemetry::layer().with_tracer(provider.tracer(service_name.to_owned()))
+        tracing_opentelemetry::layer().with_tracer(provider.tracer(effective_service_name.clone()))
     });
 
     let init_result = Registry::default()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
-        .with(tracing_subscriber::fmt::layer().json())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_current_span(true)
+                .with_span_list(true),
+        )
         .with(otel_layer)
         .try_init();
 

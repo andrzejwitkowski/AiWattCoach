@@ -5,7 +5,6 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use std::error::Error as StdError;
 use tracing::Level;
 
 use crate::{
@@ -19,6 +18,7 @@ use crate::{
 };
 
 use super::cookies::read_cookie;
+use super::logging::{format_error_chain, status_class};
 
 #[derive(Serialize)]
 pub struct UserSettingsDto {
@@ -580,32 +580,6 @@ fn log_identity_error(level: Level, status: StatusCode, error: &IdentityError) {
             "admin identity request failed"
         ),
         _ => unreachable!("unexpected log level"),
-    }
-}
-
-fn format_error_chain(error: &dyn StdError) -> String {
-    let mut chain = vec![error.to_string()];
-    let mut source = error.source();
-
-    while let Some(err) = source {
-        chain.push(err.to_string());
-        source = err.source();
-    }
-
-    chain.join(": ")
-}
-
-fn status_class(status: StatusCode) -> &'static str {
-    if status.is_server_error() {
-        "server_error"
-    } else if status.is_client_error() {
-        "client_error"
-    } else if status.is_redirection() {
-        "redirection"
-    } else if status.is_success() {
-        "success"
-    } else {
-        "informational"
     }
 }
 

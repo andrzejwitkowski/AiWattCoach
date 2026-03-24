@@ -19,6 +19,7 @@ services:
       SESSION_TTL_HOURS: 24
       SESSION_COOKIE_SECURE: "false"
       ADMIN_EMAILS: ""
+      ENABLE_CLIENT_LOG_INGESTION: "true"
       RUST_LOG: info,axum=info,tower_http=info
       OTEL_SERVICE_NAME: aiwattcoach-backend
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
@@ -34,9 +35,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    command: ["sh", "-lc", "mkdir -p /var/log/aiwattcoach && aiwattcoach 2>&1 | tee -a /var/log/aiwattcoach/app.log"]
+    entrypoint: ["/bin/sh", "/app/docker/app-entrypoint.sh"]
     volumes:
       - app_logs:/var/log/aiwattcoach
+      - ./docker/app-entrypoint.sh:/app/docker/app-entrypoint.sh:ro
     logging:
       driver: json-file
       options:
