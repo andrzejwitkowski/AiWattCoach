@@ -3,6 +3,7 @@ mod auth;
 mod cookies;
 mod health;
 mod intervals;
+mod logs;
 mod settings;
 mod user_auth;
 
@@ -10,14 +11,20 @@ use std::path::PathBuf;
 
 use axum::{
     body::Body,
-    extract::Request,
+    extract::{DefaultBodyLimit, MatchedPath, Request},
     http::{header, HeaderMap, Method, StatusCode},
     response::Response,
     routing::{get, patch, post},
     Router,
 };
+use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _};
+use opentelemetry_http::HeaderExtractor;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use tower::util::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
+use tracing::{field::Empty, Level, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::AppState;
 
@@ -39,6 +46,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/auth/google/callback", get(auth::finish_google_login))
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
+        .route(
+            "/api/logs",
+            post(logs::ingest_logs).layer(DefaultBodyLimit::max(logs::MAX_REQUEST_BODY_BYTES)),
+        )
         .route("/api/admin/system-info", get(admin::system_info))
         .route(
             "/api/admin/settings/{user_id}",
@@ -68,7 +79,106 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
             get(intervals::download_fit),
         )
         .fallback(move |request| serve_frontend(request, static_files.clone(), spa_index.clone()))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(make_request_span)
+                .on_response(log_response_event),
+        )
         .with_state(state)
+}
+
+fn make_request_span(request: &Request) -> Span {
+    let matched_path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str);
+    let route = matched_path.unwrap_or_else(|| request.uri().path());
+    let span = tracing::info_span!(
+        "http_request",
+        http.method = %request.method(),
+        http.route = %route,
+        http.target = %request.uri().path(),
+        http.status_code = Empty,
+        user_id = Empty,
+        trace_id = Empty,
+    );
+
+    apply_incoming_trace_context(request.headers(), &span);
+    span
+}
+
+fn apply_incoming_trace_context(headers: &HeaderMap, span: &Span) {
+    let parent_context = TraceContextPropagator::new().extract(&HeaderExtractor(headers));
+    let incoming_trace_id = {
+        let parent_span = parent_context.span();
+        let parent_span_context = parent_span.span_context();
+
+        parent_span_context
+            .is_valid()
+            .then(|| parent_span_context.trace_id().to_string())
+    };
+
+    if let Some(trace_id) = incoming_trace_id {
+        span.set_parent(parent_context);
+        span.record("trace_id", tracing::field::display(trace_id));
+    }
+}
+
+fn log_response_event<B>(response: &Response<B>, latency: std::time::Duration, span: &Span) {
+    let status = response.status();
+    let status_class = status_class(status);
+
+    span.record("http.status_code", status.as_u16());
+
+    let _guard = span.enter();
+
+    match status_level(status) {
+        Level::ERROR => tracing::event!(
+            Level::ERROR,
+            status = status.as_u16(),
+            status_class,
+            latency_ms = latency.as_millis(),
+            "finished processing request"
+        ),
+        Level::WARN => tracing::event!(
+            Level::WARN,
+            status = status.as_u16(),
+            status_class,
+            latency_ms = latency.as_millis(),
+            "finished processing request"
+        ),
+        _ => tracing::event!(
+            Level::INFO,
+            status = status.as_u16(),
+            status_class,
+            latency_ms = latency.as_millis(),
+            "finished processing request"
+        ),
+    }
+}
+
+fn status_level(status: StatusCode) -> Level {
+    if status.is_server_error() {
+        Level::ERROR
+    } else if status.is_client_error() {
+        Level::WARN
+    } else {
+        Level::INFO
+    }
+}
+
+fn status_class(status: StatusCode) -> &'static str {
+    if status.is_server_error() {
+        "server_error"
+    } else if status.is_client_error() {
+        "client_error"
+    } else if status.is_redirection() {
+        "redirection"
+    } else if status.is_success() {
+        "success"
+    } else {
+        "informational"
+    }
 }
 
 async fn serve_frontend(

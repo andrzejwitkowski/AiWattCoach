@@ -1,9 +1,14 @@
 use std::{
+    cell::RefCell,
     fs,
     future::Future,
+    io::Write,
     path::PathBuf,
     pin::Pin,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -140,6 +145,29 @@ impl TestSettingsService {
     }
 }
 
+struct RepositoryErrorSettingsService {
+    message: String,
+}
+
+impl RepositoryErrorSettingsService {
+    fn new(message: &str) -> Self {
+        Self {
+            message: message.to_string(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct AdminIdentityErrorService {
+    error: aiwattcoach::domain::identity::IdentityError,
+}
+
+impl AdminIdentityErrorService {
+    fn new(error: aiwattcoach::domain::identity::IdentityError) -> Self {
+        Self { error }
+    }
+}
+
 impl Default for TestSettingsService {
     fn default() -> Self {
         Self::new()
@@ -233,6 +261,108 @@ impl UserSettingsUseCases for TestSettingsService {
         let result = settings.clone();
         *self.settings.lock().unwrap() = Some(settings);
         Box::pin(async move { Ok(result) })
+    }
+}
+
+impl UserSettingsUseCases for RepositoryErrorSettingsService {
+    fn get_settings(&self, _user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: AiAgentsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: IntervalsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: AnalysisOptions,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: CyclingSettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+}
+
+impl IdentityUseCases for AdminIdentityErrorService {
+    fn begin_google_login(
+        &self,
+        _return_to: Option<String>,
+    ) -> BoxFuture<
+        Result<
+            aiwattcoach::domain::identity::GoogleLoginStart,
+            aiwattcoach::domain::identity::IdentityError,
+        >,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::identity::GoogleLoginStart {
+                state: "state-1".to_string(),
+                redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=state-1"
+                    .to_string(),
+            })
+        })
+    }
+
+    fn handle_google_callback(
+        &self,
+        _state: &str,
+        _code: &str,
+    ) -> BoxFuture<
+        Result<
+            aiwattcoach::domain::identity::GoogleLoginSuccess,
+            aiwattcoach::domain::identity::IdentityError,
+        >,
+    > {
+        Box::pin(async {
+            Err(aiwattcoach::domain::identity::IdentityError::External(
+                "not used in test".to_string(),
+            ))
+        })
+    }
+
+    fn get_current_user(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<Option<AppUser>, aiwattcoach::domain::identity::IdentityError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn logout(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<(), aiwattcoach::domain::identity::IdentityError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn require_admin(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<AppUser, aiwattcoach::domain::identity::IdentityError>> {
+        let error = self.error.clone();
+        Box::pin(async move { Err(error) })
     }
 }
 
@@ -607,6 +737,109 @@ async fn non_admin_cannot_view_other_user_settings() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
+#[tokio::test]
+async fn admin_forbidden_logs_warn_before_returning_403() {
+    let app = settings_test_app(
+        AdminIdentityErrorService::new(aiwattcoach::domain::identity::IdentityError::Forbidden),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/admin/settings/user-999")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
+    assert!(
+        logs.contains("\"error_chain\":\"User does not have the required role\""),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"status\":403"), "logs were: {logs}");
+}
+
+#[tokio::test]
+async fn admin_identity_backend_error_logs_error_before_returning_503() {
+    let app = settings_test_app(
+        AdminIdentityErrorService::new(aiwattcoach::domain::identity::IdentityError::Repository(
+            "identity backend unavailable".to_string(),
+        )),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/admin/settings/user-999")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
+    assert!(
+        logs.contains("identity backend unavailable"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("\"error_chain\":\"identity backend unavailable\""),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"status\":503"), "logs were: {logs}");
+}
+
+#[tokio::test]
+async fn admin_settings_repository_error_logs_error_chain_before_returning_503() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession {
+            roles: vec![Role::User, Role::Admin],
+            ..Default::default()
+        },
+        RepositoryErrorSettingsService::new("admin settings repository unavailable"),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/admin/settings/user-999")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
+    assert!(
+        logs.contains("admin settings repository unavailable"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("\"error_chain\":\"admin settings repository unavailable\""),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"status\":503"), "logs were: {logs}");
+}
+
 #[derive(Clone, Default)]
 struct TestIdentityServiceWithSession {
     session_id: String,
@@ -910,8 +1143,8 @@ async fn test_intervals_connection_returns_503_on_unavailable() {
     )
     .await;
 
-    let response = app
-        .oneshot(
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/settings/intervals/test")
@@ -923,7 +1156,9 @@ async fn test_intervals_connection_returns_503_on_unavailable() {
                 .unwrap(),
         )
         .await
-        .unwrap();
+        .unwrap()
+    })
+    .await;
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
@@ -935,6 +1170,201 @@ async fn test_intervals_connection_returns_503_on_unavailable() {
         .as_str()
         .unwrap()
         .contains("unavailable"));
+    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
+    assert!(
+        logs.contains("Intervals.icu is currently unavailable"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("\"error_chain\":\"Intervals.icu is currently unavailable\""),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"status\":503"), "logs were: {logs}");
+}
+
+#[tokio::test]
+async fn get_settings_returns_503_and_logs_error_chain_on_repository_error() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        RepositoryErrorSettingsService::new("settings repository unavailable"),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
+    assert!(
+        logs.contains("settings repository unavailable"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("\"error_chain\":\"settings repository unavailable\""),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"status\":503"), "logs were: {logs}");
+}
+
+#[tokio::test]
+async fn update_cycling_returns_400_and_logs_warn_on_validation_error() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "age": 0
+    });
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/cycling")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
+    assert!(
+        logs.contains("age must be between 1 and 120"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"status\":400"), "logs were: {logs}");
+}
+
+thread_local! {
+    static ACTIVE_LOG_BUFFER: RefCell<Option<SharedLogBuffer>> = const { RefCell::new(None) };
+}
+
+static TEST_TRACING_INIT: OnceLock<()> = OnceLock::new();
+static TRACE_CAPTURE_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+#[derive(Clone, Default)]
+struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
+
+impl SharedLogBuffer {
+    fn contents(&self) -> String {
+        String::from_utf8(self.0.lock().expect("log buffer mutex poisoned").clone())
+            .expect("log buffer contained invalid utf-8")
+    }
+}
+
+impl Write for SharedLogBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .expect("log buffer mutex poisoned")
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default)]
+struct ThreadLocalLogRouter;
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for ThreadLocalLogRouter {
+    type Writer = ThreadLocalLogWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        ThreadLocalLogWriter
+    }
+}
+
+struct ThreadLocalLogWriter;
+
+impl Write for ThreadLocalLogWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            if let Some(buffer) = slot.borrow().as_ref() {
+                let mut buffer = buffer.clone();
+                buffer.write(buf)
+            } else {
+                Ok(buf.len())
+            }
+        })
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct ActiveLogBufferGuard;
+
+impl ActiveLogBufferGuard {
+    fn install(buffer: SharedLogBuffer) -> Self {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            *slot.borrow_mut() = Some(buffer);
+        });
+
+        Self
+    }
+}
+
+impl Drop for ActiveLogBufferGuard {
+    fn drop(&mut self) {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            *slot.borrow_mut() = None;
+        });
+    }
+}
+
+async fn capture_tracing_logs<F, Fut, T>(run: F) -> (T, String)
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = T>,
+{
+    let _capture_guard = TRACE_CAPTURE_LOCK
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await;
+    init_test_tracing_subscriber();
+    let logs = SharedLogBuffer::default();
+    let _active_buffer = ActiveLogBufferGuard::install(logs.clone());
+    let output = run().await;
+
+    (output, logs.contents())
+}
+
+fn init_test_tracing_subscriber() {
+    TEST_TRACING_INIT.get_or_init(|| {
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .with_ansi(false)
+            .without_time()
+            .with_target(false)
+            .with_current_span(true)
+            .with_span_list(true)
+            .with_writer(ThreadLocalLogRouter)
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("test tracing subscriber should install once");
+    });
 }
 
 #[tokio::test]

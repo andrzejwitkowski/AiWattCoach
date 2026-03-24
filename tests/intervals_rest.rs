@@ -1,12 +1,14 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fs,
     future::Future,
+    io::Write,
     path::PathBuf,
     pin::Pin,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
     },
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -751,8 +753,8 @@ async fn api_error_returns_502() {
     )
     .await;
 
-    let response = app
-        .oneshot(
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
             Request::builder()
                 .uri("/api/intervals/events/12")
                 .header(header::COOKIE, session_cookie("session-1"))
@@ -760,9 +762,166 @@ async fn api_error_returns_502() {
                 .unwrap(),
         )
         .await
-        .unwrap();
+        .unwrap()
+    })
+    .await;
 
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
+    assert!(
+        logs.contains("Intervals.icu API error: upstream failure"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("\"error_chain\":\"Intervals.icu API error: upstream failure\""),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"status\":502"), "logs were: {logs}");
+}
+
+#[tokio::test]
+async fn list_events_returns_422_and_logs_warn_when_credentials_not_configured() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_error(IntervalsError::CredentialsNotConfigured),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/intervals/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
+    assert!(
+        logs.contains("Intervals.icu credentials are not configured"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"status\":422"), "logs were: {logs}");
+}
+
+thread_local! {
+    static ACTIVE_LOG_BUFFER: RefCell<Option<SharedLogBuffer>> = const { RefCell::new(None) };
+}
+
+static TEST_TRACING_INIT: OnceLock<()> = OnceLock::new();
+static TRACE_CAPTURE_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+#[derive(Clone, Default)]
+struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
+
+impl SharedLogBuffer {
+    fn contents(&self) -> String {
+        String::from_utf8(self.0.lock().expect("log buffer mutex poisoned").clone())
+            .expect("log buffer contained invalid utf-8")
+    }
+}
+
+impl Write for SharedLogBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .expect("log buffer mutex poisoned")
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default)]
+struct ThreadLocalLogRouter;
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for ThreadLocalLogRouter {
+    type Writer = ThreadLocalLogWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        ThreadLocalLogWriter
+    }
+}
+
+struct ThreadLocalLogWriter;
+
+impl Write for ThreadLocalLogWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            if let Some(buffer) = slot.borrow().as_ref() {
+                let mut buffer = buffer.clone();
+                buffer.write(buf)
+            } else {
+                Ok(buf.len())
+            }
+        })
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct ActiveLogBufferGuard;
+
+impl ActiveLogBufferGuard {
+    fn install(buffer: SharedLogBuffer) -> Self {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            *slot.borrow_mut() = Some(buffer);
+        });
+
+        Self
+    }
+}
+
+impl Drop for ActiveLogBufferGuard {
+    fn drop(&mut self) {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            *slot.borrow_mut() = None;
+        });
+    }
+}
+
+async fn capture_tracing_logs<F, Fut, T>(run: F) -> (T, String)
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = T>,
+{
+    let _capture_guard = TRACE_CAPTURE_LOCK
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await;
+    init_test_tracing_subscriber();
+    let logs = SharedLogBuffer::default();
+    let _active_buffer = ActiveLogBufferGuard::install(logs.clone());
+    let output = run().await;
+
+    (output, logs.contents())
+}
+
+fn init_test_tracing_subscriber() {
+    TEST_TRACING_INIT.get_or_init(|| {
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .with_ansi(false)
+            .without_time()
+            .with_target(false)
+            .with_current_span(true)
+            .with_span_list(true)
+            .with_writer(ThreadLocalLogRouter)
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("test tracing subscriber should install once");
+    });
 }
 
 async fn intervals_test_app(

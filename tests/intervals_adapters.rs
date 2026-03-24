@@ -29,8 +29,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_sdk::trace::TracerProvider;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
+use tracing::Instrument as _;
+use tracing_subscriber::{layer::SubscriberExt, Registry};
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -131,6 +135,38 @@ async fn intervals_connection_test_uses_api_key_basic_auth_username() {
         requests[0].authorization.as_deref(),
         Some("Basic QVBJX0tFWTpzZWNyZXQta2V5")
     );
+}
+
+#[tokio::test]
+async fn intervals_client_propagates_traceparent_header_from_active_span() {
+    let server = TestIntervalsServer::start().await;
+    server.push_event(ResponseEvent::sample(101, "Workout 101"));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+    let credentials = IntervalsCredentials {
+        api_key: "secret-key".to_string(),
+        athlete_id: "athlete-7".to_string(),
+    };
+    let tracer_provider = TracerProvider::builder().build();
+    let tracer = tracer_provider.tracer("intervals-adapters-test");
+    let subscriber = Registry::default().with(tracing_opentelemetry::layer().with_tracer(tracer));
+    let _default = tracing::subscriber::set_default(subscriber);
+
+    let span = tracing::info_span!("intervals_client_call");
+    client
+        .list_events(
+            &credentials,
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-03-31".to_string(),
+            },
+        )
+        .instrument(span)
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_valid_traceparent(requests[0].traceparent.as_deref());
 }
 
 #[tokio::test]
@@ -318,6 +354,7 @@ struct CapturedRequest {
     path: String,
     query: Option<String>,
     authorization: Option<String>,
+    traceparent: Option<String>,
     body: Option<String>,
 }
 
@@ -590,6 +627,42 @@ fn capture_request(
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
             .map(|value| value.to_string()),
+        traceparent: headers
+            .get("traceparent")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_string()),
         body,
     });
+}
+
+fn assert_valid_traceparent(traceparent: Option<&str>) {
+    let traceparent = traceparent.expect("expected traceparent header to be present");
+    let parts: Vec<_> = traceparent.split('-').collect();
+
+    assert_eq!(
+        parts.len(),
+        4,
+        "expected 4 traceparent parts, got {traceparent}"
+    );
+    assert_eq!(
+        parts[0].len(),
+        2,
+        "expected 2-char version in {traceparent}"
+    );
+    assert_eq!(
+        parts[1].len(),
+        32,
+        "expected 32-char trace id in {traceparent}"
+    );
+    assert_eq!(
+        parts[2].len(),
+        16,
+        "expected 16-char parent id in {traceparent}"
+    );
+    assert_eq!(parts[3].len(), 2, "expected 2-char flags in {traceparent}");
+    assert_ne!(parts[1], "00000000000000000000000000000000");
+    assert_ne!(parts[2], "0000000000000000");
+    assert!(parts
+        .iter()
+        .all(|part| part.chars().all(|ch| ch.is_ascii_hexdigit())));
 }

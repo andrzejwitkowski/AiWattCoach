@@ -11,7 +11,21 @@ services:
       SERVER_PORT: 3002
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DATABASE: aiwattcoach
+      GOOGLE_OAUTH_CLIENT_ID: local-dev-client-id.apps.googleusercontent.com
+      GOOGLE_OAUTH_CLIENT_SECRET: local-dev-client-secret
+      GOOGLE_OAUTH_REDIRECT_URL: http://localhost:3002/api/auth/google/callback
+      SESSION_COOKIE_NAME: aiwattcoach_session
+      SESSION_COOKIE_SAME_SITE: lax
+      SESSION_TTL_HOURS: 24
+      SESSION_COOKIE_SECURE: "false"
+      ADMIN_EMAILS: ""
+      RUST_LOG: info,axum=info,tower_http=info
+      OTEL_SERVICE_NAME: aiwattcoach-backend
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     depends_on:
+      alloy:
+        condition: service_started
       mongo:
         condition: service_healthy
     healthcheck:
@@ -20,6 +34,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    command: ["sh", "-lc", "mkdir -p /var/log/aiwattcoach && aiwattcoach 2>&1 | tee -a /var/log/aiwattcoach/app.log"]
+    volumes:
+      - app_logs:/var/log/aiwattcoach
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
 
   mongo:
     image: mongo:7
@@ -34,6 +56,85 @@ services:
       start_period: 10s
     volumes:
       - mongo_data:/data/db
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  loki:
+    image: grafana/loki:3.5.0
+    command: ["-config.file=/etc/loki/config.yaml"]
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./docker/loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/var/lib/loki
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    ports:
+      - "127.0.0.1:3200:3200"
+    volumes:
+      - ./docker/tempo-config.yaml:/etc/tempo/config.yaml:ro
+      - tempo_data:/var/lib/tempo
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  alloy:
+    image: grafana/alloy:v1.8.3
+    command: ["run", "/etc/alloy/config.alloy"]
+    depends_on:
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - app_logs:/var/log/aiwattcoach:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  grafana:
+    image: grafana/grafana:11.6.1
+    depends_on:
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./docker/grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - grafana_data:/var/lib/grafana
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
 
 volumes:
+  app_logs:
   mongo_data:
+  loki_data:
+  tempo_data:
+  grafana_data:

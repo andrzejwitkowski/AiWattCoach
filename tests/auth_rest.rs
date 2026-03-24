@@ -1,9 +1,14 @@
 use std::{
+    cell::RefCell,
     fs,
     future::Future,
+    io::Write,
     path::PathBuf,
     pin::Pin,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -13,6 +18,10 @@ use aiwattcoach::{
     domain::identity::{
         AppUser, AuthSession, GoogleLoginStart, GoogleLoginSuccess, IdentityError,
         IdentityUseCases, Role,
+    },
+    domain::settings::{
+        AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError,
+        UserSettings, UserSettingsUseCases,
     },
     Settings,
 };
@@ -28,6 +37,12 @@ type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 static FRONTEND_FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static TEST_TRACING_INIT: OnceLock<()> = OnceLock::new();
+static TRACE_CAPTURE_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+thread_local! {
+    static ACTIVE_LOG_BUFFER: RefCell<Option<SharedLogBuffer>> = const { RefCell::new(None) };
+}
 
 #[tokio::test]
 async fn google_start_redirects_to_provider() {
@@ -359,6 +374,31 @@ async fn admin_system_info_returns_payload_for_admin() {
     assert_eq!(payload["mongoDatabase"], "aiwattcoach");
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn settings_request_logs_authenticated_user_id_on_request_span() {
+    let app =
+        auth_test_app_with_settings(TestIdentityService::default(), TestSettingsService).await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        logs.contains("\"user_id\":\"user-1\""),
+        "expected request logs to include authenticated user_id, got: {logs}"
+    );
+}
+
 async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
@@ -378,6 +418,73 @@ async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
         ),
         fixture.dist_dir(),
     )
+}
+
+async fn auth_test_app_with_settings(
+    identity_service: TestIdentityService,
+    settings_service: TestSettingsService,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = frontend_fixture();
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_settings_service(std::sync::Arc::new(settings_service)),
+        fixture.dist_dir(),
+    )
+}
+
+#[derive(Default)]
+struct TestSettingsService;
+
+impl UserSettingsUseCases for TestSettingsService {
+    fn get_settings(&self, user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let user_id = user_id.to_string();
+        Box::pin(async move { Ok(UserSettings::new_defaults(user_id, 1000)) })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: AiAgentsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_ai_agents is not used in auth tests") })
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: IntervalsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_intervals is not used in auth tests") })
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: AnalysisOptions,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_options is not used in auth tests") })
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: CyclingSettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_cycling is not used in auth tests") })
+    }
 }
 
 #[derive(Clone)]
@@ -710,4 +817,120 @@ impl Drop for FrontendFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
+}
+
+#[derive(Clone, Default)]
+struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
+
+impl SharedLogBuffer {
+    fn contents(&self) -> String {
+        String::from_utf8(self.0.lock().expect("log buffer mutex poisoned").clone())
+            .expect("log buffer contained invalid utf-8")
+    }
+}
+
+impl Write for SharedLogBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .expect("log buffer mutex poisoned")
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for SharedLogBuffer {
+    type Writer = SharedLogBuffer;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
+    }
+}
+
+#[derive(Clone, Default)]
+struct ThreadLocalLogRouter;
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for ThreadLocalLogRouter {
+    type Writer = ThreadLocalLogWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        ThreadLocalLogWriter
+    }
+}
+
+struct ThreadLocalLogWriter;
+
+impl Write for ThreadLocalLogWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            if let Some(buffer) = slot.borrow().as_ref() {
+                let mut buffer = buffer.clone();
+                buffer.write(buf)
+            } else {
+                Ok(buf.len())
+            }
+        })
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct ActiveLogBufferGuard;
+
+impl ActiveLogBufferGuard {
+    fn install(buffer: SharedLogBuffer) -> Self {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            *slot.borrow_mut() = Some(buffer);
+        });
+
+        Self
+    }
+}
+
+impl Drop for ActiveLogBufferGuard {
+    fn drop(&mut self) {
+        ACTIVE_LOG_BUFFER.with(|slot| {
+            *slot.borrow_mut() = None;
+        });
+    }
+}
+
+async fn capture_tracing_logs<F, Fut, T>(run: F) -> (T, String)
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = T>,
+{
+    let _capture_guard = TRACE_CAPTURE_LOCK
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await;
+    init_test_tracing_subscriber();
+    let logs = SharedLogBuffer::default();
+    let _active_buffer = ActiveLogBufferGuard::install(logs.clone());
+    let output = run().await;
+
+    (output, logs.contents())
+}
+
+fn init_test_tracing_subscriber() {
+    TEST_TRACING_INIT.get_or_init(|| {
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .with_ansi(false)
+            .without_time()
+            .with_target(false)
+            .with_current_span(true)
+            .with_span_list(true)
+            .with_writer(ThreadLocalLogRouter)
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("test tracing subscriber should install once");
+    });
 }

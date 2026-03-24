@@ -5,6 +5,8 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::error::Error as StdError;
+use tracing::Level;
 
 use crate::{
     config::AppState,
@@ -309,9 +311,7 @@ pub async fn admin_get_user_settings(
 
     match identity_service.require_admin(&session_id).await {
         Ok(_) => {}
-        Err(IdentityError::Unauthenticated) => return StatusCode::UNAUTHORIZED.into_response(),
-        Err(IdentityError::Forbidden) => return StatusCode::FORBIDDEN.into_response(),
-        Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(err) => return map_admin_identity_error(&err),
     }
 
     let settings_service = match state.settings_service.as_ref() {
@@ -321,17 +321,44 @@ pub async fn admin_get_user_settings(
 
     match settings_service.get_settings(&user_id).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
-        Err(SettingsError::Repository(_)) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        Err(SettingsError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(SettingsError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
+        Err(err) => map_settings_error(&err),
+    }
+}
+
+fn map_admin_identity_error(err: &IdentityError) -> Response {
+    match err {
+        IdentityError::Unauthenticated => {
+            log_identity_error(Level::WARN, StatusCode::UNAUTHORIZED, err);
+            StatusCode::UNAUTHORIZED.into_response()
+        }
+        IdentityError::Forbidden => {
+            log_identity_error(Level::WARN, StatusCode::FORBIDDEN, err);
+            StatusCode::FORBIDDEN.into_response()
+        }
+        IdentityError::Repository(_)
+        | IdentityError::External(_)
+        | IdentityError::EmailNotVerified
+        | IdentityError::InvalidLoginState => {
+            log_identity_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, err);
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
     }
 }
 
 fn map_settings_error(err: &SettingsError) -> Response {
     match err {
-        SettingsError::Repository(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        SettingsError::Unauthenticated => StatusCode::UNAUTHORIZED.into_response(),
-        SettingsError::Validation(_) => StatusCode::BAD_REQUEST.into_response(),
+        SettingsError::Repository(_) => {
+            log_settings_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, err);
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+        SettingsError::Unauthenticated => {
+            log_settings_error(Level::WARN, StatusCode::UNAUTHORIZED, err);
+            StatusCode::UNAUTHORIZED.into_response()
+        }
+        SettingsError::Validation(_) => {
+            log_settings_error(Level::WARN, StatusCode::BAD_REQUEST, err);
+            StatusCode::BAD_REQUEST.into_response()
+        }
     }
 }
 
@@ -442,36 +469,143 @@ fn map_connection_error_to_response(
     used_saved_athlete_id: bool,
 ) -> Response {
     match error {
-        IntervalsConnectionError::Unauthenticated => (
-            StatusCode::BAD_REQUEST,
-            Json(test_connection_response(
-                false,
-                "Invalid API key or athlete ID. Please check your credentials.",
-                used_saved_api_key,
-                used_saved_athlete_id,
-            )),
-        )
-            .into_response(),
-        IntervalsConnectionError::InvalidConfiguration => (
-            StatusCode::BAD_REQUEST,
-            Json(test_connection_response(
-                false,
-                "Invalid configuration. Please check athlete ID.",
-                used_saved_api_key,
-                used_saved_athlete_id,
-            )),
-        )
-            .into_response(),
-        IntervalsConnectionError::Unavailable => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(test_connection_response(
-                false,
-                "Intervals.icu is currently unavailable. Please try again later.",
-                used_saved_api_key,
-                used_saved_athlete_id,
-            )),
-        )
-            .into_response(),
+        IntervalsConnectionError::Unauthenticated => {
+            log_connection_error(Level::WARN, StatusCode::BAD_REQUEST, &error);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(test_connection_response(
+                    false,
+                    "Invalid API key or athlete ID. Please check your credentials.",
+                    used_saved_api_key,
+                    used_saved_athlete_id,
+                )),
+            )
+                .into_response()
+        }
+        IntervalsConnectionError::InvalidConfiguration => {
+            log_connection_error(Level::WARN, StatusCode::BAD_REQUEST, &error);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(test_connection_response(
+                    false,
+                    "Invalid configuration. Please check athlete ID.",
+                    used_saved_api_key,
+                    used_saved_athlete_id,
+                )),
+            )
+                .into_response()
+        }
+        IntervalsConnectionError::Unavailable => {
+            log_connection_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, &error);
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(test_connection_response(
+                    false,
+                    "Intervals.icu is currently unavailable. Please try again later.",
+                    used_saved_api_key,
+                    used_saved_athlete_id,
+                )),
+            )
+                .into_response()
+        }
+    }
+}
+
+fn log_settings_error(level: Level, status: StatusCode, error: &SettingsError) {
+    let error_chain = format_error_chain(error);
+
+    match level {
+        Level::ERROR => tracing::event!(
+            Level::ERROR,
+            status = status.as_u16(),
+            status_class = status_class(status),
+            error = %error,
+            error_chain,
+            "settings request failed"
+        ),
+        Level::WARN => tracing::event!(
+            Level::WARN,
+            status = status.as_u16(),
+            status_class = status_class(status),
+            error = %error,
+            error_chain,
+            "settings request failed"
+        ),
+        _ => unreachable!("unexpected log level"),
+    }
+}
+
+fn log_connection_error(level: Level, status: StatusCode, error: &IntervalsConnectionError) {
+    let error_chain = format_error_chain(error);
+
+    match level {
+        Level::ERROR => tracing::event!(
+            Level::ERROR,
+            status = status.as_u16(),
+            status_class = status_class(status),
+            error = %error,
+            error_chain,
+            "settings intervals connection test failed"
+        ),
+        Level::WARN => tracing::event!(
+            Level::WARN,
+            status = status.as_u16(),
+            status_class = status_class(status),
+            error = %error,
+            error_chain,
+            "settings intervals connection test failed"
+        ),
+        _ => unreachable!("unexpected log level"),
+    }
+}
+
+fn log_identity_error(level: Level, status: StatusCode, error: &IdentityError) {
+    let error_chain = format_error_chain(error);
+
+    match level {
+        Level::ERROR => tracing::event!(
+            Level::ERROR,
+            status = status.as_u16(),
+            status_class = status_class(status),
+            error = %error,
+            error_chain,
+            "admin identity request failed"
+        ),
+        Level::WARN => tracing::event!(
+            Level::WARN,
+            status = status.as_u16(),
+            status_class = status_class(status),
+            error = %error,
+            error_chain,
+            "admin identity request failed"
+        ),
+        _ => unreachable!("unexpected log level"),
+    }
+}
+
+fn format_error_chain(error: &dyn StdError) -> String {
+    let mut chain = vec![error.to_string()];
+    let mut source = error.source();
+
+    while let Some(err) = source {
+        chain.push(err.to_string());
+        source = err.source();
+    }
+
+    chain.join(": ")
+}
+
+fn status_class(status: StatusCode) -> &'static str {
+    if status.is_server_error() {
+        "server_error"
+    } else if status.is_client_error() {
+        "client_error"
+    } else if status.is_redirection() {
+        "redirection"
+    } else if status.is_success() {
+        "success"
+    } else {
+        "informational"
     }
 }
 

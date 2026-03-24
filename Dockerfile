@@ -35,6 +35,8 @@ ENV APP_NAME=AiWattCoach
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=3002
 ENV RUST_BACKTRACE=1
+ENV RUST_LOG=info,axum=info,tower_http=info
+ENV OTEL_SERVICE_NAME=aiwattcoach-backend
 
 USER appuser
 

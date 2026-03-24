@@ -2,6 +2,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
+use tracing::field;
 
 use crate::config::AppState;
 
@@ -24,6 +25,8 @@ pub(super) async fn resolve_user_id(
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?
         .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
+
+    tracing::Span::current().record("user_id", field::display(&user.id));
 
     Ok(user.id)
 }

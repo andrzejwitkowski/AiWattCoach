@@ -1,3 +1,5 @@
+import { getFrontendTraceparent } from '../logger';
+
 export class ApiError extends Error {
   constructor(message: string) {
     super(message);
@@ -22,7 +24,8 @@ export async function getJsonResponse<T>(
   const requestInit: RequestInit = {
     method: 'GET',
     headers: {
-      Accept: 'application/json'
+      Accept: 'application/json',
+      traceparent: getFrontendTraceparent()
     }
   };
 
