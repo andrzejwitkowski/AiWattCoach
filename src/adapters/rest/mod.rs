@@ -124,6 +124,10 @@ fn apply_incoming_trace_context(headers: &HeaderMap, span: &Span) {
     if let Some(trace_id) = incoming_trace_id {
         span.set_parent(parent_context);
         span.record("trace_id", tracing::field::display(trace_id));
+    } else {
+        // Generate a local trace_id for log correlation even without an incoming traceparent
+        let trace_id = uuid::Uuid::new_v4().to_string().replace('-', "");
+        span.record("trace_id", tracing::field::display(trace_id));
     }
 }
 

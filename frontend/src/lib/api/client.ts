@@ -1,4 +1,4 @@
-import { getFrontendTraceparent } from '../logger';
+import { generateTraceparent } from '../logger';
 
 export class ApiError extends Error {
   constructor(message: string) {
@@ -25,7 +25,7 @@ export async function getJsonResponse<T>(
     method: 'GET',
     headers: {
       Accept: 'application/json',
-      traceparent: getFrontendTraceparent()
+      traceparent: generateTraceparent()
     }
   };
 

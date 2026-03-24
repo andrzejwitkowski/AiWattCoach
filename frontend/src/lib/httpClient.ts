@@ -1,4 +1,4 @@
-import { getFrontendTraceparent } from './logger';
+import { generateTraceparent } from './logger';
 
 export class HttpError extends Error {
   constructor(
@@ -37,7 +37,7 @@ async function request<TRes>(
 ): Promise<TRes> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    traceparent: getFrontendTraceparent(),
+    traceparent: generateTraceparent(),
   };
 
   if (body !== undefined) {

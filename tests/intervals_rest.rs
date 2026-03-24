@@ -771,11 +771,7 @@ async fn api_error_returns_502() {
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
     assert!(
-        logs.contains("Intervals.icu API error: upstream failure"),
-        "logs were: {logs}"
-    );
-    assert!(
-        logs.contains("\"error_chain\":\"Intervals.icu API error: upstream failure\""),
+        logs.contains("\"error_kind\":\"api_error\""),
         "logs were: {logs}"
     );
     assert!(logs.contains("\"status\":502"), "logs were: {logs}");
@@ -805,7 +801,7 @@ async fn list_events_returns_422_and_logs_warn_when_credentials_not_configured()
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
     assert!(
-        logs.contains("Intervals.icu credentials are not configured"),
+        logs.contains("\"error_kind\":\"credentials_not_configured\""),
         "logs were: {logs}"
     );
     assert!(logs.contains("\"status\":422"), "logs were: {logs}");

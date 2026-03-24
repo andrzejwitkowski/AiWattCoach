@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-use super::logging::{format_error_chain, status_class};
+use super::logging::status_class;
 
 #[derive(Deserialize)]
 pub struct ListEventsQuery {
@@ -326,23 +326,28 @@ fn map_intervals_error(error: IntervalsError) -> Response {
 }
 
 fn log_intervals_error(level: Level, status: StatusCode, error: &IntervalsError) {
-    let error_chain = format_error_chain(error);
+    let error_kind = match error {
+        IntervalsError::CredentialsNotConfigured => "credentials_not_configured",
+        IntervalsError::NotFound => "not_found",
+        IntervalsError::ApiError(_) => "api_error",
+        IntervalsError::ConnectionError(_) => "connection_error",
+        IntervalsError::Internal(_) => "internal_error",
+        IntervalsError::Unauthenticated => "unauthenticated",
+    };
 
     match level {
         Level::ERROR => tracing::event!(
             Level::ERROR,
             status = status.as_u16(),
             status_class = status_class(status),
-            error = %error,
-            error_chain,
+            error_kind,
             "intervals request failed"
         ),
         Level::WARN => tracing::event!(
             Level::WARN,
             status = status.as_u16(),
             status_class = status_class(status),
-            error = %error,
-            error_chain,
+            error_kind,
             "intervals request failed"
         ),
         _ => unreachable!("unexpected log level"),

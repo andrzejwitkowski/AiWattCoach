@@ -3,7 +3,7 @@ type FrontendLogLevel = 'info' | 'warn' | 'error';
 const TRACE_VERSION = '00';
 const TRACE_FLAGS = '01';
 
-let frontendTraceparent: string | null = null;
+let frontendTraceId: string | null = null;
 let consolePatched = false;
 
 function randomHex(byteCount: number): string {
@@ -44,18 +44,26 @@ function formatLogMessage(parts: unknown[]): string {
   return parts.map((part) => formatLogPart(part)).join(' ');
 }
 
-export function getFrontendTraceparent(): string {
-  if (!frontendTraceparent) {
-    frontendTraceparent = `${TRACE_VERSION}-${randomHex(16)}-${randomHex(8)}-${TRACE_FLAGS}`;
+function getTraceId(): string {
+  if (!frontendTraceId) {
+    frontendTraceId = randomHex(16);
   }
 
-  return frontendTraceparent;
+  return frontendTraceId;
+}
+
+export function generateTraceparent(): string {
+  return `${TRACE_VERSION}-${getTraceId()}-${randomHex(8)}-${TRACE_FLAGS}`;
+}
+
+export function getFrontendTraceparent(): string {
+  return generateTraceparent();
 }
 
 export async function sendFrontendLog(level: FrontendLogLevel, parts: unknown[]): Promise<void> {
   const message = formatLogMessage(parts);
-  const payload = JSON.stringify({ level, message });
-  const traceparent = getFrontendTraceparent();
+  const traceparent = generateTraceparent();
+  const payload = JSON.stringify({ level, message, traceparent });
 
   if (typeof navigator.sendBeacon === 'function') {
     const beaconBody = new Blob([payload], { type: 'application/json' });
@@ -92,17 +100,17 @@ export function patchConsoleForwarding(): void {
 
   console.info = (...parts: unknown[]) => {
     originalInfo(...parts);
-    void sendFrontendLog('info', parts);
+    sendFrontendLog('info', parts).catch(() => {});
   };
 
   console.warn = (...parts: unknown[]) => {
     originalWarn(...parts);
-    void sendFrontendLog('warn', parts);
+    sendFrontendLog('warn', parts).catch(() => {});
   };
 
   console.error = (...parts: unknown[]) => {
     originalError(...parts);
-    void sendFrontendLog('error', parts);
+    sendFrontendLog('error', parts).catch(() => {});
   };
 
   consolePatched = true;

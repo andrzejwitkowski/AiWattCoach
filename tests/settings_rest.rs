@@ -760,7 +760,7 @@ async fn admin_forbidden_logs_warn_before_returning_403() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
     assert!(
-        logs.contains("\"error_chain\":\"User does not have the required role\""),
+        logs.contains("\"error_kind\":\"forbidden\""),
         "logs were: {logs}"
     );
     assert!(logs.contains("\"status\":403"), "logs were: {logs}");
@@ -792,18 +792,14 @@ async fn admin_identity_backend_error_logs_error_before_returning_503() {
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
     assert!(
-        logs.contains("identity backend unavailable"),
-        "logs were: {logs}"
-    );
-    assert!(
-        logs.contains("\"error_chain\":\"identity backend unavailable\""),
+        logs.contains("\"error_kind\":\"repository_error\""),
         "logs were: {logs}"
     );
     assert!(logs.contains("\"status\":503"), "logs were: {logs}");
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn admin_settings_repository_error_logs_error_chain_before_returning_503() {
+async fn admin_settings_repository_error_logs_error_kind_before_returning_503() {
     let app = settings_test_app(
         TestIdentityServiceWithSession {
             roles: vec![Role::User, Role::Admin],
@@ -829,11 +825,7 @@ async fn admin_settings_repository_error_logs_error_chain_before_returning_503()
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
     assert!(
-        logs.contains("admin settings repository unavailable"),
-        "logs were: {logs}"
-    );
-    assert!(
-        logs.contains("\"error_chain\":\"admin settings repository unavailable\""),
+        logs.contains("\"error_kind\":\"repository_error\""),
         "logs were: {logs}"
     );
     assert!(logs.contains("\"status\":503"), "logs were: {logs}");
@@ -1131,7 +1123,7 @@ async fn test_intervals_connection_returns_400_on_invalid_configuration() {
         .contains("Invalid configuration"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn test_intervals_connection_returns_503_on_unavailable() {
     let app = settings_test_app_with_intervals(
         TestIdentityServiceWithSession::default(),
@@ -1171,18 +1163,14 @@ async fn test_intervals_connection_returns_503_on_unavailable() {
         .contains("unavailable"));
     assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
     assert!(
-        logs.contains("Intervals.icu is currently unavailable"),
-        "logs were: {logs}"
-    );
-    assert!(
-        logs.contains("\"error_chain\":\"Intervals.icu is currently unavailable\""),
+        logs.contains("\"error_kind\":\"unavailable\""),
         "logs were: {logs}"
     );
     assert!(logs.contains("\"status\":503"), "logs were: {logs}");
 }
 
-#[tokio::test]
-async fn get_settings_returns_503_and_logs_error_chain_on_repository_error() {
+#[tokio::test(flavor = "current_thread")]
+async fn get_settings_returns_503_and_logs_error_kind_on_repository_error() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
         RepositoryErrorSettingsService::new("settings repository unavailable"),
@@ -1205,17 +1193,13 @@ async fn get_settings_returns_503_and_logs_error_chain_on_repository_error() {
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert!(logs.contains("\"level\":\"ERROR\""), "logs were: {logs}");
     assert!(
-        logs.contains("settings repository unavailable"),
-        "logs were: {logs}"
-    );
-    assert!(
-        logs.contains("\"error_chain\":\"settings repository unavailable\""),
+        logs.contains("\"error_kind\":\"repository_error\""),
         "logs were: {logs}"
     );
     assert!(logs.contains("\"status\":503"), "logs were: {logs}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn update_cycling_returns_400_and_logs_warn_on_validation_error() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
@@ -1245,7 +1229,7 @@ async fn update_cycling_returns_400_and_logs_warn_on_validation_error() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert!(logs.contains("\"level\":\"WARN\""), "logs were: {logs}");
     assert!(
-        logs.contains("age must be between 1 and 120"),
+        logs.contains("\"error_kind\":\"validation_error\""),
         "logs were: {logs}"
     );
     assert!(logs.contains("\"status\":400"), "logs were: {logs}");

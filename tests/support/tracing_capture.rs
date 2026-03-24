@@ -98,8 +98,11 @@ where
     let logs = SharedLogBuffer::default();
     let _active_buffer = ActiveLogBufferGuard::install(logs.clone());
     let output = run().await;
+    // Drop the active buffer guard first so concurrent work finishes writing
+    drop(_active_buffer);
+    let captured = logs.contents();
 
-    (output, logs.contents())
+    (output, captured)
 }
 
 fn init_test_tracing_subscriber() {

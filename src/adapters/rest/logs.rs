@@ -5,17 +5,19 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use tracing::Level;
 
 use crate::config::AppState;
 
 pub const MAX_MESSAGE_LENGTH: usize = 10_000;
 pub const MAX_REQUEST_BODY_BYTES: usize = (MAX_MESSAGE_LENGTH * 6) + 256;
 
+const ACCEPTED_LEVELS: &[&str] = &["info", "warn", "error"];
+
 #[derive(Deserialize)]
 pub struct LogIngestionRequest {
     level: String,
     message: String,
+    traceparent: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -50,53 +52,29 @@ pub async fn ingest_logs(
             .into_response();
     }
 
-    let level = match parse_level(&body.level) {
-        Some(level) => level,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "unsupported_level",
-                }),
-            )
-                .into_response()
-        }
-    };
-
-    match level {
-        Level::INFO => tracing::event!(
-            Level::INFO,
-            client_log_level = %body.level,
-            client_message = %body.message,
-            "client log"
-        ),
-        Level::WARN => tracing::event!(
-            Level::WARN,
-            client_log_level = %body.level,
-            client_message = %body.message,
-            "client log"
-        ),
-        Level::ERROR => tracing::event!(
-            Level::ERROR,
-            client_log_level = %body.level,
-            client_message = %body.message,
-            "client log"
-        ),
-        _ => unreachable!("parse_level only returns accepted levels"),
+    if !ACCEPTED_LEVELS.contains(&body.level.as_str()) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "unsupported_level",
+            }),
+        )
+            .into_response();
     }
+
+    let client_traceparent = body.traceparent.as_deref().unwrap_or("");
+
+    tracing::event!(
+        tracing::Level::INFO,
+        client_log_level = %body.level,
+        client_message = %body.message,
+        client_traceparent = %client_traceparent,
+        "client log"
+    );
 
     (
         StatusCode::ACCEPTED,
         Json(StatusResponse { status: "accepted" }),
     )
         .into_response()
-}
-
-fn parse_level(level: &str) -> Option<Level> {
-    match level {
-        "info" => Some(Level::INFO),
-        "warn" => Some(Level::WARN),
-        "error" => Some(Level::ERROR),
-        _ => None,
-    }
 }

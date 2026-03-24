@@ -24,7 +24,7 @@ static FRONTEND_FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
 async fn valid_info_warn_and_error_payloads_are_accepted() {
     let app = logs_test_app().await;
 
-    for (level, expected_level) in [("info", "INFO"), ("warn", "WARN"), ("error", "ERROR")] {
+    for level in ["info", "warn", "error"] {
         let message = format!("{level} message from client");
         let (response, logs) = capture_tracing_logs(|| async {
             app.clone()
@@ -60,8 +60,9 @@ async fn valid_info_warn_and_error_payloads_are_accepted() {
             logs.contains(&format!("\"client_message\":\"{message}\"")),
             "logs were: {logs}"
         );
+        // All client logs are emitted at backend INFO level regardless of the client-provided level
         assert!(
-            logs.contains(&format!("\"level\":\"{expected_level}\"")),
+            logs.contains("\"level\":\"INFO\""),
             "logs were: {logs}"
         );
     }

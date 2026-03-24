@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { get } from './httpClient';
 import { getJsonResponse } from './api/client';
 import {
-  getFrontendTraceparent,
+  generateTraceparent,
   patchConsoleForwarding,
   sendFrontendLog,
 } from './logger';
@@ -49,18 +49,27 @@ async function readBlobText(blob: Blob): Promise<string> {
 }
 
 describe('logger', () => {
-  it('returns a stable traceparent header in W3C format', () => {
-    const first = getFrontendTraceparent();
-    const second = getFrontendTraceparent();
+  it('generates a fresh traceparent per call with stable trace-id', () => {
+    const first = generateTraceparent();
+    const second = generateTraceparent();
 
-    expect(second).toBe(first);
+    // Different parent-id per call
+    expect(second).not.toBe(first);
 
-    const parts = first.split('-');
-    expect(parts).toHaveLength(4);
-    expect(parts[0]).toMatch(/^[0-9a-f]{2}$/);
-    expect(parts[1]).toMatch(/^[0-9a-f]{32}$/);
-    expect(parts[2]).toMatch(/^[0-9a-f]{16}$/);
-    expect(parts[3]).toBe('01');
+    // Same trace-id across calls
+    const firstParts = first.split('-');
+    const secondParts = second.split('-');
+    expect(firstParts[1]).toBe(secondParts[1]);
+
+    // Valid W3C format
+    expect(firstParts).toHaveLength(4);
+    expect(firstParts[0]).toMatch(/^[0-9a-f]{2}$/);
+    expect(firstParts[1]).toMatch(/^[0-9a-f]{32}$/);
+    expect(firstParts[2]).toMatch(/^[0-9a-f]{16}$/);
+    expect(firstParts[3]).toBe('01');
+
+    // Different span-id
+    expect(firstParts[2]).not.toBe(secondParts[2]);
   });
 
   it('sends frontend logs with sendBeacon when available', async () => {
@@ -81,6 +90,7 @@ describe('logger', () => {
     expect(payloadText).toContain('rate limited');
     expect(payloadText).toContain('attempt');
     expect(payloadText).toContain(':2');
+    expect(payloadText).toMatch(/"traceparent":"[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}"/);
   });
 
   it('falls back to fetch when sendBeacon is unavailable', async () => {
@@ -93,20 +103,20 @@ describe('logger', () => {
 
     await sendFrontendLog('error', ['frontend exploded']);
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/logs', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/logs', expect.objectContaining({
       method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
-      },
-      body: JSON.stringify({
-        level: 'error',
-        message: 'frontend exploded',
-      }),
       credentials: 'same-origin',
       keepalive: true,
-    });
+    }));
+
+    const callArgs = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const sentBody = JSON.parse(callArgs.body as string);
+    expect(sentBody.level).toBe('error');
+    expect(sentBody.message).toBe('frontend exploded');
+    expect(sentBody.traceparent).toMatch(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/);
+
+    const headers = callArgs.headers as Record<string, string>;
+    expect(headers.traceparent).toMatch(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/);
   });
 
   it('patches console methods and forwards messages once', async () => {
@@ -129,6 +139,7 @@ describe('logger', () => {
     const payloadText = await readBlobText(payload);
     expect(payloadText).toContain('"level":"info"');
     expect(payloadText).toContain('hello {\\"source\\":\\"ui\\"}');
+    expect(payloadText).toMatch(/"traceparent":"[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}"/);
   });
 
   it('injects traceparent into both frontend fetch wrappers', async () => {

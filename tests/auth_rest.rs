@@ -385,9 +385,10 @@ async fn settings_request_logs_authenticated_user_id_on_request_span() {
     .await;
 
     assert_eq!(response.status(), StatusCode::OK);
+    // user_id is pseudonymized via SHA-256 (first 16 hex chars of hash)
     assert!(
-        logs.contains("\"user_id\":\"user-1\""),
-        "expected request logs to include authenticated user_id, got: {logs}"
+        logs.contains("\"user_id\":\"c6c289e49e9c05b2\""),
+        "expected request logs to include pseudonymized user_id, got: {logs}"
     );
 }
 

@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::cookies::read_cookie;
-use super::logging::{format_error_chain, status_class};
+use super::logging::status_class;
 
 #[derive(Serialize)]
 pub struct UserSettingsDto {
@@ -336,11 +336,17 @@ fn map_admin_identity_error(err: &IdentityError) -> Response {
             StatusCode::FORBIDDEN.into_response()
         }
         IdentityError::Repository(_)
-        | IdentityError::External(_)
-        | IdentityError::EmailNotVerified
-        | IdentityError::InvalidLoginState => {
+        | IdentityError::External(_) => {
             log_identity_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, err);
             StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+        IdentityError::EmailNotVerified => {
+            log_identity_error(Level::WARN, StatusCode::FORBIDDEN, err);
+            StatusCode::FORBIDDEN.into_response()
+        }
+        IdentityError::InvalidLoginState => {
+            log_identity_error(Level::WARN, StatusCode::UNAUTHORIZED, err);
+            StatusCode::UNAUTHORIZED.into_response()
         }
     }
 }
@@ -512,23 +518,25 @@ fn map_connection_error_to_response(
 }
 
 fn log_settings_error(level: Level, status: StatusCode, error: &SettingsError) {
-    let error_chain = format_error_chain(error);
+    let error_kind = match error {
+        SettingsError::Repository(_) => "repository_error",
+        SettingsError::Unauthenticated => "unauthenticated",
+        SettingsError::Validation(_) => "validation_error",
+    };
 
     match level {
         Level::ERROR => tracing::event!(
             Level::ERROR,
             status = status.as_u16(),
             status_class = status_class(status),
-            error = %error,
-            error_chain,
+            error_kind,
             "settings request failed"
         ),
         Level::WARN => tracing::event!(
             Level::WARN,
             status = status.as_u16(),
             status_class = status_class(status),
-            error = %error,
-            error_chain,
+            error_kind,
             "settings request failed"
         ),
         _ => unreachable!("unexpected log level"),
@@ -536,23 +544,25 @@ fn log_settings_error(level: Level, status: StatusCode, error: &SettingsError) {
 }
 
 fn log_connection_error(level: Level, status: StatusCode, error: &IntervalsConnectionError) {
-    let error_chain = format_error_chain(error);
+    let error_kind = match error {
+        IntervalsConnectionError::InvalidConfiguration => "invalid_configuration",
+        IntervalsConnectionError::Unavailable => "unavailable",
+        IntervalsConnectionError::Unauthenticated => "unauthenticated",
+    };
 
     match level {
         Level::ERROR => tracing::event!(
             Level::ERROR,
             status = status.as_u16(),
             status_class = status_class(status),
-            error = %error,
-            error_chain,
+            error_kind,
             "settings intervals connection test failed"
         ),
         Level::WARN => tracing::event!(
             Level::WARN,
             status = status.as_u16(),
             status_class = status_class(status),
-            error = %error,
-            error_chain,
+            error_kind,
             "settings intervals connection test failed"
         ),
         _ => unreachable!("unexpected log level"),
@@ -560,23 +570,28 @@ fn log_connection_error(level: Level, status: StatusCode, error: &IntervalsConne
 }
 
 fn log_identity_error(level: Level, status: StatusCode, error: &IdentityError) {
-    let error_chain = format_error_chain(error);
+    let error_kind = match error {
+        IdentityError::Unauthenticated => "unauthenticated",
+        IdentityError::Forbidden => "forbidden",
+        IdentityError::Repository(_) => "repository_error",
+        IdentityError::External(_) => "external_error",
+        IdentityError::EmailNotVerified => "email_not_verified",
+        IdentityError::InvalidLoginState => "invalid_login_state",
+    };
 
     match level {
         Level::ERROR => tracing::event!(
             Level::ERROR,
             status = status.as_u16(),
             status_class = status_class(status),
-            error = %error,
-            error_chain,
+            error_kind,
             "admin identity request failed"
         ),
         Level::WARN => tracing::event!(
             Level::WARN,
             status = status.as_u16(),
             status_class = status_class(status),
-            error = %error,
-            error_chain,
+            error_kind,
             "admin identity request failed"
         ),
         _ => unreachable!("unexpected log level"),
