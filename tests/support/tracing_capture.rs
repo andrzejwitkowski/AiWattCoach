@@ -47,16 +47,31 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for GlobalLogRouter {
     type Writer = GlobalLogWriter;
 
     fn make_writer(&'a self) -> Self::Writer {
-        GlobalLogWriter
+        GlobalLogWriter {
+            pending: Vec::new(),
+        }
     }
 }
 
-struct GlobalLogWriter;
+struct GlobalLogWriter {
+    pending: Vec<u8>,
+}
 
 impl Write for GlobalLogWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.pending.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Drop for GlobalLogWriter {
+    fn drop(&mut self) {
         let Some(capture_id) = CURRENT_CAPTURE_ID.try_with(Clone::clone).ok() else {
-            return Ok(buf.len());
+            return;
         };
 
         let active_buffers = ACTIVE_LOG_BUFFERS.get_or_init(|| Mutex::new(HashMap::new()));
@@ -65,14 +80,8 @@ impl Write for GlobalLogWriter {
             .expect("active log buffers mutex poisoned");
 
         if let Some(buffer) = guard.get_mut(&capture_id) {
-            buffer.write(buf)
-        } else {
-            Ok(buf.len())
+            let _ = buffer.write_all(&self.pending);
         }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
     }
 }
 
@@ -114,7 +123,7 @@ where
     );
     let _active_buffer = ActiveLogBufferGuard::install(capture_id.clone(), logs.clone());
     let output = CURRENT_CAPTURE_ID.scope(capture_id, run()).await;
-    // Drop the active buffer guard first so concurrent work finishes writing
+    // Stop routing new writes to this capture before reading out the buffered contents.
     drop(_active_buffer);
     let captured = logs.contents();
 
@@ -136,4 +145,62 @@ fn init_test_tracing_subscriber() {
         tracing::subscriber::set_global_default(subscriber)
             .expect("test tracing subscriber should install once");
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use tracing_subscriber::fmt::MakeWriter;
+
+    use super::{ActiveLogBufferGuard, GlobalLogRouter, SharedLogBuffer, CURRENT_CAPTURE_ID};
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn global_log_writer_commits_each_event_atomically() {
+        let logs = SharedLogBuffer::default();
+        let capture_id = String::from("capture-test");
+        let _active_buffer = ActiveLogBufferGuard::install(capture_id.clone(), logs.clone());
+
+        CURRENT_CAPTURE_ID
+            .scope(capture_id, async {
+                let router = GlobalLogRouter;
+                let mut first = router.make_writer();
+                let mut second = router.make_writer();
+
+                first.write_all(br#"{"worker":"first","#).unwrap();
+                second.write_all(br#"{"worker":"second","#).unwrap();
+                first
+                    .write_all(
+                        br#""index":1}
+"#,
+                    )
+                    .unwrap();
+                second
+                    .write_all(
+                        br#""index":2}
+"#,
+                    )
+                    .unwrap();
+
+                drop(first);
+                drop(second);
+            })
+            .await;
+
+        drop(_active_buffer);
+        let captured = logs.contents();
+
+        let lines: Vec<_> = captured.lines().collect();
+        assert_eq!(
+            lines.len(),
+            2,
+            "expected two captured log lines, got: {captured}"
+        );
+        assert!(
+            lines
+                .iter()
+                .all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok()),
+            "expected atomic JSON log lines, got: {captured}"
+        );
+    }
 }

@@ -133,18 +133,25 @@ fn apply_incoming_trace_context(headers: &HeaderMap, span: &Span) {
 
     let generated_trace_id = TraceId::from_hex(&uuid::Uuid::new_v4().to_string().replace('-', ""))
         .expect("uuid v4 without dashes should be a valid 32-char hex trace id");
-    let generated_parent = Context::new().with_remote_span_context(SpanContext::new(
-        generated_trace_id,
-        SpanId::INVALID,
-        TraceFlags::default(),
-        true,
-        TraceState::default(),
-    ));
+    let generated_parent = synthetic_remote_parent_context(generated_trace_id);
     span.set_parent(generated_parent);
     span.record(
         "trace_id",
         tracing::field::display(generated_trace_id.to_string()),
     );
+}
+
+fn synthetic_remote_parent_context(trace_id: TraceId) -> Context {
+    let span_id = SpanId::from_hex(&uuid::Uuid::new_v4().to_string().replace('-', "")[..16])
+        .expect("uuid v4 prefix should be a valid 16-char hex span id");
+
+    Context::new().with_remote_span_context(SpanContext::new(
+        trace_id,
+        span_id,
+        TraceFlags::SAMPLED,
+        true,
+        TraceState::default(),
+    ))
 }
 
 fn record_span_trace_id(span: &Span) {
@@ -305,4 +312,24 @@ fn internal_error_response() -> Response {
         .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
         .body(Body::from("failed to serve frontend asset"))
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use opentelemetry::trace::{SpanContext, SpanId, TraceContextExt as _, TraceId};
+
+    use super::synthetic_remote_parent_context;
+
+    #[test]
+    fn synthetic_remote_parent_context_is_valid_and_sampled() {
+        let trace_id = TraceId::from_hex("0af7651916cd43dd8448eb211c80319c").unwrap();
+        let context = synthetic_remote_parent_context(trace_id);
+        let span_context: SpanContext = context.span().span_context().clone();
+
+        assert!(span_context.is_remote());
+        assert!(span_context.is_valid());
+        assert!(span_context.trace_flags().is_sampled());
+        assert_eq!(span_context.trace_id(), trace_id);
+        assert_ne!(span_context.span_id(), SpanId::INVALID);
+    }
 }

@@ -833,6 +833,41 @@ async fn readiness_check_emits_error_classification_log_for_service_unavailable(
     assert_log_entry_contains(&logs, &["\"level\":\"ERROR\"", "\"status\":503"]);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn health_check_without_traceparent_logs_generated_trace_id() {
+    let settings = unreachable_mongo_settings();
+    let fixture = frontend_fixture();
+    let app = build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        ),
+        fixture.dist_dir(),
+    );
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        logs.lines().any(|line| {
+            line.contains("\"trace_id\":\"")
+                && !line.contains("\"trace_id\":\"00000000000000000000000000000000\"")
+        }),
+        "expected logs to include a generated non-zero trace id, got: {logs}"
+    );
+}
+
 fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str]) {
     let matched = logs.lines().any(|line| {
         expected_fragments
