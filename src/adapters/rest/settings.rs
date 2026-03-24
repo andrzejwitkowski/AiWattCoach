@@ -335,8 +335,7 @@ fn map_admin_identity_error(err: &IdentityError) -> Response {
             log_identity_error(Level::WARN, StatusCode::FORBIDDEN, err);
             StatusCode::FORBIDDEN.into_response()
         }
-        IdentityError::Repository(_)
-        | IdentityError::External(_) => {
+        IdentityError::Repository(_) | IdentityError::External(_) => {
             log_identity_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, err);
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }

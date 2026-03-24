@@ -61,10 +61,7 @@ async fn valid_info_warn_and_error_payloads_are_accepted() {
             "logs were: {logs}"
         );
         // All client logs are emitted at backend INFO level regardless of the client-provided level
-        assert!(
-            logs.contains("\"level\":\"INFO\""),
-            "logs were: {logs}"
-        );
+        assert!(logs.contains("\"level\":\"INFO\""), "logs were: {logs}");
     }
 }
 
