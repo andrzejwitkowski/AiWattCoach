@@ -1,35 +1,44 @@
 services:
   loki:
-    image: grafana/loki:3.5.0
-    user: "0:0"
-    command: ["-config.file=/etc/loki/config.yaml"]
+    image: 'grafana/loki:3.5.0'
+    user: '0:0'
+    command:
+      - '-config.file=/etc/loki/config.yaml'
     expose:
-      - "3100"
+      - '3100'
     configs:
-      - source: loki_config
+      -
+        source: loki_config
         target: /etc/loki/config.yaml
     volumes:
-      - loki_data:/var/lib/loki
-
+      - 'loki_data:/var/lib/loki'
+    networks:
+      - coolify
   tempo:
-    image: grafana/tempo:2.8.2
-    user: "0:0" # ADDED: Fixes the 'permission denied' for Tempo
-    command: ["-config.file=/etc/tempo/config.yaml"]
+    image: 'grafana/tempo:2.8.2'
+    user: '0:0'
+    command:
+      - '-config.file=/etc/tempo/config.yaml'
     expose:
-      - "3200"
-      - "4317"
-      - "4318"
+      - '3200'
+      - '4317'
     configs:
-      - source: tempo_config
+      -
+        source: tempo_config
         target: /etc/tempo/config.yaml
     volumes:
-      - tempo_data:/var/lib/tempo
-
+      - 'tempo_data:/var/lib/tempo'
+    networks:
+      - coolify
   alloy:
-    image: grafana/alloy:v1.8.3
-    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
+    image: 'grafana/alloy:v1.8.3'
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - '--storage.path=/var/lib/alloy/data'
     configs:
-      - source: alloy_config
+      -
+        source: alloy_config
         target: /etc/alloy/config.alloy
     depends_on:
       loki:
@@ -37,109 +46,42 @@ services:
       tempo:
         condition: service_started
     expose:
-      - "4317"
-      - "4318"
-
+      - '4317'
+      - '4318'
+    networks:
+      - coolify
   grafana:
-    image: grafana/grafana:11.6.1
+    image: 'grafana/grafana:11.6.1'
     depends_on:
       loki:
         condition: service_started
       tempo:
         condition: service_started
     expose:
-      - "3000"
+      - '6767'
+    ports:
+      - '6767:6767'
     environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SERVER_HTTP_PORT: '6767'
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
     volumes:
-      - grafana_data:/var/lib/grafana
-
+      - 'grafana_data:/var/lib/grafana'
+    networks:
+      - coolify
 configs:
   loki_config:
-    content: |
-      auth_enabled: false
-      server:
-        http_listen_port: 3100
-      common:
-        instance_addr: 127.0.0.1
-        path_prefix: /var/lib/loki
-        storage:
-          filesystem:
-            chunks_directory: /var/lib/loki/chunks
-            rules_directory: /var/lib/loki/rules
-        replication_factor: 1
-        ring:
-          kvstore:
-            store: inmemory
-      schema_config:
-        configs:
-          - from: 2024-04-01
-            store: tsdb
-            object_store: filesystem
-            schema: v13
-            index:
-              prefix: index_
-              period: 24h
-      ruler:
-        storage:
-          type: local
-          local:
-            directory: /var/lib/loki/rules
-
+    content: "auth_enabled: false\nserver:\n  http_listen_port: 3100\ncommon:\n  instance_addr: 127.0.0.1\n  path_prefix: /var/lib/loki\n  storage:\n    filesystem:\n      chunks_directory: /var/lib/loki/chunks\n      rules_directory: /var/lib/loki/rules\n  replication_factor: 1\n  ring:\n    kvstore:\n      store: inmemory\nschema_config:\n  configs:\n    - from: 2024-04-01\n      store: tsdb\n      object_store: filesystem\n      schema: v13\n      index:\n        prefix: index_\n        period: 24h\nruler:\n  storage:\n    type: local\n    local:\n      directory: /var/lib/loki/rules\n"
   tempo_config:
-    content: |
-      server:
-        http_listen_port: 3200
-      distributor:
-        receivers:
-          otlp:
-            protocols:
-              grpc:
-              http:
-      ingester:
-        trace_idle_period: 10s
-        max_block_duration: 5m
-      storage:
-        trace:
-          backend: local
-          local:
-            path: /var/lib/tempo/traces
-      overrides:
-        defaults:
-          ingestion:
-            max_traces_per_user: 10000
-
+    content: "server:\n  http_listen_port: 3200\ndistributor:\n  receivers:\n    otlp:\n      protocols:\n        grpc:\n          endpoint: \"0.0.0.0:4317\"\n        http:\n          endpoint: \"0.0.0.0:4318\"\ningester:\n  trace_idle_period: 10s\n  max_block_duration: 5m\nstorage:\n  trace:\n    backend: local\n    local:\n      path: /var/lib/tempo/traces\n"
   alloy_config:
-    content: |
-      logging {
-        level  = "info"
-        format = "logfmt"
-      }
-      otelcol.receiver.otlp "default" {
-        grpc { endpoint = "0.0.0.0:4317" }
-        http { endpoint = "0.0.0.0:4318" }
-        output {
-          traces  = [otelcol.exporter.otlp.tempo.input]
-          logs    = [otelcol.exporter.loki.default.input]
-        }
-      }
-      otelcol.exporter.otlp "tempo" {
-        client {
-          endpoint = "tempo:4317"
-          tls { insecure = true }
-        }
-      }
-      otelcol.exporter.loki "default" {
-        forward_to = [loki.write.endpoint.receiver] 
-      }
-      loki.write "endpoint" {
-        endpoint {
-          url = "http://loki:3100/loki/api/v1/push"
-        }
-      }
-
+    content: "logging {\n  level  = \"debug\"\n  format = \"logfmt\"\n}\n\notelcol.receiver.otlp \"default\" {\n  grpc { endpoint = \"0.0.0.0:4317\" }\n  http { endpoint = \"0.0.0.0:4318\" }\n  output {\n    traces  = [otelcol.exporter.otlp.tempo.input]\n    logs    = [otelcol.exporter.loki.default.input]\n  }\n}\n\notelcol.exporter.otlp \"tempo\" {\n  client {\n    endpoint = \"tempo:4317\"\n    tls { insecure = true }\n  }\n}\n\notelcol.exporter.loki \"default\" {\n  forward_to = [loki.write.endpoint.receiver] \n}\n\nloki.write \"endpoint\" {\n  endpoint {\n    url = \"http://loki:3100/loki/api/v1/push\"\n  }\n}\n"
 volumes:
-  loki_data:
-  tempo_data:
-  grafana_data:
+  loki_data: null
+  tempo_data: null
+  grafana_data: null
+networks:
+  coolify:
+    name: coolify
+    external: true
