@@ -360,6 +360,75 @@ async fn create_event_returns_201() {
 }
 
 #[tokio::test]
+async fn create_event_rejects_ambiguous_file_upload_payload() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/events")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "category": "WORKOUT",
+                        "startDateLocal": "2026-03-25",
+                        "fileUpload": {
+                            "filename": "workout.zwo",
+                            "fileContents": "<xml/>",
+                            "fileContentsBase64": "PHhtbC8+"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn create_event_rejects_empty_file_upload_payload() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/events")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "category": "WORKOUT",
+                        "startDateLocal": "2026-03-25",
+                        "fileUpload": {
+                            "filename": "workout.zwo",
+                            "fileContents": "   "
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn create_event_is_scoped_to_authenticated_user() {
     let service = ScopedIntervalsService::with_user_events([
         (
@@ -932,6 +1001,36 @@ async fn create_activity_returns_201_and_uploaded_activities() {
         body.get("activityIds").unwrap().as_array().unwrap()[0].as_str(),
         Some("i31")
     );
+}
+
+#[tokio::test]
+async fn create_activity_rejects_invalid_base64_payload() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/activities")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "filename": "ride.fit",
+                        "fileContentsBase64": "AA=A"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

@@ -87,7 +87,11 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         )
         .route(
             "/api/intervals/activities",
-            get(intervals::list_activities).post(intervals::create_activity),
+            get(intervals::list_activities)
+                .post(intervals::create_activity)
+                .layer(DefaultBodyLimit::max(
+                    intervals::MAX_ACTIVITY_UPLOAD_REQUEST_BYTES,
+                )),
         )
         .route(
             "/api/intervals/activities/{activity_id}",

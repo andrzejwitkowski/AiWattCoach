@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -18,7 +19,7 @@ async fn list_events_returns_events_from_api() {
     let event = sample_event(42, "Workout A");
     let api = FakeIntervalsApi::with_events(vec![event.clone()]);
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository);
+    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
 
     let events = service
         .list_events(
@@ -39,7 +40,7 @@ async fn list_events_fails_when_credentials_not_configured() {
     let api = FakeIntervalsApi::default();
     let calls = api.call_log.clone();
     let settings = FakeSettingsPort::without_credentials();
-    let service = IntervalsService::new(api, settings, NoopActivityRepository);
+    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
 
     let result = service
         .list_events(
@@ -60,7 +61,7 @@ async fn get_event_returns_single_event() {
     let event = sample_event(7, "Threshold");
     let api = FakeIntervalsApi::with_get_event(event.clone());
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository);
+    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
 
     let result = service.get_event("user-1", 7).await.unwrap();
 
@@ -73,7 +74,7 @@ async fn create_event_passes_event_to_api() {
     let api = FakeIntervalsApi::with_created_event(created.clone());
     let calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository);
+    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
 
     let input = CreateEvent {
         category: EventCategory::Workout,
@@ -98,7 +99,7 @@ async fn update_event_forwards_to_api() {
     let api = FakeIntervalsApi::with_updated_event(updated.clone());
     let calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository);
+    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
 
     let input = UpdateEvent {
         category: Some(EventCategory::Workout),
@@ -131,7 +132,7 @@ async fn delete_event_calls_api_and_returns_ok() {
     let api = FakeIntervalsApi::default();
     let calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository);
+    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
 
     let result = service.delete_event("user-1", 77).await;
 
@@ -143,7 +144,7 @@ async fn delete_event_calls_api_and_returns_ok() {
 async fn download_fit_returns_bytes() {
     let api = FakeIntervalsApi::with_fit_bytes(vec![1, 2, 3, 4]);
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository);
+    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
 
     let bytes = service.download_fit("user-1", 33).await.unwrap();
 
@@ -154,7 +155,7 @@ async fn download_fit_returns_bytes() {
 async fn api_error_propagated_to_caller() {
     let api = FakeIntervalsApi::with_error(IntervalsError::ApiError("bad gateway".to_string()));
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository);
+    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
 
     let result = service.get_event("user-1", 99).await;
 
@@ -296,7 +297,7 @@ async fn update_activity_persists_updated_activity() {
 }
 
 #[tokio::test]
-async fn delete_activity_removes_local_copy_before_calling_api() {
+async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds() {
     let api = FakeIntervalsApi::default();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let sequence = Arc::new(Mutex::new(Vec::new()));
@@ -309,7 +310,7 @@ async fn delete_activity_removes_local_copy_before_calling_api() {
     assert_eq!(result, Ok(()));
     assert_eq!(
         sequence.lock().unwrap().as_slice(),
-        &["repo_delete:i11".to_string(), "api_delete:i11".to_string()]
+        &["api_delete:i11".to_string(), "repo_delete:i11".to_string()]
     );
 }
 
@@ -530,12 +531,12 @@ impl FakeIntervalsApi {
             create_event_result: Err(error.clone()),
             update_event_result: Err(error.clone()),
             delete_event_result: Err(error.clone()),
-            fit_result: Err(error),
-            list_activities_result: Err(IntervalsError::ApiError("bad gateway".to_string())),
-            get_activity_result: Err(IntervalsError::ApiError("bad gateway".to_string())),
-            upload_activity_result: Err(IntervalsError::ApiError("bad gateway".to_string())),
-            update_activity_result: Err(IntervalsError::ApiError("bad gateway".to_string())),
-            delete_activity_result: Err(IntervalsError::ApiError("bad gateway".to_string())),
+            fit_result: Err(error.clone()),
+            list_activities_result: Err(error.clone()),
+            get_activity_result: Err(error.clone()),
+            upload_activity_result: Err(error.clone()),
+            update_activity_result: Err(error.clone()),
+            delete_activity_result: Err(error),
             ..Self::default()
         }
     }
@@ -669,7 +670,7 @@ impl IntervalsApiPort for FakeIntervalsApi {
 
 #[derive(Clone, Default)]
 struct FakeActivityRepository {
-    stored: Arc<Mutex<Vec<Activity>>>,
+    stored: Arc<Mutex<HashMap<String, Vec<Activity>>>>,
     call_log: Arc<Mutex<Vec<RepoCall>>>,
     sequence: Option<Arc<Mutex<Vec<String>>>>,
 }
@@ -686,39 +687,43 @@ impl FakeActivityRepository {
 impl ActivityRepositoryPort for FakeActivityRepository {
     fn upsert(
         &self,
-        _user_id: &str,
+        user_id: &str,
         activity: Activity,
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let store = self.stored.clone();
         let calls = self.call_log.clone();
+        let user_id = user_id.to_string();
         Box::pin(async move {
             calls
                 .lock()
                 .unwrap()
                 .push(RepoCall::Upsert(activity.id.clone()));
             let mut store = store.lock().unwrap();
-            store.retain(|existing| existing.id != activity.id);
-            store.push(activity.clone());
+            let activities = store.entry(user_id).or_default();
+            activities.retain(|existing| existing.id != activity.id);
+            activities.push(activity.clone());
             Ok(activity)
         })
     }
 
     fn upsert_many(
         &self,
-        _user_id: &str,
+        user_id: &str,
         activities: Vec<Activity>,
     ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
         let store = self.stored.clone();
         let calls = self.call_log.clone();
+        let user_id = user_id.to_string();
         Box::pin(async move {
             calls
                 .lock()
                 .unwrap()
                 .push(RepoCall::UpsertMany(activities.len()));
             let mut store = store.lock().unwrap();
+            let existing = store.entry(user_id).or_default();
             for activity in &activities {
-                store.retain(|existing| existing.id != activity.id);
-                store.push(activity.clone());
+                existing.retain(|current| current.id != activity.id);
+                existing.push(activity.clone());
             }
             Ok(activities)
         })
@@ -735,42 +740,51 @@ impl ActivityRepositoryPort for FakeActivityRepository {
         let oldest = range.oldest.clone();
         let newest = range.newest.clone();
         Box::pin(async move {
+            let repo_user_id = user_id.clone();
             calls.lock().unwrap().push(RepoCall::FindRange {
                 user_id,
                 oldest: oldest.clone(),
                 newest: newest.clone(),
             });
-            Ok(store
+            let activities = store
                 .lock()
                 .unwrap()
-                .iter()
-                .filter(|activity| activity.start_date_local.as_str() >= oldest.as_str())
-                .filter(|activity| activity.start_date_local.as_str() <= newest.as_str())
+                .get(&repo_user_id)
                 .cloned()
+                .unwrap_or_default();
+            Ok(activities
+                .into_iter()
+                .filter(|activity| activity_date(&activity.start_date_local) >= oldest.as_str())
+                .filter(|activity| activity_date(&activity.start_date_local) <= newest.as_str())
                 .collect())
         })
     }
 
     fn find_by_user_id_and_activity_id(
         &self,
-        _user_id: &str,
+        user_id: &str,
         activity_id: &str,
     ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
         let store = self.stored.clone();
+        let user_id = user_id.to_string();
         let activity_id = activity_id.to_string();
         Box::pin(async move {
-            Ok(store
+            let activities = store
                 .lock()
                 .unwrap()
-                .iter()
-                .find(|activity| activity.id == activity_id)
-                .cloned())
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default();
+            Ok(activities
+                .into_iter()
+                .find(|activity| activity.id == activity_id))
         })
     }
 
-    fn delete(&self, _user_id: &str, activity_id: &str) -> BoxFuture<Result<(), IntervalsError>> {
+    fn delete(&self, user_id: &str, activity_id: &str) -> BoxFuture<Result<(), IntervalsError>> {
         let store = self.stored.clone();
         let sequence = self.sequence.clone();
+        let user_id = user_id.to_string();
         let activity_id = activity_id.to_string();
         Box::pin(async move {
             if let Some(sequence) = sequence {
@@ -779,13 +793,16 @@ impl ActivityRepositoryPort for FakeActivityRepository {
                     .unwrap()
                     .push(format!("repo_delete:{activity_id}"));
             }
-            store
-                .lock()
-                .unwrap()
-                .retain(|activity| activity.id != activity_id);
+            if let Some(activities) = store.lock().unwrap().get_mut(&user_id) {
+                activities.retain(|activity| activity.id != activity_id);
+            }
             Ok(())
         })
     }
+}
+
+fn activity_date(start_date_local: &str) -> &str {
+    start_date_local.get(..10).unwrap_or(start_date_local)
 }
 
 #[derive(Clone)]

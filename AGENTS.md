@@ -153,6 +153,8 @@ Before changing behavior, use this order:
 
 - Domain services should orchestrate use cases, not know about HTTP or Mongo.
 - REST DTOs may differ from domain models; keep JSON naming explicit with `#[serde(rename = ...)]`.
+- REST handlers that accept variant payloads must validate mutual-exclusion and non-empty rules at the transport boundary before calling services or external APIs.
+- When a handler decodes request bodies into memory (for example base64 file payloads), enforce both request body limits and decoded-size limits in the HTTP adapter.
 - Mongo repositories should:
   - define internal `Document` structs
   - create indexes in `ensure_indexes()`

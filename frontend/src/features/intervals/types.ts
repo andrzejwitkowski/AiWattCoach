@@ -23,7 +23,16 @@ export const eventFileUploadSchema = z.object({
   filename: z.string(),
   fileContents: z.string().optional(),
   fileContentsBase64: z.string().optional(),
-});
+}).refine(
+  (value) => {
+    const hasFileContents = Boolean(value.fileContents?.trim());
+    const hasFileContentsBase64 = Boolean(value.fileContentsBase64?.trim());
+    return hasFileContents !== hasFileContentsBase64;
+  },
+  {
+    message: 'Exactly one of fileContents or fileContentsBase64 must be provided.'
+  }
+);
 
 export const intervalEventSchema = z.object({
   id: z.number().int(),

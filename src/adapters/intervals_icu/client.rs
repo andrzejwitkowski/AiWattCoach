@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _};
 use opentelemetry_http::HeaderInjector;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
@@ -18,8 +19,6 @@ use super::dto::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://intervals.icu";
-const DEFAULT_STREAM_TYPES: &str = "time,watts,heartrate,cadence,distance,velocity,latlng,altitude";
-
 #[derive(Clone)]
 pub struct IntervalsIcuClient {
     client: Client,
@@ -80,6 +79,55 @@ impl IntervalsIcuClient {
 
     fn activity_url_impl(base_url: &str, activity_id: &str, path: &str) -> String {
         format!("{base_url}/api/v1/activity/{activity_id}{path}")
+    }
+
+    async fn fetch_activity_details(
+        client: Client,
+        base_url: String,
+        credentials: IntervalsCredentials,
+        activity_id: String,
+    ) -> Result<Activity, IntervalsError> {
+        let url = Self::activity_url_impl(&base_url, &activity_id, "");
+        let streams_url = Self::activity_url_impl(&base_url, &activity_id, "/streams");
+
+        let response = Self::with_trace_context(
+            client
+                .get(url)
+                .basic_auth("API_KEY", Some(&credentials.api_key))
+                .query(&[("intervals", "true")]),
+        )
+        .send()
+        .await
+        .map_err(map_connection_error)?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(IntervalsError::NotFound);
+        }
+
+        let response = response.error_for_status().map_err(map_api_error)?;
+        let payload: ActivityResponse = response.json().await.map_err(map_api_error)?;
+        let mut activity = map_activity_response(payload);
+
+        if activity.stream_types.is_empty() {
+            return Ok(activity);
+        }
+
+        let streams_response = Self::with_trace_context(
+            client
+                .get(streams_url)
+                .basic_auth("API_KEY", Some(&credentials.api_key))
+                .query(&[("types", activity.stream_types.join(","))]),
+        )
+        .send()
+        .await
+        .map_err(map_connection_error)?;
+
+        let streams_response = streams_response.error_for_status().map_err(map_api_error)?;
+        let streams: Vec<ActivityStreamResponse> =
+            streams_response.json().await.map_err(map_api_error)?;
+        activity.details.streams = streams.into_iter().map(map_activity_stream).collect();
+
+        Ok(activity)
     }
 }
 
@@ -357,43 +405,12 @@ impl IntervalsApiPort for IntervalsIcuClient {
         activity_id: &str,
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let client = self.client.clone();
+        let base_url = self.base_url.clone();
         let credentials = credentials.clone();
         let activity_id = activity_id.to_string();
-        let url = self.activity_url(&activity_id, "");
-        let streams_url = self.activity_url(&activity_id, "/streams");
 
         Box::pin(async move {
-            let response = client
-                .get(url)
-                .basic_auth("API_KEY", Some(&credentials.api_key))
-                .query(&[("intervals", "true")])
-                .send()
-                .await
-                .map_err(map_connection_error)?;
-
-            if response.status() == StatusCode::NOT_FOUND {
-                return Err(IntervalsError::NotFound);
-            }
-
-            let response = response.error_for_status().map_err(map_api_error)?;
-            let payload: ActivityResponse = response.json().await.map_err(map_api_error)?;
-            let mut activity = map_activity_response(payload);
-
-            let streams_response = client
-                .get(streams_url)
-                .basic_auth("API_KEY", Some(&credentials.api_key))
-                .query(&[("types", DEFAULT_STREAM_TYPES)])
-                .send()
-                .await
-                .map_err(map_connection_error)?;
-
-            if streams_response.status().is_success() {
-                let streams: Vec<ActivityStreamResponse> =
-                    streams_response.json().await.map_err(map_api_error)?;
-                activity.details.streams = streams.into_iter().map(map_activity_stream).collect();
-            }
-
-            Ok(activity)
+            Self::fetch_activity_details(client, base_url, credentials, activity_id).await
         })
     }
 
@@ -452,19 +469,15 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .map(|activity| activity.id)
                 .collect();
 
-            let mut activities = Vec::new();
-            for activity_id in &activity_ids {
-                let response = client
-                    .get(Self::activity_url_impl(&base_url, activity_id, ""))
-                    .basic_auth("API_KEY", Some(&credentials.api_key))
-                    .query(&[("intervals", "true")])
-                    .send()
-                    .await
-                    .map_err(map_connection_error)?;
-                let response = response.error_for_status().map_err(map_api_error)?;
-                let payload: ActivityResponse = response.json().await.map_err(map_api_error)?;
-                activities.push(map_activity_response(payload));
-            }
+            let activities = try_join_all(activity_ids.iter().cloned().map(|activity_id| {
+                Self::fetch_activity_details(
+                    client.clone(),
+                    base_url.clone(),
+                    credentials.clone(),
+                    activity_id,
+                )
+            }))
+            .await?;
 
             Ok(UploadedActivities {
                 created,
@@ -481,6 +494,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
         activity: UpdateActivity,
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let client = self.client.clone();
+        let base_url = self.base_url.clone();
         let credentials = credentials.clone();
         let activity_id = activity_id.to_string();
         let url = self.activity_url(&activity_id, "");
@@ -506,8 +520,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
             }
 
             let response = response.error_for_status().map_err(map_api_error)?;
-            let payload: ActivityResponse = response.json().await.map_err(map_api_error)?;
-            Ok(map_activity_response(payload))
+            let _: ActivityResponse = response.json().await.map_err(map_api_error)?;
+            Self::fetch_activity_details(client, base_url, credentials, activity_id).await
         })
     }
 

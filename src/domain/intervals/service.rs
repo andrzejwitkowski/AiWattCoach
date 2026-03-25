@@ -325,11 +325,11 @@ where
         let activity_id = activity_id.to_string();
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
-            service.activities.delete(&user_id, &activity_id).await?;
             service
                 .api
                 .delete_activity(&credentials, &activity_id)
-                .await
+                .await?;
+            service.activities.delete(&user_id, &activity_id).await
         })
     }
 }

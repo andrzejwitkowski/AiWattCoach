@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
@@ -19,6 +20,9 @@ use crate::{
 };
 
 use super::logging::status_class;
+
+pub const MAX_ACTIVITY_UPLOAD_REQUEST_BYTES: usize = 16 * 1024 * 1024;
+const MAX_ACTIVITY_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Deserialize)]
 pub struct ListEventsQuery {
@@ -112,6 +116,25 @@ pub struct EventFileUploadDto {
     pub file_contents: Option<String>,
     #[serde(rename = "fileContentsBase64")]
     pub file_contents_base64: Option<String>,
+}
+
+impl TryFrom<EventFileUploadDto> for EventFileUpload {
+    type Error = ();
+
+    fn try_from(value: EventFileUploadDto) -> Result<Self, Self::Error> {
+        let file_contents = normalize_optional_upload_field(value.file_contents);
+        let file_contents_base64 = normalize_optional_upload_field(value.file_contents_base64);
+
+        if file_contents.is_some() == file_contents_base64.is_some() {
+            return Err(());
+        }
+
+        Ok(EventFileUpload {
+            filename: value.filename,
+            file_contents,
+            file_contents_base64,
+        })
+    }
 }
 
 #[derive(Serialize)]
@@ -417,7 +440,10 @@ pub async fn create_event(
         indoor: body.indoor,
         color: body.color,
         workout_doc: body.workout_doc,
-        file_upload: body.file_upload.map(map_event_file_upload),
+        file_upload: match try_map_event_file_upload(body.file_upload) {
+            Ok(file_upload) => file_upload,
+            Err(status) => return status.into_response(),
+        },
     };
 
     match intervals_service.create_event(&user_id, event).await {
@@ -464,7 +490,10 @@ pub async fn update_event(
         indoor: body.indoor,
         color: body.color,
         workout_doc: body.workout_doc,
-        file_upload: body.file_upload.map(map_event_file_upload),
+        file_upload: match try_map_event_file_upload(body.file_upload) {
+            Ok(file_upload) => file_upload,
+            Err(status) => return status.into_response(),
+        },
     };
 
     match intervals_service
@@ -900,54 +929,58 @@ fn map_activity_stream_to_dto(stream: ActivityStream) -> ActivityStreamDto {
     }
 }
 
-fn map_event_file_upload(file_upload: EventFileUploadDto) -> EventFileUpload {
-    EventFileUpload {
-        filename: file_upload.filename,
-        file_contents: file_upload.file_contents,
-        file_contents_base64: file_upload.file_contents_base64,
-    }
+fn try_map_event_file_upload(
+    file_upload: Option<EventFileUploadDto>,
+) -> Result<Option<EventFileUpload>, StatusCode> {
+    file_upload
+        .map(EventFileUpload::try_from)
+        .transpose()
+        .map_err(|_| StatusCode::BAD_REQUEST)
 }
 
 fn decode_base64(value: &str) -> Result<Vec<u8>, ()> {
-    fn decode_char(ch: char) -> Option<u8> {
-        match ch {
-            'A'..='Z' => Some((ch as u8) - b'A'),
-            'a'..='z' => Some((ch as u8) - b'a' + 26),
-            '0'..='9' => Some((ch as u8) - b'0' + 52),
-            '+' => Some(62),
-            '/' => Some(63),
-            _ => None,
-        }
-    }
-
-    let clean: Vec<char> = value.chars().filter(|ch| !ch.is_whitespace()).collect();
-    if !clean.len().is_multiple_of(4) {
+    let clean: String = value.chars().filter(|ch| !ch.is_whitespace()).collect();
+    if clean.is_empty() || !clean.len().is_multiple_of(4) {
         return Err(());
     }
 
-    let mut output = Vec::new();
-    for chunk in clean.chunks(4) {
-        let mut vals = [0u8; 4];
-        let mut padding = 0;
-        for (index, ch) in chunk.iter().enumerate() {
-            if *ch == '=' {
-                padding += 1;
-                vals[index] = 0;
-            } else {
-                vals[index] = decode_char(*ch).ok_or(())?;
-            }
-        }
+    let chunk_count = clean.len() / 4;
+    for (chunk_index, chunk) in clean.as_bytes().chunks(4).enumerate() {
+        let is_last = chunk_index + 1 == chunk_count;
+        let padding_positions: Vec<usize> = chunk
+            .iter()
+            .enumerate()
+            .filter_map(|(index, byte)| (*byte == b'=').then_some(index))
+            .collect();
 
-        output.push((vals[0] << 2) | (vals[1] >> 4));
-        if padding < 2 {
-            output.push((vals[1] << 4) | (vals[2] >> 2));
-        }
-        if padding < 1 {
-            output.push((vals[2] << 6) | vals[3]);
+        if !padding_positions.is_empty() {
+            if !is_last {
+                return Err(());
+            }
+
+            match padding_positions.as_slice() {
+                [3] | [2, 3] => {}
+                _ => return Err(()),
+            }
         }
     }
 
-    Ok(output)
+    let decoded = BASE64_STANDARD.decode(clean).map_err(|_| ())?;
+    if decoded.len() > MAX_ACTIVITY_UPLOAD_BYTES {
+        return Err(());
+    }
+
+    Ok(decoded)
+}
+
+fn normalize_optional_upload_field(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        if value.trim().is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    })
 }
 
 fn parse_workout_doc(workout_doc: Option<&str>) -> Vec<IntervalDefinitionDto> {

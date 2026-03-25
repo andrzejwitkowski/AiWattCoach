@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     future::Future,
     net::SocketAddr,
     pin::Pin,
@@ -327,6 +328,27 @@ async fn intervals_client_gets_activity_with_intervals_and_streams() {
     assert_eq!(requests[0].path, "/api/v1/activity/i202");
     assert_eq!(requests[0].query.as_deref(), Some("intervals=true"));
     assert_eq!(requests[1].path, "/api/v1/activity/i202/streams");
+    assert_eq!(requests[1].query.as_deref(), Some("types=watts"));
+}
+
+#[tokio::test]
+async fn intervals_client_propagates_stream_fetch_failures() {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sample("i202", "Loaded Ride"));
+    server.set_streams_status(StatusCode::TOO_MANY_REQUESTS);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .get_activity(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            "i202",
+        )
+        .await;
+
+    assert!(matches!(result, Err(IntervalsError::ApiError(_))));
 }
 
 #[tokio::test]
@@ -345,7 +367,7 @@ async fn intervals_client_uploads_activity_and_fetches_uploaded_details() {
             &credentials,
             UploadActivity {
                 filename: "ride.fit".to_string(),
-                file_bytes: vec![1, 2, 3, 4],
+                file_bytes: vec![0, 159, 146, 150],
                 name: Some("Uploaded Ride".to_string()),
                 description: Some("desc".to_string()),
                 device_name: Some("Garmin".to_string()),
@@ -368,12 +390,20 @@ async fn intervals_client_uploads_activity_and_fetches_uploaded_details() {
         .as_deref()
         .unwrap_or_default()
         .contains("paired_event_id=9"));
+    assert!(requests[0]
+        .body
+        .as_ref()
+        .is_some_and(|body| body.windows(4).any(|w| w == [0, 159, 146, 150])));
+    assert_eq!(requests[1].path, "/api/v1/activity/i303");
+    assert_eq!(requests[2].path, "/api/v1/activity/i303/streams");
 }
 
 #[tokio::test]
 async fn intervals_client_updates_and_deletes_activity() {
     let server = TestIntervalsServer::start().await;
     server.set_updated_activity(ResponseActivity::sample("i404", "Updated Ride"));
+    server.set_activity(ResponseActivity::sample("i404", "Updated Ride"));
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
     let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
     let credentials = IntervalsCredentials {
         api_key: "secret-key".to_string(),
@@ -398,12 +428,17 @@ async fn intervals_client_updates_and_deletes_activity() {
     client.delete_activity(&credentials, "i404").await.unwrap();
 
     assert_eq!(updated.name.as_deref(), Some("Updated Ride"));
+    assert_eq!(updated.details.streams.len(), 1);
 
     let requests = server.requests();
     assert_eq!(requests[0].method, "PUT");
     assert_eq!(requests[0].path, "/api/v1/activity/i404");
-    assert_eq!(requests[1].method, "DELETE");
+    assert_eq!(requests[1].method, "GET");
     assert_eq!(requests[1].path, "/api/v1/activity/i404");
+    assert_eq!(requests[2].method, "GET");
+    assert_eq!(requests[2].path, "/api/v1/activity/i404/streams");
+    assert_eq!(requests[3].method, "DELETE");
+    assert_eq!(requests[3].path, "/api/v1/activity/i404");
 }
 
 #[derive(Clone)]
@@ -727,7 +762,7 @@ struct CapturedRequest {
     query: Option<String>,
     authorization: Option<String>,
     traceparent: Option<String>,
-    body: Option<String>,
+    body: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Default)]
@@ -741,6 +776,7 @@ struct ServerState {
     updated_activity: Arc<Mutex<Option<ResponseActivity>>>,
     upload_ids: Arc<Mutex<Vec<String>>>,
     streams: Arc<Mutex<Vec<ResponseActivityStream>>>,
+    streams_status: Arc<Mutex<StatusCode>>,
     fit_bytes: Arc<Mutex<Vec<u8>>>,
     get_status: Arc<Mutex<StatusCode>>,
 }
@@ -836,6 +872,10 @@ impl TestIntervalsServer {
 
     fn set_streams(&self, streams: Vec<ResponseActivityStream>) {
         *self.state.streams.lock().unwrap() = streams;
+    }
+
+    fn set_streams_status(&self, status: StatusCode) {
+        *self.state.streams_status.lock().unwrap() = status;
     }
 
     fn set_get_status(&self, status: StatusCode) {
@@ -945,7 +985,7 @@ async fn create_event_handler(
         format!("/api/v1/athlete/{}/events", path.athlete_id),
         None,
         headers,
-        Some(body.to_string()),
+        Some(body.to_string().into_bytes()),
     );
 
     Json(
@@ -973,7 +1013,7 @@ async fn update_event_handler(
         ),
         None,
         headers,
-        Some(body.to_string()),
+        Some(body.to_string().into_bytes()),
     );
 
     Json(
@@ -1047,7 +1087,7 @@ async fn list_activities_handler(
 async fn get_activity_handler(
     State(state): State<ServerState>,
     Path(path): Path<ActivityPath>,
-    Query(query): Query<std::collections::HashMap<String, String>>,
+    Query(query): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     let query_string = query
@@ -1081,7 +1121,7 @@ async fn get_activity_handler(
 async fn get_activity_streams_handler(
     State(state): State<ServerState>,
     Path(path): Path<ActivityPath>,
-    Query(query): Query<std::collections::HashMap<String, String>>,
+    Query(query): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     let query_string = query
@@ -1101,15 +1141,20 @@ async fn get_activity_streams_handler(
         headers,
         None,
     );
-    Json(state.streams.lock().unwrap().clone())
+    let status = *state.streams_status.lock().unwrap();
+    if status != StatusCode::OK {
+        return status.into_response();
+    }
+
+    Json(state.streams.lock().unwrap().clone()).into_response()
 }
 
 async fn upload_activity_handler(
     State(state): State<ServerState>,
     Path(path): Path<AthletePath>,
-    Query(query): Query<std::collections::HashMap<String, String>>,
+    Query(query): Query<HashMap<String, String>>,
     headers: HeaderMap,
-    body: String,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
     let query_string = query
         .into_iter()
@@ -1126,7 +1171,7 @@ async fn upload_activity_handler(
             Some(query_string)
         },
         headers,
-        Some(body),
+        Some(body.to_vec()),
     );
     let ids = state.upload_ids.lock().unwrap().clone();
     (
@@ -1152,7 +1197,7 @@ async fn update_activity_handler(
         format!("/api/v1/activity/{}", path.activity_id),
         None,
         headers,
-        Some(body.to_string()),
+        Some(body.to_string().into_bytes()),
     );
     Json(
         state
@@ -1186,7 +1231,7 @@ fn capture_request(
     path: String,
     query: Option<String>,
     headers: HeaderMap,
-    body: Option<String>,
+    body: Option<Vec<u8>>,
 ) {
     state.requests.lock().unwrap().push(CapturedRequest {
         method: method.to_string(),

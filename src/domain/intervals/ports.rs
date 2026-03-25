@@ -1,4 +1,9 @@
-use std::{future::Future, pin::Pin};
+use std::{
+    collections::HashMap,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 
 use super::{
     Activity, CreateEvent, DateRange, Event, IntervalsCredentials, IntervalsError, UpdateActivity,
@@ -8,7 +13,9 @@ use super::{
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 #[derive(Clone, Default)]
-pub struct NoopActivityRepository;
+pub struct NoopActivityRepository {
+    stored: Arc<Mutex<HashMap<String, Vec<Activity>>>>,
+}
 
 pub trait IntervalsApiPort: Clone + Send + Sync + 'static {
     fn list_events(
@@ -146,39 +153,93 @@ pub trait ActivityRepositoryPort: Clone + Send + Sync + 'static {
 impl ActivityRepositoryPort for NoopActivityRepository {
     fn upsert(
         &self,
-        _user_id: &str,
+        user_id: &str,
         activity: Activity,
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
-        Box::pin(async move { Ok(activity) })
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut stored = stored.lock().expect("noop activity repo mutex poisoned");
+            let activities = stored.entry(user_id).or_default();
+            activities.retain(|existing| existing.id != activity.id);
+            activities.push(activity.clone());
+            Ok(activity)
+        })
     }
 
     fn upsert_many(
         &self,
-        _user_id: &str,
+        user_id: &str,
         activities: Vec<Activity>,
     ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
-        Box::pin(async move { Ok(activities) })
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut stored = stored.lock().expect("noop activity repo mutex poisoned");
+            let existing = stored.entry(user_id).or_default();
+            for activity in &activities {
+                existing.retain(|current| current.id != activity.id);
+                existing.push(activity.clone());
+            }
+            Ok(activities)
+        })
     }
 
     fn find_by_user_id_and_range(
         &self,
-        _user_id: &str,
-        _range: &DateRange,
+        user_id: &str,
+        range: &DateRange,
     ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
-        Box::pin(async move { Ok(Vec::new()) })
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let oldest = range.oldest.clone();
+        let newest = range.newest.clone();
+        Box::pin(async move {
+            let stored = stored.lock().expect("noop activity repo mutex poisoned");
+            let activities = stored.get(&user_id).cloned().unwrap_or_default();
+            Ok(activities
+                .into_iter()
+                .filter(|activity| activity_date(&activity.start_date_local) >= oldest.as_str())
+                .filter(|activity| activity_date(&activity.start_date_local) <= newest.as_str())
+                .collect())
+        })
     }
 
     fn find_by_user_id_and_activity_id(
         &self,
-        _user_id: &str,
-        _activity_id: &str,
+        user_id: &str,
+        activity_id: &str,
     ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
-        Box::pin(async move { Ok(None) })
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            let stored = stored.lock().expect("noop activity repo mutex poisoned");
+            Ok(stored
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|activity| activity.id == activity_id))
+        })
     }
 
-    fn delete(&self, _user_id: &str, _activity_id: &str) -> BoxFuture<Result<(), IntervalsError>> {
-        Box::pin(async move { Ok(()) })
+    fn delete(&self, user_id: &str, activity_id: &str) -> BoxFuture<Result<(), IntervalsError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            let mut stored = stored.lock().expect("noop activity repo mutex poisoned");
+            if let Some(activities) = stored.get_mut(&user_id) {
+                activities.retain(|activity| activity.id != activity_id);
+            }
+            Ok(())
+        })
     }
+}
+
+fn activity_date(start_date_local: &str) -> &str {
+    start_date_local.get(..10).unwrap_or(start_date_local)
 }
 
 pub trait IntervalsSettingsPort: Clone + Send + Sync + 'static {
