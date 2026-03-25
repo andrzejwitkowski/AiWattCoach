@@ -130,7 +130,7 @@ pub fn round_duration_bucket(duration_seconds: i32) -> i32 {
     rounded.max(30)
 }
 
-fn round_distance_bucket(distance_meters: Option<f64>) -> Option<i32> {
+pub fn round_distance_bucket(distance_meters: Option<f64>) -> Option<i32> {
     let distance_meters = distance_meters?;
     if !distance_meters.is_finite() || distance_meters <= 0.0 {
         return None;

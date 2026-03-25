@@ -7,8 +7,8 @@ use fitparser::{
 };
 
 use crate::domain::intervals::{
-    round_duration_bucket, ActivityFallbackIdentity, ActivityFileIdentityExtractorPort, BoxFuture,
-    IntervalsError, UploadActivity,
+    round_distance_bucket, round_duration_bucket, ActivityFallbackIdentity,
+    ActivityFileIdentityExtractorPort, BoxFuture, IntervalsError, UploadActivity,
 };
 
 #[derive(Clone, Default)]
@@ -53,9 +53,7 @@ fn extract_fit_identity(file_bytes: &[u8]) -> Option<ActivityFallbackIdentity> {
         .or_else(|| int_field(&session, "total_timer_time").filter(|seconds| *seconds > 0))
         .map(round_duration_bucket)?;
 
-    let distance_bucket_meters = float_field(&session, "total_distance")
-        .filter(|meters| meters.is_finite() && *meters > 0.0)
-        .map(|meters| ((meters / 100.0).round() * 100.0) as i32);
+    let distance_bucket_meters = round_distance_bucket(float_field(&session, "total_distance"));
 
     Some(ActivityFallbackIdentity {
         start_bucket,

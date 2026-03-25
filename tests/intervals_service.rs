@@ -524,6 +524,42 @@ async fn upload_activity_uses_positive_timer_time_when_elapsed_time_is_zero() {
 }
 
 #[tokio::test]
+async fn upload_activity_returns_cached_duplicate_without_credentials() {
+    let existing = sample_activity("i620", "Cached Duplicate Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec!["i621".to_string()],
+        activities: vec![sample_activity("i621", "Should Not Upload")],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::without_credentials();
+    let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Cached Duplicate Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: existing.external_id.clone(),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(!result.created);
+    assert_eq!(result.activity_ids, vec![existing.id.clone()]);
+    assert_eq!(result.activities, vec![existing]);
+    assert!(api_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn get_activity_persists_fetched_activity() {
     let activity = sample_activity("i77", "Threshold Ride");
     let api = FakeIntervalsApi::with_get_activity(activity.clone());

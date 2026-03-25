@@ -303,7 +303,6 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
             let upload = UploadActivity {
                 external_id: normalize_external_id(upload.external_id.as_deref()),
                 ..upload
@@ -357,6 +356,7 @@ where
                 }
             }
 
+            let credentials = service.settings.get_credentials(&user_id).await?;
             let uploaded = service.api.upload_activity(&credentials, upload).await?;
             if let Err(error) = service
                 .activities
