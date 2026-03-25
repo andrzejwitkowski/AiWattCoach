@@ -1,4 +1,8 @@
-use reqwest::{multipart, Client, StatusCode};
+use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _};
+use opentelemetry_http::HeaderInjector;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use reqwest::{multipart, Client, RequestBuilder, StatusCode};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::domain::intervals::{
     Activity, ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
@@ -54,7 +58,20 @@ impl IntervalsIcuClient {
     }
 
     fn athlete_url_impl(base_url: &str, athlete_id: &str, path: &str) -> String {
-        format!("{}/api/v1/athlete/{}{}", base_url, athlete_id, path)
+        format!("{base_url}/api/v1/athlete/{athlete_id}{path}")
+    }
+
+    fn with_trace_context(request: RequestBuilder) -> RequestBuilder {
+        let context = tracing::Span::current().context();
+
+        if !context.span().span_context().is_valid() {
+            return request;
+        }
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        TraceContextPropagator::new().inject_context(&context, &mut HeaderInjector(&mut headers));
+
+        request.headers(headers)
     }
 
     fn activity_url(&self, activity_id: &str, path: &str) -> String {
@@ -80,9 +97,8 @@ impl IntervalsConnectionTester for IntervalsIcuClient {
         Box::pin(async move {
             let url = Self::athlete_url_impl(&base_url, &athlete_id, "");
 
-            let response = client
-                .get(&url)
-                .basic_auth("API_KEY", Some(&api_key))
+            let response = client.get(&url).basic_auth("API_KEY", Some(&api_key));
+            let response = Self::with_trace_context(response)
                 .send()
                 .await
                 .map_err(|_| IntervalsConnectionError::Unavailable)?;
@@ -121,7 +137,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let response = client
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key))
-                .query(&[("oldest", &range.oldest), ("newest", &range.newest)])
+                .query(&[("oldest", &range.oldest), ("newest", &range.newest)]);
+            let response = Self::with_trace_context(response)
                 .send()
                 .await
                 .map_err(map_connection_error)?;
@@ -145,7 +162,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
         Box::pin(async move {
             let response = client
                 .get(url)
-                .basic_auth("API_KEY", Some(&credentials.api_key))
+                .basic_auth("API_KEY", Some(&credentials.api_key));
+            let response = Self::with_trace_context(response)
                 .send()
                 .await
                 .map_err(map_connection_error)?;
@@ -188,7 +206,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
                         .as_ref()
                         .and_then(|file| file.file_contents_base64.clone()),
                     filename: file_upload.as_ref().map(|file| file.filename.clone()),
-                })
+                });
+            let response = Self::with_trace_context(response)
                 .send()
                 .await
                 .map_err(map_connection_error)?;
@@ -228,7 +247,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
                         .as_ref()
                         .and_then(|file| file.file_contents_base64.clone()),
                     filename: file_upload.as_ref().map(|file| file.filename.clone()),
-                })
+                });
+            let response = Self::with_trace_context(response)
                 .send()
                 .await
                 .map_err(map_connection_error)?;
@@ -256,7 +276,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
         Box::pin(async move {
             let response = client
                 .delete(url)
-                .basic_auth("API_KEY", Some(&credentials.api_key))
+                .basic_auth("API_KEY", Some(&credentials.api_key));
+            let response = Self::with_trace_context(response)
                 .send()
                 .await
                 .map_err(map_connection_error)?;
@@ -285,7 +306,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
         Box::pin(async move {
             let response = client
                 .get(url)
-                .basic_auth("API_KEY", Some(&credentials.api_key))
+                .basic_auth("API_KEY", Some(&credentials.api_key));
+            let response = Self::with_trace_context(response)
                 .send()
                 .await
                 .map_err(map_connection_error)?;

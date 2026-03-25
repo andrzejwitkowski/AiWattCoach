@@ -52,7 +52,10 @@ describe('App', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/me', {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
+      },
       credentials: 'include'
     });
   });

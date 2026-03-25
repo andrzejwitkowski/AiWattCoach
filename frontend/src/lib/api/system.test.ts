@@ -31,11 +31,17 @@ describe('loadBackendStatus', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/health', {
       method: 'GET',
-      headers: { Accept: 'application/json' }
+      headers: {
+        Accept: 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
+      }
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/ready', {
       method: 'GET',
-      headers: { Accept: 'application/json' }
+      headers: {
+        Accept: 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
+      }
     });
     expect(result.state).toBe('online');
     expect(result.health.service).toBe('AiWattCoach');
@@ -67,7 +73,10 @@ describe('loadBackendStatus', () => {
       'http://api.example.com/health',
       {
         method: 'GET',
-        headers: { Accept: 'application/json' }
+        headers: {
+          Accept: 'application/json',
+          traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
+        }
       }
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -75,7 +84,10 @@ describe('loadBackendStatus', () => {
       'http://api.example.com/ready',
       {
         method: 'GET',
-        headers: { Accept: 'application/json' }
+        headers: {
+          Accept: 'application/json',
+          traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
+        }
       }
     );
     expect(result.state).toBe('degraded');

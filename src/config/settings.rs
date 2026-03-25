@@ -8,6 +8,7 @@ pub struct Settings {
     pub server: ServerSettings,
     pub mongo: MongoSettings,
     pub auth: AuthSettings,
+    pub client_log_ingestion_enabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -85,6 +86,7 @@ impl Settings {
             "SESSION_TTL_HOURS",
             "SESSION_COOKIE_SECURE",
             "ADMIN_EMAILS",
+            "ENABLE_CLIENT_LOG_INGESTION",
         ];
         let mut values = BTreeMap::new();
         for key in keys {
@@ -140,6 +142,11 @@ impl Settings {
                 },
                 admin_emails: parse_admin_emails(values.get("ADMIN_EMAILS")),
             },
+            client_log_ingestion_enabled: optional_bool_setting(
+                values.get("ENABLE_CLIENT_LOG_INGESTION"),
+                "ENABLE_CLIENT_LOG_INGESTION",
+                false,
+            )?,
         })
         .and_then(validate_session_cookie_settings)
     }
@@ -169,6 +176,7 @@ impl Settings {
                 },
                 admin_emails: Vec::new(),
             },
+            client_log_ingestion_enabled: false,
         }
     }
 }
@@ -265,6 +273,17 @@ fn parse_bool_setting(raw_value: &str, key: &str) -> Result<bool, SettingsError>
     }
 }
 
+fn optional_bool_setting(
+    raw_value: Option<&String>,
+    key: &str,
+    default: bool,
+) -> Result<bool, SettingsError> {
+    match raw_value {
+        Some(value) => parse_bool_setting(value.trim(), key),
+        None => Ok(default),
+    }
+}
+
 fn parse_same_site_setting(raw_value: &str) -> Result<String, SettingsError> {
     let normalized = raw_value.trim().to_ascii_lowercase();
 
@@ -313,5 +332,65 @@ fn parse_cookie_name(raw_value: &str) -> Result<String, SettingsError> {
         Err(SettingsError::new(
             "SESSION_COOKIE_NAME must be a valid cookie token",
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::Settings;
+
+    fn base_values() -> BTreeMap<String, String> {
+        BTreeMap::from([
+            ("APP_NAME".to_string(), "AiWattCoach".to_string()),
+            ("SERVER_HOST".to_string(), "127.0.0.1".to_string()),
+            ("SERVER_PORT".to_string(), "3002".to_string()),
+            (
+                "MONGODB_URI".to_string(),
+                "mongodb://localhost:27017".to_string(),
+            ),
+            ("MONGODB_DATABASE".to_string(), "aiwattcoach".to_string()),
+            (
+                "GOOGLE_OAUTH_CLIENT_ID".to_string(),
+                "client-id.apps.googleusercontent.com".to_string(),
+            ),
+            (
+                "GOOGLE_OAUTH_CLIENT_SECRET".to_string(),
+                "super-secret".to_string(),
+            ),
+            (
+                "GOOGLE_OAUTH_REDIRECT_URL".to_string(),
+                "http://localhost:3002/api/auth/google/callback".to_string(),
+            ),
+            (
+                "SESSION_COOKIE_NAME".to_string(),
+                "aiwattcoach_session".to_string(),
+            ),
+            ("SESSION_COOKIE_SAME_SITE".to_string(), "lax".to_string()),
+            ("SESSION_TTL_HOURS".to_string(), "24".to_string()),
+            ("SESSION_COOKIE_SECURE".to_string(), "false".to_string()),
+            ("ADMIN_EMAILS".to_string(), "".to_string()),
+        ])
+    }
+
+    #[test]
+    fn client_log_ingestion_defaults_to_disabled() {
+        let settings = Settings::from_map(&base_values()).expect("settings should parse");
+
+        assert!(!settings.client_log_ingestion_enabled);
+    }
+
+    #[test]
+    fn client_log_ingestion_can_be_enabled_explicitly() {
+        let mut values = base_values();
+        values.insert(
+            "ENABLE_CLIENT_LOG_INGESTION".to_string(),
+            "true".to_string(),
+        );
+
+        let settings = Settings::from_map(&values).expect("settings should parse");
+
+        assert!(settings.client_log_ingestion_enabled);
     }
 }

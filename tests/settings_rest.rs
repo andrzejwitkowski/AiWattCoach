@@ -1,3 +1,5 @@
+mod support;
+
 use std::{
     fs,
     future::Future,
@@ -25,6 +27,8 @@ use axum::{
 use mongodb::Client;
 use serde_json::Value;
 use tower::util::ServiceExt;
+
+use crate::support::tracing_capture::capture_tracing_logs;
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -140,6 +144,29 @@ impl TestSettingsService {
     }
 }
 
+struct RepositoryErrorSettingsService {
+    message: String,
+}
+
+impl RepositoryErrorSettingsService {
+    fn new(message: &str) -> Self {
+        Self {
+            message: message.to_string(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct AdminIdentityErrorService {
+    error: aiwattcoach::domain::identity::IdentityError,
+}
+
+impl AdminIdentityErrorService {
+    fn new(error: aiwattcoach::domain::identity::IdentityError) -> Self {
+        Self { error }
+    }
+}
+
 impl Default for TestSettingsService {
     fn default() -> Self {
         Self::new()
@@ -233,6 +260,108 @@ impl UserSettingsUseCases for TestSettingsService {
         let result = settings.clone();
         *self.settings.lock().unwrap() = Some(settings);
         Box::pin(async move { Ok(result) })
+    }
+}
+
+impl UserSettingsUseCases for RepositoryErrorSettingsService {
+    fn get_settings(&self, _user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: AiAgentsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: IntervalsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: AnalysisOptions,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: CyclingSettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+}
+
+impl IdentityUseCases for AdminIdentityErrorService {
+    fn begin_google_login(
+        &self,
+        _return_to: Option<String>,
+    ) -> BoxFuture<
+        Result<
+            aiwattcoach::domain::identity::GoogleLoginStart,
+            aiwattcoach::domain::identity::IdentityError,
+        >,
+    > {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::identity::GoogleLoginStart {
+                state: "state-1".to_string(),
+                redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=state-1"
+                    .to_string(),
+            })
+        })
+    }
+
+    fn handle_google_callback(
+        &self,
+        _state: &str,
+        _code: &str,
+    ) -> BoxFuture<
+        Result<
+            aiwattcoach::domain::identity::GoogleLoginSuccess,
+            aiwattcoach::domain::identity::IdentityError,
+        >,
+    > {
+        Box::pin(async {
+            Err(aiwattcoach::domain::identity::IdentityError::External(
+                "not used in test".to_string(),
+            ))
+        })
+    }
+
+    fn get_current_user(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<Option<AppUser>, aiwattcoach::domain::identity::IdentityError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn logout(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<(), aiwattcoach::domain::identity::IdentityError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn require_admin(
+        &self,
+        _session_id: &str,
+    ) -> BoxFuture<Result<AppUser, aiwattcoach::domain::identity::IdentityError>> {
+        let error = self.error.clone();
+        Box::pin(async move { Err(error) })
     }
 }
 
@@ -607,6 +736,121 @@ async fn non_admin_cannot_view_other_user_settings() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn admin_forbidden_logs_warn_before_returning_403() {
+    let app = settings_test_app(
+        AdminIdentityErrorService::new(aiwattcoach::domain::identity::IdentityError::Forbidden),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/admin/settings/user-999")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"WARN\"",
+            "\"error_kind\":\"forbidden\"",
+            "\"status\":403",
+        ],
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn admin_identity_backend_error_logs_error_before_returning_503() {
+    let app = settings_test_app(
+        AdminIdentityErrorService::new(aiwattcoach::domain::identity::IdentityError::Repository(
+            "identity backend unavailable".to_string(),
+        )),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/admin/settings/user-999")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"repository_error\"",
+            "\"status\":503",
+        ],
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn admin_settings_repository_error_logs_error_kind_before_returning_503() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession {
+            roles: vec![Role::User, Role::Admin],
+            ..Default::default()
+        },
+        RepositoryErrorSettingsService::new("admin settings repository unavailable"),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/admin/settings/user-999")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"repository_error\"",
+            "\"status\":503",
+        ],
+    );
+}
+
+fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str]) {
+    let matched = logs.lines().any(|line| {
+        expected_fragments
+            .iter()
+            .all(|fragment| line.contains(fragment))
+    });
+
+    assert!(
+        matched,
+        "expected one log entry to contain {:?}, logs were: {logs}",
+        expected_fragments
+    );
+}
+
 #[derive(Clone, Default)]
 struct TestIdentityServiceWithSession {
     session_id: String,
@@ -899,7 +1143,7 @@ async fn test_intervals_connection_returns_400_on_invalid_configuration() {
         .contains("Invalid configuration"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn test_intervals_connection_returns_503_on_unavailable() {
     let app = settings_test_app_with_intervals(
         TestIdentityServiceWithSession::default(),
@@ -910,8 +1154,8 @@ async fn test_intervals_connection_returns_503_on_unavailable() {
     )
     .await;
 
-    let response = app
-        .oneshot(
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/settings/intervals/test")
@@ -923,7 +1167,9 @@ async fn test_intervals_connection_returns_503_on_unavailable() {
                 .unwrap(),
         )
         .await
-        .unwrap();
+        .unwrap()
+    })
+    .await;
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
@@ -935,6 +1181,84 @@ async fn test_intervals_connection_returns_503_on_unavailable() {
         .as_str()
         .unwrap()
         .contains("unavailable"));
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"unavailable\"",
+            "\"status\":503",
+        ],
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn get_settings_returns_503_and_logs_error_kind_on_repository_error() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        RepositoryErrorSettingsService::new("settings repository unavailable"),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"ERROR\"",
+            "\"error_kind\":\"repository_error\"",
+            "\"status\":503",
+        ],
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn update_cycling_returns_400_and_logs_warn_on_validation_error() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "age": 0
+    });
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/cycling")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"level\":\"WARN\"",
+            "\"error_kind\":\"validation_error\"",
+            "\"status\":400",
+        ],
+    );
 }
 
 #[tokio::test]

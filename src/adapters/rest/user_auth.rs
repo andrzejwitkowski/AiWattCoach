@@ -2,10 +2,17 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
+use sha2::{Digest, Sha256};
+use tracing::field;
 
 use crate::config::AppState;
 
 use super::cookies::read_cookie;
+
+fn pseudonymize_user_id(user_id: &str) -> String {
+    let hash = Sha256::digest(user_id.as_bytes());
+    format!("{:x}", hash)[..16].to_string()
+}
 
 pub(super) async fn resolve_user_id(
     state: &AppState,
@@ -24,6 +31,8 @@ pub(super) async fn resolve_user_id(
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?
         .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
+
+    tracing::Span::current().record("user_id", field::display(pseudonymize_user_id(&user.id)));
 
     Ok(user.id)
 }

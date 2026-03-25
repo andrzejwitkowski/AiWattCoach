@@ -18,6 +18,14 @@ This starts:
 - app plus built frontend UI on `http://localhost:3002`
 - MongoDB on `mongodb://127.0.0.1:27017`
 
+For the observability stack in local Docker, start the separate logging compose too:
+
+```bash
+docker compose -f docker-compose.logging.yml up -d
+```
+
+Then set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317` if you run the backend directly on the host, or `http://alloy:4317` when the app runs in the same Docker network as the logging stack.
+
 Compose waits for MongoDB readiness before starting the app and exposes:
 - `/health` for liveness
 - `/ready` for readiness against the configured Mongo database
@@ -131,6 +139,33 @@ Set these in Coolify for the single application container:
 - `SERVER_PORT=3002`
 - `MONGODB_URI=<paste Mongo URL (internal) from the Coolify Mongo resource>`
 - `MONGODB_DATABASE=<database name configured in the Coolify Mongo resource>`
+
+### Coolify logging stack as a separate compose resource
+
+If you want Grafana, Tempo, Loki, and Alloy in the same Coolify environment as an already-deployed app, deploy `docker-compose.logging.yml` as a separate resource.
+
+Use this split model:
+
+- existing app resource: `docker-compose.yml`
+- logging resource: `docker-compose.logging.yml`
+- same Coolify environment/network for both resources
+- app OTLP endpoint: `http://alloy:4317`
+
+Set these env vars on the existing app resource:
+
+```env
+OTEL_SERVICE_NAME=aiwattcoach-backend
+OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+```
+
+Notes:
+
+- This split preserves OTLP tracing to Tempo without cross-resource shared volumes.
+- The current backend exports traces over OTLP; it does not yet export backend logs over OTLP.
+- Loki and Grafana are still deployed and ready, but backend file-log ingestion is no longer part of the split Coolify setup.
+- If you later want backend logs in Loki in Coolify, add OTLP log export from the app or reintroduce a shared-volume/file-scrape design.
+- Expose Grafana from the logging resource if you want a public dashboard entry point.
 
 ### Coolify setup from public GitHub repo
 
