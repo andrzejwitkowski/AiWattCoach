@@ -1,3 +1,5 @@
+mod support;
+
 use std::{
     fs,
     path::PathBuf,
@@ -12,6 +14,8 @@ use axum::{
 };
 use serde_json::Value;
 use tower::util::ServiceExt;
+
+use crate::support::tracing_capture::capture_tracing_logs;
 
 const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 const HTML_CONTENT_TYPE: &str = "text/html";
@@ -735,6 +739,147 @@ async fn post_api_route_does_not_fall_back_to_spa_html() {
         .unwrap();
 
     assert_not_found_non_html_response(response).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn health_check_with_traceparent_logs_matching_trace_id() {
+    let settings = unreachable_mongo_settings();
+    let fixture = frontend_fixture();
+    let app = build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        ),
+        fixture.dist_dir(),
+    );
+    let trace_id = "0af7651916cd43dd8448eb211c80319c";
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/health")
+                .header("traceparent", format!("00-{trace_id}-b7ad6b7169203331-01"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        logs.contains(trace_id),
+        "expected logs to include propagated trace id {trace_id}, got: {logs}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn not_found_api_route_emits_warn_classification_log() {
+    let settings = unreachable_mongo_settings();
+    let fixture = frontend_fixture();
+    let app = build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        ),
+        fixture.dist_dir(),
+    );
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/unknown")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_log_entry_contains(&logs, &["\"level\":\"WARN\"", "\"status\":404"]);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn readiness_check_emits_error_classification_log_for_service_unavailable() {
+    let settings = unreachable_mongo_settings();
+    let fixture = frontend_fixture();
+    let app = build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        ),
+        fixture.dist_dir(),
+    );
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/ready")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_log_entry_contains(&logs, &["\"level\":\"ERROR\"", "\"status\":503"]);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn health_check_without_traceparent_logs_generated_trace_id() {
+    let settings = unreachable_mongo_settings();
+    let fixture = frontend_fixture();
+    let app = build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        ),
+        fixture.dist_dir(),
+    );
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        logs.lines().any(|line| {
+            line.contains("\"trace_id\":\"")
+                && !line.contains("\"trace_id\":\"00000000000000000000000000000000\"")
+        }),
+        "expected logs to include a generated non-zero trace id, got: {logs}"
+    );
+}
+
+fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str]) {
+    let matched = logs.lines().any(|line| {
+        expected_fragments
+            .iter()
+            .all(|fragment| line.contains(fragment))
+    });
+
+    assert!(
+        matched,
+        "expected one log entry to contain {:?}, logs were: {logs}",
+        expected_fragments
+    );
 }
 
 async fn assert_html_response(response: axum::response::Response, expected_html: &str) {

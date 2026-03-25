@@ -3,6 +3,8 @@ mod auth;
 mod cookies;
 mod health;
 mod intervals;
+mod logging;
+mod logs;
 mod settings;
 mod user_auth;
 
@@ -10,16 +12,28 @@ use std::path::PathBuf;
 
 use axum::{
     body::Body,
-    extract::Request,
+    extract::{DefaultBodyLimit, MatchedPath, Request},
     http::{header, HeaderMap, Method, StatusCode},
     response::Response,
     routing::{get, patch, post},
     Router,
 };
+use opentelemetry::{
+    propagation::TextMapPropagator,
+    trace::{SpanContext, SpanId, TraceContextExt as _, TraceFlags, TraceId, TraceState},
+    Context,
+};
+use opentelemetry_http::HeaderExtractor;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use tower::util::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
+use tracing::{field::Empty, Level, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::AppState;
+
+use self::logging::status_class;
 
 pub fn router(state: AppState) -> Router {
     router_with_frontend_dist(
@@ -39,6 +53,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/auth/google/callback", get(auth::finish_google_login))
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
+        .route(
+            "/api/logs",
+            post(logs::ingest_logs).layer(DefaultBodyLimit::max(logs::MAX_REQUEST_BODY_BYTES)),
+        )
         .route("/api/admin/system-info", get(admin::system_info))
         .route(
             "/api/admin/settings/{user_id}",
@@ -68,7 +86,127 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
             get(intervals::download_fit),
         )
         .fallback(move |request| serve_frontend(request, static_files.clone(), spa_index.clone()))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(make_request_span)
+                .on_response(log_response_event),
+        )
         .with_state(state)
+}
+
+fn make_request_span(request: &Request) -> Span {
+    let matched_path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str);
+    let route = matched_path.unwrap_or_else(|| request.uri().path());
+    let span = tracing::info_span!(
+        "http_request",
+        http.method = %request.method(),
+        http.route = %route,
+        http.target = %request.uri().path(),
+        http.status_code = Empty,
+        user_id = Empty,
+        trace_id = Empty,
+    );
+
+    apply_incoming_trace_context(request.headers(), &span);
+    span
+}
+
+fn apply_incoming_trace_context(headers: &HeaderMap, span: &Span) {
+    let parent_context = TraceContextPropagator::new().extract(&HeaderExtractor(headers));
+    let incoming_trace_id = {
+        let parent_span = parent_context.span();
+        let parent_span_context = parent_span.span_context();
+
+        parent_span_context
+            .is_valid()
+            .then(|| parent_span_context.trace_id().to_string())
+    };
+
+    if let Some(trace_id) = incoming_trace_id {
+        span.set_parent(parent_context);
+        span.record("trace_id", tracing::field::display(trace_id));
+        return;
+    }
+
+    let generated_trace_id = TraceId::from_hex(&uuid::Uuid::new_v4().to_string().replace('-', ""))
+        .expect("uuid v4 without dashes should be a valid 32-char hex trace id");
+    let generated_parent = synthetic_remote_parent_context(generated_trace_id);
+    span.set_parent(generated_parent);
+    span.record(
+        "trace_id",
+        tracing::field::display(generated_trace_id.to_string()),
+    );
+}
+
+fn synthetic_remote_parent_context(trace_id: TraceId) -> Context {
+    let span_id = SpanId::from_hex(&uuid::Uuid::new_v4().to_string().replace('-', "")[..16])
+        .expect("uuid v4 prefix should be a valid 16-char hex span id");
+
+    Context::new().with_remote_span_context(SpanContext::new(
+        trace_id,
+        span_id,
+        TraceFlags::SAMPLED,
+        true,
+        TraceState::default(),
+    ))
+}
+
+fn record_span_trace_id(span: &Span) {
+    let span_context = span.context().span().span_context().clone();
+
+    if span_context.is_valid() {
+        span.record(
+            "trace_id",
+            tracing::field::display(span_context.trace_id().to_string()),
+        );
+    }
+}
+
+fn log_response_event<B>(response: &Response<B>, latency: std::time::Duration, span: &Span) {
+    let status = response.status();
+    let status_class = status_class(status);
+
+    record_span_trace_id(span);
+    span.record("http.status_code", status.as_u16());
+
+    let _guard = span.enter();
+
+    match status_level(status) {
+        Level::ERROR => tracing::event!(
+            Level::ERROR,
+            status = status.as_u16(),
+            status_class,
+            latency_ms = latency.as_millis(),
+            "finished processing request"
+        ),
+        Level::WARN => tracing::event!(
+            Level::WARN,
+            status = status.as_u16(),
+            status_class,
+            latency_ms = latency.as_millis(),
+            "finished processing request"
+        ),
+        _ => tracing::event!(
+            Level::INFO,
+            status = status.as_u16(),
+            status_class,
+            latency_ms = latency.as_millis(),
+            "finished processing request"
+        ),
+    }
+}
+
+fn status_level(status: StatusCode) -> Level {
+    if status.is_server_error() {
+        Level::ERROR
+    } else if status.is_client_error() {
+        Level::WARN
+    } else {
+        Level::INFO
+    }
 }
 
 async fn serve_frontend(
@@ -174,4 +312,24 @@ fn internal_error_response() -> Response {
         .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
         .body(Body::from("failed to serve frontend asset"))
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use opentelemetry::trace::{SpanContext, SpanId, TraceContextExt as _, TraceId};
+
+    use super::synthetic_remote_parent_context;
+
+    #[test]
+    fn synthetic_remote_parent_context_is_valid_and_sampled() {
+        let trace_id = TraceId::from_hex("0af7651916cd43dd8448eb211c80319c").unwrap();
+        let context = synthetic_remote_parent_context(trace_id);
+        let span_context: SpanContext = context.span().span_context().clone();
+
+        assert!(span_context.is_remote());
+        assert!(span_context.is_valid());
+        assert!(span_context.trace_flags().is_sampled());
+        assert_eq!(span_context.trace_id(), trace_id);
+        assert_ne!(span_context.span_id(), SpanId::INVALID);
+    }
 }

@@ -1,3 +1,5 @@
+mod support;
+
 use std::{
     fs,
     future::Future,
@@ -14,6 +16,10 @@ use aiwattcoach::{
         AppUser, AuthSession, GoogleLoginStart, GoogleLoginSuccess, IdentityError,
         IdentityUseCases, Role,
     },
+    domain::settings::{
+        AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError,
+        UserSettings, UserSettingsUseCases,
+    },
     Settings,
 };
 use axum::{
@@ -24,11 +30,12 @@ use mongodb::Client;
 use serde_json::Value;
 use tower::util::ServiceExt;
 
+use crate::support::tracing_capture::capture_tracing_logs;
+
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 static FRONTEND_FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
 #[tokio::test]
 async fn google_start_redirects_to_provider() {
     let app = auth_test_app(TestIdentityService::default()).await;
@@ -359,6 +366,32 @@ async fn admin_system_info_returns_payload_for_admin() {
     assert_eq!(payload["mongoDatabase"], "aiwattcoach");
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn settings_request_logs_authenticated_user_id_on_request_span() {
+    let app =
+        auth_test_app_with_settings(TestIdentityService::default(), TestSettingsService).await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    // user_id is pseudonymized via SHA-256 (first 16 hex chars of hash)
+    assert!(
+        logs.contains("\"user_id\":\"c6c289e49e9c05b2\""),
+        "expected request logs to include pseudonymized user_id, got: {logs}"
+    );
+}
+
 async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
@@ -378,6 +411,73 @@ async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
         ),
         fixture.dist_dir(),
     )
+}
+
+async fn auth_test_app_with_settings(
+    identity_service: TestIdentityService,
+    settings_service: TestSettingsService,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = frontend_fixture();
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_settings_service(std::sync::Arc::new(settings_service)),
+        fixture.dist_dir(),
+    )
+}
+
+#[derive(Default)]
+struct TestSettingsService;
+
+impl UserSettingsUseCases for TestSettingsService {
+    fn get_settings(&self, user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let user_id = user_id.to_string();
+        Box::pin(async move { Ok(UserSettings::new_defaults(user_id, 1000)) })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: AiAgentsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_ai_agents is not used in auth tests") })
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: IntervalsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_intervals is not used in auth tests") })
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: AnalysisOptions,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_options is not used in auth tests") })
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: CyclingSettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_cycling is not used in auth tests") })
+    }
 }
 
 #[derive(Clone)]
