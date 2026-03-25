@@ -19,8 +19,9 @@ use aiwattcoach::{
     domain::{
         identity::{AppUser, IdentityUseCases, Role},
         intervals::{
-            CreateEvent, DateRange, Event, EventCategory, IntervalsError, IntervalsUseCases,
-            UpdateEvent,
+            Activity, ActivityDetails, ActivityMetrics, CreateEvent, DateRange, Event,
+            EventCategory, IntervalsError, IntervalsUseCases, UpdateActivity, UpdateEvent,
+            UploadActivity, UploadedActivities,
         },
     },
     Settings,
@@ -356,6 +357,75 @@ async fn create_event_returns_201() {
             .len(),
         2
     );
+}
+
+#[tokio::test]
+async fn create_event_rejects_ambiguous_file_upload_payload() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/events")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "category": "WORKOUT",
+                        "startDateLocal": "2026-03-25",
+                        "fileUpload": {
+                            "filename": "workout.zwo",
+                            "fileContents": "<xml/>",
+                            "fileContentsBase64": "PHhtbC8+"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn create_event_rejects_empty_file_upload_payload() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/events")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "category": "WORKOUT",
+                        "startDateLocal": "2026-03-25",
+                        "fileUpload": {
+                            "filename": "workout.zwo",
+                            "fileContents": "   "
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -820,9 +890,203 @@ fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str]) {
 
     assert!(
         matched,
-        "expected one log entry to contain {:?}, logs were: {logs}",
-        expected_fragments
+        "expected one log entry to contain {expected_fragments:?}, logs were: {logs}"
     );
+}
+
+#[tokio::test]
+async fn list_activities_returns_activities_for_authenticated_user() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_activities(vec![sample_activity("i11", "Morning Ride")]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/activities?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    let activity = &body.as_array().unwrap()[0];
+    assert_eq!(activity.get("id").unwrap().as_str(), Some("i11"));
+    assert_eq!(
+        activity
+            .get("metrics")
+            .unwrap()
+            .get("normalizedPowerWatts")
+            .unwrap()
+            .as_i64(),
+        Some(238)
+    );
+}
+
+#[tokio::test]
+async fn get_activity_returns_detailed_activity() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_activities(vec![sample_activity("i21", "Detailed Ride")]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/activities/i21")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(body.get("name").unwrap().as_str(), Some("Detailed Ride"));
+    assert_eq!(
+        body.get("details")
+            .unwrap()
+            .get("intervals")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn create_activity_returns_201_and_uploaded_activities() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_uploaded_activities(UploadedActivities {
+            created: true,
+            activity_ids: vec!["i31".to_string()],
+            activities: vec![sample_activity("i31", "Uploaded Ride")],
+        }),
+    )
+    .await;
+
+    let request_body = serde_json::json!({
+        "filename": "ride.fit",
+        "fileContentsBase64": "AQID",
+        "name": "Uploaded Ride",
+        "pairedEventId": 9
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/activities")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body: Value = get_json(response).await;
+    assert_eq!(body.get("created").unwrap().as_bool(), Some(true));
+    assert_eq!(
+        body.get("activityIds").unwrap().as_array().unwrap()[0].as_str(),
+        Some("i31")
+    );
+}
+
+#[tokio::test]
+async fn create_activity_rejects_invalid_base64_payload() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/activities")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "filename": "ride.fit",
+                        "fileContentsBase64": "AA=A"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn update_activity_returns_200() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_activities(vec![sample_activity("i41", "Old Ride")]),
+    )
+    .await;
+
+    let request_body = serde_json::json!({
+        "name": "Updated Ride",
+        "activityType": "VirtualRide",
+        "trainer": true
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/intervals/activities/i41")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(body.get("name").unwrap().as_str(), Some("Updated Ride"));
+    assert_eq!(body.get("trainer").unwrap().as_bool(), Some(true));
+}
+
+#[tokio::test]
+async fn delete_activity_returns_204() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_activities(vec![sample_activity("i51", "Delete Me")]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/intervals/activities/i51")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
 
 async fn intervals_test_app(
@@ -860,6 +1124,84 @@ fn sample_event(id: i64, name: &str, workout_doc: Option<String>) -> Event {
         indoor: true,
         color: Some("blue".to_string()),
         workout_doc,
+    }
+}
+
+fn sample_activity(id: &str, name: &str) -> Activity {
+    Activity {
+        id: id.to_string(),
+        athlete_id: Some("athlete-42".to_string()),
+        start_date_local: "2026-03-22T08:00:00".to_string(),
+        start_date: Some("2026-03-22T07:00:00Z".to_string()),
+        name: Some(name.to_string()),
+        description: Some("structured ride".to_string()),
+        activity_type: Some("Ride".to_string()),
+        source: Some("UPLOAD".to_string()),
+        external_id: Some(format!("external-{id}")),
+        device_name: Some("Garmin Edge".to_string()),
+        distance_meters: Some(40200.0),
+        moving_time_seconds: Some(3600),
+        elapsed_time_seconds: Some(3700),
+        total_elevation_gain_meters: Some(420.0),
+        total_elevation_loss_meters: Some(415.0),
+        average_speed_mps: Some(11.2),
+        max_speed_mps: Some(16.0),
+        average_heart_rate_bpm: Some(148),
+        max_heart_rate_bpm: Some(174),
+        average_cadence_rpm: Some(88.0),
+        trainer: false,
+        commute: false,
+        race: false,
+        has_heart_rate: true,
+        stream_types: vec!["watts".to_string()],
+        tags: vec!["tempo".to_string()],
+        metrics: ActivityMetrics {
+            training_stress_score: Some(72),
+            normalized_power_watts: Some(238),
+            intensity_factor: Some(0.84),
+            efficiency_factor: Some(1.28),
+            variability_index: Some(1.04),
+            average_power_watts: Some(228),
+            ftp_watts: Some(283),
+            total_work_joules: Some(820),
+            calories: Some(690),
+            trimp: Some(92.0),
+            power_load: Some(72),
+            heart_rate_load: Some(66),
+            pace_load: None,
+            strain_score: Some(13.7),
+        },
+        details: ActivityDetails {
+            intervals: vec![aiwattcoach::domain::intervals::ActivityInterval {
+                id: Some(1),
+                label: Some("Tempo".to_string()),
+                interval_type: Some("WORK".to_string()),
+                group_id: Some("g1".to_string()),
+                start_index: Some(10),
+                end_index: Some(50),
+                start_time_seconds: Some(600),
+                end_time_seconds: Some(1200),
+                moving_time_seconds: Some(600),
+                elapsed_time_seconds: Some(620),
+                distance_meters: Some(10000.0),
+                average_power_watts: Some(250),
+                normalized_power_watts: Some(260),
+                training_stress_score: Some(22.4),
+                average_heart_rate_bpm: Some(160),
+                average_cadence_rpm: Some(90.0),
+                average_speed_mps: Some(11.5),
+                average_stride_meters: None,
+                zone: Some(3),
+            }],
+            interval_groups: Vec::new(),
+            streams: Vec::new(),
+            interval_summary: vec!["tempo".to_string()],
+            skyline_chart: Vec::new(),
+            power_zone_times: Vec::new(),
+            heart_rate_zone_times: vec![60, 120],
+            pace_zone_times: Vec::new(),
+            gap_zone_times: Vec::new(),
+        },
     }
 }
 
@@ -921,32 +1263,60 @@ async fn test_mongo_client(uri: &str) -> Client {
 #[derive(Clone, Default)]
 struct TestIntervalsService {
     events: Arc<Mutex<Vec<Event>>>,
+    activities: Arc<Mutex<Vec<Activity>>>,
     fit_bytes: Arc<Vec<u8>>,
     error: Option<IntervalsError>,
+    uploaded_activities: Option<UploadedActivities>,
 }
 
 impl TestIntervalsService {
     fn with_events(events: Vec<Event>) -> Self {
         Self {
             events: Arc::new(Mutex::new(events)),
+            activities: Arc::new(Mutex::new(Vec::new())),
             fit_bytes: Arc::new(vec![0, 1, 2]),
             error: None,
+            uploaded_activities: None,
+        }
+    }
+
+    fn with_activities(activities: Vec<Activity>) -> Self {
+        Self {
+            events: Arc::new(Mutex::new(Vec::new())),
+            activities: Arc::new(Mutex::new(activities)),
+            fit_bytes: Arc::new(vec![0, 1, 2]),
+            error: None,
+            uploaded_activities: None,
         }
     }
 
     fn with_error(error: IntervalsError) -> Self {
         Self {
             events: Arc::new(Mutex::new(Vec::new())),
+            activities: Arc::new(Mutex::new(Vec::new())),
             fit_bytes: Arc::new(vec![0, 1, 2]),
             error: Some(error),
+            uploaded_activities: None,
         }
     }
 
     fn with_fit_bytes(bytes: Vec<u8>) -> Self {
         Self {
             events: Arc::new(Mutex::new(Vec::new())),
+            activities: Arc::new(Mutex::new(Vec::new())),
             fit_bytes: Arc::new(bytes),
             error: None,
+            uploaded_activities: None,
+        }
+    }
+
+    fn with_uploaded_activities(uploaded_activities: UploadedActivities) -> Self {
+        Self {
+            events: Arc::new(Mutex::new(Vec::new())),
+            activities: Arc::new(Mutex::new(uploaded_activities.activities.clone())),
+            fit_bytes: Arc::new(vec![0, 1, 2]),
+            error: None,
+            uploaded_activities: Some(uploaded_activities),
         }
     }
 }
@@ -1082,6 +1452,119 @@ impl IntervalsUseCases for TestIntervalsService {
             Ok(fit_bytes)
         })
     }
+
+    fn list_activities(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        let error = self.error.clone();
+        let activities = self.activities.lock().unwrap().clone();
+        Box::pin(async move {
+            if let Some(error) = error {
+                return Err(error);
+            }
+            Ok(activities)
+        })
+    }
+
+    fn get_activity(
+        &self,
+        _user_id: &str,
+        activity_id: &str,
+    ) -> BoxFuture<Result<Activity, IntervalsError>> {
+        let error = self.error.clone();
+        let activities = self.activities.lock().unwrap().clone();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            if let Some(error) = error {
+                return Err(error);
+            }
+            activities
+                .into_iter()
+                .find(|activity| activity.id == activity_id)
+                .ok_or(IntervalsError::NotFound)
+        })
+    }
+
+    fn upload_activity(
+        &self,
+        _user_id: &str,
+        _upload: UploadActivity,
+    ) -> BoxFuture<Result<UploadedActivities, IntervalsError>> {
+        let error = self.error.clone();
+        let uploaded = self.uploaded_activities.clone();
+        Box::pin(async move {
+            if let Some(error) = error {
+                return Err(error);
+            }
+            uploaded.ok_or(IntervalsError::NotFound)
+        })
+    }
+
+    fn update_activity(
+        &self,
+        _user_id: &str,
+        activity_id: &str,
+        update: UpdateActivity,
+    ) -> BoxFuture<Result<Activity, IntervalsError>> {
+        let error = self.error.clone();
+        let store = self.activities.clone();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            if let Some(error) = error {
+                return Err(error);
+            }
+            let mut activities = store.lock().unwrap();
+            let existing = activities
+                .iter_mut()
+                .find(|activity| activity.id == activity_id)
+                .ok_or(IntervalsError::NotFound)?;
+
+            if let Some(name) = update.name {
+                existing.name = Some(name);
+            }
+            if let Some(description) = update.description {
+                existing.description = Some(description);
+            }
+            if let Some(activity_type) = update.activity_type {
+                existing.activity_type = Some(activity_type);
+            }
+            if let Some(trainer) = update.trainer {
+                existing.trainer = trainer;
+            }
+            if let Some(commute) = update.commute {
+                existing.commute = commute;
+            }
+            if let Some(race) = update.race {
+                existing.race = race;
+            }
+
+            Ok(existing.clone())
+        })
+    }
+
+    fn delete_activity(
+        &self,
+        _user_id: &str,
+        activity_id: &str,
+    ) -> BoxFuture<Result<(), IntervalsError>> {
+        let error = self.error.clone();
+        let store = self.activities.clone();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            if let Some(error) = error {
+                return Err(error);
+            }
+            let mut activities = store.lock().unwrap();
+            let before = activities.len();
+            activities.retain(|activity| activity.id != activity_id);
+            if activities.len() == before {
+                return Err(IntervalsError::NotFound);
+            }
+            Ok(())
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -1210,6 +1693,7 @@ impl IdentityUseCases for SessionMappedIdentityService {
 #[derive(Clone, Default)]
 struct ScopedIntervalsService {
     events_by_user: Arc<Mutex<HashMap<String, Vec<Event>>>>,
+    activities_by_user: Arc<Mutex<HashMap<String, Vec<Activity>>>>,
 }
 
 impl ScopedIntervalsService {
@@ -1221,6 +1705,7 @@ impl ScopedIntervalsService {
 
         Self {
             events_by_user: Arc::new(Mutex::new(events_by_user)),
+            activities_by_user: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -1364,6 +1849,124 @@ impl IntervalsUseCases for ScopedIntervalsService {
             }
 
             Ok(vec![1, 2, 3])
+        })
+    }
+
+    fn list_activities(
+        &self,
+        user_id: &str,
+        _range: &DateRange,
+    ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        let user_id = user_id.to_string();
+        let store = self.activities_by_user.clone();
+        Box::pin(async move {
+            Ok(store
+                .lock()
+                .unwrap()
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default())
+        })
+    }
+
+    fn get_activity(
+        &self,
+        user_id: &str,
+        activity_id: &str,
+    ) -> BoxFuture<Result<Activity, IntervalsError>> {
+        let user_id = user_id.to_string();
+        let activity_id = activity_id.to_string();
+        let store = self.activities_by_user.clone();
+        Box::pin(async move {
+            store
+                .lock()
+                .unwrap()
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|activity| activity.id == activity_id)
+                .ok_or(IntervalsError::NotFound)
+        })
+    }
+
+    fn upload_activity(
+        &self,
+        user_id: &str,
+        upload: UploadActivity,
+    ) -> BoxFuture<Result<UploadedActivities, IntervalsError>> {
+        let user_id = user_id.to_string();
+        let store = self.activities_by_user.clone();
+        Box::pin(async move {
+            let mut store = store.lock().unwrap();
+            let activities = store.entry(user_id).or_default();
+            let id = format!("i{}", activities.len() + 1);
+            let activity =
+                sample_activity(&id, upload.name.as_deref().unwrap_or("Uploaded Activity"));
+            activities.push(activity.clone());
+            Ok(UploadedActivities {
+                created: true,
+                activity_ids: vec![id],
+                activities: vec![activity],
+            })
+        })
+    }
+
+    fn update_activity(
+        &self,
+        user_id: &str,
+        activity_id: &str,
+        update: UpdateActivity,
+    ) -> BoxFuture<Result<Activity, IntervalsError>> {
+        let user_id = user_id.to_string();
+        let activity_id = activity_id.to_string();
+        let store = self.activities_by_user.clone();
+        Box::pin(async move {
+            let mut store = store.lock().unwrap();
+            let activities = store.entry(user_id).or_default();
+            let existing = activities
+                .iter_mut()
+                .find(|activity| activity.id == activity_id)
+                .ok_or(IntervalsError::NotFound)?;
+            if let Some(name) = update.name {
+                existing.name = Some(name);
+            }
+            if let Some(description) = update.description {
+                existing.description = Some(description);
+            }
+            if let Some(activity_type) = update.activity_type {
+                existing.activity_type = Some(activity_type);
+            }
+            if let Some(trainer) = update.trainer {
+                existing.trainer = trainer;
+            }
+            if let Some(commute) = update.commute {
+                existing.commute = commute;
+            }
+            if let Some(race) = update.race {
+                existing.race = race;
+            }
+            Ok(existing.clone())
+        })
+    }
+
+    fn delete_activity(
+        &self,
+        user_id: &str,
+        activity_id: &str,
+    ) -> BoxFuture<Result<(), IntervalsError>> {
+        let user_id = user_id.to_string();
+        let activity_id = activity_id.to_string();
+        let store = self.activities_by_user.clone();
+        Box::pin(async move {
+            let mut store = store.lock().unwrap();
+            let activities = store.entry(user_id).or_default();
+            let before = activities.len();
+            activities.retain(|activity| activity.id != activity_id);
+            if activities.len() == before {
+                return Err(IntervalsError::NotFound);
+            }
+            Ok(())
         })
     }
 }

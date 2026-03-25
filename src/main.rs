@@ -5,6 +5,7 @@ use aiwattcoach::{
         google_oauth::client::GoogleOAuthClient,
         intervals_icu::{client::IntervalsIcuClient, settings_adapter::SettingsIntervalsProvider},
         mongo::{
+            activities::MongoActivityRepository,
             client::{create_client, ensure_database_exists, verify_connection},
             login_state::MongoLoginStateRepository,
             sessions::MongoSessionRepository,
@@ -77,11 +78,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
     settings_repository.ensure_indexes().await?;
     let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
+    let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
+    activity_repository.ensure_indexes().await?;
     let intervals_api_client = IntervalsIcuClient::with_timeouts(10, 30)?;
     let intervals_settings_provider = SettingsIntervalsProvider::new(settings_service.clone());
     let intervals_service = Arc::new(IntervalsService::new(
         intervals_api_client,
         intervals_settings_provider,
+        activity_repository,
     ));
 
     let intervals_connection_tester = IntervalsIcuClient::with_timeouts(5, 15)?;

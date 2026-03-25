@@ -3,9 +3,15 @@ mod ports;
 mod service;
 
 pub use model::{
-    CreateEvent, DateRange, Event, EventCategory, IntervalsCredentials, IntervalsError, UpdateEvent,
+    Activity, ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
+    ActivityStream, ActivityZoneTime, CreateEvent, DateRange, Event, EventCategory,
+    EventFileUpload, IntervalsCredentials, IntervalsError, UpdateActivity, UpdateEvent,
+    UploadActivity, UploadedActivities,
 };
-pub use ports::{BoxFuture, IntervalsApiPort, IntervalsSettingsPort};
+pub use ports::{
+    ActivityRepositoryPort, BoxFuture, IntervalsApiPort, IntervalsSettingsPort,
+    NoopActivityRepository,
+};
 pub use service::{
     IntervalsConnectionError, IntervalsConnectionTester, IntervalsService, IntervalsUseCases,
 };

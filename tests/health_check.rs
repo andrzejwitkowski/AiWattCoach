@@ -877,8 +877,7 @@ fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str]) {
 
     assert!(
         matched,
-        "expected one log entry to contain {:?}, logs were: {logs}",
-        expected_fragments
+        "expected one log entry to contain {expected_fragments:?}, logs were: {logs}"
     );
 }
 

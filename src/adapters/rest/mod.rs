@@ -85,6 +85,20 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
             "/api/intervals/events/{event_id}/download.fit",
             get(intervals::download_fit),
         )
+        .route(
+            "/api/intervals/activities",
+            get(intervals::list_activities)
+                .post(intervals::create_activity)
+                .layer(DefaultBodyLimit::max(
+                    intervals::MAX_ACTIVITY_UPLOAD_REQUEST_BYTES,
+                )),
+        )
+        .route(
+            "/api/intervals/activities/{activity_id}",
+            get(intervals::get_activity)
+                .put(intervals::update_activity)
+                .delete(intervals::delete_activity),
+        )
         .fallback(move |request| serve_frontend(request, static_files.clone(), spa_index.clone()))
         .layer(
             TraceLayer::new_for_http()
