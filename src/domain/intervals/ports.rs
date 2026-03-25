@@ -6,9 +6,9 @@ use std::{
 };
 
 use super::{
-    Activity, ActivityDeduplicationIdentity, ActivityFallbackIdentity, CreateEvent, DateRange,
-    Event, IntervalsCredentials, IntervalsError, UpdateActivity, UpdateEvent, UploadActivity,
-    UploadedActivities,
+    normalize_external_id, Activity, ActivityDeduplicationIdentity, ActivityFallbackIdentity,
+    CreateEvent, DateRange, Event, IntervalsCredentials, IntervalsError, UpdateActivity,
+    UpdateEvent, UploadActivity, UploadedActivities,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -260,9 +260,7 @@ impl ActivityRepositoryPort for NoopActivityRepository {
                 .unwrap_or_default()
                 .into_iter()
                 .find(|activity| {
-                    ActivityDeduplicationIdentity::from_activity(activity)
-                        .normalized_external_id
-                        .as_deref()
+                    normalize_external_id(activity.external_id.as_deref()).as_deref()
                         == Some(external_id.as_str())
                 }))
         })
