@@ -1,42 +1,36 @@
-# Deploy this stack as a separate Coolify resource in the same environment as the app.
-# Then set the existing app resource to use:
-#   OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
-#   OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-
 services:
   loki:
     image: grafana/loki:3.5.0
+    user: "0:0"
     command: ["-config.file=/etc/loki/config.yaml"]
     expose:
       - "3100"
+    configs:
+      - source: loki_config
+        target: /etc/loki/config.yaml
     volumes:
-      - ./docker/loki-config.yaml:/etc/loki/config.yaml:ro
       - loki_data:/var/lib/loki
-    logging:
-      driver: json-file
-      options:
-        max-size: "100m"
-        max-file: "3"
 
   tempo:
     image: grafana/tempo:2.8.2
+    user: "0:0" # ADDED: Fixes the 'permission denied' for Tempo
     command: ["-config.file=/etc/tempo/config.yaml"]
     expose:
       - "3200"
       - "4317"
       - "4318"
+    configs:
+      - source: tempo_config
+        target: /etc/tempo/config.yaml
     volumes:
-      - ./docker/tempo-config.yaml:/etc/tempo/config.yaml:ro
       - tempo_data:/var/lib/tempo
-    logging:
-      driver: json-file
-      options:
-        max-size: "100m"
-        max-file: "3"
 
   alloy:
     image: grafana/alloy:v1.8.3
-    command: ["run", "/etc/alloy/config.alloy"]
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
+    configs:
+      - source: alloy_config
+        target: /etc/alloy/config.alloy
     depends_on:
       loki:
         condition: service_started
@@ -45,13 +39,6 @@ services:
     expose:
       - "4317"
       - "4318"
-    volumes:
-      - ./docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
-    logging:
-      driver: json-file
-      options:
-        max-size: "100m"
-        max-file: "3"
 
   grafana:
     image: grafana/grafana:11.6.1
@@ -65,15 +52,92 @@ services:
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_AUTH_DISABLE_LOGIN_FORM: "false"
     volumes:
-      - ./docker/grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - grafana_data:/var/lib/grafana
-    logging:
-      driver: json-file
-      options:
-        max-size: "100m"
-        max-file: "3"
+
+configs:
+  loki_config:
+    content: |
+      auth_enabled: false
+      server:
+        http_listen_port: 3100
+      common:
+        instance_addr: 127.0.0.1
+        path_prefix: /var/lib/loki
+        storage:
+          filesystem:
+            chunks_directory: /var/lib/loki/chunks
+            rules_directory: /var/lib/loki/rules
+        replication_factor: 1
+        ring:
+          kvstore:
+            store: inmemory
+      schema_config:
+        configs:
+          - from: 2024-04-01
+            store: tsdb
+            object_store: filesystem
+            schema: v13
+            index:
+              prefix: index_
+              period: 24h
+      ruler:
+        storage:
+          type: local
+          local:
+            directory: /var/lib/loki/rules
+
+  tempo_config:
+    content: |
+      server:
+        http_listen_port: 3200
+      distributor:
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+              http:
+      ingester:
+        trace_idle_period: 10s
+        max_block_duration: 5m
+      storage:
+        trace:
+          backend: local
+          local:
+            path: /var/lib/tempo/traces
+      overrides:
+        defaults:
+          ingestion:
+            max_traces_per_user: 10000
+
+  alloy_config:
+    content: |
+      logging {
+        level  = "info"
+        format = "logfmt"
+      }
+      otelcol.receiver.otlp "default" {
+        grpc { endpoint = "0.0.0.0:4317" }
+        http { endpoint = "0.0.0.0:4318" }
+        output {
+          traces  = [otelcol.exporter.otlp.tempo.input]
+          logs    = [otelcol.exporter.loki.default.input]
+        }
+      }
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo:4317"
+          tls { insecure = true }
+        }
+      }
+      otelcol.exporter.loki "default" {
+        forward_to = [loki.write.endpoint.receiver] 
+      }
+      loki.write "endpoint" {
+        endpoint {
+          url = "http://loki:3100/loki/api/v1/push"
+        }
+      }
 
 volumes:
   loki_data:
