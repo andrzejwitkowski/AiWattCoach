@@ -22,7 +22,7 @@ use aiwattcoach::{
     },
     domain::intervals::IntervalsService,
     domain::settings::UserSettingsService,
-    telemetry::init_telemetry,
+    telemetry::setup_telemetry,
     AppState,
 };
 use tokio::net::TcpListener;
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         auth,
         client_log_ingestion_enabled,
     } = settings;
-    let mut telemetry = init_telemetry(&app_name)?;
+    let mut telemetry = setup_telemetry(&app_name)?;
     let address: SocketAddr = server.address().parse()?;
     let mongo_client = create_client(&mongo.uri).await?;
     ensure_database_exists(&mongo_client, &mongo.database).await?;
@@ -114,10 +114,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .await;
     let telemetry_shutdown_result = telemetry.shutdown();
 
-    serve_result?;
-    telemetry_shutdown_result?;
+    finish_server_shutdown(serve_result, telemetry_shutdown_result)
+}
 
-    Ok(())
+fn finish_server_shutdown(
+    serve_result: std::io::Result<()>,
+    telemetry_shutdown_result: Result<(), Box<dyn Error + Send + Sync>>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    match (serve_result, telemetry_shutdown_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(serve_error), Ok(())) => Err(Box::new(serve_error)),
+        (Ok(()), Err(telemetry_error)) => Err(telemetry_error),
+        (Err(serve_error), Err(telemetry_error)) => Err(Box::new(std::io::Error::other(format!(
+            "server failed: {serve_error}; telemetry shutdown failed: {telemetry_error}"
+        )))),
+    }
 }
 
 async fn shutdown_signal() {
@@ -172,13 +183,14 @@ async fn wait_for_sigterm(
 #[cfg(test)]
 mod tests {
     use std::{
+        error::Error,
         io::{Error as IoError, Write},
         sync::{Arc, Mutex},
     };
 
-    use super::wait_for_ctrl_c;
     #[cfg(unix)]
     use super::wait_for_sigterm;
+    use super::{finish_server_shutdown, wait_for_ctrl_c};
     use tokio::sync::Notify;
     use tokio::time::{timeout, Duration};
 
@@ -262,5 +274,30 @@ mod tests {
         let output = logs.contents();
         assert!(output.contains("Failed to listen for SIGTERM"));
         assert!(output.contains("boom"));
+    }
+
+    #[test]
+    fn finish_server_shutdown_returns_ok_when_both_succeed() {
+        assert!(finish_server_shutdown(Ok(()), Ok(())).is_ok());
+    }
+
+    #[test]
+    fn finish_server_shutdown_returns_telemetry_error_when_server_succeeds() {
+        let error = finish_server_shutdown(Ok(()), Err(Box::new(IoError::other("telemetry boom"))))
+            .expect_err("telemetry error should be returned");
+
+        assert!(error.to_string().contains("telemetry boom"));
+    }
+
+    #[test]
+    fn finish_server_shutdown_combines_server_and_telemetry_errors() {
+        let telemetry_error: Box<dyn Error + Send + Sync> =
+            Box::new(IoError::other("telemetry boom"));
+        let error =
+            finish_server_shutdown(Err(IoError::other("server boom")), Err(telemetry_error))
+                .expect_err("combined error should be returned");
+
+        assert!(error.to_string().contains("server boom"));
+        assert!(error.to_string().contains("telemetry boom"));
     }
 }
