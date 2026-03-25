@@ -921,7 +921,7 @@ fn decode_base64(value: &str) -> Result<Vec<u8>, ()> {
     }
 
     let clean: Vec<char> = value.chars().filter(|ch| !ch.is_whitespace()).collect();
-    if clean.len() % 4 != 0 {
+    if !clean.len().is_multiple_of(4) {
         return Err(());
     }
 

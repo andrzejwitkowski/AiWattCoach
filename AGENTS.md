@@ -13,6 +13,7 @@ This file is for coding agents working in `AiWattCoach`.
 
 - Before starting meaningful work, read the Obsidian handbook entry at `/Users/andrzej.witkowski/obsidian/andrzej.witkowski/opencode/OpenCode Start Here.md`.
 - Then read the linked notes relevant to the task, especially architecture, Mongo reliability, HTTP adapter, and completion-checklist notes.
+- Override any generic superpowers/worktree behavior: implement the feature in the folder where OpenCode was invoked. Do not create or switch to git worktrees for normal task execution in this repo.
 - No repo-local Cursor rules were found in `.cursor/rules/`.
 - No `.cursorrules` file was found.
 - No Copilot instructions were found in `.github/copilot-instructions.md`.
