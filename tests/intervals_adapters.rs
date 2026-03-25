@@ -32,7 +32,7 @@ use axum::{
     Json, Router,
 };
 use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_sdk::trace::TracerProvider;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tracing::Instrument as _;
@@ -148,7 +148,7 @@ async fn intervals_client_propagates_traceparent_header_from_active_span() {
         api_key: "secret-key".to_string(),
         athlete_id: "athlete-7".to_string(),
     };
-    let tracer_provider = TracerProvider::builder().build();
+    let tracer_provider = SdkTracerProvider::builder().build();
     let tracer = tracer_provider.tracer("intervals-adapters-test");
     let subscriber = Registry::default().with(tracing_opentelemetry::layer().with_tracer(tracer));
     let _default = tracing::subscriber::set_default(subscriber);
