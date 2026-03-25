@@ -9,10 +9,15 @@ import {
 } from '../../../lib/httpClient';
 import {
   createIntervalEventRequestSchema,
+  intervalActivitiesResponseSchema,
+  intervalActivitySchema,
   intervalEventSchema,
   intervalEventsResponseSchema,
   listEventsQuerySchema,
+  updateActivityRequestSchema,
   updateIntervalEventRequestSchema,
+  uploadActivityRequestSchema,
+  uploadActivityResponseSchema,
 } from '../types';
 
 function toQueryString(params: Record<string, string>): string {
@@ -50,6 +55,38 @@ export async function updateEvent(apiBaseUrl: string, eventId: number, data: unk
 
 export async function deleteEvent(apiBaseUrl: string, eventId: number) {
   return del<void>(apiBaseUrl, `/api/intervals/events/${eventId}`);
+}
+
+export async function listActivities(apiBaseUrl: string, query: unknown) {
+  const validated = listEventsQuerySchema.parse(query);
+  const path = `/api/intervals/activities?${toQueryString(validated)}`;
+  const data = await get(apiBaseUrl, path);
+  return intervalActivitiesResponseSchema.parse(data);
+}
+
+export async function loadActivity(apiBaseUrl: string, activityId: string) {
+  const data = await get(apiBaseUrl, `/api/intervals/activities/${activityId}`);
+  return intervalActivitySchema.parse(data);
+}
+
+export async function uploadActivity(apiBaseUrl: string, data: unknown) {
+  const validated = uploadActivityRequestSchema.parse(data);
+  const result = await post<typeof validated, unknown>(apiBaseUrl, '/api/intervals/activities', validated);
+  return uploadActivityResponseSchema.parse(result);
+}
+
+export async function updateActivity(apiBaseUrl: string, activityId: string, data: unknown) {
+  const validated = updateActivityRequestSchema.parse(data);
+  const result = await put<typeof validated, unknown>(
+    apiBaseUrl,
+    `/api/intervals/activities/${activityId}`,
+    validated
+  );
+  return intervalActivitySchema.parse(result);
+}
+
+export async function deleteActivity(apiBaseUrl: string, activityId: string) {
+  return del<void>(apiBaseUrl, `/api/intervals/activities/${activityId}`);
 }
 
 export async function downloadFit(apiBaseUrl: string, eventId: number): Promise<Uint8Array> {

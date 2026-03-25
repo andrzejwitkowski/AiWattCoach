@@ -6,12 +6,14 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::str::FromStr;
 
 use crate::{
     config::AppState,
     domain::intervals::{
-        CreateEvent, DateRange, Event, EventCategory, IntervalsError, UpdateEvent,
+        Activity, ActivityStream, CreateEvent, DateRange, Event, EventCategory, EventFileUpload,
+        IntervalsError, UpdateActivity, UpdateEvent, UploadActivity,
     },
 };
 
@@ -24,6 +26,11 @@ pub struct ListEventsQuery {
 #[derive(Deserialize)]
 pub struct EventPath {
     pub event_id: i64,
+}
+
+#[derive(Deserialize)]
+pub struct ActivityPath {
+    pub activity_id: String,
 }
 
 #[derive(Serialize)]
@@ -76,6 +83,8 @@ pub struct CreateEventDto {
     pub color: Option<String>,
     #[serde(rename = "workoutDoc")]
     pub workout_doc: Option<String>,
+    #[serde(rename = "fileUpload")]
+    pub file_upload: Option<EventFileUploadDto>,
 }
 
 #[derive(Deserialize)]
@@ -89,6 +98,231 @@ pub struct UpdateEventDto {
     pub color: Option<String>,
     #[serde(rename = "workoutDoc")]
     pub workout_doc: Option<String>,
+    #[serde(rename = "fileUpload")]
+    pub file_upload: Option<EventFileUploadDto>,
+}
+
+#[derive(Deserialize)]
+pub struct EventFileUploadDto {
+    pub filename: String,
+    #[serde(rename = "fileContents")]
+    pub file_contents: Option<String>,
+    #[serde(rename = "fileContentsBase64")]
+    pub file_contents_base64: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ActivityDto {
+    pub id: String,
+    #[serde(rename = "startDateLocal")]
+    pub start_date_local: String,
+    #[serde(rename = "startDate")]
+    pub start_date: Option<String>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    #[serde(rename = "activityType")]
+    pub activity_type: Option<String>,
+    pub source: Option<String>,
+    #[serde(rename = "externalId")]
+    pub external_id: Option<String>,
+    #[serde(rename = "deviceName")]
+    pub device_name: Option<String>,
+    #[serde(rename = "distanceMeters")]
+    pub distance_meters: Option<f64>,
+    #[serde(rename = "movingTimeSeconds")]
+    pub moving_time_seconds: Option<i32>,
+    #[serde(rename = "elapsedTimeSeconds")]
+    pub elapsed_time_seconds: Option<i32>,
+    #[serde(rename = "totalElevationGainMeters")]
+    pub total_elevation_gain_meters: Option<f64>,
+    #[serde(rename = "averageSpeedMps")]
+    pub average_speed_mps: Option<f64>,
+    #[serde(rename = "averageHeartRateBpm")]
+    pub average_heart_rate_bpm: Option<i32>,
+    #[serde(rename = "averageCadenceRpm")]
+    pub average_cadence_rpm: Option<f64>,
+    pub trainer: bool,
+    pub commute: bool,
+    pub race: bool,
+    #[serde(rename = "hasHeartRate")]
+    pub has_heart_rate: bool,
+    #[serde(rename = "streamTypes")]
+    pub stream_types: Vec<String>,
+    pub tags: Vec<String>,
+    pub metrics: ActivityMetricsDto,
+    pub details: ActivityDetailsDto,
+}
+
+#[derive(Serialize)]
+pub struct ActivityMetricsDto {
+    #[serde(rename = "trainingStressScore")]
+    pub training_stress_score: Option<i32>,
+    #[serde(rename = "normalizedPowerWatts")]
+    pub normalized_power_watts: Option<i32>,
+    #[serde(rename = "intensityFactor")]
+    pub intensity_factor: Option<f64>,
+    #[serde(rename = "efficiencyFactor")]
+    pub efficiency_factor: Option<f64>,
+    #[serde(rename = "variabilityIndex")]
+    pub variability_index: Option<f64>,
+    #[serde(rename = "averagePowerWatts")]
+    pub average_power_watts: Option<i32>,
+    #[serde(rename = "ftpWatts")]
+    pub ftp_watts: Option<i32>,
+    #[serde(rename = "totalWorkJoules")]
+    pub total_work_joules: Option<i32>,
+    pub calories: Option<i32>,
+    pub trimp: Option<f64>,
+    #[serde(rename = "powerLoad")]
+    pub power_load: Option<i32>,
+    #[serde(rename = "heartRateLoad")]
+    pub heart_rate_load: Option<i32>,
+    #[serde(rename = "paceLoad")]
+    pub pace_load: Option<i32>,
+    #[serde(rename = "strainScore")]
+    pub strain_score: Option<f64>,
+}
+
+#[derive(Serialize)]
+pub struct ActivityDetailsDto {
+    pub intervals: Vec<ActivityIntervalDto>,
+    #[serde(rename = "intervalGroups")]
+    pub interval_groups: Vec<ActivityIntervalGroupDto>,
+    pub streams: Vec<ActivityStreamDto>,
+    #[serde(rename = "intervalSummary")]
+    pub interval_summary: Vec<String>,
+    #[serde(rename = "skylineChart")]
+    pub skyline_chart: Vec<String>,
+    #[serde(rename = "powerZoneTimes")]
+    pub power_zone_times: Vec<ActivityZoneTimeDto>,
+    #[serde(rename = "heartRateZoneTimes")]
+    pub heart_rate_zone_times: Vec<i32>,
+    #[serde(rename = "paceZoneTimes")]
+    pub pace_zone_times: Vec<i32>,
+    #[serde(rename = "gapZoneTimes")]
+    pub gap_zone_times: Vec<i32>,
+}
+
+#[derive(Serialize)]
+pub struct ActivityIntervalDto {
+    pub id: Option<i32>,
+    pub label: Option<String>,
+    #[serde(rename = "intervalType")]
+    pub interval_type: Option<String>,
+    #[serde(rename = "groupId")]
+    pub group_id: Option<String>,
+    #[serde(rename = "startIndex")]
+    pub start_index: Option<i32>,
+    #[serde(rename = "endIndex")]
+    pub end_index: Option<i32>,
+    #[serde(rename = "startTimeSeconds")]
+    pub start_time_seconds: Option<i32>,
+    #[serde(rename = "endTimeSeconds")]
+    pub end_time_seconds: Option<i32>,
+    #[serde(rename = "movingTimeSeconds")]
+    pub moving_time_seconds: Option<i32>,
+    #[serde(rename = "elapsedTimeSeconds")]
+    pub elapsed_time_seconds: Option<i32>,
+    #[serde(rename = "distanceMeters")]
+    pub distance_meters: Option<f64>,
+    #[serde(rename = "averagePowerWatts")]
+    pub average_power_watts: Option<i32>,
+    #[serde(rename = "normalizedPowerWatts")]
+    pub normalized_power_watts: Option<i32>,
+    #[serde(rename = "trainingStressScore")]
+    pub training_stress_score: Option<f64>,
+    #[serde(rename = "averageHeartRateBpm")]
+    pub average_heart_rate_bpm: Option<i32>,
+    #[serde(rename = "averageCadenceRpm")]
+    pub average_cadence_rpm: Option<f64>,
+    #[serde(rename = "averageSpeedMps")]
+    pub average_speed_mps: Option<f64>,
+    #[serde(rename = "averageStrideMeters")]
+    pub average_stride_meters: Option<f64>,
+    pub zone: Option<i32>,
+}
+
+#[derive(Serialize)]
+pub struct ActivityIntervalGroupDto {
+    pub id: String,
+    pub count: Option<i32>,
+    #[serde(rename = "startIndex")]
+    pub start_index: Option<i32>,
+    #[serde(rename = "movingTimeSeconds")]
+    pub moving_time_seconds: Option<i32>,
+    #[serde(rename = "elapsedTimeSeconds")]
+    pub elapsed_time_seconds: Option<i32>,
+    #[serde(rename = "distanceMeters")]
+    pub distance_meters: Option<f64>,
+    #[serde(rename = "averagePowerWatts")]
+    pub average_power_watts: Option<i32>,
+    #[serde(rename = "normalizedPowerWatts")]
+    pub normalized_power_watts: Option<i32>,
+    #[serde(rename = "trainingStressScore")]
+    pub training_stress_score: Option<f64>,
+    #[serde(rename = "averageHeartRateBpm")]
+    pub average_heart_rate_bpm: Option<i32>,
+    #[serde(rename = "averageCadenceRpm")]
+    pub average_cadence_rpm: Option<f64>,
+    #[serde(rename = "averageSpeedMps")]
+    pub average_speed_mps: Option<f64>,
+    #[serde(rename = "averageStrideMeters")]
+    pub average_stride_meters: Option<f64>,
+}
+
+#[derive(Serialize)]
+pub struct ActivityStreamDto {
+    #[serde(rename = "streamType")]
+    pub stream_type: String,
+    pub name: Option<String>,
+    pub data: Option<Value>,
+    pub data2: Option<Value>,
+    #[serde(rename = "valueTypeIsArray")]
+    pub value_type_is_array: bool,
+    pub custom: bool,
+    #[serde(rename = "allNull")]
+    pub all_null: bool,
+}
+
+#[derive(Serialize)]
+pub struct ActivityZoneTimeDto {
+    #[serde(rename = "zoneId")]
+    pub zone_id: String,
+    pub seconds: i32,
+}
+
+#[derive(Serialize)]
+pub struct UploadActivityResponseDto {
+    pub created: bool,
+    #[serde(rename = "activityIds")]
+    pub activity_ids: Vec<String>,
+    pub activities: Vec<ActivityDto>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateActivityDto {
+    pub filename: String,
+    #[serde(rename = "fileContentsBase64")]
+    pub file_contents_base64: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    #[serde(rename = "deviceName")]
+    pub device_name: Option<String>,
+    #[serde(rename = "externalId")]
+    pub external_id: Option<String>,
+    #[serde(rename = "pairedEventId")]
+    pub paired_event_id: Option<i32>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateActivityDto {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    #[serde(rename = "activityType")]
+    pub activity_type: Option<String>,
+    pub trainer: Option<bool>,
+    pub commute: Option<bool>,
+    pub race: Option<bool>,
 }
 
 async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String, Response> {
@@ -180,6 +414,7 @@ pub async fn create_event(
         indoor: body.indoor,
         color: body.color,
         workout_doc: body.workout_doc,
+        file_upload: body.file_upload.map(map_event_file_upload),
     };
 
     match intervals_service.create_event(&user_id, event).await {
@@ -226,6 +461,7 @@ pub async fn update_event(
         indoor: body.indoor,
         color: body.color,
         workout_doc: body.workout_doc,
+        file_upload: body.file_upload.map(map_event_file_upload),
     };
 
     match intervals_service
@@ -293,6 +529,166 @@ pub async fn download_fit(
     }
 }
 
+pub async fn list_activities(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ListEventsQuery>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+
+    let intervals_service = match state.intervals_service.as_ref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let range = DateRange {
+        oldest: query.oldest,
+        newest: query.newest,
+    };
+
+    if !is_valid_date(&range.oldest) || !is_valid_date(&range.newest) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    match intervals_service.list_activities(&user_id, &range).await {
+        Ok(activities) => Json(
+            activities
+                .into_iter()
+                .map(map_activity_to_dto)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(error) => map_intervals_error(error),
+    }
+}
+
+pub async fn get_activity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<ActivityPath>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+
+    let intervals_service = match state.intervals_service.as_ref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    match intervals_service.get_activity(&user_id, &path.activity_id).await {
+        Ok(activity) => Json(map_activity_to_dto(activity)).into_response(),
+        Err(error) => map_intervals_error(error),
+    }
+}
+
+pub async fn create_activity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<CreateActivityDto>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+
+    let intervals_service = match state.intervals_service.as_ref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let file_bytes = match decode_base64(&body.file_contents_base64) {
+        Ok(bytes) => bytes,
+        Err(()) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+
+    let upload = UploadActivity {
+        filename: body.filename,
+        file_bytes,
+        name: body.name,
+        description: body.description,
+        device_name: body.device_name,
+        external_id: body.external_id,
+        paired_event_id: body.paired_event_id,
+    };
+
+    match intervals_service.upload_activity(&user_id, upload).await {
+        Ok(result) => (
+            if result.created {
+                StatusCode::CREATED
+            } else {
+                StatusCode::OK
+            },
+            Json(UploadActivityResponseDto {
+                created: result.created,
+                activity_ids: result.activity_ids,
+                activities: result.activities.into_iter().map(map_activity_to_dto).collect(),
+            }),
+        )
+            .into_response(),
+        Err(error) => map_intervals_error(error),
+    }
+}
+
+pub async fn update_activity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<ActivityPath>,
+    Json(body): Json<UpdateActivityDto>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+
+    let intervals_service = match state.intervals_service.as_ref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let update = UpdateActivity {
+        name: body.name,
+        description: body.description,
+        activity_type: body.activity_type,
+        trainer: body.trainer,
+        commute: body.commute,
+        race: body.race,
+    };
+
+    match intervals_service
+        .update_activity(&user_id, &path.activity_id, update)
+        .await
+    {
+        Ok(activity) => Json(map_activity_to_dto(activity)).into_response(),
+        Err(error) => map_intervals_error(error),
+    }
+}
+
+pub async fn delete_activity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<ActivityPath>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+
+    let intervals_service = match state.intervals_service.as_ref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    match intervals_service.delete_activity(&user_id, &path.activity_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => map_intervals_error(error),
+    }
+}
+
 fn map_intervals_error(error: IntervalsError) -> Response {
     match error {
         IntervalsError::Unauthenticated => StatusCode::UNAUTHORIZED.into_response(),
@@ -324,6 +720,179 @@ fn map_event_to_dto(event: Event) -> EventDto {
         },
         actual_workout: None,
     }
+}
+
+fn map_activity_to_dto(activity: Activity) -> ActivityDto {
+    ActivityDto {
+        id: activity.id,
+        start_date_local: activity.start_date_local,
+        start_date: activity.start_date,
+        name: activity.name,
+        description: activity.description,
+        activity_type: activity.activity_type,
+        source: activity.source,
+        external_id: activity.external_id,
+        device_name: activity.device_name,
+        distance_meters: activity.distance_meters,
+        moving_time_seconds: activity.moving_time_seconds,
+        elapsed_time_seconds: activity.elapsed_time_seconds,
+        total_elevation_gain_meters: activity.total_elevation_gain_meters,
+        average_speed_mps: activity.average_speed_mps,
+        average_heart_rate_bpm: activity.average_heart_rate_bpm,
+        average_cadence_rpm: activity.average_cadence_rpm,
+        trainer: activity.trainer,
+        commute: activity.commute,
+        race: activity.race,
+        has_heart_rate: activity.has_heart_rate,
+        stream_types: activity.stream_types,
+        tags: activity.tags,
+        metrics: ActivityMetricsDto {
+            training_stress_score: activity.metrics.training_stress_score,
+            normalized_power_watts: activity.metrics.normalized_power_watts,
+            intensity_factor: activity.metrics.intensity_factor,
+            efficiency_factor: activity.metrics.efficiency_factor,
+            variability_index: activity.metrics.variability_index,
+            average_power_watts: activity.metrics.average_power_watts,
+            ftp_watts: activity.metrics.ftp_watts,
+            total_work_joules: activity.metrics.total_work_joules,
+            calories: activity.metrics.calories,
+            trimp: activity.metrics.trimp,
+            power_load: activity.metrics.power_load,
+            heart_rate_load: activity.metrics.heart_rate_load,
+            pace_load: activity.metrics.pace_load,
+            strain_score: activity.metrics.strain_score,
+        },
+        details: ActivityDetailsDto {
+            intervals: activity
+                .details
+                .intervals
+                .into_iter()
+                .map(|interval| ActivityIntervalDto {
+                    id: interval.id,
+                    label: interval.label,
+                    interval_type: interval.interval_type,
+                    group_id: interval.group_id,
+                    start_index: interval.start_index,
+                    end_index: interval.end_index,
+                    start_time_seconds: interval.start_time_seconds,
+                    end_time_seconds: interval.end_time_seconds,
+                    moving_time_seconds: interval.moving_time_seconds,
+                    elapsed_time_seconds: interval.elapsed_time_seconds,
+                    distance_meters: interval.distance_meters,
+                    average_power_watts: interval.average_power_watts,
+                    normalized_power_watts: interval.normalized_power_watts,
+                    training_stress_score: interval.training_stress_score,
+                    average_heart_rate_bpm: interval.average_heart_rate_bpm,
+                    average_cadence_rpm: interval.average_cadence_rpm,
+                    average_speed_mps: interval.average_speed_mps,
+                    average_stride_meters: interval.average_stride_meters,
+                    zone: interval.zone,
+                })
+                .collect(),
+            interval_groups: activity
+                .details
+                .interval_groups
+                .into_iter()
+                .map(|group| ActivityIntervalGroupDto {
+                    id: group.id,
+                    count: group.count,
+                    start_index: group.start_index,
+                    moving_time_seconds: group.moving_time_seconds,
+                    elapsed_time_seconds: group.elapsed_time_seconds,
+                    distance_meters: group.distance_meters,
+                    average_power_watts: group.average_power_watts,
+                    normalized_power_watts: group.normalized_power_watts,
+                    training_stress_score: group.training_stress_score,
+                    average_heart_rate_bpm: group.average_heart_rate_bpm,
+                    average_cadence_rpm: group.average_cadence_rpm,
+                    average_speed_mps: group.average_speed_mps,
+                    average_stride_meters: group.average_stride_meters,
+                })
+                .collect(),
+            streams: activity
+                .details
+                .streams
+                .into_iter()
+                .map(map_activity_stream_to_dto)
+                .collect(),
+            interval_summary: activity.details.interval_summary,
+            skyline_chart: activity.details.skyline_chart,
+            power_zone_times: activity
+                .details
+                .power_zone_times
+                .into_iter()
+                .map(|zone| ActivityZoneTimeDto {
+                    zone_id: zone.zone_id,
+                    seconds: zone.seconds,
+                })
+                .collect(),
+            heart_rate_zone_times: activity.details.heart_rate_zone_times,
+            pace_zone_times: activity.details.pace_zone_times,
+            gap_zone_times: activity.details.gap_zone_times,
+        },
+    }
+}
+
+fn map_activity_stream_to_dto(stream: ActivityStream) -> ActivityStreamDto {
+    ActivityStreamDto {
+        stream_type: stream.stream_type,
+        name: stream.name,
+        data: stream.data,
+        data2: stream.data2,
+        value_type_is_array: stream.value_type_is_array,
+        custom: stream.custom,
+        all_null: stream.all_null,
+    }
+}
+
+fn map_event_file_upload(file_upload: EventFileUploadDto) -> EventFileUpload {
+    EventFileUpload {
+        filename: file_upload.filename,
+        file_contents: file_upload.file_contents,
+        file_contents_base64: file_upload.file_contents_base64,
+    }
+}
+
+fn decode_base64(value: &str) -> Result<Vec<u8>, ()> {
+    fn decode_char(ch: char) -> Option<u8> {
+        match ch {
+            'A'..='Z' => Some((ch as u8) - b'A'),
+            'a'..='z' => Some((ch as u8) - b'a' + 26),
+            '0'..='9' => Some((ch as u8) - b'0' + 52),
+            '+' => Some(62),
+            '/' => Some(63),
+            _ => None,
+        }
+    }
+
+    let clean: Vec<char> = value.chars().filter(|ch| !ch.is_whitespace()).collect();
+    if clean.len() % 4 != 0 {
+        return Err(());
+    }
+
+    let mut output = Vec::new();
+    for chunk in clean.chunks(4) {
+        let mut vals = [0u8; 4];
+        let mut padding = 0;
+        for (index, ch) in chunk.iter().enumerate() {
+            if *ch == '=' {
+                padding += 1;
+                vals[index] = 0;
+            } else {
+                vals[index] = decode_char(*ch).ok_or(())?;
+            }
+        }
+
+        output.push((vals[0] << 2) | (vals[1] >> 4));
+        if padding < 2 {
+            output.push((vals[1] << 4) | (vals[2] >> 2));
+        }
+        if padding < 1 {
+            output.push((vals[2] << 6) | vals[3]);
+        }
+    }
+
+    Ok(output)
 }
 
 fn parse_workout_doc(workout_doc: Option<&str>) -> Vec<IntervalDefinitionDto> {
