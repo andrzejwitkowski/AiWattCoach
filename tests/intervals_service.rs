@@ -313,6 +313,48 @@ async fn upload_activity_returns_existing_activity_when_fallback_identity_matche
 }
 
 #[tokio::test]
+async fn upload_activity_does_not_dedupe_when_external_ids_conflict_even_if_fallback_matches() {
+    let existing = sample_activity("i350", "Existing Ride");
+    let uploaded = sample_activity("i351", "Conflicting External Id Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec![uploaded.id.clone()],
+        activities: vec![uploaded.clone()],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", existing);
+    let extractor = FakeActivityIdentityExtractor::with_identity(ActivityFallbackIdentity {
+        start_bucket: "2026-03-22T07:00".to_string(),
+        activity_type_bucket: "ride".to_string(),
+        duration_bucket_seconds: 3720,
+        distance_bucket_meters: Some(40200),
+        trainer: false,
+    });
+    let service = IntervalsService::new(api, settings, repository, extractor);
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Imported Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("different-external-id".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(result.created);
+    assert_eq!(result.activities, vec![uploaded]);
+    assert_eq!(api_calls.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn upload_activity_does_not_dedupe_ride_and_virtualride() {
     let mut existing = sample_activity("i400", "Trainer Ride");
     existing.activity_type = Some("VirtualRide".to_string());

@@ -1,6 +1,10 @@
 use std::io::Cursor;
 
-use fitparser::{profile::field_types::MesgNum, FitDataRecord, Value};
+use chrono::Utc;
+use fitparser::{
+    profile::field_types::{MesgNum, Sport, SubSport},
+    FitDataRecord, Value,
+};
 
 use crate::domain::intervals::{
     ActivityFallbackIdentity, ActivityFileIdentityExtractorPort, BoxFuture, IntervalsError,
@@ -32,13 +36,9 @@ fn extract_fit_identity(file_bytes: &[u8]) -> Option<ActivityFallbackIdentity> {
         .find(|record| record.kind() == MesgNum::Session)?;
 
     let start_bucket = timestamp_field(&session, "start_time")?;
-    let activity_type_bucket = string_field(&session, "sport")
-        .or_else(|| string_field(&session, "sub_sport"))?
-        .trim()
-        .to_ascii_lowercase();
-    if activity_type_bucket.is_empty() {
-        return None;
-    }
+    let sport = enum_u8_field(&session, "sport").map(Sport::from)?;
+    let sub_sport = enum_u8_field(&session, "sub_sport").map(SubSport::from);
+    let (activity_type_bucket, trainer) = map_fit_activity_type(sport, sub_sport)?;
 
     let duration_bucket_seconds = int_field(&session, "total_elapsed_time")
         .or_else(|| int_field(&session, "total_timer_time"))
@@ -48,8 +48,6 @@ fn extract_fit_identity(file_bytes: &[u8]) -> Option<ActivityFallbackIdentity> {
     let distance_bucket_meters = float_field(&session, "total_distance")
         .filter(|meters| meters.is_finite() && *meters > 0.0)
         .map(|meters| ((meters / 100.0).round() * 100.0) as i32);
-
-    let trainer = bool_field(&session, "sport_index").unwrap_or(false);
 
     Some(ActivityFallbackIdentity {
         start_bucket,
@@ -67,19 +65,26 @@ fn timestamp_field(record: &FitDataRecord, field_name: &str) -> Option<String> {
         .find(|field| field.name() == field_name)?
         .value();
     match value {
-        Value::Timestamp(value) => Some(value.format("%Y-%m-%dT%H:%M").to_string()),
+        Value::Timestamp(value) => Some(
+            value
+                .with_timezone(&Utc)
+                .format("%Y-%m-%dT%H:%M")
+                .to_string(),
+        ),
         _ => None,
     }
 }
 
-fn string_field(record: &FitDataRecord, field_name: &str) -> Option<String> {
+fn enum_u8_field(record: &FitDataRecord, field_name: &str) -> Option<u8> {
     let value = record
         .fields()
         .iter()
         .find(|field| field.name() == field_name)?
         .value();
     match value {
-        Value::String(value) => Some(value.clone()),
+        Value::Enum(value) | Value::UInt8(value) | Value::UInt8z(value) | Value::Byte(value) => {
+            Some(*value)
+        }
         _ => None,
     }
 }
@@ -124,28 +129,72 @@ fn float_field(record: &FitDataRecord, field_name: &str) -> Option<f64> {
     }
 }
 
-fn bool_field(record: &FitDataRecord, field_name: &str) -> Option<bool> {
-    let value = record
-        .fields()
-        .iter()
-        .find(|field| field.name() == field_name)?
-        .value();
-    match value {
-        Value::UInt8(value) | Value::UInt8z(value) | Value::Byte(value) | Value::Enum(value) => {
-            Some(*value > 0)
+fn map_fit_activity_type(sport: Sport, sub_sport: Option<SubSport>) -> Option<(String, bool)> {
+    match (sport, sub_sport) {
+        (
+            Sport::Cycling,
+            Some(SubSport::VirtualActivity | SubSport::IndoorCycling | SubSport::Spin),
+        ) => Some(("virtualride".to_string(), true)),
+        (Sport::Cycling, _) => Some(("ride".to_string(), false)),
+        (Sport::Running, _) => Some(("run".to_string(), false)),
+        (Sport::Swimming, _) => Some(("swim".to_string(), false)),
+        (Sport::Walking, _) => Some(("walk".to_string(), false)),
+        (Sport::Hiking, _) => Some(("hike".to_string(), false)),
+        (Sport::Rowing, _) => Some(("row".to_string(), false)),
+        (Sport::Generic, Some(SubSport::VirtualActivity)) => {
+            Some(("virtualride".to_string(), true))
         }
-        Value::UInt16(value) | Value::UInt16z(value) => Some(*value > 0),
-        Value::UInt32(value) | Value::UInt32z(value) => Some(*value > 0),
-        Value::SInt8(value) => Some(*value > 0),
-        Value::SInt16(value) => Some(*value > 0),
-        Value::SInt32(value) => Some(*value > 0),
-        _ => None,
+        (sport, _) => {
+            let value = sport.to_string().trim().to_ascii_lowercase();
+            if value.is_empty() {
+                None
+            } else {
+                Some((value, false))
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Local;
+
+    #[test]
+    fn virtual_cycling_maps_to_virtualride_and_trainer() {
+        assert_eq!(
+            map_fit_activity_type(Sport::Cycling, Some(SubSport::VirtualActivity)),
+            Some(("virtualride".to_string(), true))
+        );
+    }
+
+    #[test]
+    fn road_cycling_maps_to_ride() {
+        assert_eq!(
+            map_fit_activity_type(Sport::Cycling, Some(SubSport::Road)),
+            Some(("ride".to_string(), false))
+        );
+    }
+
+    #[test]
+    fn timestamp_field_normalizes_to_utc_minute() {
+        let mut record = FitDataRecord::new(MesgNum::Session);
+        let value = chrono::DateTime::<Utc>::from_timestamp(1_711_262_800, 0)
+            .unwrap()
+            .with_timezone(&Local);
+        record.push(fitparser::FitDataField::new(
+            "start_time".to_string(),
+            0,
+            None,
+            Value::Timestamp(value),
+            String::new(),
+        ));
+
+        assert_eq!(
+            timestamp_field(&record, "start_time"),
+            Some("2024-03-31T06:20".to_string())
+        );
+    }
 
     #[test]
     fn unsupported_bytes_return_none() {
