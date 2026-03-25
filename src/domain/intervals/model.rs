@@ -36,6 +36,114 @@ pub struct UploadedActivities {
     pub activities: Vec<Activity>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActivityDeduplicationIdentity {
+    pub normalized_external_id: Option<String>,
+    pub fallback_identity: Option<String>,
+}
+
+impl ActivityDeduplicationIdentity {
+    pub fn from_activity(activity: &Activity) -> Self {
+        Self {
+            normalized_external_id: normalize_external_id(activity.external_id.as_deref()),
+            fallback_identity: ActivityFallbackIdentity::from_activity(activity)
+                .map(|identity| identity.as_fingerprint()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActivityFallbackIdentity {
+    pub start_bucket: String,
+    pub activity_type_bucket: String,
+    pub duration_bucket_seconds: i32,
+    pub distance_bucket_meters: Option<i32>,
+    pub trainer: bool,
+}
+
+impl ActivityFallbackIdentity {
+    pub fn from_activity(activity: &Activity) -> Option<Self> {
+        let start_bucket = bucket_start_time(
+            activity
+                .start_date
+                .as_deref()
+                .unwrap_or(&activity.start_date_local),
+        )?;
+        let activity_type_bucket = normalize_activity_type(activity.activity_type.as_deref()?)?;
+        let duration_bucket_seconds = round_duration_bucket(
+            activity
+                .elapsed_time_seconds
+                .or(activity.moving_time_seconds)
+                .filter(|value| *value > 0)?,
+        );
+        let distance_bucket_meters = round_distance_bucket(activity.distance_meters);
+
+        Some(Self {
+            start_bucket,
+            activity_type_bucket,
+            duration_bucket_seconds,
+            distance_bucket_meters,
+            trainer: activity.trainer,
+        })
+    }
+
+    pub fn as_fingerprint(&self) -> String {
+        let distance_bucket = self
+            .distance_bucket_meters
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "none".to_string());
+
+        format!(
+            "v1:{}|{}|{}|{}|{}",
+            self.start_bucket,
+            self.activity_type_bucket,
+            self.duration_bucket_seconds,
+            distance_bucket,
+            self.trainer
+        )
+    }
+}
+
+pub fn normalize_external_id(value: Option<&str>) -> Option<String> {
+    let normalized = value?.trim();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized.to_string())
+    }
+}
+
+fn bucket_start_time(value: &str) -> Option<String> {
+    if value.len() < 16 {
+        return None;
+    }
+
+    Some(value[..16].to_string())
+}
+
+fn normalize_activity_type(value: &str) -> Option<String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+fn round_duration_bucket(duration_seconds: i32) -> i32 {
+    let rounded = ((duration_seconds + 15) / 30) * 30;
+    rounded.max(30)
+}
+
+fn round_distance_bucket(distance_meters: Option<f64>) -> Option<i32> {
+    let distance_meters = distance_meters?;
+    if !distance_meters.is_finite() || distance_meters <= 0.0 {
+        return None;
+    }
+
+    Some(((distance_meters / 100.0).round() * 100.0) as i32)
+}
+
 impl std::fmt::Display for IntervalsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -6,8 +6,8 @@ use std::{
 };
 
 use super::{
-    Activity, CreateEvent, DateRange, Event, IntervalsCredentials, IntervalsError, UpdateActivity,
-    UpdateEvent, UploadActivity, UploadedActivities,
+    Activity, ActivityFallbackIdentity, CreateEvent, DateRange, Event, IntervalsCredentials,
+    IntervalsError, UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -147,7 +147,26 @@ pub trait ActivityRepositoryPort: Clone + Send + Sync + 'static {
         activity_id: &str,
     ) -> BoxFuture<Result<Option<Activity>, IntervalsError>>;
 
+    fn find_by_user_id_and_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<Activity>, IntervalsError>>;
+
+    fn find_by_user_id_and_fallback_identity(
+        &self,
+        user_id: &str,
+        identity: &str,
+    ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>>;
+
     fn delete(&self, user_id: &str, activity_id: &str) -> BoxFuture<Result<(), IntervalsError>>;
+}
+
+pub trait ActivityFileIdentityExtractorPort: Clone + Send + Sync + 'static {
+    fn extract_identity(
+        &self,
+        upload: &UploadActivity,
+    ) -> BoxFuture<Result<Option<ActivityFallbackIdentity>, IntervalsError>>;
 }
 
 impl ActivityRepositoryPort for NoopActivityRepository {
@@ -224,6 +243,56 @@ impl ActivityRepositoryPort for NoopActivityRepository {
         })
     }
 
+    fn find_by_user_id_and_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            let stored = stored.lock().expect("noop activity repo mutex poisoned");
+            Ok(stored
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|activity| {
+                    activity
+                        .external_id
+                        .as_deref()
+                        .map(|value| value.trim())
+                        .filter(|value| !value.is_empty())
+                        == Some(external_id.as_str())
+                }))
+        })
+    }
+
+    fn find_by_user_id_and_fallback_identity(
+        &self,
+        user_id: &str,
+        identity: &str,
+    ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let identity = identity.to_string();
+        Box::pin(async move {
+            let stored = stored.lock().expect("noop activity repo mutex poisoned");
+            Ok(stored
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|activity| {
+                    ActivityFallbackIdentity::from_activity(activity)
+                        .map(|candidate| candidate.as_fingerprint())
+                        == Some(identity.clone())
+                })
+                .collect())
+        })
+    }
+
     fn delete(&self, user_id: &str, activity_id: &str) -> BoxFuture<Result<(), IntervalsError>> {
         let stored = self.stored.clone();
         let user_id = user_id.to_string();
@@ -235,6 +304,18 @@ impl ActivityRepositoryPort for NoopActivityRepository {
             }
             Ok(())
         })
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct NoopActivityFileIdentityExtractor;
+
+impl ActivityFileIdentityExtractorPort for NoopActivityFileIdentityExtractor {
+    fn extract_identity(
+        &self,
+        _upload: &UploadActivity,
+    ) -> BoxFuture<Result<Option<ActivityFallbackIdentity>, IntervalsError>> {
+        Box::pin(async { Ok(None) })
     }
 }
 

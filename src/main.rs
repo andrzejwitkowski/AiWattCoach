@@ -2,6 +2,7 @@ use std::{error::Error, future::Future, net::SocketAddr, sync::Arc, time::Durati
 
 use aiwattcoach::{
     adapters::{
+        activity_file_identity::ActivityFileIdentityExtractor,
         google_oauth::client::GoogleOAuthClient,
         intervals_icu::{client::IntervalsIcuClient, settings_adapter::SettingsIntervalsProvider},
         mongo::{
@@ -82,10 +83,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     activity_repository.ensure_indexes().await?;
     let intervals_api_client = IntervalsIcuClient::with_timeouts(10, 30)?;
     let intervals_settings_provider = SettingsIntervalsProvider::new(settings_service.clone());
+    let activity_identity_extractor = ActivityFileIdentityExtractor;
     let intervals_service = Arc::new(IntervalsService::new(
         intervals_api_client,
         intervals_settings_provider,
         activity_repository,
+        activity_identity_extractor,
     ));
 
     let intervals_connection_tester = IntervalsIcuClient::with_timeouts(5, 15)?;

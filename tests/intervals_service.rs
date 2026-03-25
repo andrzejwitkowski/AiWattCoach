@@ -6,10 +6,11 @@ use std::{
 };
 
 use aiwattcoach::domain::intervals::{
-    Activity, ActivityDetails, ActivityMetrics, ActivityRepositoryPort, CreateEvent, DateRange,
-    Event, EventCategory, IntervalsApiPort, IntervalsCredentials, IntervalsError, IntervalsService,
-    IntervalsSettingsPort, IntervalsUseCases, NoopActivityRepository, UpdateActivity, UpdateEvent,
-    UploadActivity, UploadedActivities,
+    Activity, ActivityDetails, ActivityFallbackIdentity, ActivityFileIdentityExtractorPort,
+    ActivityMetrics, ActivityRepositoryPort, CreateEvent, DateRange, Event, EventCategory,
+    IntervalsApiPort, IntervalsCredentials, IntervalsError, IntervalsService,
+    IntervalsSettingsPort, IntervalsUseCases, NoopActivityFileIdentityExtractor,
+    NoopActivityRepository, UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
 };
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -19,7 +20,12 @@ async fn list_events_returns_events_from_api() {
     let event = sample_event(42, "Workout A");
     let api = FakeIntervalsApi::with_events(vec![event.clone()]);
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let events = service
         .list_events(
@@ -40,7 +46,12 @@ async fn list_events_fails_when_credentials_not_configured() {
     let api = FakeIntervalsApi::default();
     let calls = api.call_log.clone();
     let settings = FakeSettingsPort::without_credentials();
-    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service
         .list_events(
@@ -61,7 +72,12 @@ async fn get_event_returns_single_event() {
     let event = sample_event(7, "Threshold");
     let api = FakeIntervalsApi::with_get_event(event.clone());
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service.get_event("user-1", 7).await.unwrap();
 
@@ -74,7 +90,12 @@ async fn create_event_passes_event_to_api() {
     let api = FakeIntervalsApi::with_created_event(created.clone());
     let calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let input = CreateEvent {
         category: EventCategory::Workout,
@@ -99,7 +120,12 @@ async fn update_event_forwards_to_api() {
     let api = FakeIntervalsApi::with_updated_event(updated.clone());
     let calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let input = UpdateEvent {
         category: Some(EventCategory::Workout),
@@ -132,7 +158,12 @@ async fn delete_event_calls_api_and_returns_ok() {
     let api = FakeIntervalsApi::default();
     let calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service.delete_event("user-1", 77).await;
 
@@ -144,7 +175,12 @@ async fn delete_event_calls_api_and_returns_ok() {
 async fn download_fit_returns_bytes() {
     let api = FakeIntervalsApi::with_fit_bytes(vec![1, 2, 3, 4]);
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let bytes = service.download_fit("user-1", 33).await.unwrap();
 
@@ -155,7 +191,12 @@ async fn download_fit_returns_bytes() {
 async fn api_error_propagated_to_caller() {
     let api = FakeIntervalsApi::with_error(IntervalsError::ApiError("bad gateway".to_string()));
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
-    let service = IntervalsService::new(api, settings, NoopActivityRepository::default());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service.get_event("user-1", 99).await;
 
@@ -166,13 +207,14 @@ async fn api_error_propagated_to_caller() {
 }
 
 #[tokio::test]
-async fn list_activities_persists_api_results_and_returns_repository_view() {
+async fn list_activities_persists_api_results_and_returns_fresh_api_results() {
     let activity = sample_activity("i42", "Endurance Ride");
     let api = FakeIntervalsApi::with_activities(vec![activity.clone()]);
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
-    let service = IntervalsService::new(api, settings, repository);
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
 
     let activities = service
         .list_activities(
@@ -188,15 +230,165 @@ async fn list_activities_persists_api_results_and_returns_repository_view() {
     assert_eq!(activities, vec![activity]);
     assert_eq!(
         repository_calls.lock().unwrap().as_slice(),
-        &[
-            RepoCall::UpsertMany(1),
-            RepoCall::FindRange {
-                user_id: "user-1".to_string(),
-                oldest: "2026-03-01".to_string(),
-                newest: "2026-03-31".to_string()
-            }
-        ]
+        &[RepoCall::UpsertMany(1)]
     );
+}
+
+#[tokio::test]
+async fn upload_activity_returns_existing_activity_when_external_id_matches() {
+    let existing = sample_activity("i200", "Existing Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec!["i201".to_string()],
+        activities: vec![sample_activity("i201", "Should Not Upload")],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Existing Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: existing.external_id.clone(),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(!result.created);
+    assert_eq!(result.activity_ids, vec![existing.id.clone()]);
+    assert_eq!(result.activities, vec![existing]);
+    assert!(api_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn upload_activity_returns_existing_activity_when_fallback_identity_matches() {
+    let existing = sample_activity("i300", "Existing Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec!["i301".to_string()],
+        activities: vec![sample_activity("i301", "Should Not Upload")],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
+    let extractor = FakeActivityIdentityExtractor::with_identity(ActivityFallbackIdentity {
+        start_bucket: "2026-03-22T07:00".to_string(),
+        activity_type_bucket: "ride".to_string(),
+        duration_bucket_seconds: 3720,
+        distance_bucket_meters: Some(40200),
+        trainer: false,
+    });
+    let service = IntervalsService::new(api, settings, repository, extractor);
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Imported Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: None,
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(!result.created);
+    assert_eq!(result.activity_ids, vec![existing.id.clone()]);
+    assert_eq!(result.activities, vec![existing]);
+    assert!(api_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn upload_activity_does_not_dedupe_ride_and_virtualride() {
+    let mut existing = sample_activity("i400", "Trainer Ride");
+    existing.activity_type = Some("VirtualRide".to_string());
+    let uploaded = sample_activity("i401", "Outdoor Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec![uploaded.id.clone()],
+        activities: vec![uploaded.clone()],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", existing);
+    let extractor = FakeActivityIdentityExtractor::with_identity(ActivityFallbackIdentity {
+        start_bucket: "2026-03-22T07:00".to_string(),
+        activity_type_bucket: "ride".to_string(),
+        duration_bucket_seconds: 3720,
+        distance_bucket_meters: Some(40200),
+        trainer: false,
+    });
+    let service = IntervalsService::new(api, settings, repository, extractor);
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Outdoor Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: None,
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(result.created);
+    assert_eq!(result.activities, vec![uploaded]);
+    assert_eq!(api_calls.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn upload_activity_returns_existing_activity_when_external_id_matches_after_trim() {
+    let existing = sample_activity("i500", "Trimmed Match Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec!["i501".to_string()],
+        activities: vec![sample_activity("i501", "Should Not Upload")],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Trimmed Match Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("  external-i500  ".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(!result.created);
+    assert_eq!(result.activity_ids, vec![existing.id.clone()]);
+    assert_eq!(result.activities, vec![existing]);
+    assert!(api_calls.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -206,7 +398,8 @@ async fn get_activity_persists_fetched_activity() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
-    let service = IntervalsService::new(api, settings, repository);
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
 
     let fetched = service.get_activity("user-1", "i77").await.unwrap();
 
@@ -229,7 +422,8 @@ async fn upload_activity_persists_uploaded_activities() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
-    let service = IntervalsService::new(api, settings, repository);
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
 
     let upload = UploadActivity {
         filename: "ride.fit".to_string(),
@@ -254,7 +448,10 @@ async fn upload_activity_persists_uploaded_activities() {
     );
     assert_eq!(
         repository_calls.lock().unwrap().as_slice(),
-        &[RepoCall::UpsertMany(1)]
+        &[
+            RepoCall::FindExternalId("garmin-1".to_string()),
+            RepoCall::UpsertMany(1)
+        ]
     );
 }
 
@@ -266,7 +463,8 @@ async fn update_activity_persists_updated_activity() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
-    let service = IntervalsService::new(api, settings, repository);
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
 
     let update = UpdateActivity {
         name: Some("Updated Ride".to_string()),
@@ -303,7 +501,8 @@ async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds(
     let sequence = Arc::new(Mutex::new(Vec::new()));
     let repository = FakeActivityRepository::with_sequence(sequence.clone());
     let api = api.with_sequence(sequence.clone());
-    let service = IntervalsService::new(api, settings, repository);
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
 
     let result = service.delete_activity("user-1", "i11").await;
 
@@ -416,6 +615,8 @@ enum RepoCall {
         oldest: String,
         newest: String,
     },
+    FindExternalId(String),
+    FindFallbackIdentity(String),
 }
 
 #[derive(Clone)]
@@ -682,6 +883,15 @@ impl FakeActivityRepository {
             ..Self::default()
         }
     }
+
+    fn with_existing(user_id: &str, activity: Activity) -> Self {
+        let mut stored = HashMap::new();
+        stored.insert(user_id.to_string(), vec![activity]);
+        Self {
+            stored: Arc::new(Mutex::new(stored)),
+            ..Self::default()
+        }
+    }
 }
 
 impl ActivityRepositoryPort for FakeActivityRepository {
@@ -781,6 +991,68 @@ impl ActivityRepositoryPort for FakeActivityRepository {
         })
     }
 
+    fn find_by_user_id_and_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
+        let store = self.stored.clone();
+        let calls = self.call_log.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            calls
+                .lock()
+                .unwrap()
+                .push(RepoCall::FindExternalId(external_id.clone()));
+            let activities = store
+                .lock()
+                .unwrap()
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default();
+            Ok(activities.into_iter().find(|activity| {
+                activity
+                    .external_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    == Some(external_id.as_str())
+            }))
+        })
+    }
+
+    fn find_by_user_id_and_fallback_identity(
+        &self,
+        user_id: &str,
+        identity: &str,
+    ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        let store = self.stored.clone();
+        let calls = self.call_log.clone();
+        let user_id = user_id.to_string();
+        let identity = identity.to_string();
+        Box::pin(async move {
+            calls
+                .lock()
+                .unwrap()
+                .push(RepoCall::FindFallbackIdentity(identity.clone()));
+            let activities = store
+                .lock()
+                .unwrap()
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default();
+            Ok(activities
+                .into_iter()
+                .filter(|activity| {
+                    ActivityFallbackIdentity::from_activity(activity)
+                        .map(|candidate| candidate.as_fingerprint())
+                        == Some(identity.clone())
+                })
+                .collect())
+        })
+    }
+
     fn delete(&self, user_id: &str, activity_id: &str) -> BoxFuture<Result<(), IntervalsError>> {
         let store = self.stored.clone();
         let sequence = self.sequence.clone();
@@ -798,6 +1070,29 @@ impl ActivityRepositoryPort for FakeActivityRepository {
             }
             Ok(())
         })
+    }
+}
+
+#[derive(Clone, Default)]
+struct FakeActivityIdentityExtractor {
+    identity: Option<ActivityFallbackIdentity>,
+}
+
+impl FakeActivityIdentityExtractor {
+    fn with_identity(identity: ActivityFallbackIdentity) -> Self {
+        Self {
+            identity: Some(identity),
+        }
+    }
+}
+
+impl ActivityFileIdentityExtractorPort for FakeActivityIdentityExtractor {
+    fn extract_identity(
+        &self,
+        _upload: &UploadActivity,
+    ) -> BoxFuture<Result<Option<ActivityFallbackIdentity>, IntervalsError>> {
+        let identity = self.identity.clone();
+        Box::pin(async move { Ok(identity) })
     }
 }
 
