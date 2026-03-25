@@ -11,7 +11,7 @@ use super::cookies::read_cookie;
 
 fn pseudonymize_user_id(user_id: &str) -> String {
     let hash = Sha256::digest(user_id.as_bytes());
-    format!("{:x}", hash)[..16].to_string()
+    format!("{hash:x}")[..16].to_string()
 }
 
 pub(super) async fn resolve_user_id(

@@ -79,7 +79,7 @@ impl IntervalsIcuClient {
     }
 
     fn activity_url_impl(base_url: &str, activity_id: &str, path: &str) -> String {
-        format!("{}/api/v1/activity/{}{}", base_url, activity_id, path)
+        format!("{base_url}/api/v1/activity/{activity_id}{path}")
     }
 }
 
