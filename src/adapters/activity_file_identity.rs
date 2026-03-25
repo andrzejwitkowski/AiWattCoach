@@ -49,8 +49,8 @@ fn extract_fit_identity(file_bytes: &[u8]) -> Option<ActivityFallbackIdentity> {
     let (activity_type_bucket, trainer) = map_fit_activity_type(sport, sub_sport)?;
 
     let duration_bucket_seconds = int_field(&session, "total_elapsed_time")
-        .or_else(|| int_field(&session, "total_timer_time"))
         .filter(|seconds| *seconds > 0)
+        .or_else(|| int_field(&session, "total_timer_time").filter(|seconds| *seconds > 0))
         .map(round_duration_bucket)?;
 
     let distance_bucket_meters = float_field(&session, "total_distance")

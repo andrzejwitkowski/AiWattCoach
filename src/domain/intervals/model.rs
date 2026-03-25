@@ -70,12 +70,11 @@ impl ActivityFallbackIdentity {
                 .unwrap_or(&activity.start_date_local),
         )?;
         let activity_type_bucket = normalize_activity_type(activity.activity_type.as_deref()?)?;
-        let duration_bucket_seconds = round_duration_bucket(
-            activity
-                .elapsed_time_seconds
-                .or(activity.moving_time_seconds)
-                .filter(|value| *value > 0)?,
-        );
+        let duration_seconds = activity
+            .elapsed_time_seconds
+            .filter(|value| *value > 0)
+            .or_else(|| activity.moving_time_seconds.filter(|value| *value > 0))?;
+        let duration_bucket_seconds = round_duration_bucket(duration_seconds);
         let distance_bucket_meters = round_distance_bucket(activity.distance_meters);
 
         Some(Self {
@@ -114,11 +113,7 @@ pub fn normalize_external_id(value: Option<&str>) -> Option<String> {
 }
 
 fn bucket_start_time(value: &str) -> Option<String> {
-    if value.len() < 16 {
-        return None;
-    }
-
-    Some(value[..16].to_string())
+    value.get(..16).map(ToString::to_string)
 }
 
 fn normalize_activity_type(value: &str) -> Option<String> {
@@ -141,7 +136,12 @@ fn round_distance_bucket(distance_meters: Option<f64>) -> Option<i32> {
         return None;
     }
 
-    Some(((distance_meters / 100.0).round() * 100.0) as i32)
+    let rounded = (distance_meters / 100.0).round() * 100.0;
+    if rounded > i32::MAX as f64 {
+        return None;
+    }
+
+    Some(rounded as i32)
 }
 
 impl std::fmt::Display for IntervalsError {

@@ -434,6 +434,96 @@ async fn upload_activity_returns_existing_activity_when_external_id_matches_afte
 }
 
 #[tokio::test]
+async fn upload_activity_normalizes_external_id_before_forwarding_to_api() {
+    let uploaded_activity = sample_activity("i601", "Uploaded Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec![uploaded_activity.id.clone()],
+        activities: vec![uploaded_activity.clone()],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::default();
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Uploaded Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("  garmin-601  ".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(result.created);
+    assert_eq!(result.activities, vec![uploaded_activity]);
+    assert_eq!(
+        api_calls.lock().unwrap().as_slice(),
+        &[ApiCall::UploadActivity(UploadActivity {
+            filename: "ride.fit".to_string(),
+            file_bytes: vec![1, 2, 3],
+            name: Some("Uploaded Ride".to_string()),
+            description: None,
+            device_name: None,
+            external_id: Some("garmin-601".to_string()),
+            paired_event_id: None,
+        })]
+    );
+}
+
+#[tokio::test]
+async fn upload_activity_uses_positive_timer_time_when_elapsed_time_is_zero() {
+    let mut existing = sample_activity("i610", "Elapsed Zero Ride");
+    existing.elapsed_time_seconds = Some(0);
+    existing.moving_time_seconds = Some(3600);
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec!["i611".to_string()],
+        activities: vec![sample_activity("i611", "Should Not Upload")],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
+    let extractor = FakeActivityIdentityExtractor::with_identity(ActivityFallbackIdentity {
+        start_bucket: "2026-03-22T07:00".to_string(),
+        activity_type_bucket: "ride".to_string(),
+        duration_bucket_seconds: 3600,
+        distance_bucket_meters: Some(40200),
+        trainer: false,
+    });
+    let service = IntervalsService::new(api, settings, repository, extractor);
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Elapsed Zero Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: None,
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(!result.created);
+    assert_eq!(result.activity_ids, vec![existing.id.clone()]);
+    assert_eq!(result.activities, vec![existing]);
+    assert!(api_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn get_activity_persists_fetched_activity() {
     let activity = sample_activity("i77", "Threshold Ride");
     let api = FakeIntervalsApi::with_get_activity(activity.clone());

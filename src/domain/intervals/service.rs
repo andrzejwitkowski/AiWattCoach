@@ -304,6 +304,10 @@ where
         let user_id = user_id.to_string();
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
+            let upload = UploadActivity {
+                external_id: normalize_external_id(upload.external_id.as_deref()),
+                ..upload
+            };
             let normalized_external_id = normalize_external_id(upload.external_id.as_deref());
 
             if let Some(external_id) = normalized_external_id.as_deref() {
