@@ -201,7 +201,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
                     indoor: event.indoor,
                     color: event.color,
                     workout_doc: event.workout_doc,
-                    file_contents: file_upload.as_ref().and_then(|file| file.file_contents.clone()),
+                    file_contents: file_upload
+                        .as_ref()
+                        .and_then(|file| file.file_contents.clone()),
                     file_contents_base64: file_upload
                         .as_ref()
                         .and_then(|file| file.file_contents_base64.clone()),
@@ -242,7 +244,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
                     indoor: event.indoor,
                     color: event.color,
                     workout_doc: event.workout_doc,
-                    file_contents: file_upload.as_ref().and_then(|file| file.file_contents.clone()),
+                    file_contents: file_upload
+                        .as_ref()
+                        .and_then(|file| file.file_contents.clone()),
                     file_contents_base64: file_upload
                         .as_ref()
                         .and_then(|file| file.file_contents_base64.clone()),

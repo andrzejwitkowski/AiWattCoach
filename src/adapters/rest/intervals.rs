@@ -583,7 +583,10 @@ pub async fn get_activity(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match intervals_service.get_activity(&user_id, &path.activity_id).await {
+    match intervals_service
+        .get_activity(&user_id, &path.activity_id)
+        .await
+    {
         Ok(activity) => Json(map_activity_to_dto(activity)).into_response(),
         Err(error) => map_intervals_error(error),
     }
@@ -629,7 +632,11 @@ pub async fn create_activity(
             Json(UploadActivityResponseDto {
                 created: result.created,
                 activity_ids: result.activity_ids,
-                activities: result.activities.into_iter().map(map_activity_to_dto).collect(),
+                activities: result
+                    .activities
+                    .into_iter()
+                    .map(map_activity_to_dto)
+                    .collect(),
             }),
         )
             .into_response(),
@@ -686,7 +693,10 @@ pub async fn delete_activity(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match intervals_service.delete_activity(&user_id, &path.activity_id).await {
+    match intervals_service
+        .delete_activity(&user_id, &path.activity_id)
+        .await
+    {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(error) => map_intervals_error(error),
     }

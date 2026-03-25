@@ -54,7 +54,11 @@ pub trait IntervalsApiPort: Clone + Send + Sync + 'static {
         range: &DateRange,
     ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
         let _ = (credentials, range);
-        Box::pin(async { Err(IntervalsError::Internal("activity listing not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity listing not implemented".to_string(),
+            ))
+        })
     }
 
     fn get_activity(
@@ -63,7 +67,11 @@ pub trait IntervalsApiPort: Clone + Send + Sync + 'static {
         activity_id: &str,
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let _ = (credentials, activity_id);
-        Box::pin(async { Err(IntervalsError::Internal("activity lookup not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity lookup not implemented".to_string(),
+            ))
+        })
     }
 
     fn upload_activity(
@@ -72,7 +80,11 @@ pub trait IntervalsApiPort: Clone + Send + Sync + 'static {
         upload: UploadActivity,
     ) -> BoxFuture<Result<UploadedActivities, IntervalsError>> {
         let _ = (credentials, upload);
-        Box::pin(async { Err(IntervalsError::Internal("activity upload not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity upload not implemented".to_string(),
+            ))
+        })
     }
 
     fn update_activity(
@@ -82,7 +94,11 @@ pub trait IntervalsApiPort: Clone + Send + Sync + 'static {
         activity: UpdateActivity,
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let _ = (credentials, activity_id, activity);
-        Box::pin(async { Err(IntervalsError::Internal("activity update not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity update not implemented".to_string(),
+            ))
+        })
     }
 
     fn delete_activity(
@@ -91,7 +107,11 @@ pub trait IntervalsApiPort: Clone + Send + Sync + 'static {
         activity_id: &str,
     ) -> BoxFuture<Result<(), IntervalsError>> {
         let _ = (credentials, activity_id);
-        Box::pin(async { Err(IntervalsError::Internal("activity delete not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity delete not implemented".to_string(),
+            ))
+        })
     }
 }
 
@@ -124,7 +144,11 @@ pub trait ActivityRepositoryPort: Clone + Send + Sync + 'static {
 }
 
 impl ActivityRepositoryPort for NoopActivityRepository {
-    fn upsert(&self, _user_id: &str, activity: Activity) -> BoxFuture<Result<Activity, IntervalsError>> {
+    fn upsert(
+        &self,
+        _user_id: &str,
+        activity: Activity,
+    ) -> BoxFuture<Result<Activity, IntervalsError>> {
         Box::pin(async move { Ok(activity) })
     }
 

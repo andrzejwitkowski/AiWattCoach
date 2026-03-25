@@ -6,9 +6,9 @@ use std::{
 
 use aiwattcoach::domain::intervals::{
     Activity, ActivityDetails, ActivityMetrics, ActivityRepositoryPort, CreateEvent, DateRange,
-    Event, EventCategory, IntervalsApiPort, IntervalsCredentials, IntervalsError,
-    IntervalsService, IntervalsSettingsPort, IntervalsUseCases, NoopActivityRepository,
-    UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
+    Event, EventCategory, IntervalsApiPort, IntervalsCredentials, IntervalsError, IntervalsService,
+    IntervalsSettingsPort, IntervalsUseCases, NoopActivityRepository, UpdateActivity, UpdateEvent,
+    UploadActivity, UploadedActivities,
 };
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -240,7 +240,10 @@ async fn upload_activity_persists_uploaded_activities() {
         paired_event_id: Some(7),
     };
 
-    let result = service.upload_activity("user-1", upload.clone()).await.unwrap();
+    let result = service
+        .upload_activity("user-1", upload.clone())
+        .await
+        .unwrap();
 
     assert_eq!(result.activity_ids, vec!["i91".to_string()]);
     assert_eq!(result.activities, vec![uploaded_activity]);
@@ -391,7 +394,10 @@ fn sample_activity(id: &str, name: &str) -> Activity {
 #[derive(Clone, Debug, PartialEq)]
 enum ApiCall {
     Create(CreateEvent),
-    Update { event_id: i64, event: UpdateEvent },
+    Update {
+        event_id: i64,
+        event: UpdateEvent,
+    },
     Delete(i64),
     UploadActivity(UploadActivity),
     UpdateActivity {
@@ -623,7 +629,10 @@ impl IntervalsApiPort for FakeIntervalsApi {
         _credentials: &IntervalsCredentials,
         upload: UploadActivity,
     ) -> BoxFuture<Result<UploadedActivities, IntervalsError>> {
-        self.call_log.lock().unwrap().push(ApiCall::UploadActivity(upload));
+        self.call_log
+            .lock()
+            .unwrap()
+            .push(ApiCall::UploadActivity(upload));
         let result = self.upload_activity_result.clone();
         Box::pin(async move { result })
     }
@@ -675,11 +684,18 @@ impl FakeActivityRepository {
 }
 
 impl ActivityRepositoryPort for FakeActivityRepository {
-    fn upsert(&self, _user_id: &str, activity: Activity) -> BoxFuture<Result<Activity, IntervalsError>> {
+    fn upsert(
+        &self,
+        _user_id: &str,
+        activity: Activity,
+    ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let store = self.stored.clone();
         let calls = self.call_log.clone();
         Box::pin(async move {
-            calls.lock().unwrap().push(RepoCall::Upsert(activity.id.clone()));
+            calls
+                .lock()
+                .unwrap()
+                .push(RepoCall::Upsert(activity.id.clone()));
             let mut store = store.lock().unwrap();
             store.retain(|existing| existing.id != activity.id);
             store.push(activity.clone());
@@ -695,7 +711,10 @@ impl ActivityRepositoryPort for FakeActivityRepository {
         let store = self.stored.clone();
         let calls = self.call_log.clone();
         Box::pin(async move {
-            calls.lock().unwrap().push(RepoCall::UpsertMany(activities.len()));
+            calls
+                .lock()
+                .unwrap()
+                .push(RepoCall::UpsertMany(activities.len()));
             let mut store = store.lock().unwrap();
             for activity in &activities {
                 store.retain(|existing| existing.id != activity.id);
@@ -760,7 +779,10 @@ impl ActivityRepositoryPort for FakeActivityRepository {
                     .unwrap()
                     .push(format!("repo_delete:{activity_id}"));
             }
-            store.lock().unwrap().retain(|activity| activity.id != activity_id);
+            store
+                .lock()
+                .unwrap()
+                .retain(|activity| activity.id != activity_id);
             Ok(())
         })
     }

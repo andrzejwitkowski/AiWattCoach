@@ -67,7 +67,11 @@ pub trait IntervalsUseCases: Send + Sync {
         range: &DateRange,
     ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
         let _ = (user_id, range);
-        Box::pin(async { Err(IntervalsError::Internal("activity listing not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity listing not implemented".to_string(),
+            ))
+        })
     }
 
     fn get_activity(
@@ -76,7 +80,11 @@ pub trait IntervalsUseCases: Send + Sync {
         activity_id: &str,
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let _ = (user_id, activity_id);
-        Box::pin(async { Err(IntervalsError::Internal("activity lookup not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity lookup not implemented".to_string(),
+            ))
+        })
     }
 
     fn upload_activity(
@@ -85,7 +93,11 @@ pub trait IntervalsUseCases: Send + Sync {
         upload: UploadActivity,
     ) -> BoxFuture<Result<UploadedActivities, IntervalsError>> {
         let _ = (user_id, upload);
-        Box::pin(async { Err(IntervalsError::Internal("activity upload not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity upload not implemented".to_string(),
+            ))
+        })
     }
 
     fn update_activity(
@@ -95,7 +107,11 @@ pub trait IntervalsUseCases: Send + Sync {
         activity: UpdateActivity,
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let _ = (user_id, activity_id, activity);
-        Box::pin(async { Err(IntervalsError::Internal("activity update not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity update not implemented".to_string(),
+            ))
+        })
     }
 
     fn delete_activity(
@@ -104,7 +120,11 @@ pub trait IntervalsUseCases: Send + Sync {
         activity_id: &str,
     ) -> BoxFuture<Result<(), IntervalsError>> {
         let _ = (user_id, activity_id);
-        Box::pin(async { Err(IntervalsError::Internal("activity delete not implemented".to_string())) })
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "activity delete not implemented".to_string(),
+            ))
+        })
     }
 }
 
@@ -227,8 +247,14 @@ where
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
             let activities = service.api.list_activities(&credentials, &range).await?;
-            service.activities.upsert_many(&user_id, activities.clone()).await?;
-            service.activities.find_by_user_id_and_range(&user_id, &range).await
+            service
+                .activities
+                .upsert_many(&user_id, activities.clone())
+                .await?;
+            service
+                .activities
+                .find_by_user_id_and_range(&user_id, &range)
+                .await
         })
     }
 
@@ -243,7 +269,10 @@ where
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
             let activity = service.api.get_activity(&credentials, &activity_id).await?;
-            service.activities.upsert(&user_id, activity.clone()).await?;
+            service
+                .activities
+                .upsert(&user_id, activity.clone())
+                .await?;
             Ok(activity)
         })
     }
@@ -297,7 +326,10 @@ where
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
             service.activities.delete(&user_id, &activity_id).await?;
-            service.api.delete_activity(&credentials, &activity_id).await
+            service
+                .api
+                .delete_activity(&credentials, &activity_id)
+                .await
         })
     }
 }

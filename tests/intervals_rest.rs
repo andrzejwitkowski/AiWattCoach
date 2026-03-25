@@ -930,11 +930,7 @@ async fn create_activity_returns_201_and_uploaded_activities() {
     let body: Value = get_json(response).await;
     assert_eq!(body.get("created").unwrap().as_bool(), Some(true));
     assert_eq!(
-        body.get("activityIds")
-            .unwrap()
-            .as_array()
-            .unwrap()[0]
-            .as_str(),
+        body.get("activityIds").unwrap().as_array().unwrap()[0].as_str(),
         Some("i31")
     );
 }
@@ -1807,7 +1803,8 @@ impl IntervalsUseCases for ScopedIntervalsService {
             let mut store = store.lock().unwrap();
             let activities = store.entry(user_id).or_default();
             let id = format!("i{}", activities.len() + 1);
-            let activity = sample_activity(&id, upload.name.as_deref().unwrap_or("Uploaded Activity"));
+            let activity =
+                sample_activity(&id, upload.name.as_deref().unwrap_or("Uploaded Activity"));
             activities.push(activity.clone());
             Ok(UploadedActivities {
                 created: true,
