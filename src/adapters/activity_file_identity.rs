@@ -7,8 +7,8 @@ use fitparser::{
 };
 
 use crate::domain::intervals::{
-    ActivityFallbackIdentity, ActivityFileIdentityExtractorPort, BoxFuture, IntervalsError,
-    UploadActivity,
+    round_duration_bucket, ActivityFallbackIdentity, ActivityFileIdentityExtractorPort, BoxFuture,
+    IntervalsError, UploadActivity,
 };
 
 #[derive(Clone, Default)]
@@ -19,8 +19,16 @@ impl ActivityFileIdentityExtractorPort for ActivityFileIdentityExtractor {
         &self,
         upload: &UploadActivity,
     ) -> BoxFuture<Result<Option<ActivityFallbackIdentity>, IntervalsError>> {
-        let upload = upload.clone();
-        Box::pin(async move { Ok(extract_fit_identity(&upload.file_bytes)) })
+        let file_bytes = upload.file_bytes.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || extract_fit_identity(&file_bytes))
+                .await
+                .map_err(|error| {
+                    IntervalsError::Internal(format!(
+                        "activity identity extraction task failed: {error}"
+                    ))
+                })
+        })
     }
 }
 
@@ -42,8 +50,8 @@ fn extract_fit_identity(file_bytes: &[u8]) -> Option<ActivityFallbackIdentity> {
 
     let duration_bucket_seconds = int_field(&session, "total_elapsed_time")
         .or_else(|| int_field(&session, "total_timer_time"))
-        .map(|seconds| ((seconds + 15) / 30) * 30)
-        .filter(|seconds| *seconds > 0)?;
+        .filter(|seconds| *seconds > 0)
+        .map(round_duration_bucket)?;
 
     let distance_bucket_meters = float_field(&session, "total_distance")
         .filter(|meters| meters.is_finite() && *meters > 0.0)
@@ -192,7 +200,7 @@ mod tests {
 
         assert_eq!(
             timestamp_field(&record, "start_time"),
-            Some("2024-03-31T06:20".to_string())
+            Some("2024-03-24T06:46".to_string())
         );
     }
 

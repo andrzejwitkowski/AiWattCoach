@@ -261,10 +261,17 @@ where
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
             let activities = service.api.list_activities(&credentials, &range).await?;
-            service
+            if let Err(error) = service
                 .activities
                 .upsert_many(&user_id, activities.clone())
-                .await?;
+                .await
+            {
+                warn!(
+                    ?error,
+                    %user_id,
+                    "activity list refresh succeeded but local persistence failed"
+                );
+            }
             Ok(activities)
         })
     }
@@ -316,12 +323,10 @@ where
             if let Some(fallback_identity) =
                 service.identity_extractor.extract_identity(&upload).await?
             {
+                let fallback_fingerprint = fallback_identity.as_fingerprint();
                 let matches = service
                     .activities
-                    .find_by_user_id_and_fallback_identity(
-                        &user_id,
-                        &fallback_identity.as_fingerprint(),
-                    )
+                    .find_by_user_id_and_fallback_identity(&user_id, &fallback_fingerprint)
                     .await?;
 
                 if matches.len() == 1 {
@@ -341,7 +346,7 @@ where
                 } else if matches.len() > 1 {
                     warn!(
                         %user_id,
-                        fallback_identity = %fallback_identity.as_fingerprint(),
+                        fallback_identity = %fallback_fingerprint,
                         matches = matches.len(),
                         "activity upload dedupe fallback matched multiple cached activities"
                     );

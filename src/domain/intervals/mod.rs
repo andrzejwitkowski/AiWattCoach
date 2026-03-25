@@ -3,11 +3,11 @@ mod ports;
 mod service;
 
 pub use model::{
-    normalize_external_id, Activity, ActivityDeduplicationIdentity, ActivityDetails,
-    ActivityFallbackIdentity, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
-    ActivityStream, ActivityZoneTime, CreateEvent, DateRange, Event, EventCategory,
-    EventFileUpload, IntervalsCredentials, IntervalsError, UpdateActivity, UpdateEvent,
-    UploadActivity, UploadedActivities,
+    normalize_external_id, round_duration_bucket, Activity, ActivityDeduplicationIdentity,
+    ActivityDetails, ActivityFallbackIdentity, ActivityInterval, ActivityIntervalGroup,
+    ActivityMetrics, ActivityStream, ActivityZoneTime, CreateEvent, DateRange, Event,
+    EventCategory, EventFileUpload, IntervalsCredentials, IntervalsError, UpdateActivity,
+    UpdateEvent, UploadActivity, UploadedActivities,
 };
 pub use ports::{
     ActivityFileIdentityExtractorPort, ActivityRepositoryPort, BoxFuture, IntervalsApiPort,

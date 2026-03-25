@@ -6,8 +6,9 @@ use std::{
 };
 
 use super::{
-    Activity, ActivityFallbackIdentity, CreateEvent, DateRange, Event, IntervalsCredentials,
-    IntervalsError, UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
+    Activity, ActivityDeduplicationIdentity, ActivityFallbackIdentity, CreateEvent, DateRange,
+    Event, IntervalsCredentials, IntervalsError, UpdateActivity, UpdateEvent, UploadActivity,
+    UploadedActivities,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -259,11 +260,9 @@ impl ActivityRepositoryPort for NoopActivityRepository {
                 .unwrap_or_default()
                 .into_iter()
                 .find(|activity| {
-                    activity
-                        .external_id
+                    ActivityDeduplicationIdentity::from_activity(activity)
+                        .normalized_external_id
                         .as_deref()
-                        .map(|value| value.trim())
-                        .filter(|value| !value.is_empty())
                         == Some(external_id.as_str())
                 }))
         })
@@ -285,9 +284,10 @@ impl ActivityRepositoryPort for NoopActivityRepository {
                 .unwrap_or_default()
                 .into_iter()
                 .filter(|activity| {
-                    ActivityFallbackIdentity::from_activity(activity)
-                        .map(|candidate| candidate.as_fingerprint())
-                        == Some(identity.clone())
+                    ActivityDeduplicationIdentity::from_activity(activity)
+                        .fallback_identity
+                        .as_deref()
+                        == Some(identity.as_str())
                 })
                 .collect())
         })

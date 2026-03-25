@@ -2,8 +2,8 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::intervals::{
-    normalize_external_id, Activity, ActivityDeduplicationIdentity, ActivityRepositoryPort,
-    BoxFuture, DateRange, IntervalsError,
+    Activity, ActivityDeduplicationIdentity, ActivityRepositoryPort, BoxFuture, DateRange,
+    IntervalsError,
 };
 
 #[derive(Clone)]
@@ -233,9 +233,4 @@ impl ActivityRepositoryPort for MongoActivityRepository {
             Ok(())
         })
     }
-}
-
-#[allow(dead_code)]
-fn _normalized_external_id_for_document(activity: &Activity) -> Option<String> {
-    normalize_external_id(activity.external_id.as_deref())
 }

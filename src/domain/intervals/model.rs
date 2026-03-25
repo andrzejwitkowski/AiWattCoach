@@ -130,7 +130,7 @@ fn normalize_activity_type(value: &str) -> Option<String> {
     }
 }
 
-fn round_duration_bucket(duration_seconds: i32) -> i32 {
+pub fn round_duration_bucket(duration_seconds: i32) -> i32 {
     let rounded = ((duration_seconds + 15) / 30) * 30;
     rounded.max(30)
 }
