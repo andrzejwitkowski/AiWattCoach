@@ -1004,6 +1004,52 @@ async fn create_activity_returns_201_and_uploaded_activities() {
 }
 
 #[tokio::test]
+async fn create_activity_returns_200_when_duplicate_upload_is_detected() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_uploaded_activities(UploadedActivities {
+            created: false,
+            activity_ids: vec!["i31".to_string()],
+            activities: vec![sample_activity("i31", "Existing Ride")],
+        }),
+    )
+    .await;
+
+    let request_body = serde_json::json!({
+        "filename": "ride.fit",
+        "fileContentsBase64": "AQID",
+        "name": "Existing Ride"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/activities")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(body.get("created").unwrap().as_bool(), Some(false));
+    assert_eq!(
+        body.get("activityIds")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .first()
+            .unwrap()
+            .as_str(),
+        Some("i31")
+    );
+}
+
+#[tokio::test]
 async fn create_activity_rejects_invalid_base64_payload() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),

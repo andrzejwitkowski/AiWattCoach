@@ -2,7 +2,8 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::intervals::{
-    Activity, ActivityRepositoryPort, BoxFuture, DateRange, IntervalsError,
+    Activity, ActivityDeduplicationIdentity, ActivityRepositoryPort, BoxFuture, DateRange,
+    IntervalsError,
 };
 
 #[derive(Clone)]
@@ -15,6 +16,8 @@ struct ActivityDocument {
     user_id: String,
     activity_id: String,
     start_date_local: String,
+    external_id_normalized: Option<String>,
+    fallback_identity_v1: Option<String>,
     payload: Activity,
 }
 
@@ -47,6 +50,22 @@ impl MongoActivityRepository {
                             .build(),
                     )
                     .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "external_id_normalized": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("intervals_activities_user_external_id".to_string())
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "fallback_identity_v1": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("intervals_activities_user_fallback_identity".to_string())
+                            .build(),
+                    )
+                    .build(),
             ])
             .await
             .map_err(|error| IntervalsError::Internal(error.to_string()))?;
@@ -63,10 +82,13 @@ impl ActivityRepositoryPort for MongoActivityRepository {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
+            let dedupe_identity = ActivityDeduplicationIdentity::from_activity(&activity);
             let document = ActivityDocument {
                 user_id: user_id.clone(),
                 activity_id: activity.id.clone(),
                 start_date_local: activity.start_date_local.clone(),
+                external_id_normalized: dedupe_identity.normalized_external_id,
+                fallback_identity_v1: dedupe_identity.fallback_identity,
                 payload: activity.clone(),
             };
             collection
@@ -144,6 +166,58 @@ impl ActivityRepositoryPort for MongoActivityRepository {
                 .await
                 .map_err(|error| IntervalsError::Internal(error.to_string()))?;
             Ok(result.map(|document| document.payload))
+        })
+    }
+
+    fn find_by_user_id_and_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            let result = collection
+                .find_one(doc! {
+                    "user_id": &user_id,
+                    "external_id_normalized": &external_id,
+                })
+                .await
+                .map_err(|error| IntervalsError::Internal(error.to_string()))?;
+            Ok(result.map(|document| document.payload))
+        })
+    }
+
+    fn find_by_user_id_and_fallback_identity(
+        &self,
+        user_id: &str,
+        identity: &str,
+    ) -> BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let identity = identity.to_string();
+        Box::pin(async move {
+            let mut cursor = collection
+                .find(doc! {
+                    "user_id": &user_id,
+                    "fallback_identity_v1": &identity,
+                })
+                .await
+                .map_err(|error| IntervalsError::Internal(error.to_string()))?;
+
+            let mut activities = Vec::new();
+            while cursor
+                .advance()
+                .await
+                .map_err(|error| IntervalsError::Internal(error.to_string()))?
+            {
+                let document = cursor
+                    .deserialize_current()
+                    .map_err(|error| IntervalsError::Internal(error.to_string()))?;
+                activities.push(document.payload);
+            }
+            Ok(activities)
         })
     }
 

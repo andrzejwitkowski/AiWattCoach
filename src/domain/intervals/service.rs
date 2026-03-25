@@ -1,8 +1,11 @@
 use super::{
-    ports::BoxFuture, Activity, ActivityRepositoryPort, CreateEvent, DateRange, Event,
-    IntervalsApiPort, IntervalsError, IntervalsSettingsPort, UpdateActivity, UpdateEvent,
-    UploadActivity, UploadedActivities,
+    normalize_external_id,
+    ports::{ActivityFileIdentityExtractorPort, BoxFuture},
+    Activity, ActivityRepositoryPort, CreateEvent, DateRange, Event, IntervalsApiPort,
+    IntervalsError, IntervalsSettingsPort, UpdateActivity, UpdateEvent, UploadActivity,
+    UploadedActivities,
 };
+use tracing::warn;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum IntervalsConnectionError {
@@ -129,37 +132,48 @@ pub trait IntervalsUseCases: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct IntervalsService<Api, Settings, Activities>
+pub struct IntervalsService<Api, Settings, Activities, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    Extractor: ActivityFileIdentityExtractorPort,
 {
     api: Api,
     settings: Settings,
     activities: Activities,
+    identity_extractor: Extractor,
 }
 
-impl<Api, Settings, Activities> IntervalsService<Api, Settings, Activities>
+impl<Api, Settings, Activities, Extractor> IntervalsService<Api, Settings, Activities, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    Extractor: ActivityFileIdentityExtractorPort,
 {
-    pub fn new(api: Api, settings: Settings, activities: Activities) -> Self {
+    pub fn new(
+        api: Api,
+        settings: Settings,
+        activities: Activities,
+        identity_extractor: Extractor,
+    ) -> Self {
         Self {
             api,
             settings,
             activities,
+            identity_extractor,
         }
     }
 }
 
-impl<Api, Settings, Activities> IntervalsUseCases for IntervalsService<Api, Settings, Activities>
+impl<Api, Settings, Activities, Extractor> IntervalsUseCases
+    for IntervalsService<Api, Settings, Activities, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    Extractor: ActivityFileIdentityExtractorPort,
 {
     fn list_events(
         &self,
@@ -247,14 +261,18 @@ where
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
             let activities = service.api.list_activities(&credentials, &range).await?;
-            service
+            if let Err(error) = service
                 .activities
                 .upsert_many(&user_id, activities.clone())
-                .await?;
-            service
-                .activities
-                .find_by_user_id_and_range(&user_id, &range)
                 .await
+            {
+                warn!(
+                    ?error,
+                    %user_id,
+                    "activity list refresh succeeded but local persistence failed"
+                );
+            }
+            Ok(activities)
         })
     }
 
@@ -285,12 +303,68 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
+            let upload = UploadActivity {
+                external_id: normalize_external_id(upload.external_id.as_deref()),
+                ..upload
+            };
+            let normalized_external_id = normalize_external_id(upload.external_id.as_deref());
+
+            if let Some(external_id) = normalized_external_id.as_deref() {
+                if let Some(existing) = service
+                    .activities
+                    .find_by_user_id_and_external_id(&user_id, external_id)
+                    .await?
+                {
+                    return Ok(UploadedActivities {
+                        created: false,
+                        activity_ids: vec![existing.id.clone()],
+                        activities: vec![existing],
+                    });
+                }
+            }
+
+            if let Some(fallback_identity) =
+                service.identity_extractor.extract_identity(&upload).await?
+            {
+                let fallback_fingerprint = fallback_identity.as_fingerprint();
+                let matches = service
+                    .activities
+                    .find_by_user_id_and_fallback_identity(&user_id, &fallback_fingerprint)
+                    .await?;
+
+                if matches.len() == 1 {
+                    let existing = matches.into_iter().next().expect("single match expected");
+                    let existing_external_id =
+                        normalize_external_id(existing.external_id.as_deref());
+                    if normalized_external_id.is_none()
+                        || existing_external_id.is_none()
+                        || existing_external_id == normalized_external_id
+                    {
+                        return Ok(UploadedActivities {
+                            created: false,
+                            activity_ids: vec![existing.id.clone()],
+                            activities: vec![existing],
+                        });
+                    }
+                } else if matches.len() > 1 {
+                    warn!(
+                        %user_id,
+                        fallback_identity = %fallback_fingerprint,
+                        matches = matches.len(),
+                        "activity upload dedupe fallback matched multiple cached activities"
+                    );
+                }
+            }
+
             let credentials = service.settings.get_credentials(&user_id).await?;
             let uploaded = service.api.upload_activity(&credentials, upload).await?;
-            service
+            if let Err(error) = service
                 .activities
                 .upsert_many(&user_id, uploaded.activities.clone())
-                .await?;
+                .await
+            {
+                warn!(?error, %user_id, "activity upload succeeded but local persistence failed");
+            }
             Ok(uploaded)
         })
     }
