@@ -55,6 +55,8 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const [scrollAdjustment, setScrollAdjustment] = useState<CalendarScrollAdjustment>({ topDelta: 0, version: 0 });
   const loadedWeekKeysRef = useRef<Set<string>>(new Set());
   const inflightWeekKeysRef = useRef<Set<string>>(new Set());
+  const isLoadingPastRef = useRef(false);
+  const isLoadingFutureRef = useRef(false);
   const initializedRef = useRef(false);
   const windowStartRef = useRef(windowStart);
 
@@ -120,6 +122,8 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
       return;
     }
 
+    reserveWeekOffsets(startMonday, missingOffsets, inflightWeekKeysRef.current);
+
     const ranges = groupContiguousOffsets(missingOffsets);
 
     for (const { startOffset, count: batchCount } of ranges) {
@@ -181,10 +185,11 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   }, [pruneStoredWeeks, windowStart]);
 
   const loadMorePast = useCallback(async () => {
-    if (isLoadingPast) {
+    if (isLoadingPastRef.current) {
       return;
     }
 
+    isLoadingPastRef.current = true;
     setIsLoadingPast(true);
     const nextWindowStart = addWeeks(windowStart, -CALENDAR_SHIFT_WEEKS);
     const enteringStart = nextWindowStart;
@@ -203,15 +208,17 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
       await ensureWeeks(enteringStart, CALENDAR_SHIFT_WEEKS);
       void prefetchBuffer(nextWindowStart);
     } finally {
+      isLoadingPastRef.current = false;
       setIsLoadingPast(false);
     }
-  }, [ensureWeeks, isLoadingPast, prefetchBuffer, windowStart]);
+  }, [ensureWeeks, prefetchBuffer, windowStart]);
 
   const loadMoreFuture = useCallback(async () => {
-    if (isLoadingFuture) {
+    if (isLoadingFutureRef.current) {
       return;
     }
 
+    isLoadingFutureRef.current = true;
     setIsLoadingFuture(true);
     const nextWindowStart = addWeeks(windowStart, CALENDAR_SHIFT_WEEKS);
 
@@ -225,9 +232,10 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
       }));
       void prefetchBuffer(nextWindowStart);
     } finally {
+      isLoadingFutureRef.current = false;
       setIsLoadingFuture(false);
     }
-  }, [ensureWeeks, isLoadingFuture, prefetchBuffer, windowStart]);
+  }, [ensureWeeks, prefetchBuffer, windowStart]);
 
   const weeks = useMemo(() => {
     return Array.from({ length: CALENDAR_VISIBLE_WEEKS }, (_, index) => {
@@ -355,6 +363,12 @@ function groupContiguousOffsets(offsets: number[]): Array<{ startOffset: number;
 
   ranges.push({ startOffset: rangeStart, count });
   return ranges;
+}
+
+function reserveWeekOffsets(startMonday: Date, offsets: number[], inflightWeekKeys: Set<string>) {
+  for (const offset of offsets) {
+    inflightWeekKeys.add(toDateKey(addWeeks(startMonday, offset)));
+  }
 }
 
 function createRetainedWeekKeySet(windowStart: Date): Set<string> {

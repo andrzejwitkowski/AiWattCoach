@@ -12,6 +12,15 @@ vi.mock('../../intervals/api/intervals', () => ({
 
 import { listActivities, listEvents } from '../../intervals/api/intervals';
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((onResolve) => {
+    resolve = onResolve;
+  });
+
+  return { promise, resolve };
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -77,6 +86,43 @@ describe('useCalendarData', () => {
     await waitFor(() => {
       expect(listEvents).toHaveBeenCalled();
       expect(listActivities).toHaveBeenCalled();
+    });
+  });
+
+  it('coalesces concurrent forward loads into a single request', async () => {
+    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+
+    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    const deferredEvents = createDeferred<IntervalEvent[]>();
+    const deferredActivities = createDeferred<IntervalActivity[]>();
+
+    vi.clearAllMocks();
+    vi.mocked(listEvents).mockReturnValueOnce(deferredEvents.promise);
+    vi.mocked(listActivities).mockReturnValueOnce(deferredActivities.promise);
+
+    let firstLoad!: Promise<void>;
+    let secondLoad!: Promise<void>;
+
+    await act(async () => {
+      firstLoad = result.current.loadMoreFuture();
+      secondLoad = result.current.loadMoreFuture();
+      await Promise.resolve();
+    });
+
+    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(listActivities).toHaveBeenCalledTimes(1);
+
+    deferredEvents.resolve([]);
+    deferredActivities.resolve([]);
+
+    await act(async () => {
+      await Promise.all([firstLoad, secondLoad]);
     });
   });
 });
