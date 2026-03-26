@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   CALENDAR_ANCHOR_SCROLL_TOP,
   CALENDAR_PREVIEW_VISIBLE_HEIGHT,
+  CALENDAR_SHIFT_WEEKS,
   CALENDAR_VISIBLE_WEEKS,
   CALENDAR_WEEK_ROW_HEIGHT,
 } from '../constants';
@@ -35,6 +36,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const appliedAdjustmentVersionRef = useRef(0);
   const initializingScrollRef = useRef(true);
+  const pendingAnchorRef = useRef<{ weekKey: string; top: number } | null>(null);
 
   const visibleRangeLabel = useMemo(() => {
     const firstWeek = weeks[0];
@@ -56,16 +58,18 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       return;
     }
 
+    pendingAnchorRef.current = captureScrollAnchor(scrollRef.current, weeks[0]?.weekKey ?? null);
     void loadMorePast();
-  }, [isLoadingPast, loadMorePast]);
+  }, [isLoadingPast, loadMorePast, weeks]);
 
   const handleReachBottom = useCallback(() => {
     if (isLoadingFuture) {
       return;
     }
 
+    pendingAnchorRef.current = captureScrollAnchor(scrollRef.current, weeks[CALENDAR_SHIFT_WEEKS]?.weekKey ?? weeks[0]?.weekKey ?? null);
     void loadMoreFuture();
-  }, [isLoadingFuture, loadMoreFuture]);
+  }, [isLoadingFuture, loadMoreFuture, weeks]);
 
   const handleScroll = useCallback(() => {
     const container = scrollRef.current;
@@ -93,7 +97,21 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       return;
     }
 
-    container.scrollTop += scrollAdjustment.topDelta;
+    const pendingAnchor = pendingAnchorRef.current;
+    if (pendingAnchor) {
+      const anchorElement = container.querySelector<HTMLElement>(`[data-week-key="${pendingAnchor.weekKey}"]`);
+
+      if (anchorElement) {
+        const nextTop = anchorElement.offsetTop - container.scrollTop;
+        container.scrollTop += nextTop - pendingAnchor.top;
+      } else {
+        container.scrollTop += scrollAdjustment.topDelta;
+      }
+    } else {
+      container.scrollTop += scrollAdjustment.topDelta;
+    }
+
+    pendingAnchorRef.current = null;
     appliedAdjustmentVersionRef.current = scrollAdjustment.version;
   }, [scrollAdjustment]);
 
@@ -160,7 +178,11 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
               <div className="mt-8 space-y-10">
                 <PreviewRow week={topPreviewWeek} edge="top" />
                 {weeks.length > 0 ? (
-                  weeks.map((week) => <CalendarWeekSection key={week.weekKey} week={week} />)
+                  weeks.map((week) => (
+                    <div key={week.weekKey} data-week-key={week.weekKey}>
+                      <CalendarWeekSection week={week} />
+                    </div>
+                  ))
                 ) : (
                   <div className="rounded-xl border border-white/5 bg-[#171a1d] p-6 text-center text-sm text-slate-400">
                     {t('calendar.noEvents')}
@@ -176,6 +198,22 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       <CalendarPerformanceCards />
     </section>
   );
+}
+
+function captureScrollAnchor(container: HTMLDivElement | null, weekKey: string | null) {
+  if (!container || !weekKey) {
+    return null;
+  }
+
+  const anchorElement = container.querySelector<HTMLElement>(`[data-week-key="${weekKey}"]`);
+  if (!anchorElement) {
+    return null;
+  }
+
+  return {
+    weekKey,
+    top: anchorElement.offsetTop - container.scrollTop,
+  };
 }
 
 function PreviewRow({ week, edge }: { week: CalendarWeek; edge: 'top' | 'bottom' }) {

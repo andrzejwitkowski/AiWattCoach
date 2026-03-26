@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
 import { CALENDAR_BUFFER_WEEKS, CALENDAR_VISIBLE_WEEKS } from '../constants';
+import { addDays, parseDateKey, toDateKey } from '../utils/dateUtils';
 import { useCalendarData } from './useCalendarData';
 
 vi.mock('../../intervals/api/intervals', () => ({
@@ -19,6 +20,17 @@ function createDeferred<T>() {
   });
 
   return { promise, resolve };
+}
+
+function hasRangeCall(mock: ReturnType<typeof vi.fn>, oldest: string, newest: string): boolean {
+  return mock.mock.calls.some(([, query]) => {
+    return query !== null
+      && typeof query === 'object'
+      && 'oldest' in query
+      && 'newest' in query
+      && query.oldest === oldest
+      && query.newest === newest;
+  });
 }
 
 afterEach(() => {
@@ -71,6 +83,9 @@ describe('useCalendarData', () => {
       expect(result.current.state).toBe('ready');
     });
 
+    const initialFirstWeek = result.current.weeks[0]!.weekKey;
+    const initialLastDay = toDateKey(addDays(parseDateKey(initialFirstWeek), 6));
+
     for (let index = 0; index < CALENDAR_BUFFER_WEEKS + 1; index += 1) {
       await act(async () => {
         await result.current.loadMoreFuture();
@@ -84,8 +99,8 @@ describe('useCalendarData', () => {
     });
 
     await waitFor(() => {
-      expect(listEvents).toHaveBeenCalled();
-      expect(listActivities).toHaveBeenCalled();
+      expect(hasRangeCall(vi.mocked(listEvents), initialFirstWeek, initialLastDay)).toBe(true);
+      expect(hasRangeCall(vi.mocked(listActivities), initialFirstWeek, initialLastDay)).toBe(true);
     });
   });
 
@@ -123,6 +138,51 @@ describe('useCalendarData', () => {
 
     await act(async () => {
       await Promise.all([firstLoad, secondLoad]);
+    });
+  });
+
+  it('blocks an opposite-direction load while pagination is in flight', async () => {
+    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+
+    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    for (let index = 0; index < CALENDAR_BUFFER_WEEKS; index += 1) {
+      await act(async () => {
+        await result.current.loadMoreFuture();
+      });
+    }
+
+    const expectedFirstWeekAfterForward = result.current.weeks[1]!.weekKey;
+    const deferredEvents = createDeferred<IntervalEvent[]>();
+    const deferredActivities = createDeferred<IntervalActivity[]>();
+
+    vi.clearAllMocks();
+    vi.mocked(listEvents).mockReturnValueOnce(deferredEvents.promise);
+    vi.mocked(listActivities).mockReturnValueOnce(deferredActivities.promise);
+
+    let forwardLoad!: Promise<void>;
+    let backwardLoad!: Promise<void>;
+
+    await act(async () => {
+      forwardLoad = result.current.loadMoreFuture();
+      backwardLoad = result.current.loadMorePast();
+      await Promise.resolve();
+    });
+
+    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(listActivities).toHaveBeenCalledTimes(1);
+    expect(result.current.weeks[0]!.weekKey).toBe(expectedFirstWeekAfterForward);
+
+    deferredEvents.resolve([]);
+    deferredActivities.resolve([]);
+
+    await act(async () => {
+      await Promise.all([forwardLoad, backwardLoad]);
     });
   });
 });
