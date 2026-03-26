@@ -1,13 +1,13 @@
-FROM oven/bun:1 AS frontend-builder
+FROM node:22-bookworm-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
-COPY frontend/package.json frontend/bun.lock ./
-RUN bun install --frozen-lockfile
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
 COPY frontend ./
 
-RUN bun run build
+RUN npm run build
 
 FROM rust:1.88-bookworm AS builder
 
