@@ -13,6 +13,7 @@ import {
 } from '../constants';
 import type {
   CalendarDataState,
+  CalendarLoadingEdge,
   CalendarDay,
   CalendarScrollAdjustment,
   CalendarWeek,
@@ -39,6 +40,7 @@ type UseCalendarDataResult = {
   bottomPreviewWeek: CalendarWeek;
   isLoadingPast: boolean;
   isLoadingFuture: boolean;
+  loadingEdge: CalendarLoadingEdge;
   scrollAdjustment: CalendarScrollAdjustment;
   loadMorePast: () => Promise<void>;
   loadMoreFuture: () => Promise<void>;
@@ -53,6 +55,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const [windowStart, setWindowStart] = useState<Date>(() => getMondayOfWeek(new Date()));
   const [isLoadingPast, setIsLoadingPast] = useState(false);
   const [isLoadingFuture, setIsLoadingFuture] = useState(false);
+  const [loadingEdge, setLoadingEdge] = useState<CalendarLoadingEdge>(null);
   const [scrollAdjustment, setScrollAdjustment] = useState<CalendarScrollAdjustment>({ topDelta: 0, version: 0 });
   const loadedWeekKeysRef = useRef<Set<string>>(new Set());
   const inflightWeekKeysRef = useRef<Set<string>>(new Set());
@@ -68,6 +71,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     paginationLockRef.current = true;
     setIsLoadingPast(direction === 'past');
     setIsLoadingFuture(direction === 'future');
+    setLoadingEdge(direction === 'past' ? 'top' : 'bottom');
     return true;
   }, []);
 
@@ -75,6 +79,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     paginationLockRef.current = false;
     setIsLoadingPast(false);
     setIsLoadingFuture(false);
+    setLoadingEdge(null);
   }, []);
 
   const pruneStoredWeeks = useCallback((anchorStart: Date) => {
@@ -213,19 +218,19 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     const currentWindowStart = windowStartRef.current;
     const nextWindowStart = addWeeks(currentWindowStart, -CALENDAR_SHIFT_WEEKS);
     const enteringStart = nextWindowStart;
-    windowStartRef.current = nextWindowStart;
-    setWindowStart(nextWindowStart);
-    setScrollAdjustment((current) => ({
-      topDelta: (CALENDAR_WEEK_ROW_HEIGHT + CALENDAR_WEEK_ROW_GAP) * CALENDAR_SHIFT_WEEKS,
-      version: current.version + 1,
-    }));
+    const enteringWeekKey = toDateKey(enteringStart);
 
     try {
-      // This asymmetry is intentional: loadMorePast shifts windowStart and scrollAdjustment
-      // before awaiting ensureWeeks/prefetchBuffer so the user immediately sees the entering
-      // placeholder week while scrolling upward. loadMoreFuture waits for data first to avoid
-      // a visible downward jump when advancing the window.
       await ensureWeeks(enteringStart, CALENDAR_SHIFT_WEEKS);
+      if (!loadedWeekKeysRef.current.has(enteringWeekKey)) {
+        return;
+      }
+      windowStartRef.current = nextWindowStart;
+      setWindowStart(nextWindowStart);
+      setScrollAdjustment((current) => ({
+        topDelta: (CALENDAR_WEEK_ROW_HEIGHT + CALENDAR_WEEK_ROW_GAP) * CALENDAR_SHIFT_WEEKS,
+        version: current.version + 1,
+      }));
       void prefetchBuffer(nextWindowStart);
     } finally {
       endPagination();
@@ -279,6 +284,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     bottomPreviewWeek,
     isLoadingPast,
     isLoadingFuture,
+    loadingEdge,
     scrollAdjustment,
     loadMorePast,
     loadMoreFuture,

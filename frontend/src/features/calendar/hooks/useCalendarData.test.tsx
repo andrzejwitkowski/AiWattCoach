@@ -208,4 +208,5 @@ describe('useCalendarData', () => {
       expect(window.location.href).toBe('/');
     });
   });
+
 });

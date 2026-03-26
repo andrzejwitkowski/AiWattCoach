@@ -12,6 +12,7 @@ import {
 import { useCalendarData } from '../hooks/useCalendarData';
 import type { CalendarWeek } from '../types';
 import { CalendarPerformanceCards } from './CalendarPerformanceCards';
+import { CalendarLoadingRow } from './CalendarLoadingRow';
 import { CalendarWeekDayHeader } from './CalendarWeekDayHeader';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
@@ -29,6 +30,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
     bottomPreviewWeek,
     isLoadingPast,
     isLoadingFuture,
+    loadingEdge,
     scrollAdjustment,
     loadMorePast,
     loadMoreFuture,
@@ -177,6 +179,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
               <CalendarWeekDayHeader />
               <div className="mt-8 space-y-10">
                 <PreviewRow week={topPreviewWeek} edge="top" />
+                {loadingEdge === 'top' ? <CalendarLoadingRow /> : null}
                 {weeks.length > 0 ? (
                   weeks.map((week) => (
                     <div key={week.weekKey} data-week-key={week.weekKey}>
@@ -188,6 +191,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
                     {t('calendar.noEvents')}
                   </div>
                 )}
+                {loadingEdge === 'bottom' ? <CalendarLoadingRow /> : null}
                 <PreviewRow week={bottomPreviewWeek} edge="bottom" />
               </div>
             </div>
