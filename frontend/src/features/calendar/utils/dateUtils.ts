@@ -44,11 +44,11 @@ export function isToday(date: Date): boolean {
 }
 
 export function getWeekNumber(date: Date): number {
-  const target = startOfLocalDay(date);
-  const dayNumber = target.getDay() === 0 ? 7 : target.getDay();
-  target.setDate(target.getDate() + 4 - dayNumber);
-  const yearStart = new Date(target.getFullYear(), 0, 1);
-  return Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNumber = utcDate.getUTCDay() === 0 ? 7 : utcDate.getUTCDay();
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNumber);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  return Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
 export function formatDayLabel(date: Date, locale: string): string {

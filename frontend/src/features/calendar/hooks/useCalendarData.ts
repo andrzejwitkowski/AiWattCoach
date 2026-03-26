@@ -7,6 +7,7 @@ import {
   CALENDAR_BUFFER_WEEKS,
   CALENDAR_SHIFT_WEEKS,
   CALENDAR_VISIBLE_WEEKS,
+  CALENDAR_WEEK_ROW_GAP,
   CALENDAR_WEEK_ROW_HEIGHT,
 } from '../constants';
 import type {
@@ -162,7 +163,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     const enteringStart = nextWindowStart;
     setWindowStart(nextWindowStart);
     setScrollAdjustment((current) => ({
-      topDelta: CALENDAR_WEEK_ROW_HEIGHT,
+      topDelta: (CALENDAR_WEEK_ROW_HEIGHT + CALENDAR_WEEK_ROW_GAP) * CALENDAR_SHIFT_WEEKS,
       version: current.version + 1,
     }));
 
@@ -190,7 +191,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
       await ensureWeeks(addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS), CALENDAR_SHIFT_WEEKS);
       setWindowStart(nextWindowStart);
       setScrollAdjustment((current) => ({
-        topDelta: -CALENDAR_WEEK_ROW_HEIGHT,
+        topDelta: -(CALENDAR_WEEK_ROW_HEIGHT + CALENDAR_WEEK_ROW_GAP) * CALENDAR_SHIFT_WEEKS,
         version: current.version + 1,
       }));
       void prefetchBuffer(nextWindowStart);

@@ -116,6 +116,11 @@
     "scrollToRetry": "Keep scrolling to retry loading this part of the calendar.",
     "actualOnly": "actual",
     "workout": "Workout",
+    "eventRace": "Race",
+    "eventRide": "Ride",
+    "eventRun": "Run",
+    "eventSwim": "Swim",
+    "eventOther": "Event",
     "moreItems_one": "+{{count}} more item",
     "moreItems_other": "+{{count}} more items"
   }

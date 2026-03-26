@@ -19,7 +19,8 @@ type CalendarGridProps = {
 };
 
 export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const {
     state,
     weeks,
@@ -43,12 +44,12 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       return t('calendar.fiveWeeks');
     }
 
-    const firstLabel = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(firstWeek.mondayDate);
+    const firstLabel = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(firstWeek.mondayDate);
     const lastDate = lastWeek.days[lastWeek.days.length - 1]?.date ?? lastWeek.mondayDate;
-    const lastLabel = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(lastDate);
+    const lastLabel = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(lastDate);
 
     return firstLabel === lastLabel ? firstLabel : `${firstLabel} - ${lastLabel}`;
-  }, [t, weeks]);
+  }, [locale, t, weeks]);
 
   const handleReachTop = useCallback(() => {
     if (isLoadingPast) {
@@ -72,15 +73,15 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       return;
     }
 
-    const topTrigger = CALENDAR_PREVIEW_VISIBLE_HEIGHT;
-    const bottomTrigger = (CALENDAR_WEEK_ROW_HEIGHT * 2) - CALENDAR_PREVIEW_VISIBLE_HEIGHT;
+    const { scrollTop, clientHeight, scrollHeight } = container;
+    const edgeThreshold = CALENDAR_PREVIEW_VISIBLE_HEIGHT;
 
-    if (container.scrollTop <= topTrigger) {
+    if (scrollTop <= edgeThreshold) {
       void handleReachTop();
       return;
     }
 
-    if (container.scrollTop >= bottomTrigger) {
+    if (scrollTop + clientHeight >= scrollHeight - edgeThreshold) {
       void handleReachBottom();
     }
   }, [handleReachBottom, handleReachTop, state]);
@@ -147,6 +148,9 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
             <div
               ref={scrollRef}
               onScroll={handleScroll}
+              tabIndex={0}
+              role="region"
+              aria-label={t('calendar.performanceCalendar')}
               className="no-scrollbar overflow-y-auto pr-1"
               style={{
                 maxHeight: `${(CALENDAR_WEEK_ROW_HEIGHT * CALENDAR_VISIBLE_WEEKS) + (CALENDAR_PREVIEW_VISIBLE_HEIGHT * 2)}px`,

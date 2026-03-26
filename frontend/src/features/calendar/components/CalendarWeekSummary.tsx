@@ -8,7 +8,8 @@ type CalendarWeekSummaryProps = {
 };
 
 export function CalendarWeekSummary({ weekNumber, summary }: CalendarWeekSummaryProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-white/5 border-l-4 border-l-[#d2ff9a] bg-[#111417] px-4 py-4 md:px-5 xl:flex-row xl:items-center xl:justify-between">
@@ -23,10 +24,10 @@ export function CalendarWeekSummary({ weekNumber, summary }: CalendarWeekSummary
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6 xl:gap-8">
-        <Metric label={t('calendar.tssStatus')} value={`${summary.totalTss}`} detail={summary.targetTss !== null ? `/ ${summary.targetTss}` : t('calendar.actualOnly')} />
-        <Metric label={t('calendar.energy')} value={`${summary.totalCalories.toLocaleString()}`} detail="kcal" />
-        <Metric label={t('calendar.duration')} value={formatHours(summary.totalDurationSeconds)} detail={summary.targetDurationSeconds !== null ? `/ ${formatHours(summary.targetDurationSeconds)}` : t('calendar.actualOnly')} />
-        <Metric label={t('calendar.distance')} value={formatDistance(summary.totalDistanceMeters)} detail="km" />
+        <Metric label={t('calendar.tssStatus')} value={formatInteger(summary.totalTss, locale)} detail={summary.targetTss !== null ? `/ ${formatInteger(summary.targetTss, locale)}` : t('calendar.actualOnly')} />
+        <Metric label={t('calendar.energy')} value={formatInteger(summary.totalCalories, locale)} detail="kcal" />
+        <Metric label={t('calendar.duration')} value={formatHours(summary.totalDurationSeconds, locale)} detail={summary.targetDurationSeconds !== null ? `/ ${formatHours(summary.targetDurationSeconds, locale)}` : t('calendar.actualOnly')} />
+        <Metric label={t('calendar.distance')} value={formatDistance(summary.totalDistanceMeters, locale)} detail="km" />
       </div>
     </div>
   );
@@ -43,10 +44,24 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   );
 }
 
-function formatHours(seconds: number): string {
-  return `${(seconds / 3600).toFixed(seconds >= 36000 ? 0 : 1)}h`;
+function formatInteger(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
 }
 
-function formatDistance(meters: number): string {
-  return (meters / 1000).toFixed(meters >= 100000 ? 0 : 1);
+function formatHours(seconds: number, locale: string): string {
+  const hours = seconds / 3600;
+  const fractionDigits = seconds >= 36000 ? 0 : 1;
+  return `${new Intl.NumberFormat(locale, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(hours)}h`;
+}
+
+function formatDistance(meters: number, locale: string): string {
+  const kilometers = meters / 1000;
+  const fractionDigits = meters >= 100000 ? 0 : 1;
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(kilometers);
 }

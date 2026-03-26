@@ -21,7 +21,14 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
   const extraItemCount = Math.max(0, day.activities.length + day.events.length - 1);
   const title = primaryActivity?.name ?? primaryEvent?.name ?? t('calendar.restDay');
   const subtitle = hasTraining
-    ? buildSubtitle(primaryActivity, primaryEvent, t('calendar.workout'))
+    ? buildSubtitle(primaryActivity, primaryEvent, locale, {
+      workout: t('calendar.workout'),
+      race: t('calendar.eventRace'),
+      ride: t('calendar.eventRide'),
+      run: t('calendar.eventRun'),
+      swim: t('calendar.eventSwim'),
+      unknown: t('calendar.eventOther'),
+    })
     : t('calendar.restDay');
   const tone: Tone = hasTraining
     ? getTone(primaryActivity?.activityType, primaryEvent?.category)
@@ -68,10 +75,20 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
 function buildSubtitle(
   dayActivity: CalendarDay['activities'][number] | null,
   dayEvent: CalendarDay['events'][number] | null,
-  workoutFallback: string,
+  locale: string,
+  labels: {
+    workout: string;
+    race: string;
+    ride: string;
+    run: string;
+    swim: string;
+    unknown: string;
+  },
 ): string {
   const durationSeconds = dayActivity?.movingTimeSeconds ?? 0;
-  const durationMinutes = durationSeconds > 0 ? `${Math.round(durationSeconds / 60)} min` : null;
+  const durationMinutes = durationSeconds > 0
+    ? new Intl.NumberFormat(locale, { style: 'unit', unit: 'minute', unitDisplay: 'short', maximumFractionDigits: 0 }).format(Math.round(durationSeconds / 60))
+    : null;
   const tss = dayActivity?.metrics.trainingStressScore ?? null;
 
   if (durationMinutes && tss !== null) {
@@ -86,7 +103,34 @@ function buildSubtitle(
     return `${tss} TSS`;
   }
 
-  return dayEvent?.category ?? workoutFallback;
+  return mapEventCategory(dayEvent?.category, labels);
+}
+
+function mapEventCategory(
+  category: string | null | undefined,
+  labels: {
+    workout: string;
+    race: string;
+    ride: string;
+    run: string;
+    swim: string;
+    unknown: string;
+  },
+): string {
+  switch ((category ?? '').toUpperCase()) {
+    case 'WORKOUT':
+      return labels.workout;
+    case 'RACE':
+      return labels.race;
+    case 'RIDE':
+      return labels.ride;
+    case 'RUN':
+      return labels.run;
+    case 'SWIM':
+      return labels.swim;
+    default:
+      return labels.unknown;
+  }
 }
 
 function getTone(activityType: string | null | undefined, category: string | null | undefined): Tone {
