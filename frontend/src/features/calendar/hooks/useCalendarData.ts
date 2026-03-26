@@ -6,6 +6,7 @@ import { HttpError } from '../../../lib/httpClient';
 import {
   CALENDAR_BUFFER_WEEKS,
   CALENDAR_SHIFT_WEEKS,
+  CALENDAR_WINDOW_WEEKS,
   CALENDAR_VISIBLE_WEEKS,
   CALENDAR_WEEK_ROW_GAP,
   CALENDAR_WEEK_ROW_HEIGHT,
@@ -55,6 +56,14 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const loadedWeekKeysRef = useRef<Set<string>>(new Set());
   const inflightWeekKeysRef = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
+  const windowStartRef = useRef(windowStart);
+
+  const pruneStoredWeeks = useCallback((anchorStart: Date) => {
+    const retainedWeekKeys = createRetainedWeekKeySet(anchorStart);
+    setStore((current) => pruneWeekStore(current, retainedWeekKeys));
+    loadedWeekKeysRef.current = pruneWeekKeySet(loadedWeekKeysRef.current, retainedWeekKeys);
+    inflightWeekKeysRef.current = pruneWeekKeySet(inflightWeekKeysRef.current, retainedWeekKeys);
+  }, []);
 
   const loadRange = useCallback(async (startMonday: Date, count: number) => {
     const range = formatDateRange(startMonday, count);
@@ -67,13 +76,20 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   }, [apiBaseUrl]);
 
   const hydrateWeeks = useCallback((startMonday: Date, count: number, events: IntervalEvent[], activities: IntervalActivity[], status: CalendarWeekStatus) => {
+    const retainedWeekKeys = createRetainedWeekKeySet(windowStartRef.current);
+
     setStore((current) => {
       const next = new Map(current);
       for (let index = 0; index < count; index += 1) {
         const mondayDate = addWeeks(startMonday, index);
         const week = buildCalendarWeek(mondayDate, events, activities, status);
-        next.set(week.weekKey, week);
-        loadedWeekKeysRef.current.add(week.weekKey);
+        if (retainedWeekKeys.has(week.weekKey)) {
+          next.set(week.weekKey, week);
+          loadedWeekKeysRef.current.add(week.weekKey);
+        } else {
+          next.delete(week.weekKey);
+          loadedWeekKeysRef.current.delete(week.weekKey);
+        }
         inflightWeekKeysRef.current.delete(week.weekKey);
       }
       return next;
@@ -117,12 +133,18 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
         setState('ready');
       } catch (error) {
         setStore((current) => {
+          const retainedWeekKeys = createRetainedWeekKeySet(windowStartRef.current);
           const next = new Map(current);
           for (let index = 0; index < batchCount; index += 1) {
             const mondayDate = addWeeks(batchStart, index);
             const weekKey = toDateKey(mondayDate);
-            next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
+            if (retainedWeekKeys.has(weekKey)) {
+              next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
+            } else {
+              next.delete(weekKey);
+            }
             inflightWeekKeysRef.current.delete(weekKey);
+            loadedWeekKeysRef.current.delete(weekKey);
           }
           return next;
         });
@@ -153,6 +175,11 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     void prefetchBuffer(initialStart);
   }, [ensureWeeks, prefetchBuffer]);
 
+  useEffect(() => {
+    windowStartRef.current = windowStart;
+    pruneStoredWeeks(windowStart);
+  }, [pruneStoredWeeks, windowStart]);
+
   const loadMorePast = useCallback(async () => {
     if (isLoadingPast) {
       return;
@@ -161,6 +188,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     setIsLoadingPast(true);
     const nextWindowStart = addWeeks(windowStart, -CALENDAR_SHIFT_WEEKS);
     const enteringStart = nextWindowStart;
+    windowStartRef.current = nextWindowStart;
     setWindowStart(nextWindowStart);
     setScrollAdjustment((current) => ({
       topDelta: (CALENDAR_WEEK_ROW_HEIGHT + CALENDAR_WEEK_ROW_GAP) * CALENDAR_SHIFT_WEEKS,
@@ -189,6 +217,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
     try {
       await ensureWeeks(addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS), CALENDAR_SHIFT_WEEKS);
+      windowStartRef.current = nextWindowStart;
       setWindowStart(nextWindowStart);
       setScrollAdjustment((current) => ({
         topDelta: -(CALENDAR_WEEK_ROW_HEIGHT + CALENDAR_WEEK_ROW_GAP) * CALENDAR_SHIFT_WEEKS,
@@ -303,6 +332,10 @@ function roundMetric(value: number): number {
 }
 
 function groupContiguousOffsets(offsets: number[]): Array<{ startOffset: number; count: number }> {
+  if (offsets.length === 0) {
+    return [];
+  }
+
   const ranges: Array<{ startOffset: number; count: number }> = [];
   let rangeStart = offsets[0];
   let previous = offsets[0];
@@ -322,4 +355,36 @@ function groupContiguousOffsets(offsets: number[]): Array<{ startOffset: number;
 
   ranges.push({ startOffset: rangeStart, count });
   return ranges;
+}
+
+function createRetainedWeekKeySet(windowStart: Date): Set<string> {
+  const retainedStart = addWeeks(windowStart, -CALENDAR_BUFFER_WEEKS);
+
+  return new Set(
+    Array.from({ length: CALENDAR_WINDOW_WEEKS }, (_, index) => toDateKey(addWeeks(retainedStart, index))),
+  );
+}
+
+function pruneWeekStore(store: WeekStore, retainedWeekKeys: Set<string>): WeekStore {
+  const next = new Map<string, CalendarWeek>();
+
+  for (const [weekKey, week] of store) {
+    if (retainedWeekKeys.has(weekKey)) {
+      next.set(weekKey, week);
+    }
+  }
+
+  return next.size === store.size ? store : next;
+}
+
+function pruneWeekKeySet(weekKeys: Set<string>, retainedWeekKeys: Set<string>): Set<string> {
+  const next = new Set<string>();
+
+  for (const weekKey of weekKeys) {
+    if (retainedWeekKeys.has(weekKey)) {
+      next.add(weekKey);
+    }
+  }
+
+  return next.size === weekKeys.size ? weekKeys : next;
 }
