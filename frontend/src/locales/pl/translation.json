@@ -115,6 +115,7 @@
     "rowLoadError": "Dane tygodnia niedostępne",
     "scrollToRetry": "Przewiń dalej, aby ponowić próbę wczytania tej części kalendarza.",
     "actualOnly": "rzeczywiste",
+    "workout": "Trening",
     "moreItems_one": "+{{count}} dodatkowy wpis",
     "moreItems_few": "+{{count}} dodatkowe wpisy",
     "moreItems_many": "+{{count}} dodatkowych wpisów",

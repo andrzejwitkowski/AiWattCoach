@@ -23,9 +23,9 @@ export function CalendarWeekSummary({ weekNumber, summary }: CalendarWeekSummary
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6 xl:gap-8">
-        <Metric label={t('calendar.tssStatus')} value={`${summary.totalTss}`} detail={summary.targetTss ? `/ ${summary.targetTss}` : t('calendar.actualOnly')} />
+        <Metric label={t('calendar.tssStatus')} value={`${summary.totalTss}`} detail={summary.targetTss !== null ? `/ ${summary.targetTss}` : t('calendar.actualOnly')} />
         <Metric label={t('calendar.energy')} value={`${summary.totalCalories.toLocaleString()}`} detail="kcal" />
-        <Metric label={t('calendar.duration')} value={formatHours(summary.totalDurationSeconds)} detail={summary.targetDurationSeconds ? `/ ${formatHours(summary.targetDurationSeconds)}` : t('calendar.actualOnly')} />
+        <Metric label={t('calendar.duration')} value={formatHours(summary.totalDurationSeconds)} detail={summary.targetDurationSeconds !== null ? `/ ${formatHours(summary.targetDurationSeconds)}` : t('calendar.actualOnly')} />
         <Metric label={t('calendar.distance')} value={formatDistance(summary.totalDistanceMeters)} detail="km" />
       </div>
     </div>

@@ -117,12 +117,8 @@ function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const searchReturnTo = searchParams.get('returnTo');
-  const returnTo =
-    typeof searchReturnTo === 'string' && searchReturnTo.length > 0
-      ? searchReturnTo
-      : typeof (location.state as { from?: string } | null)?.from === 'string'
-        ? (location.state as { from: string }).from
-        : '/calendar';
+  const stateReturnTo = (location.state as { from?: string } | null)?.from;
+  const returnTo = searchReturnTo || stateReturnTo || '/calendar';
 
   return (
     <LandingPage

@@ -103,33 +103,34 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
       return;
     }
 
-    const firstOffset = missingOffsets[0];
-    const lastOffset = missingOffsets[missingOffsets.length - 1];
-    const batchStart = addWeeks(startMonday, firstOffset);
-    const batchCount = (lastOffset - firstOffset) + 1;
+    const ranges = groupContiguousOffsets(missingOffsets);
 
-    markWeeks(batchStart, batchCount, placeholderStatus);
+    for (const { startOffset, count: batchCount } of ranges) {
+      const batchStart = addWeeks(startMonday, startOffset);
 
-    try {
-      const { events, activities } = await loadRange(batchStart, batchCount);
-      hydrateWeeks(batchStart, batchCount, events, activities, 'loaded');
-      setState('ready');
-    } catch (error) {
-      setStore((current) => {
-        const next = new Map(current);
-        for (let index = 0; index < batchCount; index += 1) {
-          const mondayDate = addWeeks(batchStart, index);
-          const weekKey = toDateKey(mondayDate);
-          next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
-          inflightWeekKeysRef.current.delete(weekKey);
+      markWeeks(batchStart, batchCount, placeholderStatus);
+
+      try {
+        const { events, activities } = await loadRange(batchStart, batchCount);
+        hydrateWeeks(batchStart, batchCount, events, activities, 'loaded');
+        setState('ready');
+      } catch (error) {
+        setStore((current) => {
+          const next = new Map(current);
+          for (let index = 0; index < batchCount; index += 1) {
+            const mondayDate = addWeeks(batchStart, index);
+            const weekKey = toDateKey(mondayDate);
+            next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
+            inflightWeekKeysRef.current.delete(weekKey);
+          }
+          return next;
+        });
+
+        if (error instanceof HttpError && error.status === 422) {
+          setState('credentials-required');
+        } else {
+          setState((current) => (current === 'loading' ? 'error' : current));
         }
-        return next;
-      });
-
-      if (error instanceof HttpError && error.status === 422) {
-        setState('credentials-required');
-      } else {
-        setState((current) => (current === 'loading' ? 'error' : current));
       }
     }
   }, [hydrateWeeks, loadRange, markWeeks]);
@@ -148,7 +149,6 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     initializedRef.current = true;
     const initialStart = getMondayOfWeek(new Date());
     setWindowStart(initialStart);
-    void ensureWeeks(initialStart, CALENDAR_VISIBLE_WEEKS);
     void prefetchBuffer(initialStart);
   }, [ensureWeeks, prefetchBuffer]);
 
@@ -167,6 +167,10 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     }));
 
     try {
+      // This asymmetry is intentional: loadMorePast shifts windowStart and scrollAdjustment
+      // before awaiting ensureWeeks/prefetchBuffer so the user immediately sees the entering
+      // placeholder week while scrolling upward. loadMoreFuture waits for data first to avoid
+      // a visible downward jump when advancing the window.
       await ensureWeeks(enteringStart, CALENDAR_SHIFT_WEEKS);
       void prefetchBuffer(nextWindowStart);
     } finally {
@@ -295,4 +299,26 @@ function sumMetric<T>(items: T[], getValue: (item: T) => number | null): number 
 
 function roundMetric(value: number): number {
   return Math.round(value);
+}
+
+function groupContiguousOffsets(offsets: number[]): Array<{ startOffset: number; count: number }> {
+  const ranges: Array<{ startOffset: number; count: number }> = [];
+  let rangeStart = offsets[0];
+  let previous = offsets[0];
+  let count = 1;
+
+  for (let index = 1; index < offsets.length; index += 1) {
+    const offset = offsets[index];
+    if (offset === previous + 1) {
+      count += 1;
+    } else {
+      ranges.push({ startOffset: rangeStart, count });
+      rangeStart = offset;
+      count = 1;
+    }
+    previous = offset;
+  }
+
+  ranges.push({ startOffset: rangeStart, count });
+  return ranges;
 }

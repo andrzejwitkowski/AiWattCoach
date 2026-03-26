@@ -21,11 +21,15 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
   const extraItemCount = Math.max(0, day.activities.length + day.events.length - 1);
   const title = primaryActivity?.name ?? primaryEvent?.name ?? t('calendar.restDay');
   const subtitle = hasTraining
-    ? buildSubtitle(primaryActivity, primaryEvent)
+    ? buildSubtitle(primaryActivity, primaryEvent, t('calendar.workout'))
     : t('calendar.restDay');
-  const tone = getTone(primaryActivity?.activityType, primaryEvent?.category);
+  const tone: Tone = hasTraining
+    ? getTone(primaryActivity?.activityType, primaryEvent?.category)
+    : 'muted';
   const bars = buildBars(primaryActivity, primaryEvent);
-  const Icon = getIcon(primaryActivity?.activityType, primaryEvent?.category);
+  const Icon = hasTraining
+    ? getIcon(primaryActivity?.activityType, primaryEvent?.category)
+    : BedDouble;
 
   return (
     <div
@@ -61,7 +65,11 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
   );
 }
 
-function buildSubtitle(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): string {
+function buildSubtitle(
+  dayActivity: CalendarDay['activities'][number] | null,
+  dayEvent: CalendarDay['events'][number] | null,
+  workoutFallback: string,
+): string {
   const durationSeconds = dayActivity?.movingTimeSeconds ?? 0;
   const durationMinutes = durationSeconds > 0 ? `${Math.round(durationSeconds / 60)} min` : null;
   const tss = dayActivity?.metrics.trainingStressScore ?? null;
@@ -78,7 +86,7 @@ function buildSubtitle(dayActivity: CalendarDay['activities'][number] | null, da
     return `${tss} TSS`;
   }
 
-  return dayEvent?.category ?? 'Workout';
+  return dayEvent?.category ?? workoutFallback;
 }
 
 function getTone(activityType: string | null | undefined, category: string | null | undefined): Tone {

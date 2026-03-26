@@ -29,7 +29,7 @@ type CardProps = {
   accent: string;
   barClass: string;
   icon: ReactNode;
-  width: string;
+  width: `${number}%`;
 };
 
 function Card({ title, value, detail, accent, barClass, icon, width }: CardProps) {

@@ -115,6 +115,7 @@
     "rowLoadError": "Week data unavailable",
     "scrollToRetry": "Keep scrolling to retry loading this part of the calendar.",
     "actualOnly": "actual",
+    "workout": "Workout",
     "moreItems_one": "+{{count}} more item",
     "moreItems_other": "+{{count}} more items"
   }

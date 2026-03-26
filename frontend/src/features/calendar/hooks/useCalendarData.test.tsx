@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
@@ -42,7 +42,9 @@ describe('useCalendarData', () => {
 
     const initialFirstWeek = result.current.weeks[0]?.weekKey;
 
-    await result.current.loadMoreFuture();
+    await act(async () => {
+      await result.current.loadMoreFuture();
+    });
 
     await waitFor(() => {
       expect(result.current.weeks).toHaveLength(CALENDAR_VISIBLE_WEEKS);

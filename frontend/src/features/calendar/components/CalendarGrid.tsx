@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   CALENDAR_ANCHOR_SCROLL_TOP,
   CALENDAR_PREVIEW_VISIBLE_HEIGHT,
+  CALENDAR_VISIBLE_WEEKS,
   CALENDAR_WEEK_ROW_HEIGHT,
 } from '../constants';
 import { useCalendarData } from '../hooks/useCalendarData';
@@ -148,15 +149,13 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
               onScroll={handleScroll}
               className="no-scrollbar overflow-y-auto pr-1"
               style={{
-                maxHeight: `${(CALENDAR_WEEK_ROW_HEIGHT * 5) + (CALENDAR_PREVIEW_VISIBLE_HEIGHT * 2)}px`,
+                maxHeight: `${(CALENDAR_WEEK_ROW_HEIGHT * CALENDAR_VISIBLE_WEEKS) + (CALENDAR_PREVIEW_VISIBLE_HEIGHT * 2)}px`,
               }}
             >
               <CalendarWeekDayHeader />
               <div className="mt-8 space-y-10">
                 <PreviewRow week={topPreviewWeek} edge="top" />
-                {state === 'loading' && weeks.length === 0 ? (
-                  weeks.map((week) => <CalendarWeekSection key={week.weekKey} week={week} />)
-                ) : weeks.length > 0 ? (
+                {weeks.length > 0 ? (
                   weeks.map((week) => <CalendarWeekSection key={week.weekKey} week={week} />)
                 ) : (
                   <div className="rounded-xl border border-white/5 bg-[#171a1d] p-6 text-center text-sm text-slate-400">

@@ -18,13 +18,18 @@ export function CalendarMiniChart({ bars, tone }: CalendarMiniChartProps) {
 
   return (
     <div className="mb-2 flex h-10 items-end gap-[1px]">
-      {bars.map((bar, index) => (
-        <div
-          key={`${tone}-${index}-${bar}`}
-          className={`flex-1 rounded-t-[1px] ${TONE_CLASS[tone]}`}
-          style={{ height: `${Math.max(20, Math.min(100, bar))}%` }}
-        />
-      ))}
+      {bars.map((bar, index) => {
+        const normalizedBar = Number.isFinite(bar) ? bar : 20;
+        const height = Math.max(20, Math.min(100, normalizedBar));
+
+        return (
+          <div
+            key={`${tone}-${index}-${bar}`}
+            className={`flex-1 rounded-t-[1px] ${TONE_CLASS[tone]}`}
+            style={{ height: `${height}%` }}
+          />
+        );
+      })}
     </div>
   );
 }
