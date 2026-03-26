@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { loadCurrentUser } from './auth';
+import { buildGoogleLoginUrl, loadCurrentUser } from './auth';
 
 const originalFetch = global.fetch;
 
@@ -47,5 +47,11 @@ describe('loadCurrentUser', () => {
     if (result.authenticated) {
       expect(result.user.email).toBe('athlete@example.com');
     }
+  });
+});
+
+describe('buildGoogleLoginUrl', () => {
+  it('defaults returnTo to the calendar page', () => {
+    expect(buildGoogleLoginUrl('')).toBe('/api/auth/google/start?returnTo=%2Fcalendar');
   });
 });

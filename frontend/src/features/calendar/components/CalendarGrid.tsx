@@ -54,22 +54,22 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
   }, [locale, t, weeks]);
 
   const handleReachTop = useCallback(() => {
-    if (isLoadingPast) {
+    if (isLoadingPast || isLoadingFuture) {
       return;
     }
 
     pendingAnchorRef.current = captureScrollAnchor(scrollRef.current, weeks[0]?.weekKey ?? null);
     void loadMorePast();
-  }, [isLoadingPast, loadMorePast, weeks]);
+  }, [isLoadingFuture, isLoadingPast, loadMorePast, weeks]);
 
   const handleReachBottom = useCallback(() => {
-    if (isLoadingFuture) {
+    if (isLoadingFuture || isLoadingPast) {
       return;
     }
 
     pendingAnchorRef.current = captureScrollAnchor(scrollRef.current, weeks[CALENDAR_SHIFT_WEEKS]?.weekKey ?? weeks[0]?.weekKey ?? null);
     void loadMoreFuture();
-  }, [isLoadingFuture, loadMoreFuture, weeks]);
+  }, [isLoadingFuture, isLoadingPast, loadMoreFuture, weeks]);
 
   const handleScroll = useCallback(() => {
     const container = scrollRef.current;

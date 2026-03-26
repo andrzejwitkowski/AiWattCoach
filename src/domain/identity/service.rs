@@ -196,7 +196,7 @@ where
             user,
             session,
             redirect_to: sanitize_return_to(login_state.return_to)
-                .unwrap_or_else(|| "/app".to_string()),
+                .unwrap_or_else(|| "/calendar".to_string()),
         })
     }
 

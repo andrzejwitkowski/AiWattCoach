@@ -88,6 +88,24 @@ async fn handle_google_callback_creates_new_user_and_session() {
 }
 
 #[tokio::test]
+async fn handle_google_callback_defaults_redirect_to_calendar_when_return_to_missing() {
+    let login_states = Arc::new(Mutex::new(vec![LoginState::new(
+        "state-1".to_string(),
+        None,
+        200,
+        100,
+    )]));
+    let service = test_service(login_states, vec!["admin@example.com".to_string()]);
+
+    let result = service
+        .handle_google_callback("state-1", "oauth-code")
+        .await
+        .unwrap();
+
+    assert_eq!(result.redirect_to, "/calendar");
+}
+
+#[tokio::test]
 async fn handle_google_callback_rejects_missing_state() {
     let service = test_service(Arc::new(Mutex::new(Vec::new())), Vec::new());
 

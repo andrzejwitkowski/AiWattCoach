@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { listActivities, listEvents } from '../../intervals/api/intervals';
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
-import { HttpError } from '../../../lib/httpClient';
+import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import {
   CALENDAR_BUFFER_WEEKS,
   CALENDAR_SHIFT_WEEKS,
@@ -96,12 +96,14 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
   const hydrateWeeks = useCallback((startMonday: Date, count: number, events: IntervalEvent[], activities: IntervalActivity[], status: CalendarWeekStatus) => {
     const retainedWeekKeys = createRetainedWeekKeySet(windowStartRef.current);
+    const eventsByDateKey = groupItemsByDateKey(events, (event) => extractDateKey(event.startDateLocal));
+    const activitiesByDateKey = groupItemsByDateKey(activities, (activity) => extractDateKey(activity.startDateLocal));
 
     setStore((current) => {
       const next = new Map(current);
       for (let index = 0; index < count; index += 1) {
         const mondayDate = addWeeks(startMonday, index);
-        const week = buildCalendarWeek(mondayDate, events, activities, status);
+        const week = buildCalendarWeek(mondayDate, eventsByDateKey, activitiesByDateKey, status);
         if (retainedWeekKeys.has(week.weekKey)) {
           next.set(week.weekKey, week);
           loadedWeekKeysRef.current.add(week.weekKey);
@@ -170,7 +172,9 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
           return next;
         });
 
-        if (error instanceof HttpError && error.status === 422) {
+        if (error instanceof AuthenticationError) {
+          window.location.href = '/';
+        } else if (error instanceof HttpError && error.status === 422) {
           setState('credentials-required');
         } else {
           setState((current) => (current === 'loading' ? 'error' : current));
@@ -283,15 +287,15 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
 function buildCalendarWeek(
   mondayDate: Date,
-  events: IntervalEvent[],
-  activities: IntervalActivity[],
+  eventsByDateKey: Map<string, IntervalEvent[]>,
+  activitiesByDateKey: Map<string, IntervalActivity[]>,
   status: CalendarWeekStatus,
 ): CalendarWeek {
   const weekDates = generateWeekDates(mondayDate);
-  const weekDateKeys = new Set(weekDates.map(toDateKey));
-  const weekEvents = events.filter((event) => weekDateKeys.has(extractDateKey(event.startDateLocal)));
-  const weekActivities = activities.filter((activity) => weekDateKeys.has(extractDateKey(activity.startDateLocal)));
-  const days = weekDates.map((date) => buildCalendarDay(date, weekEvents, weekActivities));
+  const weekDateKeys = weekDates.map(toDateKey);
+  const weekEvents = weekDateKeys.flatMap((dateKey) => eventsByDateKey.get(dateKey) ?? []);
+  const weekActivities = weekDateKeys.flatMap((dateKey) => activitiesByDateKey.get(dateKey) ?? []);
+  const days = weekDates.map((date) => buildCalendarDay(date, eventsByDateKey, activitiesByDateKey));
 
   return {
     weekNumber: getWeekNumber(mondayDate),
@@ -310,15 +314,35 @@ function buildCalendarWeek(
   };
 }
 
-function buildCalendarDay(date: Date, events: IntervalEvent[], activities: IntervalActivity[]): CalendarDay {
+function buildCalendarDay(
+  date: Date,
+  eventsByDateKey: Map<string, IntervalEvent[]>,
+  activitiesByDateKey: Map<string, IntervalActivity[]>,
+): CalendarDay {
   const dateKey = toDateKey(date);
 
   return {
     date,
     dateKey,
-    events: events.filter((event) => extractDateKey(event.startDateLocal) === dateKey),
-    activities: activities.filter((activity) => extractDateKey(activity.startDateLocal) === dateKey),
+    events: eventsByDateKey.get(dateKey) ?? [],
+    activities: activitiesByDateKey.get(dateKey) ?? [],
   };
+}
+
+function groupItemsByDateKey<T>(items: T[], getDateKey: (item: T) => string): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+
+  for (const item of items) {
+    const dateKey = getDateKey(item);
+    const existing = grouped.get(dateKey);
+    if (existing) {
+      existing.push(item);
+    } else {
+      grouped.set(dateKey, [item]);
+    }
+  }
+
+  return grouped;
 }
 
 function createPlaceholderWeek(mondayDate: Date, status: CalendarWeekStatus): CalendarWeek {

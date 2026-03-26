@@ -10,4 +10,10 @@ describe('CalendarLoadingRow', () => {
 
     expect(screen.getByText(/retrieving events/i)).toBeInTheDocument();
   });
+
+  it('does not expose each loading row as a live region', () => {
+    render(<CalendarLoadingRow />);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
 });

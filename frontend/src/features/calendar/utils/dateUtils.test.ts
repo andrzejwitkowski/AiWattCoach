@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addWeeks,
   extractDateKey,
+  formatDayLabel,
   formatDateRange,
   generateWeekDates,
   getMondayOfWeek,
@@ -40,5 +41,13 @@ describe('dateUtils', () => {
   it('adds weeks and returns ISO week number', () => {
     expect(toDateKey(addWeeks(new Date(2026, 2, 23), 2))).toBe('2026-04-06');
     expect(getWeekNumber(new Date(2026, 2, 23))).toBeGreaterThan(0);
+  });
+
+  it('uppercases day labels with locale-aware casing', () => {
+    const date = new Date(2026, 9, 1);
+
+    expect(formatDayLabel(date, 'tr')).toBe(
+      new Intl.DateTimeFormat('tr', { month: 'short', day: '2-digit' }).format(date).toLocaleUpperCase('tr')
+    );
   });
 });

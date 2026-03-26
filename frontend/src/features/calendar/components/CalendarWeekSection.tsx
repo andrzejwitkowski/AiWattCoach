@@ -19,7 +19,7 @@ export function CalendarWeekSection({ week }: CalendarWeekSectionProps) {
   }
 
   return (
-    <section className="flex min-h-[320px] flex-col gap-4">
+    <section className="flex h-[320px] flex-col gap-4 overflow-hidden">
       <CalendarWeekSummary weekNumber={week.weekNumber} summary={week.summary} />
       <div className="calendar-grid gap-3">
         {week.days.map((day) => (

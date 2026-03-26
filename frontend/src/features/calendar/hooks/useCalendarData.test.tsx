@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
+import { AuthenticationError } from '../../../lib/httpClient';
 import { CALENDAR_BUFFER_WEEKS, CALENDAR_VISIBLE_WEEKS } from '../constants';
 import { addDays, parseDateKey, toDateKey } from '../utils/dateUtils';
 import { useCalendarData } from './useCalendarData';
@@ -12,6 +13,8 @@ vi.mock('../../intervals/api/intervals', () => ({
 }));
 
 import { listActivities, listEvents } from '../../intervals/api/intervals';
+
+const originalLocation = window.location;
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -35,6 +38,10 @@ function hasRangeCall(mock: ReturnType<typeof vi.fn>, oldest: string, newest: st
 
 afterEach(() => {
   vi.clearAllMocks();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: originalLocation,
+  });
 });
 
 describe('useCalendarData', () => {
@@ -183,6 +190,22 @@ describe('useCalendarData', () => {
 
     await act(async () => {
       await Promise.all([forwardLoad, backwardLoad]);
+    });
+  });
+
+  it('redirects to the landing page when calendar requests return unauthorized', async () => {
+    vi.mocked(listEvents).mockRejectedValue(new AuthenticationError());
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, href: '/calendar' },
+    });
+
+    renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(window.location.href).toBe('/');
     });
   });
 });

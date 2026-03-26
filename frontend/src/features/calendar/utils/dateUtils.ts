@@ -55,7 +55,7 @@ export function formatDayLabel(date: Date, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: '2-digit',
-  }).format(date).toUpperCase();
+  }).format(date).toLocaleUpperCase(locale);
 }
 
 export function formatDateRange(startMonday: Date, weeks: number): { oldest: string; newest: string } {

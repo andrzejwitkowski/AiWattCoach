@@ -19,7 +19,16 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
   const primaryEvent = day.events[0] ?? null;
   const hasTraining = Boolean(primaryActivity || primaryEvent);
   const extraItemCount = Math.max(0, day.activities.length + day.events.length - 1);
-  const title = primaryActivity?.name ?? primaryEvent?.name ?? t('calendar.restDay');
+  const title = hasTraining
+    ? buildTitle(primaryActivity, primaryEvent, {
+      workout: t('calendar.workout'),
+      race: t('calendar.eventRace'),
+      ride: t('calendar.eventRide'),
+      run: t('calendar.eventRun'),
+      swim: t('calendar.eventSwim'),
+      unknown: t('calendar.eventOther'),
+    })
+    : t('calendar.restDay');
   const subtitle = hasTraining
     ? buildSubtitle(primaryActivity, primaryEvent, locale, {
       workout: t('calendar.workout'),
@@ -31,11 +40,11 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
     })
     : t('calendar.restDay');
   const tone: Tone = hasTraining
-    ? getTone(primaryActivity?.activityType, primaryEvent?.category)
+    ? getTone(primaryActivity, primaryEvent)
     : 'muted';
   const bars = buildBars(primaryActivity, primaryEvent);
   const Icon = hasTraining
-    ? getIcon(primaryActivity?.activityType, primaryEvent?.category)
+    ? getIcon(primaryActivity, primaryEvent)
     : BedDouble;
 
   return (
@@ -70,6 +79,29 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
       )}
     </div>
   );
+}
+
+function buildTitle(
+  dayActivity: CalendarDay['activities'][number] | null,
+  dayEvent: CalendarDay['events'][number] | null,
+  labels: {
+    workout: string;
+    race: string;
+    ride: string;
+    run: string;
+    swim: string;
+    unknown: string;
+  },
+): string {
+  if (dayActivity) {
+    return dayActivity.name ?? mapActivityType(dayActivity.activityType, labels);
+  }
+
+  if (dayEvent) {
+    return dayEvent.name ?? mapEventCategory(dayEvent.category, labels);
+  }
+
+  return labels.unknown;
 }
 
 function buildSubtitle(
@@ -133,8 +165,44 @@ function mapEventCategory(
   }
 }
 
-function getTone(activityType: string | null | undefined, category: string | null | undefined): Tone {
-  const normalized = `${activityType ?? category ?? ''}`.toLowerCase();
+function mapActivityType(
+  activityType: string | null | undefined,
+  labels: {
+    workout: string;
+    race: string;
+    ride: string;
+    run: string;
+    swim: string;
+    unknown: string;
+  },
+): string {
+  const normalized = (activityType ?? '').toLowerCase();
+
+  if (normalized.includes('swim')) {
+    return labels.swim;
+  }
+
+  if (normalized.includes('run')) {
+    return labels.run;
+  }
+
+  if (normalized.includes('ride') || normalized.includes('bike') || normalized.includes('cycle')) {
+    return labels.ride;
+  }
+
+  if (normalized.includes('race')) {
+    return labels.race;
+  }
+
+  if (normalized.includes('workout') || normalized.includes('strength') || normalized.includes('training')) {
+    return labels.workout;
+  }
+
+  return labels.unknown;
+}
+
+function getTone(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Tone {
+  const normalized = dayActivity ? (dayActivity.activityType ?? '').toLowerCase() : `${dayEvent?.category ?? ''}`.toLowerCase();
 
   if (normalized.includes('swim')) {
     return 'secondary';
@@ -155,8 +223,8 @@ function getTone(activityType: string | null | undefined, category: string | nul
   return 'primary';
 }
 
-function getIcon(activityType: string | null | undefined, category: string | null | undefined) {
-  const normalized = `${activityType ?? category ?? ''}`.toLowerCase();
+function getIcon(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null) {
+  const normalized = dayActivity ? (dayActivity.activityType ?? '').toLowerCase() : `${dayEvent?.category ?? ''}`.toLowerCase();
 
   if (normalized.includes('swim')) {
     return Waves;
@@ -174,7 +242,7 @@ function getIcon(activityType: string | null | undefined, category: string | nul
 }
 
 function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): number[] {
-  const intervalCount = dayEvent?.eventDefinition.intervals.length ?? 0;
+  const intervalCount = dayActivity ? 0 : (dayEvent?.eventDefinition.intervals.length ?? 0);
   const tss = dayActivity?.metrics.trainingStressScore ?? 0;
 
   if (intervalCount > 0) {

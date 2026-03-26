@@ -17,7 +17,7 @@ export async function loadCurrentUser(apiBaseUrl: string): Promise<CurrentUserRe
   return response.body;
 }
 
-export function buildGoogleLoginUrl(apiBaseUrl: string, returnTo = '/app'): string {
+export function buildGoogleLoginUrl(apiBaseUrl: string, returnTo = '/calendar'): string {
   const params = new URLSearchParams({ returnTo });
   return `${buildAuthUrl(apiBaseUrl, '/api/auth/google/start')}?${params.toString()}`;
 }

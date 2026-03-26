@@ -165,4 +165,156 @@ describe('CalendarDayCell', () => {
 
     expect(screen.getByText('+1 more item')).toBeInTheDocument();
   });
+
+  it('does not label unnamed training activity as a rest day', () => {
+    const day: CalendarDay = {
+      date: new Date(2026, 2, 25),
+      dateKey: '2026-03-25',
+      events: [],
+      activities: [
+        {
+          id: 'a2',
+          startDateLocal: '2026-03-25T08:00:00',
+          startDate: '2026-03-25T07:00:00Z',
+          name: null,
+          description: null,
+          activityType: 'Ride',
+          source: null,
+          externalId: null,
+          deviceName: null,
+          distanceMeters: 32000,
+          movingTimeSeconds: 3600,
+          elapsedTimeSeconds: 3700,
+          totalElevationGainMeters: null,
+          averageSpeedMps: null,
+          averageHeartRateBpm: null,
+          averageCadenceRpm: null,
+          trainer: false,
+          commute: false,
+          race: false,
+          hasHeartRate: true,
+          streamTypes: [],
+          tags: [],
+          metrics: {
+            trainingStressScore: 55,
+            normalizedPowerWatts: null,
+            intensityFactor: null,
+            efficiencyFactor: null,
+            variabilityIndex: null,
+            averagePowerWatts: null,
+            ftpWatts: null,
+            totalWorkJoules: null,
+            calories: 700,
+            trimp: null,
+            powerLoad: null,
+            heartRateLoad: null,
+            paceLoad: null,
+            strainScore: null,
+          },
+          details: {
+            intervals: [],
+            intervalGroups: [],
+            streams: [],
+            intervalSummary: [],
+            skylineChart: [],
+            powerZoneTimes: [],
+            heartRateZoneTimes: [],
+            paceZoneTimes: [],
+            gapZoneTimes: [],
+          },
+        },
+      ],
+    };
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+
+    expect(screen.getByText('Ride')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/^Rest Day$/i);
+  });
+
+  it('keeps the mini chart aligned with the displayed primary activity', () => {
+    const day: CalendarDay = {
+      date: new Date(2026, 2, 26),
+      dateKey: '2026-03-26',
+      events: [
+        {
+          id: 3,
+          startDateLocal: '2026-03-26',
+          name: 'Planned intervals',
+          category: 'WORKOUT',
+          description: null,
+          indoor: false,
+          color: null,
+          eventDefinition: {
+            rawWorkoutDoc: null,
+            intervals: [
+              { definition: '10m' },
+              { definition: '8m' },
+              { definition: '6m' },
+              { definition: '4m' },
+            ],
+          },
+          actualWorkout: null,
+        },
+      ],
+      activities: [
+        {
+          id: 'a3',
+          startDateLocal: '2026-03-26T08:00:00',
+          startDate: '2026-03-26T07:00:00Z',
+          name: 'Morning Ride',
+          description: null,
+          activityType: 'Ride',
+          source: null,
+          externalId: null,
+          deviceName: null,
+          distanceMeters: 40000,
+          movingTimeSeconds: 5400,
+          elapsedTimeSeconds: 5600,
+          totalElevationGainMeters: null,
+          averageSpeedMps: null,
+          averageHeartRateBpm: null,
+          averageCadenceRpm: null,
+          trainer: false,
+          commute: false,
+          race: false,
+          hasHeartRate: true,
+          streamTypes: [],
+          tags: [],
+          metrics: {
+            trainingStressScore: 88,
+            normalizedPowerWatts: null,
+            intensityFactor: null,
+            efficiencyFactor: null,
+            variabilityIndex: null,
+            averagePowerWatts: null,
+            ftpWatts: null,
+            totalWorkJoules: null,
+            calories: 950,
+            trimp: null,
+            powerLoad: null,
+            heartRateLoad: null,
+            paceLoad: null,
+            strainScore: null,
+          },
+          details: {
+            intervals: [],
+            intervalGroups: [],
+            streams: [],
+            intervalSummary: [],
+            skylineChart: [],
+            powerZoneTimes: [],
+            heartRateZoneTimes: [],
+            paceZoneTimes: [],
+            gapZoneTimes: [],
+          },
+        },
+      ],
+    };
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+
+    expect(container).toHaveTextContent('Morning Ride');
+    expect(container.querySelectorAll('div[style*="height"]').length).toBe(3);
+  });
 });
