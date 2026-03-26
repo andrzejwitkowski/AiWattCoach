@@ -61,6 +61,7 @@ describe('CalendarGrid', () => {
       bottomPreviewWeek: buildWeek('2026-04-27'),
       isLoadingPast: false,
       isLoadingFuture: true,
+      loadingEdge: null,
       scrollAdjustment: { topDelta: 0, version: 0 },
       loadMorePast,
       loadMoreFuture,
@@ -94,6 +95,7 @@ describe('CalendarGrid', () => {
       bottomPreviewWeek: buildWeek('2026-04-27'),
       isLoadingPast: true,
       isLoadingFuture: false,
+      loadingEdge: null,
       scrollAdjustment: { topDelta: 0, version: 0 },
       loadMorePast,
       loadMoreFuture,
@@ -109,5 +111,30 @@ describe('CalendarGrid', () => {
     fireEvent.scroll(scroller);
 
     expect(loadMoreFuture).not.toHaveBeenCalled();
+  });
+
+  it('renders a single loading row above the window when fetching earlier weeks', () => {
+    vi.mocked(useCalendarData).mockReturnValue({
+      state: 'ready',
+      weeks: [
+        buildWeek('2026-03-23'),
+        buildWeek('2026-03-30'),
+        buildWeek('2026-04-06'),
+        buildWeek('2026-04-13'),
+        buildWeek('2026-04-20'),
+      ],
+      topPreviewWeek: buildWeek('2026-03-16'),
+      bottomPreviewWeek: buildWeek('2026-04-27'),
+      isLoadingPast: true,
+      isLoadingFuture: false,
+      loadingEdge: 'top',
+      scrollAdjustment: { topDelta: 0, version: 0 },
+      loadMorePast: vi.fn(),
+      loadMoreFuture: vi.fn(),
+    });
+
+    render(<CalendarGrid apiBaseUrl="" />);
+
+    expect(screen.getByText(/loading week/i)).toBeInTheDocument();
   });
 });

@@ -112,6 +112,8 @@
     "fiveWeeks": "5 weeks",
     "scrollMode": "Scroll Mode",
     "infinite": "Infinite",
+    "loadingWeek": "Loading week",
+    "upcomingTrainingData": "Upcoming training data is being fetched.",
     "rowLoadError": "Week data unavailable",
     "scrollToRetry": "Keep scrolling to retry loading this part of the calendar.",
     "actualOnly": "actual",
