@@ -79,7 +79,7 @@ async fn google_start_drops_unsafe_return_to_values() {
 }
 
 #[tokio::test]
-async fn google_callback_sets_cookie_and_redirects_into_app() {
+async fn google_callback_sets_cookie_and_redirects_into_calendar() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
     let response = app
@@ -93,7 +93,10 @@ async fn google_callback_sets_cookie_and_redirects_into_app() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/app");
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/calendar"
+    );
 
     let cookie = response
         .headers()
@@ -542,7 +545,7 @@ impl IdentityUseCases for TestIdentityService {
                     999999,
                     100,
                 ),
-                redirect_to: "/app".to_string(),
+                redirect_to: "/calendar".to_string(),
             })
         })
     }

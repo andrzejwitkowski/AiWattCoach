@@ -87,7 +87,7 @@ export function App() {
             >
               <Route element={<AppHomePage />} path="/app" />
               <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
-              <Route element={<CalendarPage />} path="/calendar" />
+              <Route element={<CalendarPage apiBaseUrl={API_BASE_URL} />} path="/calendar" />
               <Route element={<AICoachPage />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
                 <Route
@@ -117,12 +117,9 @@ function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const searchReturnTo = searchParams.get('returnTo');
-  const returnTo =
-    typeof searchReturnTo === 'string' && searchReturnTo.length > 0
-      ? searchReturnTo
-      : typeof (location.state as { from?: string } | null)?.from === 'string'
-        ? (location.state as { from: string }).from
-        : '/app';
+  const stateValue = (location.state as { from?: unknown } | null)?.from;
+  const stateReturnTo = typeof stateValue === 'string' && stateValue.length > 0 ? stateValue : null;
+  const returnTo = (typeof searchReturnTo === 'string' && searchReturnTo.length > 0 ? searchReturnTo : null) || stateReturnTo || '/calendar';
 
   return (
     <LandingPage

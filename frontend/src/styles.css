@@ -42,3 +42,17 @@ select {
   color: #d2ff9a;
   text-shadow: 0 0 15px rgba(210, 255, 154, 0.3);
 }
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}

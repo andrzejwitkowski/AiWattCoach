@@ -100,4 +100,40 @@ describe('App', () => {
       '/api/auth/google/start?returnTo=%2Fsettings%3Ftab%3Dsecurity%23billing'
     );
   });
+
+  it('defaults login redirect to the calendar page', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ authenticated: false }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'ok', service: 'AiWattCoach' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'ok', reason: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+    const assignMock = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, assign: assignMock }
+    });
+
+    render(<App />);
+
+    const signInButtons = await screen.findAllByRole('button', { name: /sign in with google/i });
+    fireEvent.click(signInButtons.at(-1)!);
+
+    expect(assignMock).toHaveBeenCalledWith('/api/auth/google/start?returnTo=%2Fcalendar');
+  });
 });
