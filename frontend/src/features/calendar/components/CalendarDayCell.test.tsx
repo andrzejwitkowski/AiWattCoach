@@ -317,4 +317,86 @@ describe('CalendarDayCell', () => {
     expect(container).toHaveTextContent('Morning Ride');
     expect(container.querySelectorAll('div[style*="height"]').length).toBe(3);
   });
+
+  it('uses the primary activity type as subtitle fallback when activity metrics are missing', () => {
+    const day: CalendarDay = {
+      date: new Date(2026, 2, 27),
+      dateKey: '2026-03-27',
+      events: [
+        {
+          id: 4,
+          startDateLocal: '2026-03-27',
+          name: 'Planned swim set',
+          category: 'SWIM',
+          description: null,
+          indoor: false,
+          color: null,
+          eventDefinition: {
+            rawWorkoutDoc: null,
+            intervals: [],
+          },
+          actualWorkout: null,
+        },
+      ],
+      activities: [
+        {
+          id: 'a4',
+          startDateLocal: '2026-03-27T08:00:00',
+          startDate: '2026-03-27T07:00:00Z',
+          name: 'Evening Ride',
+          description: null,
+          activityType: 'Ride',
+          source: null,
+          externalId: null,
+          deviceName: null,
+          distanceMeters: 0,
+          movingTimeSeconds: null,
+          elapsedTimeSeconds: null,
+          totalElevationGainMeters: null,
+          averageSpeedMps: null,
+          averageHeartRateBpm: null,
+          averageCadenceRpm: null,
+          trainer: false,
+          commute: false,
+          race: false,
+          hasHeartRate: false,
+          streamTypes: [],
+          tags: [],
+          metrics: {
+            trainingStressScore: null,
+            normalizedPowerWatts: null,
+            intensityFactor: null,
+            efficiencyFactor: null,
+            variabilityIndex: null,
+            averagePowerWatts: null,
+            ftpWatts: null,
+            totalWorkJoules: null,
+            calories: null,
+            trimp: null,
+            powerLoad: null,
+            heartRateLoad: null,
+            paceLoad: null,
+            strainScore: null,
+          },
+          details: {
+            intervals: [],
+            intervalGroups: [],
+            streams: [],
+            intervalSummary: [],
+            skylineChart: [],
+            powerZoneTimes: [],
+            heartRateZoneTimes: [],
+            paceZoneTimes: [],
+            gapZoneTimes: [],
+          },
+        },
+      ],
+    };
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+
+    expect(container).toHaveTextContent('Evening Ride');
+    expect(container).toHaveTextContent('Ride');
+    expect(container).not.toHaveTextContent('Swim');
+  });
 });

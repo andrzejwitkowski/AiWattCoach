@@ -93,7 +93,10 @@ async fn google_callback_sets_cookie_and_redirects_into_calendar() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/calendar");
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/calendar"
+    );
 
     let cookie = response
         .headers()

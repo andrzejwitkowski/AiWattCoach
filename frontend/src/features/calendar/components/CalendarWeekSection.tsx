@@ -1,3 +1,4 @@
+import { CALENDAR_WEEK_ROW_HEIGHT } from '../constants';
 import type { CalendarWeek } from '../types';
 import { isToday } from '../utils/dateUtils';
 import { CalendarErrorRow } from './CalendarErrorRow';
@@ -19,7 +20,10 @@ export function CalendarWeekSection({ week }: CalendarWeekSectionProps) {
   }
 
   return (
-    <section className="flex h-[320px] flex-col gap-4 overflow-hidden">
+    <section
+      className="flex flex-col gap-4 overflow-hidden"
+      style={{ height: `${CALENDAR_WEEK_ROW_HEIGHT}px` }}
+    >
       <CalendarWeekSummary weekNumber={week.weekNumber} summary={week.summary} />
       <div className="calendar-grid gap-3">
         {week.days.map((day) => (

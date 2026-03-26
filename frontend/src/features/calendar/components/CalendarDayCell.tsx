@@ -135,6 +135,10 @@ function buildSubtitle(
     return `${tss} TSS`;
   }
 
+  if (dayActivity) {
+    return mapActivityType(dayActivity.activityType, labels);
+  }
+
   return mapEventCategory(dayEvent?.category, labels);
 }
 

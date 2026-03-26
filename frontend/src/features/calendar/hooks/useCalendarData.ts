@@ -293,7 +293,6 @@ function buildCalendarWeek(
 ): CalendarWeek {
   const weekDates = generateWeekDates(mondayDate);
   const weekDateKeys = weekDates.map(toDateKey);
-  const weekEvents = weekDateKeys.flatMap((dateKey) => eventsByDateKey.get(dateKey) ?? []);
   const weekActivities = weekDateKeys.flatMap((dateKey) => activitiesByDateKey.get(dateKey) ?? []);
   const days = weekDates.map((date) => buildCalendarDay(date, eventsByDateKey, activitiesByDateKey));
 

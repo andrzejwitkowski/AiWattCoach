@@ -2,6 +2,7 @@ import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import '../../../i18n';
+import { CALENDAR_WEEK_ROW_HEIGHT } from '../constants';
 import type { CalendarWeek } from '../types';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
@@ -35,6 +36,6 @@ describe('CalendarWeekSection', () => {
 
     const { container } = render(<CalendarWeekSection week={week} />);
 
-    expect(container.querySelector('section')).toHaveClass('h-[320px]');
+    expect(container.querySelector('section')).toHaveStyle({ height: `${CALENDAR_WEEK_ROW_HEIGHT}px` });
   });
 });
