@@ -213,6 +213,13 @@ Before changing behavior, use this order:
 - Update tests when adding endpoints, DTO fields, or repository behavior.
 - If you add a new backend capability, check whether frontend schemas and API helpers must also change.
 
+## Review Reply Rule
+
+- When a PR has Copilot, CodeRabbit, or human review comments, read every actionable comment and evaluate it against the current code before replying.
+- If a review comment is correct, implement the fix, run the relevant verification, and then reply on that exact PR thread with a concise note describing what changed.
+- If a review comment is not correct or is intentionally not adopted, still reply on that exact PR thread with a concise explanation grounded in the current code and behavior.
+- Do not leave review comments unanswered when the task includes handling review feedback.
+
 ## Done Checklist For Agents
 
 Before saying the task is done, verify all of the following:
