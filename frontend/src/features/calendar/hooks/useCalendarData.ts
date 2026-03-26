@@ -1,0 +1,298 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { listActivities, listEvents } from '../../intervals/api/intervals';
+import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
+import { HttpError } from '../../../lib/httpClient';
+import {
+  CALENDAR_BUFFER_WEEKS,
+  CALENDAR_SHIFT_WEEKS,
+  CALENDAR_VISIBLE_WEEKS,
+  CALENDAR_WEEK_ROW_HEIGHT,
+} from '../constants';
+import type {
+  CalendarDataState,
+  CalendarDay,
+  CalendarScrollAdjustment,
+  CalendarWeek,
+  CalendarWeekStatus,
+} from '../types';
+import {
+  addWeeks,
+  extractDateKey,
+  formatDateRange,
+  generateWeekDates,
+  getMondayOfWeek,
+  getWeekNumber,
+  toDateKey,
+} from '../utils/dateUtils';
+
+type UseCalendarDataOptions = {
+  apiBaseUrl: string;
+};
+
+type UseCalendarDataResult = {
+  state: CalendarDataState;
+  weeks: CalendarWeek[];
+  topPreviewWeek: CalendarWeek;
+  bottomPreviewWeek: CalendarWeek;
+  isLoadingPast: boolean;
+  isLoadingFuture: boolean;
+  scrollAdjustment: CalendarScrollAdjustment;
+  loadMorePast: () => Promise<void>;
+  loadMoreFuture: () => Promise<void>;
+};
+
+type WeekStore = Map<string, CalendarWeek>;
+
+export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCalendarDataResult {
+  const [state, setState] = useState<CalendarDataState>('loading');
+  const [store, setStore] = useState<WeekStore>(new Map());
+  const [windowStart, setWindowStart] = useState<Date>(() => getMondayOfWeek(new Date()));
+  const [isLoadingPast, setIsLoadingPast] = useState(false);
+  const [isLoadingFuture, setIsLoadingFuture] = useState(false);
+  const [scrollAdjustment, setScrollAdjustment] = useState<CalendarScrollAdjustment>({ topDelta: 0, version: 0 });
+  const loadedWeekKeysRef = useRef<Set<string>>(new Set());
+  const inflightWeekKeysRef = useRef<Set<string>>(new Set());
+  const initializedRef = useRef(false);
+
+  const loadRange = useCallback(async (startMonday: Date, count: number) => {
+    const range = formatDateRange(startMonday, count);
+    const [events, activities] = await Promise.all([
+      listEvents(apiBaseUrl, range),
+      listActivities(apiBaseUrl, range),
+    ]);
+
+    return { events, activities };
+  }, [apiBaseUrl]);
+
+  const hydrateWeeks = useCallback((startMonday: Date, count: number, events: IntervalEvent[], activities: IntervalActivity[], status: CalendarWeekStatus) => {
+    setStore((current) => {
+      const next = new Map(current);
+      for (let index = 0; index < count; index += 1) {
+        const mondayDate = addWeeks(startMonday, index);
+        const week = buildCalendarWeek(mondayDate, events, activities, status);
+        next.set(week.weekKey, week);
+        loadedWeekKeysRef.current.add(week.weekKey);
+        inflightWeekKeysRef.current.delete(week.weekKey);
+      }
+      return next;
+    });
+  }, []);
+
+  const markWeeks = useCallback((startMonday: Date, count: number, status: CalendarWeekStatus) => {
+    setStore((current) => {
+      const next = new Map(current);
+      for (let index = 0; index < count; index += 1) {
+        const mondayDate = addWeeks(startMonday, index);
+        const weekKey = toDateKey(mondayDate);
+        const existing = next.get(weekKey);
+        next.set(weekKey, existing ? { ...existing, status } : createPlaceholderWeek(mondayDate, status));
+        inflightWeekKeysRef.current.add(weekKey);
+      }
+      return next;
+    });
+  }, []);
+
+  const ensureWeeks = useCallback(async (startMonday: Date, count: number, placeholderStatus: CalendarWeekStatus = 'loading') => {
+    const missingOffsets = Array.from({ length: count }, (_, index) => index).filter((index) => {
+      const weekKey = toDateKey(addWeeks(startMonday, index));
+      return !loadedWeekKeysRef.current.has(weekKey) && !inflightWeekKeysRef.current.has(weekKey);
+    });
+
+    if (missingOffsets.length === 0) {
+      return;
+    }
+
+    const firstOffset = missingOffsets[0];
+    const lastOffset = missingOffsets[missingOffsets.length - 1];
+    const batchStart = addWeeks(startMonday, firstOffset);
+    const batchCount = (lastOffset - firstOffset) + 1;
+
+    markWeeks(batchStart, batchCount, placeholderStatus);
+
+    try {
+      const { events, activities } = await loadRange(batchStart, batchCount);
+      hydrateWeeks(batchStart, batchCount, events, activities, 'loaded');
+      setState('ready');
+    } catch (error) {
+      setStore((current) => {
+        const next = new Map(current);
+        for (let index = 0; index < batchCount; index += 1) {
+          const mondayDate = addWeeks(batchStart, index);
+          const weekKey = toDateKey(mondayDate);
+          next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
+          inflightWeekKeysRef.current.delete(weekKey);
+        }
+        return next;
+      });
+
+      if (error instanceof HttpError && error.status === 422) {
+        setState('credentials-required');
+      } else {
+        setState((current) => (current === 'loading' ? 'error' : current));
+      }
+    }
+  }, [hydrateWeeks, loadRange, markWeeks]);
+
+  const prefetchBuffer = useCallback(async (startMonday: Date) => {
+    const bufferStart = addWeeks(startMonday, -CALENDAR_BUFFER_WEEKS);
+    const total = CALENDAR_VISIBLE_WEEKS + (CALENDAR_BUFFER_WEEKS * 2);
+    await ensureWeeks(bufferStart, total, 'idle');
+  }, [ensureWeeks]);
+
+  useEffect(() => {
+    if (initializedRef.current) {
+      return;
+    }
+
+    initializedRef.current = true;
+    const initialStart = getMondayOfWeek(new Date());
+    setWindowStart(initialStart);
+    void ensureWeeks(initialStart, CALENDAR_VISIBLE_WEEKS);
+    void prefetchBuffer(initialStart);
+  }, [ensureWeeks, prefetchBuffer]);
+
+  const loadMorePast = useCallback(async () => {
+    if (isLoadingPast) {
+      return;
+    }
+
+    setIsLoadingPast(true);
+    const nextWindowStart = addWeeks(windowStart, -CALENDAR_SHIFT_WEEKS);
+    const enteringStart = nextWindowStart;
+    setWindowStart(nextWindowStart);
+    setScrollAdjustment((current) => ({
+      topDelta: CALENDAR_WEEK_ROW_HEIGHT,
+      version: current.version + 1,
+    }));
+
+    try {
+      await ensureWeeks(enteringStart, CALENDAR_SHIFT_WEEKS);
+      void prefetchBuffer(nextWindowStart);
+    } finally {
+      setIsLoadingPast(false);
+    }
+  }, [ensureWeeks, isLoadingPast, prefetchBuffer, windowStart]);
+
+  const loadMoreFuture = useCallback(async () => {
+    if (isLoadingFuture) {
+      return;
+    }
+
+    setIsLoadingFuture(true);
+    const nextWindowStart = addWeeks(windowStart, CALENDAR_SHIFT_WEEKS);
+
+    try {
+      await ensureWeeks(addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS), CALENDAR_SHIFT_WEEKS);
+      setWindowStart(nextWindowStart);
+      setScrollAdjustment((current) => ({
+        topDelta: -CALENDAR_WEEK_ROW_HEIGHT,
+        version: current.version + 1,
+      }));
+      void prefetchBuffer(nextWindowStart);
+    } finally {
+      setIsLoadingFuture(false);
+    }
+  }, [ensureWeeks, isLoadingFuture, prefetchBuffer, windowStart]);
+
+  const weeks = useMemo(() => {
+    return Array.from({ length: CALENDAR_VISIBLE_WEEKS }, (_, index) => {
+      const mondayDate = addWeeks(windowStart, index);
+      const weekKey = toDateKey(mondayDate);
+      return store.get(weekKey) ?? createPlaceholderWeek(mondayDate, 'loading');
+    });
+  }, [store, windowStart]);
+
+  const topPreviewWeek = useMemo(() => {
+    const mondayDate = addWeeks(windowStart, -1);
+    return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'loading');
+  }, [store, windowStart]);
+
+  const bottomPreviewWeek = useMemo(() => {
+    const mondayDate = addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS);
+    return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'loading');
+  }, [store, windowStart]);
+
+  return {
+    state,
+    weeks,
+    topPreviewWeek,
+    bottomPreviewWeek,
+    isLoadingPast,
+    isLoadingFuture,
+    scrollAdjustment,
+    loadMorePast,
+    loadMoreFuture,
+  };
+}
+
+function buildCalendarWeek(
+  mondayDate: Date,
+  events: IntervalEvent[],
+  activities: IntervalActivity[],
+  status: CalendarWeekStatus,
+): CalendarWeek {
+  const weekDates = generateWeekDates(mondayDate);
+  const weekDateKeys = new Set(weekDates.map(toDateKey));
+  const weekEvents = events.filter((event) => weekDateKeys.has(extractDateKey(event.startDateLocal)));
+  const weekActivities = activities.filter((activity) => weekDateKeys.has(extractDateKey(activity.startDateLocal)));
+  const days = weekDates.map((date) => buildCalendarDay(date, weekEvents, weekActivities));
+
+  return {
+    weekNumber: getWeekNumber(mondayDate),
+    weekKey: toDateKey(mondayDate),
+    mondayDate,
+    days,
+    summary: {
+      totalTss: roundMetric(sumMetric(weekActivities, (activity) => activity.metrics.trainingStressScore)),
+      targetTss: null,
+      totalCalories: roundMetric(sumMetric(weekActivities, (activity) => activity.metrics.calories)),
+      totalDurationSeconds: roundMetric(sumMetric(weekActivities, (activity) => activity.movingTimeSeconds)),
+      targetDurationSeconds: null,
+      totalDistanceMeters: sumMetric(weekActivities, (activity) => activity.distanceMeters),
+    },
+    status,
+  };
+}
+
+function buildCalendarDay(date: Date, events: IntervalEvent[], activities: IntervalActivity[]): CalendarDay {
+  const dateKey = toDateKey(date);
+
+  return {
+    date,
+    dateKey,
+    events: events.filter((event) => extractDateKey(event.startDateLocal) === dateKey),
+    activities: activities.filter((activity) => extractDateKey(activity.startDateLocal) === dateKey),
+  };
+}
+
+function createPlaceholderWeek(mondayDate: Date, status: CalendarWeekStatus): CalendarWeek {
+  return {
+    weekNumber: getWeekNumber(mondayDate),
+    weekKey: toDateKey(mondayDate),
+    mondayDate,
+    days: generateWeekDates(mondayDate).map((date) => ({
+      date,
+      dateKey: toDateKey(date),
+      events: [],
+      activities: [],
+    })),
+    summary: {
+      totalTss: 0,
+      targetTss: null,
+      totalCalories: 0,
+      totalDurationSeconds: 0,
+      targetDurationSeconds: null,
+      totalDistanceMeters: 0,
+    },
+    status,
+  };
+}
+
+function sumMetric<T>(items: T[], getValue: (item: T) => number | null): number {
+  return items.reduce((total, item) => total + (getValue(item) ?? 0), 0);
+}
+
+function roundMetric(value: number): number {
+  return Math.round(value);
+}

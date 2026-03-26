@@ -87,7 +87,7 @@ export function App() {
             >
               <Route element={<AppHomePage />} path="/app" />
               <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
-              <Route element={<CalendarPage />} path="/calendar" />
+              <Route element={<CalendarPage apiBaseUrl={API_BASE_URL} />} path="/calendar" />
               <Route element={<AICoachPage />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
                 <Route
@@ -122,7 +122,7 @@ function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
       ? searchReturnTo
       : typeof (location.state as { from?: string } | null)?.from === 'string'
         ? (location.state as { from: string }).from
-        : '/app';
+        : '/calendar';
 
   return (
     <LandingPage
