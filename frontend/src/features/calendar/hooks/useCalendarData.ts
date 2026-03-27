@@ -56,7 +56,6 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const [scrollAdjustment, setScrollAdjustment] = useState<CalendarScrollAdjustment>({ topDelta: 0, version: 0 });
   const loadedWeekKeysRef = useRef<Set<string>>(new Set());
   const inflightWeekKeysRef = useRef<Set<string>>(new Set());
-  const failedWeekKeysRef = useRef<Set<string>>(new Set());
   const paginationLockRef = useRef(false);
   const initializedRef = useRef(false);
   const windowStartRef = useRef(windowStart);
@@ -83,7 +82,6 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     setStore((current) => pruneWeekStore(current, retainedWeekKeys));
     loadedWeekKeysRef.current = pruneWeekKeySet(loadedWeekKeysRef.current, retainedWeekKeys);
     inflightWeekKeysRef.current = pruneWeekKeySet(inflightWeekKeysRef.current, retainedWeekKeys);
-    failedWeekKeysRef.current = pruneWeekKeySet(failedWeekKeysRef.current, retainedWeekKeys);
   }, []);
 
   const loadRange = useCallback(async (startMonday: Date, count: number) => {
@@ -109,11 +107,9 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
         if (retainedWeekKeys.has(week.weekKey)) {
           next.set(week.weekKey, week);
           loadedWeekKeysRef.current.add(week.weekKey);
-          failedWeekKeysRef.current.delete(week.weekKey);
         } else {
           next.delete(week.weekKey);
           loadedWeekKeysRef.current.delete(week.weekKey);
-          failedWeekKeysRef.current.delete(week.weekKey);
         }
         inflightWeekKeysRef.current.delete(week.weekKey);
       }
@@ -138,9 +134,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const ensureWeeks = useCallback(async (startMonday: Date, count: number, placeholderStatus: CalendarWeekStatus = 'loading') => {
     const missingOffsets = Array.from({ length: count }, (_, index) => index).filter((index) => {
       const weekKey = toDateKey(addWeeks(startMonday, index));
-      return !loadedWeekKeysRef.current.has(weekKey)
-        && !inflightWeekKeysRef.current.has(weekKey)
-        && !failedWeekKeysRef.current.has(weekKey);
+      return !loadedWeekKeysRef.current.has(weekKey) && !inflightWeekKeysRef.current.has(weekKey);
     });
 
     if (missingOffsets.length === 0) {
@@ -169,10 +163,8 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
             const weekKey = toDateKey(mondayDate);
             if (retainedWeekKeys.has(weekKey)) {
               next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
-              failedWeekKeysRef.current.add(weekKey);
             } else {
               next.delete(weekKey);
-              failedWeekKeysRef.current.delete(weekKey);
             }
             inflightWeekKeysRef.current.delete(weekKey);
             loadedWeekKeysRef.current.delete(weekKey);

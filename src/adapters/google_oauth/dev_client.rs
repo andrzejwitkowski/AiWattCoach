@@ -45,9 +45,7 @@ impl GoogleOAuthPort for DevGoogleOAuthClient {
 
         Box::pin(async move {
             if code != DEV_AUTH_CODE {
-                return Err(IdentityError::External(
-                    "unsupported dev auth code".to_string(),
-                ));
+                return Err(IdentityError::Unauthenticated);
             }
 
             GoogleIdentity::new(
@@ -104,6 +102,26 @@ mod tests {
         assert_eq!(
             identity.avatar_url.as_deref(),
             Some("https://example.com/dev.png")
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_invalid_dev_code_as_unauthenticated() {
+        let client = DevGoogleOAuthClient::new(
+            "dev-google-subject",
+            "dev@aiwattcoach.local",
+            "Dev Athlete",
+            None,
+        );
+
+        let error = client
+            .exchange_code_for_identity("wrong-code")
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            crate::domain::identity::IdentityError::Unauthenticated
         );
     }
 }

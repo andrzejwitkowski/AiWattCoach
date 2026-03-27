@@ -93,6 +93,7 @@ pub async fn finish_google_login(
             response
         }
         Err(IdentityError::InvalidLoginState) => StatusCode::BAD_REQUEST.into_response(),
+        Err(IdentityError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
         Err(IdentityError::EmailNotVerified) => StatusCode::UNAUTHORIZED.into_response(),
         Err(IdentityError::Repository(_) | IdentityError::External(_)) => {
             StatusCode::SERVICE_UNAVAILABLE.into_response()

@@ -230,7 +230,7 @@ describe('useCalendarData', () => {
     });
   });
 
-  it('does not keep refetching the same future range after a gateway failure', async () => {
+  it('retries the same future range after a gateway failure on the next attempt', async () => {
     vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
 
@@ -249,16 +249,14 @@ describe('useCalendarData', () => {
     vi.mocked(listEvents).mockRejectedValue(new HttpError(502, 'bad gateway'));
     vi.mocked(listActivities).mockRejectedValue(new HttpError(502, 'bad gateway'));
 
-    await act(async () => {
-      await result.current.loadMoreFuture();
-    });
+    for (let attempt = 0; attempt < CALENDAR_BUFFER_WEEKS + 2; attempt += 1) {
+      await act(async () => {
+        await result.current.loadMoreFuture();
+      });
+    }
 
-    await act(async () => {
-      await result.current.loadMoreFuture();
-    });
-
-    expect(countRangeCalls(vi.mocked(listEvents), repeatedFailureWeek, repeatedFailureWeekEnd)).toBe(1);
-    expect(countRangeCalls(vi.mocked(listActivities), repeatedFailureWeek, repeatedFailureWeekEnd)).toBe(1);
+    expect(countRangeCalls(vi.mocked(listEvents), repeatedFailureWeek, repeatedFailureWeekEnd)).toBeGreaterThan(1);
+    expect(countRangeCalls(vi.mocked(listActivities), repeatedFailureWeek, repeatedFailureWeekEnd)).toBeGreaterThan(1);
   });
 
 });
