@@ -1,0 +1,71 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_DEV_AUTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:3002:3002"
+    environment:
+      APP_NAME: AiWattCoach
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 3002
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DATABASE: aiwattcoach_dev
+      GOOGLE_OAUTH_CLIENT_ID: dev-google-client-id.apps.googleusercontent.com
+      GOOGLE_OAUTH_CLIENT_SECRET: dev-google-client-secret
+      GOOGLE_OAUTH_REDIRECT_URL: http://localhost:3002/api/auth/google/callback
+      DEV_AUTH_ENABLED: "true"
+      DEV_AUTH_GOOGLE_SUBJECT: dev-google-subject
+      DEV_AUTH_EMAIL: dev@aiwattcoach.local
+      DEV_AUTH_DISPLAY_NAME: Dev Athlete
+      DEV_AUTH_AVATAR_URL: ""
+      DEV_INTERVALS_ENABLED: "false"
+      SESSION_COOKIE_NAME: aiwattcoach_session
+      SESSION_COOKIE_SAME_SITE: lax
+      SESSION_TTL_HOURS: 24
+      SESSION_COOKIE_SECURE: "false"
+      ADMIN_EMAILS: dev@aiwattcoach.local
+      ENABLE_CLIENT_LOG_INGESTION: "true"
+      RUST_LOG: info,axum=info,tower_http=info
+      OTEL_SERVICE_NAME: aiwattcoach-backend
+      OTEL_EXPORTER_OTLP_ENDPOINT: ""
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:3002/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet mongodb://127.0.0.1:27017/test --eval 'quit(db.adminCommand({ ping: 1 }).ok ? 0 : 1)' "]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - mongo_dev_data:/data/db
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+volumes:
+  mongo_dev_data:

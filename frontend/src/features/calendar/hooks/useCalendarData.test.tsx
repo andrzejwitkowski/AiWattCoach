@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
-import { AuthenticationError } from '../../../lib/httpClient';
+import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import { CALENDAR_BUFFER_WEEKS, CALENDAR_VISIBLE_WEEKS } from '../constants';
 import { addDays, parseDateKey, toDateKey } from '../utils/dateUtils';
 import { useCalendarData } from './useCalendarData';
@@ -26,14 +26,18 @@ function createDeferred<T>() {
 }
 
 function hasRangeCall(mock: ReturnType<typeof vi.fn>, oldest: string, newest: string): boolean {
-  return mock.mock.calls.some(([, query]) => {
+  return countRangeCalls(mock, oldest, newest) > 0;
+}
+
+function countRangeCalls(mock: ReturnType<typeof vi.fn>, oldest: string, newest: string): number {
+  return mock.mock.calls.filter(([, query]) => {
     return query !== null
       && typeof query === 'object'
       && 'oldest' in query
       && 'newest' in query
       && query.oldest === oldest
       && query.newest === newest;
-  });
+  }).length;
 }
 
 afterEach(() => {
@@ -45,6 +49,23 @@ afterEach(() => {
 });
 
 describe('useCalendarData', () => {
+  it('defaults unresolved weeks to idle placeholders', () => {
+    const deferredEvents = createDeferred<IntervalEvent[]>();
+    const deferredActivities = createDeferred<IntervalActivity[]>();
+    vi.mocked(listEvents).mockReturnValue(deferredEvents.promise);
+    vi.mocked(listActivities).mockReturnValue(deferredActivities.promise);
+
+    const { result, unmount } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+
+    expect(result.current.weeks.every((week) => week.status === 'idle')).toBe(true);
+    expect(result.current.topPreviewWeek.status).toBe('idle');
+    expect(result.current.bottomPreviewWeek.status).toBe('idle');
+
+    unmount();
+    deferredEvents.resolve([]);
+    deferredActivities.resolve([]);
+  });
+
   it('keeps a fixed five-week window after initial load', async () => {
     vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
@@ -207,6 +228,37 @@ describe('useCalendarData', () => {
     await waitFor(() => {
       expect(window.location.href).toBe('/');
     });
+  });
+
+  it('does not keep refetching the same future range after a gateway failure', async () => {
+    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+
+    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    const repeatedFailureWeek = toDateKey(
+      addDays(result.current.bottomPreviewWeek.mondayDate, CALENDAR_BUFFER_WEEKS * 7)
+    );
+    const repeatedFailureWeekEnd = toDateKey(addDays(parseDateKey(repeatedFailureWeek), 6));
+
+    vi.clearAllMocks();
+    vi.mocked(listEvents).mockRejectedValue(new HttpError(502, 'bad gateway'));
+    vi.mocked(listActivities).mockRejectedValue(new HttpError(502, 'bad gateway'));
+
+    await act(async () => {
+      await result.current.loadMoreFuture();
+    });
+
+    await act(async () => {
+      await result.current.loadMoreFuture();
+    });
+
+    expect(countRangeCalls(vi.mocked(listEvents), repeatedFailureWeek, repeatedFailureWeekEnd)).toBe(1);
+    expect(countRangeCalls(vi.mocked(listActivities), repeatedFailureWeek, repeatedFailureWeekEnd)).toBe(1);
   });
 
 });

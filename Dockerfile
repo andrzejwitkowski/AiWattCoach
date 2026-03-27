@@ -2,6 +2,12 @@ FROM node:22-bookworm-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
+ARG VITE_API_BASE_URL=
+ARG VITE_DEV_AUTH_ENABLED=false
+
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_DEV_AUTH_ENABLED=${VITE_DEV_AUTH_ENABLED}
+
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 

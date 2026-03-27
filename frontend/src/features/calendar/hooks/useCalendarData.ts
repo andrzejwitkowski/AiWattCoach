@@ -6,14 +6,12 @@ import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import {
   CALENDAR_BUFFER_WEEKS,
   CALENDAR_SHIFT_WEEKS,
+  CALENDAR_WEEK_BLOCK_HEIGHT,
   CALENDAR_WINDOW_WEEKS,
   CALENDAR_VISIBLE_WEEKS,
-  CALENDAR_WEEK_ROW_GAP,
-  CALENDAR_WEEK_ROW_HEIGHT,
 } from '../constants';
 import type {
   CalendarDataState,
-  CalendarLoadingEdge,
   CalendarDay,
   CalendarScrollAdjustment,
   CalendarWeek,
@@ -36,11 +34,11 @@ type UseCalendarDataOptions = {
 type UseCalendarDataResult = {
   state: CalendarDataState;
   weeks: CalendarWeek[];
+  renderedWeeks: CalendarWeek[];
   topPreviewWeek: CalendarWeek;
   bottomPreviewWeek: CalendarWeek;
   isLoadingPast: boolean;
   isLoadingFuture: boolean;
-  loadingEdge: CalendarLoadingEdge;
   scrollAdjustment: CalendarScrollAdjustment;
   loadMorePast: () => Promise<void>;
   loadMoreFuture: () => Promise<void>;
@@ -55,10 +53,10 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const [windowStart, setWindowStart] = useState<Date>(() => getMondayOfWeek(new Date()));
   const [isLoadingPast, setIsLoadingPast] = useState(false);
   const [isLoadingFuture, setIsLoadingFuture] = useState(false);
-  const [loadingEdge, setLoadingEdge] = useState<CalendarLoadingEdge>(null);
   const [scrollAdjustment, setScrollAdjustment] = useState<CalendarScrollAdjustment>({ topDelta: 0, version: 0 });
   const loadedWeekKeysRef = useRef<Set<string>>(new Set());
   const inflightWeekKeysRef = useRef<Set<string>>(new Set());
+  const failedWeekKeysRef = useRef<Set<string>>(new Set());
   const paginationLockRef = useRef(false);
   const initializedRef = useRef(false);
   const windowStartRef = useRef(windowStart);
@@ -71,7 +69,6 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     paginationLockRef.current = true;
     setIsLoadingPast(direction === 'past');
     setIsLoadingFuture(direction === 'future');
-    setLoadingEdge(direction === 'past' ? 'top' : 'bottom');
     return true;
   }, []);
 
@@ -79,7 +76,6 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     paginationLockRef.current = false;
     setIsLoadingPast(false);
     setIsLoadingFuture(false);
-    setLoadingEdge(null);
   }, []);
 
   const pruneStoredWeeks = useCallback((anchorStart: Date) => {
@@ -87,6 +83,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     setStore((current) => pruneWeekStore(current, retainedWeekKeys));
     loadedWeekKeysRef.current = pruneWeekKeySet(loadedWeekKeysRef.current, retainedWeekKeys);
     inflightWeekKeysRef.current = pruneWeekKeySet(inflightWeekKeysRef.current, retainedWeekKeys);
+    failedWeekKeysRef.current = pruneWeekKeySet(failedWeekKeysRef.current, retainedWeekKeys);
   }, []);
 
   const loadRange = useCallback(async (startMonday: Date, count: number) => {
@@ -112,9 +109,11 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
         if (retainedWeekKeys.has(week.weekKey)) {
           next.set(week.weekKey, week);
           loadedWeekKeysRef.current.add(week.weekKey);
+          failedWeekKeysRef.current.delete(week.weekKey);
         } else {
           next.delete(week.weekKey);
           loadedWeekKeysRef.current.delete(week.weekKey);
+          failedWeekKeysRef.current.delete(week.weekKey);
         }
         inflightWeekKeysRef.current.delete(week.weekKey);
       }
@@ -139,7 +138,9 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const ensureWeeks = useCallback(async (startMonday: Date, count: number, placeholderStatus: CalendarWeekStatus = 'loading') => {
     const missingOffsets = Array.from({ length: count }, (_, index) => index).filter((index) => {
       const weekKey = toDateKey(addWeeks(startMonday, index));
-      return !loadedWeekKeysRef.current.has(weekKey) && !inflightWeekKeysRef.current.has(weekKey);
+      return !loadedWeekKeysRef.current.has(weekKey)
+        && !inflightWeekKeysRef.current.has(weekKey)
+        && !failedWeekKeysRef.current.has(weekKey);
     });
 
     if (missingOffsets.length === 0) {
@@ -168,8 +169,10 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
             const weekKey = toDateKey(mondayDate);
             if (retainedWeekKeys.has(weekKey)) {
               next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
+              failedWeekKeysRef.current.add(weekKey);
             } else {
               next.delete(weekKey);
+              failedWeekKeysRef.current.delete(weekKey);
             }
             inflightWeekKeysRef.current.delete(weekKey);
             loadedWeekKeysRef.current.delete(weekKey);
@@ -228,7 +231,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
       windowStartRef.current = nextWindowStart;
       setWindowStart(nextWindowStart);
       setScrollAdjustment((current) => ({
-        topDelta: (CALENDAR_WEEK_ROW_HEIGHT + CALENDAR_WEEK_ROW_GAP) * CALENDAR_SHIFT_WEEKS,
+        topDelta: CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_SHIFT_WEEKS,
         version: current.version + 1,
       }));
       void prefetchBuffer(nextWindowStart);
@@ -244,13 +247,18 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
     const currentWindowStart = windowStartRef.current;
     const nextWindowStart = addWeeks(currentWindowStart, CALENDAR_SHIFT_WEEKS);
+    const enteringStart = addWeeks(currentWindowStart, CALENDAR_VISIBLE_WEEKS);
+    const enteringWeekKey = toDateKey(enteringStart);
 
     try {
-      await ensureWeeks(addWeeks(currentWindowStart, CALENDAR_VISIBLE_WEEKS), CALENDAR_SHIFT_WEEKS);
+      await ensureWeeks(enteringStart, CALENDAR_SHIFT_WEEKS);
+      if (!loadedWeekKeysRef.current.has(enteringWeekKey)) {
+        return;
+      }
       windowStartRef.current = nextWindowStart;
       setWindowStart(nextWindowStart);
       setScrollAdjustment((current) => ({
-        topDelta: -(CALENDAR_WEEK_ROW_HEIGHT + CALENDAR_WEEK_ROW_GAP) * CALENDAR_SHIFT_WEEKS,
+        topDelta: -(CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_SHIFT_WEEKS),
         version: current.version + 1,
       }));
       void prefetchBuffer(nextWindowStart);
@@ -263,28 +271,38 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     return Array.from({ length: CALENDAR_VISIBLE_WEEKS }, (_, index) => {
       const mondayDate = addWeeks(windowStart, index);
       const weekKey = toDateKey(mondayDate);
-      return store.get(weekKey) ?? createPlaceholderWeek(mondayDate, 'loading');
+      return store.get(weekKey) ?? createPlaceholderWeek(mondayDate, 'idle');
+    });
+  }, [store, windowStart]);
+
+  const renderedWeeks = useMemo(() => {
+    const renderedStart = addWeeks(windowStart, -CALENDAR_BUFFER_WEEKS);
+
+    return Array.from({ length: CALENDAR_WINDOW_WEEKS }, (_, index) => {
+      const mondayDate = addWeeks(renderedStart, index);
+      const weekKey = toDateKey(mondayDate);
+      return store.get(weekKey) ?? createPlaceholderWeek(mondayDate, 'idle');
     });
   }, [store, windowStart]);
 
   const topPreviewWeek = useMemo(() => {
     const mondayDate = addWeeks(windowStart, -1);
-    return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'loading');
+    return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'idle');
   }, [store, windowStart]);
 
   const bottomPreviewWeek = useMemo(() => {
     const mondayDate = addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS);
-    return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'loading');
+    return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'idle');
   }, [store, windowStart]);
 
   return {
     state,
     weeks,
+    renderedWeeks,
     topPreviewWeek,
     bottomPreviewWeek,
     isLoadingPast,
     isLoadingFuture,
-    loadingEdge,
     scrollAdjustment,
     loadMorePast,
     loadMoreFuture,

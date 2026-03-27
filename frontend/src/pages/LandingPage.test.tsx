@@ -13,6 +13,16 @@ describe('LandingPage', () => {
     expect(screen.getByRole('button', { name: /get started/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/username@performance.lab/i)).toBeInTheDocument();
+    expect(screen.queryByText(/dev auth enabled/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a visible hint when dev auth is enabled', () => {
+    render(<LandingPage onLogin={vi.fn()} devAuthEnabled />);
+
+    expect(screen.getByText(/dev auth enabled/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/google sign-in uses the configured mock athlete/i)
+    ).toBeInTheDocument();
   });
 
   it('calls onLogin when Google sign-in or Get Started buttons are clicked', () => {

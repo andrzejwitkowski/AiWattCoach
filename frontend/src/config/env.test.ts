@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getApiBaseUrl, normalizeApiBaseUrl } from './env';
+import { getApiBaseUrl, isDevAuthEnabled, normalizeApiBaseUrl, normalizeBooleanFlag } from './env';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -52,6 +52,44 @@ describe('normalizeApiBaseUrl', () => {
     vi.stubEnv('VITE_API_BASE_URL', 'api');
 
     expect(getApiBaseUrl()).toBe('');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('normalizeBooleanFlag', () => {
+  it('defaults missing and blank values to false', () => {
+    expect(normalizeBooleanFlag()).toBe(false);
+    expect(normalizeBooleanFlag('   ')).toBe(false);
+  });
+
+  it('parses true and false values case-insensitively', () => {
+    expect(normalizeBooleanFlag('true')).toBe(true);
+    expect(normalizeBooleanFlag(' FALSE ')).toBe(false);
+  });
+
+  it('rejects invalid boolean flag values', () => {
+    expect(() => normalizeBooleanFlag('yes')).toThrow(
+      'Expected a boolean environment flag value of true or false'
+    );
+  });
+});
+
+describe('isDevAuthEnabled', () => {
+  it('returns false when the dev auth flag is absent', () => {
+    expect(isDevAuthEnabled()).toBe(false);
+  });
+
+  it('returns true when the dev auth flag is enabled', () => {
+    vi.stubEnv('VITE_DEV_AUTH_ENABLED', 'true');
+
+    expect(isDevAuthEnabled()).toBe(true);
+  });
+
+  it('falls back to false when the dev auth flag is invalid', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('VITE_DEV_AUTH_ENABLED', 'maybe');
+
+    expect(isDevAuthEnabled()).toBe(false);
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });

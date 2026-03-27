@@ -113,8 +113,24 @@ pub struct ActivityResponse {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ZoneTimeResponse {
-    pub id: String,
+    pub id: StringOrNumber,
     pub secs: i32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum StringOrNumber {
+    String(String),
+    Number(i64),
+}
+
+impl StringOrNumber {
+    pub fn into_string(self) -> String {
+        match self {
+            Self::String(value) => value,
+            Self::Number(value) => value.to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

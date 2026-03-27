@@ -3,13 +3,14 @@ import { BackgroundGlow } from '../features/landing/components/BackgroundGlow';
 
 type LandingPageProps = {
   onLogin: () => void;
+  devAuthEnabled?: boolean;
 };
 
 /**
  * Wattly public landing page — centered glass-panel login card over a full-screen
  * cyclist background, with a fixed navbar and footer.
  */
-export function LandingPage({ onLogin }: LandingPageProps) {
+export function LandingPage({ onLogin, devAuthEnabled = false }: LandingPageProps) {
   return (
     <div className="relative min-h-screen overflow-y-auto bg-[#0c0e11] text-slate-100">
       <BackgroundGlow />
@@ -35,7 +36,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
       </header>
 
       <main className="relative z-10 flex items-center justify-center min-h-screen px-4 pt-16 pb-24">
-        <LoginPanel onLogin={onLogin} />
+        <LoginPanel onLogin={onLogin} devAuthEnabled={devAuthEnabled} />
       </main>
 
       <footer className="fixed bottom-0 w-full z-50 px-4 py-8">

@@ -3,13 +3,14 @@ import { useState } from 'react';
 type LoginPanelProps = {
   onLogin: () => void;
   onContinue?: (athleteId: string) => void;
+  devAuthEnabled?: boolean;
 };
 
 /**
  * Centered glass-panel login card for the Wattly landing page.
  * Offers Google OAuth sign-in and an optional Athlete ID fallback.
  */
-export function LoginPanel({ onLogin, onContinue }: LoginPanelProps) {
+export function LoginPanel({ onLogin, onContinue, devAuthEnabled = false }: LoginPanelProps) {
   const [athleteId, setAthleteId] = useState('');
 
   return (
@@ -29,6 +30,15 @@ export function LoginPanel({ onLogin, onContinue }: LoginPanelProps) {
       </div>
 
       <div className="w-full space-y-4">
+        {devAuthEnabled ? (
+          <div className="rounded-lg border border-[#d2ff9a]/20 bg-[#d2ff9a]/8 px-4 py-3 text-left" role="note">
+            <p className="text-[10px] font-['Inter'] uppercase tracking-[0.24em] text-[#d2ff9a]">Dev auth enabled</p>
+            <p className="mt-2 text-sm font-['Inter'] text-[#d7dbc9]">
+              Google sign-in uses the configured mock athlete, so you can enter the app without a live OAuth redirect.
+            </p>
+          </div>
+        ) : null}
+
         <button
           className="w-full flex items-center justify-center gap-3 bg-[#23262a] border border-[#46484b]/30 py-4 px-6 rounded-lg text-[#f9f9fd] font-['Inter'] font-semibold hover:bg-[#292c31] transition-all duration-300"
           onClick={onLogin}
