@@ -400,11 +400,15 @@ impl IntervalsApiPort for IntervalsIcuClient {
             Ok(payload
                 .into_iter()
                 .filter_map(|value| {
-                    match serde_json::from_value::<ActivityResponse>(value.clone()) {
+                    let activity_id = value
+                        .get("id")
+                        .and_then(|raw| raw.as_str().map(str::to_owned));
+
+                    match serde_json::from_value::<ActivityResponse>(value) {
                         Ok(activity) => Some(map_activity_response(activity)),
                         Err(error) => {
                             tracing::warn!(
-                                activity_id = value.get("id").and_then(|raw| raw.as_str()),
+                                activity_id,
                                 %error,
                                 "skipping malformed intervals activity from list response"
                             );

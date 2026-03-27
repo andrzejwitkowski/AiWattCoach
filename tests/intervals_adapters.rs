@@ -302,7 +302,7 @@ async fn intervals_client_lists_activities_and_normalizes_metrics() {
 }
 
 #[tokio::test]
-async fn intervals_client_skips_malformed_activities_in_list_response() {
+async fn intervals_client_accepts_numeric_zone_ids_in_activity_list_response() {
     let server = TestIntervalsServer::start().await;
     server.set_list_activities_raw(serde_json::json!([
         ResponseActivity::sample("i101", "Tempo Ride"),
