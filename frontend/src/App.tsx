@@ -3,7 +3,7 @@ import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 import { AuthenticatedLayout } from './app/AuthenticatedLayout';
 import { PublicLayout } from './app/PublicLayout';
-import { getApiBaseUrl } from './config/env';
+import { getApiBaseUrl, isDevAuthEnabled } from './config/env';
 import { buildGoogleLoginUrl } from './features/auth/api/auth';
 import { AuthProvider } from './features/auth/context/AuthProvider';
 import { RequireAuth } from './features/auth/guards/RequireAuth';
@@ -19,6 +19,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { loadBackendStatus, type BackendStatus } from './lib/api/system';
 
 const API_BASE_URL = getApiBaseUrl();
+const DEV_AUTH_ENABLED = isDevAuthEnabled();
 const API_BASE_URL_LABEL =
   API_BASE_URL || 'same-origin requests (Vite proxy in local development)';
 
@@ -123,6 +124,7 @@ function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   return (
     <LandingPage
+      devAuthEnabled={DEV_AUTH_ENABLED}
       onLogin={() => {
         window.location.assign(buildGoogleLoginUrl(apiBaseUrl, returnTo));
       }}

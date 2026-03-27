@@ -5,6 +5,8 @@ use crate::domain::{
     settings::UserSettingsUseCases,
 };
 
+use super::dev_settings_adapter::DevIntervalsSettingsProvider;
+
 #[derive(Clone)]
 pub struct SettingsIntervalsProvider {
     settings_service: Arc<dyn UserSettingsUseCases>,
@@ -46,5 +48,23 @@ impl IntervalsSettingsPort for SettingsIntervalsProvider {
                 athlete_id,
             })
         })
+    }
+}
+
+#[derive(Clone)]
+pub enum IntervalsSettingsAdapter {
+    Live(SettingsIntervalsProvider),
+    Dev(DevIntervalsSettingsProvider),
+}
+
+impl IntervalsSettingsPort for IntervalsSettingsAdapter {
+    fn get_credentials(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<IntervalsCredentials, IntervalsError>> {
+        match self {
+            Self::Live(provider) => provider.get_credentials(user_id),
+            Self::Dev(provider) => provider.get_credentials(user_id),
+        }
     }
 }

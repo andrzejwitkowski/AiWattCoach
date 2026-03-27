@@ -112,6 +112,7 @@
     "fiveWeeks": "5 tygodni",
     "scrollMode": "Tryb przewijania",
     "infinite": "Nieskończony",
+    "fetchingData": "Pobieranie danych",
     "loadingWeek": "Ładowanie tygodnia",
     "upcomingTrainingData": "Nadchodzące dane treningowe są właśnie pobierane.",
     "rowLoadError": "Dane tygodnia niedostępne",

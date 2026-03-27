@@ -3,16 +3,16 @@ import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
-  CALENDAR_ANCHOR_SCROLL_TOP,
-  CALENDAR_PREVIEW_VISIBLE_HEIGHT,
+  CALENDAR_BUFFER_WEEKS,
+  CALENDAR_PAGINATION_LOCK_RELEASE_DISTANCE,
+  CALENDAR_PAGINATION_TRIGGER_OFFSET,
   CALENDAR_SHIFT_WEEKS,
   CALENDAR_VISIBLE_WEEKS,
-  CALENDAR_WEEK_ROW_HEIGHT,
+  CALENDAR_WEEK_BLOCK_HEIGHT,
+  CALENDAR_WEEK_ROW_GAP,
 } from '../constants';
 import { useCalendarData } from '../hooks/useCalendarData';
-import type { CalendarWeek } from '../types';
 import { CalendarPerformanceCards } from './CalendarPerformanceCards';
-import { CalendarLoadingRow } from './CalendarLoadingRow';
 import { CalendarWeekDayHeader } from './CalendarWeekDayHeader';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
@@ -26,11 +26,9 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
   const {
     state,
     weeks,
-    topPreviewWeek,
-    bottomPreviewWeek,
+    renderedWeeks,
     isLoadingPast,
     isLoadingFuture,
-    loadingEdge,
     scrollAdjustment,
     loadMorePast,
     loadMoreFuture,
@@ -39,6 +37,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
   const appliedAdjustmentVersionRef = useRef(0);
   const initializingScrollRef = useRef(true);
   const pendingAnchorRef = useRef<{ weekKey: string; top: number } | null>(null);
+  const edgeLockRef = useRef<{ edge: 'top' | 'bottom'; releaseScrollTop: number } | null>(null);
 
   const visibleRangeLabel = useMemo(() => {
     const firstWeek = weeks[0];
@@ -60,18 +59,31 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       return;
     }
 
-    pendingAnchorRef.current = captureScrollAnchor(scrollRef.current, weeks[0]?.weekKey ?? null);
+    const container = scrollRef.current;
+    pendingAnchorRef.current = captureScrollAnchor(scrollRef.current, renderedWeeks[0]?.weekKey ?? null);
+    edgeLockRef.current = {
+      edge: 'top',
+      releaseScrollTop: (container?.scrollTop ?? 0) + CALENDAR_PAGINATION_LOCK_RELEASE_DISTANCE,
+    };
     void loadMorePast();
-  }, [isLoadingFuture, isLoadingPast, loadMorePast, weeks]);
+  }, [isLoadingFuture, isLoadingPast, loadMorePast, renderedWeeks]);
 
   const handleReachBottom = useCallback(() => {
     if (isLoadingFuture || isLoadingPast) {
       return;
     }
 
-    pendingAnchorRef.current = captureScrollAnchor(scrollRef.current, weeks[CALENDAR_SHIFT_WEEKS]?.weekKey ?? weeks[0]?.weekKey ?? null);
+    const container = scrollRef.current;
+    pendingAnchorRef.current = captureScrollAnchor(
+      scrollRef.current,
+      renderedWeeks[CALENDAR_SHIFT_WEEKS]?.weekKey ?? renderedWeeks[0]?.weekKey ?? null,
+    );
+    edgeLockRef.current = {
+      edge: 'bottom',
+      releaseScrollTop: (container?.scrollTop ?? 0) - CALENDAR_PAGINATION_LOCK_RELEASE_DISTANCE,
+    };
     void loadMoreFuture();
-  }, [isLoadingFuture, isLoadingPast, loadMoreFuture, weeks]);
+  }, [isLoadingFuture, isLoadingPast, loadMoreFuture, renderedWeeks]);
 
   const handleScroll = useCallback(() => {
     const container = scrollRef.current;
@@ -80,14 +92,30 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
     }
 
     const { scrollTop, clientHeight, scrollHeight } = container;
-    const edgeThreshold = CALENDAR_PREVIEW_VISIBLE_HEIGHT;
+    const edgeLock = edgeLockRef.current;
 
-    if (scrollTop <= edgeThreshold) {
+    if (edgeLock) {
+      const shouldRelease = edgeLock.edge === 'top'
+        ? scrollTop >= edgeLock.releaseScrollTop
+        : scrollTop <= edgeLock.releaseScrollTop;
+
+      if (!shouldRelease) {
+        return;
+      }
+
+      edgeLockRef.current = null;
+    }
+
+    const edgeThreshold = CALENDAR_PAGINATION_TRIGGER_OFFSET;
+    const isAtTopEdge = scrollTop <= edgeThreshold;
+    const isAtBottomEdge = scrollTop + clientHeight >= scrollHeight - edgeThreshold;
+
+    if (isAtTopEdge) {
       void handleReachTop();
       return;
     }
 
-    if (scrollTop + clientHeight >= scrollHeight - edgeThreshold) {
+    if (isAtBottomEdge) {
       void handleReachBottom();
     }
   }, [handleReachBottom, handleReachTop, state]);
@@ -123,7 +151,8 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       return;
     }
 
-    container.scrollTop = CALENDAR_ANCHOR_SCROLL_TOP;
+    const anchorElement = container.querySelector<HTMLElement>(`[data-week-key="${weeks[0]?.weekKey}"]`);
+    container.scrollTop = anchorElement?.offsetTop ?? (CALENDAR_BUFFER_WEEKS * CALENDAR_WEEK_BLOCK_HEIGHT);
     initializingScrollRef.current = false;
   }, [weeks.length]);
 
@@ -173,15 +202,13 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
               aria-label={t('calendar.performanceCalendar')}
               className="no-scrollbar overflow-y-auto pr-1"
               style={{
-                maxHeight: `${(CALENDAR_WEEK_ROW_HEIGHT * CALENDAR_VISIBLE_WEEKS) + (CALENDAR_PREVIEW_VISIBLE_HEIGHT * 2)}px`,
+                maxHeight: `${(CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_VISIBLE_WEEKS) - CALENDAR_WEEK_ROW_GAP}px`,
               }}
             >
               <CalendarWeekDayHeader />
               <div className="mt-8 space-y-10">
-                <PreviewRow week={topPreviewWeek} edge="top" />
-                {loadingEdge === 'top' ? <CalendarLoadingRow /> : null}
-                {weeks.length > 0 ? (
-                  weeks.map((week) => (
+                {renderedWeeks.length > 0 ? (
+                  renderedWeeks.map((week) => (
                     <div key={week.weekKey} data-week-key={week.weekKey}>
                       <CalendarWeekSection week={week} />
                     </div>
@@ -191,8 +218,6 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
                     {t('calendar.noEvents')}
                   </div>
                 )}
-                {loadingEdge === 'bottom' ? <CalendarLoadingRow /> : null}
-                <PreviewRow week={bottomPreviewWeek} edge="bottom" />
               </div>
             </div>
           </div>
@@ -218,28 +243,6 @@ function captureScrollAnchor(container: HTMLDivElement | null, weekKey: string |
     weekKey,
     top: anchorElement.offsetTop - container.scrollTop,
   };
-}
-
-function PreviewRow({ week, edge }: { week: CalendarWeek; edge: 'top' | 'bottom' }) {
-  const transform = edge === 'top'
-    ? `translateY(-${CALENDAR_WEEK_ROW_HEIGHT - CALENDAR_PREVIEW_VISIBLE_HEIGHT}px)`
-    : 'translateY(0)';
-  const overlayClass = edge === 'top'
-    ? 'bg-gradient-to-b from-[#0a0f1a] via-[#0a0f1a]/86 to-transparent'
-    : 'bg-gradient-to-t from-[#0a0f1a] via-[#0a0f1a]/86 to-transparent';
-
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none relative overflow-hidden opacity-50"
-      style={{ height: `${CALENDAR_PREVIEW_VISIBLE_HEIGHT}px` }}
-    >
-      <div className="scale-[0.992] blur-[0.6px] saturate-75 brightness-[0.82]" style={{ transform }}>
-        <CalendarWeekSection week={week} />
-      </div>
-      <div className={`absolute inset-0 ${overlayClass}`} />
-    </div>
-  );
 }
 
 function MetricPill({ title, value, accent }: { title: string; value: string; accent: string }) {

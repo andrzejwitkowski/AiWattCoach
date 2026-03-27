@@ -64,6 +64,8 @@ fn settings_load_required_values_from_map() {
     assert_eq!(settings.auth.session.ttl_hours, 24);
     assert!(!settings.auth.session.secure);
     assert!(settings.auth.admin_emails.is_empty());
+    assert!(!settings.auth.dev.enabled);
+    assert!(!settings.dev_intervals_enabled);
 }
 
 #[test]
@@ -214,6 +216,35 @@ fn settings_require_google_client_id() {
         error.to_string(),
         "Missing required setting: GOOGLE_OAUTH_CLIENT_ID"
     );
+}
+
+#[test]
+fn settings_allow_dev_auth_without_google_oauth_credentials() {
+    let mut values = required_settings_map();
+    values.remove("GOOGLE_OAUTH_CLIENT_ID");
+    values.remove("GOOGLE_OAUTH_CLIENT_SECRET");
+    values.remove("GOOGLE_OAUTH_REDIRECT_URL");
+    values.insert("DEV_AUTH_ENABLED".to_string(), "true".to_string());
+    values.insert(
+        "DEV_AUTH_EMAIL".to_string(),
+        "coach@example.com".to_string(),
+    );
+
+    let settings = Settings::from_map(&values).unwrap();
+
+    assert!(settings.auth.dev.enabled);
+    assert_eq!(settings.auth.dev.email, "coach@example.com");
+    assert_eq!(settings.auth.google.client_id, "dev-google-client-id");
+}
+
+#[test]
+fn settings_allow_dev_intervals_toggle() {
+    let mut values = required_settings_map();
+    values.insert("DEV_INTERVALS_ENABLED".to_string(), "true".to_string());
+
+    let settings = Settings::from_map(&values).unwrap();
+
+    assert!(settings.dev_intervals_enabled);
 }
 
 #[test]

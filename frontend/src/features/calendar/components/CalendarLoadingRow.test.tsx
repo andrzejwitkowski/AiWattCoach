@@ -10,28 +10,28 @@ afterEach(() => {
 });
 
 describe('CalendarLoadingRow', () => {
-  it('renders translated loading message', () => {
+  it('renders translated fetching label for active loads', () => {
     render(<CalendarLoadingRow />);
 
-    expect(screen.getByText(/loading week/i)).toBeInTheDocument();
+    expect(screen.getByText(/fetching data/i)).toBeInTheDocument();
   });
 
-  it('does not expose each loading row as a live region', () => {
-    render(<CalendarLoadingRow />);
+  it('keeps idle placeholders visually quiet', () => {
+    render(<CalendarLoadingRow status="idle" />);
 
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText(/fetching data/i)).not.toBeInTheDocument();
   });
 
-  it('derives its min height from the shared calendar row height', () => {
+  it('derives its fixed height from the shared calendar row height', () => {
     const { container } = render(<CalendarLoadingRow />);
 
-    expect(container.firstChild).toHaveStyle({ minHeight: `${CALENDAR_WEEK_ROW_HEIGHT}px` });
+    expect(container.firstChild).toHaveStyle({ height: `${CALENDAR_WEEK_ROW_HEIGHT}px` });
   });
 
-  it('renders an incoming-week shell instead of a bare spinner box', () => {
+  it('renders an empty week shell instead of a message-heavy loading panel', () => {
     render(<CalendarLoadingRow />);
 
-    expect(screen.getAllByText(/loading week/i)).toHaveLength(1);
-    expect(screen.getByText(/upcoming training data/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/fetching data/i)).toHaveLength(1);
+    expect(screen.queryByText(/upcoming training data/i)).not.toBeInTheDocument();
   });
 });

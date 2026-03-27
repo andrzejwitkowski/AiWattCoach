@@ -3,6 +3,7 @@ use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _}
 use opentelemetry_http::HeaderInjector;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use reqwest::{multipart, Client, RequestBuilder, StatusCode};
+use serde_json::Value;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::domain::intervals::{
@@ -394,8 +395,28 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .map_err(map_connection_error)?;
 
             let response = response.error_for_status().map_err(map_api_error)?;
-            let payload: Vec<ActivityResponse> = response.json().await.map_err(map_api_error)?;
-            Ok(payload.into_iter().map(map_activity_response).collect())
+            let payload: Vec<Value> = response.json().await.map_err(map_api_error)?;
+
+            Ok(payload
+                .into_iter()
+                .filter_map(|value| {
+                    let activity_id = value
+                        .get("id")
+                        .and_then(|raw| raw.as_str().map(str::to_owned));
+
+                    match serde_json::from_value::<ActivityResponse>(value) {
+                        Ok(activity) => Some(map_activity_response(activity)),
+                        Err(error) => {
+                            tracing::warn!(
+                                activity_id,
+                                %error,
+                                "skipping malformed intervals activity from list response"
+                            );
+                            None
+                        }
+                    }
+                })
+                .collect())
         })
     }
 
@@ -646,7 +667,7 @@ fn map_activity_response(response: ActivityResponse) -> Activity {
                 .unwrap_or_default()
                 .into_iter()
                 .map(|zone| ActivityZoneTime {
-                    zone_id: zone.id,
+                    zone_id: zone.id.into_string(),
                     seconds: zone.secs,
                 })
                 .collect(),

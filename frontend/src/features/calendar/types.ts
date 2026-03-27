@@ -33,5 +33,3 @@ export type CalendarScrollAdjustment = {
   topDelta: number;
   version: number;
 };
-
-export type CalendarLoadingEdge = 'top' | 'bottom' | null;

@@ -8,11 +8,12 @@ import { CalendarWeekSummary } from './CalendarWeekSummary';
 
 type CalendarWeekSectionProps = {
   week: CalendarWeek;
+  showLoadingIndicator?: boolean;
 };
 
-export function CalendarWeekSection({ week }: CalendarWeekSectionProps) {
+export function CalendarWeekSection({ week, showLoadingIndicator = true }: CalendarWeekSectionProps) {
   if (week.status === 'loading' || week.status === 'idle') {
-    return <CalendarLoadingRow />;
+    return <CalendarLoadingRow status={week.status} showLoadingIndicator={showLoadingIndicator} />;
   }
 
   if (week.status === 'error') {

@@ -8,6 +8,7 @@ pub struct Settings {
     pub server: ServerSettings,
     pub mongo: MongoSettings,
     pub auth: AuthSettings,
+    pub dev_intervals_enabled: bool,
     pub client_log_ingestion_enabled: bool,
 }
 
@@ -26,8 +27,18 @@ pub struct MongoSettings {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthSettings {
     pub google: GoogleOAuthSettings,
+    pub dev: DevAuthSettings,
     pub session: SessionSettings,
     pub admin_emails: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DevAuthSettings {
+    pub enabled: bool,
+    pub google_subject: String,
+    pub email: String,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -81,6 +92,12 @@ impl Settings {
             "GOOGLE_OAUTH_CLIENT_ID",
             "GOOGLE_OAUTH_CLIENT_SECRET",
             "GOOGLE_OAUTH_REDIRECT_URL",
+            "DEV_AUTH_ENABLED",
+            "DEV_AUTH_GOOGLE_SUBJECT",
+            "DEV_AUTH_EMAIL",
+            "DEV_AUTH_DISPLAY_NAME",
+            "DEV_AUTH_AVATAR_URL",
+            "DEV_INTERVALS_ENABLED",
             "SESSION_COOKIE_NAME",
             "SESSION_COOKIE_SAME_SITE",
             "SESSION_TTL_HOURS",
@@ -107,6 +124,8 @@ impl Settings {
     }
 
     pub fn from_map(values: &BTreeMap<String, String>) -> Result<Self, SettingsError> {
+        let dev_auth = parse_dev_auth_settings(values)?;
+
         Ok(Self {
             app_name: required(values, "APP_NAME")?,
             server: ServerSettings {
@@ -120,11 +139,8 @@ impl Settings {
                 database: required(values, "MONGODB_DATABASE")?,
             },
             auth: AuthSettings {
-                google: GoogleOAuthSettings {
-                    client_id: required(values, "GOOGLE_OAUTH_CLIENT_ID")?,
-                    client_secret: required(values, "GOOGLE_OAUTH_CLIENT_SECRET")?,
-                    redirect_url: required(values, "GOOGLE_OAUTH_REDIRECT_URL")?,
-                },
+                google: parse_google_oauth_settings(values, dev_auth.enabled)?,
+                dev: dev_auth,
                 session: SessionSettings {
                     cookie_name: parse_cookie_name(
                         required(values, "SESSION_COOKIE_NAME")?.as_str(),
@@ -142,6 +158,11 @@ impl Settings {
                 },
                 admin_emails: parse_admin_emails(values.get("ADMIN_EMAILS")),
             },
+            dev_intervals_enabled: optional_bool_setting(
+                values.get("DEV_INTERVALS_ENABLED"),
+                "DEV_INTERVALS_ENABLED",
+                false,
+            )?,
             client_log_ingestion_enabled: optional_bool_setting(
                 values.get("ENABLE_CLIENT_LOG_INGESTION"),
                 "ENABLE_CLIENT_LOG_INGESTION",
@@ -168,6 +189,13 @@ impl Settings {
                     client_secret: "local-google-client-secret".to_string(),
                     redirect_url: "http://localhost:3002/api/auth/google/callback".to_string(),
                 },
+                dev: DevAuthSettings {
+                    enabled: false,
+                    google_subject: "dev-google-subject".to_string(),
+                    email: "dev@aiwattcoach.local".to_string(),
+                    display_name: "Dev Athlete".to_string(),
+                    avatar_url: None,
+                },
                 session: SessionSettings {
                     cookie_name: "aiwattcoach_session".to_string(),
                     same_site: "lax".to_string(),
@@ -176,6 +204,7 @@ impl Settings {
                 },
                 admin_emails: Vec::new(),
             },
+            dev_intervals_enabled: false,
             client_log_ingestion_enabled: false,
         }
     }
@@ -222,6 +251,55 @@ fn required(values: &BTreeMap<String, String>, key: &str) -> Result<String, Sett
     }
 
     Ok(trimmed.to_string())
+}
+
+fn optional_string_setting(values: &BTreeMap<String, String>, key: &str) -> Option<String> {
+    values.get(key).and_then(|value| {
+        let trimmed = value.trim();
+
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn parse_google_oauth_settings(
+    values: &BTreeMap<String, String>,
+    dev_auth_enabled: bool,
+) -> Result<GoogleOAuthSettings, SettingsError> {
+    if dev_auth_enabled {
+        return Ok(GoogleOAuthSettings {
+            client_id: optional_string_setting(values, "GOOGLE_OAUTH_CLIENT_ID")
+                .unwrap_or_else(|| "dev-google-client-id".to_string()),
+            client_secret: optional_string_setting(values, "GOOGLE_OAUTH_CLIENT_SECRET")
+                .unwrap_or_else(|| "dev-google-client-secret".to_string()),
+            redirect_url: optional_string_setting(values, "GOOGLE_OAUTH_REDIRECT_URL")
+                .unwrap_or_else(|| "http://localhost:3002/api/auth/google/callback".to_string()),
+        });
+    }
+
+    Ok(GoogleOAuthSettings {
+        client_id: required(values, "GOOGLE_OAUTH_CLIENT_ID")?,
+        client_secret: required(values, "GOOGLE_OAUTH_CLIENT_SECRET")?,
+        redirect_url: required(values, "GOOGLE_OAUTH_REDIRECT_URL")?,
+    })
+}
+
+fn parse_dev_auth_settings(
+    values: &BTreeMap<String, String>,
+) -> Result<DevAuthSettings, SettingsError> {
+    Ok(DevAuthSettings {
+        enabled: optional_bool_setting(values.get("DEV_AUTH_ENABLED"), "DEV_AUTH_ENABLED", false)?,
+        google_subject: optional_string_setting(values, "DEV_AUTH_GOOGLE_SUBJECT")
+            .unwrap_or_else(|| "dev-google-subject".to_string()),
+        email: optional_string_setting(values, "DEV_AUTH_EMAIL")
+            .unwrap_or_else(|| "dev@aiwattcoach.local".to_string()),
+        display_name: optional_string_setting(values, "DEV_AUTH_DISPLAY_NAME")
+            .unwrap_or_else(|| "Dev Athlete".to_string()),
+        avatar_url: optional_string_setting(values, "DEV_AUTH_AVATAR_URL"),
+    })
 }
 
 fn parse_admin_emails(raw_value: Option<&String>) -> Vec<String> {
@@ -392,5 +470,30 @@ mod tests {
         let settings = Settings::from_map(&values).expect("settings should parse");
 
         assert!(settings.client_log_ingestion_enabled);
+    }
+
+    #[test]
+    fn dev_auth_can_supply_google_oauth_defaults() {
+        let mut values = base_values();
+        values.remove("GOOGLE_OAUTH_CLIENT_ID");
+        values.remove("GOOGLE_OAUTH_CLIENT_SECRET");
+        values.remove("GOOGLE_OAUTH_REDIRECT_URL");
+        values.insert("DEV_AUTH_ENABLED".to_string(), "true".to_string());
+
+        let settings = Settings::from_map(&values).expect("settings should parse");
+
+        assert!(settings.auth.dev.enabled);
+        assert_eq!(settings.auth.google.client_id, "dev-google-client-id");
+        assert_eq!(settings.auth.dev.email, "dev@aiwattcoach.local");
+    }
+
+    #[test]
+    fn dev_intervals_can_be_enabled_explicitly() {
+        let mut values = base_values();
+        values.insert("DEV_INTERVALS_ENABLED".to_string(), "true".to_string());
+
+        let settings = Settings::from_map(&values).expect("settings should parse");
+
+        assert!(settings.dev_intervals_enabled);
     }
 }

@@ -662,6 +662,27 @@ async fn google_callback_returns_service_unavailable_for_provider_failures() {
 }
 
 #[tokio::test]
+async fn google_callback_returns_unauthorized_for_invalid_dev_auth_code() {
+    let app = auth_test_app(TestIdentityService {
+        callback_error: Some(IdentityError::Unauthenticated),
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/google/callback?state=state-1&code=bad-dev-code")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn me_returns_service_unavailable_when_identity_backend_errors() {
     let app = auth_test_app(TestIdentityService {
         current_user_error: Some(IdentityError::Repository("mongo down".to_string())),

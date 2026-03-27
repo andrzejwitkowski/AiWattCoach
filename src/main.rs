@@ -3,8 +3,17 @@ use std::{error::Error, future::Future, net::SocketAddr, sync::Arc, time::Durati
 use aiwattcoach::{
     adapters::{
         activity_file_identity::ActivityFileIdentityExtractor,
-        google_oauth::client::GoogleOAuthClient,
-        intervals_icu::{client::IntervalsIcuClient, settings_adapter::SettingsIntervalsProvider},
+        google_oauth::{
+            adapter::GoogleOAuthAdapter, client::GoogleOAuthClient,
+            dev_client::DevGoogleOAuthClient,
+        },
+        intervals_icu::{
+            adapter::IntervalsApiAdapter,
+            client::IntervalsIcuClient,
+            dev_client::DevIntervalsClient,
+            dev_settings_adapter::DevIntervalsSettingsProvider,
+            settings_adapter::{IntervalsSettingsAdapter, SettingsIntervalsProvider},
+        },
         mongo::{
             activities::MongoActivityRepository,
             client::{create_client, ensure_database_exists, verify_connection},
@@ -36,6 +45,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         server,
         mongo,
         auth,
+        dev_intervals_enabled,
         client_log_ingestion_enabled,
     } = settings;
     let mut telemetry = setup_telemetry(&app_name)?;
@@ -52,15 +62,24 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     user_repository.ensure_indexes().await?;
     session_repository.ensure_indexes().await?;
     login_state_repository.ensure_indexes().await?;
-    let google_oauth_client = GoogleOAuthClient::new(
-        reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(15))
-            .build()?,
-        auth.google.client_id,
-        auth.google.client_secret,
-        auth.google.redirect_url,
-    );
+    let google_oauth_client = if auth.dev.enabled {
+        GoogleOAuthAdapter::Dev(DevGoogleOAuthClient::new(
+            auth.dev.google_subject,
+            auth.dev.email,
+            auth.dev.display_name,
+            auth.dev.avatar_url,
+        ))
+    } else {
+        GoogleOAuthAdapter::Google(GoogleOAuthClient::new(
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(15))
+                .build()?,
+            auth.google.client_id,
+            auth.google.client_secret,
+            auth.google.redirect_url,
+        ))
+    };
     validate_session_ttl_against_current_time(
         SystemClock.now_epoch_seconds(),
         auth.session.ttl_hours,
@@ -81,8 +100,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
-    let intervals_api_client = IntervalsIcuClient::with_timeouts(10, 30)?;
-    let intervals_settings_provider = SettingsIntervalsProvider::new(settings_service.clone());
+    let intervals_api_client = if dev_intervals_enabled {
+        IntervalsApiAdapter::Dev(DevIntervalsClient)
+    } else {
+        IntervalsApiAdapter::Live(IntervalsIcuClient::with_timeouts(10, 30)?)
+    };
+    let intervals_settings_provider = if dev_intervals_enabled {
+        IntervalsSettingsAdapter::Dev(DevIntervalsSettingsProvider)
+    } else {
+        IntervalsSettingsAdapter::Live(SettingsIntervalsProvider::new(settings_service.clone()))
+    };
     let activity_identity_extractor = ActivityFileIdentityExtractor;
     let intervals_service = Arc::new(IntervalsService::new(
         intervals_api_client,
@@ -91,7 +118,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         activity_identity_extractor,
     ));
 
-    let intervals_connection_tester = IntervalsIcuClient::with_timeouts(5, 15)?;
+    let intervals_connection_tester = if dev_intervals_enabled {
+        IntervalsApiAdapter::Dev(DevIntervalsClient)
+    } else {
+        IntervalsApiAdapter::Live(IntervalsIcuClient::with_timeouts(5, 15)?)
+    };
 
     let app = build_app(
         AppState::new(app_name, mongo_database, mongo_client)

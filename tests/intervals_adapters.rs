@@ -302,6 +302,53 @@ async fn intervals_client_lists_activities_and_normalizes_metrics() {
 }
 
 #[tokio::test]
+async fn intervals_client_accepts_numeric_zone_ids_in_activity_list_response() {
+    let server = TestIntervalsServer::start().await;
+    server.set_list_activities_raw(serde_json::json!([
+        ResponseActivity::sample("i101", "Tempo Ride"),
+        {
+            "id": "bad-1",
+            "start_date_local": "2025-01-13T08:00:00",
+            "start_date": "2025-01-13T07:00:00Z",
+            "type": "Ride",
+            "name": "Broken Ride",
+            "stream_types": null,
+            "tags": null,
+            "pace_zone_times": null,
+            "gap_zone_times": null,
+            "interval_summary": null,
+            "skyline_chart_bytes": null,
+            "icu_hr_zone_times": null,
+            "icu_intervals": null,
+            "icu_groups": null,
+            "icu_zone_times": [
+                { "id": 1, "secs": 120 }
+            ]
+        }
+    ]));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let activities = client
+        .list_activities(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            &DateRange {
+                oldest: "2025-01-01".to_string(),
+                newest: "2025-01-31".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(activities.len(), 2);
+    assert_eq!(activities[0].id, "i101");
+    assert_eq!(activities[1].id, "bad-1");
+    assert_eq!(activities[1].details.power_zone_times[0].zone_id, "1");
+}
+
+#[tokio::test]
 async fn intervals_client_gets_activity_with_intervals_and_streams() {
     let server = TestIntervalsServer::start().await;
     server.set_activity(ResponseActivity::sample("i202", "Loaded Ride"));
@@ -770,6 +817,7 @@ struct ServerState {
     requests: Arc<Mutex<Vec<CapturedRequest>>>,
     list_events: Arc<Mutex<Vec<ResponseEvent>>>,
     list_activities: Arc<Mutex<Vec<ResponseActivity>>>,
+    list_activities_raw: Arc<Mutex<Option<serde_json::Value>>>,
     created_event: Arc<Mutex<Option<ResponseEvent>>>,
     updated_event: Arc<Mutex<Option<ResponseEvent>>>,
     activity: Arc<Mutex<Option<ResponseActivity>>>,
@@ -860,6 +908,10 @@ impl TestIntervalsServer {
 
     fn set_activity(&self, activity: ResponseActivity) {
         *self.state.activity.lock().unwrap() = Some(activity);
+    }
+
+    fn set_list_activities_raw(&self, payload: serde_json::Value) {
+        *self.state.list_activities_raw.lock().unwrap() = Some(payload);
     }
 
     fn set_updated_activity(&self, activity: ResponseActivity) {
@@ -1081,7 +1133,12 @@ async fn list_activities_handler(
         headers,
         None,
     );
-    Json(state.list_activities.lock().unwrap().clone())
+
+    if let Some(payload) = state.list_activities_raw.lock().unwrap().clone() {
+        return Json(payload).into_response();
+    }
+
+    Json(state.list_activities.lock().unwrap().clone()).into_response()
 }
 
 async fn get_activity_handler(
