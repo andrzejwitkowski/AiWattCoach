@@ -234,3 +234,151 @@ impl ActivityRepositoryPort for MongoActivityRepository {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use mongodb::bson::{from_document, to_document};
+
+    use super::ActivityDocument;
+    use crate::domain::intervals::{
+        Activity, ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
+        ActivityStream,
+    };
+
+    #[test]
+    fn activity_document_bson_round_trip_preserves_enriched_completed_fields() {
+        let payload = enriched_activity();
+        let document = ActivityDocument {
+            user_id: "user-1".to_string(),
+            activity_id: payload.id.clone(),
+            start_date_local: payload.start_date_local.clone(),
+            external_id_normalized: Some("external-i78".to_string()),
+            fallback_identity_v1: Some("v1:2026-03-22T08:00|ride|3720|40200|false".to_string()),
+            payload: payload.clone(),
+        };
+
+        let bson = to_document(&document).expect("serialize activity document");
+        let restored: ActivityDocument =
+            from_document(bson).expect("deserialize activity document");
+
+        assert_eq!(restored.user_id, document.user_id);
+        assert_eq!(restored.activity_id, document.activity_id);
+        assert_eq!(restored.start_date_local, document.start_date_local);
+        assert_eq!(
+            restored.external_id_normalized,
+            document.external_id_normalized
+        );
+        assert_eq!(restored.fallback_identity_v1, document.fallback_identity_v1);
+        assert_eq!(restored.payload.metrics, payload.metrics);
+        assert_eq!(
+            restored.payload.details.intervals,
+            payload.details.intervals
+        );
+        assert_eq!(
+            restored.payload.details.interval_groups,
+            payload.details.interval_groups
+        );
+        assert_eq!(restored.payload.details.streams, payload.details.streams);
+        assert_eq!(restored.payload, payload);
+    }
+
+    fn enriched_activity() -> Activity {
+        Activity {
+            id: "i78".to_string(),
+            athlete_id: Some("athlete-42".to_string()),
+            start_date_local: "2026-03-22T08:00:00".to_string(),
+            start_date: Some("2026-03-22T07:00:00Z".to_string()),
+            name: Some("Completed Workout".to_string()),
+            description: Some("structured ride".to_string()),
+            activity_type: Some("Ride".to_string()),
+            source: Some("STRAVA".to_string()),
+            external_id: Some("external-i78".to_string()),
+            device_name: Some("Garmin Edge".to_string()),
+            distance_meters: Some(40200.0),
+            moving_time_seconds: Some(3600),
+            elapsed_time_seconds: Some(3720),
+            total_elevation_gain_meters: Some(510.0),
+            total_elevation_loss_meters: Some(505.0),
+            average_speed_mps: Some(11.1),
+            max_speed_mps: Some(16.4),
+            average_heart_rate_bpm: Some(148),
+            max_heart_rate_bpm: Some(175),
+            average_cadence_rpm: Some(89.5),
+            trainer: false,
+            commute: false,
+            race: false,
+            has_heart_rate: true,
+            stream_types: vec!["watts".to_string(), "heartrate".to_string()],
+            tags: vec!["tempo".to_string()],
+            metrics: ActivityMetrics {
+                training_stress_score: Some(72),
+                normalized_power_watts: Some(238),
+                intensity_factor: Some(0.84),
+                efficiency_factor: Some(1.28),
+                variability_index: Some(1.04),
+                average_power_watts: Some(228),
+                ftp_watts: Some(283),
+                total_work_joules: Some(820),
+                calories: Some(690),
+                trimp: Some(92.0),
+                power_load: Some(72),
+                heart_rate_load: Some(66),
+                pace_load: None,
+                strain_score: Some(13.7),
+            },
+            details: ActivityDetails {
+                intervals: vec![ActivityInterval {
+                    id: Some(1),
+                    label: Some("Threshold".to_string()),
+                    interval_type: Some("WORK".to_string()),
+                    group_id: Some("set-1".to_string()),
+                    start_index: Some(10),
+                    end_index: Some(20),
+                    start_time_seconds: Some(300),
+                    end_time_seconds: Some(600),
+                    moving_time_seconds: Some(300),
+                    elapsed_time_seconds: Some(300),
+                    distance_meters: Some(2500.0),
+                    average_power_watts: Some(285),
+                    normalized_power_watts: Some(290),
+                    training_stress_score: Some(18.5),
+                    average_heart_rate_bpm: Some(168),
+                    average_cadence_rpm: Some(94.0),
+                    average_speed_mps: Some(8.2),
+                    average_stride_meters: None,
+                    zone: Some(4),
+                }],
+                interval_groups: vec![ActivityIntervalGroup {
+                    id: "set-1".to_string(),
+                    count: Some(3),
+                    start_index: Some(10),
+                    moving_time_seconds: Some(900),
+                    elapsed_time_seconds: Some(900),
+                    distance_meters: Some(7500.0),
+                    average_power_watts: Some(280),
+                    normalized_power_watts: Some(286),
+                    training_stress_score: Some(55.5),
+                    average_heart_rate_bpm: Some(165),
+                    average_cadence_rpm: Some(92.0),
+                    average_speed_mps: Some(8.0),
+                    average_stride_meters: None,
+                }],
+                streams: vec![ActivityStream {
+                    stream_type: "watts".to_string(),
+                    name: Some("Power".to_string()),
+                    data: Some(serde_json::json!([120, 250, 310])),
+                    data2: None,
+                    value_type_is_array: false,
+                    custom: false,
+                    all_null: false,
+                }],
+                interval_summary: vec!["tempo".to_string()],
+                skyline_chart: vec!["z2".to_string(), "z4".to_string()],
+                power_zone_times: Vec::new(),
+                heart_rate_zone_times: vec![120, 240],
+                pace_zone_times: vec![60],
+                gap_zone_times: vec![90],
+            },
+        }
+    }
+}

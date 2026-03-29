@@ -39,7 +39,30 @@ describe('intervals api', () => {
               color: 'blue',
               eventDefinition: {
                 rawWorkoutDoc: '- 10min 55%',
-                intervals: [{ definition: '- 10min 55%' }]
+                intervals: [{
+                  definition: '- 10min 55%',
+                  repeatCount: 1,
+                  durationSeconds: 600,
+                  targetPercentFtp: 55,
+                  zoneId: 1
+                }],
+                segments: [{
+                  order: 0,
+                  label: '10min 55%',
+                  durationSeconds: 600,
+                  startOffsetSeconds: 0,
+                  endOffsetSeconds: 600,
+                  targetPercentFtp: 55,
+                  zoneId: 1
+                }],
+                summary: {
+                  totalSegments: 1,
+                  totalDurationSeconds: 600,
+                  estimatedNormalizedPowerWatts: null,
+                  estimatedAveragePowerWatts: null,
+                  estimatedIntensityFactor: 0.55,
+                  estimatedTrainingStressScore: 5
+                }
               },
               actualWorkout: null
             }
@@ -71,6 +94,8 @@ describe('intervals api', () => {
       }
     );
     expect(result[0].eventDefinition.intervals[0].definition).toBe('- 10min 55%');
+    expect(result[0].eventDefinition.segments[0].durationSeconds).toBe(600);
+    expect(result[0].eventDefinition.summary.estimatedIntensityFactor).toBe(0.55);
   });
 
   it('creates, updates, loads and deletes interval events', async () => {
@@ -88,7 +113,9 @@ describe('intervals api', () => {
             color: 'green',
             eventDefinition: {
               rawWorkoutDoc: '- 2x20min 90%',
-              intervals: [{ definition: '- 2x20min 90%' }]
+              intervals: [{ definition: '- 2x20min 90%', repeatCount: 2, durationSeconds: 1200, targetPercentFtp: 90, zoneId: 3 }],
+              segments: [],
+              summary: { totalSegments: 2, totalDurationSeconds: 2400, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: 0.9, estimatedTrainingStressScore: 54 }
             },
             actualWorkout: null
           }),
@@ -110,7 +137,9 @@ describe('intervals api', () => {
             color: null,
             eventDefinition: {
               rawWorkoutDoc: '- 3x8min 100%',
-              intervals: [{ definition: '- 3x8min 100%' }]
+              intervals: [{ definition: '- 3x8min 100%', repeatCount: 3, durationSeconds: 480, targetPercentFtp: 100, zoneId: 4 }],
+              segments: [],
+              summary: { totalSegments: 3, totalDurationSeconds: 1440, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: 1, estimatedTrainingStressScore: 40 }
             },
             actualWorkout: null
           }),
@@ -132,7 +161,9 @@ describe('intervals api', () => {
             color: null,
             eventDefinition: {
               rawWorkoutDoc: '- 3x8min 100%',
-              intervals: [{ definition: '- 3x8min 100%' }]
+              intervals: [{ definition: '- 3x8min 100%', repeatCount: 3, durationSeconds: 480, targetPercentFtp: 100, zoneId: 4 }],
+              segments: [],
+              summary: { totalSegments: 3, totalDurationSeconds: 1440, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: 1, estimatedTrainingStressScore: 40 }
             },
             actualWorkout: null
           }),
@@ -156,11 +187,26 @@ describe('intervals api', () => {
             description: null,
             indoor: false,
             color: null,
-            eventDefinition: { intervals: [] },
+            eventDefinition: {
+              rawWorkoutDoc: '- 3x8min 100%',
+              intervals: [],
+              segments: [],
+              summary: { totalSegments: 0, totalDurationSeconds: 0, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: null, estimatedTrainingStressScore: null }
+            },
             actualWorkout: {
+              activityId: 'a2',
+              activityName: 'Updated Ride',
+              startDateLocal: '2026-03-25T08:00:00',
               powerValues: [],
               cadenceValues: [],
-              heartRateValues: []
+              heartRateValues: [],
+              speedValues: [],
+              averagePowerWatts: 220,
+              normalizedPowerWatts: 235,
+              trainingStressScore: 70,
+              intensityFactor: 0.83,
+              complianceScore: 0.91,
+              matchedIntervals: []
             }
           }),
           {

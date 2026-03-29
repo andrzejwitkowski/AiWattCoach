@@ -189,6 +189,14 @@ pub struct ActivityStreamResponse {
     pub all_null: bool,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ActivityIntervalsResponse {
+    #[serde(default)]
+    pub icu_intervals: Vec<ActivityIntervalResponse>,
+    #[serde(default)]
+    pub icu_groups: Vec<ActivityIntervalGroupResponse>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct UploadResponse {
     pub activities: Option<Vec<ActivityIdResponse>>,

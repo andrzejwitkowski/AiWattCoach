@@ -7,10 +7,11 @@ use std::{
 
 use aiwattcoach::domain::intervals::{
     Activity, ActivityDetails, ActivityFallbackIdentity, ActivityFileIdentityExtractorPort,
-    ActivityMetrics, ActivityRepositoryPort, CreateEvent, DateRange, Event, EventCategory,
-    IntervalsApiPort, IntervalsCredentials, IntervalsError, IntervalsService,
-    IntervalsSettingsPort, IntervalsUseCases, NoopActivityFileIdentityExtractor,
-    NoopActivityRepository, UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
+    ActivityInterval, ActivityIntervalGroup, ActivityMetrics, ActivityRepositoryPort,
+    ActivityStream, CreateEvent, DateRange, Event, EventCategory, IntervalsApiPort,
+    IntervalsCredentials, IntervalsError, IntervalsService, IntervalsSettingsPort,
+    IntervalsUseCases, NoopActivityFileIdentityExtractor, NoopActivityRepository, UpdateActivity,
+    UpdateEvent, UploadActivity, UploadedActivities,
 };
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -557,6 +558,78 @@ async fn upload_activity_returns_cached_duplicate_without_credentials() {
     assert_eq!(result.activity_ids, vec![existing.id.clone()]);
     assert_eq!(result.activities, vec![existing]);
     assert!(api_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn get_activity_persists_enriched_completed_activity() {
+    let mut activity = sample_activity("i78", "Completed Workout");
+    activity.details.intervals = vec![ActivityInterval {
+        id: Some(1),
+        label: Some("Threshold".to_string()),
+        interval_type: Some("WORK".to_string()),
+        group_id: Some("set-1".to_string()),
+        start_index: Some(10),
+        end_index: Some(20),
+        start_time_seconds: Some(300),
+        end_time_seconds: Some(600),
+        moving_time_seconds: Some(300),
+        elapsed_time_seconds: Some(300),
+        distance_meters: Some(2500.0),
+        average_power_watts: Some(285),
+        normalized_power_watts: Some(290),
+        training_stress_score: Some(18.5),
+        average_heart_rate_bpm: Some(168),
+        average_cadence_rpm: Some(94.0),
+        average_speed_mps: Some(8.2),
+        average_stride_meters: None,
+        zone: Some(4),
+    }];
+    activity.details.interval_groups = vec![ActivityIntervalGroup {
+        id: "set-1".to_string(),
+        count: Some(3),
+        start_index: Some(10),
+        moving_time_seconds: Some(900),
+        elapsed_time_seconds: Some(900),
+        distance_meters: Some(7500.0),
+        average_power_watts: Some(280),
+        normalized_power_watts: Some(286),
+        training_stress_score: Some(55.5),
+        average_heart_rate_bpm: Some(165),
+        average_cadence_rpm: Some(92.0),
+        average_speed_mps: Some(8.0),
+        average_stride_meters: None,
+    }];
+    activity.details.streams = vec![ActivityStream {
+        stream_type: "watts".to_string(),
+        name: Some("Power".to_string()),
+        data: Some(serde_json::json!([120, 250, 310])),
+        data2: None,
+        value_type_is_array: false,
+        custom: false,
+        all_null: false,
+    }];
+    let api = FakeIntervalsApi::with_get_activity(activity.clone());
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::default();
+    let stored = repository.stored.clone();
+    let service =
+        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+
+    let fetched = service.get_activity("user-1", "i78").await.unwrap();
+
+    let persisted = stored
+        .lock()
+        .unwrap()
+        .get("user-1")
+        .and_then(|activities| activities.iter().find(|candidate| candidate.id == "i78"))
+        .cloned()
+        .expect("persisted activity");
+
+    assert_eq!(fetched, activity);
+    assert_eq!(persisted, activity);
+    assert_eq!(persisted.details.intervals.len(), 1);
+    assert_eq!(persisted.details.interval_groups.len(), 1);
+    assert_eq!(persisted.details.streams.len(), 1);
 }
 
 #[tokio::test]

@@ -14,8 +14,9 @@ use tracing::Level;
 use crate::{
     config::AppState,
     domain::intervals::{
-        Activity, ActivityStream, CreateEvent, DateRange, Event, EventCategory, EventFileUpload,
-        IntervalsError, UpdateActivity, UpdateEvent, UploadActivity,
+        parse_workout_doc, Activity, ActivityStream, CreateEvent, DateRange, EnrichedEvent, Event,
+        EventCategory, EventFileUpload, IntervalsError, MatchedWorkoutInterval, ParsedWorkoutDoc,
+        UpdateActivity, UpdateEvent, UploadActivity,
     },
 };
 
@@ -61,21 +62,115 @@ pub struct EventDefinitionDto {
     #[serde(rename = "rawWorkoutDoc")]
     pub raw_workout_doc: Option<String>,
     pub intervals: Vec<IntervalDefinitionDto>,
+    pub segments: Vec<WorkoutSegmentDto>,
+    pub summary: WorkoutSummaryDto,
 }
 
 #[derive(Serialize)]
 pub struct IntervalDefinitionDto {
     pub definition: String,
+    #[serde(rename = "repeatCount")]
+    pub repeat_count: usize,
+    #[serde(rename = "durationSeconds")]
+    pub duration_seconds: Option<i32>,
+    #[serde(rename = "targetPercentFtp")]
+    pub target_percent_ftp: Option<f64>,
+    #[serde(rename = "zoneId")]
+    pub zone_id: Option<i32>,
+}
+
+#[derive(Serialize)]
+pub struct WorkoutSegmentDto {
+    pub order: usize,
+    pub label: String,
+    #[serde(rename = "durationSeconds")]
+    pub duration_seconds: i32,
+    #[serde(rename = "startOffsetSeconds")]
+    pub start_offset_seconds: i32,
+    #[serde(rename = "endOffsetSeconds")]
+    pub end_offset_seconds: i32,
+    #[serde(rename = "targetPercentFtp")]
+    pub target_percent_ftp: Option<f64>,
+    #[serde(rename = "zoneId")]
+    pub zone_id: Option<i32>,
+}
+
+#[derive(Serialize)]
+pub struct WorkoutSummaryDto {
+    #[serde(rename = "totalSegments")]
+    pub total_segments: usize,
+    #[serde(rename = "totalDurationSeconds")]
+    pub total_duration_seconds: i32,
+    #[serde(rename = "estimatedNormalizedPowerWatts")]
+    pub estimated_normalized_power_watts: Option<i32>,
+    #[serde(rename = "estimatedAveragePowerWatts")]
+    pub estimated_average_power_watts: Option<i32>,
+    #[serde(rename = "estimatedIntensityFactor")]
+    pub estimated_intensity_factor: Option<f64>,
+    #[serde(rename = "estimatedTrainingStressScore")]
+    pub estimated_training_stress_score: Option<f64>,
 }
 
 #[derive(Serialize)]
 pub struct ActualWorkoutDto {
+    #[serde(rename = "activityId")]
+    pub activity_id: String,
+    #[serde(rename = "activityName")]
+    pub activity_name: Option<String>,
+    #[serde(rename = "startDateLocal")]
+    pub start_date_local: String,
     #[serde(rename = "powerValues")]
     pub power_values: Vec<i32>,
     #[serde(rename = "cadenceValues")]
     pub cadence_values: Vec<i32>,
     #[serde(rename = "heartRateValues")]
     pub heart_rate_values: Vec<i32>,
+    #[serde(rename = "speedValues")]
+    pub speed_values: Vec<f64>,
+    #[serde(rename = "averagePowerWatts")]
+    pub average_power_watts: Option<i32>,
+    #[serde(rename = "normalizedPowerWatts")]
+    pub normalized_power_watts: Option<i32>,
+    #[serde(rename = "trainingStressScore")]
+    pub training_stress_score: Option<i32>,
+    #[serde(rename = "intensityFactor")]
+    pub intensity_factor: Option<f64>,
+    #[serde(rename = "complianceScore")]
+    pub compliance_score: f64,
+    #[serde(rename = "matchedIntervals")]
+    pub matched_intervals: Vec<MatchedWorkoutIntervalDto>,
+}
+
+#[derive(Serialize)]
+pub struct MatchedWorkoutIntervalDto {
+    #[serde(rename = "plannedSegmentOrder")]
+    pub planned_segment_order: usize,
+    #[serde(rename = "plannedLabel")]
+    pub planned_label: String,
+    #[serde(rename = "plannedDurationSeconds")]
+    pub planned_duration_seconds: i32,
+    #[serde(rename = "targetPercentFtp")]
+    pub target_percent_ftp: Option<f64>,
+    #[serde(rename = "zoneId")]
+    pub zone_id: Option<i32>,
+    #[serde(rename = "actualIntervalId")]
+    pub actual_interval_id: Option<i32>,
+    #[serde(rename = "actualStartTimeSeconds")]
+    pub actual_start_time_seconds: Option<i32>,
+    #[serde(rename = "actualEndTimeSeconds")]
+    pub actual_end_time_seconds: Option<i32>,
+    #[serde(rename = "averagePowerWatts")]
+    pub average_power_watts: Option<i32>,
+    #[serde(rename = "normalizedPowerWatts")]
+    pub normalized_power_watts: Option<i32>,
+    #[serde(rename = "averageHeartRateBpm")]
+    pub average_heart_rate_bpm: Option<i32>,
+    #[serde(rename = "averageCadenceRpm")]
+    pub average_cadence_rpm: Option<f64>,
+    #[serde(rename = "averageSpeedMps")]
+    pub average_speed_mps: Option<f64>,
+    #[serde(rename = "complianceScore")]
+    pub compliance_score: f64,
 }
 
 #[derive(Deserialize)]
@@ -402,8 +497,11 @@ pub async fn get_event(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match intervals_service.get_event(&user_id, path.event_id).await {
-        Ok(event) => Json(map_event_to_dto(event)).into_response(),
+    match intervals_service
+        .get_enriched_event(&user_id, path.event_id)
+        .await
+    {
+        Ok(event) => Json(map_enriched_event_to_dto(event)).into_response(),
         Err(error) => map_intervals_error(error),
     }
 }
@@ -790,6 +888,24 @@ fn log_intervals_error(level: Level, status: StatusCode, error: &IntervalsError)
 }
 
 fn map_event_to_dto(event: Event) -> EventDto {
+    map_event_to_dto_with_parsed(event, None, None)
+}
+
+fn map_enriched_event_to_dto(enriched_event: EnrichedEvent) -> EventDto {
+    map_event_to_dto_with_parsed(
+        enriched_event.event,
+        Some(enriched_event.parsed_workout),
+        enriched_event.actual_workout.map(map_actual_workout_to_dto),
+    )
+}
+
+fn map_event_to_dto_with_parsed(
+    event: Event,
+    parsed: Option<ParsedWorkoutDoc>,
+    actual_workout: Option<ActualWorkoutDto>,
+) -> EventDto {
+    let parsed = parsed.unwrap_or_else(|| parse_workout_doc(event.workout_doc.as_deref(), None));
+
     EventDto {
         id: event.id,
         start_date_local: event.start_date_local,
@@ -800,9 +916,83 @@ fn map_event_to_dto(event: Event) -> EventDto {
         color: event.color,
         event_definition: EventDefinitionDto {
             raw_workout_doc: event.workout_doc.clone(),
-            intervals: parse_workout_doc(event.workout_doc.as_deref()),
+            intervals: parsed
+                .intervals
+                .iter()
+                .map(|interval| IntervalDefinitionDto {
+                    definition: interval.definition.clone(),
+                    repeat_count: interval.repeat_count,
+                    duration_seconds: interval.duration_seconds,
+                    target_percent_ftp: interval.target_percent_ftp,
+                    zone_id: interval.zone_id,
+                })
+                .collect(),
+            segments: parsed
+                .segments
+                .iter()
+                .map(|segment| WorkoutSegmentDto {
+                    order: segment.order,
+                    label: segment.label.clone(),
+                    duration_seconds: segment.duration_seconds,
+                    start_offset_seconds: segment.start_offset_seconds,
+                    end_offset_seconds: segment.end_offset_seconds,
+                    target_percent_ftp: segment.target_percent_ftp,
+                    zone_id: segment.zone_id,
+                })
+                .collect(),
+            summary: WorkoutSummaryDto {
+                total_segments: parsed.summary.total_segments,
+                total_duration_seconds: parsed.summary.total_duration_seconds,
+                estimated_normalized_power_watts: parsed.summary.estimated_normalized_power_watts,
+                estimated_average_power_watts: parsed.summary.estimated_average_power_watts,
+                estimated_intensity_factor: parsed.summary.estimated_intensity_factor,
+                estimated_training_stress_score: parsed.summary.estimated_training_stress_score,
+            },
         },
-        actual_workout: None,
+        actual_workout,
+    }
+}
+
+fn map_actual_workout_to_dto(
+    actual_workout: crate::domain::intervals::ActualWorkoutMatch,
+) -> ActualWorkoutDto {
+    ActualWorkoutDto {
+        activity_id: actual_workout.activity_id,
+        activity_name: actual_workout.activity_name,
+        start_date_local: actual_workout.start_date_local,
+        power_values: actual_workout.power_values,
+        cadence_values: actual_workout.cadence_values,
+        heart_rate_values: actual_workout.heart_rate_values,
+        speed_values: actual_workout.speed_values,
+        average_power_watts: actual_workout.average_power_watts,
+        normalized_power_watts: actual_workout.normalized_power_watts,
+        training_stress_score: actual_workout.training_stress_score,
+        intensity_factor: actual_workout.intensity_factor,
+        compliance_score: actual_workout.compliance_score,
+        matched_intervals: actual_workout
+            .matched_intervals
+            .into_iter()
+            .map(map_matched_interval_to_dto)
+            .collect(),
+    }
+}
+
+fn map_matched_interval_to_dto(interval: MatchedWorkoutInterval) -> MatchedWorkoutIntervalDto {
+    MatchedWorkoutIntervalDto {
+        planned_segment_order: interval.planned_segment_order,
+        planned_label: interval.planned_label,
+        planned_duration_seconds: interval.planned_duration_seconds,
+        target_percent_ftp: interval.target_percent_ftp,
+        zone_id: interval.zone_id,
+        actual_interval_id: interval.actual_interval_id,
+        actual_start_time_seconds: interval.actual_start_time_seconds,
+        actual_end_time_seconds: interval.actual_end_time_seconds,
+        average_power_watts: interval.average_power_watts,
+        normalized_power_watts: interval.normalized_power_watts,
+        average_heart_rate_bpm: interval.average_heart_rate_bpm,
+        average_cadence_rpm: interval.average_cadence_rpm,
+        average_speed_mps: interval.average_speed_mps,
+        compliance_score: interval.compliance_score,
     }
 }
 
@@ -981,18 +1171,6 @@ fn normalize_optional_upload_field(value: Option<String>) -> Option<String> {
             Some(value)
         }
     })
-}
-
-fn parse_workout_doc(workout_doc: Option<&str>) -> Vec<IntervalDefinitionDto> {
-    workout_doc
-        .unwrap_or_default()
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(|line| IntervalDefinitionDto {
-            definition: line.to_string(),
-        })
-        .collect()
 }
 
 fn parse_category(category: &str) -> Option<EventCategory> {

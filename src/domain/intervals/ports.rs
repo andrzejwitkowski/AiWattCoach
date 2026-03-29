@@ -7,8 +7,8 @@ use std::{
 
 use super::{
     normalize_external_id, Activity, ActivityDeduplicationIdentity, ActivityFallbackIdentity,
-    CreateEvent, DateRange, Event, IntervalsCredentials, IntervalsError, UpdateActivity,
-    UpdateEvent, UploadActivity, UploadedActivities,
+    ActualWorkoutMatch, CreateEvent, DateRange, Event, IntervalsCredentials, IntervalsError,
+    ParsedWorkoutDoc, UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -326,4 +326,19 @@ pub trait IntervalsSettingsPort: Clone + Send + Sync + 'static {
         &self,
         user_id: &str,
     ) -> BoxFuture<Result<IntervalsCredentials, IntervalsError>>;
+
+    fn get_cycling_ftp_watts(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<i32>, IntervalsError>> {
+        let _ = user_id;
+        Box::pin(async { Ok(None) })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EnrichedEvent {
+    pub event: Event,
+    pub parsed_workout: ParsedWorkoutDoc,
+    pub actual_workout: Option<ActualWorkoutMatch>,
 }

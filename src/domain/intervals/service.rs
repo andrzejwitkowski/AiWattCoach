@@ -1,9 +1,9 @@
 use super::{
-    normalize_external_id,
+    find_best_activity_match, normalize_external_id, parse_workout_doc,
     ports::{ActivityFileIdentityExtractorPort, BoxFuture},
-    Activity, ActivityRepositoryPort, CreateEvent, DateRange, Event, IntervalsApiPort,
-    IntervalsError, IntervalsSettingsPort, UpdateActivity, UpdateEvent, UploadActivity,
-    UploadedActivities,
+    Activity, ActivityRepositoryPort, CreateEvent, DateRange, EnrichedEvent, Event,
+    IntervalsApiPort, IntervalsError, IntervalsSettingsPort, UpdateActivity, UpdateEvent,
+    UploadActivity, UploadedActivities,
 };
 use tracing::warn;
 
@@ -42,6 +42,19 @@ pub trait IntervalsUseCases: Send + Sync {
     ) -> BoxFuture<Result<Vec<Event>, IntervalsError>>;
 
     fn get_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<Event, IntervalsError>>;
+
+    fn get_enriched_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+    ) -> BoxFuture<Result<EnrichedEvent, IntervalsError>> {
+        let _ = (user_id, event_id);
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "enriched event lookup not implemented".to_string(),
+            ))
+        })
+    }
 
     fn create_event(
         &self,
@@ -195,6 +208,81 @@ where
         Box::pin(async move {
             let credentials = service.settings.get_credentials(&user_id).await?;
             service.api.get_event(&credentials, event_id).await
+        })
+    }
+
+    fn get_enriched_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+    ) -> BoxFuture<Result<EnrichedEvent, IntervalsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let configured_ftp_watts = service.settings.get_cycling_ftp_watts(&user_id).await?;
+            let credentials = service.settings.get_credentials(&user_id).await?;
+            let event = service.api.get_event(&credentials, event_id).await?;
+            let date_key = event
+                .start_date_local
+                .split('T')
+                .next()
+                .unwrap_or(&event.start_date_local)
+                .to_string();
+            let listed_activities = service
+                .api
+                .list_activities(
+                    &credentials,
+                    &DateRange {
+                        oldest: date_key.clone(),
+                        newest: date_key,
+                    },
+                )
+                .await
+                .unwrap_or_default();
+            let effective_ftp_watts = configured_ftp_watts.or_else(|| {
+                listed_activities
+                    .iter()
+                    .find_map(|activity| activity.metrics.ftp_watts)
+            });
+            let parsed_workout =
+                parse_workout_doc(event.workout_doc.as_deref(), effective_ftp_watts);
+
+            let mut best_match =
+                find_best_activity_match(&parsed_workout, &listed_activities, effective_ftp_watts);
+
+            for listed_activity in &listed_activities {
+                let detailed_activity = match service
+                    .api
+                    .get_activity(&credentials, &listed_activity.id)
+                    .await
+                {
+                    Ok(activity) => activity,
+                    Err(_) => continue,
+                };
+
+                let candidate = match find_best_activity_match(
+                    &parsed_workout,
+                    std::slice::from_ref(&detailed_activity),
+                    effective_ftp_watts,
+                ) {
+                    Some(candidate) => candidate,
+                    None => continue,
+                };
+
+                if best_match.as_ref().is_none_or(|current| {
+                    candidate.compliance_score > current.compliance_score
+                        || (candidate.compliance_score == current.compliance_score
+                            && candidate.power_values.len() > current.power_values.len())
+                }) {
+                    best_match = Some(candidate);
+                }
+            }
+
+            Ok(EnrichedEvent {
+                event,
+                parsed_workout,
+                actual_workout: best_match,
+            })
         })
     }
 

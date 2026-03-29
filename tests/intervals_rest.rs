@@ -19,9 +19,9 @@ use aiwattcoach::{
     domain::{
         identity::{AppUser, IdentityUseCases, Role},
         intervals::{
-            Activity, ActivityDetails, ActivityMetrics, CreateEvent, DateRange, Event,
-            EventCategory, IntervalsError, IntervalsUseCases, UpdateActivity, UpdateEvent,
-            UploadActivity, UploadedActivities,
+            Activity, ActivityDetails, ActivityMetrics, ActivityStream, CreateEvent, DateRange,
+            EnrichedEvent, Event, EventCategory, IntervalsError, IntervalsUseCases, UpdateActivity,
+            UpdateEvent, UploadActivity, UploadedActivities,
         },
     },
     Settings,
@@ -246,7 +246,214 @@ async fn get_event_returns_single_event() {
             .unwrap(),
         "- 20min 95%"
     );
+    assert_eq!(
+        body.get("eventDefinition")
+            .unwrap()
+            .get("segments")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        body.get("eventDefinition")
+            .unwrap()
+            .get("summary")
+            .unwrap()
+            .get("totalDurationSeconds")
+            .unwrap()
+            .as_i64(),
+        Some(1200)
+    );
+    assert_eq!(
+        body.get("eventDefinition")
+            .unwrap()
+            .get("summary")
+            .unwrap()
+            .get("estimatedIntensityFactor")
+            .unwrap()
+            .as_f64(),
+        Some(0.95)
+    );
     assert!(body.get("actualWorkout").unwrap().is_null());
+}
+
+#[tokio::test]
+async fn get_event_includes_actual_workout_when_matching_activity_exists() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_events_and_activities(
+            vec![sample_event(
+                21,
+                "Threshold",
+                Some("- 20min 95%".to_string()),
+            )],
+            vec![sample_activity("i21", "Threshold Ride")],
+        ),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events/21")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("actualWorkout")
+            .unwrap()
+            .get("activityId")
+            .unwrap()
+            .as_str(),
+        Some("i21")
+    );
+    assert_eq!(
+        body.get("actualWorkout")
+            .unwrap()
+            .get("matchedIntervals")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn get_event_hydrates_actual_workout_from_detailed_activity_lookup() {
+    let mut listed_activity = sample_activity("i21", "Threshold Ride");
+    listed_activity.details.streams = Vec::new();
+    let mut detailed_activity = sample_activity("i21", "Threshold Ride");
+    detailed_activity.details.streams = vec![ActivityStream {
+        stream_type: "watts".to_string(),
+        name: Some("Power".to_string()),
+        data: Some(serde_json::json!([120, 240, 280, 250])),
+        data2: None,
+        value_type_is_array: false,
+        custom: false,
+        all_null: false,
+    }];
+
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_events_listed_and_detailed_activities(
+            vec![sample_event(
+                21,
+                "Threshold",
+                Some("- 20min 95%".to_string()),
+            )],
+            vec![listed_activity],
+            vec![detailed_activity],
+        ),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events/21")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("actualWorkout")
+            .unwrap()
+            .get("powerValues")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        4
+    );
+}
+
+#[tokio::test]
+async fn get_event_hydrates_actual_workout_from_detailed_activity_lookup_without_list_match() {
+    let mut listed_activity = sample_activity("i21", "Threshold Ride");
+    listed_activity.details.intervals = Vec::new();
+    listed_activity.details.streams = Vec::new();
+
+    let mut detailed_activity = sample_activity("i21", "Threshold Ride");
+    detailed_activity.details.intervals = vec![aiwattcoach::domain::intervals::ActivityInterval {
+        id: Some(7),
+        label: Some("Threshold".to_string()),
+        interval_type: Some("WORK".to_string()),
+        group_id: Some("g2".to_string()),
+        start_index: Some(100),
+        end_index: Some(1300),
+        start_time_seconds: Some(600),
+        end_time_seconds: Some(1800),
+        moving_time_seconds: Some(1200),
+        elapsed_time_seconds: Some(1200),
+        distance_meters: Some(12000.0),
+        average_power_watts: Some(271),
+        normalized_power_watts: Some(280),
+        training_stress_score: Some(35.0),
+        average_heart_rate_bpm: Some(161),
+        average_cadence_rpm: Some(89.0),
+        average_speed_mps: Some(10.1),
+        average_stride_meters: None,
+        zone: Some(4),
+    }];
+    detailed_activity.details.streams = vec![ActivityStream {
+        stream_type: "watts".to_string(),
+        name: Some("Power".to_string()),
+        data: Some(serde_json::json!([120, 240, 280, 250])),
+        data2: None,
+        value_type_is_array: false,
+        custom: false,
+        all_null: false,
+    }];
+
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_events_listed_and_detailed_activities(
+            vec![sample_event(
+                21,
+                "Threshold",
+                Some("- 20min 95%".to_string()),
+            )],
+            vec![listed_activity],
+            vec![detailed_activity],
+        ),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events/21")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("actualWorkout")
+            .unwrap()
+            .get("activityId")
+            .unwrap()
+            .as_str(),
+        Some("i21")
+    );
 }
 
 #[tokio::test]
@@ -1310,6 +1517,7 @@ async fn test_mongo_client(uri: &str) -> Client {
 struct TestIntervalsService {
     events: Arc<Mutex<Vec<Event>>>,
     activities: Arc<Mutex<Vec<Activity>>>,
+    detailed_activities: Arc<Mutex<Vec<Activity>>>,
     fit_bytes: Arc<Vec<u8>>,
     error: Option<IntervalsError>,
     uploaded_activities: Option<UploadedActivities>,
@@ -1320,6 +1528,33 @@ impl TestIntervalsService {
         Self {
             events: Arc::new(Mutex::new(events)),
             activities: Arc::new(Mutex::new(Vec::new())),
+            detailed_activities: Arc::new(Mutex::new(Vec::new())),
+            fit_bytes: Arc::new(vec![0, 1, 2]),
+            error: None,
+            uploaded_activities: None,
+        }
+    }
+
+    fn with_events_and_activities(events: Vec<Event>, activities: Vec<Activity>) -> Self {
+        Self {
+            events: Arc::new(Mutex::new(events)),
+            activities: Arc::new(Mutex::new(activities)),
+            detailed_activities: Arc::new(Mutex::new(Vec::new())),
+            fit_bytes: Arc::new(vec![0, 1, 2]),
+            error: None,
+            uploaded_activities: None,
+        }
+    }
+
+    fn with_events_listed_and_detailed_activities(
+        events: Vec<Event>,
+        listed_activities: Vec<Activity>,
+        detailed_activities: Vec<Activity>,
+    ) -> Self {
+        Self {
+            events: Arc::new(Mutex::new(events)),
+            activities: Arc::new(Mutex::new(listed_activities)),
+            detailed_activities: Arc::new(Mutex::new(detailed_activities)),
             fit_bytes: Arc::new(vec![0, 1, 2]),
             error: None,
             uploaded_activities: None,
@@ -1330,6 +1565,7 @@ impl TestIntervalsService {
         Self {
             events: Arc::new(Mutex::new(Vec::new())),
             activities: Arc::new(Mutex::new(activities)),
+            detailed_activities: Arc::new(Mutex::new(Vec::new())),
             fit_bytes: Arc::new(vec![0, 1, 2]),
             error: None,
             uploaded_activities: None,
@@ -1340,6 +1576,7 @@ impl TestIntervalsService {
         Self {
             events: Arc::new(Mutex::new(Vec::new())),
             activities: Arc::new(Mutex::new(Vec::new())),
+            detailed_activities: Arc::new(Mutex::new(Vec::new())),
             fit_bytes: Arc::new(vec![0, 1, 2]),
             error: Some(error),
             uploaded_activities: None,
@@ -1350,6 +1587,7 @@ impl TestIntervalsService {
         Self {
             events: Arc::new(Mutex::new(Vec::new())),
             activities: Arc::new(Mutex::new(Vec::new())),
+            detailed_activities: Arc::new(Mutex::new(Vec::new())),
             fit_bytes: Arc::new(bytes),
             error: None,
             uploaded_activities: None,
@@ -1360,6 +1598,7 @@ impl TestIntervalsService {
         Self {
             events: Arc::new(Mutex::new(Vec::new())),
             activities: Arc::new(Mutex::new(uploaded_activities.activities.clone())),
+            detailed_activities: Arc::new(Mutex::new(Vec::new())),
             fit_bytes: Arc::new(vec![0, 1, 2]),
             error: None,
             uploaded_activities: Some(uploaded_activities),
@@ -1394,6 +1633,72 @@ impl IntervalsUseCases for TestIntervalsService {
                 .into_iter()
                 .find(|event| event.id == event_id)
                 .ok_or(IntervalsError::NotFound)
+        })
+    }
+
+    fn get_enriched_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+    ) -> BoxFuture<Result<EnrichedEvent, IntervalsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let event = service.get_event(&user_id, event_id).await?;
+            let date_key = event.start_date_local.clone();
+            let listed_activities = service
+                .list_activities(
+                    &user_id,
+                    &DateRange {
+                        oldest: date_key.clone(),
+                        newest: date_key,
+                    },
+                )
+                .await?;
+            let effective_ftp_watts = listed_activities
+                .iter()
+                .find_map(|activity| activity.metrics.ftp_watts);
+            let parsed_workout = aiwattcoach::domain::intervals::parse_workout_doc(
+                event.workout_doc.as_deref(),
+                effective_ftp_watts,
+            );
+
+            let mut best_match = aiwattcoach::domain::intervals::find_best_activity_match(
+                &parsed_workout,
+                &listed_activities,
+                effective_ftp_watts,
+            );
+
+            for listed_activity in &listed_activities {
+                let detailed_activity =
+                    match service.get_activity(&user_id, &listed_activity.id).await {
+                        Ok(activity) => activity,
+                        Err(_) => continue,
+                    };
+
+                let candidate = match aiwattcoach::domain::intervals::find_best_activity_match(
+                    &parsed_workout,
+                    std::slice::from_ref(&detailed_activity),
+                    effective_ftp_watts,
+                ) {
+                    Some(candidate) => candidate,
+                    None => continue,
+                };
+
+                if best_match.as_ref().is_none_or(|current| {
+                    candidate.compliance_score > current.compliance_score
+                        || (candidate.compliance_score == current.compliance_score
+                            && candidate.power_values.len() > current.power_values.len())
+                }) {
+                    best_match = Some(candidate);
+                }
+            }
+
+            Ok(EnrichedEvent {
+                event,
+                parsed_workout,
+                actual_workout: best_match,
+            })
         })
     }
 
@@ -1521,10 +1826,17 @@ impl IntervalsUseCases for TestIntervalsService {
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let error = self.error.clone();
         let activities = self.activities.lock().unwrap().clone();
+        let detailed_activities = self.detailed_activities.lock().unwrap().clone();
         let activity_id = activity_id.to_string();
         Box::pin(async move {
             if let Some(error) = error {
                 return Err(error);
+            }
+            if let Some(activity) = detailed_activities
+                .into_iter()
+                .find(|activity| activity.id == activity_id)
+            {
+                return Ok(activity);
             }
             activities
                 .into_iter()
@@ -1787,6 +2099,27 @@ impl IntervalsUseCases for ScopedIntervalsService {
                 .into_iter()
                 .find(|event| event.id == event_id)
                 .ok_or(IntervalsError::NotFound)
+        })
+    }
+
+    fn get_enriched_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+    ) -> BoxFuture<Result<EnrichedEvent, IntervalsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let event = service.get_event(&user_id, event_id).await?;
+            let parsed_workout = aiwattcoach::domain::intervals::parse_workout_doc(
+                event.workout_doc.as_deref(),
+                None,
+            );
+            Ok(EnrichedEvent {
+                event,
+                parsed_workout,
+                actual_workout: None,
+            })
         })
     }
 

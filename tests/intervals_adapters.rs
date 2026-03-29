@@ -352,6 +352,7 @@ async fn intervals_client_accepts_numeric_zone_ids_in_activity_list_response() {
 async fn intervals_client_gets_activity_with_intervals_and_streams() {
     let server = TestIntervalsServer::start().await;
     server.set_activity(ResponseActivity::sample("i202", "Loaded Ride"));
+    server.set_activity_intervals(ResponseActivityIntervals::sample());
     server.set_streams(vec![ResponseActivityStream::sample_watts()]);
     let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
 
@@ -373,19 +374,94 @@ async fn intervals_client_gets_activity_with_intervals_and_streams() {
 
     let requests = server.requests();
     assert_eq!(requests[0].path, "/api/v1/activity/i202");
-    assert_eq!(requests[0].query.as_deref(), Some("intervals=true"));
-    assert_eq!(requests[1].path, "/api/v1/activity/i202/streams");
-    assert_eq!(requests[1].query.as_deref(), Some("types=watts"));
+    assert_eq!(requests[0].query, None);
+    assert_eq!(requests[1].path, "/api/v1/activity/i202/intervals");
+    assert_eq!(requests[1].query, None);
+    assert_eq!(requests[2].path, "/api/v1/activity/i202/streams");
+    assert!(requests[2]
+        .query
+        .as_deref()
+        .is_some_and(|query| query.contains("types=watts")));
+    assert!(requests[2]
+        .query
+        .as_deref()
+        .is_some_and(|query| query.contains("includeDefaults=true")));
 }
 
 #[tokio::test]
-async fn intervals_client_propagates_stream_fetch_failures() {
+async fn intervals_client_does_not_leak_base_intervals_when_dedicated_interval_fetch_fails() {
     let server = TestIntervalsServer::start().await;
-    server.set_activity(ResponseActivity::sample("i202", "Loaded Ride"));
-    server.set_streams_status(StatusCode::TOO_MANY_REQUESTS);
+    server.set_activity(ResponseActivity::sample("i250", "Loaded Ride"));
+    server.set_activity_intervals_status(StatusCode::TOO_MANY_REQUESTS);
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
     let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
 
-    let result = client
+    let activity = client
+        .get_activity(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            "i250",
+        )
+        .await
+        .unwrap();
+
+    assert!(activity.details.intervals.is_empty());
+    assert!(activity.details.interval_groups.is_empty());
+    assert_eq!(activity.details.streams.len(), 1);
+}
+
+#[tokio::test]
+async fn completed_activity_detail_enrichment_merges_sparse_base_with_intervals_and_streams() {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sparse_strava_stub("i303", "Morning Ride"));
+    server.set_activity_intervals(ResponseActivityIntervals::sample());
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let activity = client
+        .get_activity(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            "i303",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(activity.id, "i303");
+    assert_eq!(activity.details.intervals.len(), 1);
+    assert_eq!(activity.details.interval_groups.len(), 1);
+    assert_eq!(activity.details.streams.len(), 1);
+    assert_eq!(activity.stream_types, Vec::<String>::new());
+
+    let requests = server.requests();
+    assert_eq!(requests[0].path, "/api/v1/activity/i303");
+    assert_eq!(requests[0].query, None);
+    assert_eq!(requests[1].path, "/api/v1/activity/i303/intervals");
+    assert_eq!(requests[1].query, None);
+    assert_eq!(requests[2].path, "/api/v1/activity/i303/streams");
+    assert!(requests[2]
+        .query
+        .as_deref()
+        .is_some_and(|query| query.contains("includeDefaults=true")));
+    assert!(requests[2]
+        .query
+        .as_deref()
+        .is_some_and(|query| !query.contains("types=")));
+}
+
+#[tokio::test]
+async fn completed_activity_partial_enrichment_returns_base_activity_when_intervals_fail() {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sparse_strava_stub("i202", "Loaded Ride"));
+    server.set_activity_intervals_status(StatusCode::TOO_MANY_REQUESTS);
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let activity = client
         .get_activity(
             &IntervalsCredentials {
                 api_key: "secret-key".to_string(),
@@ -395,7 +471,88 @@ async fn intervals_client_propagates_stream_fetch_failures() {
         )
         .await;
 
-    assert!(matches!(result, Err(IntervalsError::ApiError(_))));
+    let activity = activity.expect("base activity fetch should fail open when intervals fail");
+
+    assert_eq!(activity.id, "i202");
+    assert!(activity.details.intervals.is_empty());
+    assert!(activity.details.interval_groups.is_empty());
+    assert_eq!(activity.details.streams.len(), 1);
+}
+
+#[tokio::test]
+async fn completed_activity_partial_enrichment_returns_base_activity_when_streams_fail() {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sparse_strava_stub("i203", "Loaded Ride"));
+    server.set_activity_intervals(ResponseActivityIntervals::sample());
+    server.set_streams_status(StatusCode::TOO_MANY_REQUESTS);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let activity = client
+        .get_activity(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            "i203",
+        )
+        .await;
+
+    let activity = activity.expect("base activity fetch should fail open when streams fail");
+
+    assert_eq!(activity.id, "i203");
+    assert_eq!(activity.details.intervals.len(), 1);
+    assert_eq!(activity.details.interval_groups.len(), 1);
+    assert!(activity.details.streams.is_empty());
+}
+
+#[tokio::test]
+async fn completed_activity_partial_enrichment_preserves_inline_intervals_when_dedicated_intervals_payload_is_malformed(
+) {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sample("i204", "Loaded Ride").with_inline_intervals());
+    server.set_activity_intervals_raw(serde_json::json!({ "icu_intervals": "bad-payload" }));
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let activity = client
+        .get_activity(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            "i204",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(activity.details.intervals.len(), 1);
+    assert_eq!(activity.details.interval_groups.len(), 1);
+    assert_eq!(activity.details.streams.len(), 1);
+}
+
+#[tokio::test]
+async fn completed_activity_partial_enrichment_preserves_streams_when_streams_payload_is_malformed()
+{
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sparse_strava_stub("i205", "Loaded Ride"));
+    server.set_activity_intervals(ResponseActivityIntervals::sample());
+    server.set_streams_raw(serde_json::json!({ "type": "watts" }));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let activity = client
+        .get_activity(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            "i205",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(activity.details.intervals.len(), 1);
+    assert_eq!(activity.details.interval_groups.len(), 1);
+    assert!(activity.details.streams.is_empty());
 }
 
 #[tokio::test]
@@ -442,7 +599,80 @@ async fn intervals_client_uploads_activity_and_fetches_uploaded_details() {
         .as_ref()
         .is_some_and(|body| body.windows(4).any(|w| w == [0, 159, 146, 150])));
     assert_eq!(requests[1].path, "/api/v1/activity/i303");
-    assert_eq!(requests[2].path, "/api/v1/activity/i303/streams");
+    assert_eq!(requests[2].path, "/api/v1/activity/i303/intervals");
+    assert_eq!(requests[3].path, "/api/v1/activity/i303/streams");
+}
+
+#[tokio::test]
+async fn upload_activity_returns_base_activity_when_dedicated_intervals_fail() {
+    let server = TestIntervalsServer::start().await;
+    server.set_upload_ids(vec!["i350".to_string()]);
+    server.set_activity(ResponseActivity::sample("i350", "Uploaded Ride").with_inline_intervals());
+    server.set_activity_intervals_status(StatusCode::TOO_MANY_REQUESTS);
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+    let credentials = IntervalsCredentials {
+        api_key: "secret-key".to_string(),
+        athlete_id: "athlete-7".to_string(),
+    };
+
+    let result = client
+        .upload_activity(
+            &credentials,
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Uploaded Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: None,
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result.activities.len(), 1);
+    assert_eq!(result.activities[0].details.intervals.len(), 1);
+    assert_eq!(result.activities[0].details.interval_groups.len(), 1);
+    assert_eq!(result.activities[0].details.streams.len(), 1);
+}
+
+#[tokio::test]
+async fn update_activity_returns_base_activity_when_dedicated_intervals_fail() {
+    let server = TestIntervalsServer::start().await;
+    server.set_updated_activity(
+        ResponseActivity::sample("i450", "Updated Ride").with_inline_intervals(),
+    );
+    server.set_activity(ResponseActivity::sample("i450", "Updated Ride").with_inline_intervals());
+    server.set_activity_intervals_status(StatusCode::TOO_MANY_REQUESTS);
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+    let credentials = IntervalsCredentials {
+        api_key: "secret-key".to_string(),
+        athlete_id: "athlete-7".to_string(),
+    };
+
+    let updated = client
+        .update_activity(
+            &credentials,
+            "i450",
+            UpdateActivity {
+                name: Some("Updated Ride".to_string()),
+                description: None,
+                activity_type: Some("Ride".to_string()),
+                trainer: Some(false),
+                commute: Some(false),
+                race: Some(false),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated.id, "i450");
+    assert_eq!(updated.details.intervals.len(), 1);
+    assert_eq!(updated.details.interval_groups.len(), 1);
+    assert_eq!(updated.details.streams.len(), 1);
 }
 
 #[tokio::test]
@@ -483,9 +713,11 @@ async fn intervals_client_updates_and_deletes_activity() {
     assert_eq!(requests[1].method, "GET");
     assert_eq!(requests[1].path, "/api/v1/activity/i404");
     assert_eq!(requests[2].method, "GET");
-    assert_eq!(requests[2].path, "/api/v1/activity/i404/streams");
-    assert_eq!(requests[3].method, "DELETE");
-    assert_eq!(requests[3].path, "/api/v1/activity/i404");
+    assert_eq!(requests[2].path, "/api/v1/activity/i404/intervals");
+    assert_eq!(requests[3].method, "GET");
+    assert_eq!(requests[3].path, "/api/v1/activity/i404/streams");
+    assert_eq!(requests[4].method, "DELETE");
+    assert_eq!(requests[4].path, "/api/v1/activity/i404");
 }
 
 #[derive(Clone)]
@@ -656,8 +888,88 @@ impl ResponseActivity {
             hr_load: Some(66),
             pace_load: None,
             strain_score: Some(13.7),
-            icu_intervals: Some(vec![ResponseActivityInterval::sample()]),
-            icu_groups: Some(vec![ResponseActivityGroup::sample()]),
+            icu_intervals: Some(vec![]),
+            icu_groups: Some(vec![]),
+        }
+    }
+
+    fn sparse_strava_stub(id: &str, name: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            start_date_local: "2026-03-22T08:00:00".to_string(),
+            start_date: Some("2026-03-22T07:00:00Z".to_string()),
+            activity_type: Some("Ride".to_string()),
+            name: Some(name.to_string()),
+            description: None,
+            source: Some("STRAVA".to_string()),
+            external_id: Some(format!("strava-{id}")),
+            device_name: None,
+            icu_athlete_id: Some("athlete-7".to_string()),
+            distance: Some(40200.0),
+            moving_time: Some(3600),
+            elapsed_time: Some(3700),
+            total_elevation_gain: Some(420.0),
+            total_elevation_loss: Some(415.0),
+            average_speed: Some(11.2),
+            max_speed: Some(16.0),
+            average_heartrate: Some(148),
+            max_heartrate: Some(174),
+            average_cadence: Some(88.0),
+            trainer: Some(false),
+            commute: Some(false),
+            race: Some(false),
+            has_heartrate: Some(true),
+            stream_types: None,
+            tags: Some(vec!["strava".to_string()]),
+            interval_summary: None,
+            skyline_chart_bytes: None,
+            icu_hr_zone_times: None,
+            pace_zone_times: None,
+            gap_zone_times: None,
+            icu_training_load: Some(72),
+            icu_weighted_avg_watts: Some(238),
+            icu_intensity: Some(0.84),
+            icu_efficiency_factor: Some(1.28),
+            icu_variability_index: Some(1.04),
+            icu_average_watts: Some(228),
+            icu_ftp: Some(283),
+            icu_joules: Some(820),
+            calories: Some(690),
+            trimp: Some(92.0),
+            power_load: Some(72),
+            hr_load: Some(66),
+            pace_load: None,
+            strain_score: Some(13.7),
+            icu_intervals: Some(vec![]),
+            icu_groups: Some(vec![]),
+        }
+    }
+
+    fn with_inline_intervals(mut self) -> Self {
+        self.icu_intervals = Some(vec![ResponseActivityInterval::sample()]);
+        self.icu_groups = Some(vec![ResponseActivityGroup::sample()]);
+        self
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ResponseActivityIntervals {
+    icu_intervals: Vec<ResponseActivityInterval>,
+    icu_groups: Vec<ResponseActivityGroup>,
+}
+
+impl ResponseActivityIntervals {
+    fn empty() -> Self {
+        Self {
+            icu_intervals: Vec::new(),
+            icu_groups: Vec::new(),
+        }
+    }
+
+    fn sample() -> Self {
+        Self {
+            icu_intervals: vec![ResponseActivityInterval::sample()],
+            icu_groups: vec![ResponseActivityGroup::sample()],
         }
     }
 }
@@ -821,9 +1133,13 @@ struct ServerState {
     created_event: Arc<Mutex<Option<ResponseEvent>>>,
     updated_event: Arc<Mutex<Option<ResponseEvent>>>,
     activity: Arc<Mutex<Option<ResponseActivity>>>,
+    activity_intervals: Arc<Mutex<Option<ResponseActivityIntervals>>>,
+    activity_intervals_raw: Arc<Mutex<Option<serde_json::Value>>>,
+    activity_intervals_status: Arc<Mutex<StatusCode>>,
     updated_activity: Arc<Mutex<Option<ResponseActivity>>>,
     upload_ids: Arc<Mutex<Vec<String>>>,
     streams: Arc<Mutex<Vec<ResponseActivityStream>>>,
+    streams_raw: Arc<Mutex<Option<serde_json::Value>>>,
     streams_status: Arc<Mutex<StatusCode>>,
     fit_bytes: Arc<Mutex<Vec<u8>>>,
     get_status: Arc<Mutex<StatusCode>>,
@@ -868,6 +1184,10 @@ impl TestIntervalsServer {
                     .delete(delete_activity_handler),
             )
             .route(
+                "/api/v1/activity/{activity_id}/intervals",
+                get(get_activity_intervals_handler),
+            )
+            .route(
                 "/api/v1/activity/{activity_id}/streams",
                 get(get_activity_streams_handler),
             )
@@ -910,6 +1230,18 @@ impl TestIntervalsServer {
         *self.state.activity.lock().unwrap() = Some(activity);
     }
 
+    fn set_activity_intervals(&self, activity_intervals: ResponseActivityIntervals) {
+        *self.state.activity_intervals.lock().unwrap() = Some(activity_intervals);
+    }
+
+    fn set_activity_intervals_raw(&self, payload: serde_json::Value) {
+        *self.state.activity_intervals_raw.lock().unwrap() = Some(payload);
+    }
+
+    fn set_activity_intervals_status(&self, status: StatusCode) {
+        *self.state.activity_intervals_status.lock().unwrap() = status;
+    }
+
     fn set_list_activities_raw(&self, payload: serde_json::Value) {
         *self.state.list_activities_raw.lock().unwrap() = Some(payload);
     }
@@ -924,6 +1256,10 @@ impl TestIntervalsServer {
 
     fn set_streams(&self, streams: Vec<ResponseActivityStream>) {
         *self.state.streams.lock().unwrap() = streams;
+    }
+
+    fn set_streams_raw(&self, payload: serde_json::Value) {
+        *self.state.streams_raw.lock().unwrap() = Some(payload);
     }
 
     fn set_streams_status(&self, status: StatusCode) {
@@ -1203,7 +1539,45 @@ async fn get_activity_streams_handler(
         return status.into_response();
     }
 
+    if let Some(payload) = state.streams_raw.lock().unwrap().clone() {
+        return Json(payload).into_response();
+    }
+
     Json(state.streams.lock().unwrap().clone()).into_response()
+}
+
+async fn get_activity_intervals_handler(
+    State(state): State<ServerState>,
+    Path(path): Path<ActivityPath>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    capture_request(
+        &state,
+        "GET",
+        format!("/api/v1/activity/{}/intervals", path.activity_id),
+        None,
+        headers,
+        None,
+    );
+
+    let status = *state.activity_intervals_status.lock().unwrap();
+    if status != StatusCode::OK {
+        return status.into_response();
+    }
+
+    if let Some(payload) = state.activity_intervals_raw.lock().unwrap().clone() {
+        return Json(payload).into_response();
+    }
+
+    Json(
+        state
+            .activity_intervals
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(ResponseActivityIntervals::empty),
+    )
+    .into_response()
 }
 
 async fn upload_activity_handler(

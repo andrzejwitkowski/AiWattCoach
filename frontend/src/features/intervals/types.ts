@@ -6,17 +6,69 @@ const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
 
 export const intervalDefinitionSchema = z.object({
   definition: z.string(),
+  repeatCount: z.number().int(),
+  durationSeconds: z.number().int().nullable(),
+  targetPercentFtp: z.number().nullable(),
+  zoneId: z.number().int().nullable(),
+});
+
+export const workoutSegmentSchema = z.object({
+  order: z.number().int(),
+  label: z.string(),
+  durationSeconds: z.number().int(),
+  startOffsetSeconds: z.number().int(),
+  endOffsetSeconds: z.number().int(),
+  targetPercentFtp: z.number().nullable(),
+  zoneId: z.number().int().nullable(),
+});
+
+export const workoutSummarySchema = z.object({
+  totalSegments: z.number().int(),
+  totalDurationSeconds: z.number().int(),
+  estimatedNormalizedPowerWatts: z.number().int().nullable(),
+  estimatedAveragePowerWatts: z.number().int().nullable(),
+  estimatedIntensityFactor: z.number().nullable(),
+  estimatedTrainingStressScore: z.number().nullable(),
 });
 
 export const eventDefinitionSchema = z.object({
   rawWorkoutDoc: z.string().nullable(),
   intervals: z.array(intervalDefinitionSchema),
+  segments: z.array(workoutSegmentSchema),
+  summary: workoutSummarySchema,
+});
+
+export const matchedWorkoutIntervalSchema = z.object({
+  plannedSegmentOrder: z.number().int(),
+  plannedLabel: z.string(),
+  plannedDurationSeconds: z.number().int(),
+  targetPercentFtp: z.number().nullable(),
+  zoneId: z.number().int().nullable(),
+  actualIntervalId: z.number().int().nullable(),
+  actualStartTimeSeconds: z.number().int().nullable(),
+  actualEndTimeSeconds: z.number().int().nullable(),
+  averagePowerWatts: z.number().int().nullable(),
+  normalizedPowerWatts: z.number().int().nullable(),
+  averageHeartRateBpm: z.number().int().nullable(),
+  averageCadenceRpm: z.number().nullable(),
+  averageSpeedMps: z.number().nullable(),
+  complianceScore: z.number(),
 });
 
 export const actualWorkoutSchema = z.object({
+  activityId: z.string(),
+  activityName: z.string().nullable(),
+  startDateLocal: z.string(),
   powerValues: z.array(z.number().int()),
   cadenceValues: z.array(z.number().int()),
   heartRateValues: z.array(z.number().int()),
+  speedValues: z.array(z.number()),
+  averagePowerWatts: z.number().int().nullable(),
+  normalizedPowerWatts: z.number().int().nullable(),
+  trainingStressScore: z.number().int().nullable(),
+  intensityFactor: z.number().nullable(),
+  complianceScore: z.number(),
+  matchedIntervals: z.array(matchedWorkoutIntervalSchema),
 });
 
 export const eventFileUploadSchema = z.object({

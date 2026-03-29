@@ -5,6 +5,36 @@ import '../../../i18n';
 import type { CalendarDay } from '../types';
 import { CalendarDayCell } from './CalendarDayCell';
 
+function emptyWorkoutSummary() {
+  return {
+    totalSegments: 0,
+    totalDurationSeconds: 0,
+    estimatedNormalizedPowerWatts: null,
+    estimatedAveragePowerWatts: null,
+    estimatedIntensityFactor: null,
+    estimatedTrainingStressScore: null,
+  };
+}
+
+function emptyEventDefinition() {
+  return {
+    rawWorkoutDoc: null,
+    intervals: [],
+    segments: [],
+    summary: emptyWorkoutSummary(),
+  };
+}
+
+function intervalDefinition(definition: string) {
+  return {
+    definition,
+    repeatCount: 1,
+    durationSeconds: null,
+    targetPercentFtp: null,
+    zoneId: null,
+  };
+}
+
 describe('CalendarDayCell', () => {
   it('renders a rest day state when no data is present', () => {
     const day: CalendarDay = {
@@ -17,6 +47,7 @@ describe('CalendarDayCell', () => {
     render(<CalendarDayCell day={day} isToday={false} />);
 
     expect(screen.getByText(/rest day/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /rest day/i })).not.toBeInTheDocument();
   });
 
   it('renders workout content when activity data exists', () => {
@@ -99,10 +130,7 @@ describe('CalendarDayCell', () => {
           description: null,
           indoor: false,
           color: null,
-          eventDefinition: {
-            rawWorkoutDoc: null,
-            intervals: [],
-          },
+          eventDefinition: emptyEventDefinition(),
           actualWorkout: null,
         },
       ],
@@ -248,11 +276,13 @@ describe('CalendarDayCell', () => {
           eventDefinition: {
             rawWorkoutDoc: null,
             intervals: [
-              { definition: '10m' },
-              { definition: '8m' },
-              { definition: '6m' },
-              { definition: '4m' },
+              intervalDefinition('10m'),
+              intervalDefinition('8m'),
+              intervalDefinition('6m'),
+              intervalDefinition('4m'),
             ],
+            segments: [],
+            summary: emptyWorkoutSummary(),
           },
           actualWorkout: null,
         },
@@ -315,7 +345,7 @@ describe('CalendarDayCell', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
 
     expect(container).toHaveTextContent('Morning Ride');
-    expect(container.querySelectorAll('div[style*="height"]').length).toBe(3);
+    expect(container.querySelectorAll('div[style*="height"]').length).toBe(4);
   });
 
   it('uses the primary activity type as subtitle fallback when activity metrics are missing', () => {
@@ -331,10 +361,7 @@ describe('CalendarDayCell', () => {
           description: null,
           indoor: false,
           color: null,
-          eventDefinition: {
-            rawWorkoutDoc: null,
-            intervals: [],
-          },
+          eventDefinition: emptyEventDefinition(),
           actualWorkout: null,
         },
       ],
@@ -398,5 +425,57 @@ describe('CalendarDayCell', () => {
     expect(container).toHaveTextContent('Evening Ride');
     expect(container).toHaveTextContent('Ride');
     expect(container).not.toHaveTextContent('Swim');
+  });
+
+  it('renders planned mini-chart bars with their workout zone colors', () => {
+    const day: CalendarDay = {
+      date: new Date(2026, 2, 28),
+      dateKey: '2026-03-28',
+      activities: [],
+      events: [
+        {
+          id: 5,
+          startDateLocal: '2026-03-28',
+          name: 'Threshold set',
+          category: 'WORKOUT',
+          description: null,
+          indoor: true,
+          color: null,
+          eventDefinition: {
+            rawWorkoutDoc: '10m Z2\n5m Z4\n2m Z6',
+            intervals: [
+              { definition: '10m Z2', repeatCount: 1, durationSeconds: 600, targetPercentFtp: 70, zoneId: 2 },
+              { definition: '5m Z4', repeatCount: 1, durationSeconds: 300, targetPercentFtp: 100, zoneId: 4 },
+              { definition: '2m Z6', repeatCount: 1, durationSeconds: 120, targetPercentFtp: 130, zoneId: 6 },
+            ],
+            segments: [
+              { order: 1, label: 'Warmup', durationSeconds: 600, startOffsetSeconds: 0, endOffsetSeconds: 600, targetPercentFtp: 70, zoneId: 2 },
+              { order: 2, label: 'Threshold', durationSeconds: 300, startOffsetSeconds: 600, endOffsetSeconds: 900, targetPercentFtp: 100, zoneId: 4 },
+              { order: 3, label: 'VO2', durationSeconds: 120, startOffsetSeconds: 900, endOffsetSeconds: 1020, targetPercentFtp: 130, zoneId: 6 },
+            ],
+            summary: {
+              totalSegments: 3,
+              totalDurationSeconds: 1020,
+              estimatedNormalizedPowerWatts: null,
+              estimatedAveragePowerWatts: null,
+              estimatedIntensityFactor: 0.88,
+              estimatedTrainingStressScore: 75,
+            },
+          },
+          actualWorkout: null,
+        },
+      ],
+    };
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+
+    const chartBars = Array.from(container.querySelectorAll('div[style*="height"]'));
+    const backgroundColors = chartBars.map((bar) => (bar as HTMLDivElement).style.backgroundColor).filter(Boolean);
+
+    expect(chartBars.length).toBe(3);
+    expect(new Set(backgroundColors).size).toBeGreaterThan(1);
+    expect(backgroundColors).toContain('rgb(0, 227, 253)');
+    expect(backgroundColors).toContain('rgb(210, 255, 154)');
+    expect(backgroundColors).toContain('rgb(255, 115, 81)');
   });
 });

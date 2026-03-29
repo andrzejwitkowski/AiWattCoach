@@ -1,5 +1,10 @@
+type ChartBar = {
+  height: number;
+  color: string;
+};
+
 type CalendarMiniChartProps = {
-  bars: number[];
+  bars: Array<number | ChartBar>;
   tone: 'primary' | 'secondary' | 'error' | 'anaerobic' | 'muted';
 };
 
@@ -19,14 +24,15 @@ export function CalendarMiniChart({ bars, tone }: CalendarMiniChartProps) {
   return (
     <div className="mb-2 flex h-10 items-end gap-[1px]">
       {bars.map((bar, index) => {
-        const normalizedBar = Number.isFinite(bar) ? bar : 20;
+        const normalizedBar = typeof bar === 'number' && Number.isFinite(bar) ? bar : typeof bar === 'object' && Number.isFinite(bar.height) ? bar.height : 20;
         const height = Math.max(20, Math.min(100, normalizedBar));
+        const inlineColor = typeof bar === 'object' ? bar.color : undefined;
 
         return (
           <div
-            key={`${tone}-${index}-${bar}`}
+            key={`${tone}-${index}-${typeof bar === 'number' ? bar : `${bar.height}-${bar.color}`}`}
             className={`flex-1 rounded-t-[1px] ${TONE_CLASS[tone]}`}
-            style={{ height: `${height}%` }}
+            style={{ height: `${height}%`, ...(inlineColor ? { backgroundColor: inlineColor } : {}) }}
           />
         );
       })}
