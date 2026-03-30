@@ -1455,6 +1455,7 @@ fn sample_activity(id: &str, name: &str) -> Activity {
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        details_unavailable_reason: None,
     }
 }
 
@@ -1669,7 +1670,7 @@ impl IntervalsUseCases for TestIntervalsService {
                 effective_ftp_watts,
             );
 
-            for listed_activity in &listed_activities {
+            for listed_activity in listed_activities.iter().take(3) {
                 let detailed_activity =
                     match service.get_activity(&user_id, &listed_activity.id).await {
                         Ok(activity) => activity,

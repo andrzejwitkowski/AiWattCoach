@@ -8,10 +8,12 @@ use std::{
 use aiwattcoach::domain::intervals::{
     Activity, ActivityDetails, ActivityFallbackIdentity, ActivityFileIdentityExtractorPort,
     ActivityInterval, ActivityIntervalGroup, ActivityMetrics, ActivityRepositoryPort,
-    ActivityStream, CreateEvent, DateRange, Event, EventCategory, IntervalsApiPort,
+    ActivityStream, ActivityUploadOperation, ActivityUploadOperationRepositoryPort,
+    ActivityUploadOperationStatus, CreateEvent, DateRange, Event, EventCategory, IntervalsApiPort,
     IntervalsCredentials, IntervalsError, IntervalsService, IntervalsSettingsPort,
-    IntervalsUseCases, NoopActivityFileIdentityExtractor, NoopActivityRepository, UpdateActivity,
-    UpdateEvent, UploadActivity, UploadedActivities,
+    IntervalsUseCases, NoopActivityFileIdentityExtractor, NoopActivityRepository,
+    NoopActivityUploadOperationRepository, UpdateActivity, UpdateEvent, UploadActivity,
+    UploadedActivities,
 };
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -25,6 +27,7 @@ async fn list_events_returns_events_from_api() {
         api,
         settings,
         NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
     );
 
@@ -51,6 +54,7 @@ async fn list_events_fails_when_credentials_not_configured() {
         api,
         settings,
         NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
     );
 
@@ -77,6 +81,7 @@ async fn get_event_returns_single_event() {
         api,
         settings,
         NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
     );
 
@@ -95,6 +100,7 @@ async fn create_event_passes_event_to_api() {
         api,
         settings,
         NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
     );
 
@@ -125,6 +131,7 @@ async fn update_event_forwards_to_api() {
         api,
         settings,
         NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
     );
 
@@ -163,6 +170,7 @@ async fn delete_event_calls_api_and_returns_ok() {
         api,
         settings,
         NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
     );
 
@@ -180,6 +188,7 @@ async fn download_fit_returns_bytes() {
         api,
         settings,
         NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
     );
 
@@ -196,6 +205,7 @@ async fn api_error_propagated_to_caller() {
         api,
         settings,
         NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
     );
 
@@ -214,8 +224,13 @@ async fn list_activities_persists_api_results_and_returns_fresh_api_results() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let activities = service
         .list_activities(
@@ -246,8 +261,13 @@ async fn upload_activity_returns_existing_activity_when_external_id_matches() {
     let api_calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service
         .upload_activity(
@@ -289,7 +309,13 @@ async fn upload_activity_returns_existing_activity_when_fallback_identity_matche
         distance_bucket_meters: Some(40200),
         trainer: false,
     });
-    let service = IntervalsService::new(api, settings, repository, extractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        extractor,
+    );
 
     let result = service
         .upload_activity(
@@ -332,7 +358,13 @@ async fn upload_activity_does_not_dedupe_when_external_ids_conflict_even_if_fall
         distance_bucket_meters: Some(40200),
         trainer: false,
     });
-    let service = IntervalsService::new(api, settings, repository, extractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        extractor,
+    );
 
     let result = service
         .upload_activity(
@@ -375,7 +407,13 @@ async fn upload_activity_does_not_dedupe_ride_and_virtualride() {
         distance_bucket_meters: Some(40200),
         trainer: false,
     });
-    let service = IntervalsService::new(api, settings, repository, extractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        extractor,
+    );
 
     let result = service
         .upload_activity(
@@ -409,8 +447,13 @@ async fn upload_activity_returns_existing_activity_when_external_id_matches_afte
     let api_calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service
         .upload_activity(
@@ -445,8 +488,13 @@ async fn upload_activity_normalizes_external_id_before_forwarding_to_api() {
     let api_calls = api.call_log.clone();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service
         .upload_activity(
@@ -500,7 +548,13 @@ async fn upload_activity_uses_positive_timer_time_when_elapsed_time_is_zero() {
         distance_bucket_meters: Some(40200),
         trainer: false,
     });
-    let service = IntervalsService::new(api, settings, repository, extractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        extractor,
+    );
 
     let result = service
         .upload_activity(
@@ -535,8 +589,13 @@ async fn upload_activity_returns_cached_duplicate_without_credentials() {
     let api_calls = api.call_log.clone();
     let settings = FakeSettingsPort::without_credentials();
     let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service
         .upload_activity(
@@ -612,8 +671,13 @@ async fn get_activity_persists_enriched_completed_activity() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let stored = repository.stored.clone();
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let fetched = service.get_activity("user-1", "i78").await.unwrap();
 
@@ -639,8 +703,13 @@ async fn get_activity_persists_fetched_activity() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let fetched = service.get_activity("user-1", "i77").await.unwrap();
 
@@ -649,6 +718,144 @@ async fn get_activity_persists_fetched_activity() {
         repository_calls.lock().unwrap().as_slice(),
         &[RepoCall::Upsert("i77".to_string())]
     );
+}
+
+#[tokio::test]
+async fn list_activities_does_not_clobber_existing_enriched_completed_activity() {
+    let mut enriched = sample_activity("i79", "Completed Workout");
+    enriched.details.intervals = vec![ActivityInterval {
+        id: Some(1),
+        label: Some("Threshold".to_string()),
+        interval_type: Some("WORK".to_string()),
+        group_id: Some("set-1".to_string()),
+        start_index: Some(10),
+        end_index: Some(20),
+        start_time_seconds: Some(300),
+        end_time_seconds: Some(600),
+        moving_time_seconds: Some(300),
+        elapsed_time_seconds: Some(300),
+        distance_meters: Some(2500.0),
+        average_power_watts: Some(285),
+        normalized_power_watts: Some(290),
+        training_stress_score: Some(18.5),
+        average_heart_rate_bpm: Some(168),
+        average_cadence_rpm: Some(94.0),
+        average_speed_mps: Some(8.2),
+        average_stride_meters: None,
+        zone: Some(4),
+    }];
+    enriched.details.interval_groups = vec![ActivityIntervalGroup {
+        id: "set-1".to_string(),
+        count: Some(3),
+        start_index: Some(10),
+        moving_time_seconds: Some(900),
+        elapsed_time_seconds: Some(900),
+        distance_meters: Some(7500.0),
+        average_power_watts: Some(280),
+        normalized_power_watts: Some(286),
+        training_stress_score: Some(55.5),
+        average_heart_rate_bpm: Some(165),
+        average_cadence_rpm: Some(92.0),
+        average_speed_mps: Some(8.0),
+        average_stride_meters: None,
+    }];
+    enriched.details.streams = vec![ActivityStream {
+        stream_type: "watts".to_string(),
+        name: Some("Power".to_string()),
+        data: Some(serde_json::json!([120, 250, 310])),
+        data2: None,
+        value_type_is_array: false,
+        custom: false,
+        all_null: false,
+    }];
+
+    let mut sparse = sample_activity("i79", "Completed Workout");
+    sparse.athlete_id = None;
+    sparse.start_date = None;
+    sparse.name = None;
+    sparse.description = None;
+    sparse.activity_type = None;
+    sparse.external_id = None;
+    sparse.device_name = None;
+    sparse.distance_meters = None;
+    sparse.moving_time_seconds = None;
+    sparse.elapsed_time_seconds = None;
+    sparse.total_elevation_gain_meters = None;
+    sparse.total_elevation_loss_meters = None;
+    sparse.average_speed_mps = None;
+    sparse.max_speed_mps = None;
+    sparse.average_heart_rate_bpm = None;
+    sparse.max_heart_rate_bpm = None;
+    sparse.average_cadence_rpm = None;
+    sparse.has_heart_rate = false;
+    sparse.stream_types = Vec::new();
+    sparse.tags = Vec::new();
+    sparse.metrics = ActivityMetrics {
+        training_stress_score: None,
+        normalized_power_watts: None,
+        intensity_factor: None,
+        efficiency_factor: None,
+        variability_index: None,
+        average_power_watts: None,
+        ftp_watts: None,
+        total_work_joules: None,
+        calories: None,
+        trimp: None,
+        power_load: None,
+        heart_rate_load: None,
+        pace_load: None,
+        strain_score: None,
+    };
+    sparse.details = ActivityDetails {
+        intervals: Vec::new(),
+        interval_groups: Vec::new(),
+        streams: Vec::new(),
+        interval_summary: Vec::new(),
+        skyline_chart: Vec::new(),
+        power_zone_times: Vec::new(),
+        heart_rate_zone_times: Vec::new(),
+        pace_zone_times: Vec::new(),
+        gap_zone_times: Vec::new(),
+    };
+
+    let api = FakeIntervalsApi::with_activities(vec![sparse]);
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", enriched.clone());
+    let stored = repository.stored.clone();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let listed = service
+        .list_activities(
+            "user-1",
+            &DateRange {
+                oldest: "2026-03-22".to_string(),
+                newest: "2026-03-22".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let persisted = stored
+        .lock()
+        .unwrap()
+        .get("user-1")
+        .and_then(|activities| activities.iter().find(|candidate| candidate.id == "i79"))
+        .cloned()
+        .expect("persisted activity");
+
+    assert_eq!(listed.len(), 1);
+    assert_eq!(persisted.name, enriched.name);
+    assert_eq!(persisted.activity_type, enriched.activity_type);
+    assert_eq!(persisted.metrics, enriched.metrics);
+    assert_eq!(persisted.details, enriched.details);
+    assert_eq!(persisted.stream_types, enriched.stream_types);
+    assert_eq!(persisted.tags, enriched.tags);
 }
 
 #[tokio::test]
@@ -663,8 +870,13 @@ async fn upload_activity_persists_uploaded_activities() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let upload = UploadActivity {
         filename: "ride.fit".to_string(),
@@ -697,6 +909,186 @@ async fn upload_activity_persists_uploaded_activities() {
 }
 
 #[tokio::test]
+async fn upload_activity_records_pending_state_before_upstream_upload() {
+    let uploaded_activity = sample_activity("i92", "Uploaded Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec![uploaded_activity.id.clone()],
+        activities: vec![uploaded_activity.clone()],
+    });
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::default();
+    let upload_operations = FakeActivityUploadOperationRepository::default();
+    let operation_calls = upload_operations.call_log.clone();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        upload_operations,
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Uploaded Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("garmin-92".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result.activities, vec![uploaded_activity]);
+    assert_eq!(
+        operation_calls.lock().unwrap().as_slice(),
+        &[
+            UploadOperationRepoCall::FindByOperationKey("external_id:garmin-92".to_string()),
+            UploadOperationRepoCall::Upsert(
+                "external_id:garmin-92".to_string(),
+                ActivityUploadOperationStatus::Pending,
+            ),
+            UploadOperationRepoCall::Upsert(
+                "external_id:garmin-92".to_string(),
+                ActivityUploadOperationStatus::Uploaded,
+            ),
+            UploadOperationRepoCall::Upsert(
+                "external_id:garmin-92".to_string(),
+                ActivityUploadOperationStatus::Completed,
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn upload_activity_recovers_completed_operation_without_second_upload() {
+    let existing = sample_activity("i93", "Recovered Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec!["should-not-upload".to_string()],
+        activities: vec![sample_activity("should-not-upload", "Should Not Upload")],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", existing.clone());
+    let upload_operations = FakeActivityUploadOperationRepository::with_existing(
+        "user-1",
+        ActivityUploadOperation {
+            operation_key: "external_id:external-i93".to_string(),
+            normalized_external_id: Some("external-i93".to_string()),
+            fallback_identity: None,
+            uploaded_activity_ids: vec![existing.id.clone()],
+            status: ActivityUploadOperationStatus::Completed,
+        },
+    );
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        upload_operations,
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Recovered Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("external-i93".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(!result.created);
+    assert_eq!(result.activity_ids, vec![existing.id.clone()]);
+    assert_eq!(result.activities, vec![existing]);
+    assert!(api_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn upload_activity_recovers_uploaded_operation_after_previous_persistence_failure() {
+    let recovered = sample_activity("i94", "Recovered Upload");
+    let api = FakeIntervalsApi::with_get_activity(recovered.clone());
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::default();
+    let upload_operations = FakeActivityUploadOperationRepository::with_existing(
+        "user-1",
+        ActivityUploadOperation {
+            operation_key: "external_id:external-i94".to_string(),
+            normalized_external_id: Some("external-i94".to_string()),
+            fallback_identity: None,
+            uploaded_activity_ids: vec![recovered.id.clone()],
+            status: ActivityUploadOperationStatus::Uploaded,
+        },
+    );
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        upload_operations,
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Recovered Upload".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("external-i94".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(!result.created);
+    assert_eq!(result.activity_ids, vec![recovered.id.clone()]);
+    assert_eq!(result.activities, vec![recovered]);
+    assert!(api_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn get_enriched_event_propagates_activity_lookup_failure() {
+    let event = sample_event(77, "Threshold");
+    let api = FakeIntervalsApi {
+        get_event_result: Ok(event),
+        list_activities_result: Err(IntervalsError::ConnectionError("upstream down".to_string())),
+        ..FakeIntervalsApi::default()
+    };
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        NoopActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let result = service.get_enriched_event("user-1", 77).await;
+
+    assert_eq!(
+        result,
+        Err(IntervalsError::ConnectionError("upstream down".to_string()))
+    );
+}
+
+#[tokio::test]
 async fn update_activity_persists_updated_activity() {
     let updated_activity = sample_activity("i55", "Updated Ride");
     let api = FakeIntervalsApi::with_updated_activity(updated_activity.clone());
@@ -704,8 +1096,13 @@ async fn update_activity_persists_updated_activity() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let update = UpdateActivity {
         name: Some("Updated Ride".to_string()),
@@ -742,8 +1139,13 @@ async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds(
     let sequence = Arc::new(Mutex::new(Vec::new()));
     let repository = FakeActivityRepository::with_sequence(sequence.clone());
     let api = api.with_sequence(sequence.clone());
-    let service =
-        IntervalsService::new(api, settings, repository, NoopActivityFileIdentityExtractor);
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
 
     let result = service.delete_activity("user-1", "i11").await;
 
@@ -829,6 +1231,7 @@ fn sample_activity(id: &str, name: &str) -> Activity {
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        details_unavailable_reason: None,
     }
 }
 
@@ -858,6 +1261,12 @@ enum RepoCall {
     },
     FindExternalId(String),
     FindFallbackIdentity(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum UploadOperationRepoCall {
+    FindByOperationKey(String),
+    Upsert(String, ActivityUploadOperationStatus),
 }
 
 #[derive(Clone)]
@@ -1135,6 +1544,124 @@ impl FakeActivityRepository {
     }
 }
 
+fn merge_activity_for_storage(existing: Option<Activity>, incoming: Activity) -> Activity {
+    let Some(existing) = existing else {
+        return incoming;
+    };
+
+    if activity_detail_richness(&incoming) >= activity_detail_richness(&existing) {
+        return incoming;
+    }
+
+    Activity {
+        id: incoming.id,
+        athlete_id: incoming.athlete_id.or(existing.athlete_id),
+        start_date_local: incoming.start_date_local,
+        start_date: incoming.start_date.or(existing.start_date),
+        name: incoming.name.or(existing.name),
+        description: incoming.description.or(existing.description),
+        activity_type: incoming.activity_type.or(existing.activity_type),
+        source: incoming.source.or(existing.source),
+        external_id: incoming.external_id.or(existing.external_id),
+        device_name: incoming.device_name.or(existing.device_name),
+        distance_meters: incoming.distance_meters.or(existing.distance_meters),
+        moving_time_seconds: incoming
+            .moving_time_seconds
+            .or(existing.moving_time_seconds),
+        elapsed_time_seconds: incoming
+            .elapsed_time_seconds
+            .or(existing.elapsed_time_seconds),
+        total_elevation_gain_meters: incoming
+            .total_elevation_gain_meters
+            .or(existing.total_elevation_gain_meters),
+        total_elevation_loss_meters: incoming
+            .total_elevation_loss_meters
+            .or(existing.total_elevation_loss_meters),
+        average_speed_mps: incoming.average_speed_mps.or(existing.average_speed_mps),
+        max_speed_mps: incoming.max_speed_mps.or(existing.max_speed_mps),
+        average_heart_rate_bpm: incoming
+            .average_heart_rate_bpm
+            .or(existing.average_heart_rate_bpm),
+        max_heart_rate_bpm: incoming.max_heart_rate_bpm.or(existing.max_heart_rate_bpm),
+        average_cadence_rpm: incoming
+            .average_cadence_rpm
+            .or(existing.average_cadence_rpm),
+        trainer: incoming.trainer || existing.trainer,
+        commute: incoming.commute || existing.commute,
+        race: incoming.race || existing.race,
+        has_heart_rate: incoming.has_heart_rate || existing.has_heart_rate,
+        stream_types: prefer_non_empty(incoming.stream_types, existing.stream_types),
+        tags: prefer_non_empty(incoming.tags, existing.tags),
+        metrics: merge_activity_metrics(existing.metrics, incoming.metrics),
+        details: merge_activity_details(existing.details, incoming.details),
+        details_unavailable_reason: incoming
+            .details_unavailable_reason
+            .or(existing.details_unavailable_reason),
+    }
+}
+
+fn activity_detail_richness(activity: &Activity) -> usize {
+    usize::from(!activity.details.intervals.is_empty())
+        + usize::from(!activity.details.interval_groups.is_empty())
+        + usize::from(!activity.details.streams.is_empty())
+        + usize::from(!activity.details.interval_summary.is_empty())
+        + usize::from(!activity.details.skyline_chart.is_empty())
+        + usize::from(!activity.details.power_zone_times.is_empty())
+        + usize::from(!activity.details.heart_rate_zone_times.is_empty())
+        + usize::from(!activity.details.pace_zone_times.is_empty())
+        + usize::from(!activity.details.gap_zone_times.is_empty())
+}
+
+fn merge_activity_metrics(existing: ActivityMetrics, incoming: ActivityMetrics) -> ActivityMetrics {
+    ActivityMetrics {
+        training_stress_score: incoming
+            .training_stress_score
+            .or(existing.training_stress_score),
+        normalized_power_watts: incoming
+            .normalized_power_watts
+            .or(existing.normalized_power_watts),
+        intensity_factor: incoming.intensity_factor.or(existing.intensity_factor),
+        efficiency_factor: incoming.efficiency_factor.or(existing.efficiency_factor),
+        variability_index: incoming.variability_index.or(existing.variability_index),
+        average_power_watts: incoming
+            .average_power_watts
+            .or(existing.average_power_watts),
+        ftp_watts: incoming.ftp_watts.or(existing.ftp_watts),
+        total_work_joules: incoming.total_work_joules.or(existing.total_work_joules),
+        calories: incoming.calories.or(existing.calories),
+        trimp: incoming.trimp.or(existing.trimp),
+        power_load: incoming.power_load.or(existing.power_load),
+        heart_rate_load: incoming.heart_rate_load.or(existing.heart_rate_load),
+        pace_load: incoming.pace_load.or(existing.pace_load),
+        strain_score: incoming.strain_score.or(existing.strain_score),
+    }
+}
+
+fn merge_activity_details(existing: ActivityDetails, incoming: ActivityDetails) -> ActivityDetails {
+    ActivityDetails {
+        intervals: prefer_non_empty(incoming.intervals, existing.intervals),
+        interval_groups: prefer_non_empty(incoming.interval_groups, existing.interval_groups),
+        streams: prefer_non_empty(incoming.streams, existing.streams),
+        interval_summary: prefer_non_empty(incoming.interval_summary, existing.interval_summary),
+        skyline_chart: prefer_non_empty(incoming.skyline_chart, existing.skyline_chart),
+        power_zone_times: prefer_non_empty(incoming.power_zone_times, existing.power_zone_times),
+        heart_rate_zone_times: prefer_non_empty(
+            incoming.heart_rate_zone_times,
+            existing.heart_rate_zone_times,
+        ),
+        pace_zone_times: prefer_non_empty(incoming.pace_zone_times, existing.pace_zone_times),
+        gap_zone_times: prefer_non_empty(incoming.gap_zone_times, existing.gap_zone_times),
+    }
+}
+
+fn prefer_non_empty<T>(incoming: Vec<T>, existing: Vec<T>) -> Vec<T> {
+    if incoming.is_empty() {
+        existing
+    } else {
+        incoming
+    }
+}
+
 impl ActivityRepositoryPort for FakeActivityRepository {
     fn upsert(
         &self,
@@ -1151,6 +1678,11 @@ impl ActivityRepositoryPort for FakeActivityRepository {
                 .push(RepoCall::Upsert(activity.id.clone()));
             let mut store = store.lock().unwrap();
             let activities = store.entry(user_id).or_default();
+            let existing = activities
+                .iter()
+                .find(|current| current.id == activity.id)
+                .cloned();
+            let activity = merge_activity_for_storage(existing, activity);
             activities.retain(|existing| existing.id != activity.id);
             activities.push(activity.clone());
             Ok(activity)
@@ -1172,11 +1704,18 @@ impl ActivityRepositoryPort for FakeActivityRepository {
                 .push(RepoCall::UpsertMany(activities.len()));
             let mut store = store.lock().unwrap();
             let existing = store.entry(user_id).or_default();
-            for activity in &activities {
-                existing.retain(|current| current.id != activity.id);
-                existing.push(activity.clone());
+            let mut stored = Vec::with_capacity(activities.len());
+            for activity in activities {
+                let current = existing
+                    .iter()
+                    .find(|candidate| candidate.id == activity.id)
+                    .cloned();
+                let merged = merge_activity_for_storage(current, activity);
+                existing.retain(|current| current.id != merged.id);
+                existing.push(merged.clone());
+                stored.push(merged);
             }
-            Ok(activities)
+            Ok(stored)
         })
     }
 
@@ -1324,6 +1863,76 @@ impl FakeActivityIdentityExtractor {
         Self {
             identity: Some(identity),
         }
+    }
+}
+
+#[derive(Clone, Default)]
+struct FakeActivityUploadOperationRepository {
+    stored: Arc<Mutex<HashMap<String, Vec<ActivityUploadOperation>>>>,
+    call_log: Arc<Mutex<Vec<UploadOperationRepoCall>>>,
+}
+
+impl FakeActivityUploadOperationRepository {
+    fn with_existing(user_id: &str, operation: ActivityUploadOperation) -> Self {
+        let mut stored = HashMap::new();
+        stored.insert(user_id.to_string(), vec![operation]);
+        Self {
+            stored: Arc::new(Mutex::new(stored)),
+            ..Self::default()
+        }
+    }
+}
+
+impl ActivityUploadOperationRepositoryPort for FakeActivityUploadOperationRepository {
+    fn find_by_user_id_and_operation_key(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+    ) -> BoxFuture<Result<Option<ActivityUploadOperation>, IntervalsError>> {
+        let store = self.stored.clone();
+        let call_log = self.call_log.clone();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            call_log
+                .lock()
+                .unwrap()
+                .push(UploadOperationRepoCall::FindByOperationKey(
+                    operation_key.clone(),
+                ));
+            Ok(store
+                .lock()
+                .unwrap()
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|operation| operation.operation_key == operation_key))
+        })
+    }
+
+    fn upsert(
+        &self,
+        user_id: &str,
+        operation: ActivityUploadOperation,
+    ) -> BoxFuture<Result<ActivityUploadOperation, IntervalsError>> {
+        let store = self.stored.clone();
+        let call_log = self.call_log.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            call_log
+                .lock()
+                .unwrap()
+                .push(UploadOperationRepoCall::Upsert(
+                    operation.operation_key.clone(),
+                    operation.status.clone(),
+                ));
+            let mut store = store.lock().unwrap();
+            let operations = store.entry(user_id).or_default();
+            operations.retain(|existing| existing.operation_key != operation.operation_key);
+            operations.push(operation.clone());
+            Ok(operation)
+        })
     }
 }
 

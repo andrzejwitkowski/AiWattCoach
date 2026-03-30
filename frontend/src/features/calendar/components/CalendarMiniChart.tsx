@@ -1,6 +1,7 @@
 type ChartBar = {
   height: number;
   color: string;
+  widthUnits?: number;
 };
 
 type CalendarMiniChartProps = {
@@ -27,12 +28,14 @@ export function CalendarMiniChart({ bars, tone }: CalendarMiniChartProps) {
         const normalizedBar = typeof bar === 'number' && Number.isFinite(bar) ? bar : typeof bar === 'object' && Number.isFinite(bar.height) ? bar.height : 20;
         const height = Math.max(20, Math.min(100, normalizedBar));
         const inlineColor = typeof bar === 'object' ? bar.color : undefined;
+        const widthUnits = typeof bar === 'object' && Number.isFinite(bar.widthUnits) ? Math.max(1, bar.widthUnits ?? 1) : 1;
 
         return (
           <div
             key={`${tone}-${index}-${typeof bar === 'number' ? bar : `${bar.height}-${bar.color}`}`}
-            className={`flex-1 rounded-t-[1px] ${TONE_CLASS[tone]}`}
-            style={{ height: `${height}%`, ...(inlineColor ? { backgroundColor: inlineColor } : {}) }}
+            data-chart-bar="mini"
+            className={`min-w-0 rounded-t-[1px] ${TONE_CLASS[tone]}`}
+            style={{ flexBasis: 0, flexGrow: widthUnits, height: `${height}%`, ...(inlineColor ? { backgroundColor: inlineColor } : {}) }}
           />
         );
       })}

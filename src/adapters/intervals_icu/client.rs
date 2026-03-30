@@ -20,6 +20,20 @@ use super::dto::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://intervals.icu";
+
+#[derive(Debug)]
+struct ApiFailure {
+    status: Option<StatusCode>,
+    error: IntervalsError,
+    response_body: Option<String>,
+}
+
+impl ApiFailure {
+    fn is_unprocessable_entity(&self) -> bool {
+        self.status == Some(StatusCode::UNPROCESSABLE_ENTITY)
+    }
+}
+
 #[derive(Clone)]
 pub struct IntervalsIcuClient {
     client: Client,
@@ -82,118 +96,212 @@ impl IntervalsIcuClient {
         format!("{base_url}/api/v1/activity/{activity_id}{path}")
     }
 
+    async fn request_activity(
+        client: &Client,
+        base_url: &str,
+        credentials: &IntervalsCredentials,
+        activity_id: &str,
+        include_intervals: bool,
+    ) -> Result<reqwest::Response, ApiFailure> {
+        let url = Self::activity_url_impl(base_url, activity_id, "");
+        let mut request = client
+            .get(url)
+            .basic_auth("API_KEY", Some(&credentials.api_key));
+
+        if include_intervals {
+            request = request.query(&[("intervals", "true")]);
+        }
+
+        Self::send_request(request).await
+    }
+
+    async fn fetch_base_activity(
+        client: &Client,
+        base_url: &str,
+        credentials: &IntervalsCredentials,
+        activity_id: &str,
+        include_intervals: bool,
+    ) -> Result<Activity, IntervalsError> {
+        let response = Self::request_activity(
+            client,
+            base_url,
+            credentials,
+            activity_id,
+            include_intervals,
+        )
+        .await
+        .map_err(|failure| match failure.status {
+            Some(StatusCode::NOT_FOUND) => IntervalsError::NotFound,
+            _ => failure.error,
+        })?;
+        let payload: ActivityResponse = response.json().await.map_err(map_api_error)?;
+        Ok(map_activity_response(payload))
+    }
+
+    async fn send_request(request: RequestBuilder) -> Result<reqwest::Response, ApiFailure> {
+        let response = Self::with_trace_context(request)
+            .send()
+            .await
+            .map_err(|error| ApiFailure {
+                status: error.status(),
+                error: map_connection_error(error),
+                response_body: None,
+            })?;
+
+        if response.status().is_success() {
+            return Ok(response);
+        }
+
+        Err(map_error_response(response).await)
+    }
+
     async fn fetch_activity_details(
         client: Client,
         base_url: String,
         credentials: IntervalsCredentials,
         activity_id: String,
     ) -> Result<Activity, IntervalsError> {
-        let url = Self::activity_url_impl(&base_url, &activity_id, "");
         let intervals_url = Self::activity_url_impl(&base_url, &activity_id, "/intervals");
         let streams_url = Self::activity_url_impl(&base_url, &activity_id, "/streams");
 
-        let response = Self::with_trace_context(
-            client
-                .get(url)
-                .basic_auth("API_KEY", Some(&credentials.api_key)),
-        )
-        .send()
-        .await
-        .map_err(map_connection_error)?;
+        let mut activity =
+            Self::fetch_base_activity(&client, &base_url, &credentials, &activity_id, false)
+                .await?;
 
-        if response.status() == StatusCode::NOT_FOUND {
-            return Err(IntervalsError::NotFound);
-        }
-
-        let response = response.error_for_status().map_err(map_api_error)?;
-        let payload: ActivityResponse = response.json().await.map_err(map_api_error)?;
-        let mut activity = map_activity_response(payload);
-
-        let intervals_result = Self::with_trace_context(
+        let intervals_result = Self::send_request(
             client
                 .get(intervals_url)
                 .basic_auth("API_KEY", Some(&credentials.api_key)),
         )
-        .send()
-        .await
-        .map_err(map_connection_error)
-        .and_then(|response| response.error_for_status().map_err(map_api_error))
-        .map_err(|error| {
-            tracing::warn!(
-                activity_id,
-                %error,
-                "intervals enrichment failed; returning base activity without intervals"
-            );
-            error
-        });
+        .await;
 
-        if let Ok(intervals_response) = intervals_result {
-            match intervals_response.json::<ActivityIntervalsResponse>().await {
-                Ok(intervals) => {
-                    activity.details.intervals = intervals
-                        .icu_intervals
-                        .into_iter()
-                        .map(map_activity_interval)
-                        .collect();
-                    activity.details.interval_groups = intervals
-                        .icu_groups
-                        .into_iter()
-                        .map(map_activity_interval_group)
-                        .collect();
+        match intervals_result {
+            Ok(intervals_response) => {
+                match intervals_response.json::<ActivityIntervalsResponse>().await {
+                    Ok(intervals) => {
+                        activity.details.intervals = intervals
+                            .icu_intervals
+                            .into_iter()
+                            .map(map_activity_interval)
+                            .collect();
+                        activity.details.interval_groups = intervals
+                            .icu_groups
+                            .into_iter()
+                            .map(map_activity_interval_group)
+                            .collect();
+                    }
+                    Err(error) => {
+                        let error = map_api_error(error);
+                        tracing::warn!(
+                            activity_id,
+                            %error,
+                            "intervals enrichment payload could not be parsed; returning base activity without intervals"
+                        );
+                    }
                 }
-                Err(error) => {
-                    let error = map_api_error(error);
-                    tracing::warn!(
-                        activity_id,
-                        %error,
-                        "intervals enrichment payload could not be parsed; returning base activity without intervals"
-                    );
+            }
+            Err(failure) => {
+                tracing::warn!(
+                    activity_id,
+                    %failure.error,
+                    response_body = failure.response_body.as_deref().unwrap_or(""),
+                    "intervals enrichment failed; returning base activity without intervals"
+                );
+
+                if failure.is_unprocessable_entity() {
+                    match Self::fetch_base_activity(
+                        &client,
+                        &base_url,
+                        &credentials,
+                        &activity_id,
+                        true,
+                    )
+                    .await
+                    {
+                        Ok(fallback_activity) => {
+                            if !fallback_activity.details.intervals.is_empty() {
+                                activity.details.intervals = fallback_activity.details.intervals;
+                            }
+                            if !fallback_activity.details.interval_groups.is_empty() {
+                                activity.details.interval_groups =
+                                    fallback_activity.details.interval_groups;
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                activity_id,
+                                %error,
+                                "intervals=true fallback fetch failed; returning base activity without intervals"
+                            );
+                        }
+                    }
                 }
             }
         }
 
-        let streams_result = Self::with_trace_context(if activity.stream_types.is_empty() {
-            client
-                .get(streams_url)
-                .basic_auth("API_KEY", Some(&credentials.api_key))
-                .query(&[("includeDefaults", "true")])
+        let streams_result = if activity.stream_types.is_empty() {
+            Self::send_request(
+                client
+                    .get(streams_url)
+                    .basic_auth("API_KEY", Some(&credentials.api_key))
+                    .query(&[("includeDefaults", "true")]),
+            )
+            .await
         } else {
-            client
-                .get(streams_url)
-                .basic_auth("API_KEY", Some(&credentials.api_key))
-                .query(&[
-                    ("types", activity.stream_types.join(",")),
-                    ("includeDefaults", "true".to_string()),
-                ])
-        })
-        .send()
-        .await
-        .map_err(map_connection_error)
-        .and_then(|response| response.error_for_status().map_err(map_api_error))
-        .map_err(|error| {
-            tracing::warn!(
-                activity_id,
-                %error,
-                "streams enrichment failed; returning base activity without streams"
-            );
-            error
-        });
+            let mut query_params = Vec::with_capacity(activity.stream_types.len() + 1);
+            for stream_type in &activity.stream_types {
+                query_params.push(("types", stream_type.clone()));
+            }
+            query_params.push(("includeDefaults", "true".to_string()));
 
-        if let Ok(streams_response) = streams_result {
-            match streams_response.json::<Vec<ActivityStreamResponse>>().await {
-                Ok(streams) => {
-                    activity.details.streams =
-                        streams.into_iter().map(map_activity_stream).collect();
-                }
-                Err(error) => {
-                    let error = map_api_error(error);
-                    tracing::warn!(
-                        activity_id,
-                        %error,
-                        "streams enrichment payload could not be parsed; returning base activity without streams"
-                    );
+            Self::send_request(
+                client
+                    .get(streams_url)
+                    .basic_auth("API_KEY", Some(&credentials.api_key))
+                    .query(&query_params),
+            )
+            .await
+        };
+
+        match streams_result {
+            Ok(streams_response) => {
+                match streams_response.json::<Vec<ActivityStreamResponse>>().await {
+                    Ok(streams) => {
+                        activity.details.streams = streams
+                            .into_iter()
+                            .filter(should_persist_stream)
+                            .map(map_activity_stream)
+                            .collect();
+                    }
+                    Err(error) => {
+                        let error = map_api_error(error);
+                        tracing::warn!(
+                            activity_id,
+                            %error,
+                            "streams enrichment payload could not be parsed; returning base activity without streams"
+                        );
+                    }
                 }
             }
+            Err(failure) => {
+                tracing::warn!(
+                    activity_id,
+                    %failure.error,
+                    response_body = failure.response_body.as_deref().unwrap_or(""),
+                    "streams enrichment failed; returning base activity without streams"
+                );
+            }
+        }
+
+        if activity.source.as_deref() == Some("STRAVA")
+            && activity.details.intervals.is_empty()
+            && activity.details.interval_groups.is_empty()
+            && activity.details.streams.is_empty()
+        {
+            activity.details_unavailable_reason = Some(
+                "Intervals.icu did not provide detailed data for this imported activity."
+                    .to_string(),
+            );
         }
 
         Ok(activity)
@@ -646,6 +754,39 @@ fn map_connection_error(error: reqwest::Error) -> IntervalsError {
     IntervalsError::ConnectionError(error.to_string())
 }
 
+async fn map_error_response(response: reqwest::Response) -> ApiFailure {
+    let status = response.status();
+    let url = response.url().to_string();
+    let response_body = response.text().await.ok().and_then(|body| {
+        let trimmed = body.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(truncate_log_body(trimmed))
+        }
+    });
+
+    let error = match status {
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+            IntervalsError::CredentialsNotConfigured
+        }
+        _ => {
+            let mut message = format!("HTTP {} for url ({url})", format_status_code(status));
+            if let Some(body) = response_body.as_deref() {
+                message.push_str("; response body: ");
+                message.push_str(body);
+            }
+            IntervalsError::ApiError(message)
+        }
+    };
+
+    ApiFailure {
+        status: Some(status),
+        error,
+        response_body,
+    }
+}
+
 fn map_api_error(error: reqwest::Error) -> IntervalsError {
     let message = error.to_string();
 
@@ -655,6 +796,24 @@ fn map_api_error(error: reqwest::Error) -> IntervalsError {
         }
         _ => IntervalsError::ApiError(message),
     }
+}
+
+fn format_status_code(status: StatusCode) -> String {
+    match status.canonical_reason() {
+        Some(reason) => format!("{} {}", status.as_u16(), reason),
+        None => status.as_u16().to_string(),
+    }
+}
+
+fn truncate_log_body(body: &str) -> String {
+    const MAX_LEN: usize = 512;
+
+    if body.chars().count() <= MAX_LEN {
+        return body.to_string();
+    }
+
+    let truncated: String = body.chars().take(MAX_LEN).collect();
+    format!("{truncated}...")
 }
 
 fn map_event_response(response: EventResponse) -> Event {
@@ -696,7 +855,12 @@ fn map_activity_response(response: ActivityResponse) -> Activity {
         commute: response.commute.unwrap_or(false),
         race: response.race.unwrap_or(false),
         has_heart_rate: response.has_heartrate.unwrap_or(false),
-        stream_types: response.stream_types.unwrap_or_default(),
+        stream_types: response
+            .stream_types
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|stream_type| should_persist_stream_type(stream_type))
+            .collect(),
         tags: response.tags.unwrap_or_default(),
         metrics: ActivityMetrics {
             training_stress_score: response.icu_training_load,
@@ -743,6 +907,7 @@ fn map_activity_response(response: ActivityResponse) -> Activity {
             pace_zone_times: response.pace_zone_times.unwrap_or_default(),
             gap_zone_times: response.gap_zone_times.unwrap_or_default(),
         },
+        details_unavailable_reason: None,
     }
 }
 
@@ -798,6 +963,14 @@ fn map_activity_stream(response: ActivityStreamResponse) -> ActivityStream {
         custom: response.custom,
         all_null: response.all_null,
     }
+}
+
+fn should_persist_stream(stream: &ActivityStreamResponse) -> bool {
+    should_persist_stream_type(&stream.stream_type)
+}
+
+fn should_persist_stream_type(stream_type: &str) -> bool {
+    !stream_type.eq_ignore_ascii_case("time")
 }
 
 fn map_category_to_string(category: &EventCategory) -> String {

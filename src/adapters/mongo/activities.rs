@@ -2,8 +2,8 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::intervals::{
-    Activity, ActivityDeduplicationIdentity, ActivityRepositoryPort, BoxFuture, DateRange,
-    IntervalsError,
+    Activity, ActivityDeduplicationIdentity, ActivityDetails, ActivityMetrics,
+    ActivityRepositoryPort, BoxFuture, DateRange, IntervalsError,
 };
 
 #[derive(Clone)]
@@ -73,6 +73,141 @@ impl MongoActivityRepository {
     }
 }
 
+fn merge_activity_for_storage(existing: Option<Activity>, incoming: Activity) -> Activity {
+    let incoming = normalize_activity(incoming);
+    let Some(existing) = existing else {
+        return incoming;
+    };
+    let existing = normalize_activity(existing);
+
+    if activity_detail_richness(&incoming) >= activity_detail_richness(&existing) {
+        return incoming;
+    }
+
+    Activity {
+        id: incoming.id,
+        athlete_id: incoming.athlete_id.or(existing.athlete_id),
+        start_date_local: incoming.start_date_local,
+        start_date: incoming.start_date.or(existing.start_date),
+        name: incoming.name.or(existing.name),
+        description: incoming.description.or(existing.description),
+        activity_type: incoming.activity_type.or(existing.activity_type),
+        source: incoming.source.or(existing.source),
+        external_id: incoming.external_id.or(existing.external_id),
+        device_name: incoming.device_name.or(existing.device_name),
+        distance_meters: incoming.distance_meters.or(existing.distance_meters),
+        moving_time_seconds: incoming
+            .moving_time_seconds
+            .or(existing.moving_time_seconds),
+        elapsed_time_seconds: incoming
+            .elapsed_time_seconds
+            .or(existing.elapsed_time_seconds),
+        total_elevation_gain_meters: incoming
+            .total_elevation_gain_meters
+            .or(existing.total_elevation_gain_meters),
+        total_elevation_loss_meters: incoming
+            .total_elevation_loss_meters
+            .or(existing.total_elevation_loss_meters),
+        average_speed_mps: incoming.average_speed_mps.or(existing.average_speed_mps),
+        max_speed_mps: incoming.max_speed_mps.or(existing.max_speed_mps),
+        average_heart_rate_bpm: incoming
+            .average_heart_rate_bpm
+            .or(existing.average_heart_rate_bpm),
+        max_heart_rate_bpm: incoming.max_heart_rate_bpm.or(existing.max_heart_rate_bpm),
+        average_cadence_rpm: incoming
+            .average_cadence_rpm
+            .or(existing.average_cadence_rpm),
+        trainer: incoming.trainer || existing.trainer,
+        commute: incoming.commute || existing.commute,
+        race: incoming.race || existing.race,
+        has_heart_rate: incoming.has_heart_rate || existing.has_heart_rate,
+        stream_types: prefer_non_empty(incoming.stream_types, existing.stream_types),
+        tags: prefer_non_empty(incoming.tags, existing.tags),
+        metrics: merge_activity_metrics(existing.metrics, incoming.metrics),
+        details: merge_activity_details(existing.details, incoming.details),
+        details_unavailable_reason: incoming
+            .details_unavailable_reason
+            .or(existing.details_unavailable_reason),
+    }
+}
+
+fn activity_detail_richness(activity: &Activity) -> usize {
+    usize::from(!activity.details.intervals.is_empty())
+        + usize::from(!activity.details.interval_groups.is_empty())
+        + usize::from(!activity.details.streams.is_empty())
+        + usize::from(!activity.details.interval_summary.is_empty())
+        + usize::from(!activity.details.skyline_chart.is_empty())
+        + usize::from(!activity.details.power_zone_times.is_empty())
+        + usize::from(!activity.details.heart_rate_zone_times.is_empty())
+        + usize::from(!activity.details.pace_zone_times.is_empty())
+        + usize::from(!activity.details.gap_zone_times.is_empty())
+}
+
+fn merge_activity_metrics(existing: ActivityMetrics, incoming: ActivityMetrics) -> ActivityMetrics {
+    ActivityMetrics {
+        training_stress_score: incoming
+            .training_stress_score
+            .or(existing.training_stress_score),
+        normalized_power_watts: incoming
+            .normalized_power_watts
+            .or(existing.normalized_power_watts),
+        intensity_factor: incoming.intensity_factor.or(existing.intensity_factor),
+        efficiency_factor: incoming.efficiency_factor.or(existing.efficiency_factor),
+        variability_index: incoming.variability_index.or(existing.variability_index),
+        average_power_watts: incoming
+            .average_power_watts
+            .or(existing.average_power_watts),
+        ftp_watts: incoming.ftp_watts.or(existing.ftp_watts),
+        total_work_joules: incoming.total_work_joules.or(existing.total_work_joules),
+        calories: incoming.calories.or(existing.calories),
+        trimp: incoming.trimp.or(existing.trimp),
+        power_load: incoming.power_load.or(existing.power_load),
+        heart_rate_load: incoming.heart_rate_load.or(existing.heart_rate_load),
+        pace_load: incoming.pace_load.or(existing.pace_load),
+        strain_score: incoming.strain_score.or(existing.strain_score),
+    }
+}
+
+fn merge_activity_details(existing: ActivityDetails, incoming: ActivityDetails) -> ActivityDetails {
+    ActivityDetails {
+        intervals: prefer_non_empty(incoming.intervals, existing.intervals),
+        interval_groups: prefer_non_empty(incoming.interval_groups, existing.interval_groups),
+        streams: prefer_non_empty(incoming.streams, existing.streams),
+        interval_summary: prefer_non_empty(incoming.interval_summary, existing.interval_summary),
+        skyline_chart: prefer_non_empty(incoming.skyline_chart, existing.skyline_chart),
+        power_zone_times: prefer_non_empty(incoming.power_zone_times, existing.power_zone_times),
+        heart_rate_zone_times: prefer_non_empty(
+            incoming.heart_rate_zone_times,
+            existing.heart_rate_zone_times,
+        ),
+        pace_zone_times: prefer_non_empty(incoming.pace_zone_times, existing.pace_zone_times),
+        gap_zone_times: prefer_non_empty(incoming.gap_zone_times, existing.gap_zone_times),
+    }
+}
+
+fn prefer_non_empty<T>(incoming: Vec<T>, existing: Vec<T>) -> Vec<T> {
+    if incoming.is_empty() {
+        existing
+    } else {
+        incoming
+    }
+}
+
+fn normalize_activity(mut activity: Activity) -> Activity {
+    activity
+        .stream_types
+        .retain(|stream_type| should_store_stream_type(stream_type));
+    activity
+        .details
+        .streams
+        .retain(|stream| should_store_stream_type(&stream.stream_type));
+    activity
+}
+
+fn should_store_stream_type(stream_type: &str) -> bool {
+    !stream_type.eq_ignore_ascii_case("time")
+}
+
 impl ActivityRepositoryPort for MongoActivityRepository {
     fn upsert(
         &self,
@@ -82,6 +217,12 @@ impl ActivityRepositoryPort for MongoActivityRepository {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
+            let existing = collection
+                .find_one(doc! { "user_id": &user_id, "activity_id": &activity.id })
+                .await
+                .map_err(|error| IntervalsError::Internal(error.to_string()))?
+                .map(|document| document.payload);
+            let activity = merge_activity_for_storage(existing, activity);
             let dedupe_identity = ActivityDeduplicationIdentity::from_activity(&activity);
             let document = ActivityDocument {
                 user_id: user_id.clone(),
@@ -146,7 +287,7 @@ impl ActivityRepositoryPort for MongoActivityRepository {
                 let document = cursor
                     .deserialize_current()
                     .map_err(|error| IntervalsError::Internal(error.to_string()))?;
-                activities.push(document.payload);
+                activities.push(normalize_activity(document.payload));
             }
             Ok(activities)
         })
@@ -165,7 +306,7 @@ impl ActivityRepositoryPort for MongoActivityRepository {
                 .find_one(doc! { "user_id": &user_id, "activity_id": &activity_id })
                 .await
                 .map_err(|error| IntervalsError::Internal(error.to_string()))?;
-            Ok(result.map(|document| document.payload))
+            Ok(result.map(|document| normalize_activity(document.payload)))
         })
     }
 
@@ -185,7 +326,7 @@ impl ActivityRepositoryPort for MongoActivityRepository {
                 })
                 .await
                 .map_err(|error| IntervalsError::Internal(error.to_string()))?;
-            Ok(result.map(|document| document.payload))
+            Ok(result.map(|document| normalize_activity(document.payload)))
         })
     }
 
@@ -215,7 +356,7 @@ impl ActivityRepositoryPort for MongoActivityRepository {
                 let document = cursor
                     .deserialize_current()
                     .map_err(|error| IntervalsError::Internal(error.to_string()))?;
-                activities.push(document.payload);
+                activities.push(normalize_activity(document.payload));
             }
             Ok(activities)
         })
@@ -280,6 +421,137 @@ mod tests {
         );
         assert_eq!(restored.payload.details.streams, payload.details.streams);
         assert_eq!(restored.payload, payload);
+    }
+
+    #[test]
+    fn merge_sparse_activity_payload_preserves_existing_enriched_fields() {
+        let existing = enriched_activity();
+        let incoming = sparse_activity_stub(&existing.id);
+
+        let merged = super::merge_activity_for_storage(Some(existing.clone()), incoming);
+
+        assert_eq!(merged.id, existing.id);
+        assert_eq!(merged.start_date_local, existing.start_date_local);
+        assert_eq!(merged.name, existing.name);
+        assert_eq!(merged.activity_type, existing.activity_type);
+        assert_eq!(merged.distance_meters, existing.distance_meters);
+        assert_eq!(merged.moving_time_seconds, existing.moving_time_seconds);
+        assert_eq!(merged.metrics, existing.metrics);
+        assert_eq!(merged.details, existing.details);
+        assert_eq!(merged.stream_types, existing.stream_types);
+        assert_eq!(merged.tags, existing.tags);
+        assert!(merged.has_heart_rate);
+    }
+
+    #[test]
+    fn merge_richer_incoming_activity_replaces_existing_payload() {
+        let existing = enriched_activity();
+        let mut incoming = enriched_activity();
+        incoming.name = Some("Updated Completed Workout".to_string());
+        incoming.details.streams = vec![ActivityStream {
+            stream_type: "heartrate".to_string(),
+            name: Some("Heart Rate".to_string()),
+            data: Some(serde_json::json!([140, 150, 160])),
+            data2: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        }];
+
+        let merged = super::merge_activity_for_storage(Some(existing), incoming.clone());
+
+        assert_eq!(merged, incoming);
+    }
+
+    #[test]
+    fn merge_activity_for_storage_drops_time_streams() {
+        let mut incoming = enriched_activity();
+        incoming.stream_types = vec!["time".to_string(), "watts".to_string()];
+        incoming.details.streams = vec![
+            ActivityStream {
+                stream_type: "time".to_string(),
+                name: None,
+                data: Some(serde_json::json!([0, 1, 2])),
+                data2: None,
+                value_type_is_array: false,
+                custom: false,
+                all_null: false,
+            },
+            ActivityStream {
+                stream_type: "watts".to_string(),
+                name: Some("Power".to_string()),
+                data: Some(serde_json::json!([120, 250, 310])),
+                data2: None,
+                value_type_is_array: false,
+                custom: false,
+                all_null: false,
+            },
+        ];
+
+        let merged = super::merge_activity_for_storage(None, incoming);
+
+        assert_eq!(merged.stream_types, vec!["watts".to_string()]);
+        assert_eq!(merged.details.streams.len(), 1);
+        assert_eq!(merged.details.streams[0].stream_type, "watts");
+    }
+
+    fn sparse_activity_stub(id: &str) -> Activity {
+        Activity {
+            id: id.to_string(),
+            athlete_id: None,
+            start_date_local: "2026-03-22T08:00:00".to_string(),
+            start_date: None,
+            name: None,
+            description: None,
+            activity_type: None,
+            source: Some("STRAVA".to_string()),
+            external_id: None,
+            device_name: None,
+            distance_meters: None,
+            moving_time_seconds: None,
+            elapsed_time_seconds: None,
+            total_elevation_gain_meters: None,
+            total_elevation_loss_meters: None,
+            average_speed_mps: None,
+            max_speed_mps: None,
+            average_heart_rate_bpm: None,
+            max_heart_rate_bpm: None,
+            average_cadence_rpm: None,
+            trainer: false,
+            commute: false,
+            race: false,
+            has_heart_rate: false,
+            stream_types: Vec::new(),
+            tags: Vec::new(),
+            metrics: ActivityMetrics {
+                training_stress_score: None,
+                normalized_power_watts: None,
+                intensity_factor: None,
+                efficiency_factor: None,
+                variability_index: None,
+                average_power_watts: None,
+                ftp_watts: None,
+                total_work_joules: None,
+                calories: None,
+                trimp: None,
+                power_load: None,
+                heart_rate_load: None,
+                pace_load: None,
+                strain_score: None,
+            },
+            details: ActivityDetails {
+                intervals: Vec::new(),
+                interval_groups: Vec::new(),
+                streams: Vec::new(),
+                interval_summary: Vec::new(),
+                skyline_chart: Vec::new(),
+                power_zone_times: Vec::new(),
+                heart_rate_zone_times: Vec::new(),
+                pace_zone_times: Vec::new(),
+                gap_zone_times: Vec::new(),
+            },
+            details_unavailable_reason: None,
+        }
     }
 
     fn enriched_activity() -> Activity {
@@ -379,6 +651,7 @@ mod tests {
                 pace_zone_times: vec![60],
                 gap_zone_times: vec![90],
             },
+            details_unavailable_reason: None,
         }
     }
 }

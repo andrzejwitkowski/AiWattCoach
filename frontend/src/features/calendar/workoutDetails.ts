@@ -9,6 +9,7 @@ export type WorkoutDetailSelection = {
 export type WorkoutBar = {
   height: number;
   color: string;
+  widthUnits: number;
 };
 
 const POWER_ZONE_COLORS: Record<number, string> = {
@@ -27,12 +28,14 @@ export function buildPlannedWorkoutBars(event: IntervalEvent): WorkoutBar[] {
     return event.eventDefinition.intervals.map((interval, index, all) => ({
       height: 35 + Math.round((index / Math.max(1, all.length - 1)) * 55),
       color: POWER_ZONE_COLORS[interval.zoneId ?? 2] ?? POWER_ZONE_COLORS[2],
+      widthUnits: normalizeWidthUnits(interval.durationSeconds),
     }));
   }
 
   return segments.map((segment) => ({
     height: heightForPercent(segment.targetPercentFtp),
     color: POWER_ZONE_COLORS[segment.zoneId ?? 2] ?? POWER_ZONE_COLORS[2],
+    widthUnits: normalizeWidthUnits(segment.durationSeconds),
   }));
 }
 
@@ -42,10 +45,11 @@ export function buildCompletedWorkoutBars(activity: IntervalActivity): WorkoutBa
     return intervals.slice(0, 12).map((interval) => ({
       height: heightForPower(interval.averagePowerWatts ?? activity.metrics.averagePowerWatts ?? 0),
       color: POWER_ZONE_COLORS[interval.zone ?? inferZoneFromPower(interval.averagePowerWatts, activity.metrics.ftpWatts)] ?? POWER_ZONE_COLORS[4],
+      widthUnits: completedIntervalDurationSeconds(interval),
     }));
   }
 
-  const values = extractPowerValues(activity).slice(0, 24);
+  const values = extractCompletedPowerValues(activity).slice(0, 24);
   if (values.length === 0) {
     return [];
   }
@@ -53,6 +57,23 @@ export function buildCompletedWorkoutBars(activity: IntervalActivity): WorkoutBa
   return values.map((value) => ({
     height: heightForPower(value),
     color: POWER_ZONE_COLORS[inferZoneFromPower(value, activity.metrics.ftpWatts)] ?? POWER_ZONE_COLORS[4],
+    widthUnits: 1,
+  }));
+}
+
+export function buildMatchedWorkoutBars(actualWorkout: IntervalEvent['actualWorkout']): WorkoutBar[] {
+  if (!actualWorkout?.matchedIntervals.length) {
+    return actualWorkout?.powerValues.slice(0, 24).map((value) => ({
+      height: heightForPower(value),
+      color: POWER_ZONE_COLORS[4],
+      widthUnits: 1,
+    })) ?? [];
+  }
+
+  return actualWorkout.matchedIntervals.map((interval) => ({
+    height: heightForPower(interval.averagePowerWatts ?? interval.normalizedPowerWatts ?? 0),
+    color: POWER_ZONE_COLORS[interval.zoneId ?? 4] ?? POWER_ZONE_COLORS[4],
+    widthUnits: normalizeWidthUnits(matchedIntervalDurationSeconds(interval)),
   }));
 }
 
@@ -86,13 +107,37 @@ export function formatDurationLabel(totalSeconds: number | null | undefined): st
   return `${minutes}m`;
 }
 
-function extractPowerValues(activity: IntervalActivity): number[] {
+export function extractCompletedPowerValues(activity: IntervalActivity): number[] {
   const stream = activity.details.streams.find((item) => item.streamType === 'watts');
   if (!stream || !Array.isArray(stream.data)) {
     return [];
   }
 
   return stream.data.flatMap((value) => (typeof value === 'number' ? [Math.round(value)] : []));
+}
+
+function normalizeWidthUnits(durationSeconds: number | null | undefined): number {
+  if (!durationSeconds || durationSeconds <= 0) {
+    return 1;
+  }
+
+  return durationSeconds;
+}
+
+function completedIntervalDurationSeconds(interval: IntervalActivity['details']['intervals'][number]): number {
+  const inferredDuration = interval.startTimeSeconds !== null && interval.endTimeSeconds !== null
+    ? interval.endTimeSeconds - interval.startTimeSeconds
+    : null;
+
+  return normalizeWidthUnits(interval.movingTimeSeconds ?? interval.elapsedTimeSeconds ?? inferredDuration);
+}
+
+function matchedIntervalDurationSeconds(interval: NonNullable<IntervalEvent['actualWorkout']>['matchedIntervals'][number]): number {
+  const inferredDuration = interval.actualStartTimeSeconds !== null && interval.actualEndTimeSeconds !== null
+    ? interval.actualEndTimeSeconds - interval.actualStartTimeSeconds
+    : null;
+
+  return normalizeWidthUnits(inferredDuration ?? interval.plannedDurationSeconds);
 }
 
 function heightForPercent(percent: number | null | undefined): number {

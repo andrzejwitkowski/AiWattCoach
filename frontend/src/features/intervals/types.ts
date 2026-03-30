@@ -237,6 +237,7 @@ export const intervalActivitySchema = z.object({
   tags: z.array(z.string()),
   metrics: activityMetricsSchema,
   details: activityDetailsSchema,
+  detailsUnavailableReason: z.string().nullable().optional(),
 });
 
 export const intervalActivitiesResponseSchema = z.array(intervalActivitySchema);
