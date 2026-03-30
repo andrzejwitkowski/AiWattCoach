@@ -106,6 +106,7 @@ describe('CalendarDayCell', () => {
             paceZoneTimes: [],
             gapZoneTimes: [],
           },
+          detailsUnavailableReason: null,
         },
       ],
     };
@@ -185,6 +186,7 @@ describe('CalendarDayCell', () => {
             paceZoneTimes: [],
             gapZoneTimes: [],
           },
+          detailsUnavailableReason: null,
         },
       ],
     };
@@ -250,6 +252,7 @@ describe('CalendarDayCell', () => {
             paceZoneTimes: [],
             gapZoneTimes: [],
           },
+          detailsUnavailableReason: null,
         },
       ],
     };
@@ -338,6 +341,7 @@ describe('CalendarDayCell', () => {
             paceZoneTimes: [],
             gapZoneTimes: [],
           },
+          detailsUnavailableReason: null,
         },
       ],
     };
@@ -345,7 +349,7 @@ describe('CalendarDayCell', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
 
     expect(container).toHaveTextContent('Morning Ride');
-    expect(container.querySelectorAll('div[style*="height"]').length).toBe(4);
+    expect(container.querySelectorAll('[data-chart-bar="mini"]').length).toBe(4);
   });
 
   it('uses the primary activity type as subtitle fallback when activity metrics are missing', () => {
@@ -416,6 +420,7 @@ describe('CalendarDayCell', () => {
             paceZoneTimes: [],
             gapZoneTimes: [],
           },
+          detailsUnavailableReason: null,
         },
       ],
     };
@@ -469,7 +474,7 @@ describe('CalendarDayCell', () => {
 
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
 
-    const chartBars = Array.from(container.querySelectorAll('div[style*="height"]'));
+    const chartBars = Array.from(container.querySelectorAll('[data-chart-bar="mini"]'));
     const backgroundColors = chartBars.map((bar) => (bar as HTMLDivElement).style.backgroundColor).filter(Boolean);
 
     expect(chartBars.length).toBe(3);
@@ -477,5 +482,47 @@ describe('CalendarDayCell', () => {
     expect(backgroundColors).toContain('rgb(0, 227, 253)');
     expect(backgroundColors).toContain('rgb(210, 255, 154)');
     expect(backgroundColors).toContain('rgb(255, 115, 81)');
+  });
+
+  it('renders mini-chart widths proportional to planned interval duration', () => {
+    const day: CalendarDay = {
+      date: new Date(2026, 2, 28),
+      dateKey: '2026-03-28',
+      activities: [],
+      events: [
+        {
+          id: 6,
+          startDateLocal: '2026-03-28',
+          name: 'Mixed set',
+          category: 'WORKOUT',
+          description: null,
+          indoor: true,
+          color: null,
+          eventDefinition: {
+            rawWorkoutDoc: null,
+            intervals: [],
+            segments: [
+              { order: 0, label: 'Long', durationSeconds: 1200, startOffsetSeconds: 0, endOffsetSeconds: 1200, targetPercentFtp: 75, zoneId: 3 },
+              { order: 1, label: 'Short', durationSeconds: 300, startOffsetSeconds: 1200, endOffsetSeconds: 1500, targetPercentFtp: 110, zoneId: 5 },
+            ],
+            summary: {
+              totalSegments: 2,
+              totalDurationSeconds: 1500,
+              estimatedNormalizedPowerWatts: null,
+              estimatedAveragePowerWatts: null,
+              estimatedIntensityFactor: null,
+              estimatedTrainingStressScore: null,
+            },
+          },
+          actualWorkout: null,
+        },
+      ],
+    };
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const [firstBar, secondBar] = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
+
+    expect(firstBar.style.flexGrow).toBe('1200');
+    expect(secondBar.style.flexGrow).toBe('300');
   });
 });

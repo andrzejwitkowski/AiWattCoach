@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -296,7 +296,9 @@ describe('WorkoutDetailModal', () => {
     expect(within(metricCard('TSS') as HTMLElement).getByText('35 TSS')).toBeInTheDocument();
     expect(screen.queryByText('78 TSS')).not.toBeInTheDocument();
     expect(screen.getAllByText(/91% compliance/i)).toHaveLength(2);
-    expect(document.querySelectorAll('.rounded-t-md')).toHaveLength(4);
+    expect(document.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(1);
+    const [bar] = Array.from(document.querySelectorAll('[data-chart-bar="detail"]')) as HTMLDivElement[];
+    expect(bar.style.flexGrow).toBe('1200');
 
     await userEvent.click(screen.getByRole('button', { name: /close workout details/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -418,7 +420,7 @@ describe('WorkoutDetailModal', () => {
     expect(within(metricCard('TSS') as HTMLElement).getByText('42 TSS')).toBeInTheDocument();
     expect(within(metricCard('NP') as HTMLElement).getByText('240 W')).toBeInTheDocument();
     expect(screen.queryByText('activity fetch failed')).not.toBeInTheDocument();
-    expect(document.querySelectorAll('.rounded-t-md')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(1);
   });
 
   it('keeps selected activity details visible when activity reload fails for an activity-only day', async () => {
@@ -660,8 +662,12 @@ describe('WorkoutDetailModal', () => {
     expect(screen.getByText('249 W')).toBeInTheDocument();
     expect(screen.getByText('74 TSS')).toBeInTheDocument();
     expect(screen.getByText(/completed intervals/i)).toBeInTheDocument();
-    expect(screen.getByText('Tempo Block 1')).toBeInTheDocument();
-    expect(screen.getByText('Tempo Block 2')).toBeInTheDocument();
+    const fills = Array.from(document.querySelectorAll('[data-interval-duration-fill="true"]')) as HTMLDivElement[];
+    expect(fills.length).toBeGreaterThanOrEqual(2);
+    expect(fills[0].style.width).toBe('16.666666666666664%');
+    expect(fills[1].style.width).toBe('16.666666666666664%');
+    expect(screen.getAllByText('Tempo Block 1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Tempo Block 2').length).toBeGreaterThan(0);
     expect(screen.getByText('245 W')).toBeInTheDocument();
     expect(screen.getByText('255 W')).toBeInTheDocument();
     expect(screen.getAllByText('10m')).toHaveLength(2);
@@ -829,8 +835,11 @@ describe('WorkoutDetailModal', () => {
     });
 
     expect(screen.getByText(/completed intervals/i)).toBeInTheDocument();
-    expect(screen.getByText('Shown Interval')).toBeInTheDocument();
+    expect(screen.getAllByText('Shown Interval').length).toBeGreaterThan(0);
     expect(screen.queryByText('Ride 1')).not.toBeInTheDocument();
+    const fills = Array.from(document.querySelectorAll('[data-interval-duration-fill="true"]')) as HTMLDivElement[];
+    expect(fills.length).toBeGreaterThanOrEqual(1);
+    expect(fills[fills.length - 1].style.width).toBe('25%');
     expect(screen.getAllByText('10m')).toHaveLength(1);
   });
 
@@ -1000,7 +1009,664 @@ describe('WorkoutDetailModal', () => {
     expect(screen.getByText('1h 32m')).toBeInTheDocument();
     expect(screen.getByText('238 W')).toBeInTheDocument();
     expect(screen.getByText('67 TSS')).toBeInTheDocument();
-    expect(container.querySelectorAll('.rounded-t-md')).toHaveLength(2);
+    const detailBars = Array.from(container.querySelectorAll('[data-chart-bar="detail"]')) as HTMLDivElement[];
+    expect(detailBars).toHaveLength(2);
+    expect(detailBars[0].style.flexGrow).toBe('1200');
+    expect(detailBars[1].style.flexGrow).toBe('1200');
+    expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    expect(screen.getByText('250 W max')).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(2);
+  });
+
+  it('renders a power chart for completed comparison workouts from actual power values', async () => {
+    vi.mocked(loadEvent).mockResolvedValue({
+      id: 44,
+      startDateLocal: '2026-03-30',
+      name: 'Tempo Build',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 2x10min 90%',
+        intervals: [{ definition: '- 2x10min 90%', repeatCount: 2, durationSeconds: 600, targetPercentFtp: 90, zoneId: 3 }],
+        segments: [{ order: 0, label: 'Tempo', durationSeconds: 1200, startOffsetSeconds: 0, endOffsetSeconds: 1200, targetPercentFtp: 90, zoneId: 3 }],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 1200,
+          estimatedNormalizedPowerWatts: 265,
+          estimatedAveragePowerWatts: 255,
+          estimatedIntensityFactor: 0.9,
+          estimatedTrainingStressScore: 32,
+        },
+      },
+      actualWorkout: {
+        activityId: 'a44',
+        activityName: 'Tempo Build Outside',
+        startDateLocal: '2026-03-30T07:00:00',
+        powerValues: [160, 210, 245, 265, 238],
+        cadenceValues: [80, 85, 90, 88, 86],
+        heartRateValues: [128, 138, 149, 153, 151],
+        speedValues: [8.1, 9.0, 9.8, 9.7, 9.5],
+        averagePowerWatts: 224,
+        normalizedPowerWatts: 239,
+        trainingStressScore: 36,
+        intensityFactor: 0.82,
+        complianceScore: 0.88,
+        matchedIntervals: [],
+      },
+    });
+    vi.mocked(loadActivity).mockResolvedValue(undefined as never);
+
+    const selection: WorkoutDetailSelection = {
+      dateKey: '2026-03-30',
+      event: {
+        id: 44,
+        startDateLocal: '2026-03-30',
+        name: 'Tempo Build',
+        category: 'WORKOUT',
+        description: null,
+        indoor: false,
+        color: null,
+        eventDefinition: {
+          rawWorkoutDoc: null,
+          intervals: [],
+          segments: [],
+          summary: {
+            totalSegments: 0,
+            totalDurationSeconds: 0,
+            estimatedNormalizedPowerWatts: null,
+            estimatedAveragePowerWatts: null,
+            estimatedIntensityFactor: null,
+            estimatedTrainingStressScore: null,
+          },
+        },
+        actualWorkout: null,
+      },
+      activity: null,
+    };
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={selection} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/completed workout/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    expect(screen.getByText('265 W max')).toBeInTheDocument();
+    expect(screen.queryAllByText('Tempo').length).toBeGreaterThan(0);
+    expect(screen.getByText('0:00')).toBeInTheDocument();
+    expect(screen.getByText('19:59')).toBeInTheDocument();
+  });
+
+  it('shows hovered power readout next to the max power label', async () => {
+    vi.mocked(loadEvent).mockResolvedValue({
+      id: 46,
+      startDateLocal: '2026-04-01',
+      name: 'Hover Test',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 5min tempo',
+        intervals: [],
+        segments: [{ order: 0, label: 'Tempo', durationSeconds: 5, startOffsetSeconds: 0, endOffsetSeconds: 5, targetPercentFtp: 90, zoneId: 3 }],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 5,
+          estimatedNormalizedPowerWatts: 230,
+          estimatedAveragePowerWatts: 225,
+          estimatedIntensityFactor: 0.8,
+          estimatedTrainingStressScore: 4,
+        },
+      },
+      actualWorkout: {
+        activityId: 'a46',
+        activityName: 'Hover Ride',
+        startDateLocal: '2026-04-01T07:00:00',
+        powerValues: [100, 150, 200, 250, 300],
+        cadenceValues: [],
+        heartRateValues: [],
+        speedValues: [],
+        averagePowerWatts: 200,
+        normalizedPowerWatts: 220,
+        trainingStressScore: 20,
+        intensityFactor: 0.73,
+        complianceScore: 0.8,
+        matchedIntervals: [],
+      },
+    });
+    vi.mocked(loadActivity).mockResolvedValue(undefined as never);
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={{ dateKey: '2026-04-01', event: { id: 46, startDateLocal: '2026-04-01', name: 'Hover Test', category: 'WORKOUT', description: null, indoor: false, color: null, eventDefinition: { rawWorkoutDoc: null, intervals: [], segments: [], summary: { totalSegments: 0, totalDurationSeconds: 0, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: null, estimatedTrainingStressScore: null } }, actualWorkout: null }, activity: null }} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    });
+
+    const chart = screen.getByLabelText(/power chart/i);
+    Object.defineProperty(chart, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 220, right: 1000, bottom: 220, x: 0, y: 0, toJSON: () => ({}) }),
+    });
+
+    fireEvent.mouseMove(chart, { clientX: 500, clientY: 80 });
+
+    expect(screen.getByText('300 W max')).toBeInTheDocument();
+    expect(screen.getByText('0:02 • 200 W')).toBeInTheDocument();
+  });
+
+  it('highlights the matching interval chip and row while hovering the chart', async () => {
+    vi.mocked(loadEvent).mockResolvedValue(undefined as never);
+    vi.mocked(loadActivity).mockResolvedValue({
+      id: 'a47',
+      startDateLocal: '2026-04-02T08:00:00',
+      startDate: '2026-04-02T07:00:00Z',
+      name: 'Highlight Ride',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: 30000,
+      movingTimeSeconds: 1200,
+      elapsedTimeSeconds: 1200,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: true,
+      streamTypes: ['watts'],
+      tags: [],
+      metrics: {
+        trainingStressScore: 30,
+        normalizedPowerWatts: 220,
+        intensityFactor: 0.8,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: 210,
+        ftpWatts: 280,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [
+          {
+            id: 1,
+            label: 'Ride 1',
+            intervalType: 'WORK',
+            groupId: null,
+            startIndex: 0,
+            endIndex: 599,
+            startTimeSeconds: 0,
+            endTimeSeconds: 600,
+            movingTimeSeconds: 600,
+            elapsedTimeSeconds: 600,
+            distanceMeters: null,
+            averagePowerWatts: 200,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            averageHeartRateBpm: 140,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            averageStrideMeters: null,
+            zone: 3,
+          },
+          {
+            id: 2,
+            label: 'Ride 2',
+            intervalType: 'WORK',
+            groupId: null,
+            startIndex: 600,
+            endIndex: 1199,
+            startTimeSeconds: 600,
+            endTimeSeconds: 1200,
+            movingTimeSeconds: 600,
+            elapsedTimeSeconds: 600,
+            distanceMeters: null,
+            averagePowerWatts: 240,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            averageHeartRateBpm: 150,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            averageStrideMeters: null,
+            zone: 4,
+          },
+        ],
+        intervalGroups: [],
+        streams: [{ streamType: 'watts', name: 'Power', data: Array.from({ length: 1200 }, (_, index) => (index < 600 ? 200 : 240)), data2: null, valueTypeIsArray: false, custom: false, allNull: false }],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+    });
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={{ dateKey: '2026-04-02', event: null, activity: { id: 'a47', startDateLocal: '2026-04-02T08:00:00', startDate: '2026-04-02T07:00:00Z', name: 'Highlight Ride', description: null, activityType: 'Ride', source: null, externalId: null, deviceName: null, distanceMeters: null, movingTimeSeconds: 1200, elapsedTimeSeconds: 1200, totalElevationGainMeters: null, averageSpeedMps: null, averageHeartRateBpm: null, averageCadenceRpm: null, trainer: false, commute: false, race: false, hasHeartRate: true, streamTypes: [], tags: [], metrics: { trainingStressScore: null, normalizedPowerWatts: null, intensityFactor: null, efficiencyFactor: null, variabilityIndex: null, averagePowerWatts: null, ftpWatts: null, totalWorkJoules: null, calories: null, trimp: null, powerLoad: null, heartRateLoad: null, paceLoad: null, strainScore: null }, details: { intervals: [], intervalGroups: [], streams: [], intervalSummary: [], skylineChart: [], powerZoneTimes: [], heartRateZoneTimes: [], paceZoneTimes: [], gapZoneTimes: [] } } }} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    });
+
+    const chart = screen.getByLabelText(/power chart/i);
+    Object.defineProperty(chart, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 220, right: 1000, bottom: 220, x: 0, y: 0, toJSON: () => ({}) }),
+    });
+
+    fireEvent.mouseMove(chart, { clientX: 750, clientY: 80 });
+
+    const activeChip = screen.getAllByText('Ride 2').find((element) => element.getAttribute('data-interval-chip-active') === 'true');
+    expect(activeChip).toBeTruthy();
+    expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
+  });
+
+  it('lets interval chips and rows drive the chart highlight in reverse', async () => {
+    vi.mocked(loadEvent).mockResolvedValue(undefined as never);
+    vi.mocked(loadActivity).mockResolvedValue({
+      id: 'a48',
+      startDateLocal: '2026-04-03T08:00:00',
+      startDate: '2026-04-03T07:00:00Z',
+      name: 'Reverse Highlight Ride',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: 30000,
+      movingTimeSeconds: 1200,
+      elapsedTimeSeconds: 1200,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: true,
+      streamTypes: ['watts'],
+      tags: [],
+      metrics: {
+        trainingStressScore: 30,
+        normalizedPowerWatts: 220,
+        intensityFactor: 0.8,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: 210,
+        ftpWatts: 280,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [
+          {
+            id: 1,
+            label: 'Ride 1',
+            intervalType: 'WORK',
+            groupId: null,
+            startIndex: 0,
+            endIndex: 599,
+            startTimeSeconds: 0,
+            endTimeSeconds: 600,
+            movingTimeSeconds: 600,
+            elapsedTimeSeconds: 600,
+            distanceMeters: null,
+            averagePowerWatts: 200,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            averageHeartRateBpm: 140,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            averageStrideMeters: null,
+            zone: 3,
+          },
+          {
+            id: 2,
+            label: 'Ride 2',
+            intervalType: 'WORK',
+            groupId: null,
+            startIndex: 600,
+            endIndex: 1199,
+            startTimeSeconds: 600,
+            endTimeSeconds: 1200,
+            movingTimeSeconds: 600,
+            elapsedTimeSeconds: 600,
+            distanceMeters: null,
+            averagePowerWatts: 240,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            averageHeartRateBpm: 150,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            averageStrideMeters: null,
+            zone: 4,
+          },
+        ],
+        intervalGroups: [],
+        streams: [{ streamType: 'watts', name: 'Power', data: Array.from({ length: 1200 }, (_, index) => (index < 600 ? 200 : 240)), data2: null, valueTypeIsArray: false, custom: false, allNull: false }],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+    });
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={{ dateKey: '2026-04-03', event: null, activity: { id: 'a48', startDateLocal: '2026-04-03T08:00:00', startDate: '2026-04-03T07:00:00Z', name: 'Reverse Highlight Ride', description: null, activityType: 'Ride', source: null, externalId: null, deviceName: null, distanceMeters: null, movingTimeSeconds: 1200, elapsedTimeSeconds: 1200, totalElevationGainMeters: null, averageSpeedMps: null, averageHeartRateBpm: null, averageCadenceRpm: null, trainer: false, commute: false, race: false, hasHeartRate: true, streamTypes: [], tags: [], metrics: { trainingStressScore: null, normalizedPowerWatts: null, intensityFactor: null, efficiencyFactor: null, variabilityIndex: null, averagePowerWatts: null, ftpWatts: null, totalWorkJoules: null, calories: null, trimp: null, powerLoad: null, heartRateLoad: null, paceLoad: null, strainScore: null }, details: { intervals: [], intervalGroups: [], streams: [], intervalSummary: [], skylineChart: [], powerZoneTimes: [], heartRateZoneTimes: [], paceZoneTimes: [], gapZoneTimes: [] } } }} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    });
+
+    const ride2Chip = screen.getAllByText('Ride 2').find((element) => element.getAttribute('data-interval-chip-active') === 'false');
+    expect(ride2Chip).toBeTruthy();
+    fireEvent.mouseEnter(ride2Chip as Element);
+
+    expect(screen.getAllByText('Ride 2').some((element) => element.getAttribute('data-interval-chip-active') === 'true')).toBe(true);
+    expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
+    expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('240 W');
+
+    const ride1Row = Array.from(document.querySelectorAll('[data-interval-row-active]')).find((element) => element.textContent?.includes('Ride 1')) as HTMLElement;
+    fireEvent.click(ride1Row);
+
+    expect(document.querySelectorAll('[data-interval-row-active="true"]').length).toBeGreaterThan(0);
+    fireEvent.mouseEnter(ride1Row);
+    expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('200 W');
+  });
+
+  it('keeps chart overlays aligned when hidden intervals precede visible ones', async () => {
+    vi.mocked(loadEvent).mockResolvedValue(undefined as never);
+    vi.mocked(loadActivity).mockResolvedValue({
+      id: 'a49',
+      startDateLocal: '2026-04-04T08:00:00',
+      startDate: '2026-04-04T07:00:00Z',
+      name: 'Hidden Interval Ride',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: 20000,
+      movingTimeSeconds: 1200,
+      elapsedTimeSeconds: 1200,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: true,
+      streamTypes: ['watts'],
+      tags: [],
+      metrics: {
+        trainingStressScore: 20,
+        normalizedPowerWatts: 210,
+        intensityFactor: 0.75,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: 205,
+        ftpWatts: 280,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [
+          {
+            id: 91,
+            label: null,
+            intervalType: null,
+            groupId: null,
+            startIndex: null,
+            endIndex: null,
+            startTimeSeconds: 0,
+            endTimeSeconds: 300,
+            movingTimeSeconds: 300,
+            elapsedTimeSeconds: 300,
+            distanceMeters: null,
+            averagePowerWatts: null,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            averageHeartRateBpm: null,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            averageStrideMeters: null,
+            zone: null,
+          },
+          {
+            id: 92,
+            label: 'Ride 1',
+            intervalType: 'WORK',
+            groupId: null,
+            startIndex: null,
+            endIndex: null,
+            startTimeSeconds: null,
+            endTimeSeconds: null,
+            movingTimeSeconds: 600,
+            elapsedTimeSeconds: 600,
+            distanceMeters: null,
+            averagePowerWatts: 220,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            averageHeartRateBpm: 145,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            averageStrideMeters: null,
+            zone: 3,
+          },
+        ],
+        intervalGroups: [],
+        streams: [{ streamType: 'watts', name: 'Power', data: Array.from({ length: 1200 }, (_, index) => (index < 300 ? 120 : 220)), data2: null, valueTypeIsArray: false, custom: false, allNull: false }],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+      detailsUnavailableReason: null,
+    });
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={{ dateKey: '2026-04-04', event: null, activity: { id: 'a49', startDateLocal: '2026-04-04T08:00:00', startDate: '2026-04-04T07:00:00Z', name: 'Hidden Interval Ride', description: null, activityType: 'Ride', source: null, externalId: null, deviceName: null, distanceMeters: null, movingTimeSeconds: 1200, elapsedTimeSeconds: 1200, totalElevationGainMeters: null, averageSpeedMps: null, averageHeartRateBpm: null, averageCadenceRpm: null, trainer: false, commute: false, race: false, hasHeartRate: true, streamTypes: [], tags: [], metrics: { trainingStressScore: null, normalizedPowerWatts: null, intensityFactor: null, efficiencyFactor: null, variabilityIndex: null, averagePowerWatts: null, ftpWatts: null, totalWorkJoules: null, calories: null, trimp: null, powerLoad: null, heartRateLoad: null, paceLoad: null, strainScore: null }, details: { intervals: [], intervalGroups: [], streams: [], intervalSummary: [], skylineChart: [], powerZoneTimes: [], heartRateZoneTimes: [], paceZoneTimes: [], gapZoneTimes: [] } } }} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    });
+
+    const chart = screen.getByLabelText(/power chart/i);
+    Object.defineProperty(chart, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 220, right: 1000, bottom: 220, x: 0, y: 0, toJSON: () => ({}) }),
+    });
+
+    fireEvent.mouseMove(chart, { clientX: 400, clientY: 80 });
+
+    expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 1');
+    expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('220 W');
+  });
+
+  it('supports keyboard activation for interval rows and chips', async () => {
+    vi.mocked(loadEvent).mockResolvedValue(undefined as never);
+    vi.mocked(loadActivity).mockResolvedValue({
+      id: 'a50',
+      startDateLocal: '2026-04-05T08:00:00',
+      startDate: '2026-04-05T07:00:00Z',
+      name: 'Keyboard Ride',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: 30000,
+      movingTimeSeconds: 1200,
+      elapsedTimeSeconds: 1200,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: true,
+      streamTypes: ['watts'],
+      tags: [],
+      metrics: {
+        trainingStressScore: 20,
+        normalizedPowerWatts: 210,
+        intensityFactor: 0.75,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: 205,
+        ftpWatts: 280,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [
+          { id: 1, label: 'Ride 1', intervalType: 'WORK', groupId: null, startIndex: null, endIndex: null, startTimeSeconds: 0, endTimeSeconds: 600, movingTimeSeconds: 600, elapsedTimeSeconds: 600, distanceMeters: null, averagePowerWatts: 200, normalizedPowerWatts: null, trainingStressScore: null, averageHeartRateBpm: 140, averageCadenceRpm: null, averageSpeedMps: null, averageStrideMeters: null, zone: 3 },
+          { id: 2, label: 'Ride 2', intervalType: 'WORK', groupId: null, startIndex: null, endIndex: null, startTimeSeconds: 600, endTimeSeconds: 1200, movingTimeSeconds: 600, elapsedTimeSeconds: 600, distanceMeters: null, averagePowerWatts: 240, normalizedPowerWatts: null, trainingStressScore: null, averageHeartRateBpm: 150, averageCadenceRpm: null, averageSpeedMps: null, averageStrideMeters: null, zone: 4 },
+        ],
+        intervalGroups: [],
+        streams: [{ streamType: 'watts', name: 'Power', data: Array.from({ length: 1200 }, (_, index) => (index < 600 ? 200 : 240)), data2: null, valueTypeIsArray: false, custom: false, allNull: false }],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+      detailsUnavailableReason: null,
+    });
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={{ dateKey: '2026-04-05', event: null, activity: { id: 'a50', startDateLocal: '2026-04-05T08:00:00', startDate: '2026-04-05T07:00:00Z', name: 'Keyboard Ride', description: null, activityType: 'Ride', source: null, externalId: null, deviceName: null, distanceMeters: null, movingTimeSeconds: 1200, elapsedTimeSeconds: 1200, totalElevationGainMeters: null, averageSpeedMps: null, averageHeartRateBpm: null, averageCadenceRpm: null, trainer: false, commute: false, race: false, hasHeartRate: true, streamTypes: [], tags: [], metrics: { trainingStressScore: null, normalizedPowerWatts: null, intensityFactor: null, efficiencyFactor: null, variabilityIndex: null, averagePowerWatts: null, ftpWatts: null, totalWorkJoules: null, calories: null, trimp: null, powerLoad: null, heartRateLoad: null, paceLoad: null, strainScore: null }, details: { intervals: [], intervalGroups: [], streams: [], intervalSummary: [], skylineChart: [], powerZoneTimes: [], heartRateZoneTimes: [], paceZoneTimes: [], gapZoneTimes: [] } } }} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    });
+
+    const ride2Chip = screen.getAllByText('Ride 2').find((element) => element.getAttribute('data-interval-chip-active') === 'false') as HTMLElement;
+    ride2Chip.focus();
+    fireEvent.keyDown(ride2Chip, { key: 'Enter' });
+
+    expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
+
+    const ride1Row = Array.from(document.querySelectorAll('[data-interval-row-active]')).find((element) => element.textContent?.includes('Ride 1')) as HTMLElement;
+    ride1Row.focus();
+    fireEvent.keyDown(ride1Row, { key: ' ' });
+
+    const activeRows = Array.from(document.querySelectorAll('[data-interval-row-active="true"]'));
+    expect(activeRows.some((element) => element.textContent?.includes('Ride 1'))).toBe(true);
+  });
+
+  it('renders comparison workout bars with width proportional to matched interval durations', async () => {
+    vi.mocked(loadEvent).mockResolvedValue({
+      id: 45,
+      startDateLocal: '2026-03-31',
+      name: 'Mixed durations',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- mixed',
+        intervals: [],
+        segments: [],
+        summary: {
+          totalSegments: 0,
+          totalDurationSeconds: 1500,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: {
+        activityId: 'a45',
+        activityName: 'Mixed durations ride',
+        startDateLocal: '2026-03-31T07:00:00',
+        powerValues: [180, 220, 260, 280, 230],
+        cadenceValues: [],
+        heartRateValues: [],
+        speedValues: [],
+        averagePowerWatts: 230,
+        normalizedPowerWatts: 242,
+        trainingStressScore: 40,
+        intensityFactor: 0.84,
+        complianceScore: 0.9,
+        matchedIntervals: [
+          {
+            plannedSegmentOrder: 0,
+            plannedLabel: 'Long',
+            plannedDurationSeconds: 1200,
+            targetPercentFtp: 90,
+            zoneId: 4,
+            actualIntervalId: 1,
+            actualStartTimeSeconds: 0,
+            actualEndTimeSeconds: 1200,
+            averagePowerWatts: 250,
+            normalizedPowerWatts: 255,
+            averageHeartRateBpm: null,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            complianceScore: 0.92,
+          },
+          {
+            plannedSegmentOrder: 1,
+            plannedLabel: 'Short',
+            plannedDurationSeconds: 300,
+            targetPercentFtp: 80,
+            zoneId: 3,
+            actualIntervalId: 2,
+            actualStartTimeSeconds: 1200,
+            actualEndTimeSeconds: 1500,
+            averagePowerWatts: 210,
+            normalizedPowerWatts: 215,
+            averageHeartRateBpm: null,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            complianceScore: 0.86,
+          },
+        ],
+      },
+    });
+    vi.mocked(loadActivity).mockResolvedValue(undefined as never);
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={{ dateKey: '2026-03-31', event: { id: 45, startDateLocal: '2026-03-31', name: 'Mixed durations', category: 'WORKOUT', description: null, indoor: false, color: null, eventDefinition: { rawWorkoutDoc: null, intervals: [], segments: [], summary: { totalSegments: 0, totalDurationSeconds: 0, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: null, estimatedTrainingStressScore: null } }, actualWorkout: null }, activity: null }} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/completed workout/i)).toBeInTheDocument();
+    });
+
+    const detailBars = Array.from(document.querySelectorAll('[data-chart-bar="detail"]')) as HTMLDivElement[];
+    expect(detailBars).toHaveLength(2);
+    expect(detailBars[0].style.flexGrow).toBe('1200');
+    expect(detailBars[1].style.flexGrow).toBe('300');
+    expect(document.querySelectorAll('[data-interval-overlay="true"]')).toHaveLength(2);
   });
 
   it('stays in planned mode when an unrelated selected activity exists', async () => {
@@ -1302,6 +1968,127 @@ describe('WorkoutDetailModal', () => {
     expect(screen.getByText('272 W')).toBeInTheDocument();
     expect(screen.getByText('81 TSS')).toBeInTheDocument();
     expect(screen.getByText(/87% compliance/i)).toBeInTheDocument();
+  });
+
+  it('shows imported activity details unavailable hint for sparse completed imports', async () => {
+    vi.mocked(loadEvent).mockResolvedValue(undefined as never);
+    vi.mocked(loadActivity).mockResolvedValue({
+      id: 'a24',
+      startDateLocal: '2026-03-26T08:00:00',
+      startDate: '2026-03-26T07:00:00Z',
+      name: 'Imported Ride',
+      description: null,
+      activityType: 'Ride',
+      source: 'STRAVA',
+      externalId: null,
+      deviceName: null,
+      distanceMeters: 40200,
+      movingTimeSeconds: 3600,
+      elapsedTimeSeconds: 3700,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: false,
+      streamTypes: [],
+      tags: [],
+      metrics: {
+        trainingStressScore: null,
+        normalizedPowerWatts: null,
+        intensityFactor: null,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: null,
+        ftpWatts: null,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [],
+        intervalGroups: [],
+        streams: [],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+      detailsUnavailableReason: 'Intervals.icu did not provide detailed data for this imported activity.',
+    });
+
+    const selection: WorkoutDetailSelection = {
+      dateKey: '2026-03-26',
+      event: null,
+      activity: {
+        id: 'a24',
+        startDateLocal: '2026-03-26T08:00:00',
+        startDate: '2026-03-26T07:00:00Z',
+        name: 'Imported Ride',
+        description: null,
+        activityType: 'Ride',
+        source: 'STRAVA',
+        externalId: null,
+        deviceName: null,
+        distanceMeters: 40200,
+        movingTimeSeconds: 3600,
+        elapsedTimeSeconds: 3700,
+        totalElevationGainMeters: null,
+        averageSpeedMps: null,
+        averageHeartRateBpm: null,
+        averageCadenceRpm: null,
+        trainer: false,
+        commute: false,
+        race: false,
+        hasHeartRate: false,
+        streamTypes: [],
+        tags: [],
+        metrics: {
+          trainingStressScore: null,
+          normalizedPowerWatts: null,
+          intensityFactor: null,
+          efficiencyFactor: null,
+          variabilityIndex: null,
+          averagePowerWatts: null,
+          ftpWatts: null,
+          totalWorkJoules: null,
+          calories: null,
+          trimp: null,
+          powerLoad: null,
+          heartRateLoad: null,
+          paceLoad: null,
+          strainScore: null,
+        },
+        details: {
+          intervals: [],
+          intervalGroups: [],
+          streams: [],
+          intervalSummary: [],
+          skylineChart: [],
+          powerZoneTimes: [],
+          heartRateZoneTimes: [],
+          paceZoneTimes: [],
+          gapZoneTimes: [],
+        },
+        detailsUnavailableReason: null,
+      },
+    };
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={selection} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Imported Ride')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Intervals.icu did not expose detailed data for this imported workout.')).toBeInTheDocument();
   });
 
   it('hides FIT download action in completed mode', async () => {

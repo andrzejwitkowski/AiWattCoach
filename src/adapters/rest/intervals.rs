@@ -272,6 +272,8 @@ pub struct ActivityDto {
     pub tags: Vec<String>,
     pub metrics: ActivityMetricsDto,
     pub details: ActivityDetailsDto,
+    #[serde(rename = "detailsUnavailableReason")]
+    pub details_unavailable_reason: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1104,6 +1106,7 @@ fn map_activity_to_dto(activity: Activity) -> ActivityDto {
             pace_zone_times: activity.details.pace_zone_times,
             gap_zone_times: activity.details.gap_zone_times,
         },
+        details_unavailable_reason: activity.details_unavailable_reason,
     }
 }
 

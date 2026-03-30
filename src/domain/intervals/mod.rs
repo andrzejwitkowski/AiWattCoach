@@ -4,16 +4,18 @@ mod service;
 mod workout;
 
 pub use model::{
-    normalize_external_id, round_distance_bucket, round_duration_bucket, Activity,
-    ActivityDeduplicationIdentity, ActivityDetails, ActivityFallbackIdentity, ActivityInterval,
-    ActivityIntervalGroup, ActivityMetrics, ActivityStream, ActivityZoneTime, CreateEvent,
-    DateRange, Event, EventCategory, EventFileUpload, IntervalsCredentials, IntervalsError,
-    UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
+    build_activity_upload_operation_key, normalize_external_id, round_distance_bucket,
+    round_duration_bucket, Activity, ActivityDeduplicationIdentity, ActivityDetails,
+    ActivityFallbackIdentity, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
+    ActivityStream, ActivityUploadOperation, ActivityUploadOperationStatus, ActivityZoneTime,
+    CreateEvent, DateRange, Event, EventCategory, EventFileUpload, IntervalsCredentials,
+    IntervalsError, UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
 };
 pub use ports::{
-    ActivityFileIdentityExtractorPort, ActivityRepositoryPort, BoxFuture, EnrichedEvent,
-    IntervalsApiPort, IntervalsSettingsPort, NoopActivityFileIdentityExtractor,
-    NoopActivityRepository,
+    ActivityFileIdentityExtractorPort, ActivityRepositoryPort,
+    ActivityUploadOperationRepositoryPort, BoxFuture, EnrichedEvent, IntervalsApiPort,
+    IntervalsSettingsPort, NoopActivityFileIdentityExtractor, NoopActivityRepository,
+    NoopActivityUploadOperationRepository,
 };
 pub use service::{
     IntervalsConnectionError, IntervalsConnectionTester, IntervalsService, IntervalsUseCases,

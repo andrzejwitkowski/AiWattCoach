@@ -1,9 +1,11 @@
 use super::{
-    find_best_activity_match, normalize_external_id, parse_workout_doc,
+    build_activity_upload_operation_key, find_best_activity_match, normalize_external_id,
+    parse_workout_doc,
     ports::{ActivityFileIdentityExtractorPort, BoxFuture},
-    Activity, ActivityRepositoryPort, CreateEvent, DateRange, EnrichedEvent, Event,
-    IntervalsApiPort, IntervalsError, IntervalsSettingsPort, UpdateActivity, UpdateEvent,
-    UploadActivity, UploadedActivities,
+    Activity, ActivityRepositoryPort, ActivityUploadOperation,
+    ActivityUploadOperationRepositoryPort, ActivityUploadOperationStatus, CreateEvent, DateRange,
+    EnrichedEvent, Event, IntervalsApiPort, IntervalsError, IntervalsSettingsPort, UpdateActivity,
+    UpdateEvent, UploadActivity, UploadedActivities,
 };
 use tracing::warn;
 
@@ -145,47 +147,109 @@ pub trait IntervalsUseCases: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct IntervalsService<Api, Settings, Activities, Extractor>
+pub struct IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
 {
     api: Api,
     settings: Settings,
     activities: Activities,
+    upload_operations: UploadOperations,
     identity_extractor: Extractor,
 }
 
-impl<Api, Settings, Activities, Extractor> IntervalsService<Api, Settings, Activities, Extractor>
+impl<Api, Settings, Activities, UploadOperations, Extractor>
+    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
 {
     pub fn new(
         api: Api,
         settings: Settings,
         activities: Activities,
+        upload_operations: UploadOperations,
         identity_extractor: Extractor,
     ) -> Self {
         Self {
             api,
             settings,
             activities,
+            upload_operations,
             identity_extractor,
+        }
+    }
+
+    async fn recover_uploaded_operation(
+        &self,
+        user_id: &str,
+        operation: &ActivityUploadOperation,
+    ) -> Result<Option<UploadedActivities>, IntervalsError> {
+        match operation.status {
+            ActivityUploadOperationStatus::Pending => Ok(None),
+            ActivityUploadOperationStatus::Uploaded | ActivityUploadOperationStatus::Completed => {
+                let mut activities = Vec::new();
+
+                for activity_id in &operation.uploaded_activity_ids {
+                    if let Some(activity) = self
+                        .activities
+                        .find_by_user_id_and_activity_id(user_id, activity_id)
+                        .await?
+                    {
+                        activities.push(activity);
+                        continue;
+                    }
+
+                    let credentials = self.settings.get_credentials(user_id).await?;
+                    let activity = self.api.get_activity(&credentials, activity_id).await?;
+                    let stored = self.activities.upsert(user_id, activity).await?;
+                    activities.push(stored);
+                }
+
+                if activities.len() != operation.uploaded_activity_ids.len() {
+                    return Ok(None);
+                }
+
+                let completed = if operation.status == ActivityUploadOperationStatus::Completed {
+                    operation.clone()
+                } else {
+                    self.upload_operations
+                        .upsert(
+                            user_id,
+                            operation.mark_completed(
+                                activities
+                                    .iter()
+                                    .map(|activity| activity.id.clone())
+                                    .collect(),
+                            ),
+                        )
+                        .await?
+                };
+
+                Ok(Some(UploadedActivities {
+                    created: false,
+                    activity_ids: completed.uploaded_activity_ids,
+                    activities,
+                }))
+            }
         }
     }
 }
 
-impl<Api, Settings, Activities, Extractor> IntervalsUseCases
-    for IntervalsService<Api, Settings, Activities, Extractor>
+impl<Api, Settings, Activities, UploadOperations, Extractor> IntervalsUseCases
+    for IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
 {
     fn list_events(
@@ -237,8 +301,7 @@ where
                         newest: date_key,
                     },
                 )
-                .await
-                .unwrap_or_default();
+                .await?;
             let effective_ftp_watts = configured_ftp_watts.or_else(|| {
                 listed_activities
                     .iter()
@@ -396,6 +459,15 @@ where
                 ..upload
             };
             let normalized_external_id = normalize_external_id(upload.external_id.as_deref());
+            let fallback_identity = service.identity_extractor.extract_identity(&upload).await?;
+            let fallback_fingerprint = fallback_identity
+                .as_ref()
+                .map(|identity| identity.as_fingerprint());
+            let operation_key = build_activity_upload_operation_key(
+                normalized_external_id.as_deref(),
+                fallback_fingerprint.as_deref(),
+                &upload.file_bytes,
+            );
 
             if let Some(external_id) = normalized_external_id.as_deref() {
                 if let Some(existing) = service
@@ -411,13 +483,10 @@ where
                 }
             }
 
-            if let Some(fallback_identity) =
-                service.identity_extractor.extract_identity(&upload).await?
-            {
-                let fallback_fingerprint = fallback_identity.as_fingerprint();
+            if let Some(fallback_fingerprint) = fallback_fingerprint.as_deref() {
                 let matches = service
                     .activities
-                    .find_by_user_id_and_fallback_identity(&user_id, &fallback_fingerprint)
+                    .find_by_user_id_and_fallback_identity(&user_id, fallback_fingerprint)
                     .await?;
 
                 if matches.len() == 1 {
@@ -444,16 +513,71 @@ where
                 }
             }
 
+            let pending_operation = match service
+                .upload_operations
+                .find_by_user_id_and_operation_key(&user_id, &operation_key)
+                .await?
+            {
+                Some(existing_operation) => {
+                    if let Some(existing_result) = service
+                        .recover_uploaded_operation(&user_id, &existing_operation)
+                        .await?
+                    {
+                        return Ok(existing_result);
+                    }
+
+                    return Err(IntervalsError::Internal(
+                        "Activity upload is already pending recovery".to_string(),
+                    ));
+                }
+                None => {
+                    service
+                        .upload_operations
+                        .upsert(
+                            &user_id,
+                            ActivityUploadOperation::pending(
+                                operation_key.clone(),
+                                normalized_external_id.clone(),
+                                fallback_fingerprint.clone(),
+                            ),
+                        )
+                        .await?
+                }
+            };
+
             let credentials = service.settings.get_credentials(&user_id).await?;
             let uploaded = service.api.upload_activity(&credentials, upload).await?;
-            if let Err(error) = service
+            let uploaded_operation = service
+                .upload_operations
+                .upsert(
+                    &user_id,
+                    pending_operation.mark_uploaded(uploaded.activity_ids.clone()),
+                )
+                .await?;
+            let stored_activities = service
                 .activities
                 .upsert_many(&user_id, uploaded.activities.clone())
-                .await
-            {
-                warn!(?error, %user_id, "activity upload succeeded but local persistence failed");
-            }
-            Ok(uploaded)
+                .await?;
+            service
+                .upload_operations
+                .upsert(
+                    &user_id,
+                    uploaded_operation.mark_completed(
+                        stored_activities
+                            .iter()
+                            .map(|activity| activity.id.clone())
+                            .collect(),
+                    ),
+                )
+                .await?;
+            Ok(UploadedActivities {
+                created: uploaded.created,
+                activity_ids: stored_activities
+                    .iter()
+                    .map(|activity| activity.id.clone())
+                    .collect(),
+                activities: stored_activities,
+            })
         })
     }
 

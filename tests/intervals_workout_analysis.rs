@@ -272,6 +272,7 @@ fn sample_activity() -> Activity {
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        details_unavailable_reason: None,
     }
 }
 

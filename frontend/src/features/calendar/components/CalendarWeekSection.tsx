@@ -37,7 +37,7 @@ export function CalendarWeekSection({ week, showLoadingIndicator = true, onSelec
             onSelect={() => onSelectWorkout?.(selectWorkoutDetail(
               day.dateKey,
               day.events[0] ?? null,
-              day.activities[0] ?? null,
+              day.activities,
             ))}
           />
         ))}
