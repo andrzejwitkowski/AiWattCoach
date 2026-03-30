@@ -2,7 +2,7 @@ use super::{
     build_activity_upload_operation_key, find_best_activity_match, normalize_external_id,
     parse_workout_doc,
     ports::{ActivityFileIdentityExtractorPort, BoxFuture},
-    Activity, ActivityRepositoryPort, ActivityUploadOperation,
+    Activity, ActivityRepositoryPort, ActivityUploadOperation, ActivityUploadOperationClaimResult,
     ActivityUploadOperationRepositoryPort, ActivityUploadOperationStatus, CreateEvent, DateRange,
     EnrichedEvent, Event, IntervalsApiPort, IntervalsError, IntervalsSettingsPort, UpdateActivity,
     UpdateEvent, UploadActivity, UploadedActivities,
@@ -193,9 +193,8 @@ where
         operation: &ActivityUploadOperation,
     ) -> Result<Option<UploadedActivities>, IntervalsError> {
         match operation.status {
-            ActivityUploadOperationStatus::Pending | ActivityUploadOperationStatus::Failed => {
-                Ok(None)
-            }
+            ActivityUploadOperationStatus::Pending => Ok(None),
+            ActivityUploadOperationStatus::Failed => Ok(None),
             ActivityUploadOperationStatus::Uploaded | ActivityUploadOperationStatus::Completed => {
                 let mut activities = Vec::new();
 
@@ -517,10 +516,18 @@ where
 
             let pending_operation = match service
                 .upload_operations
-                .find_by_user_id_and_operation_key(&user_id, &operation_key)
+                .claim_pending(
+                    &user_id,
+                    ActivityUploadOperation::pending(
+                        operation_key.clone(),
+                        normalized_external_id.clone(),
+                        fallback_fingerprint.clone(),
+                    ),
+                )
                 .await?
             {
-                Some(existing_operation) => {
+                ActivityUploadOperationClaimResult::Claimed(pending_operation) => pending_operation,
+                ActivityUploadOperationClaimResult::Existing(existing_operation) => {
                     if let Some(existing_result) = service
                         .recover_uploaded_operation(&user_id, &existing_operation)
                         .await?
@@ -528,20 +535,9 @@ where
                         return Ok(existing_result);
                     }
 
-                    existing_operation
-                }
-                None => {
-                    service
-                        .upload_operations
-                        .upsert(
-                            &user_id,
-                            ActivityUploadOperation::pending(
-                                operation_key.clone(),
-                                normalized_external_id.clone(),
-                                fallback_fingerprint.clone(),
-                            ),
-                        )
-                        .await?
+                    return Err(IntervalsError::Internal(
+                        "Activity upload is already pending recovery".to_string(),
+                    ));
                 }
             };
 

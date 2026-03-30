@@ -8,12 +8,12 @@ use std::{
 use aiwattcoach::domain::intervals::{
     Activity, ActivityDetails, ActivityFallbackIdentity, ActivityFileIdentityExtractorPort,
     ActivityInterval, ActivityIntervalGroup, ActivityMetrics, ActivityRepositoryPort,
-    ActivityStream, ActivityUploadOperation, ActivityUploadOperationRepositoryPort,
-    ActivityUploadOperationStatus, CreateEvent, DateRange, Event, EventCategory, IntervalsApiPort,
-    IntervalsCredentials, IntervalsError, IntervalsService, IntervalsSettingsPort,
-    IntervalsUseCases, NoopActivityFileIdentityExtractor, NoopActivityRepository,
-    NoopActivityUploadOperationRepository, UpdateActivity, UpdateEvent, UploadActivity,
-    UploadedActivities,
+    ActivityStream, ActivityUploadOperation, ActivityUploadOperationClaimResult,
+    ActivityUploadOperationRepositoryPort, ActivityUploadOperationStatus, CreateEvent, DateRange,
+    Event, EventCategory, IntervalsApiPort, IntervalsCredentials, IntervalsError, IntervalsService,
+    IntervalsSettingsPort, IntervalsUseCases, NoopActivityFileIdentityExtractor,
+    NoopActivityRepository, NoopActivityUploadOperationRepository, UpdateActivity, UpdateEvent,
+    UploadActivity, UploadedActivities,
 };
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -948,11 +948,7 @@ async fn upload_activity_records_pending_state_before_upstream_upload() {
     assert_eq!(
         operation_calls.lock().unwrap().as_slice(),
         &[
-            UploadOperationRepoCall::FindByOperationKey("external_id:garmin-92".to_string()),
-            UploadOperationRepoCall::Upsert(
-                "external_id:garmin-92".to_string(),
-                ActivityUploadOperationStatus::Pending,
-            ),
+            UploadOperationRepoCall::ClaimPending("external_id:garmin-92".to_string()),
             UploadOperationRepoCall::Upsert(
                 "external_id:garmin-92".to_string(),
                 ActivityUploadOperationStatus::Uploaded,
@@ -1006,11 +1002,7 @@ async fn upload_activity_marks_operation_failed_when_upstream_upload_fails() {
     assert_eq!(
         operation_calls.lock().unwrap().as_slice(),
         &[
-            UploadOperationRepoCall::FindByOperationKey("external_id:garmin-fail".to_string()),
-            UploadOperationRepoCall::Upsert(
-                "external_id:garmin-fail".to_string(),
-                ActivityUploadOperationStatus::Pending,
-            ),
+            UploadOperationRepoCall::ClaimPending("external_id:garmin-fail".to_string()),
             UploadOperationRepoCall::Upsert(
                 "external_id:garmin-fail".to_string(),
                 ActivityUploadOperationStatus::Failed,
@@ -1071,7 +1063,7 @@ async fn upload_activity_retries_when_existing_operation_is_failed() {
     assert_eq!(
         operation_calls.lock().unwrap().as_slice(),
         &[
-            UploadOperationRepoCall::FindByOperationKey("external_id:external-i95".to_string()),
+            UploadOperationRepoCall::ClaimPending("external_id:external-i95".to_string()),
             UploadOperationRepoCall::Upsert(
                 "external_id:external-i95".to_string(),
                 ActivityUploadOperationStatus::Uploaded,
@@ -1081,6 +1073,65 @@ async fn upload_activity_retries_when_existing_operation_is_failed() {
                 ActivityUploadOperationStatus::Completed,
             ),
         ]
+    );
+}
+
+#[tokio::test]
+async fn upload_activity_blocks_when_existing_operation_is_pending() {
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec!["i96".to_string()],
+        activities: vec![sample_activity("i96", "Should Not Upload")],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::default();
+    let upload_operations = FakeActivityUploadOperationRepository::with_existing(
+        "user-1",
+        ActivityUploadOperation {
+            operation_key: "external_id:external-i96".to_string(),
+            normalized_external_id: Some("external-i96".to_string()),
+            fallback_identity: None,
+            uploaded_activity_ids: Vec::new(),
+            status: ActivityUploadOperationStatus::Pending,
+        },
+    );
+    let operation_calls = upload_operations.call_log.clone();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        upload_operations,
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Blocked Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("external-i96".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await;
+
+    assert_eq!(
+        result,
+        Err(IntervalsError::Internal(
+            "Activity upload is already pending recovery".to_string()
+        ))
+    );
+    assert!(api_calls.lock().unwrap().is_empty());
+    assert_eq!(
+        operation_calls.lock().unwrap().as_slice(),
+        &[UploadOperationRepoCall::ClaimPending(
+            "external_id:external-i96".to_string()
+        )]
     );
 }
 
@@ -1384,6 +1435,7 @@ enum RepoCall {
 
 #[derive(Clone, Debug, PartialEq)]
 enum UploadOperationRepoCall {
+    ClaimPending(String),
     FindByOperationKey(String),
     Upsert(String, ActivityUploadOperationStatus),
 }
@@ -2003,6 +2055,42 @@ impl FakeActivityUploadOperationRepository {
 }
 
 impl ActivityUploadOperationRepositoryPort for FakeActivityUploadOperationRepository {
+    fn claim_pending(
+        &self,
+        user_id: &str,
+        operation: ActivityUploadOperation,
+    ) -> BoxFuture<Result<ActivityUploadOperationClaimResult, IntervalsError>> {
+        let store = self.stored.clone();
+        let call_log = self.call_log.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            call_log
+                .lock()
+                .unwrap()
+                .push(UploadOperationRepoCall::ClaimPending(
+                    operation.operation_key.clone(),
+                ));
+
+            let mut store = store.lock().unwrap();
+            let operations = store.entry(user_id).or_default();
+            if let Some(index) = operations
+                .iter()
+                .position(|existing| existing.operation_key == operation.operation_key)
+            {
+                let existing = operations[index].clone();
+                if existing.status == ActivityUploadOperationStatus::Failed {
+                    operations[index] = operation.clone();
+                    return Ok(ActivityUploadOperationClaimResult::Claimed(operation));
+                }
+
+                return Ok(ActivityUploadOperationClaimResult::Existing(existing));
+            }
+
+            operations.push(operation.clone());
+            Ok(ActivityUploadOperationClaimResult::Claimed(operation))
+        })
+    }
+
     fn find_by_user_id_and_operation_key(
         &self,
         user_id: &str,

@@ -2,7 +2,8 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::intervals::{
-    ActivityUploadOperation, ActivityUploadOperationRepositoryPort, BoxFuture, IntervalsError,
+    ActivityUploadOperation, ActivityUploadOperationClaimResult,
+    ActivityUploadOperationRepositoryPort, BoxFuture, IntervalsError,
 };
 
 #[derive(Clone)]
@@ -44,6 +45,68 @@ impl MongoActivityUploadOperationRepository {
 }
 
 impl ActivityUploadOperationRepositoryPort for MongoActivityUploadOperationRepository {
+    fn claim_pending(
+        &self,
+        user_id: &str,
+        operation: ActivityUploadOperation,
+    ) -> BoxFuture<Result<ActivityUploadOperationClaimResult, IntervalsError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let document = ActivityUploadOperationDocument {
+                user_id: user_id.clone(),
+                operation_key: operation.operation_key.clone(),
+                payload: operation.clone(),
+            };
+
+            let reclaimed = collection
+                .find_one_and_replace(
+                    doc! {
+                        "user_id": &user_id,
+                        "operation_key": &document.operation_key,
+                        "payload.status": "Failed",
+                    },
+                    &document,
+                )
+                .await
+                .map_err(|error| IntervalsError::Internal(error.to_string()))?;
+
+            if reclaimed.is_some() {
+                return Ok(ActivityUploadOperationClaimResult::Claimed(operation));
+            }
+
+            let inserted = collection
+                .insert_one(&document)
+                .await
+                .map(|_| true)
+                .or_else(|error| {
+                    if is_duplicate_key_error(&error) {
+                        Ok(false)
+                    } else {
+                        Err(IntervalsError::Internal(error.to_string()))
+                    }
+                })?;
+
+            if inserted {
+                return Ok(ActivityUploadOperationClaimResult::Claimed(operation));
+            }
+
+            let existing = collection
+                .find_one(doc! { "user_id": &user_id, "operation_key": &document.operation_key })
+                .await
+                .map_err(|error| IntervalsError::Internal(error.to_string()))?
+                .ok_or_else(|| {
+                    IntervalsError::Internal(
+                        "claimed upload operation disappeared before reload".to_string(),
+                    )
+                })?;
+
+            Ok(ActivityUploadOperationClaimResult::Existing(
+                existing.payload,
+            ))
+        })
+    }
+
     fn find_by_user_id_and_operation_key(
         &self,
         user_id: &str,
@@ -85,4 +148,12 @@ impl ActivityUploadOperationRepositoryPort for MongoActivityUploadOperationRepos
             Ok(operation)
         })
     }
+}
+
+fn is_duplicate_key_error(error: &mongodb::error::Error) -> bool {
+    matches!(
+        error.kind.as_ref(),
+        mongodb::error::ErrorKind::Write(mongodb::error::WriteFailure::WriteError(write_error))
+            if write_error.code == 11000
+    )
 }

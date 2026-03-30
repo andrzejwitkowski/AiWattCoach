@@ -7,9 +7,10 @@ pub use model::{
     build_activity_upload_operation_key, normalize_external_id, round_distance_bucket,
     round_duration_bucket, Activity, ActivityDeduplicationIdentity, ActivityDetails,
     ActivityFallbackIdentity, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
-    ActivityStream, ActivityUploadOperation, ActivityUploadOperationStatus, ActivityZoneTime,
-    CreateEvent, DateRange, Event, EventCategory, EventFileUpload, IntervalsCredentials,
-    IntervalsError, UpdateActivity, UpdateEvent, UploadActivity, UploadedActivities,
+    ActivityStream, ActivityUploadOperation, ActivityUploadOperationClaimResult,
+    ActivityUploadOperationStatus, ActivityZoneTime, CreateEvent, DateRange, Event, EventCategory,
+    EventFileUpload, IntervalsCredentials, IntervalsError, UpdateActivity, UpdateEvent,
+    UploadActivity, UploadedActivities,
 };
 pub use ports::{
     ActivityFileIdentityExtractorPort, ActivityRepositoryPort,

@@ -101,6 +101,12 @@ impl ActivityUploadOperation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ActivityUploadOperationClaimResult {
+    Claimed(ActivityUploadOperation),
+    Existing(ActivityUploadOperation),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActivityDeduplicationIdentity {
     pub normalized_external_id: Option<String>,
     pub fallback_identity: Option<String>,
