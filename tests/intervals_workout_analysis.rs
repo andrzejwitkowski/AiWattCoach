@@ -116,6 +116,24 @@ fn parse_workout_doc_supports_zone_tokens_for_segments_and_summary() {
     assert_eq!(parsed.summary.estimated_training_stress_score, Some(23.9));
 }
 
+#[test]
+fn parse_workout_doc_caps_segment_expansion_for_large_repeat_counts() {
+    let parsed = parse_workout_doc(Some("20000x1s"), None);
+
+    assert_eq!(parsed.segments.len(), 10_000);
+    assert_eq!(parsed.summary.total_segments, 10_000);
+    assert_eq!(parsed.summary.total_duration_seconds, 10_000);
+}
+
+#[test]
+fn parse_workout_doc_stops_before_offset_overflow() {
+    let parsed = parse_workout_doc(Some("2x2147483647s"), None);
+
+    assert_eq!(parsed.segments.len(), 1);
+    assert_eq!(parsed.segments[0].start_offset_seconds, 0);
+    assert_eq!(parsed.segments[0].end_offset_seconds, i32::MAX);
+}
+
 fn sample_activity() -> Activity {
     Activity {
         id: "ride-1".to_string(),

@@ -134,3 +134,64 @@ async fn google_callback_sets_none_same_site_cookie_for_cross_site_mode() {
     assert!(cookie.contains("SameSite=None"));
     assert!(cookie.contains("Secure"));
 }
+
+#[tokio::test]
+async fn frontend_fallback_serves_index_from_kept_fixture() {
+    let app = auth_test_app(TestIdentityService::default()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/calendar")
+                .header(header::ACCEPT, "text/html")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn google_start_forwards_return_to_to_identity_service() {
+    let service = TestIdentityService::default();
+    let captured = service.last_return_to.clone();
+    let app = auth_test_app(service).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/google/start?returnTo=%2Fsettings")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(captured.lock().unwrap().as_deref(), Some("/settings"));
+}
+
+#[tokio::test]
+async fn google_callback_forwards_state_and_code_to_identity_service() {
+    let service = TestIdentityService::default();
+    let captured = service.last_callback_input.clone();
+    let app = auth_test_app(service).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/google/callback?state=state-1&code=oauth-code")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        captured.lock().unwrap().clone(),
+        Some(("state-1".to_string(), "oauth-code".to_string()))
+    );
+}

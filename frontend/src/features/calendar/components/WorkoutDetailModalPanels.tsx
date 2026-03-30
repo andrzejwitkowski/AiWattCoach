@@ -1,9 +1,9 @@
-import {useEffect, useRef, useState} from 'react';
+import {useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import type {IntervalActivity, IntervalEvent} from '../../intervals/types';
 import {
-  buildCompletedWorkoutBars,
+  buildCompletedWorkoutPreviewBars,
   buildMatchedWorkoutBars,
   buildPlannedWorkoutBars,
   extractCompletedPowerValues,
@@ -64,7 +64,7 @@ export function CompletedWorkoutPanel({event, activity}: {
       : [];
 
   const bars = isCompletedActivityOnly && activity
-    ? buildCompletedWorkoutBars(activity)
+    ? buildCompletedWorkoutPreviewBars(activity)
     : isPlannedVsActual
       ? buildMatchedWorkoutBars(actualWorkout)
       : [];
@@ -88,17 +88,6 @@ export function CompletedWorkoutPanel({event, activity}: {
     ? (hoveredIntervalKey ?? selectedIntervalKey)
     : null;
   const activeInterval = chartIntervalOverlays.find((interval) => interval.id === highlightedIntervalKey) ?? null;
-
-  useEffect(() => {
-    if (!highlightedIntervalKey) {
-      return;
-    }
-
-    const node = intervalRowRefs.current.get(highlightedIntervalKey);
-    if (node && typeof node.scrollIntoView === 'function') {
-      node.scrollIntoView({block: 'nearest', behavior: 'smooth'});
-    }
-  }, [highlightedIntervalKey]);
 
   const normalizedPowerLabel = isCompletedActivityOnly
     ? activity?.metrics.normalizedPowerWatts !== null && activity?.metrics.normalizedPowerWatts !== undefined
@@ -158,7 +147,7 @@ export function CompletedWorkoutPanel({event, activity}: {
       />
       {detailsUnavailableMessage ? (
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
-          {t('calendar.importedWorkoutDetailsUnavailable')}
+          {detailsUnavailableMessage ?? t('calendar.importedWorkoutDetailsUnavailable')}
         </div>
       ) : null}
     </div>

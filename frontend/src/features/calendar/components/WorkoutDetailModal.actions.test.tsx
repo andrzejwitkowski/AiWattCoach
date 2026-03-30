@@ -102,7 +102,8 @@ describe('WorkoutDetailModal actions', () => {
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(click).toHaveBeenCalledTimes(1);
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:fit-download');
+
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:fit-download'));
 
     createElementSpy.mockRestore();
     URL.createObjectURL = originalCreateObjectURL;

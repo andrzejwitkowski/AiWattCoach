@@ -48,6 +48,9 @@ pub(super) fn map_api_error(error: reqwest::Error) -> IntervalsError {
         Some(StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => {
             IntervalsError::CredentialsNotConfigured
         }
+        None if error.is_connect() || error.is_timeout() => {
+            IntervalsError::ConnectionError(message)
+        }
         _ => IntervalsError::ApiError(message),
     }
 }

@@ -49,6 +49,11 @@ impl Settings {
                 "ENABLE_CLIENT_LOG_INGESTION",
                 false,
             )?,
+            legacy_time_stream_cleanup_enabled: parse::optional_bool_setting(
+                values.get("ENABLE_LEGACY_TIME_STREAM_CLEANUP"),
+                "ENABLE_LEGACY_TIME_STREAM_CLEANUP",
+                false,
+            )?,
         })
         .and_then(parse::validate_session_cookie_settings)
     }
@@ -61,12 +66,13 @@ impl Settings {
             auth: AuthSettings::test_defaults(),
             dev_intervals_enabled: false,
             client_log_ingestion_enabled: false,
+            legacy_time_stream_cleanup_enabled: false,
         }
     }
 }
 
 fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
-    const KEYS: [&str; 20] = [
+    const KEYS: [&str; 21] = [
         "APP_NAME",
         "SERVER_HOST",
         "SERVER_PORT",
@@ -87,6 +93,7 @@ fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
         "SESSION_COOKIE_SECURE",
         "ADMIN_EMAILS",
         "ENABLE_CLIENT_LOG_INGESTION",
+        "ENABLE_LEGACY_TIME_STREAM_CLEANUP",
     ];
 
     let mut values = BTreeMap::new();

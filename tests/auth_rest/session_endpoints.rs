@@ -114,3 +114,25 @@ async fn logout_clears_session_cookie() {
     assert!(cookie.contains("aiwattcoach_session="));
     assert!(cookie.contains("Max-Age=0"));
 }
+
+#[tokio::test]
+async fn logout_forwards_session_id_to_identity_service() {
+    let service = TestIdentityService::default();
+    let captured = service.last_logout_session_id.clone();
+    let app = auth_test_app(service).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/logout")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(captured.lock().unwrap().as_deref(), Some("session-1"));
+}

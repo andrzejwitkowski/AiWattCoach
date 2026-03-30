@@ -74,7 +74,7 @@ where
             external_id: normalize_external_id(upload.external_id.as_deref()),
             ..upload
         };
-        let normalized_external_id = normalize_external_id(upload.external_id.as_deref());
+        let normalized_external_id = upload.external_id.clone();
         let fallback_identity = self.identity_extractor.extract_identity(&upload).await?;
         let fallback_fingerprint = fallback_identity
             .as_ref()

@@ -43,11 +43,9 @@ pub(super) fn map_ai_agents_update(
     current: &UserSettings,
 ) -> AiAgentsConfig {
     AiAgentsConfig {
-        openai_api_key: body
-            .openai_api_key
+        openai_api_key: normalize_optional_patch_value(body.openai_api_key)
             .or(current.ai_agents.openai_api_key.clone()),
-        gemini_api_key: body
-            .gemini_api_key
+        gemini_api_key: normalize_optional_patch_value(body.gemini_api_key)
             .or(current.ai_agents.gemini_api_key.clone()),
     }
 }
@@ -56,10 +54,21 @@ pub(super) fn map_intervals_update(
     body: UpdateIntervalsRequest,
     current: &UserSettings,
 ) -> IntervalsConfig {
+    let api_key =
+        normalize_optional_patch_value(body.api_key).or(current.intervals.api_key.clone());
+    let athlete_id =
+        normalize_optional_patch_value(body.athlete_id).or(current.intervals.athlete_id.clone());
+
     IntervalsConfig {
-        api_key: body.api_key.or(current.intervals.api_key.clone()),
-        athlete_id: body.athlete_id.or(current.intervals.athlete_id.clone()),
-        connected: current.intervals.connected,
+        connected: if api_key != current.intervals.api_key
+            || athlete_id != current.intervals.athlete_id
+        {
+            false
+        } else {
+            current.intervals.connected
+        },
+        api_key,
+        athlete_id,
     }
 }
 
@@ -72,6 +81,17 @@ pub(super) fn map_options_update(
             .analyze_without_heart_rate
             .unwrap_or(current.options.analyze_without_heart_rate),
     }
+}
+
+fn normalize_optional_patch_value(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
 }
 
 pub(super) fn map_cycling_update(

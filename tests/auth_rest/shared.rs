@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
     pin::Pin,
     sync::atomic::{AtomicU64, Ordering},
+    sync::{Arc, Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -27,10 +28,13 @@ pub(crate) type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
 static FRONTEND_FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static KEPT_FRONTEND_FIXTURES: OnceLock<Mutex<Vec<FrontendFixture>>> = OnceLock::new();
 
 pub(crate) async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -45,7 +49,7 @@ pub(crate) async fn auth_test_app(identity_service: TestIdentityService) -> axum
             false,
             24,
         ),
-        fixture.dist_dir(),
+        dist_dir,
     )
 }
 
@@ -54,6 +58,8 @@ pub(crate) async fn auth_test_app_with_custom_settings(
     identity_service: TestIdentityService,
 ) -> axum::Router {
     let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -68,13 +74,15 @@ pub(crate) async fn auth_test_app_with_custom_settings(
             settings.auth.session.secure,
             settings.auth.session.ttl_hours,
         ),
-        fixture.dist_dir(),
+        dist_dir,
     )
 }
 
 pub(crate) async fn auth_test_app_without_identity() -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -82,7 +90,7 @@ pub(crate) async fn auth_test_app_without_identity() -> axum::Router {
             settings.mongo.database,
             test_mongo_client(&settings.mongo.uri).await,
         ),
-        fixture.dist_dir(),
+        dist_dir,
     )
 }
 
@@ -92,6 +100,8 @@ pub(crate) async fn auth_test_app_with_settings(
 ) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -107,7 +117,7 @@ pub(crate) async fn auth_test_app_with_settings(
             24,
         )
         .with_settings_service(std::sync::Arc::new(settings_service)),
-        fixture.dist_dir(),
+        dist_dir,
     )
 }
 
@@ -158,6 +168,9 @@ pub(crate) struct TestIdentityService {
     pub(crate) admin_cookie_role: Role,
     pub(crate) callback_error: Option<IdentityError>,
     pub(crate) current_user_error: Option<IdentityError>,
+    pub(crate) last_callback_input: Arc<Mutex<Option<(String, String)>>>,
+    pub(crate) last_logout_session_id: Arc<Mutex<Option<String>>>,
+    pub(crate) last_return_to: Arc<Mutex<Option<String>>>,
     pub(crate) logout_error: Option<IdentityError>,
     pub(crate) require_admin_error: Option<IdentityError>,
 }
@@ -168,6 +181,9 @@ impl Default for TestIdentityService {
             admin_cookie_role: Role::Admin,
             callback_error: None,
             current_user_error: None,
+            last_callback_input: Arc::new(Mutex::new(None)),
+            last_logout_session_id: Arc::new(Mutex::new(None)),
+            last_return_to: Arc::new(Mutex::new(None)),
             logout_error: None,
             require_admin_error: None,
         }
@@ -177,8 +193,9 @@ impl Default for TestIdentityService {
 impl IdentityUseCases for TestIdentityService {
     fn begin_google_login(
         &self,
-        _return_to: Option<String>,
+        return_to: Option<String>,
     ) -> BoxFuture<Result<GoogleLoginStart, IdentityError>> {
+        *self.last_return_to.lock().unwrap() = return_to;
         Box::pin(async {
             Ok(GoogleLoginStart {
                 state: "state-1".to_string(),
@@ -190,9 +207,10 @@ impl IdentityUseCases for TestIdentityService {
 
     fn handle_google_callback(
         &self,
-        _state: &str,
-        _code: &str,
+        state: &str,
+        code: &str,
     ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>> {
+        *self.last_callback_input.lock().unwrap() = Some((state.to_string(), code.to_string()));
         if let Some(error) = self.callback_error.clone() {
             return Box::pin(async move { Err(error) });
         }
@@ -252,7 +270,8 @@ impl IdentityUseCases for TestIdentityService {
         })
     }
 
-    fn logout(&self, _session_id: &str) -> BoxFuture<Result<(), IdentityError>> {
+    fn logout(&self, session_id: &str) -> BoxFuture<Result<(), IdentityError>> {
+        *self.last_logout_session_id.lock().unwrap() = Some(session_id.to_string());
         if let Some(error) = self.logout_error.clone() {
             return Box::pin(async move { Err(error) });
         }
@@ -330,4 +349,12 @@ impl Drop for FrontendFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
+}
+
+fn keep_frontend_fixture(fixture: FrontendFixture) {
+    KEPT_FRONTEND_FIXTURES
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .unwrap()
+        .push(fixture);
 }

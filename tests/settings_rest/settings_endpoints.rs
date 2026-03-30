@@ -191,6 +191,92 @@ async fn update_intervals_saves_athlete_id() {
 }
 
 #[tokio::test]
+async fn update_intervals_keeps_saved_credentials_when_blank_values_are_sent() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.intervals.api_key = Some("saved-api-key".to_string());
+    settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
+    settings.intervals.connected = true;
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "apiKey": "   ",
+        "athleteId": "   "
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/intervals")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let intervals = response_body.get("intervals").unwrap();
+
+    assert!(intervals.get("apiKeySet").unwrap().as_bool().unwrap());
+    assert_eq!(
+        intervals.get("athleteId").unwrap().as_str().unwrap(),
+        "saved-athlete-id"
+    );
+    assert!(intervals.get("connected").unwrap().as_bool().unwrap());
+}
+
+#[tokio::test]
+async fn update_intervals_resets_connected_when_credentials_change() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.intervals.api_key = Some("saved-api-key".to_string());
+    settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
+    settings.intervals.connected = true;
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "apiKey": "updated-api-key"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/intervals")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let intervals = response_body.get("intervals").unwrap();
+
+    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
+    assert_eq!(
+        intervals.get("athleteId").unwrap().as_str().unwrap(),
+        "saved-athlete-id"
+    );
+}
+
+#[tokio::test]
 async fn update_options_sets_analyze_without_heart_rate() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),

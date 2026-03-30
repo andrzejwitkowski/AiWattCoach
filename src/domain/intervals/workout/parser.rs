@@ -1,5 +1,7 @@
 use super::{ParsedWorkoutDoc, WorkoutIntervalDefinition, WorkoutSegment, WorkoutSummary};
 
+const MAX_PARSED_SEGMENTS: usize = 10_000;
+
 pub fn parse_workout_doc(workout_doc: Option<&str>, ftp_watts: Option<i32>) -> ParsedWorkoutDoc {
     let intervals = workout_doc
         .unwrap_or_default()
@@ -10,14 +12,18 @@ pub fn parse_workout_doc(workout_doc: Option<&str>, ftp_watts: Option<i32>) -> P
         .collect::<Vec<_>>();
 
     let mut segments = Vec::new();
-    let mut start_offset_seconds = 0;
+    let mut start_offset_seconds: i32 = 0;
 
-    for interval in &intervals {
+    'intervals: for interval in &intervals {
         let Some(duration_seconds) = interval.duration_seconds else {
             continue;
         };
 
         for repeat_index in 0..interval.repeat_count {
+            if segments.len() >= MAX_PARSED_SEGMENTS {
+                break 'intervals;
+            }
+
             let label = if interval.repeat_count > 1 {
                 format!(
                     "{} #{}",
@@ -28,7 +34,10 @@ pub fn parse_workout_doc(workout_doc: Option<&str>, ftp_watts: Option<i32>) -> P
                 normalize_definition(&interval.definition)
             };
 
-            let end_offset_seconds = start_offset_seconds + duration_seconds;
+            let Some(end_offset_seconds) = start_offset_seconds.checked_add(duration_seconds)
+            else {
+                break 'intervals;
+            };
             segments.push(WorkoutSegment {
                 order: segments.len(),
                 label,

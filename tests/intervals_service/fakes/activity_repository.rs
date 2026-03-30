@@ -27,7 +27,9 @@ pub(crate) enum RepoCall {
 pub(crate) struct FakeActivityRepository {
     pub(crate) stored: Arc<Mutex<HashMap<String, Vec<Activity>>>>,
     pub(crate) call_log: Arc<Mutex<Vec<RepoCall>>>,
+    delete_error: Option<IntervalsError>,
     sequence: Option<Arc<Mutex<Vec<String>>>>,
+    upsert_error: Option<IntervalsError>,
 }
 
 impl FakeActivityRepository {
@@ -43,6 +45,24 @@ impl FakeActivityRepository {
         stored.insert(user_id.to_string(), vec![activity]);
         Self {
             stored: Arc::new(Mutex::new(stored)),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn with_upsert_error(error: IntervalsError) -> Self {
+        Self {
+            upsert_error: Some(error),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn with_sequence_and_delete_error(
+        sequence: Arc<Mutex<Vec<String>>>,
+        error: IntervalsError,
+    ) -> Self {
+        Self {
+            delete_error: Some(error),
+            sequence: Some(sequence),
             ..Self::default()
         }
     }
@@ -178,12 +198,16 @@ impl ActivityRepositoryPort for FakeActivityRepository {
     ) -> BoxFuture<Result<Activity, IntervalsError>> {
         let store = self.stored.clone();
         let calls = self.call_log.clone();
+        let error = self.upsert_error.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
             calls
                 .lock()
                 .unwrap()
                 .push(RepoCall::Upsert(activity.id.clone()));
+            if let Some(error) = error {
+                return Err(error);
+            }
             let mut store = store.lock().unwrap();
             let activities = store.entry(user_id).or_default();
             let existing = activities
@@ -344,6 +368,7 @@ impl ActivityRepositoryPort for FakeActivityRepository {
     fn delete(&self, user_id: &str, activity_id: &str) -> BoxFuture<Result<(), IntervalsError>> {
         let store = self.stored.clone();
         let sequence = self.sequence.clone();
+        let error = self.delete_error.clone();
         let user_id = user_id.to_string();
         let activity_id = activity_id.to_string();
         Box::pin(async move {
@@ -352,6 +377,9 @@ impl ActivityRepositoryPort for FakeActivityRepository {
                     .lock()
                     .unwrap()
                     .push(format!("repo_delete:{activity_id}"));
+            }
+            if let Some(error) = error {
+                return Err(error);
             }
             if let Some(activities) = store.lock().unwrap().get_mut(&user_id) {
                 activities.retain(|activity| activity.id != activity_id);

@@ -71,6 +71,57 @@ describe('WorkoutDetailModal interval interaction', () => {
     expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
   });
 
+  it('does not auto-scroll the interval list when chart hover changes the active ride', async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      mockedLoadEvent.mockResolvedValue(undefined as never);
+      mockedLoadActivity.mockResolvedValue(
+        makeActivity({
+          id: 'a47-scroll',
+          startDateLocal: '2026-04-02T08:00:00',
+          name: 'No Scroll Ride',
+          distanceMeters: 30000,
+          movingTimeSeconds: 1200,
+          elapsedTimeSeconds: 1200,
+          hasHeartRate: true,
+          streamTypes: ['watts'],
+          metrics: { trainingStressScore: 30, normalizedPowerWatts: 220, intensityFactor: 0.8, averagePowerWatts: 210, ftpWatts: 280 },
+          details: {
+            intervals: [
+              makeActivityInterval({ id: 1, label: 'Ride 1', startIndex: 0, endIndex: 599, averagePowerWatts: 200, averageHeartRateBpm: 140, zone: 3 }),
+              makeActivityInterval({ id: 2, label: 'Ride 2', startIndex: 600, endIndex: 1199, startTimeSeconds: 600, endTimeSeconds: 1200, averagePowerWatts: 240, averageHeartRateBpm: 150, zone: 4 }),
+            ],
+            streams: [makeActivityStream({ data: Array.from({ length: 1200 }, (_, index) => (index < 600 ? 200 : 240)) })],
+          },
+        }),
+      );
+
+      renderActivityModal(
+        makeActivity({
+          id: 'a47-scroll',
+          startDateLocal: '2026-04-02T08:00:00',
+          name: 'No Scroll Ride',
+          movingTimeSeconds: 1200,
+          elapsedTimeSeconds: 1200,
+          hasHeartRate: true,
+        }),
+      );
+
+      await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+      const chart = screen.getByLabelText(/power chart/i);
+      setChartRect(chart);
+      fireEvent.mouseMove(chart, { clientX: 750, clientY: 80 });
+
+      expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+    }
+  });
+
   it('lets interval chips and rows drive the chart highlight in reverse', async () => {
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(

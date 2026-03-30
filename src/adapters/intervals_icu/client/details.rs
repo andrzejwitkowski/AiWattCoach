@@ -112,7 +112,6 @@ impl IntervalsIcuClient {
                             .into_iter()
                             .map(map_activity_interval_group)
                             .collect();
-                        intervals_definitively_unavailable = true;
                     }
                     Err(error) => {
                         let error = map_api_error(error);
@@ -133,6 +132,7 @@ impl IntervalsIcuClient {
                 );
 
                 if failure.is_unprocessable_entity() {
+                    intervals_definitively_unavailable = true;
                     match Self::fetch_base_activity(
                         &client,
                         &base_url,
@@ -150,7 +150,6 @@ impl IntervalsIcuClient {
                                 activity.details.interval_groups =
                                     fallback_activity.details.interval_groups;
                             }
-                            intervals_definitively_unavailable = true;
                         }
                         Err(error) => {
                             tracing::warn!(
@@ -197,7 +196,6 @@ impl IntervalsIcuClient {
                             .filter(should_persist_stream)
                             .map(map_activity_stream)
                             .collect();
-                        streams_definitively_unavailable = true;
                     }
                     Err(error) => {
                         let error = map_api_error(error);

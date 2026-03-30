@@ -93,7 +93,7 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
             link.href = objectUrl;
             link.download = `event-${event.id}.fit`;
             link.click();
-            URL.revokeObjectURL(objectUrl);
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
         } catch (error: unknown) {
             if (error instanceof AuthenticationError) {
                 window.location.href = '/';

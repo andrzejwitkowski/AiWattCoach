@@ -239,7 +239,47 @@ describe('WorkoutDetailModal completed mode', () => {
 
     await waitFor(() => expect(screen.getByText('Imported Ride')).toBeInTheDocument());
 
-    expect(screen.getByText('Intervals.icu did not expose detailed data for this imported workout.')).toBeInTheDocument();
+    expect(screen.getByText('Intervals.icu did not provide detailed data for this imported activity.')).toBeInTheDocument();
+  });
+
+  it('renders completed activity bars from skyline chart payloads', async () => {
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a26',
+        startDateLocal: '2026-03-26T08:00:00',
+        name: 'Skyline Import',
+        source: 'STRAVA',
+        movingTimeSeconds: 3600,
+        elapsedTimeSeconds: 3600,
+        details: {
+          skylineChart: ['CAcSAtJFGgFAIgECKAE='],
+        },
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-03-26',
+          activity: makeActivity({
+            id: 'a26',
+            startDateLocal: '2026-03-26T08:00:00',
+            name: 'Skyline Import',
+            source: 'STRAVA',
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Skyline Import')).toBeInTheDocument());
+
+    const [bar] = Array.from(document.querySelectorAll('[data-chart-bar="detail"]')) as HTMLDivElement[];
+    expect(bar).toBeDefined();
+    expect(bar.style.flexGrow).toBe('82');
+    expect(bar.style.height).toBe('64%');
   });
 
   it('shows seconds for sub-minute completed intervals', async () => {

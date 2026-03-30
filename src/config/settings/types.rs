@@ -13,6 +13,7 @@ pub struct Settings {
     pub auth: AuthSettings,
     pub dev_intervals_enabled: bool,
     pub client_log_ingestion_enabled: bool,
+    pub legacy_time_stream_cleanup_enabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

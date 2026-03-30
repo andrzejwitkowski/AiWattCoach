@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use aiwattcoach::domain::intervals::{
     ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics, ActivityStream,
-    DateRange, IntervalsService, IntervalsUseCases, NoopActivityFileIdentityExtractor,
-    NoopActivityUploadOperationRepository, UpdateActivity,
+    DateRange, IntervalsError, IntervalsService, IntervalsUseCases,
+    NoopActivityFileIdentityExtractor, NoopActivityUploadOperationRepository, UpdateActivity,
 };
 
 use crate::{
@@ -348,5 +348,77 @@ async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds(
     assert_eq!(
         sequence.lock().unwrap().as_slice(),
         &["api_delete:i11".to_string(), "repo_delete:i11".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn update_activity_returns_upstream_result_when_local_persistence_fails() {
+    let updated_activity = sample_activity("i56", "Updated Ride");
+    let api = FakeIntervalsApi::with_updated_activity(updated_activity.clone());
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_upsert_error(IntervalsError::Internal(
+        "mongo unavailable".to_string(),
+    ));
+    let repository_calls = repository.call_log.clone();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let update = UpdateActivity {
+        name: Some("Updated Ride".to_string()),
+        description: Some("more details".to_string()),
+        activity_type: Some("VirtualRide".to_string()),
+        trainer: Some(true),
+        commute: Some(false),
+        race: Some(false),
+    };
+
+    let result = service
+        .update_activity("user-1", "i56", update.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(result, updated_activity);
+    assert_eq!(
+        api_calls.lock().unwrap().as_slice(),
+        &[ApiCall::UpdateActivity {
+            activity_id: "i56".to_string(),
+            activity: update,
+        }]
+    );
+    assert_eq!(
+        repository_calls.lock().unwrap().as_slice(),
+        &[RepoCall::Upsert("i56".to_string())]
+    );
+}
+
+#[tokio::test]
+async fn delete_activity_returns_ok_when_local_delete_fails_after_upstream_success() {
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let sequence = Arc::new(Mutex::new(Vec::new()));
+    let repository = FakeActivityRepository::with_sequence_and_delete_error(
+        sequence.clone(),
+        IntervalsError::Internal("mongo unavailable".to_string()),
+    );
+    let api = FakeIntervalsApi::default().with_sequence(sequence.clone());
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let result = service.delete_activity("user-1", "i12").await;
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(
+        sequence.lock().unwrap().as_slice(),
+        &["api_delete:i12".to_string(), "repo_delete:i12".to_string()]
     );
 }

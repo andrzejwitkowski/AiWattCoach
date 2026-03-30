@@ -52,7 +52,14 @@ where
             .api
             .update_activity(&credentials, activity_id, activity)
             .await?;
-        self.activities.upsert(user_id, updated.clone()).await?;
+        if let Err(error) = self.activities.upsert(user_id, updated.clone()).await {
+            warn!(
+                ?error,
+                %user_id,
+                activity_id,
+                "activity update succeeded upstream but local persistence failed"
+            );
+        }
         Ok(updated)
     }
 
@@ -63,6 +70,14 @@ where
     ) -> Result<(), IntervalsError> {
         let credentials = self.settings.get_credentials(user_id).await?;
         self.api.delete_activity(&credentials, activity_id).await?;
-        self.activities.delete(user_id, activity_id).await
+        if let Err(error) = self.activities.delete(user_id, activity_id).await {
+            warn!(
+                ?error,
+                %user_id,
+                activity_id,
+                "activity delete succeeded upstream but local deletion failed"
+            );
+        }
+        Ok(())
     }
 }
