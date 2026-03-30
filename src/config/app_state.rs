@@ -5,6 +5,7 @@ use mongodb::Client;
 use crate::domain::identity::IdentityUseCases;
 use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::settings::UserSettingsUseCases;
+use crate::domain::workout_summary::WorkoutSummaryUseCases;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -15,6 +16,7 @@ pub struct AppState {
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
+    pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
     pub intervals_connection_tester: Option<Arc<dyn IntervalsConnectionTester>>,
     pub session_cookie_name: String,
     pub session_cookie_same_site: String,
@@ -36,6 +38,7 @@ impl AppState {
             identity_service: None,
             intervals_service: None,
             settings_service: None,
+            workout_summary_service: None,
             intervals_connection_tester: None,
             session_cookie_name: "aiwattcoach_session".to_string(),
             session_cookie_same_site: "lax".to_string(),
@@ -65,6 +68,14 @@ impl AppState {
         settings_service: Arc<dyn UserSettingsUseCases>,
     ) -> Self {
         self.settings_service = Some(settings_service);
+        self
+    }
+
+    pub fn with_workout_summary_service(
+        mut self,
+        workout_summary_service: Arc<dyn WorkoutSummaryUseCases>,
+    ) -> Self {
+        self.workout_summary_service = Some(workout_summary_service);
         self
     }
 

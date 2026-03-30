@@ -1,0 +1,156 @@
+use std::time::Duration;
+
+use futures::{SinkExt, StreamExt};
+use tokio::{net::TcpListener, time::timeout};
+use tokio_tungstenite::{
+    connect_async,
+    tungstenite::{client::IntoClientRequest, protocol::Message},
+};
+
+use crate::shared::{
+    sample_summary, workout_summary_test_app, TestIdentityServiceWithSession,
+    TestWorkoutSummaryService,
+};
+
+#[tokio::test]
+async fn websocket_requires_authentication() {
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![sample_summary("event-1")]),
+    )
+    .await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let result = connect_async(format!("ws://{}/api/workout-summaries/event-1/ws", address)).await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn websocket_sends_typing_then_coach_message() {
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![sample_summary("event-1")]),
+    )
+    .await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut request = format!("ws://{}/api/workout-summaries/event-1/ws", address)
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    socket
+        .send(Message::Text(
+            r#"{"type":"send_message","content":"Legs felt heavy today"}"#
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap();
+
+    let first = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let second = timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+
+    let first_text = first.into_text().unwrap().to_string();
+    let second_text = second.into_text().unwrap().to_string();
+
+    assert!(first_text.contains(r#""type":"coach_typing""#));
+    assert!(second_text.contains(r#""type":"coach_message""#));
+    assert!(second_text.contains(r#""role":"coach""#));
+}
+
+#[tokio::test]
+async fn websocket_queues_multiple_user_messages_in_order() {
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![sample_summary("event-1")]),
+    )
+    .await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut request = format!("ws://{}/api/workout-summaries/event-1/ws", address)
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    socket
+        .send(Message::Text(
+            r#"{"type":"send_message","content":"First"}"#.to_string().into(),
+        ))
+        .await
+        .unwrap();
+    socket
+        .send(Message::Text(
+            r#"{"type":"send_message","content":"Second"}"#.to_string().into(),
+        ))
+        .await
+        .unwrap();
+
+    let first = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let second = timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let third = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let fourth = timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+
+    assert!(first.contains(r#""type":"coach_typing""#));
+    assert!(second.contains(r#""type":"coach_message""#));
+    assert!(third.contains(r#""type":"coach_typing""#));
+    assert!(fourth.contains(r#""type":"coach_message""#));
+}

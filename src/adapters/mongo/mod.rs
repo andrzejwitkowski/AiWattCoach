@@ -7,3 +7,4 @@ pub mod sessions;
 pub mod settings;
 mod time;
 pub mod users;
+pub mod workout_summary;
