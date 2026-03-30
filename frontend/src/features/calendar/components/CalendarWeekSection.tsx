@@ -29,18 +29,20 @@ export function CalendarWeekSection({ week, showLoadingIndicator = true, onSelec
     >
       <CalendarWeekSummary weekNumber={week.weekNumber} summary={week.summary} />
       <div className="calendar-grid gap-3">
-        {week.days.map((day) => (
+        {week.days.map((day) => {
+          const selectionHandler = onSelectWorkout
+            ? () => onSelectWorkout(selectWorkoutDetail(day.dateKey, day.events[0] ?? null, day.activities))
+            : undefined;
+
+          return (
           <CalendarDayCell
             key={day.dateKey}
             day={day}
             isToday={isToday(day.date)}
-            onSelect={() => onSelectWorkout?.(selectWorkoutDetail(
-              day.dateKey,
-              day.events[0] ?? null,
-              day.activities,
-            ))}
+            onSelect={selectionHandler}
           />
-        ))}
+          );
+        })}
       </div>
     </section>
   );

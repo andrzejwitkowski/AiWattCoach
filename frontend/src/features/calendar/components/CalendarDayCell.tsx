@@ -48,12 +48,13 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const Icon = hasTraining
     ? getIcon(primaryActivity, primaryEvent)
     : BedDouble;
+  const isSelectable = hasTraining && Boolean(onSelect);
 
   const baseClassName = [
     'flex min-h-[160px] w-full flex-col gap-3 rounded-xl border p-3 text-left transition-colors md:min-h-[168px] md:p-3.5',
     hasTraining ? 'bg-[#1d2024] border-white/5' : 'bg-[#1d2024]/85 border-white/5 opacity-60',
     isToday ? 'ring-1 ring-[#d2ff9a]/40 shadow-[0_0_0_1px_rgba(210,255,154,0.15)]' : '',
-    hasTraining ? 'cursor-pointer hover:border-[#d2ff9a]/25 hover:bg-[#20242a]' : 'cursor-default',
+    isSelectable ? 'cursor-pointer hover:border-[#d2ff9a]/25 hover:bg-[#20242a]' : 'cursor-default',
   ].join(' ');
 
   const content = (
@@ -83,7 +84,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     </>
   );
 
-  if (!hasTraining) {
+  if (!isSelectable) {
     return <div className={baseClassName}>{content}</div>;
   }
 

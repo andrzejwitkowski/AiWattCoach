@@ -1,6 +1,7 @@
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
+use super::error::is_duplicate_key_error;
 use crate::domain::intervals::{
     ActivityUploadOperation, ActivityUploadOperationClaimResult,
     ActivityUploadOperationRepositoryPort, BoxFuture, IntervalsError,
@@ -148,12 +149,4 @@ impl ActivityUploadOperationRepositoryPort for MongoActivityUploadOperationRepos
             Ok(operation)
         })
     }
-}
-
-fn is_duplicate_key_error(error: &mongodb::error::Error) -> bool {
-    matches!(
-        error.kind.as_ref(),
-        mongodb::error::ErrorKind::Write(mongodb::error::WriteFailure::WriteError(write_error))
-            if write_error.code == 11000
-    )
 }

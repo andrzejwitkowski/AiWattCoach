@@ -6,6 +6,22 @@ import '../../../i18n';
 import type { CalendarWeek } from '../types';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
+function emptyEventDefinition() {
+  return {
+    rawWorkoutDoc: null,
+    intervals: [],
+    segments: [],
+    summary: {
+      totalSegments: 0,
+      totalDurationSeconds: 0,
+      estimatedNormalizedPowerWatts: null,
+      estimatedAveragePowerWatts: null,
+      estimatedIntensityFactor: null,
+      estimatedTrainingStressScore: null,
+    },
+  };
+}
+
 function createWeek(status: CalendarWeek['status']): CalendarWeek {
   return {
     weekNumber: 12,
@@ -397,5 +413,29 @@ describe('CalendarWeekSection', () => {
       event: week.days[0].events[0],
       activity: week.days[0].activities[1],
     });
+  });
+
+  it('does not render training days as buttons when no selection handler is provided', () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [{
+        id: 14,
+        startDateLocal: '2026-03-23',
+        name: 'Planned workout',
+        category: 'WORKOUT',
+        description: null,
+        indoor: false,
+        color: null,
+        eventDefinition: emptyEventDefinition(),
+        actualWorkout: null,
+      }],
+      activities: [],
+    };
+
+    render(<CalendarWeekSection week={week} />);
+
+    expect(screen.queryByRole('button', { name: /planned workout/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Planned workout')).toBeInTheDocument();
   });
 });
