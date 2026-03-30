@@ -200,7 +200,11 @@ function CompletedWorkoutPanel({ event, activity }: { event: IntervalEvent | nul
   const durationSeconds = isCompletedActivityOnly
     ? firstPositiveValue(activity?.movingTimeSeconds, activity?.elapsedTimeSeconds)
     : isPlannedVsActual
-      ? firstPositiveValue(event?.eventDefinition.summary.totalDurationSeconds)
+      ? firstPositiveValue(
+          activity?.movingTimeSeconds,
+          activity?.elapsedTimeSeconds,
+          event?.eventDefinition.summary.totalDurationSeconds,
+        )
       : 0;
   const completedIntervalTotalDurationSeconds = completedIntervalsTotalDuration(completedIntervals, durationSeconds);
   const matchedIntervalTotalDurationSeconds = matchedIntervalsTotalDuration(actualWorkout?.matchedIntervals ?? [], durationSeconds);

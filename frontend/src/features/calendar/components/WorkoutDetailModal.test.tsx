@@ -291,7 +291,7 @@ describe('WorkoutDetailModal', () => {
     });
 
     expect(screen.getByText('Threshold Ride')).toBeInTheDocument();
-    expect(within(metricCard('Duration') as HTMLElement).getByText('20m')).toBeInTheDocument();
+    expect(within(metricCard('Duration') as HTMLElement).getByText('1h 00m')).toBeInTheDocument();
     expect(within(metricCard('NP') as HTMLElement).getByText('280 W')).toBeInTheDocument();
     expect(within(metricCard('TSS') as HTMLElement).getByText('35 TSS')).toBeInTheDocument();
     expect(screen.queryByText('78 TSS')).not.toBeInTheDocument();
@@ -1968,6 +1968,91 @@ describe('WorkoutDetailModal', () => {
     expect(screen.getByText('272 W')).toBeInTheDocument();
     expect(screen.getByText('81 TSS')).toBeInTheDocument();
     expect(screen.getByText(/87% compliance/i)).toBeInTheDocument();
+  });
+
+  it('shows seconds for sub-minute completed intervals', async () => {
+    vi.mocked(loadEvent).mockResolvedValue(undefined as never);
+    vi.mocked(loadActivity).mockResolvedValue({
+      id: 'a55',
+      startDateLocal: '2026-04-05T08:00:00',
+      startDate: '2026-04-05T07:00:00Z',
+      name: 'Sprint Ride',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: 10000,
+      movingTimeSeconds: 1800,
+      elapsedTimeSeconds: 1800,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: true,
+      streamTypes: ['watts'],
+      tags: [],
+      metrics: {
+        trainingStressScore: 20,
+        normalizedPowerWatts: 230,
+        intensityFactor: 0.8,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: 220,
+        ftpWatts: 280,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [
+          {
+            id: 1,
+            label: 'Sprint',
+            intervalType: 'WORK',
+            groupId: null,
+            startIndex: 0,
+            endIndex: 44,
+            startTimeSeconds: 0,
+            endTimeSeconds: 45,
+            movingTimeSeconds: 45,
+            elapsedTimeSeconds: 45,
+            distanceMeters: null,
+            averagePowerWatts: 500,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            averageHeartRateBpm: 160,
+            averageCadenceRpm: null,
+            averageSpeedMps: null,
+            averageStrideMeters: null,
+            zone: 6,
+          },
+        ],
+        intervalGroups: [],
+        streams: [{ streamType: 'watts', name: 'Power', data: [300, 400, 500], data2: null, valueTypeIsArray: false, custom: false, allNull: false }],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+    });
+
+    render(<WorkoutDetailModal apiBaseUrl="" selection={{ dateKey: '2026-04-05', event: null, activity: { id: 'a55', startDateLocal: '2026-04-05T08:00:00', startDate: '2026-04-05T07:00:00Z', name: 'Sprint Ride', description: null, activityType: 'Ride', source: null, externalId: null, deviceName: null, distanceMeters: null, movingTimeSeconds: 1800, elapsedTimeSeconds: 1800, totalElevationGainMeters: null, averageSpeedMps: null, averageHeartRateBpm: null, averageCadenceRpm: null, trainer: false, commute: false, race: false, hasHeartRate: true, streamTypes: [], tags: [], metrics: { trainingStressScore: null, normalizedPowerWatts: null, intensityFactor: null, efficiencyFactor: null, variabilityIndex: null, averagePowerWatts: null, ftpWatts: null, totalWorkJoules: null, calories: null, trimp: null, powerLoad: null, heartRateLoad: null, paceLoad: null, strainScore: null }, details: { intervals: [], intervalGroups: [], streams: [], intervalSummary: [], skylineChart: [], powerZoneTimes: [], heartRateZoneTimes: [], paceZoneTimes: [], gapZoneTimes: [] } } }} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/completed workout/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('45s')).toBeInTheDocument();
   });
 
   it('shows imported activity details unavailable hint for sparse completed imports', async () => {

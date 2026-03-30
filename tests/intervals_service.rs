@@ -966,6 +966,125 @@ async fn upload_activity_records_pending_state_before_upstream_upload() {
 }
 
 #[tokio::test]
+async fn upload_activity_marks_operation_failed_when_upstream_upload_fails() {
+    let api = FakeIntervalsApi::with_error(IntervalsError::ConnectionError(
+        "intervals unavailable".to_string(),
+    ));
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::default();
+    let upload_operations = FakeActivityUploadOperationRepository::default();
+    let operation_calls = upload_operations.call_log.clone();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        upload_operations,
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Uploaded Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("garmin-fail".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await;
+
+    assert_eq!(
+        result,
+        Err(IntervalsError::ConnectionError(
+            "intervals unavailable".to_string()
+        ))
+    );
+    assert_eq!(
+        operation_calls.lock().unwrap().as_slice(),
+        &[
+            UploadOperationRepoCall::FindByOperationKey("external_id:garmin-fail".to_string()),
+            UploadOperationRepoCall::Upsert(
+                "external_id:garmin-fail".to_string(),
+                ActivityUploadOperationStatus::Pending,
+            ),
+            UploadOperationRepoCall::Upsert(
+                "external_id:garmin-fail".to_string(),
+                ActivityUploadOperationStatus::Failed,
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn upload_activity_retries_when_existing_operation_is_failed() {
+    let uploaded_activity = sample_activity("i95", "Retried Ride");
+    let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+        created: true,
+        activity_ids: vec![uploaded_activity.id.clone()],
+        activities: vec![uploaded_activity.clone()],
+    });
+    let api_calls = api.call_log.clone();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::default();
+    let upload_operations = FakeActivityUploadOperationRepository::with_existing(
+        "user-1",
+        ActivityUploadOperation {
+            operation_key: "external_id:external-i95".to_string(),
+            normalized_external_id: Some("external-i95".to_string()),
+            fallback_identity: None,
+            uploaded_activity_ids: Vec::new(),
+            status: ActivityUploadOperationStatus::Failed,
+        },
+    );
+    let operation_calls = upload_operations.call_log.clone();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        upload_operations,
+        NoopActivityFileIdentityExtractor,
+    );
+
+    let result = service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Retried Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("external-i95".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(result.created);
+    assert_eq!(result.activities, vec![uploaded_activity]);
+    assert_eq!(api_calls.lock().unwrap().len(), 1);
+    assert_eq!(
+        operation_calls.lock().unwrap().as_slice(),
+        &[
+            UploadOperationRepoCall::FindByOperationKey("external_id:external-i95".to_string()),
+            UploadOperationRepoCall::Upsert(
+                "external_id:external-i95".to_string(),
+                ActivityUploadOperationStatus::Uploaded,
+            ),
+            UploadOperationRepoCall::Upsert(
+                "external_id:external-i95".to_string(),
+                ActivityUploadOperationStatus::Completed,
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn upload_activity_recovers_completed_operation_without_second_upload() {
     let existing = sample_activity("i93", "Recovered Ride");
     let api = FakeIntervalsApi::with_uploaded_activities(UploadedActivities {

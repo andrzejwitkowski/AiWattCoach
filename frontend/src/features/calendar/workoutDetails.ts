@@ -103,6 +103,10 @@ export function formatDurationLabel(totalSeconds: number | null | undefined): st
     return '0m';
   }
 
+  if (totalSeconds < 60) {
+    return `${Math.floor(totalSeconds)}s`;
+  }
+
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   if (hours > 0) {

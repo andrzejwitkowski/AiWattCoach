@@ -200,6 +200,7 @@ describe('workoutDetails', () => {
   });
 
   it('formats compact duration labels', () => {
+    expect(formatDurationLabel(45)).toBe('45s');
     expect(formatDurationLabel(3900)).toBe('1h 05m');
     expect(formatDurationLabel(1500)).toBe('25m');
     expect(formatDurationLabel(3599)).toBe('59m');

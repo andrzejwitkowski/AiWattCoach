@@ -40,6 +40,7 @@ pub struct UploadedActivities {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActivityUploadOperationStatus {
     Pending,
+    Failed,
     Uploaded,
     Completed,
 }
@@ -75,6 +76,16 @@ impl ActivityUploadOperation {
             fallback_identity: self.fallback_identity.clone(),
             uploaded_activity_ids: activity_ids,
             status: ActivityUploadOperationStatus::Uploaded,
+        }
+    }
+
+    pub fn mark_failed(&self) -> Self {
+        Self {
+            operation_key: self.operation_key.clone(),
+            normalized_external_id: self.normalized_external_id.clone(),
+            fallback_identity: self.fallback_identity.clone(),
+            uploaded_activity_ids: Vec::new(),
+            status: ActivityUploadOperationStatus::Failed,
         }
     }
 

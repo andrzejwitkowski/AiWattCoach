@@ -193,7 +193,9 @@ where
         operation: &ActivityUploadOperation,
     ) -> Result<Option<UploadedActivities>, IntervalsError> {
         match operation.status {
-            ActivityUploadOperationStatus::Pending => Ok(None),
+            ActivityUploadOperationStatus::Pending | ActivityUploadOperationStatus::Failed => {
+                Ok(None)
+            }
             ActivityUploadOperationStatus::Uploaded | ActivityUploadOperationStatus::Completed => {
                 let mut activities = Vec::new();
 
@@ -526,9 +528,7 @@ where
                         return Ok(existing_result);
                     }
 
-                    return Err(IntervalsError::Internal(
-                        "Activity upload is already pending recovery".to_string(),
-                    ));
+                    existing_operation
                 }
                 None => {
                     service
@@ -546,7 +546,16 @@ where
             };
 
             let credentials = service.settings.get_credentials(&user_id).await?;
-            let uploaded = service.api.upload_activity(&credentials, upload).await?;
+            let uploaded = match service.api.upload_activity(&credentials, upload).await {
+                Ok(uploaded) => uploaded,
+                Err(error) => {
+                    service
+                        .upload_operations
+                        .upsert(&user_id, pending_operation.mark_failed())
+                        .await?;
+                    return Err(error);
+                }
+            };
             let uploaded_operation = service
                 .upload_operations
                 .upsert(
@@ -554,10 +563,23 @@ where
                     pending_operation.mark_uploaded(uploaded.activity_ids.clone()),
                 )
                 .await?;
-            let stored_activities = service
+            let stored_activities = match service
                 .activities
                 .upsert_many(&user_id, uploaded.activities.clone())
-                .await?;
+                .await
+            {
+                Ok(stored_activities) => stored_activities,
+                Err(error) => {
+                    service
+                        .upload_operations
+                        .upsert(
+                            &user_id,
+                            uploaded_operation.mark_uploaded(uploaded.activity_ids.clone()),
+                        )
+                        .await?;
+                    return Err(error);
+                }
+            };
             service
                 .upload_operations
                 .upsert(
