@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { CalendarDay } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
-import { buildCompletedWorkoutBars, buildPlannedWorkoutBars, type WorkoutBar } from '../workoutDetails';
+import { buildCompletedWorkoutPreviewBars, buildPlannedWorkoutBars, type WorkoutBar } from '../workoutDetails';
 import { CalendarMiniChart } from './CalendarMiniChart';
 
 type CalendarDayCellProps = {
@@ -265,7 +265,7 @@ function getIcon(dayActivity: CalendarDay['activities'][number] | null, dayEvent
 
 function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Array<number | WorkoutBar> {
   if (dayActivity) {
-    const bars = buildCompletedWorkoutBars(dayActivity);
+    const bars = buildCompletedWorkoutPreviewBars(dayActivity);
     if (bars.length > 0) {
       return bars;
     }

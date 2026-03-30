@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -119,5 +119,55 @@ describe('WorkoutDetailModal interval sections', () => {
     expect(fills.length).toBeGreaterThanOrEqual(1);
     expect(fills[fills.length - 1].style.width).toBe('25%');
     expect(screen.getAllByText('10m')).toHaveLength(1);
+  });
+
+  it('uses timestamp-derived duration labels when explicit interval durations are missing', async () => {
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a27',
+        startDateLocal: '2026-03-30T08:00:00',
+        name: 'Timestamped Ride',
+        movingTimeSeconds: 2400,
+        elapsedTimeSeconds: 2400,
+        hasHeartRate: true,
+        details: {
+          intervals: [
+            makeActivityInterval({
+              id: 7,
+              label: 'Clocked Block',
+              startTimeSeconds: 300,
+              endTimeSeconds: 900,
+              movingTimeSeconds: null,
+              elapsedTimeSeconds: null,
+              averagePowerWatts: 240,
+              averageHeartRateBpm: 150,
+              zone: 3,
+            }),
+          ],
+          streams: [makeActivityStream({ data: [180, 220, 240] })],
+        },
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-03-30',
+          activity: makeActivity({ id: 'a27', startDateLocal: '2026-03-30T08:00:00', name: 'Timestamped Ride', movingTimeSeconds: 2400, elapsedTimeSeconds: 2400, hasHeartRate: true }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText(/completed workout/i)).toBeInTheDocument());
+
+    expect(screen.getAllByText('Clocked Block').length).toBeGreaterThan(0);
+    const intervalRows = Array.from(document.querySelectorAll('[data-interval-row-active]')) as HTMLElement[];
+    const clockedRow = intervalRows.find((row) => within(row).queryByText('Clocked Block'));
+    expect(clockedRow).toBeDefined();
+    expect(clockedRow).toHaveTextContent('10m');
+    expect(screen.queryByText('0m')).not.toBeInTheDocument();
   });
 });

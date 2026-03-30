@@ -58,7 +58,7 @@ describe('CalendarWeekSection', () => {
     expect(screen.getByText(/fetching data/i)).toBeInTheDocument();
   });
 
-  it('selects only the event when the day activity is unrelated', async () => {
+  it('selects the displayed activity when the day activity is unrelated to the event', async () => {
     const week = createWeek('loaded');
     week.days[0] = {
       ...week.days[0],
@@ -145,8 +145,8 @@ describe('CalendarWeekSection', () => {
 
     expect(onSelectWorkout).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
-      event: week.days[0].events[0],
-      activity: null,
+      event: null,
+      activity: week.days[0].activities[0],
     });
   });
 

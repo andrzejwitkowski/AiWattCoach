@@ -76,7 +76,6 @@ export function CompletedWorkoutPanel({event, activity}: {
       ? firstPositiveValue(
         activity?.movingTimeSeconds,
         activity?.elapsedTimeSeconds,
-        event?.eventDefinition.summary.totalDurationSeconds,
       )
       : 0;
   const completedIntervalTotalDurationSeconds = completedIntervalsTotalDuration(completedIntervals, durationSeconds);

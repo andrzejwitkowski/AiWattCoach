@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
-import { buildCompletedWorkoutBars, buildMatchedWorkoutBars, buildPlannedWorkoutBars, extractCompletedPowerValues, formatDurationLabel, selectWorkoutDetail } from './workoutDetails';
+import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildMatchedWorkoutBars, buildPlannedWorkoutBars, extractCompletedPowerValues, formatDurationLabel, selectWorkoutDetail } from './workoutDetails';
 
 describe('workoutDetails', () => {
   it('builds planned bars from parsed workout segments with zone colors', () => {
@@ -141,6 +141,67 @@ describe('workoutDetails', () => {
 
     expect(bars).toHaveLength(1);
     expect(bars[0]).toEqual({ height: 71, color: '#d2ff9a', widthUnits: 360 });
+  });
+
+  it('builds completed preview bars from skyline chart data before generic fallbacks', () => {
+    const activity: IntervalActivity = {
+      id: 'a-skyline',
+      startDateLocal: '2026-03-22T08:00:00',
+      startDate: '2026-03-22T07:00:00Z',
+      name: 'Encoded Skyline Ride',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: 40000,
+      movingTimeSeconds: 3600,
+      elapsedTimeSeconds: 3600,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: false,
+      streamTypes: [],
+      tags: [],
+      metrics: {
+        trainingStressScore: 60,
+        normalizedPowerWatts: 240,
+        intensityFactor: 0.84,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: 228,
+        ftpWatts: 283,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [],
+        intervalGroups: [],
+        streams: [],
+        intervalSummary: [],
+        skylineChart: ['CAcSAtJFGgFAIgECKAE='],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+      detailsUnavailableReason: null,
+    };
+
+    const bars = buildCompletedWorkoutPreviewBars(activity);
+
+    expect(bars).toEqual([
+      { height: 64, color: '#00e3fd', widthUnits: 82 },
+    ]);
   });
 
   it('builds matched workout bars with width proportional to interval duration', () => {
@@ -302,6 +363,94 @@ describe('workoutDetails', () => {
     const selection = selectWorkoutDetail('2026-03-22', event, [activityBase, { ...activityBase, id: 'a-match', name: 'Matched ride' }]);
 
     expect(selection.activity?.id).toBe('a-match');
+    expect(selection.event?.id).toBe(event.id);
+  });
+
+  it('keeps an unrelated activity selection in completed mode instead of forcing the event', () => {
+    const event: IntervalEvent = {
+      id: 14,
+      startDateLocal: '2026-03-22',
+      name: 'Planned workout',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: null,
+        intervals: [],
+        segments: [],
+        summary: {
+          totalSegments: 0,
+          totalDurationSeconds: 0,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    const activity: IntervalActivity = {
+      id: 'a-unrelated',
+      startDateLocal: '2026-03-22T08:00:00',
+      startDate: '2026-03-22T07:00:00Z',
+      name: 'Unrelated ride',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: null,
+      movingTimeSeconds: null,
+      elapsedTimeSeconds: null,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: false,
+      streamTypes: [],
+      tags: [],
+      metrics: {
+        trainingStressScore: null,
+        normalizedPowerWatts: null,
+        intensityFactor: null,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: null,
+        ftpWatts: null,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [],
+        intervalGroups: [],
+        streams: [],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+      detailsUnavailableReason: null,
+    };
+
+    const selection = selectWorkoutDetail('2026-03-22', event, [activity]);
+
+    expect(selection).toEqual({
+      dateKey: '2026-03-22',
+      event: null,
+      activity,
+    });
   });
 
   it('extracts completed power values from watts streams', () => {

@@ -200,6 +200,7 @@ describe('WorkoutDetailModal completed mode', () => {
     expect(screen.getByText('272 W')).toBeInTheDocument();
     expect(screen.getByText('81 TSS')).toBeInTheDocument();
     expect(screen.getByText(/87% compliance/i)).toBeInTheDocument();
+    expect(within(metricCard('Duration')).getByText('0m')).toBeInTheDocument();
   });
 
   it('shows imported activity details unavailable hint for sparse completed imports', async () => {

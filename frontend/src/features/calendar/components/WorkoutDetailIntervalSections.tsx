@@ -109,7 +109,7 @@ export function CompletedIntervalsSection({
               left={(
                 <div>
                   <p className="text-sm font-bold text-[#f9f9fd]">{interval.label ?? `${activity?.activityType ?? t('calendar.workout')} ${index + 1}`}</p>
-                  <p className="text-xs text-slate-400">{formatDurationLabel(interval.movingTimeSeconds ?? interval.elapsedTimeSeconds ?? null)}</p>
+                  <p className="text-xs text-slate-400">{formatDurationLabel(completedIntervalDurationSeconds(interval))}</p>
                 </div>
               )}
               right={(

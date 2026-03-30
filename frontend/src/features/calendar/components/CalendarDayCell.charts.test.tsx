@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import '../../../i18n';
 import {
   makeActivity,
+  makeActivityDetails,
   makeCalendarDay,
   makeEvent,
   makeEventDefinition,
@@ -50,6 +51,31 @@ describe('CalendarDayCell charts', () => {
 
     expect(container).toHaveTextContent('Morning Ride');
     expect(container.querySelectorAll('[data-chart-bar="mini"]').length).toBe(4);
+  });
+
+  it('renders completed mini-chart bars from skyline chart payloads', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 29),
+      dateKey: '2026-03-29',
+      activities: [
+        makeActivity({
+          id: 'a-skyline',
+          name: 'Encoded Skyline Ride',
+          details: makeActivityDetails({
+            skylineChart: ['CAcSAtJFGgFAIgECKAE='],
+          }),
+          metrics: { trainingStressScore: 88 },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const [bar] = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
+
+    expect(bar).toBeDefined();
+    expect(bar.style.flexGrow).toBe('82');
+    expect(bar.style.height).toBe('64%');
+    expect(bar.style.backgroundColor).toBe('rgb(0, 227, 253)');
   });
 
   it('renders planned mini-chart bars with their workout zone colors', () => {
