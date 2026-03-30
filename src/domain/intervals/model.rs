@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::str::FromStr;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,6 +35,75 @@ pub struct UploadedActivities {
     pub created: bool,
     pub activity_ids: Vec<String>,
     pub activities: Vec<Activity>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ActivityUploadOperationStatus {
+    Pending,
+    Failed,
+    Uploaded,
+    Completed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActivityUploadOperation {
+    pub operation_key: String,
+    pub normalized_external_id: Option<String>,
+    pub fallback_identity: Option<String>,
+    pub uploaded_activity_ids: Vec<String>,
+    pub status: ActivityUploadOperationStatus,
+}
+
+impl ActivityUploadOperation {
+    pub fn pending(
+        operation_key: String,
+        normalized_external_id: Option<String>,
+        fallback_identity: Option<String>,
+    ) -> Self {
+        Self {
+            operation_key,
+            normalized_external_id,
+            fallback_identity,
+            uploaded_activity_ids: Vec::new(),
+            status: ActivityUploadOperationStatus::Pending,
+        }
+    }
+
+    pub fn mark_uploaded(&self, activity_ids: Vec<String>) -> Self {
+        Self {
+            operation_key: self.operation_key.clone(),
+            normalized_external_id: self.normalized_external_id.clone(),
+            fallback_identity: self.fallback_identity.clone(),
+            uploaded_activity_ids: activity_ids,
+            status: ActivityUploadOperationStatus::Uploaded,
+        }
+    }
+
+    pub fn mark_failed(&self) -> Self {
+        Self {
+            operation_key: self.operation_key.clone(),
+            normalized_external_id: self.normalized_external_id.clone(),
+            fallback_identity: self.fallback_identity.clone(),
+            uploaded_activity_ids: Vec::new(),
+            status: ActivityUploadOperationStatus::Failed,
+        }
+    }
+
+    pub fn mark_completed(&self, activity_ids: Vec<String>) -> Self {
+        Self {
+            operation_key: self.operation_key.clone(),
+            normalized_external_id: self.normalized_external_id.clone(),
+            fallback_identity: self.fallback_identity.clone(),
+            uploaded_activity_ids: activity_ids,
+            status: ActivityUploadOperationStatus::Completed,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ActivityUploadOperationClaimResult {
+    Claimed(ActivityUploadOperation),
+    Existing(ActivityUploadOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,6 +180,23 @@ pub fn normalize_external_id(value: Option<&str>) -> Option<String> {
     } else {
         Some(normalized.to_string())
     }
+}
+
+pub fn build_activity_upload_operation_key(
+    normalized_external_id: Option<&str>,
+    fallback_identity: Option<&str>,
+    file_bytes: &[u8],
+) -> String {
+    if let Some(external_id) = normalized_external_id {
+        return format!("external_id:{external_id}");
+    }
+
+    if let Some(identity) = fallback_identity {
+        return format!("fallback_identity:{identity}");
+    }
+
+    let digest = Sha256::digest(file_bytes);
+    format!("file_sha256:{digest:x}")
 }
 
 fn bucket_start_time(value: &str) -> Option<String> {
@@ -372,6 +459,7 @@ pub struct Activity {
     pub tags: Vec<String>,
     pub metrics: ActivityMetrics,
     pub details: ActivityDetails,
+    pub details_unavailable_reason: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]

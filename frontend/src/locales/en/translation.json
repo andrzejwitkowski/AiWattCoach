@@ -124,6 +124,18 @@
     "eventRun": "Run",
     "eventSwim": "Swim",
     "eventOther": "Event",
+    "plannedWorkout": "Planned Workout",
+    "completedWorkout": "Completed Workout",
+    "downloadFit": "Download FIT",
+    "downloadingFit": "Downloading FIT",
+    "closeWorkoutDetails": "Close workout details",
+    "loadingWorkoutDetails": "Loading workout details...",
+    "workoutDetailsUnavailable": "Workout details are unavailable.",
+    "importedWorkoutDetailsUnavailable": "Intervals.icu did not expose detailed data for this imported workout.",
+    "compliance": "compliance",
+    "powerChart": "Power Chart",
+    "intervalMatches": "Interval Matches",
+    "completedIntervals": "Completed Intervals",
     "moreItems_one": "+{{count}} more item",
     "moreItems_other": "+{{count}} more items"
   }

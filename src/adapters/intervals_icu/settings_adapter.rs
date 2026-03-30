@@ -49,6 +49,25 @@ impl IntervalsSettingsPort for SettingsIntervalsProvider {
             })
         })
     }
+
+    fn get_cycling_ftp_watts(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<i32>, IntervalsError>> {
+        let settings_service = self.settings_service.clone();
+        let user_id = user_id.to_string();
+
+        Box::pin(async move {
+            let settings = settings_service.get_settings(&user_id).await.map_err(|_| {
+                IntervalsError::Internal("Failed to load Intervals.icu settings".to_string())
+            })?;
+
+            Ok(settings
+                .cycling
+                .ftp_watts
+                .and_then(|value| i32::try_from(value).ok()))
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -65,6 +84,16 @@ impl IntervalsSettingsPort for IntervalsSettingsAdapter {
         match self {
             Self::Live(provider) => provider.get_credentials(user_id),
             Self::Dev(provider) => provider.get_credentials(user_id),
+        }
+    }
+
+    fn get_cycling_ftp_watts(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<i32>, IntervalsError>> {
+        match self {
+            Self::Live(provider) => provider.get_cycling_ftp_watts(user_id),
+            Self::Dev(provider) => provider.get_cycling_ftp_watts(user_id),
         }
     }
 }

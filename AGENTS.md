@@ -35,6 +35,7 @@ This file is for coding agents working in `AiWattCoach`.
 - Keep domain logic in `src/domain/**`.
 - Keep infrastructure and external API details in `src/adapters/**`.
 - Keep Axum handler code thin; delegate behavior to services/use cases.
+- When a backend area grows large, split it into directory modules with `mod.rs` plus focused siblings by concern such as `dto.rs`, `handlers.rs`, `mapping.rs`, `error.rs`, `validation.rs`, or feature-specific files.
 - Keep Mongo document shapes separate from domain models.
 - Keep Intervals.icu DTOs inside `src/adapters/intervals_icu/**`.
 - Keep LLM provider DTOs and SDK types inside dedicated adapter folders as well.
@@ -179,6 +180,7 @@ Before changing behavior, use this order:
 - Write tests before backend behavior changes whenever practical.
 - Add or update tests with behavior changes.
 - Prefer focused integration tests in `tests/*.rs` for HTTP and adapter behavior.
+- When an integration test target or shared test helper grows large, split it into a directory-based suite such as `tests/<suite>/main.rs` with focused files for support, fixtures, fakes, observability, and behavior groups.
 - Use fakes/test doubles for domain-service tests.
 - Verify user scoping in REST tests whenever endpoints are user-owned.
 - For frontend API tests, mock `fetch` and validate parsed output shapes.
@@ -208,6 +210,8 @@ Before changing behavior, use this order:
 
 - Match existing file style before introducing new patterns.
 - Prefer minimal diffs.
+- Keep files under 500 lines of code when practical; refactor early into smaller logical modules/components instead of letting one file grow into spaghetti code.
+- Do not keep catch-all support files after a split; move shared helpers into narrowly scoped modules like `app.rs`, `identity.rs`, `settings.rs`, `intervals.rs`, or similar concern-based names.
 - Keep the borrow checker boring; redesign API shapes before introducing extra `clone()`, `Arc`, shared wrappers, or explicit lifetimes.
 - Do not rename public API fields casually.
 - Update tests when adding endpoints, DTO fields, or repository behavior.

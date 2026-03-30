@@ -1,9 +1,16 @@
+mod activities;
+mod enriched;
+mod events;
+mod upload;
+
 use super::{
-    normalize_external_id,
+    build_activity_upload_operation_key, find_best_activity_match, normalize_external_id,
+    parse_workout_doc,
     ports::{ActivityFileIdentityExtractorPort, BoxFuture},
-    Activity, ActivityRepositoryPort, CreateEvent, DateRange, Event, IntervalsApiPort,
-    IntervalsError, IntervalsSettingsPort, UpdateActivity, UpdateEvent, UploadActivity,
-    UploadedActivities,
+    Activity, ActivityRepositoryPort, ActivityUploadOperation, ActivityUploadOperationClaimResult,
+    ActivityUploadOperationRepositoryPort, ActivityUploadOperationStatus, CreateEvent, DateRange,
+    EnrichedEvent, Event, IntervalsApiPort, IntervalsError, IntervalsSettingsPort, UpdateActivity,
+    UpdateEvent, UploadActivity, UploadedActivities,
 };
 use tracing::warn;
 
@@ -42,6 +49,19 @@ pub trait IntervalsUseCases: Send + Sync {
     ) -> BoxFuture<Result<Vec<Event>, IntervalsError>>;
 
     fn get_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<Event, IntervalsError>>;
+
+    fn get_enriched_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+    ) -> BoxFuture<Result<EnrichedEvent, IntervalsError>> {
+        let _ = (user_id, event_id);
+        Box::pin(async {
+            Err(IntervalsError::Internal(
+                "enriched event lookup not implemented".to_string(),
+            ))
+        })
+    }
 
     fn create_event(
         &self,
@@ -132,47 +152,54 @@ pub trait IntervalsUseCases: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct IntervalsService<Api, Settings, Activities, Extractor>
+pub struct IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
 {
     api: Api,
     settings: Settings,
     activities: Activities,
+    upload_operations: UploadOperations,
     identity_extractor: Extractor,
 }
 
-impl<Api, Settings, Activities, Extractor> IntervalsService<Api, Settings, Activities, Extractor>
+impl<Api, Settings, Activities, UploadOperations, Extractor>
+    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
 {
     pub fn new(
         api: Api,
         settings: Settings,
         activities: Activities,
+        upload_operations: UploadOperations,
         identity_extractor: Extractor,
     ) -> Self {
         Self {
             api,
             settings,
             activities,
+            upload_operations,
             identity_extractor,
         }
     }
 }
 
-impl<Api, Settings, Activities, Extractor> IntervalsUseCases
-    for IntervalsService<Api, Settings, Activities, Extractor>
+impl<Api, Settings, Activities, UploadOperations, Extractor> IntervalsUseCases
+    for IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
+    UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
 {
     fn list_events(
@@ -183,19 +210,23 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         let range = range.clone();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            service.api.list_events(&credentials, &range).await
-        })
+        Box::pin(async move { service.list_events_impl(&user_id, &range).await })
     }
 
     fn get_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<Event, IntervalsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            service.api.get_event(&credentials, event_id).await
-        })
+        Box::pin(async move { service.get_event_impl(&user_id, event_id).await })
+    }
+
+    fn get_enriched_event(
+        &self,
+        user_id: &str,
+        event_id: i64,
+    ) -> BoxFuture<Result<EnrichedEvent, IntervalsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.get_enriched_event_impl(&user_id, event_id).await })
     }
 
     fn create_event(
@@ -205,10 +236,7 @@ where
     ) -> BoxFuture<Result<Event, IntervalsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            service.api.create_event(&credentials, event).await
-        })
+        Box::pin(async move { service.create_event_impl(&user_id, event).await })
     }
 
     fn update_event(
@@ -219,22 +247,13 @@ where
     ) -> BoxFuture<Result<Event, IntervalsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            service
-                .api
-                .update_event(&credentials, event_id, event)
-                .await
-        })
+        Box::pin(async move { service.update_event_impl(&user_id, event_id, event).await })
     }
 
     fn delete_event(&self, user_id: &str, event_id: i64) -> BoxFuture<Result<(), IntervalsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            service.api.delete_event(&credentials, event_id).await
-        })
+        Box::pin(async move { service.delete_event_impl(&user_id, event_id).await })
     }
 
     fn download_fit(
@@ -244,10 +263,7 @@ where
     ) -> BoxFuture<Result<Vec<u8>, IntervalsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            service.api.download_fit(&credentials, event_id).await
-        })
+        Box::pin(async move { service.download_fit_impl(&user_id, event_id).await })
     }
 
     fn list_activities(
@@ -258,22 +274,7 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         let range = range.clone();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            let activities = service.api.list_activities(&credentials, &range).await?;
-            if let Err(error) = service
-                .activities
-                .upsert_many(&user_id, activities.clone())
-                .await
-            {
-                warn!(
-                    ?error,
-                    %user_id,
-                    "activity list refresh succeeded but local persistence failed"
-                );
-            }
-            Ok(activities)
-        })
+        Box::pin(async move { service.list_activities_impl(&user_id, &range).await })
     }
 
     fn get_activity(
@@ -284,15 +285,7 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         let activity_id = activity_id.to_string();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            let activity = service.api.get_activity(&credentials, &activity_id).await?;
-            service
-                .activities
-                .upsert(&user_id, activity.clone())
-                .await?;
-            Ok(activity)
-        })
+        Box::pin(async move { service.get_activity_impl(&user_id, &activity_id).await })
     }
 
     fn upload_activity(
@@ -302,71 +295,7 @@ where
     ) -> BoxFuture<Result<UploadedActivities, IntervalsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move {
-            let upload = UploadActivity {
-                external_id: normalize_external_id(upload.external_id.as_deref()),
-                ..upload
-            };
-            let normalized_external_id = normalize_external_id(upload.external_id.as_deref());
-
-            if let Some(external_id) = normalized_external_id.as_deref() {
-                if let Some(existing) = service
-                    .activities
-                    .find_by_user_id_and_external_id(&user_id, external_id)
-                    .await?
-                {
-                    return Ok(UploadedActivities {
-                        created: false,
-                        activity_ids: vec![existing.id.clone()],
-                        activities: vec![existing],
-                    });
-                }
-            }
-
-            if let Some(fallback_identity) =
-                service.identity_extractor.extract_identity(&upload).await?
-            {
-                let fallback_fingerprint = fallback_identity.as_fingerprint();
-                let matches = service
-                    .activities
-                    .find_by_user_id_and_fallback_identity(&user_id, &fallback_fingerprint)
-                    .await?;
-
-                if matches.len() == 1 {
-                    let existing = matches.into_iter().next().expect("single match expected");
-                    let existing_external_id =
-                        normalize_external_id(existing.external_id.as_deref());
-                    if normalized_external_id.is_none()
-                        || existing_external_id.is_none()
-                        || existing_external_id == normalized_external_id
-                    {
-                        return Ok(UploadedActivities {
-                            created: false,
-                            activity_ids: vec![existing.id.clone()],
-                            activities: vec![existing],
-                        });
-                    }
-                } else if matches.len() > 1 {
-                    warn!(
-                        %user_id,
-                        fallback_identity = %fallback_fingerprint,
-                        matches = matches.len(),
-                        "activity upload dedupe fallback matched multiple cached activities"
-                    );
-                }
-            }
-
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            let uploaded = service.api.upload_activity(&credentials, upload).await?;
-            if let Err(error) = service
-                .activities
-                .upsert_many(&user_id, uploaded.activities.clone())
-                .await
-            {
-                warn!(?error, %user_id, "activity upload succeeded but local persistence failed");
-            }
-            Ok(uploaded)
-        })
+        Box::pin(async move { service.upload_activity_impl(&user_id, upload).await })
     }
 
     fn update_activity(
@@ -379,13 +308,9 @@ where
         let user_id = user_id.to_string();
         let activity_id = activity_id.to_string();
         Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            let updated = service
-                .api
-                .update_activity(&credentials, &activity_id, activity)
-                .await?;
-            service.activities.upsert(&user_id, updated.clone()).await?;
-            Ok(updated)
+            service
+                .update_activity_impl(&user_id, &activity_id, activity)
+                .await
         })
     }
 
@@ -397,13 +322,6 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         let activity_id = activity_id.to_string();
-        Box::pin(async move {
-            let credentials = service.settings.get_credentials(&user_id).await?;
-            service
-                .api
-                .delete_activity(&credentials, &activity_id)
-                .await?;
-            service.activities.delete(&user_id, &activity_id).await
-        })
+        Box::pin(async move { service.delete_activity_impl(&user_id, &activity_id).await })
     }
 }

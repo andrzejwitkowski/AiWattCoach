@@ -16,6 +16,7 @@ use aiwattcoach::{
         },
         mongo::{
             activities::MongoActivityRepository,
+            activity_upload_operations::MongoActivityUploadOperationRepository,
             client::{create_client, ensure_database_exists, verify_connection},
             login_state::MongoLoginStateRepository,
             sessions::MongoSessionRepository,
@@ -36,6 +37,7 @@ use aiwattcoach::{
 };
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -47,6 +49,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         auth,
         dev_intervals_enabled,
         client_log_ingestion_enabled,
+        legacy_time_stream_cleanup_enabled,
     } = settings;
     let mut telemetry = setup_telemetry(&app_name)?;
     let address: SocketAddr = server.address().parse()?;
@@ -100,6 +103,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
+    if legacy_time_stream_cleanup_enabled {
+        let cleaned_activity_documents = activity_repository.cleanup_legacy_time_streams().await?;
+        if cleaned_activity_documents > 0 {
+            info!(
+                cleaned_activity_documents,
+                "Removed legacy time streams from stored activities"
+            );
+        }
+    }
+    let upload_operation_repository =
+        MongoActivityUploadOperationRepository::new(mongo_client.clone(), &mongo_database);
+    upload_operation_repository.ensure_indexes().await?;
     let intervals_api_client = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
     } else {
@@ -115,6 +130,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         intervals_api_client,
         intervals_settings_provider,
         activity_repository,
+        upload_operation_repository,
         activity_identity_extractor,
     ));
 

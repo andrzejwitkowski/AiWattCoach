@@ -3,16 +3,18 @@ import { useTranslation } from 'react-i18next';
 
 import type { CalendarDay } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
+import { buildCompletedWorkoutPreviewBars, buildPlannedWorkoutBars, type WorkoutBar } from '../workoutDetails';
 import { CalendarMiniChart } from './CalendarMiniChart';
 
 type CalendarDayCellProps = {
   day: CalendarDay;
   isToday: boolean;
+  onSelect?: (day: CalendarDay) => void;
 };
 
 type Tone = 'primary' | 'secondary' | 'error' | 'anaerobic' | 'muted';
 
-export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
+export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const primaryActivity = day.activities[0] ?? null;
@@ -46,15 +48,17 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
   const Icon = hasTraining
     ? getIcon(primaryActivity, primaryEvent)
     : BedDouble;
+  const isSelectable = hasTraining && Boolean(onSelect);
 
-  return (
-    <div
-      className={[
-        'flex min-h-[160px] flex-col gap-3 rounded-xl border p-3 transition-colors md:min-h-[168px] md:p-3.5',
-        hasTraining ? 'bg-[#1d2024] border-white/5' : 'bg-[#1d2024]/85 border-white/5 opacity-60',
-        isToday ? 'ring-1 ring-[#d2ff9a]/40 shadow-[0_0_0_1px_rgba(210,255,154,0.15)]' : '',
-      ].join(' ')}
-    >
+  const baseClassName = [
+    'flex min-h-[160px] w-full flex-col gap-3 rounded-xl border p-3 text-left transition-colors md:min-h-[168px] md:p-3.5',
+    hasTraining ? 'bg-[#1d2024] border-white/5' : 'bg-[#1d2024]/85 border-white/5 opacity-60',
+    isToday ? 'ring-1 ring-[#d2ff9a]/40 shadow-[0_0_0_1px_rgba(210,255,154,0.15)]' : '',
+    isSelectable ? 'cursor-pointer hover:border-[#d2ff9a]/25 hover:bg-[#20242a]' : 'cursor-default',
+  ].join(' ');
+
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <span className="text-[10px] font-bold text-slate-500">{formatDayLabel(day.date, locale)}</span>
         <Icon className={iconColorClass(tone)} size={14} />
@@ -77,7 +81,21 @@ export function CalendarDayCell({ day, isToday }: CalendarDayCellProps) {
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{t('calendar.restDay')}</p>
         </div>
       )}
-    </div>
+    </>
+  );
+
+  if (!isSelectable) {
+    return <div className={baseClassName}>{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect?.(day)}
+      className={baseClassName}
+    >
+      {content}
+    </button>
   );
 }
 
@@ -245,17 +263,22 @@ function getIcon(dayActivity: CalendarDay['activities'][number] | null, dayEvent
   return Bike;
 }
 
-function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): number[] {
-  const intervalCount = dayActivity ? 0 : (dayEvent?.eventDefinition.intervals.length ?? 0);
-  const tss = dayActivity?.metrics.trainingStressScore ?? 0;
-
-  if (intervalCount > 0) {
-    return dayEvent?.eventDefinition.intervals.map((_, index) => {
-      const divisor = Math.max(1, intervalCount - 1);
-      return 35 + Math.round((index / divisor) * 55);
-    }) ?? [];
+function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Array<number | WorkoutBar> {
+  if (dayActivity) {
+    const bars = buildCompletedWorkoutPreviewBars(dayActivity);
+    if (bars.length > 0) {
+      return bars;
+    }
   }
 
+  if (dayEvent) {
+    const bars = buildPlannedWorkoutBars(dayEvent);
+    if (bars.length > 0) {
+      return bars;
+    }
+  }
+
+  const tss = dayActivity?.metrics.trainingStressScore ?? 0;
   if (tss > 0) {
     const peak = Math.min(100, Math.max(30, tss));
     return [Math.max(20, peak - 25), peak, Math.max(25, peak - 10)];

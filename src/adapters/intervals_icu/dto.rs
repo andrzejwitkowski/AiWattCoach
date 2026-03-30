@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -85,9 +85,13 @@ pub struct ActivityResponse {
     pub commute: Option<bool>,
     pub race: Option<bool>,
     pub has_heartrate: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
     pub stream_types: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
     pub tags: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
     pub interval_summary: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
     pub skyline_chart_bytes: Option<Vec<String>>,
     pub icu_zone_times: Option<Vec<ZoneTimeResponse>>,
     pub icu_hr_zone_times: Option<Vec<i32>>,
@@ -122,6 +126,26 @@ pub struct ZoneTimeResponse {
 pub enum StringOrNumber {
     String(String),
     Number(i64),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+enum StringListOrSingle {
+    List(Vec<String>),
+    Single(String),
+}
+
+fn deserialize_optional_string_list<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<StringListOrSingle>::deserialize(deserializer)?;
+    Ok(value.map(|value| match value {
+        StringListOrSingle::List(values) => values,
+        StringListOrSingle::Single(value) => vec![value],
+    }))
 }
 
 impl StringOrNumber {
@@ -187,6 +211,14 @@ pub struct ActivityStreamResponse {
     pub custom: bool,
     #[serde(default, rename = "allNull")]
     pub all_null: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ActivityIntervalsResponse {
+    #[serde(default)]
+    pub icu_intervals: Vec<ActivityIntervalResponse>,
+    #[serde(default)]
+    pub icu_groups: Vec<ActivityIntervalGroupResponse>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

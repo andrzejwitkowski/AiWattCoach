@@ -1,5 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -12,7 +12,9 @@ import {
   CALENDAR_WEEK_ROW_GAP,
 } from '../constants';
 import { useCalendarData } from '../hooks/useCalendarData';
+import type { WorkoutDetailSelection } from '../workoutDetails';
 import { CalendarPerformanceCards } from './CalendarPerformanceCards';
+import { WorkoutDetailModal } from './WorkoutDetailModal';
 import { CalendarWeekDayHeader } from './CalendarWeekDayHeader';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
@@ -33,6 +35,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
     loadMorePast,
     loadMoreFuture,
   } = useCalendarData({ apiBaseUrl });
+  const [selection, setSelection] = useState<WorkoutDetailSelection | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const appliedAdjustmentVersionRef = useRef(0);
   const initializingScrollRef = useRef(true);
@@ -208,11 +211,11 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
               <CalendarWeekDayHeader />
               <div className="mt-8 space-y-10">
                 {renderedWeeks.length > 0 ? (
-                  renderedWeeks.map((week) => (
-                    <div key={week.weekKey} data-week-key={week.weekKey}>
-                      <CalendarWeekSection week={week} />
-                    </div>
-                  ))
+                    renderedWeeks.map((week) => (
+                      <div key={week.weekKey} data-week-key={week.weekKey}>
+                      <CalendarWeekSection week={week} onSelectWorkout={setSelection} />
+                      </div>
+                    ))
                 ) : (
                   <div className="rounded-xl border border-white/5 bg-[#171a1d] p-6 text-center text-sm text-slate-400">
                     {t('calendar.noEvents')}
@@ -225,6 +228,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       </div>
 
       <CalendarPerformanceCards />
+      <WorkoutDetailModal apiBaseUrl={apiBaseUrl} selection={selection} onClose={() => setSelection(null)} />
     </section>
   );
 }

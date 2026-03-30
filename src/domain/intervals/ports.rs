@@ -7,7 +7,8 @@ use std::{
 
 use super::{
     normalize_external_id, Activity, ActivityDeduplicationIdentity, ActivityFallbackIdentity,
-    CreateEvent, DateRange, Event, IntervalsCredentials, IntervalsError, UpdateActivity,
+    ActivityUploadOperation, ActivityUploadOperationClaimResult, ActualWorkoutMatch, CreateEvent,
+    DateRange, Event, IntervalsCredentials, IntervalsError, ParsedWorkoutDoc, UpdateActivity,
     UpdateEvent, UploadActivity, UploadedActivities,
 };
 
@@ -170,6 +171,26 @@ pub trait ActivityFileIdentityExtractorPort: Clone + Send + Sync + 'static {
     ) -> BoxFuture<Result<Option<ActivityFallbackIdentity>, IntervalsError>>;
 }
 
+pub trait ActivityUploadOperationRepositoryPort: Clone + Send + Sync + 'static {
+    fn claim_pending(
+        &self,
+        user_id: &str,
+        operation: ActivityUploadOperation,
+    ) -> BoxFuture<Result<ActivityUploadOperationClaimResult, IntervalsError>>;
+
+    fn find_by_user_id_and_operation_key(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+    ) -> BoxFuture<Result<Option<ActivityUploadOperation>, IntervalsError>>;
+
+    fn upsert(
+        &self,
+        user_id: &str,
+        operation: ActivityUploadOperation,
+    ) -> BoxFuture<Result<ActivityUploadOperation, IntervalsError>>;
+}
+
 impl ActivityRepositoryPort for NoopActivityRepository {
     fn upsert(
         &self,
@@ -306,6 +327,83 @@ impl ActivityRepositoryPort for NoopActivityRepository {
 }
 
 #[derive(Clone, Default)]
+pub struct NoopActivityUploadOperationRepository {
+    stored: Arc<Mutex<HashMap<String, Vec<ActivityUploadOperation>>>>,
+}
+
+impl ActivityUploadOperationRepositoryPort for NoopActivityUploadOperationRepository {
+    fn claim_pending(
+        &self,
+        user_id: &str,
+        operation: ActivityUploadOperation,
+    ) -> BoxFuture<Result<ActivityUploadOperationClaimResult, IntervalsError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut stored = stored
+                .lock()
+                .expect("noop upload operation repo mutex poisoned");
+            let operations = stored.entry(user_id).or_default();
+
+            if let Some(index) = operations
+                .iter()
+                .position(|existing| existing.operation_key == operation.operation_key)
+            {
+                let existing = operations[index].clone();
+                if existing.status == super::ActivityUploadOperationStatus::Failed {
+                    operations[index] = operation.clone();
+                    return Ok(ActivityUploadOperationClaimResult::Claimed(operation));
+                }
+
+                return Ok(ActivityUploadOperationClaimResult::Existing(existing));
+            }
+
+            operations.push(operation.clone());
+            Ok(ActivityUploadOperationClaimResult::Claimed(operation))
+        })
+    }
+
+    fn find_by_user_id_and_operation_key(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+    ) -> BoxFuture<Result<Option<ActivityUploadOperation>, IntervalsError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            let stored = stored
+                .lock()
+                .expect("noop upload operation repo mutex poisoned");
+            Ok(stored
+                .get(&user_id)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|operation| operation.operation_key == operation_key))
+        })
+    }
+
+    fn upsert(
+        &self,
+        user_id: &str,
+        operation: ActivityUploadOperation,
+    ) -> BoxFuture<Result<ActivityUploadOperation, IntervalsError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut stored = stored
+                .lock()
+                .expect("noop upload operation repo mutex poisoned");
+            let operations = stored.entry(user_id).or_default();
+            operations.retain(|existing| existing.operation_key != operation.operation_key);
+            operations.push(operation.clone());
+            Ok(operation)
+        })
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct NoopActivityFileIdentityExtractor;
 
 impl ActivityFileIdentityExtractorPort for NoopActivityFileIdentityExtractor {
@@ -326,4 +424,19 @@ pub trait IntervalsSettingsPort: Clone + Send + Sync + 'static {
         &self,
         user_id: &str,
     ) -> BoxFuture<Result<IntervalsCredentials, IntervalsError>>;
+
+    fn get_cycling_ftp_watts(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<i32>, IntervalsError>> {
+        let _ = user_id;
+        Box::pin(async { Ok(None) })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EnrichedEvent {
+    pub event: Event,
+    pub parsed_workout: ParsedWorkoutDoc,
+    pub actual_workout: Option<ActualWorkoutMatch>,
 }
