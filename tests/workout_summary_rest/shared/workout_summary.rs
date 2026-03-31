@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use aiwattcoach::domain::workout_summary::{
-    CoachReply, ConversationMessage, MessageRole, PersistedUserMessage, SendMessageResult,
-    WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+    validate_message_content, CoachReply, ConversationMessage, MessageRole, PersistedUserMessage,
+    SendMessageResult, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
 };
 
 type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'static>>;
@@ -10,12 +10,14 @@ type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send
 #[derive(Clone, Default)]
 pub(crate) struct TestWorkoutSummaryService {
     summaries: Arc<Mutex<Vec<WorkoutSummary>>>,
+    processed_user_messages: Arc<Mutex<Vec<String>>>,
 }
 
 impl TestWorkoutSummaryService {
     pub(crate) fn with_summaries(summaries: Vec<WorkoutSummary>) -> Self {
         Self {
             summaries: Arc::new(Mutex::new(summaries)),
+            processed_user_messages: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -30,6 +32,10 @@ impl TestWorkoutSummaryService {
 
     fn find_summary(&self, user_id: &str, event_id: &str) -> Option<WorkoutSummary> {
         self.summary(user_id, event_id)
+    }
+
+    pub(crate) fn processed_user_messages(&self) -> Vec<String> {
+        self.processed_user_messages.lock().unwrap().clone()
     }
 }
 
@@ -48,12 +54,16 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_id: &str,
         event_id: &str,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
-        let existing = self.find_summary(user_id, event_id);
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         let event_id = event_id.to_string();
         Box::pin(async move {
-            if let Some(existing) = existing {
+            let mut summaries = summaries.lock().unwrap();
+            if let Some(existing) = summaries
+                .iter()
+                .find(|summary| summary.user_id == user_id && summary.event_id == event_id)
+                .cloned()
+            {
                 return Ok(existing);
             }
 
@@ -66,7 +76,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 created_at_epoch_seconds: 1_700_000_000,
                 updated_at_epoch_seconds: 1_700_000_000,
             };
-            summaries.lock().unwrap().push(summary.clone());
+            summaries.push(summary.clone());
             Ok(summary)
         })
     }
@@ -135,9 +145,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         content: String,
     ) -> BoxFuture<Result<SendMessageResult, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
+        let processed_user_messages = self.processed_user_messages.clone();
         let user_id = user_id.to_string();
         let event_id = event_id.to_string();
         Box::pin(async move {
+            let content = validate_message_content(&content)?;
             let mut summaries = summaries.lock().unwrap();
             let Some(summary) = summaries
                 .iter_mut()
@@ -145,6 +157,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             else {
                 return Err(WorkoutSummaryError::NotFound);
             };
+
+            processed_user_messages
+                .lock()
+                .unwrap()
+                .push(content.clone());
 
             let user_message = ConversationMessage {
                 id: "message-user-1".to_string(),
@@ -178,9 +195,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         content: String,
     ) -> BoxFuture<Result<PersistedUserMessage, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
+        let processed_user_messages = self.processed_user_messages.clone();
         let user_id = user_id.to_string();
         let event_id = event_id.to_string();
         Box::pin(async move {
+            let content = validate_message_content(&content)?;
             let mut summaries = summaries.lock().unwrap();
             let Some(summary) = summaries
                 .iter_mut()
@@ -188,6 +207,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             else {
                 return Err(WorkoutSummaryError::NotFound);
             };
+
+            processed_user_messages
+                .lock()
+                .unwrap()
+                .push(content.clone());
 
             let user_message = ConversationMessage {
                 id: "message-user-1".to_string(),
@@ -210,7 +234,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         &self,
         user_id: &str,
         event_id: &str,
-        _user_message_content: String,
+        user_message_content: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
@@ -227,7 +251,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             let coach_message = ConversationMessage {
                 id: "message-coach-1".to_string(),
                 role: MessageRole::Coach,
-                content: "Thanks, that helps. What stood out most about how the workout felt compared with the plan?".to_string(),
+                content: format!("Coach reply to: {user_message_content}"),
                 created_at_epoch_seconds: 1_700_000_000,
             };
 

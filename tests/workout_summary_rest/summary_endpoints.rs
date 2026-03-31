@@ -144,6 +144,34 @@ async fn list_summaries_returns_batch_results() {
 }
 
 #[tokio::test]
+async fn list_summaries_rejects_empty_event_ids() {
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/workout-summaries?eventIds=,,")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("error").and_then(Value::as_str),
+        Some("eventIds must contain at least one event id")
+    );
+}
+
+#[tokio::test]
 async fn update_rpe_returns_updated_summary() {
     let app = workout_summary_test_app(
         TestIdentityServiceWithSession::default(),

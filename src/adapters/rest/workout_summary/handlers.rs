@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use serde::Serialize;
 
 use crate::{config::AppState, domain::workout_summary::WorkoutSummaryUseCases};
 
@@ -12,6 +13,11 @@ use super::{
     error::map_workout_summary_error,
     mapping::{map_send_message_result_to_dto, map_summary_to_dto},
 };
+
+#[derive(Serialize)]
+struct ErrorResponse {
+    error: &'static str,
+}
 
 pub(super) async fn resolve_user_id(
     state: &AppState,
@@ -87,6 +93,16 @@ pub async fn list_summaries(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
+
+    if event_ids.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "eventIds must contain at least one event id",
+            }),
+        )
+            .into_response();
+    }
 
     match service.list_summaries(&user_id, event_ids).await {
         Ok(summaries) => Json(

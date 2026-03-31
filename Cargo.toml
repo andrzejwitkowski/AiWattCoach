@@ -30,7 +30,7 @@ uuid = { version = "1.18.1", features = ["v4"] }
 
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.28", features = ["logs", "rt-tokio", "testing"] }
-tokio-tungstenite = "0.27"
+tokio-tungstenite = "0.28"
 
 [lints.rust]
 unused_lifetimes = "deny"

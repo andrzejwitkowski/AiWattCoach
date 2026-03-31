@@ -1,10 +1,14 @@
 use super::WorkoutSummary;
 
+pub trait WorkoutCoach: Send + Sync {
+    fn reply(&self, summary: &WorkoutSummary, user_message: &str) -> String;
+}
+
 #[derive(Clone, Default)]
 pub struct MockWorkoutCoach;
 
-impl MockWorkoutCoach {
-    pub fn reply(&self, summary: &WorkoutSummary, user_message: &str) -> String {
+impl WorkoutCoach for MockWorkoutCoach {
+    fn reply(&self, summary: &WorkoutSummary, user_message: &str) -> String {
         match summary.rpe {
             Some(rpe) if rpe >= 8 => format!(
                 "That sounds like a hard session. With an RPE of {rpe}, what part of the workout drove the most fatigue?"

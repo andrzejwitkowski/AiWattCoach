@@ -2,7 +2,7 @@ use crate::domain::identity::{Clock, IdGenerator};
 
 use super::{
     validate_message_content, validate_rpe, BoxFuture, CoachReply, ConversationMessage,
-    MessageRole, MockWorkoutCoach, PersistedUserMessage, SendMessageResult, WorkoutSummary,
+    MessageRole, PersistedUserMessage, SendMessageResult, WorkoutCoach, WorkoutSummary,
     WorkoutSummaryError, WorkoutSummaryRepository,
 };
 
@@ -64,7 +64,7 @@ where
     repository: Repo,
     clock: Time,
     ids: Ids,
-    coach: MockWorkoutCoach,
+    coach: std::sync::Arc<dyn WorkoutCoach>,
 }
 
 impl<Repo, Time, Ids> WorkoutSummaryService<Repo, Time, Ids>
@@ -74,11 +74,25 @@ where
     Ids: IdGenerator,
 {
     pub fn new(repository: Repo, clock: Time, ids: Ids) -> Self {
+        Self::with_coach(
+            repository,
+            clock,
+            ids,
+            std::sync::Arc::new(super::MockWorkoutCoach),
+        )
+    }
+
+    pub fn with_coach(
+        repository: Repo,
+        clock: Time,
+        ids: Ids,
+        coach: std::sync::Arc<dyn WorkoutCoach>,
+    ) -> Self {
         Self {
             repository,
             clock,
             ids,
-            coach: MockWorkoutCoach,
+            coach,
         }
     }
 

@@ -1,17 +1,20 @@
 use axum::{
     extract::{ws::Message, Path, State, WebSocketUpgrade},
-    http::HeaderMap,
-    response::Response,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
 };
 use futures::{SinkExt, StreamExt};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, Notify};
 use tokio::time::{sleep, Duration};
 
-use crate::config::AppState;
+use crate::{
+    config::AppState,
+    domain::workout_summary::{validate_message_content, WorkoutSummaryError},
+};
 
 use super::{
     dto::{
@@ -31,9 +34,19 @@ pub async fn workout_summary_ws(
 ) -> Response {
     match super::handlers::resolve_user_id(&state, &headers).await {
         Ok(user_id) => {
+            let Some(service) = state.workout_summary_service.clone() else {
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            };
+
             let state = state.clone();
             let event_id = path.event_id;
-            ws.on_upgrade(move |socket| handle_socket(socket, state, user_id, event_id))
+
+            match service.get_summary(&user_id, &event_id).await {
+                Ok(_) => {
+                    ws.on_upgrade(move |socket| handle_socket(socket, state, user_id, event_id))
+                }
+                Err(error) => map_workout_summary_error(&error),
+            }
         }
         Err(response) => response,
     }
@@ -48,6 +61,7 @@ async fn handle_socket(
     let (sender, mut receiver) = socket.split();
     let sender = Arc::new(Mutex::new(sender));
     let connection_open = Arc::new(AtomicBool::new(true));
+    let close_requested = Arc::new(Notify::new());
     let Some(service) = state.workout_summary_service.clone() else {
         let _ = send_ws_json(
             &sender,
@@ -63,6 +77,7 @@ async fn handle_socket(
     let worker_user_id = user_id.clone();
     let worker_event_id = event_id.clone();
     let worker_connection_open = Arc::clone(&connection_open);
+    let worker_close_requested = Arc::clone(&close_requested);
 
     tokio::spawn(async move {
         // Process one queued user message at a time so typing/reply events stay ordered.
@@ -82,6 +97,8 @@ async fn handle_socket(
             .await
             {
                 worker_connection_open.store(false, Ordering::Relaxed);
+                let _ = close_ws(&worker_sender).await;
+                worker_close_requested.notify_waiters();
                 break;
             }
 
@@ -91,7 +108,16 @@ async fn handle_socket(
         }
     });
 
-    while let Some(message_result) = receiver.next().await {
+    loop {
+        let message_result = tokio::select! {
+            _ = close_requested.notified() => break,
+            message_result = receiver.next() => message_result,
+        };
+
+        let Some(message_result) = message_result else {
+            break;
+        };
+
         let message = match message_result {
             Ok(message) => message,
             Err(_) => break,
@@ -132,6 +158,19 @@ async fn handle_socket(
                     continue;
                 };
 
+                let content = match validate_message_content(&content) {
+                    Ok(content) => content,
+                    Err(error) => {
+                        if send_ws_json(&sender, error_message(client_error_message(&error)))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                };
+
                 match queued_messages_tx.try_send(content) {
                     Ok(()) => {}
                     Err(mpsc::error::TrySendError::Full(_)) => {
@@ -166,6 +205,7 @@ async fn handle_socket(
 
     connection_open.store(false, Ordering::Relaxed);
     drop(queued_messages_tx);
+    let _ = close_ws(&sender).await;
 }
 
 async fn send_ws_json(
@@ -175,6 +215,12 @@ async fn send_ws_json(
     let json =
         serde_json::to_string(&payload).expect("serializing websocket payload should not fail");
     sender.lock().await.send(Message::Text(json.into())).await
+}
+
+async fn close_ws(
+    sender: &Arc<Mutex<futures::stream::SplitSink<axum::extract::ws::WebSocket, Message>>>,
+) -> Result<(), axum::Error> {
+    sender.lock().await.close().await
 }
 
 async fn process_send_message(
@@ -222,7 +268,7 @@ async fn process_send_message(
                 .await
                 .is_err(),
                 Err(error) => {
-                    if send_ws_json(&sender, error_message(error.to_string()))
+                    if send_ws_json(&sender, error_message(client_error_message(&error)))
                         .await
                         .is_err()
                     {
@@ -234,7 +280,7 @@ async fn process_send_message(
             }
         }
         Err(error) => {
-            if send_ws_json(&sender, error_message(error.to_string()))
+            if send_ws_json(&sender, error_message(client_error_message(&error)))
                 .await
                 .is_err()
             {
@@ -243,6 +289,13 @@ async fn process_send_message(
 
             should_close_worker(&error)
         }
+    }
+}
+
+fn client_error_message(error: &WorkoutSummaryError) -> String {
+    match error {
+        WorkoutSummaryError::Repository(_) => "workout summary service unavailable".to_string(),
+        _ => error.to_string(),
     }
 }
 

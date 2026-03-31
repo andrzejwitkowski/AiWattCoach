@@ -29,7 +29,7 @@ Per-workout summary with RPE rating and AI coach conversation. MongoDB-backed, e
 - Server messages:
   - `{ "type": "coach_typing" }`
   - after 1.5s simulated delay: `{ "type": "coach_message", "message": {...} }`
-  - `{ "type": "error", "message": "..." }` for validation or processing failures
+  - `{ "type": "error", "error": "..." }` for validation or processing failures
 
 ## Key Design Decisions
 
@@ -42,20 +42,20 @@ Per-workout summary with RPE rating and AI coach conversation. MongoDB-backed, e
 ## Implementation Tasks
 
 1. Enable Axum `ws` support in `Cargo.toml` and add `tokio-tungstenite` as a dev-dependency for WebSocket integration tests.
-2. Add domain model files for `WorkoutSummary`, `ConversationMessage`, `MessageRole`, domain errors, and RPE validation.
-3. Add the `WorkoutSummaryRepository` port using the existing boxed-future pattern.
-4. Add a mock coach module that generates template responses based on the latest user message and optional RPE.
-5. Add `WorkoutSummaryUseCases` and `WorkoutSummaryService` to orchestrate create, fetch, batch fetch, RPE updates, and chat message persistence.
+2. Introduce domain model files for `WorkoutSummary`, `ConversationMessage`, `MessageRole`, domain errors, and RPE validation.
+3. Define the `WorkoutSummaryRepository` port using the existing boxed-future pattern.
+4. Create a mock coach module that generates template responses based on the latest user message and optional RPE.
+5. Implement `WorkoutSummaryUseCases` and `WorkoutSummaryService` to orchestrate create, fetch, batch fetch, RPE updates, and chat message persistence.
 6. Wire the new domain module through `src/domain/workout_summary/mod.rs` and `src/domain/mod.rs`.
-7. Add MongoDB persistence in `src/adapters/mongo/workout_summary.rs` with explicit document mapping and `ensure_indexes()` support.
-8. Add REST DTOs for summary payloads, mutation requests, query parsing, and WebSocket message envelopes.
-9. Add REST error mapping from domain errors to HTTP responses.
-10. Add REST mapping helpers between domain models and DTOs.
-11. Add REST handlers for get, create, update RPE, send message, and batch list.
-12. Add WebSocket handling for upgrade, authentication, client message parsing, typing notifications, simulated delay, and persisted mock coach replies.
-13. Add REST module wiring and register the new routes in `src/adapters/rest/mod.rs`.
+7. Implement MongoDB persistence in `src/adapters/mongo/workout_summary.rs` with explicit document mapping and `ensure_indexes()` support.
+8. Define REST DTOs for summary payloads, mutation requests, query parsing, and WebSocket message envelopes.
+9. Map REST error responses from domain errors to HTTP responses.
+10. Translate domain models into DTOs with REST mapping helpers.
+11. Implement REST handlers for get, create, update RPE, send message, and batch list.
+12. Implement WebSocket handling for upgrade, authentication, client message parsing, typing notifications, simulated delay, and persisted mock coach replies.
+13. Register the REST module wiring and new routes in `src/adapters/rest/mod.rs`.
 14. Add `workout_summary_service` to `AppState` and wire the repository/service in `main.rs`.
-15. Add integration test helpers and fake services matching the repo's current test harness structure.
-16. Add REST integration tests for authentication, create/get, batch fetch, RPE update, and message sending.
-17. Add WebSocket integration tests for authentication, typing indicator flow, persisted replies, and invalid message handling.
+15. Create integration test helpers and fake services matching the repo's current test harness structure.
+16. Test REST integration for authentication, create/get, batch fetch, RPE update, and message sending.
+17. Verify WebSocket integration for authentication, typing indicator flow, persisted replies, and invalid message handling.
 18. Run final verification with formatting, clippy, targeted tests, and full backend test coverage relevant to the feature.
