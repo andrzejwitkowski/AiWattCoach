@@ -80,6 +80,36 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.hasConversation).toBe(true);
   });
 
+  it('pages through older workouts from a larger recent history window', async () => {
+    vi.mocked(listEvents).mockResolvedValue(
+      Array.from({ length: 10 }, (_, index) => ({
+        ...eventFixture,
+        id: 200 + index,
+        name: `Workout ${index + 1}`,
+        startDateLocal: `2026-03-${String(28 - index).padStart(2, '0')}T09:00:00`,
+      })),
+    );
+    vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(result.current.items).toHaveLength(7);
+    expect(result.current.items[0]?.event.name).toBe('Workout 1');
+
+    result.current.goToOlderWeek();
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(3);
+    });
+
+    expect(result.current.items[0]?.event.name).toBe('Workout 8');
+    expect(result.current.canGoToNewerWeek).toBe(true);
+  });
+
   it('marks missing intervals credentials as a dedicated state', async () => {
     vi.mocked(listEvents).mockRejectedValue(new HttpError(422, 'bad request'));
 

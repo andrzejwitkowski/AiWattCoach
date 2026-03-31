@@ -9,6 +9,9 @@ import type { CoachWorkoutListItem } from '../types';
 
 export type WorkoutListState = 'loading' | 'ready' | 'error' | 'credentials-required';
 
+const WORKOUT_PAGE_SIZE = 7;
+const WORKOUT_LOOKBACK_WEEKS = 12;
+
 type UseWorkoutListOptions = {
   apiBaseUrl: string;
 };
@@ -28,40 +31,40 @@ function isCoachEligibleEvent(event: IntervalEvent): boolean {
   return event.actualWorkout !== null || event.category === 'WORKOUT' || event.category === 'RACE';
 }
 
-function formatWeekLabel(startOfWeek: Date): string {
-  const endOfWeek = addDays(startOfWeek, 6);
+function formatRangeLabel(startDate: Date, endDate: Date): string {
   const formatter = new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
   });
-  return `${formatter.format(startOfWeek)} - ${formatter.format(endOfWeek)}`;
+  return `${formatter.format(startDate)} - ${formatter.format(endDate)}`;
 }
 
 export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkoutListResult {
   const currentWeekStart = useMemo(() => getMondayOfWeek(new Date()), []);
-  const [weekStart, setWeekStart] = useState<Date>(currentWeekStart);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [allItems, setAllItems] = useState<CoachWorkoutListItem[]>([]);
   const [items, setItems] = useState<CoachWorkoutListItem[]>([]);
   const [state, setState] = useState<WorkoutListState>('loading');
   const [error, setError] = useState<string | null>(null);
 
-  const loadWeek = useCallback(async () => {
+  const loadRecentWorkouts = useCallback(async () => {
     setState('loading');
     setError(null);
 
     try {
-      const events = await listEvents(apiBaseUrl, formatDateRange(weekStart, 1));
+      const lookbackStart = addWeeks(currentWeekStart, -(WORKOUT_LOOKBACK_WEEKS - 1));
+      const events = await listEvents(apiBaseUrl, formatDateRange(lookbackStart, WORKOUT_LOOKBACK_WEEKS));
       const workoutEvents = events
         .filter(isCoachEligibleEvent)
         .sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal))
-        .slice(0, 7);
+        .slice(0, WORKOUT_LOOKBACK_WEEKS * WORKOUT_PAGE_SIZE);
       const summaries = await listWorkoutSummaries(
         apiBaseUrl,
         workoutEvents.map((event) => String(event.id)),
       );
       const summariesByEventId = new Map(summaries.map((summary) => [summary.eventId, summary]));
 
-      setItems(
-        workoutEvents.map((event) => {
+      const nextItems = workoutEvents.map((event) => {
           const summary = summariesByEventId.get(String(event.id)) ?? null;
           return {
             event,
@@ -69,8 +72,9 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
             hasSummary: summary !== null,
             hasConversation: summary?.messages.some((message) => message.role === 'coach') ?? false,
           };
-        }),
-      );
+        });
+
+      setAllItems(nextItems);
       setState('ready');
     } catch (loadError) {
       if (loadError instanceof AuthenticationError) {
@@ -86,14 +90,33 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
       setState('error');
       setError(loadError instanceof Error ? loadError.message : 'Unknown error');
     }
-  }, [apiBaseUrl, weekStart]);
+  }, [apiBaseUrl, currentWeekStart]);
 
   useEffect(() => {
-    void loadWeek();
-  }, [loadWeek]);
+    void loadRecentWorkouts();
+  }, [loadRecentWorkouts]);
 
-  const weekLabel = useMemo(() => formatWeekLabel(weekStart), [weekStart]);
-  const canGoToNewerWeek = weekStart.getTime() < currentWeekStart.getTime();
+  useEffect(() => {
+    const maxPageIndex = Math.max(0, Math.ceil(allItems.length / WORKOUT_PAGE_SIZE) - 1);
+    setPageIndex((current) => Math.min(current, maxPageIndex));
+  }, [allItems.length]);
+
+  useEffect(() => {
+    const start = pageIndex * WORKOUT_PAGE_SIZE;
+    setItems(allItems.slice(start, start + WORKOUT_PAGE_SIZE));
+  }, [allItems, pageIndex]);
+
+  const maxPageIndex = Math.max(0, Math.ceil(allItems.length / WORKOUT_PAGE_SIZE) - 1);
+  const weekLabel = useMemo(() => {
+    if (items.length === 0) {
+      return formatRangeLabel(addDays(currentWeekStart, -6), currentWeekStart);
+    }
+
+    const startDate = new Date(items[items.length - 1].event.startDateLocal);
+    const endDate = new Date(items[0].event.startDateLocal);
+    return formatRangeLabel(startDate, endDate);
+  }, [currentWeekStart, items]);
+  const canGoToNewerWeek = pageIndex > 0;
 
   return {
     items,
@@ -102,14 +125,11 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
     weekLabel,
     canGoToNewerWeek,
     goToOlderWeek: () => {
-      setWeekStart((current) => addWeeks(current, -1));
+      setPageIndex((current) => Math.min(current + 1, maxPageIndex));
     },
     goToNewerWeek: () => {
-      setWeekStart((current) => {
-        const next = addWeeks(current, 1);
-        return next.getTime() > currentWeekStart.getTime() ? currentWeekStart : next;
-      });
+      setPageIndex((current) => Math.max(current - 1, 0));
     },
-    refresh: loadWeek,
+    refresh: loadRecentWorkouts,
   };
 }
