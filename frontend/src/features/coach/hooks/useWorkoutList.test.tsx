@@ -80,6 +80,28 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.hasConversation).toBe(true);
   });
 
+  it('keeps unknown intervals event categories in the workout list', async () => {
+    vi.mocked(listEvents).mockResolvedValue([
+      {
+        ...eventFixture,
+        id: 301,
+        name: 'March 31 Ride',
+        startDateLocal: '2026-03-31T09:00:00',
+        category: 'OTHER',
+      },
+    ]);
+    vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0]?.event.id).toBe(301);
+  });
+
   it('pages through older workouts from a larger recent history window', async () => {
     vi.mocked(listEvents).mockResolvedValue(
       Array.from({ length: 10 }, (_, index) => ({

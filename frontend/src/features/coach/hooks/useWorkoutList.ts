@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { IntervalEvent } from '../../intervals/types';
 import { listEvents } from '../../intervals/api/intervals';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import { addDays, addWeeks, formatDateRange, getMondayOfWeek } from '../../calendar/utils/dateUtils';
@@ -27,10 +26,6 @@ type UseWorkoutListResult = {
   refresh: () => Promise<void>;
 };
 
-function isCoachEligibleEvent(event: IntervalEvent): boolean {
-  return event.actualWorkout !== null || event.category === 'WORKOUT' || event.category === 'RACE';
-}
-
 function formatRangeLabel(startDate: Date, endDate: Date): string {
   const formatter = new Intl.DateTimeFormat(undefined, {
     month: 'short',
@@ -55,7 +50,6 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
       const lookbackStart = addWeeks(currentWeekStart, -(WORKOUT_LOOKBACK_WEEKS - 1));
       const events = await listEvents(apiBaseUrl, formatDateRange(lookbackStart, WORKOUT_LOOKBACK_WEEKS));
       const workoutEvents = events
-        .filter(isCoachEligibleEvent)
         .sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal))
         .slice(0, WORKOUT_LOOKBACK_WEEKS * WORKOUT_PAGE_SIZE);
       const summaries = await listWorkoutSummaries(
