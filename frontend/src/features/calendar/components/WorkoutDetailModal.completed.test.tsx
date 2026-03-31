@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   makeActivity,
   makeActivityInterval,
+  makeMatchedInterval,
   makeActivityStream,
   makeActualWorkout,
   makeEvent,
@@ -177,6 +178,10 @@ describe('WorkoutDetailModal completed mode', () => {
           trainingStressScore: 81,
           intensityFactor: 0.91,
           complianceScore: 0.87,
+          matchedIntervals: [
+            makeMatchedInterval({ plannedLabel: 'Over 1', actualStartTimeSeconds: 0, actualEndTimeSeconds: 720 }),
+            makeMatchedInterval({ plannedSegmentOrder: 1, plannedLabel: 'Over 2', actualStartTimeSeconds: 720, actualEndTimeSeconds: 1440 }),
+          ],
         }),
       }),
     );
@@ -200,7 +205,7 @@ describe('WorkoutDetailModal completed mode', () => {
     expect(screen.getByText('272 W')).toBeInTheDocument();
     expect(screen.getByText('81 TSS')).toBeInTheDocument();
     expect(screen.getByText(/87% compliance/i)).toBeInTheDocument();
-    expect(within(metricCard('Duration')).getByText('0m')).toBeInTheDocument();
+    expect(within(metricCard('Duration')).getByText('24m')).toBeInTheDocument();
   });
 
   it('shows imported activity details unavailable hint for sparse completed imports', async () => {

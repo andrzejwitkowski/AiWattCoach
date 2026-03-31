@@ -70,12 +70,17 @@ export function CompletedWorkoutPanel({event, activity}: {
       : [];
   const compliance = actualWorkout ? `${Math.round(actualWorkout.complianceScore * 100)}% ${t('calendar.compliance')}` : null;
   const completedIntervals = !actualWorkout ? getDisplayableCompletedIntervals(activity) : [];
+  const actualWorkoutDurationSeconds = actualWorkout?.matchedIntervals.reduce((maxDuration, interval) => {
+    const intervalEnd = typeof interval.actualEndTimeSeconds === 'number' ? interval.actualEndTimeSeconds : 0;
+    return Math.max(maxDuration, intervalEnd);
+  }, 0) ?? 0;
   const durationSeconds = isCompletedActivityOnly
     ? firstPositiveValue(activity?.movingTimeSeconds, activity?.elapsedTimeSeconds)
     : isPlannedVsActual
       ? firstPositiveValue(
         activity?.movingTimeSeconds,
         activity?.elapsedTimeSeconds,
+        actualWorkoutDurationSeconds || undefined,
       )
       : 0;
   const completedIntervalTotalDurationSeconds = completedIntervalsTotalDuration(completedIntervals, durationSeconds);

@@ -7,6 +7,7 @@ mod logging;
 mod logs;
 mod settings;
 mod user_auth;
+mod workout_summary;
 
 use std::path::PathBuf;
 
@@ -71,6 +72,26 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         )
         .route("/api/settings/options", patch(settings::update_options))
         .route("/api/settings/cycling", patch(settings::update_cycling))
+        .route(
+            "/api/workout-summaries",
+            get(workout_summary::list_summaries),
+        )
+        .route(
+            "/api/workout-summaries/{event_id}",
+            get(workout_summary::get_summary).post(workout_summary::create_summary),
+        )
+        .route(
+            "/api/workout-summaries/{event_id}/rpe",
+            patch(workout_summary::update_rpe),
+        )
+        .route(
+            "/api/workout-summaries/{event_id}/messages",
+            post(workout_summary::send_message),
+        )
+        .route(
+            "/api/workout-summaries/{event_id}/ws",
+            get(workout_summary::workout_summary_ws),
+        )
         .route(
             "/api/intervals/events",
             get(intervals::list_events).post(intervals::create_event),

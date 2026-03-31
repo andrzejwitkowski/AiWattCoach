@@ -22,6 +22,7 @@ use aiwattcoach::{
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
             users::MongoUserRepository,
+            workout_summary::MongoWorkoutSummaryRepository,
         },
         support::{SystemClock, UuidIdGenerator},
     },
@@ -32,6 +33,7 @@ use aiwattcoach::{
     },
     domain::intervals::IntervalsService,
     domain::settings::UserSettingsService,
+    domain::workout_summary::WorkoutSummaryService,
     telemetry::setup_telemetry,
     AppState,
 };
@@ -101,6 +103,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
     settings_repository.ensure_indexes().await?;
     let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
+    let workout_summary_repository =
+        MongoWorkoutSummaryRepository::new(mongo_client.clone(), &mongo_database);
+    workout_summary_repository.ensure_indexes().await?;
+    let workout_summary_service = Arc::new(WorkoutSummaryService::new(
+        workout_summary_repository,
+        SystemClock,
+        UuidIdGenerator,
+    ));
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
     if legacy_time_stream_cleanup_enabled {
@@ -151,6 +161,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 auth.session.ttl_hours,
             )
             .with_settings_service(settings_service)
+            .with_workout_summary_service(workout_summary_service)
             .with_intervals_service(intervals_service)
             .with_intervals_connection_tester(Arc::new(intervals_connection_tester)),
     );
