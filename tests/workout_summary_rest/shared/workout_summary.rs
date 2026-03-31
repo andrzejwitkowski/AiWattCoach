@@ -19,13 +19,17 @@ impl TestWorkoutSummaryService {
         }
     }
 
-    fn find_summary(&self, user_id: &str, event_id: &str) -> Option<WorkoutSummary> {
+    pub(crate) fn summary(&self, user_id: &str, event_id: &str) -> Option<WorkoutSummary> {
         self.summaries
             .lock()
             .unwrap()
             .iter()
             .find(|summary| summary.user_id == user_id && summary.event_id == event_id)
             .cloned()
+    }
+
+    fn find_summary(&self, user_id: &str, event_id: &str) -> Option<WorkoutSummary> {
+        self.summary(user_id, event_id)
     }
 }
 

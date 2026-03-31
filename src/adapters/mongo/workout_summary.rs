@@ -196,7 +196,7 @@ fn map_document_to_domain(
         id: document.summary_id,
         user_id: document.user_id,
         event_id: document.event_id,
-        rpe: document.rpe.map(|value| value as u8),
+        rpe: document.rpe.map(map_rpe_to_domain).transpose()?,
         messages: document
             .messages
             .into_iter()
@@ -256,4 +256,39 @@ fn map_message_to_domain(
         content: message.content,
         created_at_epoch_seconds: message.created_at_epoch_seconds,
     })
+}
+
+fn map_rpe_to_domain(value: i32) -> Result<u8, WorkoutSummaryError> {
+    u8::try_from(value)
+        .ok()
+        .filter(|value| (1..=10).contains(value))
+        .ok_or_else(|| {
+            WorkoutSummaryError::Repository(format!("invalid workout summary rpe: {value}"))
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{map_document_to_domain, ConversationMessageDocument, WorkoutSummaryDocument};
+    use crate::domain::workout_summary::WorkoutSummaryError;
+
+    #[test]
+    fn map_document_to_domain_rejects_out_of_range_rpe() {
+        let error = map_document_to_domain(WorkoutSummaryDocument {
+            id: None,
+            summary_id: "summary-1".to_string(),
+            user_id: "user-1".to_string(),
+            event_id: "event-1".to_string(),
+            rpe: Some(300),
+            messages: Vec::<ConversationMessageDocument>::new(),
+            created_at_epoch_seconds: 1,
+            updated_at_epoch_seconds: 1,
+        })
+        .expect_err("out-of-range rpe should fail");
+
+        assert_eq!(
+            error,
+            WorkoutSummaryError::Repository("invalid workout summary rpe: 300".to_string())
+        );
+    }
 }

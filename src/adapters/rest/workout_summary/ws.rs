@@ -4,7 +4,10 @@ use axum::{
     response::Response,
 };
 use futures::{SinkExt, StreamExt};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{sleep, Duration};
 
@@ -17,6 +20,8 @@ use super::{
     error::map_workout_summary_error,
     mapping::{map_message_to_dto, map_summary_to_dto},
 };
+
+const MAX_QUEUED_MESSAGES: usize = 4;
 
 pub async fn workout_summary_ws(
     State(state): State<AppState>,
@@ -42,6 +47,7 @@ async fn handle_socket(
 ) {
     let (sender, mut receiver) = socket.split();
     let sender = Arc::new(Mutex::new(sender));
+    let connection_open = Arc::new(AtomicBool::new(true));
     let Some(service) = state.workout_summary_service.clone() else {
         let _ = send_ws_json(
             &sender,
@@ -51,17 +57,23 @@ async fn handle_socket(
         return;
     };
 
-    let (queued_messages_tx, mut queued_messages_rx) = mpsc::unbounded_channel::<String>();
+    let (queued_messages_tx, mut queued_messages_rx) = mpsc::channel::<String>(MAX_QUEUED_MESSAGES);
     let worker_sender = Arc::clone(&sender);
     let worker_service = service.clone();
     let worker_user_id = user_id.clone();
     let worker_event_id = event_id.clone();
+    let worker_connection_open = Arc::clone(&connection_open);
 
     tokio::spawn(async move {
         // Process one queued user message at a time so typing/reply events stay ordered.
         while let Some(content) = queued_messages_rx.recv().await {
+            if !worker_connection_open.load(Ordering::Relaxed) {
+                break;
+            }
+
             if process_send_message(
                 Arc::clone(&worker_sender),
+                Arc::clone(&worker_connection_open),
                 worker_service.clone(),
                 worker_user_id.clone(),
                 worker_event_id.clone(),
@@ -69,6 +81,11 @@ async fn handle_socket(
             )
             .await
             {
+                worker_connection_open.store(false, Ordering::Relaxed);
+                break;
+            }
+
+            if !worker_connection_open.load(Ordering::Relaxed) {
                 break;
             }
         }
@@ -85,27 +102,50 @@ async fn handle_socket(
                 let client_message = match serde_json::from_str::<ClientWsMessage>(&text) {
                     Ok(message) => message,
                     Err(_) => {
-                        let _ =
-                            send_ws_json(&sender, error_message("invalid websocket payload")).await;
+                        if send_ws_json(&sender, error_message("invalid websocket payload"))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
                         continue;
                     }
                 };
 
                 if client_message.message_type != "send_message" {
-                    let _ =
-                        send_ws_json(&sender, error_message("unsupported websocket message type"))
-                            .await;
+                    if send_ws_json(&sender, error_message("unsupported websocket message type"))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
                     continue;
                 }
 
                 let Some(content) = client_message.content else {
-                    let _ =
-                        send_ws_json(&sender, error_message("message content is required")).await;
+                    if send_ws_json(&sender, error_message("message content is required"))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
                     continue;
                 };
 
-                if queued_messages_tx.send(content).is_err() {
-                    break;
+                match queued_messages_tx.try_send(content) {
+                    Ok(()) => {}
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        if send_ws_json(
+                            &sender,
+                            error_message("too many pending workout summary messages"),
+                        )
+                        .await
+                        .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(mpsc::error::TrySendError::Closed(_)) => break,
                 }
             }
             Message::Close(_) => break,
@@ -123,6 +163,9 @@ async fn handle_socket(
             _ => {}
         }
     }
+
+    connection_open.store(false, Ordering::Relaxed);
+    drop(queued_messages_tx);
 }
 
 async fn send_ws_json(
@@ -136,49 +179,76 @@ async fn send_ws_json(
 
 async fn process_send_message(
     sender: Arc<Mutex<futures::stream::SplitSink<axum::extract::ws::WebSocket, Message>>>,
+    connection_open: Arc<AtomicBool>,
     service: std::sync::Arc<dyn crate::domain::workout_summary::WorkoutSummaryUseCases>,
     user_id: String,
     event_id: String,
     content: String,
 ) -> bool {
+    if !connection_open.load(Ordering::Relaxed) {
+        return true;
+    }
+
     match service
         .append_user_message(&user_id, &event_id, content)
         .await
     {
         Ok(persisted) => {
-            let _ = send_ws_json(&sender, coach_typing_message()).await;
+            if !connection_open.load(Ordering::Relaxed) {
+                return true;
+            }
+
+            if send_ws_json(&sender, coach_typing_message()).await.is_err() {
+                return true;
+            }
+
             sleep(Duration::from_millis(1500)).await;
+
+            if !connection_open.load(Ordering::Relaxed) {
+                return true;
+            }
 
             match service
                 .generate_coach_reply(&user_id, &event_id, persisted.user_message.content.clone())
                 .await
             {
-                Ok(reply) => {
-                    let _ = send_ws_json(
-                        &sender,
-                        coach_message(
-                            map_message_to_dto(reply.coach_message),
-                            map_summary_to_dto(reply.summary),
-                        ),
-                    )
-                    .await;
-                    false
-                }
+                Ok(reply) => send_ws_json(
+                    &sender,
+                    coach_message(
+                        map_message_to_dto(reply.coach_message),
+                        map_summary_to_dto(reply.summary),
+                    ),
+                )
+                .await
+                .is_err(),
                 Err(error) => {
-                    let _ = send_ws_json(&sender, error_message(error.to_string())).await;
-                    matches!(
-                        map_workout_summary_error(&error).status().as_u16(),
-                        404 | 503
-                    )
+                    if send_ws_json(&sender, error_message(error.to_string()))
+                        .await
+                        .is_err()
+                    {
+                        return true;
+                    }
+
+                    should_close_worker(&error)
                 }
             }
         }
         Err(error) => {
-            let _ = send_ws_json(&sender, error_message(error.to_string())).await;
-            matches!(
-                map_workout_summary_error(&error).status().as_u16(),
-                404 | 503
-            )
+            if send_ws_json(&sender, error_message(error.to_string()))
+                .await
+                .is_err()
+            {
+                return true;
+            }
+
+            should_close_worker(&error)
         }
     }
+}
+
+fn should_close_worker(error: &crate::domain::workout_summary::WorkoutSummaryError) -> bool {
+    matches!(
+        map_workout_summary_error(error).status().as_u16(),
+        404 | 503
+    )
 }
