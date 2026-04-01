@@ -12,6 +12,7 @@ pub struct Settings {
     pub mongo: MongoSettings,
     pub auth: AuthSettings,
     pub dev_intervals_enabled: bool,
+    pub dev_llm_coach_enabled: bool,
     pub client_log_ingestion_enabled: bool,
     pub legacy_time_stream_cleanup_enabled: bool,
 }

@@ -1,3 +1,5 @@
+use crate::domain::llm::LlmProvider;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum SettingsError {
     Unauthenticated,
@@ -21,6 +23,9 @@ impl std::error::Error for SettingsError {}
 pub struct AiAgentsConfig {
     pub openai_api_key: Option<String>,
     pub gemini_api_key: Option<String>,
+    pub openrouter_api_key: Option<String>,
+    pub selected_provider: Option<LlmProvider>,
+    pub selected_model: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]

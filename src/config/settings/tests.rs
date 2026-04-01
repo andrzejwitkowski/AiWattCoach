@@ -81,6 +81,23 @@ fn dev_intervals_can_be_enabled_explicitly() {
 }
 
 #[test]
+fn dev_llm_coach_defaults_to_disabled() {
+    let settings = Settings::from_map(&base_values()).expect("settings should parse");
+
+    assert!(!settings.dev_llm_coach_enabled);
+}
+
+#[test]
+fn dev_llm_coach_can_be_enabled_explicitly() {
+    let mut values = base_values();
+    values.insert("DEV_LLM_COACH_ENABLED".to_string(), "true".to_string());
+
+    let settings = Settings::from_map(&values).expect("settings should parse");
+
+    assert!(settings.dev_llm_coach_enabled);
+}
+
+#[test]
 fn legacy_time_stream_cleanup_defaults_to_disabled() {
     let settings = Settings::from_map(&base_values()).expect("settings should parse");
 

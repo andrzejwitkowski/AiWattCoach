@@ -251,6 +251,32 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
             Ok(())
         })
     }
+
+    fn find_message_by_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        message_id: &str,
+    ) -> BoxFuture<Result<Option<ConversationMessage>, WorkoutSummaryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let message_id = message_id.to_string();
+        Box::pin(async move {
+            let document = collection
+                .find_one(doc! { "user_id": &user_id, "workout_id": &workout_id })
+                .await
+                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+
+            let summary = document.map(map_document_to_domain).transpose()?;
+            Ok(summary.and_then(|summary| {
+                summary
+                    .messages
+                    .into_iter()
+                    .find(|message| message.id == message_id)
+            }))
+        })
+    }
 }
 
 fn map_document_to_domain(

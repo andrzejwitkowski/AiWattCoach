@@ -20,6 +20,10 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): 
       openaiApiKeySet: false,
       geminiApiKey: null,
       geminiApiKeySet: false,
+      openrouterApiKey: null,
+      openrouterApiKeySet: false,
+      selectedProvider: null,
+      selectedModel: null,
     },
     intervals: {
       apiKey: '***...1234',

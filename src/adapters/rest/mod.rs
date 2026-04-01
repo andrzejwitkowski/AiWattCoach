@@ -65,6 +65,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         )
         .route("/api/settings", get(settings::get_settings))
         .route("/api/settings/ai-agents", patch(settings::update_ai_agents))
+        .route(
+            "/api/settings/ai-agents/test",
+            post(settings::test_ai_agents_connection),
+        )
         .route("/api/settings/intervals", patch(settings::update_intervals))
         .route(
             "/api/settings/intervals/test",

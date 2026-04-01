@@ -1,3 +1,4 @@
+use crate::domain::llm::LlmProvider;
 use crate::domain::settings::{
     mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig,
     SettingsError, UserSettings,
@@ -15,6 +16,14 @@ pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
             openai_api_key_set: settings.ai_agents.openai_api_key.is_some(),
             gemini_api_key: mask_sensitive(&settings.ai_agents.gemini_api_key),
             gemini_api_key_set: settings.ai_agents.gemini_api_key.is_some(),
+            openrouter_api_key: mask_sensitive(&settings.ai_agents.openrouter_api_key),
+            openrouter_api_key_set: settings.ai_agents.openrouter_api_key.is_some(),
+            selected_provider: settings
+                .ai_agents
+                .selected_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            selected_model: settings.ai_agents.selected_model.clone(),
         },
         intervals: IntervalsDto {
             api_key: mask_sensitive(&settings.intervals.api_key),
@@ -41,13 +50,29 @@ pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
 pub(super) fn map_ai_agents_update(
     body: UpdateAiAgentsRequest,
     current: &UserSettings,
-) -> AiAgentsConfig {
-    AiAgentsConfig {
+) -> Result<AiAgentsConfig, SettingsError> {
+    let selected_provider = match body.selected_provider {
+        Some(value) => Some(LlmProvider::parse(&value).ok_or_else(|| {
+            SettingsError::Validation(
+                "selectedProvider must be one of: openai, gemini, openrouter".to_string(),
+            )
+        })?),
+        None => current.ai_agents.selected_provider.clone(),
+    };
+
+    Ok(AiAgentsConfig {
         openai_api_key: normalize_optional_patch_value(body.openai_api_key)
             .or(current.ai_agents.openai_api_key.clone()),
         gemini_api_key: normalize_optional_patch_value(body.gemini_api_key)
             .or(current.ai_agents.gemini_api_key.clone()),
-    }
+        openrouter_api_key: normalize_optional_patch_value(body.openrouter_api_key)
+            .or(current.ai_agents.openrouter_api_key.clone()),
+        selected_provider: validation::validate_ai_provider(selected_provider)?,
+        selected_model: validation::validate_ai_model(
+            normalize_optional_patch_value(body.selected_model)
+                .or(current.ai_agents.selected_model.clone()),
+        )?,
+    })
 }
 
 pub(super) fn map_intervals_update(

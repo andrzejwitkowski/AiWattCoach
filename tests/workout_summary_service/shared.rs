@@ -3,13 +3,21 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use aiwattcoach::domain::{
-    identity::{Clock, IdGenerator},
-    workout_summary::{
-        BoxFuture, ConversationMessage, MessageRole, WorkoutSummary, WorkoutSummaryError,
-        WorkoutSummaryRepository, WorkoutSummaryService,
+use aiwattcoach::{
+    adapters::llm::dev_adapter::DevLlmCoachAdapter,
+    domain::{
+        identity::{Clock, IdGenerator},
+        llm::LlmChatPort,
+        workout_summary::{
+            BoxFuture, CoachReplyOperation, CoachReplyOperationRepository, ConversationMessage,
+            MessageRole, WorkoutCoach, WorkoutSummary, WorkoutSummaryError,
+            WorkoutSummaryRepository, WorkoutSummaryService,
+        },
     },
 };
+
+type ReplyOperationKey = (String, String, String);
+type ReplyOperationStore = BTreeMap<ReplyOperationKey, CoachReplyOperation>;
 
 #[derive(Clone)]
 pub(crate) struct TestClock;
@@ -189,12 +197,181 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             Ok(())
         })
     }
+
+    fn find_message_by_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        message_id: &str,
+    ) -> BoxFuture<Result<Option<ConversationMessage>, WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let message_id = message_id.to_string();
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            Ok(summaries
+                .lock()
+                .unwrap()
+                .get(&(user_id, workout_id))
+                .and_then(|summary| {
+                    summary
+                        .messages
+                        .iter()
+                        .find(|message| message.id == message_id)
+                        .cloned()
+                }))
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct InMemoryCoachReplyOperationRepository {
+    operations: Arc<Mutex<ReplyOperationStore>>,
+    calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl InMemoryCoachReplyOperationRepository {
+    pub(crate) fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
+    fn find_by_user_message_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        user_message_id: &str,
+    ) -> BoxFuture<Result<Option<CoachReplyOperation>, WorkoutSummaryError>> {
+        let key = (
+            user_id.to_string(),
+            workout_id.to_string(),
+            user_message_id.to_string(),
+        );
+        let operations = self.operations.clone();
+        Box::pin(async move { Ok(operations.lock().unwrap().get(&key).cloned()) })
+    }
+
+    fn claim_pending(
+        &self,
+        operation: CoachReplyOperation,
+    ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+        let operations = self.operations.clone();
+        let calls = self.calls.clone();
+        Box::pin(async move {
+            calls.lock().unwrap().push(format!(
+                "claim_pending:{}:{}",
+                operation.workout_id, operation.user_message_id
+            ));
+            operations.lock().unwrap().insert(
+                (
+                    operation.user_id.clone(),
+                    operation.workout_id.clone(),
+                    operation.user_message_id.clone(),
+                ),
+                operation.clone(),
+            );
+            Ok(operation)
+        })
+    }
+
+    fn upsert(
+        &self,
+        operation: CoachReplyOperation,
+    ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+        let operations = self.operations.clone();
+        let calls = self.calls.clone();
+        Box::pin(async move {
+            calls.lock().unwrap().push(format!(
+                "upsert:{}:{}:{:?}",
+                operation.workout_id, operation.user_message_id, operation.status
+            ));
+            operations.lock().unwrap().insert(
+                (
+                    operation.user_id.clone(),
+                    operation.workout_id.clone(),
+                    operation.user_message_id.clone(),
+                ),
+                operation.clone(),
+            );
+            Ok(operation)
+        })
+    }
 }
 
 pub(crate) fn test_service(
     repository: InMemoryWorkoutSummaryRepository,
-) -> WorkoutSummaryService<InMemoryWorkoutSummaryRepository, TestClock, TestIdGenerator> {
-    WorkoutSummaryService::new(repository, TestClock, TestIdGenerator)
+) -> WorkoutSummaryService<
+    InMemoryWorkoutSummaryRepository,
+    InMemoryCoachReplyOperationRepository,
+    TestClock,
+    TestIdGenerator,
+> {
+    WorkoutSummaryService::new(
+        repository,
+        InMemoryCoachReplyOperationRepository::default(),
+        TestClock,
+        TestIdGenerator,
+    )
+}
+
+pub(crate) fn test_service_with_coach(
+    repository: InMemoryWorkoutSummaryRepository,
+    reply_operations: InMemoryCoachReplyOperationRepository,
+    coach: Arc<dyn WorkoutCoach>,
+) -> WorkoutSummaryService<
+    InMemoryWorkoutSummaryRepository,
+    InMemoryCoachReplyOperationRepository,
+    TestClock,
+    TestIdGenerator,
+> {
+    WorkoutSummaryService::with_coach(
+        repository,
+        reply_operations,
+        TestClock,
+        TestIdGenerator,
+        coach,
+    )
+}
+
+pub(crate) fn default_dev_coach() -> Arc<dyn WorkoutCoach> {
+    Arc::new(DevWorkoutCoach)
+}
+
+#[derive(Clone, Default)]
+struct DevWorkoutCoach;
+
+impl WorkoutCoach for DevWorkoutCoach {
+    fn reply(
+        &self,
+        user_id: &str,
+        summary: &WorkoutSummary,
+        user_message: &str,
+    ) -> aiwattcoach::domain::llm::BoxFuture<
+        Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
+    > {
+        let adapter = DevLlmCoachAdapter;
+        let request = aiwattcoach::domain::llm::LlmChatRequest {
+            user_id: user_id.to_string(),
+            system_prompt: "test".to_string(),
+            stable_context: summary.workout_id.clone(),
+            conversation: vec![aiwattcoach::domain::llm::LlmChatMessage {
+                role: aiwattcoach::domain::llm::LlmMessageRole::User,
+                content: user_message.to_string(),
+            }],
+            cache_scope_key: Some(format!("test:{}", summary.workout_id)),
+            cache_key: Some("test-cache-key".to_string()),
+            reusable_cache_id: None,
+        };
+        adapter.chat(
+            aiwattcoach::domain::llm::LlmProviderConfig {
+                provider: aiwattcoach::domain::llm::LlmProvider::OpenAi,
+                model: "mock-workout-coach".to_string(),
+                api_key: "dev".to_string(),
+            },
+            request,
+        )
+    }
 }
 
 pub(crate) fn existing_summary() -> WorkoutSummary {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { testIntervalsConnection } from './settings';
+import { testAiAgentsConnection, testIntervalsConnection } from './settings';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 
 const originalFetch = global.fetch;
@@ -143,5 +143,49 @@ describe('settings api', () => {
     await expect(testIntervalsConnection('', { apiKey: 'live-api-key' })).rejects.toBeInstanceOf(
       HttpError,
     );
+  });
+
+  it('posts ai test settings and parses a successful response', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            connected: true,
+            message: 'Connection successful.',
+            usedSavedApiKey: false,
+            usedSavedProvider: false,
+            usedSavedModel: false,
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await testAiAgentsConnection('', {
+      openrouterApiKey: 'or-key',
+      selectedProvider: 'openrouter',
+      selectedModel: 'openai/gpt-4o-mini',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents/test', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        openrouterApiKey: 'or-key',
+        selectedProvider: 'openrouter',
+        selectedModel: 'openai/gpt-4o-mini',
+      }),
+    });
+    expect(result.connected).toBe(true);
   });
 });

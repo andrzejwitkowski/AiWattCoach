@@ -4,6 +4,7 @@ use mongodb::Client;
 
 use crate::domain::identity::IdentityUseCases;
 use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
+use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
 use crate::domain::settings::UserSettingsUseCases;
 use crate::domain::workout_summary::WorkoutSummaryUseCases;
 
@@ -17,6 +18,8 @@ pub struct AppState {
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
+    pub llm_chat_service: Option<Arc<dyn LlmChatPort>>,
+    pub llm_config_provider: Option<Arc<dyn UserLlmConfigProvider>>,
     pub intervals_connection_tester: Option<Arc<dyn IntervalsConnectionTester>>,
     pub session_cookie_name: String,
     pub session_cookie_same_site: String,
@@ -39,6 +42,8 @@ impl AppState {
             intervals_service: None,
             settings_service: None,
             workout_summary_service: None,
+            llm_chat_service: None,
+            llm_config_provider: None,
             intervals_connection_tester: None,
             session_cookie_name: "aiwattcoach_session".to_string(),
             session_cookie_same_site: "lax".to_string(),
@@ -76,6 +81,16 @@ impl AppState {
         workout_summary_service: Arc<dyn WorkoutSummaryUseCases>,
     ) -> Self {
         self.workout_summary_service = Some(workout_summary_service);
+        self
+    }
+
+    pub fn with_llm_services(
+        mut self,
+        llm_chat_service: Arc<dyn LlmChatPort>,
+        llm_config_provider: Arc<dyn UserLlmConfigProvider>,
+    ) -> Self {
+        self.llm_chat_service = Some(llm_chat_service);
+        self.llm_config_provider = Some(llm_config_provider);
         self
     }
 

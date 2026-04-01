@@ -39,6 +39,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             geminiApiKey: data.geminiApiKey ?? null,
             geminiApiKeySet: data.geminiApiKey != null,
           }),
+          ...(data.openrouterApiKey !== undefined && {
+            openrouterApiKey: data.openrouterApiKey ?? null,
+            openrouterApiKeySet: data.openrouterApiKey != null,
+          }),
+          ...(data.selectedProvider !== undefined && {
+            selectedProvider: data.selectedProvider ?? null,
+          }),
+          ...(data.selectedModel !== undefined && {
+            selectedModel: data.selectedModel ?? null,
+          }),
         },
       }));
     } finally {

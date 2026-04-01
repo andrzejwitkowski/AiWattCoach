@@ -6,8 +6,8 @@ use serde_json::Value;
 use tower::util::ServiceExt;
 
 use crate::shared::{
-    get_json, session_cookie, settings_test_app, TestIdentityServiceWithSession,
-    TestSettingsService,
+    get_json, session_cookie, settings_test_app, settings_test_app_with_services,
+    MockLlmChatService, TestIdentityServiceWithSession, TestLlmConfigProvider, TestSettingsService,
 };
 
 #[tokio::test]
@@ -400,6 +400,156 @@ async fn update_ai_agents_partial_body_preserves_existing_key() {
     assert!(ai_agents.get("geminiApiKeySet").unwrap().as_bool().unwrap());
     let gemini_key = ai_agents.get("geminiApiKey").unwrap().as_str().unwrap();
     assert!(gemini_key.starts_with("***..."));
+}
+
+#[tokio::test]
+async fn update_ai_agents_supports_openrouter_provider_and_model() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openrouterApiKey": "or-key-123456",
+        "selectedProvider": "openrouter",
+        "selectedModel": "openai/gpt-4o-mini"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let ai_agents = response_body.get("aiAgents").unwrap();
+
+    assert!(ai_agents
+        .get("openrouterApiKeySet")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert_eq!(
+        ai_agents.get("selectedProvider").unwrap().as_str().unwrap(),
+        "openrouter"
+    );
+    assert_eq!(
+        ai_agents.get("selectedModel").unwrap().as_str().unwrap(),
+        "openai/gpt-4o-mini"
+    );
+}
+
+#[tokio::test]
+async fn update_ai_agents_rejects_invalid_provider() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "selectedProvider": "unknown"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_ai_agents_connection_returns_ok_for_valid_provider_settings() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_ok())),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openrouterApiKey": "or-key-123456",
+        "selectedProvider": "openrouter",
+        "selectedModel": "openai/gpt-4o-mini"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    assert!(response_body.get("connected").unwrap().as_bool().unwrap());
+    assert_eq!(
+        response_body.get("message").unwrap().as_str().unwrap(),
+        "Connection successful."
+    );
+}
+
+#[tokio::test]
+async fn test_ai_agents_connection_returns_bad_request_for_provider_error() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_err(
+            aiwattcoach::domain::llm::LlmError::ProviderRejected("invalid model".to_string()),
+        ))),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openaiApiKey": "sk-test-key",
+        "selectedProvider": "openai",
+        "selectedModel": "bad-model"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 use aiwattcoach::domain::settings::UserSettings;

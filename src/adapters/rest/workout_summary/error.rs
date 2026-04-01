@@ -26,6 +26,10 @@ pub(super) fn map_workout_summary_error(error: &WorkoutSummaryError) -> Response
             log_workout_summary_error(Level::WARN, StatusCode::CONFLICT, error);
             StatusCode::CONFLICT.into_response()
         }
+        WorkoutSummaryError::Llm(_) => {
+            log_workout_summary_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, error);
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
         WorkoutSummaryError::Repository(_) => {
             log_workout_summary_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, error);
             StatusCode::SERVICE_UNAVAILABLE.into_response()
@@ -37,6 +41,7 @@ fn log_workout_summary_error(level: Level, status: StatusCode, error: &WorkoutSu
     let error_kind = match error {
         WorkoutSummaryError::AlreadyExists => "already_exists",
         WorkoutSummaryError::Locked => "locked",
+        WorkoutSummaryError::Llm(_) => "llm_error",
         WorkoutSummaryError::NotFound => "not_found",
         WorkoutSummaryError::Repository(_) => "repository_error",
         WorkoutSummaryError::Validation(_) => "validation_error",

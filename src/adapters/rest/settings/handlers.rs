@@ -12,11 +12,15 @@ use crate::{
     domain::{
         identity::IdentityUseCases,
         intervals::IntervalsConnectionTester,
+        llm::LlmChatPort,
         settings::{UserSettings, UserSettingsUseCases},
     },
 };
 
 use super::{
+    ai_connection::{
+        build_test_request, map_ai_connection_error_to_response, merge_ai_connection_config,
+    },
     dto::{
         test_connection_response, TestIntervalsConnectionRequest, UpdateAiAgentsRequest,
         UpdateCyclingRequest, UpdateIntervalsRequest, UpdateOptionsRequest,
@@ -62,11 +66,64 @@ pub async fn update_ai_agents(
         Ok(settings) => settings,
         Err(response) => return response,
     };
-    let config = map_ai_agents_update(body, &current);
+    let config = match map_ai_agents_update(body, &current) {
+        Ok(config) => config,
+        Err(err) => return map_settings_error(&err),
+    };
 
     match settings_service.update_ai_agents(&user_id, config).await {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
         Err(err) => map_settings_error(&err),
+    }
+}
+
+pub async fn test_ai_agents_connection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateAiAgentsRequest>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+    let settings_service = match settings_service(&state) {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+    let llm_chat_service = match llm_chat_service(&state) {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+    let current = match load_settings(settings_service, &user_id).await {
+        Ok(settings) => settings,
+        Err(response) => return response,
+    };
+    let merged = match merge_ai_connection_config(body, &current) {
+        Ok(config) => config,
+        Err(response_body) => return Json(response_body).into_response(),
+    };
+
+    match llm_chat_service
+        .chat(merged.config, build_test_request(&user_id))
+        .await
+    {
+        Ok(_) => Json(super::dto::test_ai_agents_connection_response(
+            true,
+            "Connection successful.",
+            merged.used_saved_api_key,
+            merged.used_saved_provider,
+            merged.used_saved_model,
+        ))
+        .into_response(),
+        Err(error) => {
+            let (status, body) = map_ai_connection_error_to_response(
+                error,
+                merged.used_saved_api_key,
+                merged.used_saved_provider,
+                merged.used_saved_model,
+            );
+            (status, body).into_response()
+        }
     }
 }
 
@@ -234,6 +291,10 @@ fn identity_service(state: &AppState) -> Option<&Arc<dyn IdentityUseCases>> {
 
 fn connection_tester(state: &AppState) -> Option<&Arc<dyn IntervalsConnectionTester>> {
     state.intervals_connection_tester.as_ref()
+}
+
+fn llm_chat_service(state: &AppState) -> Option<&Arc<dyn LlmChatPort>> {
+    state.llm_chat_service.as_ref()
 }
 
 async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String, Response> {

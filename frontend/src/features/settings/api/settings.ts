@@ -5,6 +5,7 @@ import {
   updateIntervalsRequestSchema,
   updateOptionsRequestSchema,
   updateCyclingRequestSchema,
+  testAiAgentsConnectionResponseSchema,
   testIntervalsConnectionResponseSchema,
 } from '../types';
 
@@ -25,8 +26,26 @@ export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   const trimmed = {
     openaiApiKey: validated.openaiApiKey?.trim() ?? undefined,
     geminiApiKey: validated.geminiApiKey?.trim() ?? undefined,
+    openrouterApiKey: validated.openrouterApiKey?.trim() ?? undefined,
+    selectedProvider: validated.selectedProvider?.trim() ?? undefined,
+    selectedModel: validated.selectedModel?.trim() ?? undefined,
   };
   return patch(apiBaseUrl, '/api/settings/ai-agents', trimmed);
+}
+
+export async function testAiAgentsConnection(apiBaseUrl: string, data: unknown) {
+  const validated = updateAiAgentsRequestSchema.parse(data);
+  const body = {
+    openaiApiKey: validated.openaiApiKey?.trim() ?? undefined,
+    geminiApiKey: validated.geminiApiKey?.trim() ?? undefined,
+    openrouterApiKey: validated.openrouterApiKey?.trim() ?? undefined,
+    selectedProvider: validated.selectedProvider?.trim() ?? undefined,
+    selectedModel: validated.selectedModel?.trim() ?? undefined,
+  };
+  const parsed = await post<typeof body, unknown>(apiBaseUrl, '/api/settings/ai-agents/test', body, {
+    allowStatuses: [400, 503],
+  });
+  return testAiAgentsConnectionResponseSchema.parse(parsed);
 }
 
 export async function updateIntervals(apiBaseUrl: string, data: unknown) {
