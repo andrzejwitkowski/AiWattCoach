@@ -65,7 +65,7 @@ impl LlmChatPort for OpenAiClient {
 
 fn map_error(status: StatusCode, body: String) -> LlmError {
     match status {
-        StatusCode::UNAUTHORIZED => LlmError::CredentialsNotConfigured,
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => LlmError::CredentialsNotConfigured,
         StatusCode::TOO_MANY_REQUESTS => LlmError::RateLimited(body),
         StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY => {
             LlmError::ProviderRejected(body)

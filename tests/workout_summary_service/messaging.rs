@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use aiwattcoach::domain::{
     llm::LlmError,
-    workout_summary::{MessageRole, WorkoutCoach, WorkoutSummaryUseCases},
+    workout_summary::{
+        CoachReplyOperation, MessageRole, WorkoutCoach, WorkoutSummaryError, WorkoutSummaryUseCases,
+    },
 };
 
 use crate::shared::{
@@ -74,8 +76,8 @@ async fn generate_coach_reply_persists_pending_operation_before_coach_message() 
     assert_eq!(
         reply_operations.calls(),
         vec![
-            "claim_pending:workout-1:message-1".to_string(),
-            "upsert:workout-1:message-1:Completed".to_string(),
+            format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
         ]
     );
     assert_eq!(
@@ -189,6 +191,83 @@ async fn generate_coach_reply_preserves_structured_llm_errors() {
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
             format!("upsert:workout-1:{}:Failed", persisted.user_message.id),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn generate_coach_reply_returns_dedicated_error_when_reply_is_already_pending() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let service =
+        test_service_with_coach(repository, reply_operations.clone(), default_dev_coach());
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    reply_operations.seed(CoachReplyOperation::pending(
+        "user-1".to_string(),
+        "workout-1".to_string(),
+        persisted.user_message.id.clone(),
+        Some("workout-summary:user-1:workout-1".to_string()),
+        1_700_000_000,
+    ));
+
+    let error = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, WorkoutSummaryError::ReplyAlreadyPending);
+}
+
+#[tokio::test]
+async fn generate_coach_reply_retries_after_failed_operation() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let service = test_service_with_coach(
+        repository.clone(),
+        reply_operations.clone(),
+        default_dev_coach(),
+    );
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    reply_operations.seed(
+        CoachReplyOperation::pending(
+            "user-1".to_string(),
+            "workout-1".to_string(),
+            persisted.user_message.id.clone(),
+            Some("workout-summary:user-1:workout-1".to_string()),
+            1_700_000_000,
+        )
+        .mark_failed("provider throttled".to_string(), 1_700_000_001),
+    );
+
+    let reply = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(reply.coach_message.role, MessageRole::Coach);
+    assert_eq!(
+        reply_operations.calls(),
+        vec![
+            format!("seed:workout-1:{}:Failed", persisted.user_message.id),
+            format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
+        ]
+    );
+    assert_eq!(
+        repository.calls(),
+        vec![
+            "append_message:workout-1:user".to_string(),
+            "append_message:workout-1:coach".to_string(),
         ]
     );
 }

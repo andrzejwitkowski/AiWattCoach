@@ -114,7 +114,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let llm_http_client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(60))
         .build()?;
     let llm_adapter = if dev_llm_coach_enabled {
         Arc::new(LlmAdapter::Dev(DevLlmCoachAdapter))

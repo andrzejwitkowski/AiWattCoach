@@ -110,6 +110,24 @@ describe('AiAgentsCard', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('clears plaintext api key fields after a successful save', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildSettings());
+
+    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    const openrouterKeyInput = screen.getByLabelText(/openrouter api key/i) as HTMLInputElement;
+    fireEvent.change(openrouterKeyInput, {
+      target: { value: 'or-new-key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(updateAiAgentsMock).toHaveBeenCalled();
+    });
+
+    expect(openrouterKeyInput.value).toBe('');
+  });
+
   it('ignores stale test responses after the draft changes', async () => {
     let resolveTest:
       | ((value: {

@@ -1,6 +1,6 @@
 use crate::domain::{
     llm::{LlmChatRequest, LlmProvider, LlmProviderConfig},
-    settings::UserSettings,
+    settings::{validation::validate_ai_model, SettingsError, UserSettings},
 };
 
 use super::dto::{
@@ -84,6 +84,8 @@ pub(super) fn merge_ai_connection_config(
                 && current.ai_agents.selected_model.is_some(),
         ));
     };
+    let model = validate_ai_model(Some(model)).map_err(map_validation_error_to_response)?;
+    let model = model.expect("validated selected model should remain present");
 
     let Some(api_key) = api_key.filter(|value| !value.trim().is_empty()) else {
         return Err(test_ai_agents_connection_response(
@@ -120,6 +122,15 @@ pub(super) fn merge_ai_connection_config(
             && transient_model.is_none()
             && current.ai_agents.selected_model.is_some(),
     })
+}
+
+fn map_validation_error_to_response(error: SettingsError) -> TestAiAgentsConnectionResponse {
+    match error {
+        SettingsError::Validation(message) => {
+            test_ai_agents_connection_response(false, &message, false, false, false)
+        }
+        other => test_ai_agents_connection_response(false, &other.to_string(), false, false, false),
+    }
 }
 
 pub(super) fn build_test_request(user_id: &str) -> LlmChatRequest {

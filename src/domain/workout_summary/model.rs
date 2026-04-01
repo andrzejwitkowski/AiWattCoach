@@ -6,6 +6,7 @@ pub enum WorkoutSummaryError {
     AlreadyExists,
     Locked,
     NotFound,
+    ReplyAlreadyPending,
     Repository(String),
     Llm(LlmError),
     Validation(String),
@@ -17,6 +18,12 @@ impl std::fmt::Display for WorkoutSummaryError {
             Self::AlreadyExists => write!(f, "workout summary already exists"),
             Self::Locked => write!(f, "workout summary is saved and cannot be edited"),
             Self::NotFound => write!(f, "workout summary not found"),
+            Self::ReplyAlreadyPending => {
+                write!(
+                    f,
+                    "coach reply generation is already pending for this message"
+                )
+            }
             Self::Repository(message) => write!(f, "{message}"),
             Self::Llm(error) => write!(f, "{error}"),
             Self::Validation(message) => write!(f, "{message}"),

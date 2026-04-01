@@ -42,6 +42,10 @@ impl MockServer {
         let state = MockServerState::default();
         let app = Router::new()
             .route("/v1/chat/completions", post(openai_handler))
+            .route(
+                "/v1-forbidden/chat/completions",
+                post(openai_forbidden_handler),
+            )
             .route("/api/v1/chat/completions", post(openrouter_handler))
             .route("/v1beta/cachedContents", post(gemini_cache_handler))
             .route(
@@ -159,6 +163,14 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
     let requests = server.requests();
     assert_eq!(requests[0].path, "/v1beta/cachedContents");
     assert_eq!(
+        requests[0].body["systemInstruction"]["parts"][0]["text"],
+        "system"
+    );
+    assert_eq!(
+        requests[0].body["contents"][0]["parts"][0]["text"],
+        "stable"
+    );
+    assert_eq!(
         requests[1].path,
         "/v1beta/models/gemini-2.5-flash:generateContent"
     );
@@ -274,6 +286,30 @@ async fn openrouter_client_does_not_fallback_cache_discount_to_cost() {
     assert_eq!(response.cache.cache_discount, None);
 }
 
+#[tokio::test]
+async fn openai_client_maps_forbidden_to_credentials_not_configured() {
+    let server = MockServer::start().await;
+    let client = OpenAiClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/v1-forbidden", server.base_url));
+
+    let error = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenAi,
+                model: "gpt-4o-mini".to_string(),
+                api_key: "openai-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::llm::LlmError::CredentialsNotConfigured
+    );
+}
+
 #[test]
 fn llm_debug_output_redacts_secrets_and_prompt_contents() {
     let config = LlmProviderConfig {
@@ -311,6 +347,15 @@ async fn openai_handler(
             "prompt_tokens_details": { "cached_tokens": 42 }
         }
     }))
+}
+
+async fn openai_forbidden_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    capture_request(&state, "/v1-forbidden/chat/completions", headers, body);
+    (StatusCode::FORBIDDEN, "forbidden")
 }
 
 async fn openrouter_handler(

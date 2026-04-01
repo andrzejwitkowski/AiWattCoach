@@ -33,7 +33,11 @@ pub(crate) struct TestIdGenerator;
 
 impl IdGenerator for TestIdGenerator {
     fn new_id(&self, prefix: &str) -> String {
-        format!("{prefix}-1")
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+        let next = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        format!("{prefix}-{next}")
     }
 }
 
@@ -217,6 +221,7 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
                     summary
                         .messages
                         .iter()
+                        .rev()
                         .find(|message| message.id == message_id)
                         .cloned()
                 }))
@@ -233,6 +238,21 @@ pub(crate) struct InMemoryCoachReplyOperationRepository {
 impl InMemoryCoachReplyOperationRepository {
     pub(crate) fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
+    }
+
+    pub(crate) fn seed(&self, operation: CoachReplyOperation) {
+        self.calls.lock().unwrap().push(format!(
+            "seed:{}:{}:{:?}",
+            operation.workout_id, operation.user_message_id, operation.status
+        ));
+        self.operations.lock().unwrap().insert(
+            (
+                operation.user_id.clone(),
+                operation.workout_id.clone(),
+                operation.user_message_id.clone(),
+            ),
+            operation,
+        );
     }
 }
 
@@ -270,6 +290,12 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
             );
             let mut operations = operations.lock().unwrap();
             if let Some(existing) = operations.get(&key).cloned() {
+                if existing.status
+                    == aiwattcoach::domain::workout_summary::CoachReplyOperationStatus::Failed
+                {
+                    operations.insert(key, operation.clone());
+                    return Ok(CoachReplyClaimResult::Claimed(operation));
+                }
                 return Ok(CoachReplyClaimResult::Existing(existing));
             }
 

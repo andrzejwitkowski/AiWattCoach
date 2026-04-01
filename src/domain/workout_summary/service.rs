@@ -407,21 +407,28 @@ where
                 .find_by_user_message_id(&user_id, &workout_id, &user_message.id)
                 .await?
             {
-                if existing.status == CoachReplyOperationStatus::Completed {
-                    let coach_message_id = existing.coach_message_id.ok_or_else(|| {
-                        WorkoutSummaryError::Repository(
-                            "completed coach reply operation missing coach message id".to_string(),
-                        )
-                    })?;
-                    let coach_message = service
-                        .get_message_by_id(&user_id, &workout_id, &coach_message_id)
-                        .await?;
-                    let summary = service.get_existing_summary(&user_id, &workout_id).await?;
+                match existing.status {
+                    CoachReplyOperationStatus::Completed => {
+                        let coach_message_id = existing.coach_message_id.ok_or_else(|| {
+                            WorkoutSummaryError::Repository(
+                                "completed coach reply operation missing coach message id"
+                                    .to_string(),
+                            )
+                        })?;
+                        let coach_message = service
+                            .get_message_by_id(&user_id, &workout_id, &coach_message_id)
+                            .await?;
+                        let summary = service.get_existing_summary(&user_id, &workout_id).await?;
 
-                    return Ok(CoachReply {
-                        summary,
-                        coach_message,
-                    });
+                        return Ok(CoachReply {
+                            summary,
+                            coach_message,
+                        });
+                    }
+                    CoachReplyOperationStatus::Pending => {
+                        return Err(WorkoutSummaryError::ReplyAlreadyPending)
+                    }
+                    CoachReplyOperationStatus::Failed => {}
                 }
             }
 
@@ -439,8 +446,8 @@ where
                 .await?
             {
                 CoachReplyClaimResult::Claimed(operation) => operation,
-                CoachReplyClaimResult::Existing(existing) => {
-                    if existing.status == CoachReplyOperationStatus::Completed {
+                CoachReplyClaimResult::Existing(existing) => match existing.status {
+                    CoachReplyOperationStatus::Completed => {
                         let coach_message_id = existing.coach_message_id.ok_or_else(|| {
                             WorkoutSummaryError::Repository(
                                 "completed coach reply operation missing coach message id"
@@ -457,11 +464,13 @@ where
                             coach_message,
                         });
                     }
-
-                    return Err(WorkoutSummaryError::Repository(
-                        "coach reply generation already pending for this user message".to_string(),
-                    ));
-                }
+                    CoachReplyOperationStatus::Pending => {
+                        return Err(WorkoutSummaryError::ReplyAlreadyPending)
+                    }
+                    CoachReplyOperationStatus::Failed => {
+                        unreachable!("failed operations should be reclaimed during claim_pending")
+                    }
+                },
             };
 
             let llm_response = match service

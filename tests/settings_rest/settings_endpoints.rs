@@ -557,6 +557,45 @@ async fn test_ai_agents_connection_returns_bad_request_for_provider_error() {
 }
 
 #[tokio::test]
+async fn test_ai_agents_connection_reuses_model_validation_rules() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_ok())),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openaiApiKey": "sk-test-key",
+        "selectedProvider": "openai",
+        "selectedModel": "x".repeat(201)
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let response_body: Value = get_json(response).await;
+    assert_eq!(
+        response_body.get("message").unwrap().as_str().unwrap(),
+        "selectedModel must be 200 characters or fewer"
+    );
+}
+
+#[tokio::test]
 async fn test_ai_agents_connection_returns_service_unavailable_for_timeout() {
     let app = settings_test_app_with_services(
         TestIdentityServiceWithSession::default(),

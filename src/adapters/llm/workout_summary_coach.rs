@@ -159,14 +159,17 @@ fn build_conversation(summary: &WorkoutSummary, user_message: &str) -> Vec<LlmCh
         })
         .collect::<Vec<_>>();
 
-    if conversation.last().map(|message| message.role.clone()) != Some(LlmMessageRole::User)
-        || conversation.last().map(|message| message.content.as_str()) != Some(user_message)
-    {
-        conversation.push(LlmChatMessage {
-            role: LlmMessageRole::User,
-            content: user_message.to_string(),
-        });
+    if let Some(last) = conversation.last_mut() {
+        if last.role == LlmMessageRole::User {
+            last.content = user_message.to_string();
+            return conversation;
+        }
     }
+
+    conversation.push(LlmChatMessage {
+        role: LlmMessageRole::User,
+        content: user_message.to_string(),
+    });
 
     conversation
 }

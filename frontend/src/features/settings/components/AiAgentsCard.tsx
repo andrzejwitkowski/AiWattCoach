@@ -17,6 +17,15 @@ type DraftState = {
   selectedModel: string;
 };
 
+function clearDraftApiKeys(draft: DraftState): DraftState {
+  return {
+    ...draft,
+    openaiApiKey: '',
+    geminiApiKey: '',
+    openrouterApiKey: '',
+  };
+}
+
 export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps) {
   const aiAgents = settings.aiAgents;
   const persistedDraft = useMemo(
@@ -177,7 +186,9 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
 
     try {
       await updateAiAgents(apiBaseUrl, visibleRequest);
-      setCleanDraft(draft);
+      const clearedDraft = clearDraftApiKeys(draft);
+      setDraft(clearedDraft);
+      setCleanDraft(clearedDraft);
       setStatus({
         tone: 'success',
         label: 'Saved',

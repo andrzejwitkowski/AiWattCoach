@@ -22,13 +22,33 @@ pub(super) fn map_workout_summary_error(error: &WorkoutSummaryError) -> Response
             log_workout_summary_error(Level::WARN, StatusCode::CONFLICT, error);
             StatusCode::CONFLICT.into_response()
         }
+        WorkoutSummaryError::ReplyAlreadyPending => {
+            log_workout_summary_error(Level::WARN, StatusCode::CONFLICT, error);
+            StatusCode::CONFLICT.into_response()
+        }
         WorkoutSummaryError::AlreadyExists => {
             log_workout_summary_error(Level::WARN, StatusCode::CONFLICT, error);
             StatusCode::CONFLICT.into_response()
         }
-        WorkoutSummaryError::Llm(_) => {
-            log_workout_summary_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, error);
-            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        WorkoutSummaryError::Llm(llm_error) => {
+            let status = match llm_error {
+                crate::domain::llm::LlmError::CredentialsNotConfigured
+                | crate::domain::llm::LlmError::ProviderNotConfigured
+                | crate::domain::llm::LlmError::ModelNotConfigured
+                | crate::domain::llm::LlmError::UnsupportedProvider(_)
+                | crate::domain::llm::LlmError::ProviderRejected(_) => StatusCode::BAD_REQUEST,
+                crate::domain::llm::LlmError::RateLimited(_)
+                | crate::domain::llm::LlmError::Transport(_)
+                | crate::domain::llm::LlmError::InvalidResponse(_)
+                | crate::domain::llm::LlmError::Internal(_) => StatusCode::SERVICE_UNAVAILABLE,
+            };
+            let level = if status.is_server_error() {
+                Level::ERROR
+            } else {
+                Level::WARN
+            };
+            log_workout_summary_error(level, status, error);
+            status.into_response()
         }
         WorkoutSummaryError::Repository(_) => {
             log_workout_summary_error(Level::ERROR, StatusCode::SERVICE_UNAVAILABLE, error);
@@ -41,6 +61,7 @@ fn log_workout_summary_error(level: Level, status: StatusCode, error: &WorkoutSu
     let error_kind = match error {
         WorkoutSummaryError::AlreadyExists => "already_exists",
         WorkoutSummaryError::Locked => "locked",
+        WorkoutSummaryError::ReplyAlreadyPending => "reply_already_pending",
         WorkoutSummaryError::Llm(_) => "llm_error",
         WorkoutSummaryError::NotFound => "not_found",
         WorkoutSummaryError::Repository(_) => "repository_error",
