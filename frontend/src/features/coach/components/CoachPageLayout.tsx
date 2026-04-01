@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useWorkoutList } from '../hooks/useWorkoutList';
@@ -21,6 +21,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [showConfirmWithoutChat, setShowConfirmWithoutChat] = useState(false);
   const [isEditing, setIsEditing] = useState(true);
+  const selectedWorkoutIdRef = useRef<string | null>(null);
 
   const selectedItem = useMemo(
     () => workoutList.items.find((item) => item.id === selectedWorkoutId) ?? null,
@@ -31,6 +32,10 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     apiBaseUrl,
     workoutId: selectedItem?.id ?? null,
   });
+
+  useEffect(() => {
+    selectedWorkoutIdRef.current = selectedWorkoutId;
+  }, [selectedWorkoutId]);
 
   useEffect(() => {
     if (workoutList.items.length === 0) {
@@ -54,14 +59,20 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     }
   }, [chat.summary, workoutList.replaceSummary]);
 
+  const isCurrentSelection = useCallback((workoutId: string) => {
+    return selectedWorkoutIdRef.current === workoutId;
+  }, []);
+
   async function handleSave() {
-    if (chat.draftRpe === null) {
+    if (chat.draftRpe === null || !selectedItem) {
       return;
     }
 
+    const workoutId = selectedItem.id;
+
     const result = await chat.saveSummary();
 
-    if (result) {
+    if (result && isCurrentSelection(workoutId)) {
       workoutList.replaceSummary(result);
       setIsEditing(false);
       setShowConfirmWithoutChat(false);
@@ -128,9 +139,14 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
                 canSave={chat.draftRpe !== null}
                 onSave={handleSaveClick}
                 onEdit={() => {
+                  if (!selectedItem) {
+                    return;
+                  }
+
+                  const workoutId = selectedItem.id;
                   void (async () => {
                     const result = await chat.reopenSummary();
-                    if (result) {
+                    if (result && isCurrentSelection(workoutId)) {
                       workoutList.replaceSummary(result);
                       setIsEditing(true);
                       await workoutList.refresh();

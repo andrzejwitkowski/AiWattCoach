@@ -242,6 +242,79 @@ describe('useCoachChat', () => {
     });
   });
 
+  it('ignores stale load responses after switching workouts', async () => {
+    let resolveFirstSummary: ((value: typeof summaryFixture) => void) | undefined;
+    let resolveSecondSummary: ((value: typeof summaryFixture) => void) | undefined;
+
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary)
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirstSummary = resolve;
+      }))
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveSecondSummary = resolve;
+      }));
+
+    const { result, rerender } = renderHook(
+      ({ workoutId }) => useCoachChat({ apiBaseUrl: '', workoutId }),
+      { initialProps: { workoutId: '101' } },
+    );
+
+    rerender({ workoutId: '202' });
+
+    act(() => {
+      resolveSecondSummary?.({ ...summaryFixture, workoutId: '202', id: 'summary-202' });
+    });
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('202');
+    });
+
+    act(() => {
+      resolveFirstSummary?.({ ...summaryFixture, workoutId: '101', id: 'summary-101' });
+    });
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('202');
+    });
+  });
+
+  it('ignores stale save results after switching workouts', async () => {
+    let resolveSave: ((value: typeof summaryFixture) => void) | undefined;
+
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary)
+      .mockResolvedValueOnce(summaryFixture)
+      .mockResolvedValueOnce({ ...summaryFixture, workoutId: '202', id: 'summary-202' });
+    vi.mocked(saveWorkoutSummary).mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    const { result, rerender } = renderHook(
+      ({ workoutId }) => useCoachChat({ apiBaseUrl: '', workoutId }),
+      { initialProps: { workoutId: '101' } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('101');
+    });
+
+    const savePromise = result.current.saveSummary();
+    rerender({ workoutId: '202' });
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('202');
+    });
+
+    act(() => {
+      resolveSave?.({ ...summaryFixture, workoutId: '101', savedAtEpochSeconds: 3 });
+    });
+
+    await expect(savePromise).resolves.toBeNull();
+    expect(result.current.summary?.workoutId).toBe('202');
+    expect(result.current.isSaving).toBe(false);
+  });
+
   it('preserves app path prefixes in websocket urls', () => {
     expect(buildWorkoutSummaryWebSocketUrl('https://example.com/myapp', '101')).toBe(
       'wss://example.com/myapp/api/workout-summaries/101/ws',
