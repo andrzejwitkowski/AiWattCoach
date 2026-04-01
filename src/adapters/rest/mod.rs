@@ -77,19 +77,23 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
             get(workout_summary::list_summaries),
         )
         .route(
-            "/api/workout-summaries/{event_id}",
+            "/api/workout-summaries/{workout_id}",
             get(workout_summary::get_summary).post(workout_summary::create_summary),
         )
         .route(
-            "/api/workout-summaries/{event_id}/rpe",
+            "/api/workout-summaries/{workout_id}/rpe",
             patch(workout_summary::update_rpe),
         )
         .route(
-            "/api/workout-summaries/{event_id}/messages",
+            "/api/workout-summaries/{workout_id}/state",
+            post(workout_summary::set_saved_state).patch(workout_summary::set_saved_state),
+        )
+        .route(
+            "/api/workout-summaries/{workout_id}/messages",
             post(workout_summary::send_message),
         )
         .route(
-            "/api/workout-summaries/{event_id}/ws",
+            "/api/workout-summaries/{workout_id}/ws",
             get(workout_summary::workout_summary_ws),
         )
         .route(

@@ -19,7 +19,10 @@ function formatDateLabel(value: string): string {
 
 export function WorkoutHistoryItem({ item, isSelected, onSelect }: WorkoutHistoryItemProps) {
   const { t } = useTranslation();
-  const name = item.event.name?.trim() || t('coach.untitledWorkout');
+  const name = item.activity?.name?.trim()
+    || item.event?.name?.trim()
+    || item.activity?.activityType?.trim()
+    || t('coach.untitledWorkout');
   const statusLabel = item.hasConversation ? t('coach.statusDone') : t('coach.statusPending');
 
   return (
@@ -39,7 +42,7 @@ export function WorkoutHistoryItem({ item, isSelected, onSelect }: WorkoutHistor
             {isSelected ? t('coach.activeWorkout') : statusLabel}
           </p>
           <p className="mt-3 text-2xl font-medium text-white">{name}</p>
-          <p className="mt-1 text-sm text-slate-400">{formatDateLabel(item.event.startDateLocal)}</p>
+          <p className="mt-1 text-sm text-slate-400">{formatDateLabel(item.startDateLocal)}</p>
         </div>
         <div className={item.hasConversation ? 'text-cyan-300' : 'text-slate-600'}>
           <MessageSquareMore size={18} />

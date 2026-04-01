@@ -18,6 +18,7 @@ type PowerChartProps = {
   intervals: ChartIntervalOverlay[];
   onHoverIntervalChange: (intervalKey: string | null) => void;
   onSelectIntervalChange: (intervalKey: string | null) => void;
+  sampleDurationSeconds?: number;
   title: string;
   values: number[];
 };
@@ -28,11 +29,16 @@ export function PowerChart({
   intervals,
   onHoverIntervalChange,
   onSelectIntervalChange,
+  sampleDurationSeconds = 1,
   title,
   values,
 }: PowerChartProps) {
-  const totalSeconds = Math.max(values.length, intervals.reduce((max, interval) => Math.max(max, interval.endSecond), 0), 1);
-  const sampledPoints = samplePowerValues(values, 180);
+  const totalSeconds = Math.max(
+    values.length * sampleDurationSeconds,
+    intervals.reduce((max, interval) => Math.max(max, interval.endSecond), 0),
+    1,
+  );
+  const sampledPoints = samplePowerValues(values, 180, sampleDurationSeconds);
   const [hoveredSampleIndex, setHoveredSampleIndex] = useState<number | null>(null);
 
   if (sampledPoints.length === 0) {
@@ -92,7 +98,7 @@ export function PowerChart({
               {formatChartTimeLabel(displayedSample.second)} • {displayedSample.value} W
             </p>
           ) : null}
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">{maxValue} W max</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">{maxValue} W max (5s avg)</p>
         </div>
       </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-[linear-gradient(180deg,rgba(210,255,154,0.16)_0%,rgba(210,255,154,0.03)_100%)] p-3">
@@ -150,7 +156,7 @@ export function PowerChart({
             stroke="url(#power-chart-stroke)"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeWidth="8"
+            strokeWidth="4"
           />
           {displayedSample !== null && markerX !== null && markerY !== null ? (
             <g data-power-chart-marker="true">
@@ -163,7 +169,7 @@ export function PowerChart({
                 strokeDasharray="8 8"
                 strokeWidth="2"
               />
-              <circle cx={markerX} cy={markerY} r="8" fill="#d2ff9a" stroke="#111417" strokeWidth="4" />
+              <circle cx={markerX} cy={markerY} r="6" fill="#d2ff9a" stroke="#111417" strokeWidth="3" />
             </g>
           ) : null}
         </svg>
@@ -201,9 +207,9 @@ export function PowerChart({
   );
 }
 
-function samplePowerValues(values: number[], maxPoints: number): ChartSamplePoint[] {
+function samplePowerValues(values: number[], maxPoints: number, sampleDurationSeconds: number): ChartSamplePoint[] {
   if (values.length <= maxPoints) {
-    return values.map((value, index) => ({value, second: index}));
+    return values.map((value, index) => ({value, second: index * sampleDurationSeconds}));
   }
 
   const bucketSize = values.length / maxPoints;
@@ -216,7 +222,7 @@ function samplePowerValues(values: number[], maxPoints: number): ChartSamplePoin
     const average = bucket.reduce((sum, value) => sum + value, 0) / bucket.length;
     sampled.push({
       value: Math.round(average),
-      second: Math.round((start + Math.max(start, end - 1)) / 2),
+      second: Math.round(((start + Math.max(start, end - 1)) / 2) * sampleDurationSeconds),
     });
   }
 

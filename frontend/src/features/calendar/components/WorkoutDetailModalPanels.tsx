@@ -4,6 +4,7 @@ import {useTranslation} from 'react-i18next';
 import type {IntervalActivity, IntervalEvent} from '../../intervals/types';
 import {
   buildCompletedWorkoutPreviewBars,
+  buildFiveSecondAveragePowerSeries,
   buildMatchedWorkoutBars,
   buildPlannedWorkoutBars,
   extractCompletedPowerValues,
@@ -58,9 +59,9 @@ export function CompletedWorkoutPanel({event, activity}: {
   const isPlannedVsActual = Boolean(event && actualWorkout);
   const detailsUnavailableMessage = !actualWorkout ? activity?.detailsUnavailableReason : null;
   const powerSeries = actualWorkout?.powerValues.length
-    ? actualWorkout.powerValues
+    ? buildFiveSecondAveragePowerSeries(actualWorkout.powerValues)
     : activity
-      ? extractCompletedPowerValues(activity)
+      ? buildFiveSecondAveragePowerSeries(extractCompletedPowerValues(activity))
       : [];
 
   const bars = isCompletedActivityOnly && activity

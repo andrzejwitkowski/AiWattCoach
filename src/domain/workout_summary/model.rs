@@ -1,6 +1,7 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkoutSummaryError {
     AlreadyExists,
+    Locked,
     NotFound,
     Repository(String),
     Validation(String),
@@ -10,6 +11,7 @@ impl std::fmt::Display for WorkoutSummaryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::AlreadyExists => write!(f, "workout summary already exists"),
+            Self::Locked => write!(f, "workout summary is saved and cannot be edited"),
             Self::NotFound => write!(f, "workout summary not found"),
             Self::Repository(message) => write!(f, "{message}"),
             Self::Validation(message) => write!(f, "{message}"),
@@ -37,9 +39,10 @@ pub struct ConversationMessage {
 pub struct WorkoutSummary {
     pub id: String,
     pub user_id: String,
-    pub event_id: String,
+    pub workout_id: String,
     pub rpe: Option<u8>,
     pub messages: Vec<ConversationMessage>,
+    pub saved_at_epoch_seconds: Option<i64>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
 }
@@ -64,13 +67,14 @@ pub struct CoachReply {
 }
 
 impl WorkoutSummary {
-    pub fn new(id: String, user_id: String, event_id: String, now_epoch_seconds: i64) -> Self {
+    pub fn new(id: String, user_id: String, workout_id: String, now_epoch_seconds: i64) -> Self {
         Self {
             id,
             user_id,
-            event_id,
+            workout_id,
             rpe: None,
             messages: Vec::new(),
+            saved_at_epoch_seconds: None,
             created_at_epoch_seconds: now_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
         }

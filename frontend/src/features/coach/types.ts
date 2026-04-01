@@ -1,4 +1,4 @@
-import type { IntervalEvent } from '../intervals/types';
+import type { IntervalActivity, IntervalEvent } from '../intervals/types';
 import { z } from 'zod';
 
 export const conversationMessageRoleSchema = z.enum(['user', 'coach']);
@@ -12,9 +12,10 @@ export const conversationMessageSchema = z.object({
 
 export const workoutSummarySchema = z.object({
   id: z.string(),
-  eventId: z.string(),
+  workoutId: z.string(),
   rpe: z.number().int().min(1).max(10).nullable(),
   messages: z.array(conversationMessageSchema),
+  savedAtEpochSeconds: z.number().int().nullable(),
   createdAtEpochSeconds: z.number().int(),
   updatedAtEpochSeconds: z.number().int(),
 });
@@ -31,6 +32,10 @@ export const sendMessageResponseSchema = z.object({
   summary: workoutSummarySchema,
   userMessage: conversationMessageSchema,
   coachMessage: conversationMessageSchema,
+});
+
+export const saveWorkoutSummaryResponseSchema = z.object({
+  summary: workoutSummarySchema,
 });
 
 export const clientWsMessageSchema = z.object({
@@ -62,11 +67,16 @@ export const serverWsMessageSchema = z.discriminatedUnion('type', [
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
 export type WorkoutSummary = z.infer<typeof workoutSummarySchema>;
 export type SendMessageResponse = z.infer<typeof sendMessageResponseSchema>;
+export type SaveWorkoutSummaryResponse = z.infer<typeof saveWorkoutSummaryResponseSchema>;
 export type ClientWsMessage = z.infer<typeof clientWsMessageSchema>;
 export type ServerWsMessage = z.infer<typeof serverWsMessageSchema>;
 
 export type CoachWorkoutListItem = {
-  event: IntervalEvent;
+  id: string;
+  source: 'activity' | 'event';
+  startDateLocal: string;
+  event: IntervalEvent | null;
+  activity: IntervalActivity | null;
   summary: WorkoutSummary | null;
   hasSummary: boolean;
   hasConversation: boolean;

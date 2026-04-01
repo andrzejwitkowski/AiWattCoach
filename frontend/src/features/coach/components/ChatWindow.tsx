@@ -10,6 +10,8 @@ type ChatWindowProps = {
   isCoachTyping: boolean;
   isConnected: boolean;
   hasSelectedWorkout: boolean;
+  isSaved?: boolean;
+  requiresRpe?: boolean;
   error: string | null;
   inputDisabled?: boolean;
   onSendMessage: (content: string) => Promise<void>;
@@ -20,6 +22,8 @@ export function ChatWindow({
   isCoachTyping,
   isConnected,
   hasSelectedWorkout,
+  isSaved = false,
+  requiresRpe = false,
   error,
   inputDisabled = false,
   onSendMessage,
@@ -28,7 +32,7 @@ export function ChatWindow({
 
   return (
     <section className="glass-panel flex h-[38rem] flex-col rounded-2xl border border-white/10 bg-[#111417]/80">
-      <ChatHeader isConnected={isConnected} hasSelectedWorkout={hasSelectedWorkout} />
+      <ChatHeader isConnected={isConnected} hasSelectedWorkout={hasSelectedWorkout} isSaved={isSaved} requiresRpe={requiresRpe} />
       {error ? (
         <div className="mx-6 mt-6 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}

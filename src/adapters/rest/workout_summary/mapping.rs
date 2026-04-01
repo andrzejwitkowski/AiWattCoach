@@ -7,13 +7,14 @@ use super::dto::{ConversationMessageDto, SendMessageResponseDto, WorkoutSummaryD
 pub(super) fn map_summary_to_dto(summary: WorkoutSummary) -> WorkoutSummaryDto {
     WorkoutSummaryDto {
         id: summary.id,
-        event_id: summary.event_id,
+        workout_id: summary.workout_id,
         rpe: summary.rpe,
         messages: summary
             .messages
             .into_iter()
             .map(map_message_to_dto)
             .collect(),
+        saved_at_epoch_seconds: summary.saved_at_epoch_seconds,
         created_at_epoch_seconds: summary.created_at_epoch_seconds,
         updated_at_epoch_seconds: summary.updated_at_epoch_seconds,
     }

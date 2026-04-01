@@ -25,9 +25,10 @@ struct WorkoutSummaryDocument {
     id: Option<ObjectId>,
     summary_id: String,
     user_id: String,
-    event_id: String,
+    workout_id: String,
     rpe: Option<i32>,
     messages: Vec<ConversationMessageDocument>,
+    saved_at_epoch_seconds: Option<i64>,
     created_at_epoch_seconds: i64,
     updated_at_epoch_seconds: i64,
 }
@@ -52,10 +53,10 @@ impl MongoWorkoutSummaryRepository {
     pub async fn ensure_indexes(&self) -> Result<(), WorkoutSummaryError> {
         self.collection
             .create_indexes([IndexModel::builder()
-                .keys(doc! { "user_id": 1, "event_id": 1 })
+                .keys(doc! { "user_id": 1, "workout_id": 1 })
                 .options(
                     IndexOptions::builder()
-                        .name("workout_summaries_user_event_unique".to_string())
+                        .name("workout_summaries_user_workout_unique".to_string())
                         .unique(true)
                         .build(),
                 )
@@ -67,33 +68,33 @@ impl MongoWorkoutSummaryRepository {
 }
 
 impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
-    fn find_by_user_id_and_event_id(
+    fn find_by_user_id_and_workout_id(
         &self,
         user_id: &str,
-        event_id: &str,
+        workout_id: &str,
     ) -> BoxFuture<Result<Option<WorkoutSummary>, WorkoutSummaryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let event_id = event_id.to_string();
+        let workout_id = workout_id.to_string();
         Box::pin(async move {
             let document = collection
-                .find_one(doc! { "user_id": &user_id, "event_id": &event_id })
+                .find_one(doc! { "user_id": &user_id, "workout_id": &workout_id })
                 .await
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
             document.map(map_document_to_domain).transpose()
         })
     }
 
-    fn find_by_user_id_and_event_ids(
+    fn find_by_user_id_and_workout_ids(
         &self,
         user_id: &str,
-        event_ids: Vec<String>,
+        workout_ids: Vec<String>,
     ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
             let documents = collection
-                .find(doc! { "user_id": &user_id, "event_id": { "$in": event_ids } })
+                .find(doc! { "user_id": &user_id, "workout_id": { "$in": workout_ids } })
                 .await
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
             let documents = documents
@@ -128,17 +129,17 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
     fn update_rpe(
         &self,
         user_id: &str,
-        event_id: &str,
+        workout_id: &str,
         rpe: u8,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let event_id = event_id.to_string();
+        let workout_id = workout_id.to_string();
         Box::pin(async move {
             let result = collection
                 .update_one(
-                    doc! { "user_id": &user_id, "event_id": &event_id },
+                    doc! { "user_id": &user_id, "workout_id": &workout_id },
                     doc! {
                         "$set": {
                             "rpe": i32::from(rpe),
@@ -160,21 +161,53 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
     fn append_message(
         &self,
         user_id: &str,
-        event_id: &str,
+        workout_id: &str,
         message: ConversationMessage,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let event_id = event_id.to_string();
+        let workout_id = workout_id.to_string();
         let message = map_message_to_document(message);
         Box::pin(async move {
             let result = collection
                 .update_one(
-                    doc! { "user_id": &user_id, "event_id": &event_id },
+                    doc! { "user_id": &user_id, "workout_id": &workout_id },
                     doc! {
                         "$push": { "messages": mongodb::bson::to_bson(&message).map_err(|error| WorkoutSummaryError::Repository(error.to_string()))? },
                         "$set": { "updated_at_epoch_seconds": updated_at_epoch_seconds },
+                    },
+                )
+                .await
+                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+
+            if result.matched_count == 0 {
+                return Err(WorkoutSummaryError::NotFound);
+            }
+
+            Ok(())
+        })
+    }
+
+    fn set_saved_state(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: Option<i64>,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            let result = collection
+                .update_one(
+                    doc! { "user_id": &user_id, "workout_id": &workout_id },
+                    doc! {
+                        "$set": {
+                            "saved_at_epoch_seconds": saved_at_epoch_seconds,
+                            "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                        }
                     },
                 )
                 .await
@@ -195,13 +228,14 @@ fn map_document_to_domain(
     Ok(WorkoutSummary {
         id: document.summary_id,
         user_id: document.user_id,
-        event_id: document.event_id,
+        workout_id: document.workout_id,
         rpe: document.rpe.map(map_rpe_to_domain).transpose()?,
         messages: document
             .messages
             .into_iter()
             .map(map_message_to_domain)
             .collect::<Result<Vec<_>, _>>()?,
+        saved_at_epoch_seconds: document.saved_at_epoch_seconds,
         created_at_epoch_seconds: document.created_at_epoch_seconds,
         updated_at_epoch_seconds: document.updated_at_epoch_seconds,
     })
@@ -212,7 +246,7 @@ fn map_domain_to_document(summary: &WorkoutSummary) -> WorkoutSummaryDocument {
         id: None,
         summary_id: summary.id.clone(),
         user_id: summary.user_id.clone(),
-        event_id: summary.event_id.clone(),
+        workout_id: summary.workout_id.clone(),
         rpe: summary.rpe.map(i32::from),
         messages: summary
             .messages
@@ -220,6 +254,7 @@ fn map_domain_to_document(summary: &WorkoutSummary) -> WorkoutSummaryDocument {
             .cloned()
             .map(map_message_to_document)
             .collect(),
+        saved_at_epoch_seconds: summary.saved_at_epoch_seconds,
         created_at_epoch_seconds: summary.created_at_epoch_seconds,
         updated_at_epoch_seconds: summary.updated_at_epoch_seconds,
     }
@@ -278,9 +313,10 @@ mod tests {
             id: None,
             summary_id: "summary-1".to_string(),
             user_id: "user-1".to_string(),
-            event_id: "event-1".to_string(),
+            workout_id: "workout-1".to_string(),
             rpe: Some(300),
             messages: Vec::<ConversationMessageDocument>::new(),
+            saved_at_epoch_seconds: None,
             created_at_epoch_seconds: 1,
             updated_at_epoch_seconds: 1,
         })

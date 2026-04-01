@@ -6,19 +6,19 @@ import { WorkoutHistoryPagination } from './WorkoutHistoryPagination';
 
 type WorkoutHistorySidebarProps = {
   items: CoachWorkoutListItem[];
-  selectedEventId: string | null;
+  selectedWorkoutId: string | null;
   state: 'loading' | 'ready' | 'error' | 'credentials-required';
   error: string | null;
   weekLabel: string;
   canGoToNewerWeek: boolean;
   onOlderWeek: () => void;
   onNewerWeek: () => void;
-  onSelectWorkout: (eventId: string) => void;
+  onSelectWorkout: (workoutId: string) => void;
 };
 
 export function WorkoutHistorySidebar({
   items,
-  selectedEventId,
+  selectedWorkoutId,
   state,
   error,
   weekLabel,
@@ -64,11 +64,11 @@ export function WorkoutHistorySidebar({
         {state === 'ready'
           ? items.map((item) => (
             <WorkoutHistoryItem
-              key={item.event.id}
+              key={item.id}
               item={item}
-              isSelected={selectedEventId === String(item.event.id)}
+              isSelected={selectedWorkoutId === item.id}
               onSelect={() => {
-                onSelectWorkout(String(item.event.id));
+                onSelectWorkout(item.id);
               }}
             />
           ))

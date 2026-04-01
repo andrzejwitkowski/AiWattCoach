@@ -9,7 +9,10 @@ use serde::Serialize;
 use crate::{config::AppState, domain::workout_summary::WorkoutSummaryUseCases};
 
 use super::{
-    dto::{ListWorkoutSummariesQuery, SendMessageRequest, UpdateRpeRequest, WorkoutSummaryPath},
+    dto::{
+        ListWorkoutSummariesQuery, SendMessageRequest, SetSavedStateRequest, UpdateRpeRequest,
+        WorkoutSummaryPath, WorkoutSummaryStateResponse,
+    },
     error::map_workout_summary_error,
     mapping::{map_send_message_result_to_dto, map_summary_to_dto},
 };
@@ -46,7 +49,7 @@ pub async fn get_summary(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match service.get_summary(&user_id, &path.event_id).await {
+    match service.get_summary(&user_id, &path.workout_id).await {
         Ok(summary) => Json(map_summary_to_dto(summary)).into_response(),
         Err(error) => map_workout_summary_error(&error),
     }
@@ -66,7 +69,7 @@ pub async fn create_summary(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match service.create_summary(&user_id, &path.event_id).await {
+    match service.create_summary(&user_id, &path.workout_id).await {
         Ok(summary) => (StatusCode::CREATED, Json(map_summary_to_dto(summary))).into_response(),
         Err(error) => map_workout_summary_error(&error),
     }
@@ -86,25 +89,25 @@ pub async fn list_summaries(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    let event_ids = query
-        .event_ids
+    let workout_ids = query
+        .workout_ids
         .split(',')
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
 
-    if event_ids.is_empty() {
+    if workout_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                error: "eventIds must contain at least one event id",
+                error: "workoutIds must contain at least one workout id",
             }),
         )
             .into_response();
     }
 
-    match service.list_summaries(&user_id, event_ids).await {
+    match service.list_summaries(&user_id, workout_ids).await {
         Ok(summaries) => Json(
             summaries
                 .into_iter()
@@ -131,8 +134,41 @@ pub async fn update_rpe(
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
-    match service.update_rpe(&user_id, &path.event_id, body.rpe).await {
+    match service
+        .update_rpe(&user_id, &path.workout_id, body.rpe)
+        .await
+    {
         Ok(summary) => Json(map_summary_to_dto(summary)).into_response(),
+        Err(error) => map_workout_summary_error(&error),
+    }
+}
+
+pub async fn set_saved_state(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<WorkoutSummaryPath>,
+    Json(body): Json<SetSavedStateRequest>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+    let service = match workout_summary_service(&state) {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    let result = if body.saved {
+        service.mark_saved(&user_id, &path.workout_id).await
+    } else {
+        service.reopen_summary(&user_id, &path.workout_id).await
+    };
+
+    match result {
+        Ok(summary) => Json(WorkoutSummaryStateResponse {
+            summary: map_summary_to_dto(summary),
+        })
+        .into_response(),
         Err(error) => map_workout_summary_error(&error),
     }
 }
@@ -153,7 +189,7 @@ pub async fn send_message(
     };
 
     match service
-        .send_message(&user_id, &path.event_id, body.content)
+        .send_message(&user_id, &path.workout_id, body.content)
         .await
     {
         Ok(result) => Json(map_send_message_result_to_dto(result)).into_response(),

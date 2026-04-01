@@ -162,6 +162,8 @@
     "chatTitle": "AI Performance Coach",
     "chatConnected": "Trener polaczony i gotowy.",
     "chatReady": "Czat otworzy sie, gdy wyslesz pierwsza wiadomosc.",
+    "chatRequiresRpe": "Najpierw wybierz RPE, aby odblokowac coaching.",
+    "chatSavedLocked": "Podsumowanie zapisane. Kliknij Edytuj, aby wznowic coaching.",
     "chatPlaceholder": "Opisz stan swoich miesni...",
     "sendMessage": "Wyslij wiadomosc",
     "coachTyping": "Trener pisze",

@@ -4,12 +4,18 @@ import { useTranslation } from 'react-i18next';
 type ChatHeaderProps = {
   isConnected: boolean;
   hasSelectedWorkout: boolean;
+  isSaved?: boolean;
+  requiresRpe?: boolean;
 };
 
-export function ChatHeader({ isConnected, hasSelectedWorkout }: ChatHeaderProps) {
+export function ChatHeader({ isConnected, hasSelectedWorkout, isSaved = false, requiresRpe = false }: ChatHeaderProps) {
   const { t } = useTranslation();
   const statusLabel = !hasSelectedWorkout
     ? t('coach.selectWorkoutPrompt')
+    : requiresRpe
+      ? t('coach.chatRequiresRpe')
+      : isSaved
+        ? t('coach.chatSavedLocked')
     : isConnected
       ? t('coach.chatConnected')
       : t('coach.chatReady');

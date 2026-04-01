@@ -4,6 +4,7 @@ type WorkoutActionButtonsProps = {
   disabled?: boolean;
   isSaving: boolean;
   isEditing: boolean;
+  canSave?: boolean;
   onSave: () => void;
   onEdit: () => void;
 };
@@ -12,6 +13,7 @@ export function WorkoutActionButtons({
   disabled = false,
   isSaving,
   isEditing,
+  canSave = true,
   onSave,
   onEdit,
 }: WorkoutActionButtonsProps) {
@@ -22,7 +24,7 @@ export function WorkoutActionButtons({
       <button
         type="button"
         className="flex-1 rounded-2xl bg-cyan-300 px-6 py-5 text-lg font-extrabold uppercase tracking-[0.18em] text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-        disabled={disabled || isSaving}
+        disabled={disabled || isSaving || !isEditing || !canSave}
         onClick={onSave}
       >
         {isSaving ? t('coach.saving') : t('coach.save')}

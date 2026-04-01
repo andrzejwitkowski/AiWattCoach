@@ -160,6 +160,8 @@
     "chatTitle": "AI Performance Coach",
     "chatConnected": "Coach connected and ready.",
     "chatReady": "Chat opens when you send the first message.",
+    "chatRequiresRpe": "Choose an RPE first to unlock coaching.",
+    "chatSavedLocked": "Summary saved. Click Edit to continue coaching.",
     "chatPlaceholder": "Describe your muscle state...",
     "sendMessage": "Send message",
     "coachTyping": "Coach is typing",

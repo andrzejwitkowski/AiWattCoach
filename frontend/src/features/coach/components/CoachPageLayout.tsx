@@ -18,35 +18,35 @@ type CoachPageLayoutProps = {
 export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   const { t } = useTranslation();
   const workoutList = useWorkoutList({ apiBaseUrl });
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [showConfirmWithoutChat, setShowConfirmWithoutChat] = useState(false);
   const [isEditing, setIsEditing] = useState(true);
 
   const selectedItem = useMemo(
-    () => workoutList.items.find((item) => String(item.event.id) === selectedEventId) ?? null,
-    [selectedEventId, workoutList.items],
+    () => workoutList.items.find((item) => item.id === selectedWorkoutId) ?? null,
+    [selectedWorkoutId, workoutList.items],
   );
 
   const chat = useCoachChat({
     apiBaseUrl,
-    eventId: selectedItem ? String(selectedItem.event.id) : null,
+    workoutId: selectedItem?.id ?? null,
   });
 
   useEffect(() => {
     if (workoutList.items.length === 0) {
-      setSelectedEventId(null);
+      setSelectedWorkoutId(null);
       return;
     }
 
-    if (!selectedEventId || !workoutList.items.some((item) => String(item.event.id) === selectedEventId)) {
-      setSelectedEventId(String(workoutList.items[0].event.id));
+    if (!selectedWorkoutId || !workoutList.items.some((item) => item.id === selectedWorkoutId)) {
+      setSelectedWorkoutId(workoutList.items[0].id);
     }
-  }, [selectedEventId, workoutList.items]);
+  }, [selectedWorkoutId, workoutList.items]);
 
   useEffect(() => {
     setShowConfirmWithoutChat(false);
-    setIsEditing(true);
-  }, [selectedEventId]);
+    setIsEditing(!(selectedItem?.summary?.savedAtEpochSeconds ?? null));
+  }, [selectedItem?.summary?.savedAtEpochSeconds, selectedWorkoutId]);
 
   useEffect(() => {
     if (chat.summary?.updatedAtEpochSeconds) {
@@ -55,6 +55,10 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   }, [chat.summary?.updatedAtEpochSeconds, workoutList.refresh]);
 
   async function handleSave() {
+    if (chat.draftRpe === null) {
+      return;
+    }
+
     const result = await chat.saveSummary();
 
     if (result) {
@@ -66,6 +70,10 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
 
   function handleSaveClick() {
     if (!selectedItem) {
+      return;
+    }
+
+    if (chat.draftRpe === null) {
       return;
     }
 
@@ -82,20 +90,20 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
       <div className="grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
         <WorkoutHistorySidebar
           items={workoutList.items}
-          selectedEventId={selectedEventId}
+          selectedWorkoutId={selectedWorkoutId}
           state={workoutList.state}
           error={workoutList.error}
           weekLabel={workoutList.weekLabel}
           canGoToNewerWeek={workoutList.canGoToNewerWeek}
           onOlderWeek={workoutList.goToOlderWeek}
           onNewerWeek={workoutList.goToNewerWeek}
-          onSelectWorkout={setSelectedEventId}
+          onSelectWorkout={setSelectedWorkoutId}
         />
 
         <div className="space-y-6">
           {selectedItem ? (
             <>
-              <WorkoutHeader event={selectedItem.event} hasConversation={chat.hasConversation} />
+              <WorkoutHeader item={selectedItem} hasConversation={chat.hasConversation} />
               <RpeSelector
                 value={chat.draftRpe}
                 disabled={!isEditing || chat.isLoading}
@@ -106,17 +114,26 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
                 isCoachTyping={chat.isCoachTyping}
                 isConnected={chat.isConnected}
                 hasSelectedWorkout
+                isSaved={chat.isSaved}
+                requiresRpe={chat.draftRpe === null}
                 error={chat.error}
-                inputDisabled={chat.isLoading}
+                inputDisabled={chat.isLoading || !isEditing || chat.isSaved || chat.draftRpe === null}
                 onSendMessage={chat.sendMessage}
               />
               <WorkoutActionButtons
                 disabled={chat.isLoading}
                 isSaving={chat.isSaving}
                 isEditing={isEditing}
+                canSave={chat.draftRpe !== null}
                 onSave={handleSaveClick}
                 onEdit={() => {
-                  setIsEditing(true);
+                  void (async () => {
+                    const result = await chat.reopenSummary();
+                    if (result) {
+                      setIsEditing(true);
+                      await workoutList.refresh();
+                    }
+                  })();
                 }}
               />
             </>

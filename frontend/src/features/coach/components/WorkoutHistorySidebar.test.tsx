@@ -6,6 +6,9 @@ import type { CoachWorkoutListItem } from '../types';
 import { WorkoutHistorySidebar } from './WorkoutHistorySidebar';
 
 const itemFixture: CoachWorkoutListItem = {
+  id: '101',
+  source: 'event',
+  startDateLocal: '2026-03-24T09:00:00',
   event: {
     id: 101,
     startDateLocal: '2026-03-24T09:00:00',
@@ -29,6 +32,7 @@ const itemFixture: CoachWorkoutListItem = {
     },
     actualWorkout: null,
   },
+  activity: null,
   summary: null,
   hasSummary: false,
   hasConversation: false,
@@ -45,7 +49,7 @@ describe('WorkoutHistorySidebar', () => {
     render(
       <WorkoutHistorySidebar
         items={[itemFixture]}
-        selectedEventId={null}
+        selectedWorkoutId={null}
         state="ready"
         error={null}
         weekLabel="Mar 24 - Mar 30"
@@ -66,7 +70,7 @@ describe('WorkoutHistorySidebar', () => {
     render(
       <WorkoutHistorySidebar
         items={[]}
-        selectedEventId={null}
+        selectedWorkoutId={null}
         state="ready"
         error={null}
         weekLabel="Mar 24 - Mar 30"
@@ -84,7 +88,7 @@ describe('WorkoutHistorySidebar', () => {
     render(
       <WorkoutHistorySidebar
         items={[]}
-        selectedEventId={null}
+        selectedWorkoutId={null}
         state="credentials-required"
         error={null}
         weekLabel="Mar 24 - Mar 30"

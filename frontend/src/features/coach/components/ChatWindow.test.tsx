@@ -25,6 +25,8 @@ describe('ChatWindow', () => {
         isCoachTyping
         isConnected
         hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
         error={null}
         onSendMessage={async () => undefined}
       />,
@@ -43,6 +45,8 @@ describe('ChatWindow', () => {
         isCoachTyping={false}
         isConnected
         hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
         error={null}
         onSendMessage={onSendMessage}
       />,
@@ -65,11 +69,50 @@ describe('ChatWindow', () => {
         isCoachTyping={false}
         isConnected={false}
         hasSelectedWorkout={false}
+        isSaved={false}
+        requiresRpe={false}
         error={null}
         onSendMessage={async () => undefined}
       />,
     );
 
     expect(screen.getAllByText(/select a workout from the left panel/i)).toHaveLength(2);
+  });
+
+  it('disables chat input when editing is locked', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved
+        requiresRpe={false}
+        error={null}
+        inputDisabled
+        onSendMessage={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByPlaceholderText(/describe your muscle state/i)).toBeDisabled();
+    expect(screen.getByRole('button', { name: /send message/i })).toBeDisabled();
+  });
+
+  it('shows rpe requirement before chat unlocks', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isCoachTyping={false}
+        isConnected={false}
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe
+        error={null}
+        inputDisabled
+        onSendMessage={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/choose an rpe first to unlock coaching/i)).toBeInTheDocument();
   });
 });

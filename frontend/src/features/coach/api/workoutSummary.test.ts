@@ -4,6 +4,8 @@ import {
   createWorkoutSummary,
   getWorkoutSummary,
   listWorkoutSummaries,
+  reopenWorkoutSummary,
+  saveWorkoutSummary,
   updateWorkoutSummaryRpe,
 } from './workoutSummary';
 
@@ -11,7 +13,7 @@ const originalFetch = global.fetch;
 
 const summaryFixture = {
   id: 'summary-1',
-  eventId: '101',
+  workoutId: '101',
   rpe: 7,
   messages: [
     {
@@ -21,6 +23,7 @@ const summaryFixture = {
       createdAtEpochSeconds: 1711000100,
     },
   ],
+  savedAtEpochSeconds: null,
   createdAtEpochSeconds: 1711000000,
   updatedAtEpochSeconds: 1711000200,
 };
@@ -41,7 +44,7 @@ describe('workoutSummary api', () => {
 
     const result = await getWorkoutSummary('', '101');
 
-    expect(result.eventId).toBe('101');
+    expect(result.workoutId).toBe('101');
     expect(global.fetch).toHaveBeenCalledWith('/api/workout-summaries/101', expect.any(Object));
   });
 
@@ -59,7 +62,7 @@ describe('workoutSummary api', () => {
     expect(global.fetch).toHaveBeenCalledWith('/api/workout-summaries/101', expect.objectContaining({ method: 'POST' }));
   });
 
-  it('lists workout summaries by event id', async () => {
+  it('lists workout summaries by workout id', async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify([summaryFixture]), {
         status: 200,
@@ -71,7 +74,7 @@ describe('workoutSummary api', () => {
 
     expect(result).toHaveLength(1);
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/workout-summaries?eventIds=101%2C102',
+      '/api/workout-summaries?workoutIds=101%2C102',
       expect.any(Object),
     );
   });
@@ -92,6 +95,46 @@ describe('workoutSummary api', () => {
       expect.objectContaining({
         method: 'PATCH',
         body: JSON.stringify({ rpe: 8 }),
+      }),
+    );
+  });
+
+  it('saves workout summary', async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ summary: { ...summaryFixture, savedAtEpochSeconds: 1711000300 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    const result = await saveWorkoutSummary('', '101');
+
+    expect(result.savedAtEpochSeconds).toBe(1711000300);
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/workout-summaries/101/state',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ saved: true }),
+      }),
+    );
+  });
+
+  it('reopens workout summary', async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ summary: summaryFixture }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    const result = await reopenWorkoutSummary('', '101');
+
+    expect(result.savedAtEpochSeconds).toBeNull();
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/workout-summaries/101/state',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ saved: false }),
       }),
     );
   });
