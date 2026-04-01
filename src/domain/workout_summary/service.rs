@@ -442,7 +442,7 @@ where
             );
             let operation = match service
                 .reply_operations
-                .claim_pending(pending_operation)
+                .claim_pending(pending_operation.clone())
                 .await?
             {
                 CoachReplyClaimResult::Claimed(operation) => operation,
@@ -467,9 +467,7 @@ where
                     CoachReplyOperationStatus::Pending => {
                         return Err(WorkoutSummaryError::ReplyAlreadyPending)
                     }
-                    CoachReplyOperationStatus::Failed => {
-                        unreachable!("failed operations should be reclaimed during claim_pending")
-                    }
+                    CoachReplyOperationStatus::Failed => pending_operation,
                 },
             };
 

@@ -454,6 +454,45 @@ async fn update_ai_agents_supports_openrouter_provider_and_model() {
 }
 
 #[tokio::test]
+async fn update_ai_agents_requires_model_when_provider_changes() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.ai_agents.selected_provider = Some(aiwattcoach::domain::llm::LlmProvider::OpenAi);
+    settings.ai_agents.selected_model = Some("gpt-4o-mini".to_string());
+    settings.ai_agents.openrouter_api_key = Some("or-saved-key-3456".to_string());
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "selectedProvider": "openrouter"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let response_body: Value = get_json(response).await;
+    assert_eq!(
+        response_body.get("message").unwrap().as_str().unwrap(),
+        "selectedModel must not be empty"
+    );
+}
+
+#[tokio::test]
 async fn update_ai_agents_rejects_invalid_provider() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
@@ -593,6 +632,21 @@ async fn test_ai_agents_connection_reuses_model_validation_rules() {
         response_body.get("message").unwrap().as_str().unwrap(),
         "selectedModel must be 200 characters or fewer"
     );
+    assert!(!response_body
+        .get("usedSavedApiKey")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert!(!response_body
+        .get("usedSavedProvider")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert!(!response_body
+        .get("usedSavedModel")
+        .unwrap()
+        .as_bool()
+        .unwrap());
 }
 
 #[tokio::test]

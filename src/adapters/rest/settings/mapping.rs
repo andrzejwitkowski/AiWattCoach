@@ -51,14 +51,60 @@ pub(super) fn map_ai_agents_update(
     body: UpdateAiAgentsRequest,
     current: &UserSettings,
 ) -> Result<AiAgentsConfig, SettingsError> {
-    let selected_provider = match body.selected_provider {
-        Some(value) => Some(LlmProvider::parse(&value).ok_or_else(|| {
-            SettingsError::Validation(
-                "selectedProvider must be one of: openai, gemini, openrouter".to_string(),
-            )
-        })?),
-        None => current.ai_agents.selected_provider.clone(),
+    let provider_patch = match body.selected_provider {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                Some(None)
+            } else {
+                Some(Some(LlmProvider::parse(trimmed).ok_or_else(|| {
+                    SettingsError::Validation(
+                        "selectedProvider must be one of: openai, gemini, openrouter".to_string(),
+                    )
+                })?))
+            }
+        }
+        None => None,
     };
+    let model_patch = match body.selected_model {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                Some(None)
+            } else {
+                Some(Some(trimmed.to_string()))
+            }
+        }
+        None => None,
+    };
+    let selected_provider = provider_patch
+        .clone()
+        .unwrap_or_else(|| current.ai_agents.selected_provider.clone());
+    let provider_changed = provider_patch
+        .as_ref()
+        .is_some_and(|patch| patch.as_ref() != current.ai_agents.selected_provider.as_ref());
+    if provider_changed && model_patch.is_none() {
+        return Err(SettingsError::Validation(
+            "selectedModel must not be empty".to_string(),
+        ));
+    }
+    let selected_model = validation::validate_ai_model(
+        model_patch.unwrap_or_else(|| current.ai_agents.selected_model.clone()),
+    )?;
+
+    match (&selected_provider, &selected_model) {
+        (Some(_), None) => {
+            return Err(SettingsError::Validation(
+                "selectedModel must not be empty".to_string(),
+            ))
+        }
+        (None, Some(_)) => {
+            return Err(SettingsError::Validation(
+                "selectedProvider must not be empty".to_string(),
+            ))
+        }
+        _ => {}
+    }
 
     Ok(AiAgentsConfig {
         openai_api_key: normalize_optional_patch_value(body.openai_api_key)
@@ -68,10 +114,7 @@ pub(super) fn map_ai_agents_update(
         openrouter_api_key: normalize_optional_patch_value(body.openrouter_api_key)
             .or(current.ai_agents.openrouter_api_key.clone()),
         selected_provider: validation::validate_ai_provider(selected_provider)?,
-        selected_model: validation::validate_ai_model(
-            normalize_optional_patch_value(body.selected_model)
-                .or(current.ai_agents.selected_model.clone()),
-        )?,
+        selected_model,
     })
 }
 

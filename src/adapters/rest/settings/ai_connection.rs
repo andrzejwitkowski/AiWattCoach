@@ -38,10 +38,15 @@ pub(super) fn merge_ai_connection_config(
     let provider = transient_provider
         .clone()
         .or(current.ai_agents.selected_provider.clone());
+    let used_saved_provider =
+        transient_provider.is_none() && current.ai_agents.selected_provider.is_some();
     let provider_changed = transient_provider
         .as_ref()
         .zip(current.ai_agents.selected_provider.as_ref())
         .is_some_and(|(transient, current_provider)| transient != current_provider);
+    let used_saved_model = !provider_changed
+        && transient_model.is_none()
+        && current.ai_agents.selected_model.is_some();
     let model = transient_model.clone().or_else(|| {
         (!provider_changed)
             .then(|| current.ai_agents.selected_model.clone())
@@ -55,8 +60,8 @@ pub(super) fn merge_ai_connection_config(
                 false,
                 "Provider, model, and matching API key are required.",
                 false,
-                false,
-                false,
+                used_saved_provider,
+                used_saved_model,
             ))
         }
     };
@@ -72,6 +77,13 @@ pub(super) fn merge_ai_connection_config(
             .clone()
             .or(current.ai_agents.openrouter_api_key.clone()),
     };
+    let used_saved_api_key = current_api_key_is_saved(provider.clone(), current)
+        && selected_key_was_not_provided(
+            &provider,
+            transient_openai_api_key.is_none(),
+            transient_gemini_api_key.is_none(),
+            transient_openrouter_api_key.is_none(),
+        );
 
     let Some(model) = model.filter(|value| !value.trim().is_empty()) else {
         return Err(test_ai_agents_connection_response(
@@ -84,52 +96,59 @@ pub(super) fn merge_ai_connection_config(
                 && current.ai_agents.selected_model.is_some(),
         ));
     };
-    let model = validate_ai_model(Some(model)).map_err(map_validation_error_to_response)?;
+    let model = validate_ai_model(Some(model)).map_err(|error| {
+        map_validation_error_to_response(
+            error,
+            used_saved_api_key,
+            used_saved_provider,
+            used_saved_model,
+        )
+    })?;
     let model = model.expect("validated selected model should remain present");
 
     let Some(api_key) = api_key.filter(|value| !value.trim().is_empty()) else {
         return Err(test_ai_agents_connection_response(
             false,
             "Provider, model, and matching API key are required.",
-            current_api_key_is_saved(provider.clone(), current)
-                && selected_key_was_not_provided(
-                    &provider,
-                    transient_openai_api_key.is_none(),
-                    transient_gemini_api_key.is_none(),
-                    transient_openrouter_api_key.is_none(),
-                ),
-            transient_provider.is_none() && current.ai_agents.selected_provider.is_some(),
-            transient_model.is_none() && current.ai_agents.selected_model.is_some(),
+            used_saved_api_key,
+            used_saved_provider,
+            used_saved_model,
         ));
     };
 
     Ok(MergedAiConnectionConfig {
         config: LlmProviderConfig {
-            provider: provider.clone(),
+            provider,
             model,
             api_key,
         },
-        used_saved_api_key: current_api_key_is_saved(provider.clone(), current)
-            && selected_key_was_not_provided(
-                &provider,
-                transient_openai_api_key.is_none(),
-                transient_gemini_api_key.is_none(),
-                transient_openrouter_api_key.is_none(),
-            ),
-        used_saved_provider: transient_provider.is_none()
-            && current.ai_agents.selected_provider.is_some(),
-        used_saved_model: !provider_changed
-            && transient_model.is_none()
-            && current.ai_agents.selected_model.is_some(),
+        used_saved_api_key,
+        used_saved_provider,
+        used_saved_model,
     })
 }
 
-fn map_validation_error_to_response(error: SettingsError) -> TestAiAgentsConnectionResponse {
+fn map_validation_error_to_response(
+    error: SettingsError,
+    used_saved_api_key: bool,
+    used_saved_provider: bool,
+    used_saved_model: bool,
+) -> TestAiAgentsConnectionResponse {
     match error {
-        SettingsError::Validation(message) => {
-            test_ai_agents_connection_response(false, &message, false, false, false)
-        }
-        other => test_ai_agents_connection_response(false, &other.to_string(), false, false, false),
+        SettingsError::Validation(message) => test_ai_agents_connection_response(
+            false,
+            &message,
+            used_saved_api_key,
+            used_saved_provider,
+            used_saved_model,
+        ),
+        other => test_ai_agents_connection_response(
+            false,
+            &other.to_string(),
+            used_saved_api_key,
+            used_saved_provider,
+            used_saved_model,
+        ),
     }
 }
 

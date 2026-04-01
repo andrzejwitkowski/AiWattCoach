@@ -128,6 +128,27 @@ describe('AiAgentsCard', () => {
     expect(openrouterKeyInput.value).toBe('');
   });
 
+  it('sends explicit provider and model clears on save', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildSettings({ selectedProvider: null, selectedModel: null }));
+
+    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText(/model/i), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(updateAiAgentsMock).toHaveBeenCalledWith('', {
+        selectedProvider: '',
+        selectedModel: '',
+      });
+    });
+  });
+
   it('ignores stale test responses after the draft changes', async () => {
     let resolveTest:
       | ((value: {

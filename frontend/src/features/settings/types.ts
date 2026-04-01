@@ -64,7 +64,7 @@ export const updateAiAgentsRequestSchema = z.object({
   openaiApiKey: z.string().nullable().optional(),
   geminiApiKey: z.string().nullable().optional(),
   openrouterApiKey: z.string().nullable().optional(),
-  selectedProvider: llmProviderSchema.nullable().optional(),
+  selectedProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
   selectedModel: z.string().nullable().optional(),
 });
 

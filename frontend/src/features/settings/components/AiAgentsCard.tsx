@@ -30,16 +30,13 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
   const aiAgents = settings.aiAgents;
   const persistedDraft = useMemo(
     () => ({
-      openaiApiKey: aiAgents.openaiApiKey ?? '',
-      geminiApiKey: aiAgents.geminiApiKey ?? '',
-      openrouterApiKey: aiAgents.openrouterApiKey ?? '',
+      openaiApiKey: '',
+      geminiApiKey: '',
+      openrouterApiKey: '',
       selectedProvider: aiAgents.selectedProvider ?? '',
       selectedModel: aiAgents.selectedModel ?? '',
     }),
     [
-      aiAgents.geminiApiKey,
-      aiAgents.openaiApiKey,
-      aiAgents.openrouterApiKey,
       aiAgents.selectedModel,
       aiAgents.selectedProvider,
     ],
@@ -121,13 +118,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     aiAgents.openrouterApiKeySet ||
     Boolean(aiAgents.selectedProvider) ||
     Boolean(aiAgents.selectedModel);
-  const canSave =
-    draft.selectedProvider.trim().length > 0 ||
-    draft.selectedModel.trim().length > 0 ||
-    draft.openaiApiKey.trim().length > 0 ||
-    draft.geminiApiKey.trim().length > 0 ||
-    draft.openrouterApiKey.trim().length > 0;
-  const canTest = canSave || hasAnyPersistedConnectionValue;
+  const canSave = hasDirtyDraft;
+  const canTest = hasDirtyDraft || hasAnyPersistedConnectionValue;
 
   const visibleRequest = useMemo(() => {
     const request: Record<string, string> = {};
@@ -137,19 +129,19 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     const trimmedProvider = draft.selectedProvider.trim();
     const trimmedModel = draft.selectedModel.trim();
 
-    if (trimmedOpenai && trimmedOpenai !== persistedDraft.openaiApiKey) {
+    if (trimmedOpenai) {
       request.openaiApiKey = trimmedOpenai;
     }
-    if (trimmedGemini && trimmedGemini !== persistedDraft.geminiApiKey) {
+    if (trimmedGemini) {
       request.geminiApiKey = trimmedGemini;
     }
-    if (trimmedOpenrouter && trimmedOpenrouter !== persistedDraft.openrouterApiKey) {
+    if (trimmedOpenrouter) {
       request.openrouterApiKey = trimmedOpenrouter;
     }
-    if (trimmedProvider && trimmedProvider !== persistedDraft.selectedProvider) {
+    if (trimmedProvider !== persistedDraft.selectedProvider) {
       request.selectedProvider = trimmedProvider;
     }
-    if (trimmedModel && trimmedModel !== persistedDraft.selectedModel) {
+    if (trimmedModel !== persistedDraft.selectedModel) {
       request.selectedModel = trimmedModel;
     }
 

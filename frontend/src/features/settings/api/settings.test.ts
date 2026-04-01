@@ -260,4 +260,36 @@ describe('settings api', () => {
       }),
     });
   });
+
+  it('preserves explicit provider and model clears in update requests', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateAiAgents('', {
+      selectedProvider: '',
+      selectedModel: '',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        selectedProvider: '',
+        selectedModel: '',
+      }),
+    });
+  });
 });

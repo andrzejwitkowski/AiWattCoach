@@ -142,6 +142,11 @@ pub(super) struct TestAiAgentsConnectionResponse {
     pub(super) used_saved_model: bool,
 }
 
+#[derive(Serialize)]
+pub(super) struct ValidationMessageResponse {
+    pub(super) message: String,
+}
+
 pub(super) fn test_connection_response(
     connected: bool,
     message: &str,
@@ -170,5 +175,11 @@ pub(super) fn test_ai_agents_connection_response(
         used_saved_api_key,
         used_saved_provider,
         used_saved_model,
+    }
+}
+
+pub(super) fn validation_message_response(message: &str) -> ValidationMessageResponse {
+    ValidationMessageResponse {
+        message: message.to_string(),
     }
 }

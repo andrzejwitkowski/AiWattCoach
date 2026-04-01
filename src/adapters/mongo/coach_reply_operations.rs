@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::workout_summary::{
     BoxFuture, CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
-    WorkoutSummaryError,
+    CoachReplyOperationStatus, WorkoutSummaryError,
 };
 
 #[derive(Clone)]
@@ -159,6 +159,8 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
         let collection = self.collection.clone();
         Box::pin(async move {
             let document = Self::map_operation_to_document(&operation);
+            let operation_document = mongodb::bson::to_document(&document)
+                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
             let existing = collection
                 .find_one_and_update(
@@ -168,8 +170,7 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
                         "user_message_id": &document.user_message_id,
                     },
                     doc! {
-                        "$setOnInsert": mongodb::bson::to_document(&document)
-                            .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?,
+                        "$setOnInsert": operation_document.clone(),
                     },
                 )
                 .upsert(true)
@@ -178,9 +179,26 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
             match existing {
-                Some(document) => Ok(CoachReplyClaimResult::Existing(
-                    Self::map_document_to_operation(document)?,
-                )),
+                Some(document) => {
+                    let existing = Self::map_document_to_operation(document)?;
+                    if existing.status == CoachReplyOperationStatus::Failed {
+                        collection
+                            .replace_one(
+                                doc! {
+                                    "user_id": &operation.user_id,
+                                    "workout_id": &operation.workout_id,
+                                    "user_message_id": &operation.user_message_id,
+                                    "status": "failed",
+                                },
+                                Self::map_operation_to_document(&operation),
+                            )
+                            .await
+                            .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+                        Ok(CoachReplyClaimResult::Claimed(operation))
+                    } else {
+                        Ok(CoachReplyClaimResult::Existing(existing))
+                    }
+                }
                 None => Ok(CoachReplyClaimResult::Claimed(operation)),
             }
         })
