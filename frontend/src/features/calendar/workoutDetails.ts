@@ -135,6 +135,28 @@ export function extractCompletedPowerValues(activity: IntervalActivity): number[
   return stream.data.flatMap((value) => (typeof value === 'number' ? [Math.round(value)] : []));
 }
 
+export function buildFiveSecondAveragePowerSeries(values: number[]): number[] {
+  if (values.length === 0) {
+    return [];
+  }
+
+  const averaged: number[] = [];
+  let rollingSum = 0;
+
+  for (let index = 0; index < values.length; index += 1) {
+    rollingSum += values[index];
+
+    if (index >= 5) {
+      rollingSum -= values[index - 5];
+    }
+
+    const windowSize = Math.min(index + 1, 5);
+    averaged.push(Math.round(rollingSum / windowSize));
+  }
+
+  return averaged;
+}
+
 function normalizeWidthUnits(durationSeconds: number | null | undefined): number {
   if (!durationSeconds || durationSeconds <= 0) {
     return 1;

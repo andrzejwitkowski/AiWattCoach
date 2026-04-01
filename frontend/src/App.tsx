@@ -89,7 +89,7 @@ export function App() {
               <Route element={<AppHomePage />} path="/app" />
               <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
               <Route element={<CalendarPage apiBaseUrl={API_BASE_URL} />} path="/calendar" />
-              <Route element={<AICoachPage />} path="/ai-coach" />
+              <Route element={<AICoachPage apiBaseUrl={API_BASE_URL} />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
                 <Route
                   element={

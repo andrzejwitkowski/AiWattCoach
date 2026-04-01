@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
-import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildMatchedWorkoutBars, buildPlannedWorkoutBars, extractCompletedPowerValues, formatDurationLabel, selectWorkoutDetail } from './workoutDetails';
+import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildFiveSecondAveragePowerSeries, buildMatchedWorkoutBars, buildPlannedWorkoutBars, extractCompletedPowerValues, formatDurationLabel, selectWorkoutDetail } from './workoutDetails';
 
 describe('workoutDetails', () => {
   it('builds planned bars from parsed workout segments with zone colors', () => {
@@ -266,6 +266,10 @@ describe('workoutDetails', () => {
     expect(formatDurationLabel(1500)).toBe('25m');
     expect(formatDurationLabel(3599)).toBe('59m');
     expect(formatDurationLabel(7199)).toBe('1h 59m');
+  });
+
+  it('builds a 5 second average power series', () => {
+    expect(buildFiveSecondAveragePowerSeries([100, 150, 200, 250, 300, 350, 400])).toEqual([100, 125, 150, 175, 200, 250, 300]);
   });
 
   it('selects the matched activity from the full day activity list', () => {

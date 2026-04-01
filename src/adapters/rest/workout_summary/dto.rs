@@ -2,18 +2,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub(in crate::adapters::rest) struct WorkoutSummaryPath {
-    pub event_id: String,
+    pub workout_id: String,
 }
 
 #[derive(Deserialize)]
 pub(in crate::adapters::rest) struct ListWorkoutSummariesQuery {
-    #[serde(rename = "eventIds")]
-    pub event_ids: String,
+    // Keep alias for backward compatibility during transition.
+    #[serde(rename = "workoutIds", alias = "eventIds")]
+    pub workout_ids: String,
 }
 
 #[derive(Deserialize)]
 pub(in crate::adapters::rest) struct UpdateRpeRequest {
     pub rpe: u8,
+}
+
+#[derive(Serialize)]
+pub(super) struct WorkoutSummaryStateResponse {
+    pub summary: WorkoutSummaryDto,
+}
+
+#[derive(Deserialize)]
+pub(in crate::adapters::rest) struct SetSavedStateRequest {
+    pub saved: bool,
 }
 
 #[derive(Deserialize)]
@@ -24,10 +35,12 @@ pub(in crate::adapters::rest) struct SendMessageRequest {
 #[derive(Serialize)]
 pub(super) struct WorkoutSummaryDto {
     pub id: String,
-    #[serde(rename = "eventId")]
-    pub event_id: String,
+    #[serde(rename = "workoutId")]
+    pub workout_id: String,
     pub rpe: Option<u8>,
     pub messages: Vec<ConversationMessageDto>,
+    #[serde(rename = "savedAtEpochSeconds")]
+    pub saved_at_epoch_seconds: Option<i64>,
     #[serde(rename = "createdAtEpochSeconds")]
     pub created_at_epoch_seconds: i64,
     #[serde(rename = "updatedAtEpochSeconds")]

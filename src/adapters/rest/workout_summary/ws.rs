@@ -39,11 +39,11 @@ pub async fn workout_summary_ws(
             };
 
             let state = state.clone();
-            let event_id = path.event_id;
+            let workout_id = path.workout_id;
 
-            match service.get_summary(&user_id, &event_id).await {
+            match service.get_summary(&user_id, &workout_id).await {
                 Ok(_) => {
-                    ws.on_upgrade(move |socket| handle_socket(socket, state, user_id, event_id))
+                    ws.on_upgrade(move |socket| handle_socket(socket, state, user_id, workout_id))
                 }
                 Err(error) => map_workout_summary_error(&error),
             }
@@ -56,7 +56,7 @@ async fn handle_socket(
     socket: axum::extract::ws::WebSocket,
     state: AppState,
     user_id: String,
-    event_id: String,
+    workout_id: String,
 ) {
     let (sender, mut receiver) = socket.split();
     let sender = Arc::new(Mutex::new(sender));
@@ -75,7 +75,7 @@ async fn handle_socket(
     let worker_sender = Arc::clone(&sender);
     let worker_service = service.clone();
     let worker_user_id = user_id.clone();
-    let worker_event_id = event_id.clone();
+    let worker_workout_id = workout_id.clone();
     let worker_connection_open = Arc::clone(&connection_open);
     let worker_close_requested = Arc::clone(&close_requested);
 
@@ -91,7 +91,7 @@ async fn handle_socket(
                 Arc::clone(&worker_connection_open),
                 worker_service.clone(),
                 worker_user_id.clone(),
-                worker_event_id.clone(),
+                worker_workout_id.clone(),
                 content,
             )
             .await
@@ -228,7 +228,7 @@ async fn process_send_message(
     connection_open: Arc<AtomicBool>,
     service: std::sync::Arc<dyn crate::domain::workout_summary::WorkoutSummaryUseCases>,
     user_id: String,
-    event_id: String,
+    workout_id: String,
     content: String,
 ) -> bool {
     if !connection_open.load(Ordering::Relaxed) {
@@ -236,7 +236,7 @@ async fn process_send_message(
     }
 
     match service
-        .append_user_message(&user_id, &event_id, content)
+        .append_user_message(&user_id, &workout_id, content)
         .await
     {
         Ok(persisted) => {
@@ -255,7 +255,11 @@ async fn process_send_message(
             }
 
             match service
-                .generate_coach_reply(&user_id, &event_id, persisted.user_message.content.clone())
+                .generate_coach_reply(
+                    &user_id,
+                    &workout_id,
+                    persisted.user_message.content.clone(),
+                )
                 .await
             {
                 Ok(reply) => send_ws_json(
@@ -302,6 +306,6 @@ fn client_error_message(error: &WorkoutSummaryError) -> String {
 fn should_close_worker(error: &crate::domain::workout_summary::WorkoutSummaryError) -> bool {
     matches!(
         map_workout_summary_error(error).status().as_u16(),
-        404 | 503
+        404 | 409 | 503
     )
 }

@@ -21,6 +21,7 @@ struct ActivityDocument {
     user_id: String,
     activity_id: String,
     start_date_local: String,
+    event_id_hint: Option<String>,
     external_id_normalized: Option<String>,
     fallback_identity_v1: Option<String>,
     payload: Activity,
@@ -260,6 +261,7 @@ fn normalize_activity_document(mut document: ActivityDocument) -> ActivityDocume
 
     document.activity_id = payload.id.clone();
     document.start_date_local = payload.start_date_local.clone();
+    document.event_id_hint = infer_event_id_hint(&payload);
     document.external_id_normalized = dedupe_identity.normalized_external_id;
     document.fallback_identity_v1 = dedupe_identity.fallback_identity;
     document.payload = payload;
@@ -273,10 +275,38 @@ fn build_activity_document(user_id: &str, activity: Activity) -> ActivityDocumen
         user_id: user_id.to_string(),
         activity_id: activity.id.clone(),
         start_date_local: activity.start_date_local.clone(),
+        event_id_hint: infer_event_id_hint(&activity),
         external_id_normalized: dedupe_identity.normalized_external_id,
         fallback_identity_v1: dedupe_identity.fallback_identity,
         payload: activity,
     }
+}
+
+fn infer_event_id_hint(activity: &Activity) -> Option<String> {
+    let marker = "paired_event_id=";
+
+    for raw in [
+        activity.external_id.as_deref(),
+        activity.description.as_deref(),
+        activity.name.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let Some(start) = raw.find(marker).map(|index| index + marker.len()) else {
+            continue;
+        };
+        let digits = raw[start..]
+            .chars()
+            .take_while(|character| character.is_ascii_digit())
+            .collect::<String>();
+
+        if !digits.is_empty() {
+            return Some(digits);
+        }
+    }
+
+    None
 }
 
 fn should_store_stream_type(stream_type: &str) -> bool {
