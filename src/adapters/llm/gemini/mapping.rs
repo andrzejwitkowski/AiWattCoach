@@ -13,16 +13,20 @@ pub fn map_generate_request(
     cached_content: Option<String>,
 ) -> GeminiGenerateContentRequest {
     let cached_content = request.reusable_cache_id.clone().or(cached_content);
-    let system_instruction = (!request.system_prompt.trim().is_empty()
-        || !request.stable_context.trim().is_empty())
-    .then(|| GeminiContent {
-        role: "user".to_string(),
-        parts: vec![GeminiTextPart {
-            text: format!("{}\n\n{}", request.system_prompt, request.stable_context)
-                .trim()
-                .to_string(),
-        }],
-    });
+    let system_instruction = cached_content
+        .is_none()
+        .then_some(())
+        .filter(|_| {
+            !request.system_prompt.trim().is_empty() || !request.stable_context.trim().is_empty()
+        })
+        .map(|_| GeminiContent {
+            role: "user".to_string(),
+            parts: vec![GeminiTextPart {
+                text: format!("{}\n\n{}", request.system_prompt, request.stable_context)
+                    .trim()
+                    .to_string(),
+            }],
+        });
 
     GeminiGenerateContentRequest {
         contents: request

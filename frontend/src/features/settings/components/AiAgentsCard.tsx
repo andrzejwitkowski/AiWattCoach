@@ -19,13 +19,22 @@ type DraftState = {
 
 export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps) {
   const aiAgents = settings.aiAgents;
-  const persistedDraft = {
-    openaiApiKey: aiAgents.openaiApiKey ?? '',
-    geminiApiKey: aiAgents.geminiApiKey ?? '',
-    openrouterApiKey: aiAgents.openrouterApiKey ?? '',
-    selectedProvider: aiAgents.selectedProvider ?? '',
-    selectedModel: aiAgents.selectedModel ?? '',
-  };
+  const persistedDraft = useMemo(
+    () => ({
+      openaiApiKey: aiAgents.openaiApiKey ?? '',
+      geminiApiKey: aiAgents.geminiApiKey ?? '',
+      openrouterApiKey: aiAgents.openrouterApiKey ?? '',
+      selectedProvider: aiAgents.selectedProvider ?? '',
+      selectedModel: aiAgents.selectedModel ?? '',
+    }),
+    [
+      aiAgents.geminiApiKey,
+      aiAgents.openaiApiKey,
+      aiAgents.openrouterApiKey,
+      aiAgents.selectedModel,
+      aiAgents.selectedProvider,
+    ],
+  );
   const [draft, setDraft] = useState<DraftState>(persistedDraft);
   const [cleanDraft, setCleanDraft] = useState<DraftState>(persistedDraft);
   const [showOpenai, setShowOpenai] = useState(false);
@@ -89,13 +98,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           : current.selectedModel,
     }));
     previousPersistedRef.current = persistedDraft;
-  }, [
-    persistedDraft.geminiApiKey,
-    persistedDraft.openaiApiKey,
-    persistedDraft.openrouterApiKey,
-    persistedDraft.selectedModel,
-    persistedDraft.selectedProvider,
-  ]);
+  }, [persistedDraft]);
 
   const hasDirtyDraft =
     draft.openaiApiKey !== cleanDraft.openaiApiKey ||

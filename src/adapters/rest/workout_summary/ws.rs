@@ -255,11 +255,7 @@ async fn process_send_message(
             }
 
             match service
-                .generate_coach_reply(
-                    &user_id,
-                    &workout_id,
-                    persisted.user_message.content.clone(),
-                )
+                .generate_coach_reply(&user_id, &workout_id, persisted.user_message.id.clone())
                 .await
             {
                 Ok(reply) => send_ws_json(

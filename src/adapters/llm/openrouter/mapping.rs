@@ -75,7 +75,7 @@ pub fn map_response(
             cached_read_tokens: cached_tokens,
             cache_write_tokens,
             cache_hit: cached_tokens.unwrap_or(0) > 0,
-            cache_discount: usage.cache_discount.or(usage.cost),
+            cache_discount: usage.cache_discount,
             provider_cache_id: None,
             provider_cache_key: None,
             cache_expires_at_epoch_seconds: None,

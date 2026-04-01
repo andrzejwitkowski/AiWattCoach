@@ -1,8 +1,13 @@
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::doc,
+    options::{IndexOptions, ReturnDocument},
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::workout_summary::{
-    BoxFuture, CoachReplyOperation, CoachReplyOperationRepository, WorkoutSummaryError,
+    BoxFuture, CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
+    WorkoutSummaryError,
 };
 
 #[derive(Clone)]
@@ -15,7 +20,18 @@ struct CoachReplyOperationDocument {
     user_id: String,
     workout_id: String,
     user_message_id: String,
-    payload: CoachReplyOperation,
+    status: String,
+    provider: Option<String>,
+    model: Option<String>,
+    provider_request_id: Option<String>,
+    coach_message_id: Option<String>,
+    cache_scope_key: Option<String>,
+    provider_cache_id: Option<String>,
+    token_usage: Option<crate::domain::llm::LlmTokenUsage>,
+    cache_usage: Option<crate::domain::llm::LlmCacheUsage>,
+    error_message: Option<String>,
+    created_at_epoch_seconds: i64,
+    updated_at_epoch_seconds: i64,
 }
 
 impl MongoCoachReplyOperationRepository {
@@ -42,6 +58,74 @@ impl MongoCoachReplyOperationRepository {
             .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
         Ok(())
     }
+
+    fn map_operation_to_document(operation: &CoachReplyOperation) -> CoachReplyOperationDocument {
+        CoachReplyOperationDocument {
+            user_id: operation.user_id.clone(),
+            workout_id: operation.workout_id.clone(),
+            user_message_id: operation.user_message_id.clone(),
+            status: match operation.status {
+                crate::domain::workout_summary::CoachReplyOperationStatus::Pending => "pending",
+                crate::domain::workout_summary::CoachReplyOperationStatus::Completed => "completed",
+                crate::domain::workout_summary::CoachReplyOperationStatus::Failed => "failed",
+            }
+            .to_string(),
+            provider: operation
+                .provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            model: operation.model.clone(),
+            provider_request_id: operation.provider_request_id.clone(),
+            coach_message_id: operation.coach_message_id.clone(),
+            cache_scope_key: operation.cache_scope_key.clone(),
+            provider_cache_id: operation.provider_cache_id.clone(),
+            token_usage: operation.token_usage.clone(),
+            cache_usage: operation.cache_usage.clone(),
+            error_message: operation.error_message.clone(),
+            created_at_epoch_seconds: operation.created_at_epoch_seconds,
+            updated_at_epoch_seconds: operation.updated_at_epoch_seconds,
+        }
+    }
+
+    fn map_document_to_operation(
+        document: CoachReplyOperationDocument,
+    ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
+        Ok(CoachReplyOperation {
+            user_id: document.user_id,
+            workout_id: document.workout_id,
+            user_message_id: document.user_message_id,
+            status: match document.status.as_str() {
+                "pending" => crate::domain::workout_summary::CoachReplyOperationStatus::Pending,
+                "completed" => crate::domain::workout_summary::CoachReplyOperationStatus::Completed,
+                "failed" => crate::domain::workout_summary::CoachReplyOperationStatus::Failed,
+                other => {
+                    return Err(WorkoutSummaryError::Repository(format!(
+                        "unknown coach reply operation status: {other}"
+                    )))
+                }
+            },
+            provider: document
+                .provider
+                .map(|value| {
+                    crate::domain::llm::LlmProvider::parse(&value).ok_or_else(|| {
+                        WorkoutSummaryError::Repository(format!(
+                            "unknown llm provider in coach reply operation: {value}"
+                        ))
+                    })
+                })
+                .transpose()?,
+            model: document.model,
+            provider_request_id: document.provider_request_id,
+            coach_message_id: document.coach_message_id,
+            cache_scope_key: document.cache_scope_key,
+            provider_cache_id: document.provider_cache_id,
+            token_usage: document.token_usage,
+            cache_usage: document.cache_usage,
+            error_message: document.error_message,
+            created_at_epoch_seconds: document.created_at_epoch_seconds,
+            updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+        })
+    }
 }
 
 impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
@@ -64,37 +148,41 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
                 })
                 .await
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
-            Ok(document.map(|document| document.payload))
+            document.map(Self::map_document_to_operation).transpose()
         })
     }
 
     fn claim_pending(
         &self,
         operation: CoachReplyOperation,
-    ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+    ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         let collection = self.collection.clone();
         Box::pin(async move {
-            let document = CoachReplyOperationDocument {
-                user_id: operation.user_id.clone(),
-                workout_id: operation.workout_id.clone(),
-                user_message_id: operation.user_message_id.clone(),
-                payload: operation.clone(),
-            };
+            let document = Self::map_operation_to_document(&operation);
 
-            collection
-                .replace_one(
+            let existing = collection
+                .find_one_and_update(
                     doc! {
                         "user_id": &document.user_id,
                         "workout_id": &document.workout_id,
                         "user_message_id": &document.user_message_id,
                     },
-                    &document,
+                    doc! {
+                        "$setOnInsert": mongodb::bson::to_document(&document)
+                            .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?,
+                    },
                 )
                 .upsert(true)
+                .return_document(ReturnDocument::Before)
                 .await
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
-            Ok(operation)
+            match existing {
+                Some(document) => Ok(CoachReplyClaimResult::Existing(
+                    Self::map_document_to_operation(document)?,
+                )),
+                None => Ok(CoachReplyClaimResult::Claimed(operation)),
+            }
         })
     }
 
@@ -104,12 +192,7 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
     ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
         let collection = self.collection.clone();
         Box::pin(async move {
-            let document = CoachReplyOperationDocument {
-                user_id: operation.user_id.clone(),
-                workout_id: operation.workout_id.clone(),
-                user_message_id: operation.user_message_id.clone(),
-                payload: operation.clone(),
-            };
+            let document = Self::map_operation_to_document(&operation);
 
             collection
                 .replace_one(

@@ -1,4 +1,4 @@
-use crate::domain::llm::{LlmCacheUsage, LlmProvider, LlmTokenUsage};
+use crate::domain::llm::{LlmCacheUsage, LlmError, LlmProvider, LlmTokenUsage};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -7,7 +7,7 @@ pub enum WorkoutSummaryError {
     Locked,
     NotFound,
     Repository(String),
-    Llm(String),
+    Llm(LlmError),
     Validation(String),
 }
 
@@ -18,7 +18,7 @@ impl std::fmt::Display for WorkoutSummaryError {
             Self::Locked => write!(f, "workout summary is saved and cannot be edited"),
             Self::NotFound => write!(f, "workout summary not found"),
             Self::Repository(message) => write!(f, "{message}"),
-            Self::Llm(message) => write!(f, "{message}"),
+            Self::Llm(error) => write!(f, "{error}"),
             Self::Validation(message) => write!(f, "{message}"),
         }
     }
@@ -48,6 +48,12 @@ pub struct CoachReplyOperation {
     pub error_message: Option<String>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CoachReplyClaimResult {
+    Claimed(CoachReplyOperation),
+    Existing(CoachReplyOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

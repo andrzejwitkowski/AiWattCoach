@@ -107,7 +107,7 @@ where
                     cache_scope_key,
                     response.cache.provider_cache_id.clone(),
                 ) {
-                    repository
+                    if let Err(error) = repository
                         .upsert(LlmContextCache {
                             user_id: user_id.clone(),
                             provider: config.provider,
@@ -119,7 +119,10 @@ where
                             created_at_epoch_seconds: clock.now_epoch_seconds(),
                             updated_at_epoch_seconds: clock.now_epoch_seconds(),
                         })
-                        .await?;
+                        .await
+                    {
+                        tracing::warn!(error = %error, "failed to persist reusable gemini context cache");
+                    }
                 }
             }
 
@@ -156,7 +159,9 @@ fn build_conversation(summary: &WorkoutSummary, user_message: &str) -> Vec<LlmCh
         })
         .collect::<Vec<_>>();
 
-    if conversation.last().map(|message| message.content.as_str()) != Some(user_message) {
+    if conversation.last().map(|message| message.role.clone()) != Some(LlmMessageRole::User)
+        || conversation.last().map(|message| message.content.as_str()) != Some(user_message)
+    {
         conversation.push(LlmChatMessage {
             role: LlmMessageRole::User,
             content: user_message.to_string(),

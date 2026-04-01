@@ -307,7 +307,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         &self,
         user_id: &str,
         workout_id: &str,
-        user_message_content: String,
+        user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
@@ -329,6 +329,17 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                     "rpe must be set before chatting with coach".to_string(),
                 ));
             }
+
+            let user_message_content = summary
+                .messages
+                .iter()
+                .find(|message| message.id == user_message_id && message.role == MessageRole::User)
+                .map(|message| message.content.clone())
+                .ok_or_else(|| {
+                    WorkoutSummaryError::Validation(
+                        "user message must be persisted before generating coach reply".to_string(),
+                    )
+                })?;
 
             let coach_message = ConversationMessage {
                 id: "message-coach-1".to_string(),

@@ -25,7 +25,7 @@ export function buildUrl(apiBaseUrl: string, path: string): string {
 }
 
 type RequestOptions = {
-  allowStatuses?: number[];
+  allowedErrorStatuses?: number[];
 };
 
 async function request<TRes>(
@@ -55,7 +55,7 @@ async function request<TRes>(
     throw new AuthenticationError();
   }
 
-  if (!response.ok && !options?.allowStatuses?.includes(response.status)) {
+  if (!response.ok && !options?.allowedErrorStatuses?.includes(response.status)) {
     throw new HttpError(response.status, `${method} ${path} failed: ${response.status}`);
   }
 

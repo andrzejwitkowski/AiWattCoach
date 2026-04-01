@@ -1,6 +1,9 @@
 use std::{future::Future, pin::Pin};
 
-use super::{CoachReplyOperation, ConversationMessage, WorkoutSummary, WorkoutSummaryError};
+use super::{
+    CoachReplyClaimResult, CoachReplyOperation, ConversationMessage, WorkoutSummary,
+    WorkoutSummaryError,
+};
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -65,7 +68,7 @@ pub trait CoachReplyOperationRepository: Send + Sync + 'static {
     fn claim_pending(
         &self,
         operation: CoachReplyOperation,
-    ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>>;
+    ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>>;
 
     fn upsert(
         &self,

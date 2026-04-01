@@ -38,9 +38,15 @@ pub(super) fn merge_ai_connection_config(
     let provider = transient_provider
         .clone()
         .or(current.ai_agents.selected_provider.clone());
-    let model = transient_model
-        .clone()
-        .or(current.ai_agents.selected_model.clone());
+    let provider_changed = transient_provider
+        .as_ref()
+        .zip(current.ai_agents.selected_provider.as_ref())
+        .is_some_and(|(transient, current_provider)| transient != current_provider);
+    let model = transient_model.clone().or_else(|| {
+        (!provider_changed)
+            .then(|| current.ai_agents.selected_model.clone())
+            .flatten()
+    });
 
     let provider = match provider {
         Some(provider) => provider,
@@ -73,7 +79,9 @@ pub(super) fn merge_ai_connection_config(
             "Provider, model, and matching API key are required.",
             false,
             transient_provider.is_none() && current.ai_agents.selected_provider.is_some(),
-            false,
+            !provider_changed
+                && transient_model.is_none()
+                && current.ai_agents.selected_model.is_some(),
         ));
     };
 
@@ -108,7 +116,9 @@ pub(super) fn merge_ai_connection_config(
             ),
         used_saved_provider: transient_provider.is_none()
             && current.ai_agents.selected_provider.is_some(),
-        used_saved_model: transient_model.is_none() && current.ai_agents.selected_model.is_some(),
+        used_saved_model: !provider_changed
+            && transient_model.is_none()
+            && current.ai_agents.selected_model.is_some(),
     })
 }
 

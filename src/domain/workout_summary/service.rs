@@ -1,10 +1,10 @@
 use crate::domain::identity::{Clock, IdGenerator};
 
 use super::{
-    validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyOperation,
-    CoachReplyOperationRepository, CoachReplyOperationStatus, CompletedCoachReply,
-    ConversationMessage, MessageRole, PersistedUserMessage, SendMessageResult, WorkoutCoach,
-    WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
+    validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyClaimResult,
+    CoachReplyOperation, CoachReplyOperationRepository, CoachReplyOperationStatus,
+    CompletedCoachReply, ConversationMessage, MessageRole, PersistedUserMessage, SendMessageResult,
+    WorkoutCoach, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
 };
 
 pub trait WorkoutSummaryUseCases: Send + Sync {
@@ -63,7 +63,7 @@ pub trait WorkoutSummaryUseCases: Send + Sync {
         &self,
         user_id: &str,
         workout_id: &str,
-        user_message_content: String,
+        user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>>;
 }
 
@@ -346,11 +346,7 @@ where
                 .append_user_message(&user_id, &workout_id, content)
                 .await?;
             let reply = service
-                .generate_coach_reply(
-                    &user_id,
-                    &workout_id,
-                    persisted.user_message.content.clone(),
-                )
+                .generate_coach_reply(&user_id, &workout_id, persisted.user_message.id.clone())
                 .await?;
 
             Ok(SendMessageResult {
@@ -388,7 +384,7 @@ where
         &self,
         user_id: &str,
         workout_id: &str,
-        user_message_content: String,
+        user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
@@ -398,10 +394,7 @@ where
             let user_message = summary
                 .messages
                 .iter()
-                .rev()
-                .find(|message| {
-                    message.role == MessageRole::User && message.content == user_message_content
-                })
+                .find(|message| message.role == MessageRole::User && message.id == user_message_id)
                 .cloned()
                 .ok_or_else(|| {
                     WorkoutSummaryError::Validation(
@@ -440,14 +433,40 @@ where
                 Some(format!("workout-summary:{user_id}:{workout_id}")),
                 now,
             );
-            let operation = service
+            let operation = match service
                 .reply_operations
                 .claim_pending(pending_operation)
-                .await?;
+                .await?
+            {
+                CoachReplyClaimResult::Claimed(operation) => operation,
+                CoachReplyClaimResult::Existing(existing) => {
+                    if existing.status == CoachReplyOperationStatus::Completed {
+                        let coach_message_id = existing.coach_message_id.ok_or_else(|| {
+                            WorkoutSummaryError::Repository(
+                                "completed coach reply operation missing coach message id"
+                                    .to_string(),
+                            )
+                        })?;
+                        let coach_message = service
+                            .get_message_by_id(&user_id, &workout_id, &coach_message_id)
+                            .await?;
+                        let summary = service.get_existing_summary(&user_id, &workout_id).await?;
+
+                        return Ok(CoachReply {
+                            summary,
+                            coach_message,
+                        });
+                    }
+
+                    return Err(WorkoutSummaryError::Repository(
+                        "coach reply generation already pending for this user message".to_string(),
+                    ));
+                }
+            };
 
             let llm_response = match service
                 .coach
-                .reply(&user_id, &summary, &user_message_content)
+                .reply(&user_id, &summary, &user_message.content)
                 .await
             {
                 Ok(response) => response,
@@ -455,7 +474,7 @@ where
                     let failed =
                         operation.mark_failed(error.to_string(), service.clock.now_epoch_seconds());
                     service.reply_operations.upsert(failed).await?;
-                    return Err(WorkoutSummaryError::Llm(error.to_string()));
+                    return Err(WorkoutSummaryError::Llm(error));
                 }
             };
 

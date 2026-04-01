@@ -9,8 +9,8 @@ use aiwattcoach::{
         identity::{Clock, IdGenerator},
         llm::LlmChatPort,
         workout_summary::{
-            BoxFuture, CoachReplyOperation, CoachReplyOperationRepository, ConversationMessage,
-            MessageRole, WorkoutCoach, WorkoutSummary, WorkoutSummaryError,
+            BoxFuture, CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
+            ConversationMessage, MessageRole, WorkoutCoach, WorkoutSummary, WorkoutSummaryError,
             WorkoutSummaryRepository, WorkoutSummaryService,
         },
     },
@@ -255,7 +255,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     fn claim_pending(
         &self,
         operation: CoachReplyOperation,
-    ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+    ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         let operations = self.operations.clone();
         let calls = self.calls.clone();
         Box::pin(async move {
@@ -263,15 +263,18 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
                 "claim_pending:{}:{}",
                 operation.workout_id, operation.user_message_id
             ));
-            operations.lock().unwrap().insert(
-                (
-                    operation.user_id.clone(),
-                    operation.workout_id.clone(),
-                    operation.user_message_id.clone(),
-                ),
-                operation.clone(),
+            let key = (
+                operation.user_id.clone(),
+                operation.workout_id.clone(),
+                operation.user_message_id.clone(),
             );
-            Ok(operation)
+            let mut operations = operations.lock().unwrap();
+            if let Some(existing) = operations.get(&key).cloned() {
+                return Ok(CoachReplyClaimResult::Existing(existing));
+            }
+
+            operations.insert(key, operation.clone());
+            Ok(CoachReplyClaimResult::Claimed(operation))
         })
     }
 

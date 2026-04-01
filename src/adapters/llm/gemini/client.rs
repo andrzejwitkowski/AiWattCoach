@@ -41,10 +41,14 @@ impl LlmChatPort for GeminiClient {
         let base_url = self.base_url.clone();
 
         Box::pin(async move {
-            let mut provider_cache_id = None;
+            let mut provider_cache_id = request.reusable_cache_id.clone();
             let mut cache_expires_at_epoch_seconds = None;
 
-            if request.reusable_cache_id.is_none() {
+            let can_create_cache = request.reusable_cache_id.is_none()
+                && request.cache_scope_key.is_some()
+                && request.cache_key.is_some();
+
+            if can_create_cache {
                 if let Some(cache_request) = mapping::map_create_cache_request(&config, &request) {
                     let cache_response = client
                         .post(format!(
@@ -54,7 +58,7 @@ impl LlmChatPort for GeminiClient {
                         .json(&cache_request)
                         .send()
                         .await
-                        .map_err(|error| LlmError::Transport(error.to_string()))?;
+                        .map_err(|error| LlmError::Transport(error.without_url().to_string()))?;
 
                     if cache_response.status().is_success() {
                         let cache: GeminiCachedContentResponse = cache_response
@@ -79,7 +83,7 @@ impl LlmChatPort for GeminiClient {
                 .json(&payload)
                 .send()
                 .await
-                .map_err(|error| LlmError::Transport(error.to_string()))?;
+                .map_err(|error| LlmError::Transport(error.without_url().to_string()))?;
 
             let status = response.status();
             if !status.is_success() {

@@ -447,6 +447,10 @@ async fn update_ai_agents_supports_openrouter_provider_and_model() {
         ai_agents.get("selectedModel").unwrap().as_str().unwrap(),
         "openai/gpt-4o-mini"
     );
+    assert_eq!(
+        ai_agents.get("openrouterApiKey").unwrap().as_str().unwrap(),
+        "***...3456"
+    );
 }
 
 #[tokio::test]
@@ -550,6 +554,130 @@ async fn test_ai_agents_connection_returns_bad_request_for_provider_error() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_ai_agents_connection_returns_service_unavailable_for_timeout() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_err(
+            aiwattcoach::domain::llm::LlmError::Transport(
+                "LLM request timed out after 180 seconds".to_string(),
+            ),
+        ))),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openaiApiKey": "sk-test-key",
+        "selectedProvider": "openai",
+        "selectedModel": "o1-mini"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    let response_body: Value = get_json(response).await;
+    assert_eq!(
+        response_body.get("message").unwrap().as_str().unwrap(),
+        "LLM request timed out after 180 seconds"
+    );
+}
+
+#[tokio::test]
+async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_without_model() {
+    let mut existing_settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    existing_settings.ai_agents = aiwattcoach::domain::settings::AiAgentsConfig {
+        openai_api_key: Some("sk-existing-openai".to_string()),
+        gemini_api_key: None,
+        openrouter_api_key: Some("or-existing-openrouter".to_string()),
+        selected_provider: Some(aiwattcoach::domain::llm::LlmProvider::OpenAi),
+        selected_model: Some("gpt-4o-mini".to_string()),
+    };
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(existing_settings),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_ok())),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "selectedProvider": "openrouter"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let response_body: Value = get_json(response).await;
+    assert_eq!(
+        response_body.get("message").unwrap().as_str().unwrap(),
+        "Provider, model, and matching API key are required."
+    );
+    assert!(!response_body
+        .get("usedSavedProvider")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert!(!response_body
+        .get("usedSavedModel")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+}
+
+#[tokio::test]
+async fn test_ai_agents_connection_requires_authentication() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_ok())),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 use aiwattcoach::domain::settings::UserSettings;

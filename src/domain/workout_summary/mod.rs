@@ -5,7 +5,7 @@ mod service;
 
 pub use coach::{MockWorkoutCoach, WorkoutCoach};
 pub use model::{
-    validate_message_content, validate_rpe, CoachReply, CoachReplyOperation,
+    validate_message_content, validate_rpe, CoachReply, CoachReplyClaimResult, CoachReplyOperation,
     CoachReplyOperationStatus, CompletedCoachReply, ConversationMessage, MessageRole,
     PersistedUserMessage, SendMessageResult, WorkoutSummary, WorkoutSummaryError,
 };

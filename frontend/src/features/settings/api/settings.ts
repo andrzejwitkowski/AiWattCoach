@@ -9,6 +9,36 @@ import {
   testIntervalsConnectionResponseSchema,
 } from '../types';
 
+function trimToUndefined(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeAiAgentsPayload(data: unknown) {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+
+  const candidate = data as Record<string, unknown>;
+  return {
+    ...candidate,
+    openaiApiKey:
+      typeof candidate.openaiApiKey === 'string' ? candidate.openaiApiKey.trim() : candidate.openaiApiKey,
+    geminiApiKey:
+      typeof candidate.geminiApiKey === 'string' ? candidate.geminiApiKey.trim() : candidate.geminiApiKey,
+    openrouterApiKey:
+      typeof candidate.openrouterApiKey === 'string'
+        ? candidate.openrouterApiKey.trim()
+        : candidate.openrouterApiKey,
+    selectedProvider:
+      typeof candidate.selectedProvider === 'string'
+        ? candidate.selectedProvider.trim()
+        : candidate.selectedProvider,
+    selectedModel:
+      typeof candidate.selectedModel === 'string' ? candidate.selectedModel.trim() : candidate.selectedModel,
+  };
+}
+
 export async function loadSettings(apiBaseUrl: string) {
   try {
     const data = await get(apiBaseUrl, '/api/settings');
@@ -22,28 +52,28 @@ export async function loadSettings(apiBaseUrl: string) {
 }
 
 export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
-  const validated = updateAiAgentsRequestSchema.parse(data);
+  const validated = updateAiAgentsRequestSchema.parse(normalizeAiAgentsPayload(data));
   const trimmed = {
-    openaiApiKey: validated.openaiApiKey?.trim() ?? undefined,
-    geminiApiKey: validated.geminiApiKey?.trim() ?? undefined,
-    openrouterApiKey: validated.openrouterApiKey?.trim() ?? undefined,
-    selectedProvider: validated.selectedProvider?.trim() ?? undefined,
-    selectedModel: validated.selectedModel?.trim() ?? undefined,
+    openaiApiKey: trimToUndefined(validated.openaiApiKey),
+    geminiApiKey: trimToUndefined(validated.geminiApiKey),
+    openrouterApiKey: trimToUndefined(validated.openrouterApiKey),
+    selectedProvider: trimToUndefined(validated.selectedProvider),
+    selectedModel: trimToUndefined(validated.selectedModel),
   };
   return patch(apiBaseUrl, '/api/settings/ai-agents', trimmed);
 }
 
 export async function testAiAgentsConnection(apiBaseUrl: string, data: unknown) {
-  const validated = updateAiAgentsRequestSchema.parse(data);
+  const validated = updateAiAgentsRequestSchema.parse(normalizeAiAgentsPayload(data));
   const body = {
-    openaiApiKey: validated.openaiApiKey?.trim() ?? undefined,
-    geminiApiKey: validated.geminiApiKey?.trim() ?? undefined,
-    openrouterApiKey: validated.openrouterApiKey?.trim() ?? undefined,
-    selectedProvider: validated.selectedProvider?.trim() ?? undefined,
-    selectedModel: validated.selectedModel?.trim() ?? undefined,
+    openaiApiKey: trimToUndefined(validated.openaiApiKey),
+    geminiApiKey: trimToUndefined(validated.geminiApiKey),
+    openrouterApiKey: trimToUndefined(validated.openrouterApiKey),
+    selectedProvider: trimToUndefined(validated.selectedProvider),
+    selectedModel: trimToUndefined(validated.selectedModel),
   };
   const parsed = await post<typeof body, unknown>(apiBaseUrl, '/api/settings/ai-agents/test', body, {
-    allowStatuses: [400, 503],
+    allowedErrorStatuses: [400, 503],
   });
   return testAiAgentsConnectionResponseSchema.parse(parsed);
 }
@@ -64,7 +94,7 @@ export async function testIntervalsConnection(apiBaseUrl: string, data: unknown)
     athleteId: validated.athleteId?.trim() || undefined,
   };
   const parsed = await post<typeof body, unknown>(apiBaseUrl, '/api/settings/intervals/test', body, {
-    allowStatuses: [400, 503],
+    allowedErrorStatuses: [400, 503],
   });
   return testIntervalsConnectionResponseSchema.parse(parsed);
 }

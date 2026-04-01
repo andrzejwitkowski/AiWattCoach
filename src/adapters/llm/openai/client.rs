@@ -45,7 +45,7 @@ impl LlmChatPort for OpenAiClient {
                 .json(&payload)
                 .send()
                 .await
-                .map_err(|error| LlmError::Transport(error.to_string()))?;
+                .map_err(|error| LlmError::Transport(error.without_url().to_string()))?;
 
             let status = response.status();
             if !status.is_success() {
