@@ -280,7 +280,7 @@ describe('useCoachChat', () => {
   });
 
   it('ignores stale save results after switching workouts', async () => {
-    let resolveSave: ((value: typeof summaryFixture) => void) | undefined;
+    let resolveSave: ((value: Awaited<ReturnType<typeof saveWorkoutSummary>>) => void) | undefined;
 
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary)
