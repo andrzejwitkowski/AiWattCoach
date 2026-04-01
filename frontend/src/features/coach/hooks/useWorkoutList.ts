@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { listActivities, listEvents } from '../../intervals/api/intervals';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
-import { addDays, addWeeks, extractDateKey, formatDateRange, getMondayOfWeek } from '../../calendar/utils/dateUtils';
+import { addDays, addWeeks, extractDateKey, formatDateRange, getMondayOfWeek, toDateKey } from '../../calendar/utils/dateUtils';
 import { listWorkoutSummaries } from '../api/workoutSummary';
 import type { CoachWorkoutListItem, WorkoutSummary } from '../types';
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
@@ -25,6 +25,7 @@ type UseWorkoutListResult = {
   goToOlderWeek: () => void;
   goToNewerWeek: () => void;
   refresh: () => Promise<void>;
+  replaceSummary: (summary: WorkoutSummary) => void;
 };
 
 function formatRangeLabel(startDate: Date, endDate: Date): string {
@@ -122,7 +123,27 @@ function buildWorkoutItems(
   const matchedEventIds = new Set<number>();
   const activityEventMatches = new Map<string, IntervalEvent>();
 
+  for (const activity of activitiesSorted) {
+    const hintedEventId = inferEventIdHint(activity);
+    if (!hintedEventId) {
+      continue;
+    }
+
+    const hintedEvent = eventsSorted.find((event) => String(event.id) === hintedEventId);
+    if (!hintedEvent || matchedActivityIds.has(activity.id) || matchedEventIds.has(hintedEvent.id)) {
+      continue;
+    }
+
+    matchedActivityIds.add(activity.id);
+    matchedEventIds.add(hintedEvent.id);
+    activityEventMatches.set(activity.id, hintedEvent);
+  }
+
   for (const event of eventsSorted) {
+    if (matchedEventIds.has(event.id)) {
+      continue;
+    }
+
     const dateKey = extractDateKey(event.startDateLocal);
     const candidates = (activitiesByDate.get(dateKey) ?? []).filter((activity) => !matchedActivityIds.has(activity.id));
     const matchedActivity = chooseMatchedActivity(
@@ -142,11 +163,7 @@ function buildWorkoutItems(
   }
 
   const items: CoachWorkoutListItem[] = activitiesSorted.map((activity) => {
-    const hintedEventId = inferEventIdHint(activity);
-    const hintedEvent = hintedEventId
-      ? eventsSorted.find((event) => String(event.id) === hintedEventId) ?? null
-      : null;
-    const matchedEvent = activityEventMatches.get(activity.id) ?? hintedEvent;
+    const matchedEvent = activityEventMatches.get(activity.id) ?? null;
     const summary = chooseSummary(
       [summariesById.get(activity.id), matchedEvent ? summariesById.get(String(matchedEvent.id)) : undefined].filter(
         (value): value is WorkoutSummary => value !== undefined,
@@ -187,20 +204,65 @@ function buildWorkoutItems(
   return items.sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal));
 }
 
+function isSameDay(left: Date, right: Date): boolean {
+  return left.getTime() === right.getTime();
+}
+
+function isWithinWeek(value: string, weekStart: Date): boolean {
+  const weekStartKey = toDateKey(weekStart);
+  const weekEndKey = toDateKey(addDays(weekStart, 6));
+  const dateKey = extractDateKey(value);
+
+  return dateKey >= weekStartKey && dateKey <= weekEndKey;
+}
+
+function applySummaryToItem(item: CoachWorkoutListItem, summary: WorkoutSummary): CoachWorkoutListItem {
+  const hasSummaryMatch = item.id === summary.workoutId
+    || item.summary?.workoutId === summary.workoutId
+    || item.activity?.id === summary.workoutId
+    || String(item.event?.id ?? '') === summary.workoutId;
+
+  if (!hasSummaryMatch) {
+    return item;
+  }
+
+  return {
+    ...item,
+    id: summary.workoutId,
+    summary,
+    hasSummary: true,
+    hasConversation: summary.messages.some((message) => message.role === 'coach'),
+  };
+}
+
+function defaultVisibleWeekStart(items: CoachWorkoutListItem[], currentWeekStart: Date): Date {
+  if (items.some((item) => isWithinWeek(item.startDateLocal, currentWeekStart))) {
+    return currentWeekStart;
+  }
+
+  const newestItem = items[0];
+  return newestItem ? getMondayOfWeek(new Date(newestItem.startDateLocal)) : currentWeekStart;
+}
+
 export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkoutListResult {
-  const currentWeekStart = useMemo(() => getMondayOfWeek(new Date()), []);
-  const [pageIndex, setPageIndex] = useState(0);
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => getMondayOfWeek(new Date()));
+  const [visibleWeekStart, setVisibleWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [allItems, setAllItems] = useState<CoachWorkoutListItem[]>([]);
   const [items, setItems] = useState<CoachWorkoutListItem[]>([]);
   const [state, setState] = useState<WorkoutListState>('loading');
   const [error, setError] = useState<string | null>(null);
+  const currentWeekStartRef = useRef(currentWeekStart);
+  const requestIdRef = useRef(0);
 
   const loadRecentWorkouts = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setState('loading');
     setError(null);
 
     try {
-      const lookbackStart = addWeeks(currentWeekStart, -(WORKOUT_LOOKBACK_WEEKS - 1));
+      const latestCurrentWeekStart = getMondayOfWeek(new Date());
+      const lookbackStart = addWeeks(latestCurrentWeekStart, -(WORKOUT_LOOKBACK_WEEKS - 1));
       const range = formatDateRange(lookbackStart, WORKOUT_LOOKBACK_WEEKS);
       const [events, activities] = await Promise.all([
         listEvents(apiBaseUrl, range),
@@ -221,9 +283,28 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
       );
       const nextItems = buildWorkoutItems(workoutEvents, recentActivities, summaries);
 
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       setAllItems(nextItems);
+      const nextVisibleWeekStart = defaultVisibleWeekStart(nextItems, latestCurrentWeekStart);
+      const previousCurrentWeekStart = currentWeekStartRef.current;
+      currentWeekStartRef.current = latestCurrentWeekStart;
+      setCurrentWeekStart(latestCurrentWeekStart);
+      setVisibleWeekStart((current) => {
+        if (isSameDay(current, previousCurrentWeekStart) || current > latestCurrentWeekStart) {
+          return nextVisibleWeekStart;
+        }
+
+        return current;
+      });
       setState('ready');
     } catch (loadError) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       if (loadError instanceof AuthenticationError) {
         window.location.href = '/';
         return;
@@ -237,33 +318,24 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
       setState('error');
       setError(loadError instanceof Error ? loadError.message : 'Unknown error');
     }
-  }, [apiBaseUrl, currentWeekStart]);
+  }, [apiBaseUrl]);
 
   useEffect(() => {
     void loadRecentWorkouts();
   }, [loadRecentWorkouts]);
 
   useEffect(() => {
-    const maxPageIndex = Math.max(0, Math.ceil(allItems.length / WORKOUT_PAGE_SIZE) - 1);
-    setPageIndex((current) => Math.min(current, maxPageIndex));
-  }, [allItems.length]);
+    setItems(allItems.filter((item) => isWithinWeek(item.startDateLocal, visibleWeekStart)));
+  }, [allItems, visibleWeekStart]);
 
-  useEffect(() => {
-    const start = pageIndex * WORKOUT_PAGE_SIZE;
-    setItems(allItems.slice(start, start + WORKOUT_PAGE_SIZE));
-  }, [allItems, pageIndex]);
-
-  const maxPageIndex = Math.max(0, Math.ceil(allItems.length / WORKOUT_PAGE_SIZE) - 1);
   const weekLabel = useMemo(() => {
-    if (items.length === 0) {
-      return formatRangeLabel(addDays(currentWeekStart, -6), currentWeekStart);
-    }
+    return formatRangeLabel(visibleWeekStart, addDays(visibleWeekStart, 6));
+  }, [visibleWeekStart]);
+  const canGoToNewerWeek = visibleWeekStart < currentWeekStart;
 
-    const startDate = new Date(items[items.length - 1].startDateLocal);
-    const endDate = new Date(items[0].startDateLocal);
-    return formatRangeLabel(startDate, endDate);
-  }, [currentWeekStart, items]);
-  const canGoToNewerWeek = pageIndex > 0;
+  const replaceSummary = useCallback((summary: WorkoutSummary) => {
+    setAllItems((current) => current.map((item) => applySummaryToItem(item, summary)));
+  }, []);
 
   return {
     items,
@@ -272,11 +344,15 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
     weekLabel,
     canGoToNewerWeek,
     goToOlderWeek: () => {
-      setPageIndex((current) => Math.min(current + 1, maxPageIndex));
+      setVisibleWeekStart((current) => addWeeks(current, -1));
     },
     goToNewerWeek: () => {
-      setPageIndex((current) => Math.max(current - 1, 0));
+      setVisibleWeekStart((current) => {
+        const next = addWeeks(current, 1);
+        return next > currentWeekStartRef.current ? currentWeekStartRef.current : next;
+      });
     },
     refresh: loadRecentWorkouts,
+    replaceSummary,
   };
 }

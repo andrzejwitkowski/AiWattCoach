@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntervalEvent } from '../../intervals/types';
@@ -131,7 +131,8 @@ describe('useWorkoutList', () => {
       expect(result.current.state).toBe('ready');
     });
 
-    expect(result.current.items).toHaveLength(7);
+    expect(result.current.weekLabel).toBe('Mar 23 - Mar 29');
+    expect(result.current.items).toHaveLength(2);
     expect(result.current.items[0]?.hasConversation).toBe(true);
   });
 
@@ -154,6 +155,7 @@ describe('useWorkoutList', () => {
       expect(result.current.state).toBe('ready');
     });
 
+    expect(result.current.weekLabel).toBe('Mar 30 - Apr 5');
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0]?.event?.id).toBe(301);
   });
@@ -176,17 +178,127 @@ describe('useWorkoutList', () => {
       expect(result.current.state).toBe('ready');
     });
 
-    expect(result.current.items).toHaveLength(7);
-    expect(result.current.items[0]?.event?.name).toBe('Workout 1');
+    expect(result.current.weekLabel).toBe('Mar 23 - Mar 29');
+    expect(result.current.items).toHaveLength(6);
 
-    result.current.goToOlderWeek();
-
-    await waitFor(() => {
-      expect(result.current.items).toHaveLength(3);
+    act(() => {
+      result.current.goToOlderWeek();
     });
 
-    expect(result.current.items[0]?.event?.name).toBe('Workout 8');
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(4);
+    });
+
+    expect(result.current.weekLabel).toBe('Mar 16 - Mar 22');
+    expect(result.current.items[0]?.event?.name).toBe('Workout 7');
     expect(result.current.canGoToNewerWeek).toBe(true);
+  });
+
+  it('matches hinted activities to their event without leaving duplicates behind', async () => {
+    vi.mocked(listEvents).mockResolvedValue([
+      {
+        ...eventFixture,
+        id: 777,
+        name: 'Hinted Workout',
+        startDateLocal: '2026-03-24T09:00:00',
+      },
+    ]);
+    vi.mocked(listActivities).mockResolvedValue([
+      {
+        ...activityFixture,
+        id: 'activity-777',
+        name: 'Completed Ride',
+        description: 'paired_event_id=777',
+        startDateLocal: '2026-03-24T10:00:00',
+      },
+    ]);
+    vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(result.current.items[0]?.source).toBe('activity');
+    expect(result.current.items[0]?.event?.id).toBe(777);
+  });
+
+  it('keeps only the newest refresh result when loads overlap', async () => {
+    let resolveFirstEvents: ((value: IntervalEvent[]) => void) | undefined;
+    let resolveSecondEvents: ((value: IntervalEvent[]) => void) | undefined;
+
+    vi.mocked(listActivities).mockResolvedValue([]);
+    vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+    vi.mocked(listEvents)
+      .mockImplementationOnce(() => new Promise<IntervalEvent[]>((resolve) => {
+        resolveFirstEvents = resolve;
+      }))
+      .mockImplementationOnce(() => new Promise<IntervalEvent[]>((resolve) => {
+        resolveSecondEvents = resolve;
+      }));
+
+    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+    await act(async () => {
+      const secondRefresh = result.current.refresh();
+      resolveSecondEvents?.([{ ...eventFixture, id: 900, name: 'Newer result', startDateLocal: '2026-03-31T09:00:00' }]);
+      await secondRefresh;
+    });
+
+    await act(async () => {
+      resolveFirstEvents?.([{ ...eventFixture, id: 901, name: 'Older result', startDateLocal: '2026-03-24T09:00:00' }]);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    await waitFor(() => {
+      expect(result.current.items[0]?.event?.name).toBe('Newer result');
+    });
+  });
+
+  it('updates the matching item when a summary changes', async () => {
+    vi.mocked(listActivities).mockResolvedValue([]);
+    vi.mocked(listEvents).mockResolvedValue([
+      {
+        ...eventFixture,
+        id: 101,
+        startDateLocal: '2026-03-24T09:00:00',
+      },
+    ]);
+    vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    act(() => {
+      result.current.replaceSummary({
+        id: 'summary-101',
+        workoutId: '101',
+        rpe: 7,
+        messages: [
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'Great work.',
+            createdAtEpochSeconds: 1,
+          },
+        ],
+        savedAtEpochSeconds: 2,
+        createdAtEpochSeconds: 1,
+        updatedAtEpochSeconds: 2,
+      });
+    });
+
+    expect(result.current.items[0]?.hasSummary).toBe(true);
+    expect(result.current.items[0]?.hasConversation).toBe(true);
+    expect(result.current.items[0]?.summary?.savedAtEpochSeconds).toBe(2);
   });
 
   it('prefers activities and falls back to related event summaries when available', async () => {

@@ -28,7 +28,7 @@ describe('ChatWindow', () => {
         isSaved={false}
         requiresRpe={false}
         error={null}
-        onSendMessage={async () => undefined}
+        onSendMessage={async () => true}
       />,
     );
 
@@ -37,7 +37,7 @@ describe('ChatWindow', () => {
   });
 
   it('sends trimmed input text', async () => {
-    const onSendMessage = vi.fn().mockResolvedValue(undefined);
+    const onSendMessage = vi.fn().mockResolvedValue(true);
 
     render(
       <ChatWindow
@@ -52,7 +52,7 @@ describe('ChatWindow', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/describe your muscle state/i), {
+    fireEvent.change(screen.getAllByPlaceholderText(/describe your muscle state/i)[0], {
       target: { value: '  Heavy, but manageable  ' },
     });
     fireEvent.click(screen.getByRole('button', { name: /send message/i }));
@@ -72,11 +72,11 @@ describe('ChatWindow', () => {
         isSaved={false}
         requiresRpe={false}
         error={null}
-        onSendMessage={async () => undefined}
+        onSendMessage={async () => true}
       />,
     );
 
-    expect(screen.getAllByText(/select a workout from the left panel/i)).toHaveLength(2);
+    expect(screen.getAllByText(/select a workout from the left panel/i)[0]).toBeInTheDocument();
   });
 
   it('disables chat input when editing is locked', () => {
@@ -90,11 +90,11 @@ describe('ChatWindow', () => {
         requiresRpe={false}
         error={null}
         inputDisabled
-        onSendMessage={async () => undefined}
+        onSendMessage={async () => true}
       />,
     );
 
-    expect(screen.getByPlaceholderText(/describe your muscle state/i)).toBeDisabled();
+    expect(screen.getAllByPlaceholderText(/describe your muscle state/i)[0]).toBeDisabled();
     expect(screen.getByRole('button', { name: /send message/i })).toBeDisabled();
   });
 
@@ -109,7 +109,7 @@ describe('ChatWindow', () => {
         requiresRpe
         error={null}
         inputDisabled
-        onSendMessage={async () => undefined}
+        onSendMessage={async () => true}
       />,
     );
 

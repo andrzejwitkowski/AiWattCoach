@@ -5,6 +5,10 @@ import '../../../i18n';
 import type { CoachWorkoutListItem } from '../types';
 import { WorkoutHistorySidebar } from './WorkoutHistorySidebar';
 
+afterEach(() => {
+  cleanup();
+});
+
 const itemFixture: CoachWorkoutListItem = {
   id: '101',
   source: 'event',
@@ -37,10 +41,6 @@ const itemFixture: CoachWorkoutListItem = {
   hasSummary: false,
   hasConversation: false,
 };
-
-afterEach(() => {
-  cleanup();
-});
 
 describe('WorkoutHistorySidebar', () => {
   it('renders workout items and emits selection', () => {

@@ -15,7 +15,7 @@ fn activity_document_bson_round_trip_preserves_enriched_completed_fields() {
         user_id: "user-1".to_string(),
         activity_id: payload.id.clone(),
         start_date_local: payload.start_date_local.clone(),
-        event_id_hint: None,
+        event_id_hint: Some("1234".to_string()),
         external_id_normalized: Some("external-i78".to_string()),
         fallback_identity_v1: Some("v1:2026-03-22T08:00|ride|3720|40200|false".to_string()),
         payload: payload.clone(),
@@ -27,6 +27,7 @@ fn activity_document_bson_round_trip_preserves_enriched_completed_fields() {
     assert_eq!(restored.user_id, document.user_id);
     assert_eq!(restored.activity_id, document.activity_id);
     assert_eq!(restored.start_date_local, document.start_date_local);
+    assert_eq!(restored.event_id_hint, document.event_id_hint);
     assert_eq!(
         restored.external_id_normalized,
         document.external_id_normalized
@@ -251,6 +252,25 @@ fn normalize_activity_document_keeps_clean_document_unchanged() {
     let normalized_document = normalize_activity_document(document.clone());
 
     assert_eq!(normalized_document, document);
+}
+
+#[test]
+fn infer_event_id_hint_checks_description_after_non_matching_external_id() {
+    let mut payload = enriched_activity();
+    payload.external_id = Some("garmin-upload".to_string());
+    payload.description = Some("paired_event_id=4321 completed ride".to_string());
+
+    let normalized_document = normalize_activity_document(ActivityDocument {
+        user_id: "user-1".to_string(),
+        activity_id: payload.id.clone(),
+        start_date_local: payload.start_date_local.clone(),
+        event_id_hint: None,
+        external_id_normalized: None,
+        fallback_identity_v1: None,
+        payload,
+    });
+
+    assert_eq!(normalized_document.event_id_hint.as_deref(), Some("4321"));
 }
 
 fn sparse_activity_stub(id: &str) -> Activity {

@@ -14,7 +14,7 @@ type ChatWindowProps = {
   requiresRpe?: boolean;
   error: string | null;
   inputDisabled?: boolean;
-  onSendMessage: (content: string) => Promise<void>;
+  onSendMessage: (content: string) => Promise<boolean>;
 };
 
 export function ChatWindow({

@@ -10,11 +10,16 @@ type WorkoutHistoryItemProps = {
 };
 
 function formatDateLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(value));
+  }).format(date);
 }
 
 export function WorkoutHistoryItem({ item, isSelected, onSelect }: WorkoutHistoryItemProps) {

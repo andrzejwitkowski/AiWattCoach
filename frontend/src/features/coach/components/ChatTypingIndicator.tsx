@@ -9,9 +9,9 @@ export function ChatTypingIndicator() {
         <div className="flex items-center gap-3">
           <span>{t('coach.coachTyping')}</span>
           <span className="flex gap-1">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-300" />
-            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-300 [animation-delay:150ms]" />
-            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-300 [animation-delay:300ms]" />
+            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-300 motion-reduce:animate-none" />
+            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-300 motion-reduce:animate-none [animation-delay:150ms]" />
+            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-300 motion-reduce:animate-none [animation-delay:300ms]" />
           </span>
         </div>
       </div>

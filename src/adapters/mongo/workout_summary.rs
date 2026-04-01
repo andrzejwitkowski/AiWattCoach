@@ -25,6 +25,7 @@ struct WorkoutSummaryDocument {
     id: Option<ObjectId>,
     summary_id: String,
     user_id: String,
+    #[serde(alias = "event_id")]
     workout_id: String,
     rpe: Option<i32>,
     messages: Vec<ConversationMessageDocument>,
@@ -139,7 +140,11 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         Box::pin(async move {
             let result = collection
                 .update_one(
-                    doc! { "user_id": &user_id, "workout_id": &workout_id },
+                    doc! {
+                        "user_id": &user_id,
+                        "workout_id": &workout_id,
+                        "saved_at_epoch_seconds": null,
+                    },
                     doc! {
                         "$set": {
                             "rpe": i32::from(rpe),
@@ -151,7 +156,18 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
             if result.matched_count == 0 {
-                return Err(WorkoutSummaryError::NotFound);
+                let existing = collection
+                    .find_one(doc! { "user_id": &user_id, "workout_id": &workout_id })
+                    .await
+                    .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+
+                return match existing {
+                    Some(document) if document.saved_at_epoch_seconds.is_some() => {
+                        Err(WorkoutSummaryError::Locked)
+                    }
+                    Some(_) => Err(WorkoutSummaryError::NotFound),
+                    None => Err(WorkoutSummaryError::NotFound),
+                };
             }
 
             Ok(())
@@ -172,7 +188,11 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         Box::pin(async move {
             let result = collection
                 .update_one(
-                    doc! { "user_id": &user_id, "workout_id": &workout_id },
+                    doc! {
+                        "user_id": &user_id,
+                        "workout_id": &workout_id,
+                        "saved_at_epoch_seconds": null,
+                    },
                     doc! {
                         "$push": { "messages": mongodb::bson::to_bson(&message).map_err(|error| WorkoutSummaryError::Repository(error.to_string()))? },
                         "$set": { "updated_at_epoch_seconds": updated_at_epoch_seconds },
@@ -182,7 +202,18 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
             if result.matched_count == 0 {
-                return Err(WorkoutSummaryError::NotFound);
+                let existing = collection
+                    .find_one(doc! { "user_id": &user_id, "workout_id": &workout_id })
+                    .await
+                    .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+
+                return match existing {
+                    Some(document) if document.saved_at_epoch_seconds.is_some() => {
+                        Err(WorkoutSummaryError::Locked)
+                    }
+                    Some(_) => Err(WorkoutSummaryError::NotFound),
+                    None => Err(WorkoutSummaryError::NotFound),
+                };
             }
 
             Ok(())
@@ -304,6 +335,8 @@ fn map_rpe_to_domain(value: i32) -> Result<u8, WorkoutSummaryError> {
 
 #[cfg(test)]
 mod tests {
+    use mongodb::bson::{doc, from_document, Bson};
+
     use super::{map_document_to_domain, ConversationMessageDocument, WorkoutSummaryDocument};
     use crate::domain::workout_summary::WorkoutSummaryError;
 
@@ -326,5 +359,22 @@ mod tests {
             error,
             WorkoutSummaryError::Repository("invalid workout summary rpe: 300".to_string())
         );
+    }
+
+    #[test]
+    fn workout_summary_document_accepts_legacy_event_id_field() {
+        let document: WorkoutSummaryDocument = from_document(doc! {
+            "summary_id": "summary-1",
+            "user_id": "user-1",
+            "event_id": "workout-legacy",
+            "rpe": 6,
+            "messages": [],
+            "saved_at_epoch_seconds": Bson::Null,
+            "created_at_epoch_seconds": 1,
+            "updated_at_epoch_seconds": 1,
+        })
+        .expect("legacy event_id should deserialize");
+
+        assert_eq!(document.workout_id, "workout-legacy");
     }
 }

@@ -9,7 +9,7 @@ import {
   saveWorkoutSummary,
   updateWorkoutSummaryRpe,
 } from '../api/workoutSummary';
-import { useCoachChat } from './useCoachChat';
+import { buildWorkoutSummaryWebSocketUrl, useCoachChat } from './useCoachChat';
 
 vi.mock('../api/workoutSummary', () => ({
   createWorkoutSummary: vi.fn(),
@@ -117,6 +117,32 @@ describe('useCoachChat', () => {
     );
   });
 
+  it('loads existing summary after create conflict', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary)
+      .mockRejectedValueOnce(new HttpError(404, 'not found'))
+      .mockResolvedValueOnce({ ...summaryFixture, rpe: 5 });
+    vi.mocked(createWorkoutSummary).mockRejectedValue(new HttpError(409, 'conflict'));
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    act(() => {
+      result.current.setDraftRpe(5);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Legs felt strong');
+    });
+
+    expect(createWorkoutSummary).toHaveBeenCalledWith('', '101');
+    expect(getWorkoutSummary).toHaveBeenCalledTimes(2);
+    expect(result.current.summary?.rpe).toBe(5);
+  });
+
   it('does not create chat session before rpe is chosen', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockRejectedValue(new HttpError(404, 'not found'));
@@ -214,5 +240,11 @@ describe('useCoachChat', () => {
     await waitFor(() => {
       expect(window.location.href).toBe('/');
     });
+  });
+
+  it('preserves app path prefixes in websocket urls', () => {
+    expect(buildWorkoutSummaryWebSocketUrl('https://example.com/myapp', '101')).toBe(
+      'wss://example.com/myapp/api/workout-summaries/101/ws',
+    );
   });
 });

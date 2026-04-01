@@ -42,4 +42,41 @@ describe('ConfirmWithoutChatModal', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
+
+  it('disables confirm while saving', () => {
+    const onConfirm = vi.fn();
+
+    render(
+      <ConfirmWithoutChatModal
+        isOpen
+        isSaving
+        onCancel={() => undefined}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    const confirmButton = screen.getByRole('button', { name: /saving/i });
+    fireEvent.click(confirmButton);
+
+    expect(confirmButton).toBeDisabled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('closes on escape', () => {
+    const onCancel = vi.fn();
+
+    render(
+      <ConfirmWithoutChatModal
+        isOpen
+        isSaving={false}
+        onCancel={onCancel}
+        onConfirm={() => undefined}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole('dialog')[0]).toHaveAttribute('aria-modal', 'true');
+  });
 });

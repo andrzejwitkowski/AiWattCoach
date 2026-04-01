@@ -7,10 +7,10 @@ async fn create_summary_is_idempotent_when_summary_already_exists() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let service = test_service(repository.clone());
 
-    let summary = service.create_summary("user-1", "event-1").await.unwrap();
+    let summary = service.create_summary("user-1", "workout-1").await.unwrap();
 
     assert_eq!(summary.id, "summary-1");
-    assert_eq!(summary.workout_id, "event-1");
+    assert_eq!(summary.workout_id, "workout-1");
     assert_eq!(repository.calls(), Vec::<String>::new());
 }
 
@@ -18,7 +18,10 @@ async fn create_summary_is_idempotent_when_summary_already_exists() {
 async fn get_summary_returns_not_found_when_missing() {
     let service = test_service(InMemoryWorkoutSummaryRepository::default());
 
-    let error = service.get_summary("user-1", "event-1").await.unwrap_err();
+    let error = service
+        .get_summary("user-1", "workout-1")
+        .await
+        .unwrap_err();
 
     assert_eq!(error, WorkoutSummaryError::NotFound);
 }
@@ -29,7 +32,7 @@ async fn update_rpe_rejects_values_outside_expected_range() {
     let service = test_service(repository.clone());
 
     let error = service
-        .update_rpe("user-1", "event-1", 11)
+        .update_rpe("user-1", "workout-1", 11)
         .await
         .unwrap_err();
 
@@ -45,12 +48,12 @@ async fn mark_saved_persists_saved_state() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let service = test_service(repository.clone());
 
-    let summary = service.mark_saved("user-1", "event-1").await.unwrap();
+    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
 
     assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
     assert_eq!(
         repository.calls(),
-        vec!["set_saved_state:event-1:Some(1700000000)".to_string()]
+        vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]
     );
 }
 
@@ -62,7 +65,7 @@ async fn update_rpe_rejects_saved_summary() {
     let service = test_service(repository.clone());
 
     let error = service
-        .update_rpe("user-1", "event-1", 8)
+        .update_rpe("user-1", "workout-1", 8)
         .await
         .unwrap_err();
 
@@ -77,13 +80,24 @@ async fn reopen_summary_clears_saved_state() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let service = test_service(repository.clone());
 
-    let summary = service.reopen_summary("user-1", "event-1").await.unwrap();
+    let summary = service.reopen_summary("user-1", "workout-1").await.unwrap();
 
     assert_eq!(summary.saved_at_epoch_seconds, None);
     assert_eq!(
         repository.calls(),
-        vec!["set_saved_state:event-1:None".to_string()]
+        vec!["set_saved_state:workout-1:None".to_string()]
     );
+}
+
+#[tokio::test]
+async fn reopen_summary_is_a_no_op_when_already_editable() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let service = test_service(repository.clone());
+
+    let summary = service.reopen_summary("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(summary.saved_at_epoch_seconds, None);
+    assert_eq!(repository.calls(), Vec::<String>::new());
 }
 
 #[tokio::test]
@@ -93,7 +107,7 @@ async fn mark_saved_requires_rpe() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let service = test_service(repository.clone());
 
-    let error = service.mark_saved("user-1", "event-1").await.unwrap_err();
+    let error = service.mark_saved("user-1", "workout-1").await.unwrap_err();
 
     assert_eq!(
         error,

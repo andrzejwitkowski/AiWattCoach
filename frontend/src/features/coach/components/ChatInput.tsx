@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 type ChatInputProps = {
   disabled?: boolean;
-  onSend: (content: string) => Promise<void>;
+  onSend: (content: string) => Promise<boolean>;
 };
 
 export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
@@ -18,8 +18,10 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
       return;
     }
 
-    setValue('');
-    await onSend(trimmed);
+    const wasSent = await onSend(trimmed);
+    if (wasSent) {
+      setValue('');
+    }
   }
 
   return (

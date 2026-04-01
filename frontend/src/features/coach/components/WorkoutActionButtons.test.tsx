@@ -31,17 +31,23 @@ describe('WorkoutActionButtons', () => {
   });
 
   it('disables save until rpe is selected', () => {
+    const onSave = vi.fn();
+
     render(
       <WorkoutActionButtons
         disabled={false}
         isSaving={false}
         isEditing={true}
         canSave={false}
-        onSave={() => undefined}
+        onSave={onSave}
         onEdit={() => undefined}
       />,
     );
 
-    expect(screen.getByRole('button', { name: /save as workout summary/i })).toBeDisabled();
+    const saveButton = screen.getByRole('button', { name: /save as workout summary/i });
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.click(saveButton);
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

@@ -201,7 +201,7 @@ pub(crate) fn existing_summary() -> WorkoutSummary {
     WorkoutSummary {
         id: "summary-1".to_string(),
         user_id: "user-1".to_string(),
-        workout_id: "event-1".to_string(),
+        workout_id: "workout-1".to_string(),
         rpe: Some(6),
         messages: Vec::new(),
         saved_at_epoch_seconds: None,

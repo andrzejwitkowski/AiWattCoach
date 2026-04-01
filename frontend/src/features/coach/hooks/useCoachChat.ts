@@ -32,13 +32,14 @@ type UseCoachChatResult = {
   hasConversation: boolean;
   isSaved: boolean;
   setDraftRpe: (rpe: number) => void;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string) => Promise<boolean>;
   saveSummary: () => Promise<WorkoutSummary | null>;
   reopenSummary: () => Promise<WorkoutSummary | null>;
 };
 
 type PendingSocketState = {
   workoutId: string;
+  socket: WebSocket;
   promise: Promise<WebSocket>;
 };
 
@@ -57,7 +58,11 @@ export function buildWorkoutSummaryWebSocketUrl(apiBaseUrl: string, workoutId: s
     return `${buildProtocol(window.location.protocol)}//${window.location.host}${apiBaseUrl}${path}`;
   }
 
-  const url = new URL(path, apiBaseUrl.endsWith('/') ? apiBaseUrl : `${apiBaseUrl}/`);
+  const url = new URL(apiBaseUrl);
+  const normalizedBasePath = url.pathname.endsWith('/')
+    ? url.pathname.slice(0, -1)
+    : url.pathname;
+  url.pathname = `${normalizedBasePath}${path}`;
   url.protocol = buildProtocol(url.protocol);
   return url.toString();
 }
@@ -81,6 +86,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
   const [isCoachTyping, setIsCoachTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const socketWorkoutIdRef = useRef<string | null>(null);
   const pendingSocketRef = useRef<PendingSocketState | null>(null);
 
   const handleSetDraftRpe = useCallback((rpe: number) => {
@@ -89,12 +95,16 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
   }, []);
 
   const closeSocket = useCallback(() => {
+    const pendingSocket = pendingSocketRef.current;
     pendingSocketRef.current = null;
+    pendingSocket?.socket.close();
 
     if (socketRef.current) {
       socketRef.current.close();
       socketRef.current = null;
     }
+
+    socketWorkoutIdRef.current = null;
 
     setIsConnected(false);
     setIsCoachTyping(false);
@@ -134,6 +144,23 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
 
   const connectSocket = useCallback(async (currentWorkoutId: string) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      if (socketWorkoutIdRef.current === currentWorkoutId) {
+        return socketRef.current;
+      }
+
+      socketRef.current.close();
+      socketRef.current = null;
+      socketWorkoutIdRef.current = null;
+      setIsConnected(false);
+      setIsCoachTyping(false);
+    }
+
+    if (pendingSocketRef.current && pendingSocketRef.current.workoutId !== currentWorkoutId) {
+      pendingSocketRef.current.socket.close();
+      pendingSocketRef.current = null;
+    }
+
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       return socketRef.current;
     }
 
@@ -141,11 +168,20 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
       return pendingSocketRef.current.promise;
     }
 
-    const socketPromise = new Promise<WebSocket>((resolve, reject) => {
-      const socket = new WebSocket(buildWorkoutSummaryWebSocketUrl(apiBaseUrl, currentWorkoutId));
+    setError(null);
 
+    const socket = new WebSocket(buildWorkoutSummaryWebSocketUrl(apiBaseUrl, currentWorkoutId));
+
+    const socketPromise = new Promise<WebSocket>((resolve, reject) => {
       socket.addEventListener('open', () => {
+        if (pendingSocketRef.current?.socket !== socket || pendingSocketRef.current?.workoutId !== currentWorkoutId) {
+          socket.close();
+          reject(new Error('WebSocket connection no longer needed'));
+          return;
+        }
+
         socketRef.current = socket;
+        socketWorkoutIdRef.current = currentWorkoutId;
         setIsConnected(true);
         resolve(socket);
       }, { once: true });
@@ -178,12 +214,23 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
       socket.addEventListener('close', () => {
         if (socketRef.current === socket) {
           socketRef.current = null;
+          socketWorkoutIdRef.current = null;
+          setIsConnected(false);
         }
-        setIsConnected(false);
+        if (pendingSocketRef.current?.socket === socket) {
+          pendingSocketRef.current = null;
+        }
         setIsCoachTyping(false);
       });
 
       socket.addEventListener('error', () => {
+        if (pendingSocketRef.current?.socket === socket) {
+          pendingSocketRef.current = null;
+        }
+        if (socketRef.current === socket) {
+          socketRef.current = null;
+          socketWorkoutIdRef.current = null;
+        }
         setError('Unable to connect to the coach chat right now.');
         setIsConnected(false);
         setIsCoachTyping(false);
@@ -191,7 +238,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
       }, { once: true });
     });
 
-    pendingSocketRef.current = { workoutId: currentWorkoutId, promise: socketPromise };
+    pendingSocketRef.current = { workoutId: currentWorkoutId, socket, promise: socketPromise };
 
     try {
       return await socketPromise;
@@ -331,16 +378,16 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     const trimmed = content.trim();
 
     if (!trimmed || !workoutId) {
-      return;
+      return false;
     }
 
     if (draftRpe === null) {
-      return;
+      return false;
     }
 
-    if (summary?.savedAtEpochSeconds) {
+    if (summary?.savedAtEpochSeconds != null) {
       setError('This summary is saved. Click Edit to continue coaching.');
-      return;
+      return false;
     }
 
     setError(null);
@@ -359,13 +406,15 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
       const payload = clientWsMessageSchema.parse({ type: 'send_message', content: trimmed });
       socket.send(JSON.stringify(payload));
       setMessages((current) => [...current, temporaryMessage(trimmed)]);
+      return true;
     } catch (sendError) {
       if (sendError instanceof AuthenticationError) {
         window.location.href = '/';
-        return;
+        return false;
       }
 
       setError(sendError instanceof Error ? sendError.message : 'Unable to send your message.');
+      return false;
     }
   }, [apiBaseUrl, connectSocket, draftRpe, ensureSummaryExists, summary?.savedAtEpochSeconds, workoutId]);
 

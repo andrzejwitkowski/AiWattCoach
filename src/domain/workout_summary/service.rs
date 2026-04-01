@@ -297,7 +297,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
-            service.get_existing_summary(&user_id, &workout_id).await?;
+            let existing = service.get_existing_summary(&user_id, &workout_id).await?;
+            if existing.saved_at_epoch_seconds.is_none() {
+                return Ok(existing);
+            }
             let now = service.clock.now_epoch_seconds();
             service
                 .repository

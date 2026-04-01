@@ -49,10 +49,10 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   }, [selectedItem?.summary?.savedAtEpochSeconds, selectedWorkoutId]);
 
   useEffect(() => {
-    if (chat.summary?.updatedAtEpochSeconds) {
-      void workoutList.refresh();
+    if (chat.summary) {
+      workoutList.replaceSummary(chat.summary);
     }
-  }, [chat.summary?.updatedAtEpochSeconds, workoutList.refresh]);
+  }, [chat.summary, workoutList.replaceSummary]);
 
   async function handleSave() {
     if (chat.draftRpe === null) {
@@ -62,6 +62,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     const result = await chat.saveSummary();
 
     if (result) {
+      workoutList.replaceSummary(result);
       setIsEditing(false);
       setShowConfirmWithoutChat(false);
       await workoutList.refresh();
@@ -130,6 +131,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
                   void (async () => {
                     const result = await chat.reopenSummary();
                     if (result) {
+                      workoutList.replaceSummary(result);
                       setIsEditing(true);
                       await workoutList.refresh();
                     }
@@ -137,6 +139,14 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
                 }}
               />
             </>
+          ) : workoutList.state === 'credentials-required' ? (
+            <div className="glass-panel rounded-2xl border border-amber-300/20 bg-amber-300/10 p-10 text-center text-amber-100">
+              {t('calendar.connectionRequired')}
+            </div>
+          ) : workoutList.state === 'error' ? (
+            <div className="glass-panel rounded-2xl border border-red-400/25 bg-red-500/10 p-10 text-center text-red-200">
+              {workoutList.error ?? t('coach.loadingError')}
+            </div>
           ) : workoutList.state === 'ready' ? (
             <EmptyWorkoutState />
           ) : (

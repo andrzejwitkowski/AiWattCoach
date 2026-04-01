@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type ConfirmWithoutChatModalProps = {
@@ -15,14 +16,36 @@ export function ConfirmWithoutChatModal({
 }: ConfirmWithoutChatModalProps) {
   const { t } = useTranslation();
 
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onCancel();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onCancel]);
+
   if (!isOpen) {
     return null;
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#070b12]/80 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111417] p-6 shadow-2xl">
-        <h2 className="text-2xl font-bold text-white">{t('coach.confirmWithoutChatTitle')}</h2>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-without-chat-title"
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111417] p-6 shadow-2xl"
+      >
+        <h2 id="confirm-without-chat-title" className="text-2xl font-bold text-white">{t('coach.confirmWithoutChatTitle')}</h2>
         <p className="mt-3 text-sm leading-6 text-slate-300">{t('coach.confirmWithoutChatBody')}</p>
         <div className="mt-6 flex gap-3">
           <button

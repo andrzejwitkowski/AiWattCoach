@@ -283,24 +283,30 @@ fn build_activity_document(user_id: &str, activity: Activity) -> ActivityDocumen
 }
 
 fn infer_event_id_hint(activity: &Activity) -> Option<String> {
-    let raw = activity
-        .external_id
-        .as_deref()
-        .or(activity.description.as_deref())
-        .or(activity.name.as_deref())?;
-
     let marker = "paired_event_id=";
-    let start = raw.find(marker)? + marker.len();
-    let digits = raw[start..]
-        .chars()
-        .take_while(|character| character.is_ascii_digit())
-        .collect::<String>();
 
-    if digits.is_empty() {
-        None
-    } else {
-        Some(digits)
+    for raw in [
+        activity.external_id.as_deref(),
+        activity.description.as_deref(),
+        activity.name.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let Some(start) = raw.find(marker).map(|index| index + marker.len()) else {
+            continue;
+        };
+        let digits = raw[start..]
+            .chars()
+            .take_while(|character| character.is_ascii_digit())
+            .collect::<String>();
+
+        if !digits.is_empty() {
+            return Some(digits);
+        }
     }
+
+    None
 }
 
 fn should_store_stream_type(stream_type: &str) -> bool {
