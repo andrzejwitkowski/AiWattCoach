@@ -227,8 +227,9 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 .unwrap()
                 .push(content.clone());
 
+            let next_user_message_id = format!("message-user-{}", summary.messages.len() + 1);
             let user_message = ConversationMessage {
-                id: "message-user-1".to_string(),
+                id: next_user_message_id,
                 role: MessageRole::User,
                 content,
                 created_at_epoch_seconds: 1_700_000_000,
@@ -286,8 +287,9 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 .unwrap()
                 .push(content.clone());
 
+            let next_user_message_id = format!("message-user-{}", summary.messages.len() + 1);
             let user_message = ConversationMessage {
-                id: "message-user-1".to_string(),
+                id: next_user_message_id,
                 role: MessageRole::User,
                 content,
                 created_at_epoch_seconds: 1_700_000_000,
@@ -341,8 +343,9 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                     )
                 })?;
 
+            let next_coach_message_id = format!("message-coach-{}", summary.messages.len() + 1);
             let coach_message = ConversationMessage {
-                id: "message-coach-1".to_string(),
+                id: next_coach_message_id,
                 role: MessageRole::Coach,
                 content: format!("Coach reply to: {user_message_content}"),
                 created_at_epoch_seconds: 1_700_000_000,
