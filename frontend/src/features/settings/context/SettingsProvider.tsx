@@ -24,6 +24,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<UserSettingsResponse>(mockSettings);
   const [isSaving, setIsSaving] = useState<Record<string, boolean>>({});
 
+  const selectedProvider = (value: UpdateAiAgentsRequest['selectedProvider']) => value || null;
+  const selectedModel = (value: UpdateAiAgentsRequest['selectedModel']) => value || null;
+
   const updateAiAgents = useCallback(async (data: UpdateAiAgentsRequest) => {
     setIsSaving((prev) => ({ ...prev, aiAgents: true }));
     try {
@@ -38,6 +41,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           ...(data.geminiApiKey !== undefined && {
             geminiApiKey: data.geminiApiKey ?? null,
             geminiApiKeySet: data.geminiApiKey != null,
+          }),
+          ...(data.openrouterApiKey !== undefined && {
+            openrouterApiKey: data.openrouterApiKey ?? null,
+            openrouterApiKeySet: data.openrouterApiKey != null,
+          }),
+          ...(data.selectedProvider !== undefined && {
+            selectedProvider: selectedProvider(data.selectedProvider),
+          }),
+          ...(data.selectedModel !== undefined && {
+            selectedModel: selectedModel(data.selectedModel),
           }),
         },
       }));

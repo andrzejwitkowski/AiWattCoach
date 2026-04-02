@@ -1,5 +1,7 @@
 use crate::domain::settings::SettingsError;
 
+use crate::domain::llm::LlmProvider;
+
 pub fn validate_cycling_age(age: Option<u32>) -> Result<Option<u32>, SettingsError> {
     match age {
         Some(v) if v == 0 || v > 120 => Err(SettingsError::Validation(
@@ -51,5 +53,33 @@ pub fn validate_cycling_vo2(vo2_max: Option<f64>) -> Result<Option<f64>, Setting
             "vo2Max must be between 0 and 100".to_string(),
         )),
         _ => Ok(vo2_max),
+    }
+}
+
+pub fn validate_ai_provider(
+    provider: Option<LlmProvider>,
+) -> Result<Option<LlmProvider>, SettingsError> {
+    Ok(provider)
+}
+
+pub fn validate_ai_model(model: Option<String>) -> Result<Option<String>, SettingsError> {
+    match model {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Err(SettingsError::Validation(
+                    "selectedModel must not be empty".to_string(),
+                ));
+            }
+
+            if trimmed.len() > 200 {
+                return Err(SettingsError::Validation(
+                    "selectedModel must be 200 characters or fewer".to_string(),
+                ));
+            }
+
+            Ok(Some(trimmed.to_string()))
+        }
+        None => Ok(None),
     }
 }

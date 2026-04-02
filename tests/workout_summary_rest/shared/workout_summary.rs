@@ -1,11 +1,12 @@
 use std::sync::{Arc, Mutex};
 
-use aiwattcoach::domain::workout_summary::{
-    validate_message_content, CoachReply, ConversationMessage, MessageRole, PersistedUserMessage,
-    SendMessageResult, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+use aiwattcoach::domain::{
+    llm::BoxFuture,
+    workout_summary::{
+        validate_message_content, CoachReply, MessageRole, PersistedUserMessage, SendMessageResult,
+        WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+    },
 };
-
-type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'static>>;
 
 #[derive(Clone, Default)]
 pub(crate) struct TestWorkoutSummaryService {
@@ -21,6 +22,10 @@ impl TestWorkoutSummaryService {
         }
     }
 
+    pub(crate) fn processed_user_messages(&self) -> Vec<String> {
+        self.processed_user_messages.lock().unwrap().clone()
+    }
+
     pub(crate) fn summary(&self, user_id: &str, workout_id: &str) -> Option<WorkoutSummary> {
         self.summaries
             .lock()
@@ -28,14 +33,6 @@ impl TestWorkoutSummaryService {
             .iter()
             .find(|summary| summary.user_id == user_id && summary.workout_id == workout_id)
             .cloned()
-    }
-
-    fn find_summary(&self, user_id: &str, workout_id: &str) -> Option<WorkoutSummary> {
-        self.summary(user_id, workout_id)
-    }
-
-    pub(crate) fn processed_user_messages(&self) -> Vec<String> {
-        self.processed_user_messages.lock().unwrap().clone()
     }
 }
 
@@ -45,8 +42,18 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_id: &str,
         workout_id: &str,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
-        let summary = self.find_summary(user_id, workout_id);
-        Box::pin(async move { summary.ok_or(WorkoutSummaryError::NotFound) })
+        let summaries = self.summaries.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            summaries
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|summary| summary.user_id == user_id && summary.workout_id == workout_id)
+                .cloned()
+                .ok_or(WorkoutSummaryError::NotFound)
+        })
     }
 
     fn create_summary(
@@ -67,16 +74,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 return Ok(existing);
             }
 
-            let summary = WorkoutSummary {
-                id: format!("summary-{workout_id}"),
-                user_id,
-                workout_id,
-                rpe: None,
-                messages: Vec::new(),
-                saved_at_epoch_seconds: None,
-                created_at_epoch_seconds: 1_700_000_000,
-                updated_at_epoch_seconds: 1_700_000_000,
-            };
+            let summary = sample_summary(&workout_id);
             summaries.push(summary.clone());
             Ok(summary)
         })
@@ -87,16 +85,20 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_id: &str,
         workout_ids: Vec<String>,
     ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
-        let summaries = self.summaries.lock().unwrap().clone();
+        let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            let mut summaries = summaries
-                .into_iter()
+            let mut filtered: Vec<_> = summaries
+                .lock()
+                .unwrap()
+                .iter()
                 .filter(|summary| {
-                    summary.user_id == user_id && workout_ids.contains(&summary.workout_id)
+                    summary.user_id == user_id
+                        && workout_ids.iter().any(|id| id == &summary.workout_id)
                 })
-                .collect::<Vec<_>>();
-            summaries.sort_by(|left, right| {
+                .cloned()
+                .collect();
+            filtered.sort_by(|left, right| {
                 right
                     .updated_at_epoch_seconds
                     .cmp(&left.updated_at_epoch_seconds)
@@ -106,7 +108,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                             .cmp(&left.created_at_epoch_seconds)
                     })
             });
-            Ok(summaries)
+            Ok(filtered)
         })
     }
 
@@ -120,12 +122,6 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
-            if !(1..=10).contains(&rpe) {
-                return Err(WorkoutSummaryError::Validation(
-                    "rpe must be between 1 and 10".to_string(),
-                ));
-            }
-
             let mut summaries = summaries.lock().unwrap();
             let Some(summary) = summaries
                 .iter_mut()
@@ -133,9 +129,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             else {
                 return Err(WorkoutSummaryError::NotFound);
             };
+
             if summary.saved_at_epoch_seconds.is_some() {
                 return Err(WorkoutSummaryError::Locked);
             }
+
             summary.rpe = Some(rpe);
             summary.updated_at_epoch_seconds = 1_700_000_100;
             Ok(summary.clone())
@@ -158,15 +156,15 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             else {
                 return Err(WorkoutSummaryError::NotFound);
             };
+
             if summary.rpe.is_none() {
                 return Err(WorkoutSummaryError::Validation(
                     "rpe must be set before saving workout summary".to_string(),
                 ));
             }
-            if summary.saved_at_epoch_seconds.is_none() {
-                summary.saved_at_epoch_seconds = Some(1_700_000_100);
-                summary.updated_at_epoch_seconds = 1_700_000_100;
-            }
+
+            summary.saved_at_epoch_seconds = Some(1_700_000_100);
+            summary.updated_at_epoch_seconds = 1_700_000_100;
             Ok(summary.clone())
         })
     }
@@ -187,8 +185,9 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             else {
                 return Err(WorkoutSummaryError::NotFound);
             };
+
             summary.saved_at_epoch_seconds = None;
-            summary.updated_at_epoch_seconds = 1_700_000_100;
+            summary.updated_at_epoch_seconds = 1_700_000_300;
             Ok(summary.clone())
         })
     }
@@ -227,14 +226,15 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 .unwrap()
                 .push(content.clone());
 
-            let user_message = ConversationMessage {
-                id: "message-user-1".to_string(),
+            let next_user_suffix = summary.messages.len() + 1;
+            let user_message = aiwattcoach::domain::workout_summary::ConversationMessage {
+                id: format!("message-user-{next_user_suffix}"),
                 role: MessageRole::User,
                 content,
                 created_at_epoch_seconds: 1_700_000_000,
             };
-            let coach_message = ConversationMessage {
-                id: "message-coach-1".to_string(),
+            let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
+                id: format!("message-coach-{}", next_user_suffix + 1),
                 role: MessageRole::Coach,
                 content: "Thanks, that helps. What stood out most about how the workout felt compared with the plan?".to_string(),
                 created_at_epoch_seconds: 1_700_000_000,
@@ -286,8 +286,9 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 .unwrap()
                 .push(content.clone());
 
-            let user_message = ConversationMessage {
-                id: "message-user-1".to_string(),
+            let next_user_suffix = summary.messages.len() + 1;
+            let user_message = aiwattcoach::domain::workout_summary::ConversationMessage {
+                id: format!("message-user-{next_user_suffix}"),
                 role: MessageRole::User,
                 content,
                 created_at_epoch_seconds: 1_700_000_000,
@@ -307,7 +308,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         &self,
         user_id: &str,
         workout_id: &str,
-        user_message_content: String,
+        user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
@@ -330,8 +331,20 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 ));
             }
 
-            let coach_message = ConversationMessage {
-                id: "message-coach-1".to_string(),
+            let user_message_content = summary
+                .messages
+                .iter()
+                .find(|message| message.id == user_message_id && message.role == MessageRole::User)
+                .map(|message| message.content.clone())
+                .ok_or_else(|| {
+                    WorkoutSummaryError::Validation(
+                        "user message must be persisted before generating coach reply".to_string(),
+                    )
+                })?;
+
+            let next_coach_suffix = summary.messages.len() + 1;
+            let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
+                id: format!("message-coach-{next_coach_suffix}"),
                 role: MessageRole::Coach,
                 content: format!("Coach reply to: {user_message_content}"),
                 created_at_epoch_seconds: 1_700_000_000,

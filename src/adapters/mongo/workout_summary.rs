@@ -42,6 +42,12 @@ struct ConversationMessageDocument {
     created_at_epoch_seconds: i64,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct WorkoutSummaryMessageLookupDocument {
+    #[serde(default)]
+    messages: Vec<ConversationMessageDocument>,
+}
+
 impl MongoWorkoutSummaryRepository {
     pub fn new(client: mongodb::Client, database: impl AsRef<str>) -> Self {
         Self {
@@ -249,6 +255,37 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
             }
 
             Ok(())
+        })
+    }
+
+    fn find_message_by_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        message_id: &str,
+    ) -> BoxFuture<Result<Option<ConversationMessage>, WorkoutSummaryError>> {
+        let collection = self
+            .collection
+            .clone_with_type::<WorkoutSummaryMessageLookupDocument>();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let message_id = message_id.to_string();
+        Box::pin(async move {
+            let document = collection
+                .find_one(doc! { "user_id": &user_id, "workout_id": &workout_id })
+                .projection(doc! {
+                    "messages": { "$elemMatch": { "id": &message_id } },
+                    "_id": 0,
+                })
+                .await
+                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+
+            let message = document
+                .and_then(|document| document.messages.into_iter().next())
+                .map(map_message_to_domain)
+                .transpose()?;
+
+            Ok(message)
         })
     }
 }

@@ -1,10 +1,16 @@
 import { z } from 'zod';
 
+export const llmProviderSchema = z.enum(['openai', 'gemini', 'openrouter']);
+
 const aiAgentsSettingsSchema = z.object({
   openaiApiKey: z.string().nullable(),
   openaiApiKeySet: z.boolean(),
   geminiApiKey: z.string().nullable(),
   geminiApiKeySet: z.boolean(),
+  openrouterApiKey: z.string().nullable(),
+  openrouterApiKeySet: z.boolean(),
+  selectedProvider: llmProviderSchema.nullable().optional(),
+  selectedModel: z.string().nullable().optional(),
 });
 
 const intervalsSettingsSchema = z.object({
@@ -20,6 +26,14 @@ export const testIntervalsConnectionResponseSchema = z.object({
   usedSavedApiKey: z.boolean(),
   usedSavedAthleteId: z.boolean(),
   persistedStatusUpdated: z.boolean(),
+});
+
+export const testAiAgentsConnectionResponseSchema = z.object({
+  connected: z.boolean(),
+  message: z.string(),
+  usedSavedApiKey: z.boolean(),
+  usedSavedProvider: z.boolean(),
+  usedSavedModel: z.boolean(),
 });
 
 const analysisOptionsSettingsSchema = z.object({
@@ -49,7 +63,12 @@ export type UserSettingsResponse = z.infer<typeof userSettingsResponseSchema>;
 export const updateAiAgentsRequestSchema = z.object({
   openaiApiKey: z.string().nullable().optional(),
   geminiApiKey: z.string().nullable().optional(),
+  openrouterApiKey: z.string().nullable().optional(),
+  selectedProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
+  selectedModel: z.string().nullable().optional(),
 });
+
+export type LlmProvider = z.infer<typeof llmProviderSchema>;
 
 export type UpdateAiAgentsRequest = z.infer<typeof updateAiAgentsRequestSchema>;
 
@@ -61,6 +80,7 @@ export const updateIntervalsRequestSchema = z.object({
 export type UpdateIntervalsRequest = z.infer<typeof updateIntervalsRequestSchema>;
 
 export type TestIntervalsConnectionResponse = z.infer<typeof testIntervalsConnectionResponseSchema>;
+export type TestAiAgentsConnectionResponse = z.infer<typeof testAiAgentsConnectionResponseSchema>;
 
 export const updateOptionsRequestSchema = z.object({
   analyzeWithoutHeartRate: z.boolean().optional(),

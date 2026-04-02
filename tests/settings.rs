@@ -66,6 +66,7 @@ fn settings_load_required_values_from_map() {
     assert!(settings.auth.admin_emails.is_empty());
     assert!(!settings.auth.dev.enabled);
     assert!(!settings.dev_intervals_enabled);
+    assert!(!settings.dev_llm_coach_enabled);
 }
 
 #[test]
@@ -245,6 +246,16 @@ fn settings_allow_dev_intervals_toggle() {
     let settings = Settings::from_map(&values).unwrap();
 
     assert!(settings.dev_intervals_enabled);
+}
+
+#[test]
+fn settings_allow_dev_llm_coach_toggle() {
+    let mut values = required_settings_map();
+    values.insert("DEV_LLM_COACH_ENABLED".to_string(), "true".to_string());
+
+    let settings = Settings::from_map(&values).unwrap();
+
+    assert!(settings.dev_llm_coach_enabled);
 }
 
 #[test]

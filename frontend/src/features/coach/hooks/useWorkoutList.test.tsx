@@ -7,6 +7,15 @@ import { HttpError } from '../../../lib/httpClient';
 import { listWorkoutSummaries } from '../api/workoutSummary';
 import { useWorkoutList } from './useWorkoutList';
 
+function formatWeekLabel(start: Date, end: Date): string {
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+
+  return `${formatter.format(start)} - ${formatter.format(end)}`;
+}
+
 vi.mock('../../intervals/api/intervals', () => ({
   listActivities: vi.fn(),
   listEvents: vi.fn(),
@@ -131,7 +140,7 @@ describe('useWorkoutList', () => {
       expect(result.current.state).toBe('ready');
     });
 
-    expect(result.current.weekLabel).toBe('Mar 23 - Mar 29');
+    expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
     expect(result.current.items).toHaveLength(2);
     expect(result.current.items[0]?.hasConversation).toBe(true);
   });
@@ -155,7 +164,7 @@ describe('useWorkoutList', () => {
       expect(result.current.state).toBe('ready');
     });
 
-    expect(result.current.weekLabel).toBe('Mar 30 - Apr 5');
+    expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 30), new Date(2026, 3, 5)));
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0]?.event?.id).toBe(301);
   });
@@ -178,7 +187,7 @@ describe('useWorkoutList', () => {
       expect(result.current.state).toBe('ready');
     });
 
-    expect(result.current.weekLabel).toBe('Mar 23 - Mar 29');
+    expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 23), new Date(2026, 2, 29)));
     expect(result.current.items).toHaveLength(6);
 
     act(() => {
@@ -189,7 +198,7 @@ describe('useWorkoutList', () => {
       expect(result.current.items).toHaveLength(4);
     });
 
-    expect(result.current.weekLabel).toBe('Mar 16 - Mar 22');
+    expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 16), new Date(2026, 2, 22)));
     expect(result.current.items[0]?.event?.name).toBe('Workout 7');
     expect(result.current.canGoToNewerWeek).toBe(true);
   });

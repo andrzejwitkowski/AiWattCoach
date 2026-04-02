@@ -14,10 +14,17 @@ use aiwattcoach::{
             dev_settings_adapter::DevIntervalsSettingsProvider,
             settings_adapter::{IntervalsSettingsAdapter, SettingsIntervalsProvider},
         },
+        llm::{
+            adapter::LlmAdapter, dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
+            openai::client::OpenAiClient, openrouter::client::OpenRouterClient,
+            settings_adapter::SettingsLlmConfigProvider, workout_summary_coach::LlmWorkoutCoach,
+        },
         mongo::{
             activities::MongoActivityRepository,
             activity_upload_operations::MongoActivityUploadOperationRepository,
             client::{create_client, ensure_database_exists, verify_connection},
+            coach_reply_operations::MongoCoachReplyOperationRepository,
+            llm_context_cache::MongoLlmContextCacheRepository,
             login_state::MongoLoginStateRepository,
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
@@ -50,6 +57,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         mongo,
         auth,
         dev_intervals_enabled,
+        dev_llm_coach_enabled,
         client_log_ingestion_enabled,
         legacy_time_stream_cleanup_enabled,
     } = settings;
@@ -103,13 +111,41 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
     settings_repository.ensure_indexes().await?;
     let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
+    let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
+    let llm_http_client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .build()?;
+    let llm_adapter = if dev_llm_coach_enabled {
+        Arc::new(LlmAdapter::Dev(DevLlmCoachAdapter))
+    } else {
+        Arc::new(LlmAdapter::live(
+            OpenAiClient::new(llm_http_client.clone()),
+            GeminiClient::new(llm_http_client.clone()),
+            OpenRouterClient::new(llm_http_client),
+        ))
+    };
+    let llm_context_cache_repository =
+        MongoLlmContextCacheRepository::new(mongo_client.clone(), &mongo_database);
+    llm_context_cache_repository.ensure_indexes().await?;
     let workout_summary_repository =
         MongoWorkoutSummaryRepository::new(mongo_client.clone(), &mongo_database);
     workout_summary_repository.ensure_indexes().await?;
-    let workout_summary_service = Arc::new(WorkoutSummaryService::new(
-        workout_summary_repository,
+    let coach_reply_operation_repository =
+        MongoCoachReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
+    coach_reply_operation_repository.ensure_indexes().await?;
+    let workout_summary_service = Arc::new(WorkoutSummaryService::with_coach(
+        workout_summary_repository.clone(),
+        coach_reply_operation_repository.clone(),
         SystemClock,
         UuidIdGenerator,
+        Arc::new(
+            LlmWorkoutCoach::new(
+                llm_adapter.clone(),
+                llm_config_provider.clone(),
+                SystemClock,
+            )
+            .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
+        ),
     ));
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
@@ -161,6 +197,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 auth.session.ttl_hours,
             )
             .with_settings_service(settings_service)
+            .with_llm_services(llm_adapter, llm_config_provider)
             .with_workout_summary_service(workout_summary_service)
             .with_intervals_service(intervals_service)
             .with_intervals_connection_tester(Arc::new(intervals_connection_tester)),

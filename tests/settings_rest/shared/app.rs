@@ -11,7 +11,9 @@ use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
     domain::{
-        identity::IdentityUseCases, intervals::IntervalsConnectionTester,
+        identity::IdentityUseCases,
+        intervals::IntervalsConnectionTester,
+        llm::{LlmChatPort, UserLlmConfigProvider},
         settings::UserSettingsUseCases,
     },
     Settings,
@@ -51,6 +53,23 @@ pub(crate) async fn settings_test_app_with_intervals(
     settings_service: impl UserSettingsUseCases + 'static,
     intervals_connection_tester: Option<std::sync::Arc<dyn IntervalsConnectionTester>>,
 ) -> axum::Router {
+    settings_test_app_with_services(
+        identity_service,
+        settings_service,
+        intervals_connection_tester,
+        None,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn settings_test_app_with_services(
+    identity_service: impl IdentityUseCases + 'static,
+    settings_service: impl UserSettingsUseCases + 'static,
+    intervals_connection_tester: Option<std::sync::Arc<dyn IntervalsConnectionTester>>,
+    llm_chat_service: Option<std::sync::Arc<dyn LlmChatPort>>,
+    llm_config_provider: Option<std::sync::Arc<dyn UserLlmConfigProvider>>,
+) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
 
@@ -70,6 +89,10 @@ pub(crate) async fn settings_test_app_with_intervals(
 
     if let Some(tester) = intervals_connection_tester {
         app_state = app_state.with_intervals_connection_tester(tester);
+    }
+
+    if let (Some(chat_service), Some(config_provider)) = (llm_chat_service, llm_config_provider) {
+        app_state = app_state.with_llm_services(chat_service, config_provider);
     }
 
     build_app_with_frontend_dist(app_state, fixture.dist_dir())

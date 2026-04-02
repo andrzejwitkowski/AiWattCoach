@@ -1,5 +1,25 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) enum OptionalStringInput {
+    #[default]
+    Missing,
+    Null,
+    Value(String),
+}
+
+impl<'de> Deserialize<'de> for OptionalStringInput {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(match Option::<String>::deserialize(deserializer)? {
+            Some(value) => Self::Value(value),
+            None => Self::Null,
+        })
+    }
+}
+
 #[derive(Serialize)]
 pub(super) struct UserSettingsDto {
     #[serde(rename = "aiAgents")]
@@ -19,6 +39,14 @@ pub(super) struct AiAgentsDto {
     pub(super) gemini_api_key: Option<String>,
     #[serde(rename = "geminiApiKeySet")]
     pub(super) gemini_api_key_set: bool,
+    #[serde(rename = "openrouterApiKey")]
+    pub(super) openrouter_api_key: Option<String>,
+    #[serde(rename = "openrouterApiKeySet")]
+    pub(super) openrouter_api_key_set: bool,
+    #[serde(rename = "selectedProvider")]
+    pub(super) selected_provider: Option<String>,
+    #[serde(rename = "selectedModel")]
+    pub(super) selected_model: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -59,10 +87,16 @@ pub(super) struct CyclingDto {
 
 #[derive(Deserialize)]
 pub(crate) struct UpdateAiAgentsRequest {
-    #[serde(rename = "openaiApiKey")]
-    pub(super) openai_api_key: Option<String>,
-    #[serde(rename = "geminiApiKey")]
-    pub(super) gemini_api_key: Option<String>,
+    #[serde(default, rename = "openaiApiKey")]
+    pub(super) openai_api_key: OptionalStringInput,
+    #[serde(default, rename = "geminiApiKey")]
+    pub(super) gemini_api_key: OptionalStringInput,
+    #[serde(default, rename = "openrouterApiKey")]
+    pub(super) openrouter_api_key: OptionalStringInput,
+    #[serde(default, rename = "selectedProvider")]
+    pub(super) selected_provider: OptionalStringInput,
+    #[serde(default, rename = "selectedModel")]
+    pub(super) selected_model: OptionalStringInput,
 }
 
 #[derive(Deserialize)]
@@ -116,6 +150,23 @@ pub(super) struct TestIntervalsConnectionResponse {
     pub(super) persisted_status_updated: bool,
 }
 
+#[derive(Serialize)]
+pub(super) struct TestAiAgentsConnectionResponse {
+    pub(super) connected: bool,
+    pub(super) message: String,
+    #[serde(rename = "usedSavedApiKey")]
+    pub(super) used_saved_api_key: bool,
+    #[serde(rename = "usedSavedProvider")]
+    pub(super) used_saved_provider: bool,
+    #[serde(rename = "usedSavedModel")]
+    pub(super) used_saved_model: bool,
+}
+
+#[derive(Serialize)]
+pub(super) struct ValidationMessageResponse {
+    pub(super) message: String,
+}
+
 pub(super) fn test_connection_response(
     connected: bool,
     message: &str,
@@ -128,5 +179,27 @@ pub(super) fn test_connection_response(
         used_saved_api_key,
         used_saved_athlete_id,
         persisted_status_updated: false,
+    }
+}
+
+pub(super) fn test_ai_agents_connection_response(
+    connected: bool,
+    message: &str,
+    used_saved_api_key: bool,
+    used_saved_provider: bool,
+    used_saved_model: bool,
+) -> TestAiAgentsConnectionResponse {
+    TestAiAgentsConnectionResponse {
+        connected,
+        message: message.to_string(),
+        used_saved_api_key,
+        used_saved_provider,
+        used_saved_model,
+    }
+}
+
+pub(super) fn validation_message_response(message: &str) -> ValidationMessageResponse {
+    ValidationMessageResponse {
+        message: message.to_string(),
     }
 }

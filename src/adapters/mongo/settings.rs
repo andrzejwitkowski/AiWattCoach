@@ -5,6 +5,7 @@ use mongodb::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::domain::llm::LlmProvider;
 use crate::domain::settings::{
     AiAgentsConfig, AnalysisOptions, BoxFuture, CyclingSettings, IntervalsConfig, SettingsError,
     UserSettings, UserSettingsRepository,
@@ -32,6 +33,9 @@ struct SettingsDocument {
 struct AiAgentsDocument {
     openai_api_key: Option<String>,
     gemini_api_key: Option<String>,
+    openrouter_api_key: Option<String>,
+    selected_provider: Option<String>,
+    selected_model: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -130,6 +134,9 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                         "$set": {
                             "ai_agents.openai_api_key": &ai_agents.openai_api_key,
                             "ai_agents.gemini_api_key": &ai_agents.gemini_api_key,
+                            "ai_agents.openrouter_api_key": &ai_agents.openrouter_api_key,
+                            "ai_agents.selected_provider": ai_agents.selected_provider.as_ref().map(|provider| provider.as_str()),
+                            "ai_agents.selected_model": &ai_agents.selected_model,
                             "updated_at_epoch_seconds": updated_at,
                         }
                     },
@@ -231,6 +238,13 @@ fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
         ai_agents: AiAgentsConfig {
             openai_api_key: doc.ai_agents.openai_api_key,
             gemini_api_key: doc.ai_agents.gemini_api_key,
+            openrouter_api_key: doc.ai_agents.openrouter_api_key,
+            selected_provider: doc
+                .ai_agents
+                .selected_provider
+                .as_deref()
+                .and_then(LlmProvider::parse),
+            selected_model: doc.ai_agents.selected_model,
         },
         intervals: IntervalsConfig {
             api_key: doc.intervals.api_key,
@@ -262,6 +276,13 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
         ai_agents: AiAgentsDocument {
             openai_api_key: settings.ai_agents.openai_api_key.clone(),
             gemini_api_key: settings.ai_agents.gemini_api_key.clone(),
+            openrouter_api_key: settings.ai_agents.openrouter_api_key.clone(),
+            selected_provider: settings
+                .ai_agents
+                .selected_provider
+                .as_ref()
+                .map(|provider| provider.as_str().to_string()),
+            selected_model: settings.ai_agents.selected_model.clone(),
         },
         intervals: IntervalsDocument {
             api_key: settings.intervals.api_key.clone(),

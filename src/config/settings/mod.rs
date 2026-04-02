@@ -44,6 +44,11 @@ impl Settings {
                 "DEV_INTERVALS_ENABLED",
                 false,
             )?,
+            dev_llm_coach_enabled: parse::optional_bool_setting(
+                values.get("DEV_LLM_COACH_ENABLED"),
+                "DEV_LLM_COACH_ENABLED",
+                false,
+            )?,
             client_log_ingestion_enabled: parse::optional_bool_setting(
                 values.get("ENABLE_CLIENT_LOG_INGESTION"),
                 "ENABLE_CLIENT_LOG_INGESTION",
@@ -65,6 +70,7 @@ impl Settings {
             mongo: types::MongoSettings::test_defaults(),
             auth: AuthSettings::test_defaults(),
             dev_intervals_enabled: false,
+            dev_llm_coach_enabled: false,
             client_log_ingestion_enabled: false,
             legacy_time_stream_cleanup_enabled: false,
         }
@@ -72,7 +78,7 @@ impl Settings {
 }
 
 fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
-    const KEYS: [&str; 21] = [
+    const KEYS: [&str; 22] = [
         "APP_NAME",
         "SERVER_HOST",
         "SERVER_PORT",
@@ -87,6 +93,7 @@ fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
         "DEV_AUTH_DISPLAY_NAME",
         "DEV_AUTH_AVATAR_URL",
         "DEV_INTERVALS_ENABLED",
+        "DEV_LLM_COACH_ENABLED",
         "SESSION_COOKIE_NAME",
         "SESSION_COOKIE_SAME_SITE",
         "SESSION_TTL_HOURS",
