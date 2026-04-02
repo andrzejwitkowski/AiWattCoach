@@ -7,7 +7,9 @@ use super::dto::{
     AiAgentsDto, CyclingDto, IntervalsDto, OptionsDto, UpdateAiAgentsRequest, UpdateCyclingRequest,
     UpdateIntervalsRequest, UpdateOptionsRequest, UserSettingsDto,
 };
-use super::input::{apply_field_update, normalize_string_input, parse_provider_settings_input};
+use super::input::{
+    apply_field_update, normalize_string_input, parse_provider_settings_input, FieldUpdate,
+};
 
 pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
     UserSettingsDto {
@@ -51,11 +53,46 @@ pub(super) fn map_ai_agents_update(
     body: UpdateAiAgentsRequest,
     current: &UserSettings,
 ) -> Result<AiAgentsConfig, SettingsError> {
-    let selected_provider = parse_provider_settings_input(body.selected_provider)?;
-    let selected_model = normalize_string_input(body.selected_model);
+    let selected_provider_update = parse_provider_settings_input(body.selected_provider)?;
+    let selected_model_update = normalize_string_input(body.selected_model);
     let openai_api_key = normalize_string_input(body.openai_api_key);
     let gemini_api_key = normalize_string_input(body.gemini_api_key);
     let openrouter_api_key = normalize_string_input(body.openrouter_api_key);
+
+    let provider_changed = match &selected_provider_update {
+        FieldUpdate::Missing => false,
+        FieldUpdate::Clear => current.ai_agents.selected_provider.is_some(),
+        FieldUpdate::Set(provider) => {
+            current.ai_agents.selected_provider.as_ref() != Some(provider)
+        }
+    };
+
+    let selected_provider = apply_field_update(
+        selected_provider_update,
+        current.ai_agents.selected_provider.clone(),
+    );
+    let selected_model = validation::validate_ai_model(if provider_changed {
+        apply_field_update(selected_model_update, None)
+    } else {
+        apply_field_update(
+            selected_model_update,
+            current.ai_agents.selected_model.clone(),
+        )
+    })?;
+
+    match (&selected_provider, &selected_model) {
+        (Some(_), None) => {
+            return Err(SettingsError::Validation(
+                "selectedModel must not be empty".to_string(),
+            ))
+        }
+        (None, Some(_)) => {
+            return Err(SettingsError::Validation(
+                "selectedProvider must not be empty".to_string(),
+            ))
+        }
+        _ => {}
+    }
 
     Ok(AiAgentsConfig {
         openai_api_key: apply_field_update(
@@ -70,14 +107,8 @@ pub(super) fn map_ai_agents_update(
             openrouter_api_key,
             current.ai_agents.openrouter_api_key.clone(),
         ),
-        selected_provider: validation::validate_ai_provider(apply_field_update(
-            selected_provider,
-            current.ai_agents.selected_provider.clone(),
-        ))?,
-        selected_model: validation::validate_ai_model(apply_field_update(
-            selected_model,
-            current.ai_agents.selected_model.clone(),
-        ))?,
+        selected_provider: validation::validate_ai_provider(selected_provider)?,
+        selected_model,
     })
 }
 

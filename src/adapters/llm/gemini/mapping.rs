@@ -13,16 +13,20 @@ pub fn map_generate_request(
     cached_content: Option<String>,
 ) -> GeminiGenerateContentRequest {
     let cached_content = request.reusable_cache_id.clone().or(cached_content);
-    let system_instruction = (!request.system_prompt.trim().is_empty()
-        || !request.stable_context.trim().is_empty())
-    .then(|| GeminiContent {
-        role: "user".to_string(),
-        parts: vec![GeminiTextPart {
-            text: format!("{}\n\n{}", request.system_prompt, request.stable_context)
-                .trim()
-                .to_string(),
-        }],
-    });
+    let system_instruction = cached_content
+        .is_none()
+        .then_some(())
+        .filter(|_| {
+            !request.system_prompt.trim().is_empty() || !request.stable_context.trim().is_empty()
+        })
+        .map(|_| GeminiContent {
+            role: "user".to_string(),
+            parts: vec![GeminiTextPart {
+                text: format!("{}\n\n{}", request.system_prompt, request.stable_context)
+                    .trim()
+                    .to_string(),
+            }],
+        });
 
     GeminiGenerateContentRequest {
         contents: request
@@ -40,21 +44,31 @@ pub fn map_create_cache_request(
     config: &LlmProviderConfig,
     request: &LlmChatRequest,
 ) -> Option<GeminiCreateCacheRequest> {
-    let content = format!("{}\n\n{}", request.system_prompt, request.stable_context)
-        .trim()
-        .to_string();
+    let system_prompt = request.system_prompt.trim().to_string();
+    let stable_context = request.stable_context.trim().to_string();
 
-    if content.is_empty() {
+    if system_prompt.is_empty() && stable_context.is_empty() {
         return None;
     }
 
     Some(GeminiCreateCacheRequest {
         model: format!("models/{}", config.model),
-        contents: vec![GeminiContent {
+        contents: if stable_context.is_empty() {
+            Vec::new()
+        } else {
+            vec![GeminiContent {
+                role: "user".to_string(),
+                parts: vec![GeminiTextPart {
+                    text: stable_context,
+                }],
+            }]
+        },
+        system_instruction: (!system_prompt.is_empty()).then(|| GeminiContent {
             role: "user".to_string(),
-            parts: vec![GeminiTextPart { text: content }],
-        }],
-        system_instruction: None,
+            parts: vec![GeminiTextPart {
+                text: system_prompt,
+            }],
+        }),
         ttl: Some("3600s".to_string()),
     })
 }

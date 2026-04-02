@@ -110,13 +110,26 @@ describe('AiAgentsCard', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
-  it('sends explicit null clears for removed provider settings', async () => {
-    updateAiAgentsMock.mockResolvedValue(buildSettings({
-      openrouterApiKey: null,
-      openrouterApiKeySet: false,
-      selectedProvider: null,
-      selectedModel: null,
-    }));
+  it('clears plaintext api key fields after a successful save', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildSettings());
+
+    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    const openrouterKeyInput = screen.getByLabelText(/openrouter api key/i) as HTMLInputElement;
+    fireEvent.change(openrouterKeyInput, {
+      target: { value: 'or-new-key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(updateAiAgentsMock).toHaveBeenCalled();
+    });
+
+    expect(openrouterKeyInput.value).toBe('');
+  });
+
+  it('sends explicit provider and model clears on save', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildSettings({ selectedProvider: null, selectedModel: null }));
 
     render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
 
@@ -124,18 +137,14 @@ describe('AiAgentsCard', () => {
       target: { value: '' },
     });
     fireEvent.change(screen.getByLabelText(/model/i), {
-      target: { value: '   ' },
-    });
-    fireEvent.change(screen.getByLabelText(/openrouter api key/i), {
       target: { value: '' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
 
     await waitFor(() => {
       expect(updateAiAgentsMock).toHaveBeenCalledWith('', {
-        openrouterApiKey: null,
-        selectedProvider: null,
-        selectedModel: null,
+        selectedProvider: '',
+        selectedModel: '',
       });
     });
   });

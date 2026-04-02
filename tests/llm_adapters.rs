@@ -42,6 +42,10 @@ impl MockServer {
         let state = MockServerState::default();
         let app = Router::new()
             .route("/v1/chat/completions", post(openai_handler))
+            .route(
+                "/v1-forbidden/chat/completions",
+                post(openai_forbidden_handler),
+            )
             .route("/api/v1/chat/completions", post(openrouter_handler))
             .route("/v1beta/cachedContents", post(gemini_cache_handler))
             .route(
@@ -159,6 +163,14 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
     let requests = server.requests();
     assert_eq!(requests[0].path, "/v1beta/cachedContents");
     assert_eq!(
+        requests[0].body["systemInstruction"]["parts"][0]["text"],
+        "system"
+    );
+    assert_eq!(
+        requests[0].body["contents"][0]["parts"][0]["text"],
+        "stable"
+    );
+    assert_eq!(
         requests[1].path,
         "/v1beta/models/gemini-2.5-flash:generateContent"
     );
@@ -169,6 +181,8 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
     assert_eq!(requests[1].body["cachedContent"], "cachedContents/cache-1");
     assert_eq!(requests[2].body["cachedContent"], "cachedContents/cache-1");
     assert_eq!(context_hash(&sample_request()).len(), 64);
+    assert!(requests[1].body.get("systemInstruction").is_none());
+    assert!(requests[2].body.get("systemInstruction").is_none());
 }
 
 #[tokio::test]
@@ -198,6 +212,124 @@ async fn openrouter_client_maps_cache_discount_and_write_tokens() {
     assert_eq!(requests[0].authorization.as_deref(), Some("Bearer or-key"));
 }
 
+#[tokio::test]
+async fn gemini_client_skips_cache_creation_without_durable_cache_keys() {
+    let server = MockServer::start().await;
+    let client = GeminiClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/v1beta", server.base_url));
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::Gemini,
+                model: "gemini-2.5-flash".to_string(),
+                api_key: "gemini-key".to_string(),
+            },
+            LlmChatRequest {
+                cache_scope_key: None,
+                cache_key: None,
+                ..sample_request()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.message, "Gemini says hi");
+    assert_eq!(response.cache.provider_cache_id, None);
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].path,
+        "/v1beta/models/gemini-2.5-flash:generateContent"
+    );
+    assert_eq!(
+        requests[0].body["systemInstruction"]["parts"][0]["text"],
+        "system\n\nstable"
+    );
+}
+
+#[tokio::test]
+async fn context_hash_includes_field_boundaries() {
+    let first = LlmChatRequest {
+        system_prompt: "ab".to_string(),
+        stable_context: "c".to_string(),
+        ..sample_request()
+    };
+    let second = LlmChatRequest {
+        system_prompt: "a".to_string(),
+        stable_context: "bc".to_string(),
+        ..sample_request()
+    };
+
+    assert_ne!(context_hash(&first), context_hash(&second));
+}
+
+#[tokio::test]
+async fn openrouter_client_does_not_fallback_cache_discount_to_cost() {
+    let server = MockServer::start().await;
+    let client = OpenRouterClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/api/v1", server.base_url));
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "openai/gpt-4o-mini-no-discount".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.cache.cache_discount, None);
+}
+
+#[tokio::test]
+async fn openai_client_maps_forbidden_to_credentials_not_configured() {
+    let server = MockServer::start().await;
+    let client = OpenAiClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/v1-forbidden", server.base_url));
+
+    let error = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenAi,
+                model: "gpt-4o-mini".to_string(),
+                api_key: "openai-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::llm::LlmError::CredentialsNotConfigured
+    );
+}
+
+#[test]
+fn llm_debug_output_redacts_secrets_and_prompt_contents() {
+    let config = LlmProviderConfig {
+        provider: LlmProvider::OpenAi,
+        model: "gpt-4o-mini".to_string(),
+        api_key: "sk-secret-value".to_string(),
+    };
+    let request = sample_request();
+
+    let config_debug = format!("{config:?}");
+    let request_debug = format!("{request:?}");
+
+    assert!(!config_debug.contains("sk-secret-value"));
+    assert!(config_debug.contains("<redacted:"));
+    assert!(!request_debug.contains("How did I do?"));
+    assert!(!request_debug.contains("stable_context: \"stable\""));
+    assert!(!request_debug.contains("system_prompt: \"system\""));
+    assert!(request_debug.contains("conversation_len"));
+}
+
 async fn openai_handler(
     State(state): State<MockServerState>,
     headers: HeaderMap,
@@ -217,17 +349,39 @@ async fn openai_handler(
     }))
 }
 
+async fn openai_forbidden_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    capture_request(&state, "/v1-forbidden/chat/completions", headers, body);
+    (StatusCode::FORBIDDEN, "forbidden")
+}
+
 async fn openrouter_handler(
     State(state): State<MockServerState>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let model = body
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
     capture_request(&state, "/api/v1/chat/completions", headers, body);
-    Json(json!({
-        "id": "openrouter-req-1",
-        "model": "openai/gpt-4o-mini",
-        "choices": [{ "message": { "content": "OpenRouter says hi" } }],
-        "usage": {
+    let usage = if model == "openai/gpt-4o-mini-no-discount" {
+        json!({
+            "prompt_tokens": 120,
+            "completion_tokens": 25,
+            "total_tokens": 145,
+            "cost": "0.0099",
+            "prompt_tokens_details": {
+              "cached_tokens": 80,
+              "cache_write_tokens": 32
+            }
+        })
+    } else {
+        json!({
             "prompt_tokens": 120,
             "completion_tokens": 25,
             "total_tokens": 145,
@@ -236,7 +390,13 @@ async fn openrouter_handler(
               "cached_tokens": 80,
               "cache_write_tokens": 32
             }
-        }
+        })
+    };
+    Json(json!({
+        "id": "openrouter-req-1",
+        "model": model,
+        "choices": [{ "message": { "content": "OpenRouter says hi" } }],
+        "usage": usage
     }))
 }
 

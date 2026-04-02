@@ -1,4 +1,4 @@
-use crate::domain::llm::{LlmCacheUsage, LlmProvider, LlmTokenUsage};
+use crate::domain::llm::{LlmCacheUsage, LlmError, LlmProvider, LlmTokenUsage};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -8,7 +8,7 @@ pub enum WorkoutSummaryError {
     NotFound,
     ReplyAlreadyPending,
     Repository(String),
-    Llm(String),
+    Llm(LlmError),
     Validation(String),
 }
 
@@ -18,13 +18,20 @@ impl std::fmt::Display for WorkoutSummaryError {
             Self::AlreadyExists => write!(f, "workout summary already exists"),
             Self::Locked => write!(f, "workout summary is saved and cannot be edited"),
             Self::NotFound => write!(f, "workout summary not found"),
-            Self::ReplyAlreadyPending => write!(f, "coach reply is already pending"),
+            Self::ReplyAlreadyPending => {
+                write!(
+                    f,
+                    "coach reply generation is already pending for this message"
+                )
+            }
             Self::Repository(message) => write!(f, "{message}"),
-            Self::Llm(message) => write!(f, "{message}"),
+            Self::Llm(error) => write!(f, "{error}"),
             Self::Validation(message) => write!(f, "{message}"),
         }
     }
 }
+
+impl std::error::Error for WorkoutSummaryError {}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CoachReplyOperationStatus {
@@ -53,7 +60,7 @@ pub struct CoachReplyOperation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CoachReplyOperationClaimResult {
+pub enum CoachReplyClaimResult {
     Claimed(CoachReplyOperation),
     Existing(CoachReplyOperation),
 }
@@ -138,7 +145,17 @@ impl CoachReplyOperation {
     }
 }
 
-impl std::error::Error for WorkoutSummaryError {}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkoutSummary {
+    pub id: String,
+    pub user_id: String,
+    pub workout_id: String,
+    pub rpe: Option<u8>,
+    pub messages: Vec<ConversationMessage>,
+    pub saved_at_epoch_seconds: Option<i64>,
+    pub created_at_epoch_seconds: i64,
+    pub updated_at_epoch_seconds: i64,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MessageRole {
@@ -155,25 +172,6 @@ pub struct ConversationMessage {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct WorkoutSummary {
-    pub id: String,
-    pub user_id: String,
-    pub workout_id: String,
-    pub rpe: Option<u8>,
-    pub messages: Vec<ConversationMessage>,
-    pub saved_at_epoch_seconds: Option<i64>,
-    pub created_at_epoch_seconds: i64,
-    pub updated_at_epoch_seconds: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SendMessageResult {
-    pub summary: WorkoutSummary,
-    pub user_message: ConversationMessage,
-    pub coach_message: ConversationMessage,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PersistedUserMessage {
     pub summary: WorkoutSummary,
     pub user_message: ConversationMessage,
@@ -182,6 +180,13 @@ pub struct PersistedUserMessage {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoachReply {
     pub summary: WorkoutSummary,
+    pub coach_message: ConversationMessage,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SendMessageResult {
+    pub summary: WorkoutSummary,
+    pub user_message: ConversationMessage,
     pub coach_message: ConversationMessage,
 }
 
@@ -201,22 +206,26 @@ impl WorkoutSummary {
 }
 
 pub fn validate_rpe(rpe: u8) -> Result<u8, WorkoutSummaryError> {
-    match rpe {
-        1..=10 => Ok(rpe),
-        _ => Err(WorkoutSummaryError::Validation(
+    if (1..=10).contains(&rpe) {
+        Ok(rpe)
+    } else {
+        Err(WorkoutSummaryError::Validation(
             "rpe must be between 1 and 10".to_string(),
-        )),
+        ))
     }
 }
 
 pub fn validate_message_content(content: &str) -> Result<String, WorkoutSummaryError> {
     let trimmed = content.trim();
-
     if trimmed.is_empty() {
         return Err(WorkoutSummaryError::Validation(
             "message content must not be empty".to_string(),
         ));
     }
-
+    if trimmed.chars().count() > 2000 {
+        return Err(WorkoutSummaryError::Validation(
+            "message must be 2000 characters or fewer".to_string(),
+        ));
+    }
     Ok(trimmed.to_string())
 }

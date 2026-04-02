@@ -1,6 +1,6 @@
 use crate::domain::{
     llm::{LlmChatRequest, LlmProvider, LlmProviderConfig},
-    settings::UserSettings,
+    settings::{validation::validate_ai_model, SettingsError, UserSettings},
 };
 
 use super::dto::{
@@ -35,14 +35,27 @@ pub(super) fn merge_ai_connection_config(
     let transient_gemini_api_key = normalize_string_input(body.gemini_api_key);
     let transient_openrouter_api_key = normalize_string_input(body.openrouter_api_key);
 
+    let used_saved_provider =
+        used_saved_value(&transient_provider, &current.ai_agents.selected_provider);
+    let provider_changed = match &transient_provider {
+        FieldUpdate::Missing => false,
+        FieldUpdate::Clear => current.ai_agents.selected_provider.is_some(),
+        FieldUpdate::Set(provider) => {
+            current.ai_agents.selected_provider.as_ref() != Some(provider)
+        }
+    };
+
     let provider = apply_field_update(
-        transient_provider.clone(),
+        transient_provider,
         current.ai_agents.selected_provider.clone(),
     );
-    let model = apply_field_update(
-        transient_model.clone(),
-        current.ai_agents.selected_model.clone(),
-    );
+    let used_saved_model =
+        !provider_changed && used_saved_value(&transient_model, &current.ai_agents.selected_model);
+    let model = if provider_changed {
+        apply_field_update(transient_model, None)
+    } else {
+        apply_field_update(transient_model, current.ai_agents.selected_model.clone())
+    };
 
     let provider = match provider {
         Some(provider) => provider,
@@ -51,8 +64,8 @@ pub(super) fn merge_ai_connection_config(
                 false,
                 "Provider, model, and matching API key are required.",
                 false,
-                false,
-                false,
+                used_saved_provider,
+                used_saved_model,
             ))
         }
     };
@@ -71,52 +84,77 @@ pub(super) fn merge_ai_connection_config(
             current.ai_agents.openrouter_api_key.clone(),
         ),
     };
+    let used_saved_api_key = current_api_key_is_saved(provider.clone(), current)
+        && selected_key_was_not_provided(
+            &provider,
+            matches!(&transient_openai_api_key, FieldUpdate::Missing),
+            matches!(&transient_gemini_api_key, FieldUpdate::Missing),
+            matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
+        );
 
     let Some(model) = model else {
         return Err(test_ai_agents_connection_response(
             false,
             "Provider, model, and matching API key are required.",
             false,
-            used_saved_value(&transient_provider, &current.ai_agents.selected_provider),
-            false,
+            used_saved_provider,
+            used_saved_model,
         ));
     };
+    let model = validate_ai_model(Some(model)).map_err(|error| {
+        map_validation_error_to_response(
+            error,
+            used_saved_api_key,
+            used_saved_provider,
+            used_saved_model,
+        )
+    })?;
+    let model = model.expect("validated selected model should remain present");
 
     let Some(api_key) = api_key else {
         return Err(test_ai_agents_connection_response(
             false,
             "Provider, model, and matching API key are required.",
-            current_api_key_is_saved(provider.clone(), current)
-                && selected_key_was_not_provided(
-                    &provider,
-                    matches!(&transient_openai_api_key, FieldUpdate::Missing),
-                    matches!(&transient_gemini_api_key, FieldUpdate::Missing),
-                    matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
-                ),
-            used_saved_value(&transient_provider, &current.ai_agents.selected_provider),
-            used_saved_value(&transient_model, &current.ai_agents.selected_model),
+            used_saved_api_key,
+            used_saved_provider,
+            used_saved_model,
         ));
     };
 
     Ok(MergedAiConnectionConfig {
         config: LlmProviderConfig {
-            provider: provider.clone(),
+            provider,
             model,
             api_key,
         },
-        used_saved_api_key: current_api_key_is_saved(provider.clone(), current)
-            && selected_key_was_not_provided(
-                &provider,
-                matches!(&transient_openai_api_key, FieldUpdate::Missing),
-                matches!(&transient_gemini_api_key, FieldUpdate::Missing),
-                matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
-            ),
-        used_saved_provider: used_saved_value(
-            &transient_provider,
-            &current.ai_agents.selected_provider,
-        ),
-        used_saved_model: used_saved_value(&transient_model, &current.ai_agents.selected_model),
+        used_saved_api_key,
+        used_saved_provider,
+        used_saved_model,
     })
+}
+
+fn map_validation_error_to_response(
+    error: SettingsError,
+    used_saved_api_key: bool,
+    used_saved_provider: bool,
+    used_saved_model: bool,
+) -> TestAiAgentsConnectionResponse {
+    match error {
+        SettingsError::Validation(message) => test_ai_agents_connection_response(
+            false,
+            &message,
+            used_saved_api_key,
+            used_saved_provider,
+            used_saved_model,
+        ),
+        other => test_ai_agents_connection_response(
+            false,
+            &other.to_string(),
+            used_saved_api_key,
+            used_saved_provider,
+            used_saved_model,
+        ),
+    }
 }
 
 pub(super) fn build_test_request(user_id: &str) -> LlmChatRequest {

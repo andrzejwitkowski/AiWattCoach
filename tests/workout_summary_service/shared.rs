@@ -4,17 +4,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use aiwattcoach::{
-    adapters::llm::dev_adapter::DevLlmCoachAdapter,
-    domain::{
-        identity::{Clock, IdGenerator},
-        llm::LlmChatPort,
-        workout_summary::{
-            BoxFuture, CoachReplyOperation, CoachReplyOperationClaimResult,
-            CoachReplyOperationRepository, CoachReplyOperationStatus, ConversationMessage,
-            MessageRole, WorkoutCoach, WorkoutSummary, WorkoutSummaryError,
-            WorkoutSummaryRepository, WorkoutSummaryService,
-        },
+use aiwattcoach::domain::{
+    identity::{Clock, IdGenerator},
+    llm::{LlmCacheUsage, LlmChatResponse, LlmProvider, LlmTokenUsage},
+    workout_summary::{
+        BoxFuture, CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
+        CoachReplyOperationStatus, ConversationMessage, MessageRole, WorkoutCoach, WorkoutSummary,
+        WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
     },
 };
 
@@ -222,6 +218,7 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
                     summary
                         .messages
                         .iter()
+                        .rev()
                         .find(|message| message.id == message_id)
                         .cloned()
                 }))
@@ -241,6 +238,10 @@ impl InMemoryCoachReplyOperationRepository {
     }
 
     pub(crate) fn seed(&self, operation: CoachReplyOperation) {
+        self.calls.lock().unwrap().push(format!(
+            "seed:{}:{}:{:?}",
+            operation.workout_id, operation.user_message_id, operation.status
+        ));
         self.operations.lock().unwrap().insert(
             (
                 operation.user_id.clone(),
@@ -271,7 +272,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     fn claim_pending(
         &self,
         operation: CoachReplyOperation,
-    ) -> BoxFuture<Result<CoachReplyOperationClaimResult, WorkoutSummaryError>> {
+    ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         let operations = self.operations.clone();
         let calls = self.calls.clone();
         Box::pin(async move {
@@ -279,7 +280,6 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
                 "claim_pending:{}:{}",
                 operation.workout_id, operation.user_message_id
             ));
-
             let key = (
                 operation.user_id.clone(),
                 operation.workout_id.clone(),
@@ -289,14 +289,13 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
             if let Some(existing) = operations.get(&key).cloned() {
                 if existing.status == CoachReplyOperationStatus::Failed {
                     operations.insert(key, operation.clone());
-                    return Ok(CoachReplyOperationClaimResult::Claimed(operation));
+                    return Ok(CoachReplyClaimResult::Claimed(operation));
                 }
-
-                return Ok(CoachReplyOperationClaimResult::Existing(existing));
+                return Ok(CoachReplyClaimResult::Existing(existing));
             }
 
             operations.insert(key, operation.clone());
-            Ok(CoachReplyOperationClaimResult::Claimed(operation))
+            Ok(CoachReplyClaimResult::Claimed(operation))
         })
     }
 
@@ -363,42 +362,6 @@ pub(crate) fn default_dev_coach() -> Arc<dyn WorkoutCoach> {
     Arc::new(DevWorkoutCoach)
 }
 
-#[derive(Clone, Default)]
-struct DevWorkoutCoach;
-
-impl WorkoutCoach for DevWorkoutCoach {
-    fn reply(
-        &self,
-        user_id: &str,
-        summary: &WorkoutSummary,
-        user_message: &str,
-    ) -> aiwattcoach::domain::llm::BoxFuture<
-        Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
-    > {
-        let adapter = DevLlmCoachAdapter;
-        let request = aiwattcoach::domain::llm::LlmChatRequest {
-            user_id: user_id.to_string(),
-            system_prompt: "test".to_string(),
-            stable_context: summary.workout_id.clone(),
-            conversation: vec![aiwattcoach::domain::llm::LlmChatMessage {
-                role: aiwattcoach::domain::llm::LlmMessageRole::User,
-                content: user_message.to_string(),
-            }],
-            cache_scope_key: Some(format!("test:{}", summary.workout_id)),
-            cache_key: Some("test-cache-key".to_string()),
-            reusable_cache_id: None,
-        };
-        adapter.chat(
-            aiwattcoach::domain::llm::LlmProviderConfig {
-                provider: aiwattcoach::domain::llm::LlmProvider::OpenAi,
-                model: "mock-workout-coach".to_string(),
-                api_key: "dev".to_string(),
-            },
-            request,
-        )
-    }
-}
-
 pub(crate) fn existing_summary() -> WorkoutSummary {
     WorkoutSummary {
         id: "summary-1".to_string(),
@@ -409,5 +372,33 @@ pub(crate) fn existing_summary() -> WorkoutSummary {
         saved_at_epoch_seconds: None,
         created_at_epoch_seconds: 1_700_000_000,
         updated_at_epoch_seconds: 1_700_000_000,
+    }
+}
+
+#[derive(Clone, Default)]
+struct DevWorkoutCoach;
+
+impl WorkoutCoach for DevWorkoutCoach {
+    fn reply(
+        &self,
+        _user_id: &str,
+        _summary: &WorkoutSummary,
+        user_message: &str,
+    ) -> aiwattcoach::domain::llm::BoxFuture<
+        Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
+    > {
+        let message = format!(
+            "Thanks, that helps. What stood out most about \"{user_message}\" during the workout?"
+        );
+        Box::pin(async move {
+            Ok(LlmChatResponse {
+                provider: LlmProvider::OpenAi,
+                model: "dev-llm-coach".to_string(),
+                message,
+                provider_request_id: Some("dev-request-1".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: LlmCacheUsage::default(),
+            })
+        })
     }
 }

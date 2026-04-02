@@ -1,8 +1,8 @@
 use crate::domain::identity::{Clock, IdGenerator};
 
 use super::{
-    validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyOperation,
-    CoachReplyOperationClaimResult, CoachReplyOperationRepository, CoachReplyOperationStatus,
+    validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyClaimResult,
+    CoachReplyOperation, CoachReplyOperationRepository, CoachReplyOperationStatus,
     CompletedCoachReply, ConversationMessage, MessageRole, PersistedUserMessage, SendMessageResult,
     WorkoutCoach, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
 };
@@ -433,11 +433,11 @@ where
             );
             let operation = match service
                 .reply_operations
-                .claim_pending(pending_operation)
+                .claim_pending(pending_operation.clone())
                 .await?
             {
-                CoachReplyOperationClaimResult::Claimed(operation) => operation,
-                CoachReplyOperationClaimResult::Existing(existing) => match existing.status {
+                CoachReplyClaimResult::Claimed(operation) => operation,
+                CoachReplyClaimResult::Existing(existing) => match existing.status {
                     CoachReplyOperationStatus::Completed => {
                         return service
                             .get_completed_reply(&user_id, &workout_id, existing)
@@ -446,11 +446,7 @@ where
                     CoachReplyOperationStatus::Pending => {
                         return Err(WorkoutSummaryError::ReplyAlreadyPending);
                     }
-                    CoachReplyOperationStatus::Failed => {
-                        return Err(WorkoutSummaryError::Repository(
-                            "failed coach reply operation should have been reclaimed".to_string(),
-                        ));
-                    }
+                    CoachReplyOperationStatus::Failed => pending_operation,
                 },
             };
 
@@ -464,7 +460,7 @@ where
                     let failed =
                         operation.mark_failed(error.to_string(), service.clock.now_epoch_seconds());
                     service.reply_operations.upsert(failed).await?;
-                    return Err(WorkoutSummaryError::Llm(error.to_string()));
+                    return Err(WorkoutSummaryError::Llm(error));
                 }
             };
 

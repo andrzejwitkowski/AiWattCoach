@@ -45,7 +45,7 @@ impl LlmChatPort for OpenAiClient {
                 .json(&payload)
                 .send()
                 .await
-                .map_err(|error| LlmError::Transport(error.to_string()))?;
+                .map_err(|error| LlmError::Transport(error.without_url().to_string()))?;
 
             let status = response.status();
             if !status.is_success() {
@@ -65,7 +65,7 @@ impl LlmChatPort for OpenAiClient {
 
 fn map_error(status: StatusCode, body: String) -> LlmError {
     match status {
-        StatusCode::UNAUTHORIZED => LlmError::CredentialsNotConfigured,
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => LlmError::CredentialsNotConfigured,
         StatusCode::TOO_MANY_REQUESTS => LlmError::RateLimited(body),
         StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY => {
             LlmError::ProviderRejected(body)

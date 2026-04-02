@@ -100,7 +100,9 @@ pub async fn test_ai_agents_connection(
     };
     let merged = match merge_ai_connection_config(body, &current) {
         Ok(config) => config,
-        Err(response_body) => return Json(response_body).into_response(),
+        Err(response_body) => {
+            return (StatusCode::BAD_REQUEST, Json(response_body)).into_response()
+        }
     };
 
     match llm_chat_service

@@ -44,7 +44,7 @@ impl std::fmt::Display for LlmProvider {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LlmProviderConfig {
     pub provider: LlmProvider,
     pub model: String,
@@ -63,7 +63,7 @@ pub struct LlmChatMessage {
     pub content: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LlmChatRequest {
     pub user_id: String,
     pub system_prompt: String,
@@ -102,7 +102,7 @@ pub struct LlmChatResponse {
     pub cache: LlmCacheUsage,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LlmContextCache {
     pub user_id: String,
     pub provider: LlmProvider,
@@ -118,4 +118,52 @@ pub struct LlmContextCache {
 pub fn hash_text(value: &str) -> String {
     let digest = Sha256::digest(value.as_bytes());
     format!("{digest:x}")
+}
+
+impl std::fmt::Debug for LlmProviderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LlmProviderConfig")
+            .field("provider", &self.provider)
+            .field("model", &self.model)
+            .field("api_key", &redact_value(&self.api_key))
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for LlmChatRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LlmChatRequest")
+            .field("user_id", &self.user_id)
+            .field("system_prompt", &redact_value(&self.system_prompt))
+            .field("stable_context", &redact_value(&self.stable_context))
+            .field("conversation_len", &self.conversation.len())
+            .field("cache_scope_key", &self.cache_scope_key)
+            .field("cache_key", &self.cache_key)
+            .field("reusable_cache_id", &self.reusable_cache_id)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for LlmContextCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LlmContextCache")
+            .field("user_id", &self.user_id)
+            .field("provider", &self.provider)
+            .field("model", &self.model)
+            .field("scope_key", &self.scope_key)
+            .field("context_hash", &redact_value(&self.context_hash))
+            .field("provider_cache_id", &redact_value(&self.provider_cache_id))
+            .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
+            .field("created_at_epoch_seconds", &self.created_at_epoch_seconds)
+            .field("updated_at_epoch_seconds", &self.updated_at_epoch_seconds)
+            .finish()
+    }
+}
+
+fn redact_value(value: &str) -> String {
+    if value.is_empty() {
+        return "<empty>".to_string();
+    }
+
+    format!("<redacted:{} chars>", value.chars().count())
 }

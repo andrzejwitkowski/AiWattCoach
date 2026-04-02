@@ -1,4 +1,5 @@
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use serde::{Deserialize, Serialize};
 
 use crate::domain::llm::{
     BoxFuture, LlmContextCache, LlmContextCacheRepository, LlmError, LlmProvider,
@@ -6,7 +7,20 @@ use crate::domain::llm::{
 
 #[derive(Clone)]
 pub struct MongoLlmContextCacheRepository {
-    collection: Collection<LlmContextCache>,
+    collection: Collection<LlmContextCacheDocument>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct LlmContextCacheDocument {
+    user_id: String,
+    provider: String,
+    model: String,
+    scope_key: String,
+    context_hash: String,
+    provider_cache_id: String,
+    expires_at_epoch_seconds: Option<i64>,
+    created_at_epoch_seconds: i64,
+    updated_at_epoch_seconds: i64,
 }
 
 impl MongoLlmContextCacheRepository {
@@ -77,23 +91,24 @@ impl LlmContextCacheRepository for MongoLlmContextCacheRepository {
                 .await
                 .map_err(|error| LlmError::Internal(error.to_string()))?;
 
-            Ok(document)
+            document.map(map_document_to_domain).transpose()
         })
     }
 
     fn upsert(&self, cache: LlmContextCache) -> BoxFuture<Result<LlmContextCache, LlmError>> {
         let collection = self.collection.clone();
         Box::pin(async move {
+            let document = map_domain_to_document(&cache);
             collection
                 .replace_one(
                     doc! {
-                        "user_id": &cache.user_id,
-                        "provider": cache.provider.as_str(),
-                        "model": &cache.model,
-                        "scope_key": &cache.scope_key,
-                        "context_hash": &cache.context_hash,
+                        "user_id": &document.user_id,
+                        "provider": &document.provider,
+                        "model": &document.model,
+                        "scope_key": &document.scope_key,
+                        "context_hash": &document.context_hash,
                     },
-                    &cache,
+                    &document,
                 )
                 .upsert(true)
                 .await
@@ -102,4 +117,37 @@ impl LlmContextCacheRepository for MongoLlmContextCacheRepository {
             Ok(cache)
         })
     }
+}
+
+fn map_domain_to_document(cache: &LlmContextCache) -> LlmContextCacheDocument {
+    LlmContextCacheDocument {
+        user_id: cache.user_id.clone(),
+        provider: cache.provider.as_str().to_string(),
+        model: cache.model.clone(),
+        scope_key: cache.scope_key.clone(),
+        context_hash: cache.context_hash.clone(),
+        provider_cache_id: cache.provider_cache_id.clone(),
+        expires_at_epoch_seconds: cache.expires_at_epoch_seconds,
+        created_at_epoch_seconds: cache.created_at_epoch_seconds,
+        updated_at_epoch_seconds: cache.updated_at_epoch_seconds,
+    }
+}
+
+fn map_document_to_domain(document: LlmContextCacheDocument) -> Result<LlmContextCache, LlmError> {
+    Ok(LlmContextCache {
+        user_id: document.user_id,
+        provider: LlmProvider::parse(&document.provider).ok_or_else(|| {
+            LlmError::Internal(format!(
+                "unknown llm provider in context cache: {}",
+                document.provider
+            ))
+        })?,
+        model: document.model,
+        scope_key: document.scope_key,
+        context_hash: document.context_hash,
+        provider_cache_id: document.provider_cache_id,
+        expires_at_epoch_seconds: document.expires_at_epoch_seconds,
+        created_at_epoch_seconds: document.created_at_epoch_seconds,
+        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+    })
 }

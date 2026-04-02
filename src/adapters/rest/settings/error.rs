@@ -10,7 +10,7 @@ use crate::domain::{
 };
 
 use super::super::logging;
-use super::dto::test_connection_response;
+use super::dto::{test_connection_response, validation_message_response};
 
 pub(super) fn map_admin_identity_error(err: &IdentityError) -> Response {
     match err {
@@ -49,7 +49,11 @@ pub(super) fn map_settings_error(err: &SettingsError) -> Response {
         }
         SettingsError::Validation(_) => {
             log_settings_error(Level::WARN, StatusCode::BAD_REQUEST, err);
-            StatusCode::BAD_REQUEST.into_response()
+            (
+                StatusCode::BAD_REQUEST,
+                Json(validation_message_response(&err.to_string())),
+            )
+                .into_response()
         }
     }
 }
