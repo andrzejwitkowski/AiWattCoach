@@ -1,8 +1,10 @@
+use super::error::is_duplicate_key_error;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::workout_summary::{
-    BoxFuture, CoachReplyOperation, CoachReplyOperationRepository, WorkoutSummaryError,
+    BoxFuture, CoachReplyOperation, CoachReplyOperationClaimResult, CoachReplyOperationRepository,
+    WorkoutSummaryError,
 };
 
 #[derive(Clone)]
@@ -71,7 +73,7 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
     fn claim_pending(
         &self,
         operation: CoachReplyOperation,
-    ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+    ) -> BoxFuture<Result<CoachReplyOperationClaimResult, WorkoutSummaryError>> {
         let collection = self.collection.clone();
         Box::pin(async move {
             let document = CoachReplyOperationDocument {
@@ -81,20 +83,54 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
                 payload: operation.clone(),
             };
 
-            collection
-                .replace_one(
+            let reclaimed = collection
+                .find_one_and_replace(
                     doc! {
                         "user_id": &document.user_id,
                         "workout_id": &document.workout_id,
                         "user_message_id": &document.user_message_id,
+                        "payload.status": "Failed",
                     },
                     &document,
                 )
-                .upsert(true)
                 .await
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
-            Ok(operation)
+            if reclaimed.is_some() {
+                return Ok(CoachReplyOperationClaimResult::Claimed(operation));
+            }
+
+            let inserted = collection
+                .insert_one(&document)
+                .await
+                .map(|_| true)
+                .or_else(|error| {
+                    if is_duplicate_key_error(&error) {
+                        Ok(false)
+                    } else {
+                        Err(WorkoutSummaryError::Repository(error.to_string()))
+                    }
+                })?;
+
+            if inserted {
+                return Ok(CoachReplyOperationClaimResult::Claimed(operation));
+            }
+
+            let existing = collection
+                .find_one(doc! {
+                    "user_id": &document.user_id,
+                    "workout_id": &document.workout_id,
+                    "user_message_id": &document.user_message_id,
+                })
+                .await
+                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?
+                .ok_or_else(|| {
+                    WorkoutSummaryError::Repository(
+                        "claimed coach reply operation disappeared before reload".to_string(),
+                    )
+                })?;
+
+            Ok(CoachReplyOperationClaimResult::Existing(existing.payload))
         })
     }
 

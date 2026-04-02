@@ -227,14 +227,16 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 .unwrap()
                 .push(content.clone());
 
+            let next_message_id = summary.messages.len() + 1;
+
             let user_message = ConversationMessage {
-                id: "message-user-1".to_string(),
+                id: format!("message-user-{next_message_id}"),
                 role: MessageRole::User,
                 content,
                 created_at_epoch_seconds: 1_700_000_000,
             };
             let coach_message = ConversationMessage {
-                id: "message-coach-1".to_string(),
+                id: format!("message-coach-{next_message_id}"),
                 role: MessageRole::Coach,
                 content: "Thanks, that helps. What stood out most about how the workout felt compared with the plan?".to_string(),
                 created_at_epoch_seconds: 1_700_000_000,
@@ -286,8 +288,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 .unwrap()
                 .push(content.clone());
 
+            let next_message_id = summary.messages.len() + 1;
+
             let user_message = ConversationMessage {
-                id: "message-user-1".to_string(),
+                id: format!("message-user-{next_message_id}"),
                 role: MessageRole::User,
                 content,
                 created_at_epoch_seconds: 1_700_000_000,
@@ -307,7 +311,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         &self,
         user_id: &str,
         workout_id: &str,
-        user_message_content: String,
+        user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
@@ -330,10 +334,23 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 ));
             }
 
+            let user_message = summary
+                .messages
+                .iter()
+                .find(|message| message.id == user_message_id && message.role == MessageRole::User)
+                .cloned()
+                .ok_or_else(|| {
+                    WorkoutSummaryError::Validation(
+                        "user message must be persisted before generating coach reply".to_string(),
+                    )
+                })?;
+
+            let next_message_id = summary.messages.len() + 1;
+
             let coach_message = ConversationMessage {
-                id: "message-coach-1".to_string(),
+                id: format!("message-coach-{next_message_id}"),
                 role: MessageRole::Coach,
-                content: format!("Coach reply to: {user_message_content}"),
+                content: format!("Coach reply to: {}", user_message.content),
                 created_at_epoch_seconds: 1_700_000_000,
             };
 

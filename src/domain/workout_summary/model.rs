@@ -6,6 +6,7 @@ pub enum WorkoutSummaryError {
     AlreadyExists,
     Locked,
     NotFound,
+    ReplyAlreadyPending,
     Repository(String),
     Llm(String),
     Validation(String),
@@ -17,6 +18,7 @@ impl std::fmt::Display for WorkoutSummaryError {
             Self::AlreadyExists => write!(f, "workout summary already exists"),
             Self::Locked => write!(f, "workout summary is saved and cannot be edited"),
             Self::NotFound => write!(f, "workout summary not found"),
+            Self::ReplyAlreadyPending => write!(f, "coach reply is already pending"),
             Self::Repository(message) => write!(f, "{message}"),
             Self::Llm(message) => write!(f, "{message}"),
             Self::Validation(message) => write!(f, "{message}"),
@@ -48,6 +50,12 @@ pub struct CoachReplyOperation {
     pub error_message: Option<String>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CoachReplyOperationClaimResult {
+    Claimed(CoachReplyOperation),
+    Existing(CoachReplyOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

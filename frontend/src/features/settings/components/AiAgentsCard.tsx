@@ -19,13 +19,22 @@ type DraftState = {
 
 export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps) {
   const aiAgents = settings.aiAgents;
-  const persistedDraft = {
-    openaiApiKey: aiAgents.openaiApiKey ?? '',
-    geminiApiKey: aiAgents.geminiApiKey ?? '',
-    openrouterApiKey: aiAgents.openrouterApiKey ?? '',
-    selectedProvider: aiAgents.selectedProvider ?? '',
-    selectedModel: aiAgents.selectedModel ?? '',
-  };
+  const persistedDraft = useMemo(
+    () => ({
+      openaiApiKey: aiAgents.openaiApiKey ?? '',
+      geminiApiKey: aiAgents.geminiApiKey ?? '',
+      openrouterApiKey: aiAgents.openrouterApiKey ?? '',
+      selectedProvider: aiAgents.selectedProvider ?? '',
+      selectedModel: aiAgents.selectedModel ?? '',
+    }),
+    [
+      aiAgents.geminiApiKey,
+      aiAgents.openaiApiKey,
+      aiAgents.openrouterApiKey,
+      aiAgents.selectedModel,
+      aiAgents.selectedProvider,
+    ],
+  );
   const [draft, setDraft] = useState<DraftState>(persistedDraft);
   const [cleanDraft, setCleanDraft] = useState<DraftState>(persistedDraft);
   const [showOpenai, setShowOpenai] = useState(false);
@@ -109,40 +118,32 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     aiAgents.openrouterApiKeySet ||
     Boolean(aiAgents.selectedProvider) ||
     Boolean(aiAgents.selectedModel);
-  const canSave =
-    draft.selectedProvider.trim().length > 0 ||
-    draft.selectedModel.trim().length > 0 ||
-    draft.openaiApiKey.trim().length > 0 ||
-    draft.geminiApiKey.trim().length > 0 ||
-    draft.openrouterApiKey.trim().length > 0;
-  const canTest = canSave || hasAnyPersistedConnectionValue;
 
   const visibleRequest = useMemo(() => {
-    const request: Record<string, string> = {};
-    const trimmedOpenai = draft.openaiApiKey.trim();
-    const trimmedGemini = draft.geminiApiKey.trim();
-    const trimmedOpenrouter = draft.openrouterApiKey.trim();
-    const trimmedProvider = draft.selectedProvider.trim();
-    const trimmedModel = draft.selectedModel.trim();
+    const request: Partial<Record<keyof DraftState, string | null>> = {};
 
-    if (trimmedOpenai && trimmedOpenai !== persistedDraft.openaiApiKey) {
-      request.openaiApiKey = trimmedOpenai;
-    }
-    if (trimmedGemini && trimmedGemini !== persistedDraft.geminiApiKey) {
-      request.geminiApiKey = trimmedGemini;
-    }
-    if (trimmedOpenrouter && trimmedOpenrouter !== persistedDraft.openrouterApiKey) {
-      request.openrouterApiKey = trimmedOpenrouter;
-    }
-    if (trimmedProvider && trimmedProvider !== persistedDraft.selectedProvider) {
-      request.selectedProvider = trimmedProvider;
-    }
-    if (trimmedModel && trimmedModel !== persistedDraft.selectedModel) {
-      request.selectedModel = trimmedModel;
-    }
+    const assignField = (field: keyof DraftState) => {
+      const currentValue = draft[field];
+      const persistedValue = persistedDraft[field];
+
+      if (currentValue === persistedValue) {
+        return;
+      }
+
+      const trimmedValue = currentValue.trim();
+      request[field] = trimmedValue.length > 0 ? trimmedValue : null;
+    };
+
+    assignField('openaiApiKey');
+    assignField('geminiApiKey');
+    assignField('openrouterApiKey');
+    assignField('selectedProvider');
+    assignField('selectedModel');
 
     return request;
   }, [draft, persistedDraft]);
+  const canSave = hasDirtyDraft;
+  const canTest = Object.keys(visibleRequest).length > 0 || hasAnyPersistedConnectionValue;
 
   const clearTestStatusIfNeeded = () => {
     testRunIdRef.current += 1;

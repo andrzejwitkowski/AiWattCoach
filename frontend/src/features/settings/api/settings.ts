@@ -21,26 +21,39 @@ export async function loadSettings(apiBaseUrl: string) {
   }
 }
 
+function normalizeStringField(value: string | null | undefined): string | null | undefined {
+  if (value === null) {
+    return null;
+  }
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   const validated = updateAiAgentsRequestSchema.parse(data);
-  const trimmed = {
-    openaiApiKey: validated.openaiApiKey?.trim() ?? undefined,
-    geminiApiKey: validated.geminiApiKey?.trim() ?? undefined,
-    openrouterApiKey: validated.openrouterApiKey?.trim() ?? undefined,
-    selectedProvider: validated.selectedProvider?.trim() ?? undefined,
-    selectedModel: validated.selectedModel?.trim() ?? undefined,
+  const normalized = {
+    openaiApiKey: normalizeStringField(validated.openaiApiKey),
+    geminiApiKey: normalizeStringField(validated.geminiApiKey),
+    openrouterApiKey: normalizeStringField(validated.openrouterApiKey),
+    selectedProvider: normalizeStringField(validated.selectedProvider),
+    selectedModel: normalizeStringField(validated.selectedModel),
   };
-  return patch(apiBaseUrl, '/api/settings/ai-agents', trimmed);
+  return patch(apiBaseUrl, '/api/settings/ai-agents', normalized);
 }
 
 export async function testAiAgentsConnection(apiBaseUrl: string, data: unknown) {
   const validated = updateAiAgentsRequestSchema.parse(data);
   const body = {
-    openaiApiKey: validated.openaiApiKey?.trim() ?? undefined,
-    geminiApiKey: validated.geminiApiKey?.trim() ?? undefined,
-    openrouterApiKey: validated.openrouterApiKey?.trim() ?? undefined,
-    selectedProvider: validated.selectedProvider?.trim() ?? undefined,
-    selectedModel: validated.selectedModel?.trim() ?? undefined,
+    openaiApiKey: normalizeStringField(validated.openaiApiKey),
+    geminiApiKey: normalizeStringField(validated.geminiApiKey),
+    openrouterApiKey: normalizeStringField(validated.openrouterApiKey),
+    selectedProvider: normalizeStringField(validated.selectedProvider),
+    selectedModel: normalizeStringField(validated.selectedModel),
   };
   const parsed = await post<typeof body, unknown>(apiBaseUrl, '/api/settings/ai-agents/test', body, {
     allowStatuses: [400, 503],

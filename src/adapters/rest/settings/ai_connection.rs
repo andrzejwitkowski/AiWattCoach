@@ -6,6 +6,9 @@ use crate::domain::{
 use super::dto::{
     test_ai_agents_connection_response, TestAiAgentsConnectionResponse, UpdateAiAgentsRequest,
 };
+use super::input::{
+    apply_field_update, normalize_string_input, parse_provider_input, used_saved_value, FieldUpdate,
+};
 
 pub(super) struct MergedAiConnectionConfig {
     pub(super) config: LlmProviderConfig,
@@ -18,29 +21,28 @@ pub(super) fn merge_ai_connection_config(
     body: UpdateAiAgentsRequest,
     current: &UserSettings,
 ) -> Result<MergedAiConnectionConfig, TestAiAgentsConnectionResponse> {
-    let transient_provider = match body.selected_provider {
-        Some(value) => Some(parse_provider(&value).ok_or_else(|| {
-            test_ai_agents_connection_response(
-                false,
-                "selectedProvider must be one of: openai, gemini, openrouter",
-                false,
-                false,
-                false,
-            )
-        })?),
-        None => None,
-    };
-    let transient_model = normalize_optional_input(body.selected_model);
-    let transient_openai_api_key = normalize_optional_input(body.openai_api_key);
-    let transient_gemini_api_key = normalize_optional_input(body.gemini_api_key);
-    let transient_openrouter_api_key = normalize_optional_input(body.openrouter_api_key);
+    let transient_provider = parse_provider_input(body.selected_provider, || {
+        test_ai_agents_connection_response(
+            false,
+            "selectedProvider must be one of: openai, gemini, openrouter",
+            false,
+            false,
+            false,
+        )
+    })?;
+    let transient_model = normalize_string_input(body.selected_model);
+    let transient_openai_api_key = normalize_string_input(body.openai_api_key);
+    let transient_gemini_api_key = normalize_string_input(body.gemini_api_key);
+    let transient_openrouter_api_key = normalize_string_input(body.openrouter_api_key);
 
-    let provider = transient_provider
-        .clone()
-        .or(current.ai_agents.selected_provider.clone());
-    let model = transient_model
-        .clone()
-        .or(current.ai_agents.selected_model.clone());
+    let provider = apply_field_update(
+        transient_provider.clone(),
+        current.ai_agents.selected_provider.clone(),
+    );
+    let model = apply_field_update(
+        transient_model.clone(),
+        current.ai_agents.selected_model.clone(),
+    );
 
     let provider = match provider {
         Some(provider) => provider,
@@ -56,40 +58,43 @@ pub(super) fn merge_ai_connection_config(
     };
 
     let api_key = match provider {
-        LlmProvider::OpenAi => transient_openai_api_key
-            .clone()
-            .or(current.ai_agents.openai_api_key.clone()),
-        LlmProvider::Gemini => transient_gemini_api_key
-            .clone()
-            .or(current.ai_agents.gemini_api_key.clone()),
-        LlmProvider::OpenRouter => transient_openrouter_api_key
-            .clone()
-            .or(current.ai_agents.openrouter_api_key.clone()),
+        LlmProvider::OpenAi => apply_field_update(
+            transient_openai_api_key.clone(),
+            current.ai_agents.openai_api_key.clone(),
+        ),
+        LlmProvider::Gemini => apply_field_update(
+            transient_gemini_api_key.clone(),
+            current.ai_agents.gemini_api_key.clone(),
+        ),
+        LlmProvider::OpenRouter => apply_field_update(
+            transient_openrouter_api_key.clone(),
+            current.ai_agents.openrouter_api_key.clone(),
+        ),
     };
 
-    let Some(model) = model.filter(|value| !value.trim().is_empty()) else {
+    let Some(model) = model else {
         return Err(test_ai_agents_connection_response(
             false,
             "Provider, model, and matching API key are required.",
             false,
-            transient_provider.is_none() && current.ai_agents.selected_provider.is_some(),
+            used_saved_value(&transient_provider, &current.ai_agents.selected_provider),
             false,
         ));
     };
 
-    let Some(api_key) = api_key.filter(|value| !value.trim().is_empty()) else {
+    let Some(api_key) = api_key else {
         return Err(test_ai_agents_connection_response(
             false,
             "Provider, model, and matching API key are required.",
             current_api_key_is_saved(provider.clone(), current)
                 && selected_key_was_not_provided(
                     &provider,
-                    transient_openai_api_key.is_none(),
-                    transient_gemini_api_key.is_none(),
-                    transient_openrouter_api_key.is_none(),
+                    matches!(&transient_openai_api_key, FieldUpdate::Missing),
+                    matches!(&transient_gemini_api_key, FieldUpdate::Missing),
+                    matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
                 ),
-            transient_provider.is_none() && current.ai_agents.selected_provider.is_some(),
-            transient_model.is_none() && current.ai_agents.selected_model.is_some(),
+            used_saved_value(&transient_provider, &current.ai_agents.selected_provider),
+            used_saved_value(&transient_model, &current.ai_agents.selected_model),
         ));
     };
 
@@ -102,13 +107,15 @@ pub(super) fn merge_ai_connection_config(
         used_saved_api_key: current_api_key_is_saved(provider.clone(), current)
             && selected_key_was_not_provided(
                 &provider,
-                transient_openai_api_key.is_none(),
-                transient_gemini_api_key.is_none(),
-                transient_openrouter_api_key.is_none(),
+                matches!(&transient_openai_api_key, FieldUpdate::Missing),
+                matches!(&transient_gemini_api_key, FieldUpdate::Missing),
+                matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
             ),
-        used_saved_provider: transient_provider.is_none()
-            && current.ai_agents.selected_provider.is_some(),
-        used_saved_model: transient_model.is_none() && current.ai_agents.selected_model.is_some(),
+        used_saved_provider: used_saved_value(
+            &transient_provider,
+            &current.ai_agents.selected_provider,
+        ),
+        used_saved_model: used_saved_value(&transient_model, &current.ai_agents.selected_model),
     })
 }
 
@@ -163,17 +170,6 @@ pub(super) fn map_ai_connection_error_to_response(
             used_saved_model,
         )),
     )
-}
-
-fn normalize_optional_input(value: Option<String>) -> Option<String> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    })
-}
-
-fn parse_provider(value: &str) -> Option<LlmProvider> {
-    LlmProvider::parse(value)
 }
 
 fn current_api_key_is_saved(provider: LlmProvider, current: &UserSettings) -> bool {

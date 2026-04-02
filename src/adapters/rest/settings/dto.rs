@@ -1,5 +1,25 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) enum OptionalStringInput {
+    #[default]
+    Missing,
+    Null,
+    Value(String),
+}
+
+impl<'de> Deserialize<'de> for OptionalStringInput {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(match Option::<String>::deserialize(deserializer)? {
+            Some(value) => Self::Value(value),
+            None => Self::Null,
+        })
+    }
+}
+
 #[derive(Serialize)]
 pub(super) struct UserSettingsDto {
     #[serde(rename = "aiAgents")]
@@ -67,16 +87,16 @@ pub(super) struct CyclingDto {
 
 #[derive(Deserialize)]
 pub(crate) struct UpdateAiAgentsRequest {
-    #[serde(rename = "openaiApiKey")]
-    pub(super) openai_api_key: Option<String>,
-    #[serde(rename = "geminiApiKey")]
-    pub(super) gemini_api_key: Option<String>,
-    #[serde(rename = "openrouterApiKey")]
-    pub(super) openrouter_api_key: Option<String>,
-    #[serde(rename = "selectedProvider")]
-    pub(super) selected_provider: Option<String>,
-    #[serde(rename = "selectedModel")]
-    pub(super) selected_model: Option<String>,
+    #[serde(default, rename = "openaiApiKey")]
+    pub(super) openai_api_key: OptionalStringInput,
+    #[serde(default, rename = "geminiApiKey")]
+    pub(super) gemini_api_key: OptionalStringInput,
+    #[serde(default, rename = "openrouterApiKey")]
+    pub(super) openrouter_api_key: OptionalStringInput,
+    #[serde(default, rename = "selectedProvider")]
+    pub(super) selected_provider: OptionalStringInput,
+    #[serde(default, rename = "selectedModel")]
+    pub(super) selected_model: OptionalStringInput,
 }
 
 #[derive(Deserialize)]

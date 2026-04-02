@@ -2,9 +2,9 @@ use crate::domain::identity::{Clock, IdGenerator};
 
 use super::{
     validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyOperation,
-    CoachReplyOperationRepository, CoachReplyOperationStatus, CompletedCoachReply,
-    ConversationMessage, MessageRole, PersistedUserMessage, SendMessageResult, WorkoutCoach,
-    WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
+    CoachReplyOperationClaimResult, CoachReplyOperationRepository, CoachReplyOperationStatus,
+    CompletedCoachReply, ConversationMessage, MessageRole, PersistedUserMessage, SendMessageResult,
+    WorkoutCoach, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
 };
 
 pub trait WorkoutSummaryUseCases: Send + Sync {
@@ -63,7 +63,7 @@ pub trait WorkoutSummaryUseCases: Send + Sync {
         &self,
         user_id: &str,
         workout_id: &str,
-        user_message_content: String,
+        user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>>;
 }
 
@@ -168,6 +168,28 @@ where
             .find_message_by_id(user_id, workout_id, message_id)
             .await?
             .ok_or(WorkoutSummaryError::NotFound)
+    }
+
+    async fn get_completed_reply(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        operation: CoachReplyOperation,
+    ) -> Result<CoachReply, WorkoutSummaryError> {
+        let coach_message_id = operation.coach_message_id.ok_or_else(|| {
+            WorkoutSummaryError::Repository(
+                "completed coach reply operation missing coach message id".to_string(),
+            )
+        })?;
+        let coach_message = self
+            .get_message_by_id(user_id, workout_id, &coach_message_id)
+            .await?;
+        let summary = self.get_existing_summary(user_id, workout_id).await?;
+
+        Ok(CoachReply {
+            summary,
+            coach_message,
+        })
     }
 }
 
@@ -346,11 +368,7 @@ where
                 .append_user_message(&user_id, &workout_id, content)
                 .await?;
             let reply = service
-                .generate_coach_reply(
-                    &user_id,
-                    &workout_id,
-                    persisted.user_message.content.clone(),
-                )
+                .generate_coach_reply(&user_id, &workout_id, persisted.user_message.id.clone())
                 .await?;
 
             Ok(SendMessageResult {
@@ -388,48 +406,21 @@ where
         &self,
         user_id: &str,
         workout_id: &str,
-        user_message_content: String,
+        user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
             let summary = service.get_existing_summary(&user_id, &workout_id).await?;
-            let user_message = summary
-                .messages
-                .iter()
-                .rev()
-                .find(|message| {
-                    message.role == MessageRole::User && message.content == user_message_content
-                })
-                .cloned()
-                .ok_or_else(|| {
-                    WorkoutSummaryError::Validation(
-                        "user message must be persisted before generating coach reply".to_string(),
-                    )
-                })?;
+            let user_message = service
+                .get_message_by_id(&user_id, &workout_id, &user_message_id)
+                .await?;
 
-            if let Some(existing) = service
-                .reply_operations
-                .find_by_user_message_id(&user_id, &workout_id, &user_message.id)
-                .await?
-            {
-                if existing.status == CoachReplyOperationStatus::Completed {
-                    let coach_message_id = existing.coach_message_id.ok_or_else(|| {
-                        WorkoutSummaryError::Repository(
-                            "completed coach reply operation missing coach message id".to_string(),
-                        )
-                    })?;
-                    let coach_message = service
-                        .get_message_by_id(&user_id, &workout_id, &coach_message_id)
-                        .await?;
-                    let summary = service.get_existing_summary(&user_id, &workout_id).await?;
-
-                    return Ok(CoachReply {
-                        summary,
-                        coach_message,
-                    });
-                }
+            if user_message.role != MessageRole::User {
+                return Err(WorkoutSummaryError::Validation(
+                    "user message must be persisted before generating coach reply".to_string(),
+                ));
             }
 
             let now = service.clock.now_epoch_seconds();
@@ -440,14 +431,32 @@ where
                 Some(format!("workout-summary:{user_id}:{workout_id}")),
                 now,
             );
-            let operation = service
+            let operation = match service
                 .reply_operations
                 .claim_pending(pending_operation)
-                .await?;
+                .await?
+            {
+                CoachReplyOperationClaimResult::Claimed(operation) => operation,
+                CoachReplyOperationClaimResult::Existing(existing) => match existing.status {
+                    CoachReplyOperationStatus::Completed => {
+                        return service
+                            .get_completed_reply(&user_id, &workout_id, existing)
+                            .await;
+                    }
+                    CoachReplyOperationStatus::Pending => {
+                        return Err(WorkoutSummaryError::ReplyAlreadyPending);
+                    }
+                    CoachReplyOperationStatus::Failed => {
+                        return Err(WorkoutSummaryError::Repository(
+                            "failed coach reply operation should have been reclaimed".to_string(),
+                        ));
+                    }
+                },
+            };
 
             let llm_response = match service
                 .coach
-                .reply(&user_id, &summary, &user_message_content)
+                .reply(&user_id, &summary, &user_message.content)
                 .await
             {
                 Ok(response) => response,

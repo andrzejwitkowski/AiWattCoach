@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    sync::atomic::{AtomicUsize, Ordering},
     sync::{Arc, Mutex},
 };
 
@@ -9,7 +10,8 @@ use aiwattcoach::{
         identity::{Clock, IdGenerator},
         llm::LlmChatPort,
         workout_summary::{
-            BoxFuture, CoachReplyOperation, CoachReplyOperationRepository, ConversationMessage,
+            BoxFuture, CoachReplyOperation, CoachReplyOperationClaimResult,
+            CoachReplyOperationRepository, CoachReplyOperationStatus, ConversationMessage,
             MessageRole, WorkoutCoach, WorkoutSummary, WorkoutSummaryError,
             WorkoutSummaryRepository, WorkoutSummaryService,
         },
@@ -28,12 +30,15 @@ impl Clock for TestClock {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct TestIdGenerator;
+#[derive(Clone, Default)]
+pub(crate) struct TestIdGenerator {
+    next_id: Arc<AtomicUsize>,
+}
 
 impl IdGenerator for TestIdGenerator {
     fn new_id(&self, prefix: &str) -> String {
-        format!("{prefix}-1")
+        let next_id = self.next_id.fetch_add(1, Ordering::SeqCst) + 1;
+        format!("{prefix}-{next_id}")
     }
 }
 
@@ -234,6 +239,17 @@ impl InMemoryCoachReplyOperationRepository {
     pub(crate) fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
     }
+
+    pub(crate) fn seed(&self, operation: CoachReplyOperation) {
+        self.operations.lock().unwrap().insert(
+            (
+                operation.user_id.clone(),
+                operation.workout_id.clone(),
+                operation.user_message_id.clone(),
+            ),
+            operation,
+        );
+    }
 }
 
 impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
@@ -255,7 +271,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     fn claim_pending(
         &self,
         operation: CoachReplyOperation,
-    ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+    ) -> BoxFuture<Result<CoachReplyOperationClaimResult, WorkoutSummaryError>> {
         let operations = self.operations.clone();
         let calls = self.calls.clone();
         Box::pin(async move {
@@ -263,15 +279,24 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
                 "claim_pending:{}:{}",
                 operation.workout_id, operation.user_message_id
             ));
-            operations.lock().unwrap().insert(
-                (
-                    operation.user_id.clone(),
-                    operation.workout_id.clone(),
-                    operation.user_message_id.clone(),
-                ),
-                operation.clone(),
+
+            let key = (
+                operation.user_id.clone(),
+                operation.workout_id.clone(),
+                operation.user_message_id.clone(),
             );
-            Ok(operation)
+            let mut operations = operations.lock().unwrap();
+            if let Some(existing) = operations.get(&key).cloned() {
+                if existing.status == CoachReplyOperationStatus::Failed {
+                    operations.insert(key, operation.clone());
+                    return Ok(CoachReplyOperationClaimResult::Claimed(operation));
+                }
+
+                return Ok(CoachReplyOperationClaimResult::Existing(existing));
+            }
+
+            operations.insert(key, operation.clone());
+            Ok(CoachReplyOperationClaimResult::Claimed(operation))
         })
     }
 
@@ -311,7 +336,7 @@ pub(crate) fn test_service(
         repository,
         InMemoryCoachReplyOperationRepository::default(),
         TestClock,
-        TestIdGenerator,
+        TestIdGenerator::default(),
     )
 }
 
@@ -329,7 +354,7 @@ pub(crate) fn test_service_with_coach(
         repository,
         reply_operations,
         TestClock,
-        TestIdGenerator,
+        TestIdGenerator::default(),
         coach,
     )
 }

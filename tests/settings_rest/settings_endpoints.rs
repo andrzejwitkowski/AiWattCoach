@@ -439,6 +439,8 @@ async fn update_ai_agents_supports_openrouter_provider_and_model() {
         .unwrap()
         .as_bool()
         .unwrap());
+    let openrouter_key = ai_agents.get("openrouterApiKey").unwrap().as_str().unwrap();
+    assert!(openrouter_key.starts_with("***..."));
     assert_eq!(
         ai_agents.get("selectedProvider").unwrap().as_str().unwrap(),
         "openrouter"
@@ -475,6 +477,60 @@ async fn update_ai_agents_rejects_invalid_provider() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn update_ai_agents_explicitly_clears_provider_model_and_openrouter_key() {
+    let mut existing_settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    existing_settings.ai_agents.openrouter_api_key = Some("or-key-123456".to_string());
+    existing_settings.ai_agents.selected_provider =
+        Some(aiwattcoach::domain::llm::LlmProvider::OpenRouter);
+    existing_settings.ai_agents.selected_model = Some("openai/gpt-4o-mini".to_string());
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(existing_settings),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openrouterApiKey": null,
+        "selectedProvider": "   ",
+        "selectedModel": null
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/ai-agents")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let ai_agents = response_body.get("aiAgents").unwrap();
+
+    assert!(!ai_agents
+        .get("openrouterApiKeySet")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert!(ai_agents
+        .get("openrouterApiKey")
+        .is_none_or(|value| value.is_null()));
+    assert!(ai_agents
+        .get("selectedProvider")
+        .is_none_or(|value| value.is_null()));
+    assert!(ai_agents
+        .get("selectedModel")
+        .is_none_or(|value| value.is_null()));
 }
 
 #[tokio::test]
@@ -515,6 +571,98 @@ async fn test_ai_agents_connection_returns_ok_for_valid_provider_settings() {
         response_body.get("message").unwrap().as_str().unwrap(),
         "Connection successful."
     );
+}
+
+#[tokio::test]
+async fn test_ai_agents_connection_returns_unauthorized_for_missing_auth() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_ok())),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openrouterApiKey": "or-key-123456",
+        "selectedProvider": "openrouter",
+        "selectedModel": "openai/gpt-4o-mini"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_ai_agents_connection_explicit_clear_does_not_fall_back_to_saved_values() {
+    let mut existing_settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    existing_settings.ai_agents.openrouter_api_key = Some("or-key-123456".to_string());
+    existing_settings.ai_agents.selected_provider =
+        Some(aiwattcoach::domain::llm::LlmProvider::OpenRouter);
+    existing_settings.ai_agents.selected_model = Some("openai/gpt-4o-mini".to_string());
+
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(existing_settings),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_ok())),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "selectedProvider": null,
+        "selectedModel": "   "
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    assert!(!response_body.get("connected").unwrap().as_bool().unwrap());
+    assert_eq!(
+        response_body.get("message").unwrap().as_str().unwrap(),
+        "Provider, model, and matching API key are required."
+    );
+    assert!(!response_body
+        .get("usedSavedProvider")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert!(!response_body
+        .get("usedSavedModel")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+    assert!(!response_body
+        .get("usedSavedApiKey")
+        .unwrap()
+        .as_bool()
+        .unwrap());
 }
 
 #[tokio::test]

@@ -2,6 +2,7 @@ mod ai_connection;
 mod dto;
 mod error;
 mod handlers;
+mod input;
 mod intervals_connection;
 mod mapping;
 

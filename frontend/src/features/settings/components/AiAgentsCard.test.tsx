@@ -110,6 +110,36 @@ describe('AiAgentsCard', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('sends explicit null clears for removed provider settings', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildSettings({
+      openrouterApiKey: null,
+      openrouterApiKeySet: false,
+      selectedProvider: null,
+      selectedModel: null,
+    }));
+
+    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText(/model/i), {
+      target: { value: '   ' },
+    });
+    fireEvent.change(screen.getByLabelText(/openrouter api key/i), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(updateAiAgentsMock).toHaveBeenCalledWith('', {
+        openrouterApiKey: null,
+        selectedProvider: null,
+        selectedModel: null,
+      });
+    });
+  });
+
   it('ignores stale test responses after the draft changes', async () => {
     let resolveTest:
       | ((value: {

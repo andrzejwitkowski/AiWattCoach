@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { testAiAgentsConnection, testIntervalsConnection } from './settings';
+import { testAiAgentsConnection, testIntervalsConnection, updateAiAgents } from './settings';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 
 const originalFetch = global.fetch;
@@ -186,6 +186,48 @@ describe('settings api', () => {
         selectedModel: 'openai/gpt-4o-mini',
       }),
     });
-    expect(result.connected).toBe(true);
+    expect(result).toEqual({
+      connected: true,
+      message: 'Connection successful.',
+      usedSavedApiKey: false,
+      usedSavedProvider: false,
+      usedSavedModel: false,
+    });
+  });
+
+  it('preserves explicit null clears for ai settings payloads', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateAiAgents('', {
+      openrouterApiKey: '   ',
+      selectedProvider: null,
+      selectedModel: '',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        openaiApiKey: undefined,
+        geminiApiKey: undefined,
+        openrouterApiKey: null,
+        selectedProvider: null,
+        selectedModel: null,
+      }),
+    });
   });
 });
