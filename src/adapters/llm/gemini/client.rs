@@ -10,6 +10,7 @@ use super::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
+const MAX_LOGGED_RESPONSE_BODY_CHARS: usize = 400;
 
 #[derive(Clone)]
 pub struct GeminiClient {
@@ -39,6 +40,10 @@ impl LlmChatPort for GeminiClient {
     ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
         let client = self.client.clone();
         let base_url = self.base_url.clone();
+        let model = config.model.clone();
+        let message_count = request.conversation.len();
+        let has_system_prompt = !request.system_prompt.trim().is_empty();
+        let has_stable_context = !request.stable_context.trim().is_empty();
 
         Box::pin(async move {
             let mut provider_cache_id = request.reusable_cache_id.clone();
@@ -50,53 +55,149 @@ impl LlmChatPort for GeminiClient {
 
             if can_create_cache {
                 if let Some(cache_request) = mapping::map_create_cache_request(&config, &request) {
+                    let cache_url = format!("{}/cachedContents?key={}", base_url, config.api_key);
+                    tracing::info!(
+                        provider = "gemini",
+                        model = %model,
+                        url = %cache_url,
+                        message_count,
+                        has_system_prompt,
+                        has_stable_context,
+                        "sending gemini cache create request"
+                    );
                     let cache_response = client
-                        .post(format!(
-                            "{}/cachedContents?key={}",
-                            base_url, config.api_key
-                        ))
+                        .post(cache_url.clone())
                         .json(&cache_request)
                         .send()
                         .await
-                        .map_err(|error| LlmError::Transport(error.without_url().to_string()))?;
+                        .map_err(|error| {
+                            let message = error.without_url().to_string();
+                            tracing::warn!(
+                                provider = "gemini",
+                                model = %model,
+                                url = %cache_url,
+                                error = %message,
+                                "gemini cache create transport failure"
+                            );
+                            LlmError::Transport(message)
+                        })?;
 
                     if cache_response.status().is_success() {
-                        let cache: GeminiCachedContentResponse = cache_response
-                            .json()
-                            .await
-                            .map_err(|error| LlmError::InvalidResponse(error.to_string()))?;
+                        let cache_body = cache_response.text().await.map_err(|error| {
+                            let message = error.without_url().to_string();
+                            tracing::warn!(
+                                provider = "gemini",
+                                model = %model,
+                                url = %cache_url,
+                                error = %message,
+                                "gemini cache create response body read failed"
+                            );
+                            LlmError::InvalidResponse(message)
+                        })?;
+                        let cache: GeminiCachedContentResponse = serde_json::from_str(&cache_body)
+                            .map_err(|error| {
+                                let message = error.to_string();
+                                tracing::warn!(
+                                    provider = "gemini",
+                                    model = %model,
+                                    url = %cache_url,
+                                    error = %message,
+                                    response_body = %truncate_logged_response_body(&cache_body),
+                                    "gemini cache create json parsing failed"
+                                );
+                                LlmError::InvalidResponse(message)
+                            })?;
                         provider_cache_id = cache.name;
                         cache_expires_at_epoch_seconds = cache
                             .expire_time
                             .as_deref()
                             .and_then(parse_expire_time_epoch_seconds);
-                        tracing::info!(provider = "gemini", model = %config.model, cache_created = provider_cache_id.is_some(), "gemini cache create request succeeded");
+                        tracing::info!(provider = "gemini", model = %model, cache_created = provider_cache_id.is_some(), "gemini cache create request succeeded");
+                    } else {
+                        let status = cache_response.status();
+                        let body = cache_response.text().await.unwrap_or_default();
+                        tracing::warn!(
+                            provider = "gemini",
+                            model = %model,
+                            url = %cache_url,
+                            status = status.as_u16(),
+                            response_body = %truncate_logged_response_body(&body),
+                            "gemini cache create request failed"
+                        );
                     }
                 }
             }
 
             let payload = mapping::map_generate_request(&request, provider_cache_id.clone());
+            let generate_url = format!(
+                "{}/models/{}:generateContent?key={}",
+                base_url, config.model, config.api_key
+            );
+            tracing::info!(
+                provider = "gemini",
+                model = %model,
+                url = %generate_url,
+                message_count,
+                has_system_prompt,
+                has_stable_context,
+                "sending gemini generate request"
+            );
             let response = client
-                .post(format!(
-                    "{}/models/{}:generateContent?key={}",
-                    base_url, config.model, config.api_key
-                ))
+                .post(generate_url.clone())
                 .json(&payload)
                 .send()
                 .await
-                .map_err(|error| LlmError::Transport(error.without_url().to_string()))?;
+                .map_err(|error| {
+                    let message = error.without_url().to_string();
+                    tracing::warn!(
+                        provider = "gemini",
+                        model = %model,
+                        url = %generate_url,
+                        error = %message,
+                        "gemini generate transport failure"
+                    );
+                    LlmError::Transport(message)
+                })?;
 
             let status = response.status();
             if !status.is_success() {
                 let body = response.text().await.unwrap_or_default();
-                tracing::warn!(provider = "gemini", model = %config.model, status = status.as_u16(), "gemini generate request failed");
+                tracing::warn!(
+                    provider = "gemini",
+                    model = %model,
+                    url = %generate_url,
+                    status = status.as_u16(),
+                    response_body = %truncate_logged_response_body(&body),
+                    "gemini generate request failed"
+                );
                 return Err(map_error(status, body));
             }
 
-            let response: GeminiGenerateContentResponse = response
-                .json()
-                .await
-                .map_err(|error| LlmError::InvalidResponse(error.to_string()))?;
+            let response_body = response.text().await.map_err(|error| {
+                let message = error.without_url().to_string();
+                tracing::warn!(
+                    provider = "gemini",
+                    model = %model,
+                    url = %generate_url,
+                    error = %message,
+                    "gemini generate response body read failed"
+                );
+                LlmError::InvalidResponse(message)
+            })?;
+
+            let response: GeminiGenerateContentResponse = serde_json::from_str(&response_body)
+                .map_err(|error| {
+                    let message = error.to_string();
+                    tracing::warn!(
+                        provider = "gemini",
+                        model = %model,
+                        url = %generate_url,
+                        error = %message,
+                        response_body = %truncate_logged_response_body(&response_body),
+                        "gemini generate json parsing failed"
+                    );
+                    LlmError::InvalidResponse(message)
+                })?;
 
             mapping::map_response(
                 &config,
@@ -104,8 +205,27 @@ impl LlmChatPort for GeminiClient {
                 provider_cache_id,
                 cache_expires_at_epoch_seconds,
             )
+            .map_err(|error| {
+                tracing::warn!(
+                    provider = "gemini",
+                    model = %model,
+                    url = %generate_url,
+                    error = %error,
+                    "gemini response mapping failed"
+                );
+                error
+            })
         })
     }
+}
+
+fn truncate_logged_response_body(body: &str) -> String {
+    if body.chars().count() <= MAX_LOGGED_RESPONSE_BODY_CHARS {
+        return body.to_string();
+    }
+
+    let truncated: String = body.chars().take(MAX_LOGGED_RESPONSE_BODY_CHARS).collect();
+    format!("{truncated}...(truncated)")
 }
 
 fn parse_expire_time_epoch_seconds(value: &str) -> Option<i64> {

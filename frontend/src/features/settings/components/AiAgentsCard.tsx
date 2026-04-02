@@ -24,12 +24,12 @@ type ProviderOption = {
 };
 
 const PROVIDER_OPTIONS: ProviderOption[] = [
-  { value: 'openai', label: 'OpenAI', suggestedModels: ['gpt-5.4', 'o1'] },
-  { value: 'gemini', label: 'Gemini', suggestedModels: ['gemini-3.1-pro', 'gemini-3.0-pro'] },
+  { value: 'openai', label: 'OpenAI', suggestedModels: ['gpt-5', 'gpt-5.4', 'o4-mini'] },
+  { value: 'gemini', label: 'Gemini', suggestedModels: ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-pro'] },
   {
     value: 'openrouter',
     label: 'OpenRouter',
-    suggestedModels: ['openai/gpt-5.4', 'google/gemini-3.1-pro'],
+    suggestedModels: ['openai/gpt-5', 'google/gemini-3-flash-preview', 'anthropic/claude-sonnet-4.5'],
   },
 ];
 
@@ -362,6 +362,10 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       <p className="mt-4 text-sm leading-relaxed text-slate-300">
         Choose the active provider, start from a recommended model, and keep only the matching API
         key in focus while you test the visible draft.
+      </p>
+
+      <p className="mt-2 text-xs text-slate-500">
+        Suggested models are current examples. You can still type any supported model name.
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">

@@ -36,6 +36,8 @@ struct MockServerState {
 struct CapturedRequest {
     path: String,
     authorization: Option<String>,
+    referer: Option<String>,
+    title: Option<String>,
     body: Value,
 }
 
@@ -290,6 +292,27 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
 }
 
 #[tokio::test]
+async fn gemini_client_accepts_google_prefixed_model_name() {
+    let server = MockServer::start().await;
+    let client = GeminiClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/v1beta", server.base_url));
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::Gemini,
+                model: "google/gemini-2.5-flash".to_string(),
+                api_key: "gemini-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.message, "Gemini says hi");
+}
+
+#[tokio::test]
 async fn openrouter_client_maps_cache_discount_and_write_tokens() {
     let server = MockServer::start().await;
     let client = OpenRouterClient::new(reqwest::Client::new())
@@ -314,6 +337,8 @@ async fn openrouter_client_maps_cache_discount_and_write_tokens() {
 
     let requests = server.requests();
     assert_eq!(requests[0].authorization.as_deref(), Some("Bearer or-key"));
+    assert_eq!(requests[0].referer.as_deref(), Some("http://localhost"));
+    assert_eq!(requests[0].title.as_deref(), Some("AiWattCoach"));
 }
 
 #[tokio::test]
@@ -413,6 +438,75 @@ async fn openrouter_client_does_not_fallback_cache_discount_to_cost() {
 }
 
 #[tokio::test]
+async fn openrouter_client_maps_payment_required_to_provider_rejected() {
+    let server = MockServer::start().await;
+    let client = OpenRouterClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/api/v1", server.base_url));
+
+    let error = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "openai/gpt-4o-mini-no-credits".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::llm::LlmError::ProviderRejected(
+            r#"{"error":{"message":"Insufficient credits","code":402}}"#.to_string(),
+        )
+    );
+}
+
+#[tokio::test]
+async fn openrouter_client_parses_array_content_parts() {
+    let server = MockServer::start().await;
+    let client = OpenRouterClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/api/v1", server.base_url));
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "google/gemini-3-flash-preview".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.message, "OpenRouter says hi from parts");
+}
+
+#[tokio::test]
+async fn openrouter_client_parses_numeric_usage_fields() {
+    let server = MockServer::start().await;
+    let client = OpenRouterClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/api/v1", server.base_url));
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "google/gemini-3-flash-preview-numeric-usage".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.message, "OK");
+    assert_eq!(response.cache.cache_discount.as_deref(), Some("0.000014"));
+}
+
+#[tokio::test]
 async fn openai_client_maps_forbidden_to_credentials_not_configured() {
     let server = MockServer::start().await;
     let client = OpenAiClient::new(reqwest::Client::new())
@@ -495,6 +589,51 @@ async fn openrouter_handler(
         .unwrap_or_default()
         .to_string();
     capture_request(&state, "/api/v1/chat/completions", headers, body);
+    if model == "openai/gpt-4o-mini-no-credits" {
+        return (
+            StatusCode::PAYMENT_REQUIRED,
+            Json(json!({ "error": { "message": "Insufficient credits", "code": 402 } })),
+        )
+            .into_response();
+    }
+    if model == "google/gemini-3-flash-preview" {
+        return Json(json!({
+            "id": "openrouter-req-1",
+            "model": model,
+            "choices": [{
+                "message": {
+                    "content": [
+                        { "type": "text", "text": "OpenRouter says hi from parts" }
+                    ]
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 25,
+                "total_tokens": 145
+            }
+        }))
+        .into_response();
+    }
+    if model == "google/gemini-3-flash-preview-numeric-usage" {
+        return Json(json!({
+            "id": "openrouter-req-1",
+            "model": model,
+            "choices": [{
+                "message": {
+                    "content": "OK"
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 25,
+                "total_tokens": 145,
+                "cost": 0.000014,
+                "cache_discount": 0.000014
+            }
+        }))
+        .into_response();
+    }
     let usage = if model == "openai/gpt-4o-mini-no-discount" {
         json!({
             "prompt_tokens": 120,
@@ -524,6 +663,7 @@ async fn openrouter_handler(
         "choices": [{ "message": { "content": "OpenRouter says hi" } }],
         "usage": usage
     }))
+    .into_response()
 }
 
 async fn gemini_cache_handler(
@@ -573,6 +713,14 @@ fn capture_request(state: &MockServerState, path: &str, headers: HeaderMap, body
         path: path.to_string(),
         authorization: headers
             .get(axum::http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_string()),
+        referer: headers
+            .get("HTTP-Referer")
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_string()),
+        title: headers
+            .get("X-OpenRouter-Title")
             .and_then(|value| value.to_str().ok())
             .map(|value| value.to_string()),
         body,

@@ -143,15 +143,27 @@ fn make_request_span(request: &Request) -> Span {
         .get::<MatchedPath>()
         .map(MatchedPath::as_str);
     let route = matched_path.unwrap_or_else(|| request.uri().path());
-    let span = tracing::info_span!(
-        "http_request",
-        http.method = %request.method(),
-        http.route = %route,
-        http.target = %request.uri().path(),
-        http.status_code = Empty,
-        user_id = Empty,
-        trace_id = Empty,
-    );
+    let span = if matches!(route, "/health" | "/ready") {
+        tracing::info_span!(
+            "health_request",
+            http.method = %request.method(),
+            http.route = %route,
+            http.target = %request.uri().path(),
+            http.status_code = Empty,
+            user_id = Empty,
+            trace_id = Empty,
+        )
+    } else {
+        tracing::info_span!(
+            "http_request",
+            http.method = %request.method(),
+            http.route = %route,
+            http.target = %request.uri().path(),
+            http.status_code = Empty,
+            user_id = Empty,
+            trace_id = Empty,
+        )
+    };
 
     apply_incoming_trace_context(request.headers(), &span);
     span
@@ -211,13 +223,14 @@ fn record_span_trace_id(span: &Span) {
 fn log_response_event<B>(response: &Response<B>, latency: std::time::Duration, span: &Span) {
     let status = response.status();
     let status_class = status_class(status);
+    let level = response_log_level(is_health_request(span), status);
 
     record_span_trace_id(span);
     span.record("http.status_code", status.as_u16());
 
     let _guard = span.enter();
 
-    match status_level(status) {
+    match level {
         Level::ERROR => tracing::event!(
             Level::ERROR,
             status = status.as_u16(),
@@ -227,6 +240,13 @@ fn log_response_event<B>(response: &Response<B>, latency: std::time::Duration, s
         ),
         Level::WARN => tracing::event!(
             Level::WARN,
+            status = status.as_u16(),
+            status_class,
+            latency_ms = latency.as_millis(),
+            "finished processing request"
+        ),
+        Level::DEBUG => tracing::event!(
+            Level::DEBUG,
             status = status.as_u16(),
             status_class,
             latency_ms = latency.as_millis(),
@@ -249,6 +269,21 @@ fn status_level(status: StatusCode) -> Level {
         Level::WARN
     } else {
         Level::INFO
+    }
+}
+
+fn is_health_request(span: &Span) -> bool {
+    matches!(
+        span.metadata().map(|metadata| metadata.name()),
+        Some("health_request")
+    )
+}
+
+fn response_log_level(is_health_request: bool, status: StatusCode) -> Level {
+    if is_health_request && status.is_success() {
+        Level::DEBUG
+    } else {
+        status_level(status)
     }
 }
 
@@ -359,9 +394,25 @@ fn internal_error_response() -> Response {
 
 #[cfg(test)]
 mod tests {
+    use axum::http::StatusCode;
     use opentelemetry::trace::{SpanContext, SpanId, TraceContextExt as _, TraceId};
+    use tracing::Level;
 
-    use super::synthetic_remote_parent_context;
+    use super::{response_log_level, synthetic_remote_parent_context};
+
+    #[test]
+    fn health_check_successes_log_at_debug() {
+        assert_eq!(response_log_level(true, StatusCode::OK), Level::DEBUG);
+        assert_eq!(
+            response_log_level(true, StatusCode::NO_CONTENT),
+            Level::DEBUG
+        );
+        assert_eq!(response_log_level(false, StatusCode::OK), Level::INFO);
+        assert_eq!(
+            response_log_level(true, StatusCode::SERVICE_UNAVAILABLE),
+            Level::ERROR
+        );
+    }
 
     #[test]
     fn synthetic_remote_parent_context_is_valid_and_sampled() {

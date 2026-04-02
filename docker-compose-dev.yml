@@ -50,6 +50,10 @@ services:
 
   mongo:
     image: mongo:7
+    command:
+      - mongod
+      - --setParameter
+      - '{"logComponentVerbosity":{"network":{"verbosity":-1},"accessControl":{"verbosity":-1}}}'
     restart: unless-stopped
     ports:
       - "127.0.0.1:27017:27017"
