@@ -4,7 +4,8 @@ use crate::domain::llm::{
 };
 
 use super::dto::{
-    OpenRouterChatRequest, OpenRouterChatResponse, OpenRouterMessage, OpenRouterUsage,
+    OpenRouterChatRequest, OpenRouterChatResponse, OpenRouterMessage, OpenRouterMessageContent,
+    OpenRouterStringOrNumber, OpenRouterUsage,
 };
 
 pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenRouterChatRequest {
@@ -38,7 +39,7 @@ pub fn map_response(
         .choices
         .into_iter()
         .next()
-        .map(|choice| choice.message.content)
+        .and_then(|choice| extract_message_text(choice.message.content))
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             LlmError::InvalidResponse("OpenRouter returned no message content".to_string())
@@ -75,7 +76,7 @@ pub fn map_response(
             cached_read_tokens: cached_tokens,
             cache_write_tokens,
             cache_hit: cached_tokens.unwrap_or(0) > 0,
-            cache_discount: usage.cache_discount,
+            cache_discount: usage.cache_discount.map(normalize_string_or_number),
             provider_cache_id: None,
             provider_cache_key: None,
             cache_expires_at_epoch_seconds: None,
@@ -90,5 +91,27 @@ fn map_message(message: LlmChatMessage) -> OpenRouterMessage {
             LlmMessageRole::Assistant => "assistant".to_string(),
         },
         content: message.content,
+    }
+}
+
+fn extract_message_text(content: OpenRouterMessageContent) -> Option<String> {
+    match content {
+        OpenRouterMessageContent::Text(text) => Some(text),
+        OpenRouterMessageContent::Parts(parts) => {
+            let text = parts
+                .into_iter()
+                .filter_map(|part| part.text)
+                .collect::<Vec<_>>()
+                .join("");
+
+            (!text.trim().is_empty()).then_some(text)
+        }
+    }
+}
+
+fn normalize_string_or_number(value: OpenRouterStringOrNumber) -> String {
+    match value {
+        OpenRouterStringOrNumber::String(value) => value,
+        OpenRouterStringOrNumber::Number(value) => value.to_string(),
     }
 }

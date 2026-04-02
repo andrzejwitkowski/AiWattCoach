@@ -59,7 +59,7 @@ describe('AiAgentsCard', () => {
 
     expect(screen.getByLabelText(/active provider/i)).toHaveValue('openrouter');
     expect(screen.getByLabelText(/model/i)).toHaveValue('openai/gpt-4o-mini');
-    expect(screen.getByRole('button', { name: 'openai/gpt-5.4' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'openai/gpt-5' })).toBeInTheDocument();
   });
 
   it('tests current values and omits unchanged masked provider key', async () => {
@@ -200,28 +200,31 @@ describe('AiAgentsCard', () => {
       target: { value: 'gemini' },
     });
 
-    expect(screen.getByLabelText(/model/i)).toHaveValue('gemini-3.1-pro');
+    expect(screen.getByLabelText(/model/i)).toHaveValue('gemini-3-flash-preview');
   });
 
   it('shows higher-end suggested models for each provider', () => {
-    render(<AiAgentsCard settings={buildSettings({ selectedProvider: 'openai', selectedModel: 'gpt-5.4' })} apiBaseUrl="" onSave={() => {}} />);
+    render(<AiAgentsCard settings={buildSettings({ selectedProvider: 'openai', selectedModel: 'gpt-5' })} apiBaseUrl="" onSave={() => {}} />);
 
+    expect(screen.getByRole('button', { name: 'gpt-5' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'gpt-5.4' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'o1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'o4-mini' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'gemini' },
     });
 
-    expect(screen.getByRole('button', { name: 'gemini-3.1-pro' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'gemini-3.0-pro' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'gemini-3-flash-preview' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'gemini-2.5-flash' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'gemini-2.5-pro' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/active provider/i), {
       target: { value: 'openrouter' },
     });
 
-    expect(screen.getByRole('button', { name: 'openai/gpt-5.4' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'google/gemini-3.1-pro' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'openai/gpt-5' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'google/gemini-3-flash-preview' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'anthropic/claude-sonnet-4.5' })).toBeInTheDocument();
   });
 
   it('shows inline validation and disables actions when provider config is incomplete', () => {
@@ -256,7 +259,7 @@ describe('AiAgentsCard', () => {
           geminiApiKey: null,
           geminiApiKeySet: false,
           selectedProvider: 'openai',
-          selectedModel: 'gpt-5.4',
+          selectedModel: 'gpt-5',
         })}
         apiBaseUrl=""
         onSave={() => {}}
