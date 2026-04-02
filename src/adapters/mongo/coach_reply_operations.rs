@@ -278,6 +278,7 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
                         "user_id": &document.user_id,
                         "workout_id": &document.workout_id,
                         "user_message_id": &document.user_message_id,
+                        "attempt_count": i64::from(existing.attempt_count),
                         "updated_at_epoch_seconds": existing.updated_at_epoch_seconds,
                     },
                     &reclaimed_document,

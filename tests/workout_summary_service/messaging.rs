@@ -4,7 +4,7 @@ use aiwattcoach::domain::{
     llm::{BoxFuture, LlmCacheUsage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
     workout_summary::{
         CoachReplyOperation, MessageRole, PendingCoachReplyCheckpoint, WorkoutCoach,
-        WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+        WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryUseCases,
     },
 };
 
@@ -601,5 +601,94 @@ async fn generate_coach_reply_replays_persisted_response_message_after_partial_c
             "append_message:workout-1:user".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
+    );
+}
+
+#[tokio::test]
+async fn generate_coach_reply_recovers_when_completion_upsert_fails_after_coach_message_append() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CountingCoach::default());
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations.clone(), coach.clone());
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    reply_operations.fail_next_completed_upsert("completion write failed");
+
+    let first_error = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        first_error,
+        WorkoutSummaryError::Repository("completion write failed".to_string())
+    );
+
+    let recovered = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(coach.calls(), vec!["Need feedback".to_string()]);
+    assert_eq!(recovered.coach_message.role, MessageRole::Coach);
+}
+
+#[tokio::test]
+async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
+    let mut summary = existing_summary();
+    summary.saved_at_epoch_seconds = Some(1_700_000_050);
+
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CountingCoach::default());
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations.clone(), coach.clone());
+
+    let user_message = aiwattcoach::domain::workout_summary::ConversationMessage {
+        id: "message-user-saved".to_string(),
+        role: MessageRole::User,
+        content: "Need feedback".to_string(),
+        created_at_epoch_seconds: 1_699_999_000,
+    };
+    repository
+        .append_message("user-1", "workout-1", user_message.clone(), 1_699_999_000)
+        .await
+        .unwrap();
+
+    let partial = CoachReplyOperation::pending(
+        "user-1".to_string(),
+        "workout-1".to_string(),
+        user_message.id.clone(),
+        Some("workout-summary:user-1:workout-1".to_string()),
+        "message-saved-replay".to_string(),
+        1_699_999_000,
+    )
+    .record_provider_response(PendingCoachReplyCheckpoint {
+        provider: LlmProvider::OpenAi,
+        model: "gpt-4o-mini".to_string(),
+        provider_request_id: Some("req-saved".to_string()),
+        provider_cache_id: None,
+        token_usage: LlmTokenUsage::default(),
+        cache_usage: LlmCacheUsage::default(),
+        response_message: "Recovered even though summary was saved".to_string(),
+        updated_at_epoch_seconds: 1_699_999_001,
+    });
+    reply_operations.seed(partial);
+
+    let reply = service
+        .generate_coach_reply("user-1", "workout-1", user_message.id.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(coach.calls(), Vec::<String>::new());
+    assert_eq!(reply.coach_message.id, "message-saved-replay");
+    assert_eq!(
+        reply.coach_message.content,
+        "Recovered even though summary was saved"
     );
 }

@@ -237,6 +237,8 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
 pub(crate) struct InMemoryCoachReplyOperationRepository {
     operations: Arc<Mutex<ReplyOperationStore>>,
     calls: Arc<Mutex<Vec<String>>>,
+    fail_next_upsert: Arc<Mutex<Option<String>>>,
+    fail_next_completed_upsert: Arc<Mutex<Option<String>>>,
 }
 
 impl InMemoryCoachReplyOperationRepository {
@@ -274,6 +276,10 @@ impl InMemoryCoachReplyOperationRepository {
             ),
             operation,
         );
+    }
+
+    pub(crate) fn fail_next_completed_upsert(&self, message: impl Into<String>) {
+        *self.fail_next_completed_upsert.lock().unwrap() = Some(message.into());
     }
 }
 
@@ -348,11 +354,21 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
         let operations = self.operations.clone();
         let calls = self.calls.clone();
+        let fail_next_upsert = self.fail_next_upsert.clone();
+        let fail_next_completed_upsert = self.fail_next_completed_upsert.clone();
         Box::pin(async move {
             calls.lock().unwrap().push(format!(
                 "upsert:{}:{}:{:?}",
                 operation.workout_id, operation.user_message_id, operation.status
             ));
+            if let Some(message) = fail_next_upsert.lock().unwrap().take() {
+                return Err(WorkoutSummaryError::Repository(message));
+            }
+            if operation.status == CoachReplyOperationStatus::Completed {
+                if let Some(message) = fail_next_completed_upsert.lock().unwrap().take() {
+                    return Err(WorkoutSummaryError::Repository(message));
+                }
+            }
             operations.lock().unwrap().insert(
                 (
                     operation.user_id.clone(),

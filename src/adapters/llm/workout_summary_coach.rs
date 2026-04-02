@@ -80,7 +80,7 @@ where
             let reusable_cache_id = if config.provider == LlmProvider::Gemini {
                 match (&context_cache_repository, cache_scope_key.as_deref()) {
                     (Some(repository), Some(scope_key)) => {
-                        let reusable = repository
+                        let reusable = match repository
                             .find_reusable(
                                 &user_id,
                                 &config.provider,
@@ -89,7 +89,21 @@ where
                                 &context_hash,
                                 clock.now_epoch_seconds(),
                             )
-                            .await?;
+                            .await
+                        {
+                            Ok(reusable) => reusable,
+                            Err(error) => {
+                                tracing::warn!(
+                                    error = %error,
+                                    user_id = %user_id,
+                                    provider = %config.provider,
+                                    model = %config.model,
+                                    cache_scope_key = %scope_key,
+                                    "failed to load reusable gemini context cache"
+                                );
+                                None
+                            }
+                        };
                         if let Some(cache) = reusable {
                             tracing::info!(
                                 user_id = %user_id,

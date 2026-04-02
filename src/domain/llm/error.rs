@@ -13,13 +13,17 @@ pub enum LlmError {
 
 impl LlmError {
     pub fn is_retryable(&self) -> bool {
-        matches!(
-            self,
-            Self::Transport(_)
-                | Self::RateLimited(_)
-                | Self::InvalidResponse(_)
-                | Self::Internal(_)
-        )
+        match self {
+            Self::CredentialsNotConfigured => false,
+            Self::ProviderNotConfigured => false,
+            Self::ModelNotConfigured => false,
+            Self::UnsupportedProvider(_) => false,
+            Self::Transport(_) => true,
+            Self::ProviderRejected(_) => false,
+            Self::RateLimited(_) => true,
+            Self::InvalidResponse(_) => true,
+            Self::Internal(_) => true,
+        }
     }
 }
 

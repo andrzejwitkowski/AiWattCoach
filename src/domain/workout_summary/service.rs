@@ -138,7 +138,7 @@ where
         role: MessageRole,
         content: String,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
-        self.append_message_with_role_and_id(user_id, workout_id, role, content, None)
+        self.append_message_with_role_and_id(user_id, workout_id, role, content, None, true)
             .await
     }
 
@@ -149,12 +149,13 @@ where
         role: MessageRole,
         content: String,
         message_id: Option<String>,
+        require_open_summary: bool,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
         let summary = self.get_existing_summary(user_id, workout_id).await?;
-        if summary.saved_at_epoch_seconds.is_some() {
+        if require_open_summary && summary.saved_at_epoch_seconds.is_some() {
             return Err(WorkoutSummaryError::Locked);
         }
-        if summary.rpe.is_none() {
+        if require_open_summary && summary.rpe.is_none() {
             return Err(WorkoutSummaryError::Validation(
                 "rpe must be set before chatting with coach".to_string(),
             ));
@@ -213,14 +214,86 @@ where
         &self,
         operation: CoachReplyOperation,
     ) -> Result<WorkoutSummaryError, WorkoutSummaryError> {
-        let failure_kind = operation.failure_kind.ok_or_else(|| {
-            WorkoutSummaryError::Repository(
-                "failed coach reply operation missing failure kind".to_string(),
-            )
-        })?;
+        if let Some(failure_kind) = operation.failure_kind {
+            return Ok(WorkoutSummaryError::Llm(
+                failure_kind.to_llm_error(operation.error_message),
+            ));
+        }
+
         Ok(WorkoutSummaryError::Llm(
-            failure_kind.to_llm_error(operation.error_message),
+            crate::domain::llm::LlmError::Internal(operation.error_message.unwrap_or_else(|| {
+                "failed coach reply operation missing failure kind".to_string()
+            })),
         ))
+    }
+
+    async fn try_recover_pending_operation(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        user_message_id: &str,
+        operation: &CoachReplyOperation,
+    ) -> Result<Option<CoachReply>, WorkoutSummaryError> {
+        if let Some(existing_coach_message_id) = operation.coach_message_id.clone() {
+            if let Some(existing_coach_message) = self
+                .repository
+                .find_message_by_id(user_id, workout_id, &existing_coach_message_id)
+                .await?
+            {
+                let completed = operation.mark_completed_from_existing_message(
+                    existing_coach_message.id.clone(),
+                    self.clock.now_epoch_seconds(),
+                );
+                self.reply_operations.upsert(completed).await?;
+                let summary = self.get_existing_summary(user_id, workout_id).await?;
+                info!(
+                    workout_id = %workout_id,
+                    user_message_id = %user_message_id,
+                    coach_message_id = %existing_coach_message.id,
+                    "recovered coach reply from persisted message"
+                );
+                return Ok(Some(CoachReply {
+                    summary,
+                    coach_message: existing_coach_message,
+                }));
+            }
+        }
+
+        if let Some(response_message) = operation.response_message.clone() {
+            let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+                WorkoutSummaryError::Repository(
+                    "pending coach reply operation missing reserved coach message id".to_string(),
+                )
+            })?;
+            let coach_message = self
+                .append_message_with_role_and_id(
+                    user_id,
+                    workout_id,
+                    MessageRole::Coach,
+                    response_message,
+                    Some(coach_message_id),
+                    false,
+                )
+                .await?;
+            let completed = operation.mark_completed_from_existing_message(
+                coach_message.id.clone(),
+                self.clock.now_epoch_seconds(),
+            );
+            self.reply_operations.upsert(completed).await?;
+            let summary = self.get_existing_summary(user_id, workout_id).await?;
+            info!(
+                workout_id = %workout_id,
+                user_message_id = %user_message_id,
+                coach_message_id = %coach_message.id,
+                "replayed persisted coach reply after partial crash"
+            );
+            return Ok(Some(CoachReply {
+                summary,
+                coach_message,
+            }));
+        }
+
+        Ok(None)
     }
 }
 
@@ -443,7 +516,6 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
-            let summary = service.get_existing_summary(&user_id, &workout_id).await?;
             let user_message = service
                 .get_message_by_id(&user_id, &workout_id, &user_message_id)
                 .await?;
@@ -470,80 +542,47 @@ where
                 .claim_pending(pending_operation.clone(), stale_before_epoch_seconds)
                 .await?
             {
-                CoachReplyClaimResult::Claimed(operation) => operation,
+                CoachReplyClaimResult::Claimed(operation) => {
+                    if let Some(reply) = service
+                        .try_recover_pending_operation(
+                            &user_id,
+                            &workout_id,
+                            &user_message.id,
+                            &operation,
+                        )
+                        .await?
+                    {
+                        return Ok(reply);
+                    }
+
+                    operation
+                }
                 CoachReplyClaimResult::Existing(existing) => match existing.status {
                     CoachReplyOperationStatus::Completed => {
                         return service
                             .get_completed_reply(&user_id, &workout_id, existing)
                             .await;
                     }
-                    CoachReplyOperationStatus::Pending => {
-                        return Err(WorkoutSummaryError::ReplyAlreadyPending);
-                    }
                     CoachReplyOperationStatus::Failed => {
                         return Err(service.map_existing_llm_failure(existing)?);
                     }
+                    CoachReplyOperationStatus::Pending => {
+                        if let Some(reply) = service
+                            .try_recover_pending_operation(
+                                &user_id,
+                                &workout_id,
+                                &user_message.id,
+                                &existing,
+                            )
+                            .await?
+                        {
+                            return Ok(reply);
+                        }
+
+                        return Err(WorkoutSummaryError::ReplyAlreadyPending);
+                    }
                 },
             };
-
-            if let Some(existing_coach_message_id) = operation.coach_message_id.clone() {
-                if let Some(existing_coach_message) = service
-                    .repository
-                    .find_message_by_id(&user_id, &workout_id, &existing_coach_message_id)
-                    .await?
-                {
-                    let completed = operation.mark_completed_from_existing_message(
-                        existing_coach_message.id.clone(),
-                        service.clock.now_epoch_seconds(),
-                    );
-                    service.reply_operations.upsert(completed).await?;
-                    let summary = service.get_existing_summary(&user_id, &workout_id).await?;
-                    info!(
-                        workout_id = %workout_id,
-                        user_message_id = %user_message.id,
-                        coach_message_id = %existing_coach_message.id,
-                        "recovered coach reply from persisted message"
-                    );
-                    return Ok(CoachReply {
-                        summary,
-                        coach_message: existing_coach_message,
-                    });
-                }
-            }
-
-            if let Some(response_message) = operation.response_message.clone() {
-                let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
-                    WorkoutSummaryError::Repository(
-                        "pending coach reply operation missing reserved coach message id"
-                            .to_string(),
-                    )
-                })?;
-                let coach_message = service
-                    .append_message_with_role_and_id(
-                        &user_id,
-                        &workout_id,
-                        MessageRole::Coach,
-                        response_message,
-                        Some(coach_message_id),
-                    )
-                    .await?;
-                let completed = operation.mark_completed_from_existing_message(
-                    coach_message.id.clone(),
-                    service.clock.now_epoch_seconds(),
-                );
-                service.reply_operations.upsert(completed).await?;
-                let summary = service.get_existing_summary(&user_id, &workout_id).await?;
-                info!(
-                    workout_id = %workout_id,
-                    user_message_id = %user_message.id,
-                    coach_message_id = %coach_message.id,
-                    "replayed persisted coach reply after partial crash"
-                );
-                return Ok(CoachReply {
-                    summary,
-                    coach_message,
-                });
-            }
 
             info!(
                 workout_id = %workout_id,
@@ -551,6 +590,8 @@ where
                 attempt_count = operation.attempt_count,
                 "requesting workout summary coach reply"
             );
+
+            let summary = service.get_existing_summary(&user_id, &workout_id).await?;
 
             let llm_response = match service
                 .coach
@@ -596,6 +637,7 @@ where
                     MessageRole::Coach,
                     llm_response.message.clone(),
                     Some(coach_message_id.clone()),
+                    false,
                 )
                 .await?;
 
@@ -618,5 +660,166 @@ where
                 coach_message,
             })
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::domain::{
+        identity::{Clock, IdGenerator},
+        llm::LlmError,
+        workout_summary::{
+            CoachReplyOperation, CoachReplyOperationRepository, MockWorkoutCoach,
+            WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
+        },
+    };
+
+    #[derive(Clone)]
+    struct FixedClock;
+
+    impl Clock for FixedClock {
+        fn now_epoch_seconds(&self) -> i64 {
+            1_700_000_000
+        }
+    }
+
+    #[derive(Clone)]
+    struct FixedIds;
+
+    impl IdGenerator for FixedIds {
+        fn new_id(&self, prefix: &str) -> String {
+            format!("{prefix}-1")
+        }
+    }
+
+    #[test]
+    fn map_existing_llm_failure_falls_back_to_internal_error_when_kind_is_missing() {
+        let service = WorkoutSummaryService::with_coach(
+            StubSummaryRepository,
+            StubReplyOperations,
+            FixedClock,
+            FixedIds,
+            Arc::new(MockWorkoutCoach),
+        );
+
+        let mut operation = CoachReplyOperation::pending(
+            "user-1".to_string(),
+            "workout-1".to_string(),
+            "message-1".to_string(),
+            Some("workout-summary:user-1:workout-1".to_string()),
+            "coach-message-1".to_string(),
+            1_700_000_000,
+        )
+        .mark_failed(
+            &LlmError::Internal("persisted failure without kind".to_string()),
+            1_700_000_001,
+        );
+        operation.failure_kind = None;
+
+        assert_eq!(
+            service.map_existing_llm_failure(operation).unwrap(),
+            WorkoutSummaryError::Llm(LlmError::Internal(
+                "persisted failure without kind".to_string()
+            ))
+        );
+    }
+
+    #[derive(Clone)]
+    struct StubSummaryRepository;
+
+    impl WorkoutSummaryRepository for StubSummaryRepository {
+        fn find_by_user_id_and_workout_id(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> super::BoxFuture<Result<Option<super::WorkoutSummary>, WorkoutSummaryError>> {
+            Box::pin(async { Ok(None) })
+        }
+
+        fn find_by_user_id_and_workout_ids(
+            &self,
+            _user_id: &str,
+            _workout_ids: Vec<String>,
+        ) -> super::BoxFuture<Result<Vec<super::WorkoutSummary>, WorkoutSummaryError>> {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+
+        fn create(
+            &self,
+            _summary: super::WorkoutSummary,
+        ) -> super::BoxFuture<Result<super::WorkoutSummary, WorkoutSummaryError>> {
+            Box::pin(async { Err(WorkoutSummaryError::NotFound) })
+        }
+
+        fn update_rpe(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _rpe: u8,
+            _updated_at_epoch_seconds: i64,
+        ) -> super::BoxFuture<Result<(), WorkoutSummaryError>> {
+            Box::pin(async { Ok(()) })
+        }
+
+        fn append_message(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _message: super::ConversationMessage,
+            _updated_at_epoch_seconds: i64,
+        ) -> super::BoxFuture<Result<(), WorkoutSummaryError>> {
+            Box::pin(async { Ok(()) })
+        }
+
+        fn set_saved_state(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _saved_at_epoch_seconds: Option<i64>,
+            _updated_at_epoch_seconds: i64,
+        ) -> super::BoxFuture<Result<(), WorkoutSummaryError>> {
+            Box::pin(async { Ok(()) })
+        }
+
+        fn find_message_by_id(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _message_id: &str,
+        ) -> super::BoxFuture<Result<Option<super::ConversationMessage>, WorkoutSummaryError>>
+        {
+            Box::pin(async { Ok(None) })
+        }
+    }
+
+    #[derive(Clone)]
+    struct StubReplyOperations;
+
+    impl CoachReplyOperationRepository for StubReplyOperations {
+        fn find_by_user_message_id(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _user_message_id: &str,
+        ) -> super::BoxFuture<Result<Option<CoachReplyOperation>, WorkoutSummaryError>> {
+            Box::pin(async { Ok(None) })
+        }
+
+        fn claim_pending(
+            &self,
+            _operation: CoachReplyOperation,
+            _stale_before_epoch_seconds: i64,
+        ) -> super::BoxFuture<Result<super::CoachReplyClaimResult, WorkoutSummaryError>> {
+            Box::pin(async { Err(WorkoutSummaryError::NotFound) })
+        }
+
+        fn upsert(
+            &self,
+            operation: CoachReplyOperation,
+        ) -> super::BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+            Box::pin(async move { Ok(operation) })
+        }
     }
 }

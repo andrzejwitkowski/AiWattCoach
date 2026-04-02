@@ -24,12 +24,12 @@ type ProviderOption = {
 };
 
 const PROVIDER_OPTIONS: ProviderOption[] = [
-  { value: 'openai', label: 'OpenAI', suggestedModels: ['gpt-4o-mini', 'gpt-4.1-mini'] },
-  { value: 'gemini', label: 'Gemini', suggestedModels: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
+  { value: 'openai', label: 'OpenAI', suggestedModels: ['gpt-5.4', 'o1'] },
+  { value: 'gemini', label: 'Gemini', suggestedModels: ['gemini-3.1-pro', 'gemini-3.0-pro'] },
   {
     value: 'openrouter',
     label: 'OpenRouter',
-    suggestedModels: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet'],
+    suggestedModels: ['openai/gpt-5.4', 'google/gemini-3.1-pro'],
   },
 ];
 
@@ -211,6 +211,9 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
 
   const selectedProviderOption = getProviderOption(draft.selectedProvider);
   const suggestedModels = selectedProviderOption?.suggestedModels ?? [];
+  const openaiHasKey = aiAgents.openaiApiKeySet || draft.openaiApiKey.trim().length > 0;
+  const geminiHasKey = aiAgents.geminiApiKeySet || draft.geminiApiKey.trim().length > 0;
+  const openrouterHasKey = aiAgents.openrouterApiKeySet || draft.openrouterApiKey.trim().length > 0;
   const providerKeyState = getProviderKeyState(draft.selectedProvider, draft, aiAgents);
   const hasMatchingProviderKey =
     providerKeyState.draftValue.length > 0 || providerKeyState.hasPersistedKey;
@@ -429,7 +432,13 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           visible={showOpenai}
           configured={aiAgents.openaiApiKeySet}
           emphasized={!draft.selectedProvider || draft.selectedProvider === 'openai'}
-          helperText={draft.selectedProvider === 'openai' ? 'Used by the active provider.' : 'Saved for quick provider switching.'}
+          helperText={
+            draft.selectedProvider === 'openai'
+              ? 'Used by the active provider.'
+              : openaiHasKey
+                ? 'Saved for quick provider switching.'
+                : 'Optional unless you switch to this provider.'
+          }
           onVisibilityChange={() => setShowOpenai((value) => !value)}
           onChange={(value) => updateDraft('openaiApiKey', value)}
         />
@@ -441,7 +450,13 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           visible={showGemini}
           configured={aiAgents.geminiApiKeySet}
           emphasized={!draft.selectedProvider || draft.selectedProvider === 'gemini'}
-          helperText={draft.selectedProvider === 'gemini' ? 'Used by the active provider.' : 'Saved for quick provider switching.'}
+          helperText={
+            draft.selectedProvider === 'gemini'
+              ? 'Used by the active provider.'
+              : geminiHasKey
+                ? 'Saved for quick provider switching.'
+                : 'Optional unless you switch to this provider.'
+          }
           onVisibilityChange={() => setShowGemini((value) => !value)}
           onChange={(value) => updateDraft('geminiApiKey', value)}
         />
@@ -453,7 +468,13 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           visible={showOpenrouter}
           configured={aiAgents.openrouterApiKeySet}
           emphasized={!draft.selectedProvider || draft.selectedProvider === 'openrouter'}
-          helperText={draft.selectedProvider === 'openrouter' ? 'Used by the active provider.' : 'Saved for quick provider switching.'}
+          helperText={
+            draft.selectedProvider === 'openrouter'
+              ? 'Used by the active provider.'
+              : openrouterHasKey
+                ? 'Saved for quick provider switching.'
+                : 'Optional unless you switch to this provider.'
+          }
           onVisibilityChange={() => setShowOpenrouter((value) => !value)}
           onChange={(value) => updateDraft('openrouterApiKey', value)}
         />
