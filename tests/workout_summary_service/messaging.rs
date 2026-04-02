@@ -666,6 +666,15 @@ async fn generate_coach_reply_retries_success_checkpoint_write_before_returning(
 
     assert_eq!(coach.calls(), vec!["Need feedback".to_string()]);
     assert_eq!(reply.coach_message.role, MessageRole::Coach);
+    assert_eq!(
+        reply_operations.calls(),
+        vec![
+            format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
+        ]
+    );
 }
 
 #[tokio::test]

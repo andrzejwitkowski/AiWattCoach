@@ -128,7 +128,7 @@ That avoids turning a stored provider failure into a repository error during rec
 The workflow currently handles these important windows safely:
 
 1. Provider reply succeeded, the first checkpoint write fails transiently, and the same request retries the checkpoint locally.
-2. Provider failure occurs, the first failed-state write fails transiently, and the same request retries that write locally before returning the original LLM error.
+2. Provider fails and the initial failed-state write hits a transient repository error; the same request retries that write locally before returning the original LLM error.
 3. Provider reply succeeded and was checkpointed, but appending the coach message failed.
 4. Coach message append succeeded, but marking the operation `Completed` failed.
 5. A later retry sees the durable pending state and finalizes from stored data instead of re-calling the provider.
