@@ -10,6 +10,8 @@ use super::{
     WorkoutSummaryRepository,
 };
 
+const POST_PROVIDER_WRITE_ATTEMPTS: usize = 2;
+
 pub trait WorkoutSummaryUseCases: Send + Sync {
     fn get_summary(
         &self,
@@ -289,6 +291,52 @@ where
         }
 
         Ok(None)
+    }
+
+    async fn persist_post_provider_operation(
+        &self,
+        operation: CoachReplyOperation,
+        write_label: &'static str,
+    ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
+        let mut last_error = None;
+
+        for attempt in 1..=POST_PROVIDER_WRITE_ATTEMPTS {
+            match self.reply_operations.upsert(operation.clone()).await {
+                Ok(saved) => {
+                    if attempt > 1 {
+                        info!(
+                            attempt,
+                            max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
+                            operation_status = ?saved.status,
+                            write_label,
+                            "recovered post-provider coach reply write after retry"
+                        );
+                    }
+                    return Ok(saved);
+                }
+                Err(error) => {
+                    if attempt == POST_PROVIDER_WRITE_ATTEMPTS {
+                        return Err(error);
+                    }
+
+                    warn!(
+                        attempt,
+                        max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
+                        operation_status = ?operation.status,
+                        write_label,
+                        error = %error,
+                        "retrying transient post-provider coach reply write"
+                    );
+                    last_error = Some(error);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| {
+            WorkoutSummaryError::Repository(
+                "post-provider coach reply write failed without error".to_string(),
+            )
+        }))
     }
 }
 
@@ -596,7 +644,9 @@ where
                 Ok(response) => response,
                 Err(error) => {
                     let failed = operation.mark_failed(&error, service.clock.now_epoch_seconds());
-                    service.reply_operations.upsert(failed).await?;
+                    service
+                        .persist_post_provider_operation(failed, "persist_failed_checkpoint")
+                        .await?;
                     warn!(
                         workout_id = %workout_id,
                         user_message_id = %user_message.id,
@@ -618,7 +668,9 @@ where
                 response_message: llm_response.message.clone(),
                 updated_at_epoch_seconds: service.clock.now_epoch_seconds(),
             });
-            service.reply_operations.upsert(operation.clone()).await?;
+            let operation = service
+                .persist_post_provider_operation(operation, "persist_success_checkpoint")
+                .await?;
 
             let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
                 WorkoutSummaryError::Repository(
@@ -646,7 +698,9 @@ where
                 cache_usage: llm_response.cache.clone(),
                 updated_at_epoch_seconds: service.clock.now_epoch_seconds(),
             });
-            service.reply_operations.upsert(completed).await?;
+            service
+                .persist_post_provider_operation(completed, "persist_completed_reply")
+                .await?;
 
             let summary = service.get_existing_summary(&user_id, &workout_id).await?;
 
