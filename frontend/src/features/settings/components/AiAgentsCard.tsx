@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Bot, CheckCircle2, Eye, EyeOff, RefreshCw, Save } from 'lucide-react';
-import type { TestAiAgentsConnectionResponse, UserSettingsResponse } from '../types';
+import type { LlmProvider, TestAiAgentsConnectionResponse, UserSettingsResponse } from '../types';
 import { testAiAgentsConnection, updateAiAgents } from '../api/settings';
 
 type AiAgentsCardProps = {
@@ -17,6 +17,22 @@ type DraftState = {
   selectedModel: string;
 };
 
+type ProviderOption = {
+  value: LlmProvider;
+  label: string;
+  suggestedModels: string[];
+};
+
+const PROVIDER_OPTIONS: ProviderOption[] = [
+  { value: 'openai', label: 'OpenAI', suggestedModels: ['gpt-4o-mini', 'gpt-4.1-mini'] },
+  { value: 'gemini', label: 'Gemini', suggestedModels: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
+  {
+    value: 'openrouter',
+    label: 'OpenRouter',
+    suggestedModels: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet'],
+  },
+];
+
 function clearDraftApiKeys(draft: DraftState): DraftState {
   return {
     ...draft,
@@ -24,6 +40,53 @@ function clearDraftApiKeys(draft: DraftState): DraftState {
     geminiApiKey: '',
     openrouterApiKey: '',
   };
+}
+
+function getProviderOption(provider: string) {
+  return PROVIDER_OPTIONS.find((option) => option.value === provider);
+}
+
+function getProviderKeyState(provider: string, draft: DraftState, aiAgents: UserSettingsResponse['aiAgents']) {
+  switch (provider) {
+    case 'openai':
+      return {
+        draftValue: draft.openaiApiKey.trim(),
+        hasPersistedKey: aiAgents.openaiApiKeySet,
+        label: 'OpenAI',
+      };
+    case 'gemini':
+      return {
+        draftValue: draft.geminiApiKey.trim(),
+        hasPersistedKey: aiAgents.geminiApiKeySet,
+        label: 'Gemini',
+      };
+    case 'openrouter':
+      return {
+        draftValue: draft.openrouterApiKey.trim(),
+        hasPersistedKey: aiAgents.openrouterApiKeySet,
+        label: 'OpenRouter',
+      };
+    default:
+      return {
+        draftValue: '',
+        hasPersistedKey: false,
+        label: 'Provider',
+      };
+  }
+}
+
+function buildTestStatusMessage(result: TestAiAgentsConnectionResponse) {
+  const reusedSavedValues = [
+    result.usedSavedApiKey ? 'saved key' : null,
+    result.usedSavedProvider ? 'saved provider' : null,
+    result.usedSavedModel ? 'saved model' : null,
+  ].filter(Boolean);
+
+  if (reusedSavedValues.length === 0) {
+    return `${result.message} Tested the visible draft only.`;
+  }
+
+  return `${result.message} Used ${reusedSavedValues.join(', ')} for unchanged fields.`;
 }
 
 export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps) {
@@ -145,8 +208,29 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
 
     return request;
   }, [draft, persistedDraft]);
-  const canSave = hasDirtyDraft;
-  const canTest = Object.keys(visibleRequest).length > 0 || hasAnyPersistedConnectionValue;
+
+  const selectedProviderOption = getProviderOption(draft.selectedProvider);
+  const suggestedModels = selectedProviderOption?.suggestedModels ?? [];
+  const providerKeyState = getProviderKeyState(draft.selectedProvider, draft, aiAgents);
+  const hasMatchingProviderKey =
+    providerKeyState.draftValue.length > 0 || providerKeyState.hasPersistedKey;
+  const providerValidationMessage =
+    draft.selectedProvider && !draft.selectedModel.trim()
+      ? 'Choose a model for the selected provider.'
+      : draft.selectedModel.trim() && !draft.selectedProvider
+        ? 'Choose a provider for the selected model.'
+        : null;
+  const providerKeyValidationMessage =
+    draft.selectedProvider && draft.selectedModel.trim() && !hasMatchingProviderKey
+      ? `Add a ${providerKeyState.label} API key or keep the saved one before testing or saving this provider.`
+      : null;
+  const validationMessage = providerValidationMessage ?? providerKeyValidationMessage;
+  const canSave = hasDirtyDraft && !validationMessage;
+  const canTest =
+    !validationMessage &&
+    Boolean(draft.selectedProvider.trim()) &&
+    Boolean(draft.selectedModel.trim()) &&
+    (Object.keys(visibleRequest).length > 0 || hasAnyPersistedConnectionValue);
 
   const clearTestStatusIfNeeded = () => {
     testRunIdRef.current += 1;
@@ -158,13 +242,30 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     setStatus({
       tone: result.connected ? 'success' : 'error',
       label: result.connected ? 'OK' : 'FAILED',
-      message: result.message,
+      message: buildTestStatusMessage(result),
     });
   };
 
   const updateDraft = (field: keyof DraftState, value: string) => {
     clearTestStatusIfNeeded();
     setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateProvider = (value: string) => {
+    clearTestStatusIfNeeded();
+    setDraft((current) => {
+      const previousOption = getProviderOption(current.selectedProvider);
+      const nextOption = getProviderOption(value);
+      const currentModel = current.selectedModel.trim();
+      const shouldAutofillModel =
+        Boolean(nextOption) && (!currentModel || previousOption?.suggestedModels.includes(currentModel));
+
+      return {
+        ...current,
+        selectedProvider: value,
+        selectedModel: shouldAutofillModel ? nextOption?.suggestedModels[0] ?? current.selectedModel : current.selectedModel,
+      };
+    });
   };
 
   const handleSave = async () => {
@@ -184,7 +285,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       setStatus({
         tone: 'success',
         label: 'Saved',
-        message: 'AI provider settings saved.',
+        message: 'AI provider settings saved. New coach replies will use the latest provider setup.',
       });
       onSave();
     } catch (err) {
@@ -206,7 +307,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     setStatus({
       tone: 'neutral',
       label: 'Testing',
-      message: 'Testing current AI provider values...',
+      message: 'Testing the current visible AI draft...',
     });
 
     try {
@@ -256,8 +357,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       </div>
 
       <p className="mt-4 text-sm leading-relaxed text-slate-300">
-        Choose the provider, set the model, and manage provider-specific API keys. Use the test
-        action to validate the current selection before saving.
+        Choose the active provider, start from a recommended model, and keep only the matching API
+        key in focus while you test the visible draft.
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -269,12 +370,14 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
             id="ai-provider"
             className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 focus:border-cyan-400/50 focus:outline-none"
             value={draft.selectedProvider}
-            onChange={(event) => updateDraft('selectedProvider', event.target.value)}
+            onChange={(event) => updateProvider(event.target.value)}
           >
             <option value="">Choose provider</option>
-            <option value="openai">OpenAI</option>
-            <option value="gemini">Gemini</option>
-            <option value="openrouter">OpenRouter</option>
+            {PROVIDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -290,8 +393,32 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
             value={draft.selectedModel}
             onChange={(event) => updateDraft('selectedModel', event.target.value)}
           />
+          {suggestedModels.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {suggestedModels.map((model) => (
+                <button
+                  key={model}
+                  type="button"
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
+                    draft.selectedModel.trim() === model
+                      ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-200'
+                      : 'border-white/10 bg-slate-900/60 text-slate-300 hover:border-cyan-400/30 hover:text-cyan-200'
+                  }`}
+                  onClick={() => updateDraft('selectedModel', model)}
+                >
+                  {model}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {validationMessage && (
+        <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+          {validationMessage}
+        </div>
+      )}
 
       <div className="mt-6 space-y-4">
         <ApiKeyField
@@ -301,6 +428,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           value={draft.openaiApiKey}
           visible={showOpenai}
           configured={aiAgents.openaiApiKeySet}
+          emphasized={!draft.selectedProvider || draft.selectedProvider === 'openai'}
+          helperText={draft.selectedProvider === 'openai' ? 'Used by the active provider.' : 'Saved for quick provider switching.'}
           onVisibilityChange={() => setShowOpenai((value) => !value)}
           onChange={(value) => updateDraft('openaiApiKey', value)}
         />
@@ -311,6 +440,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           value={draft.geminiApiKey}
           visible={showGemini}
           configured={aiAgents.geminiApiKeySet}
+          emphasized={!draft.selectedProvider || draft.selectedProvider === 'gemini'}
+          helperText={draft.selectedProvider === 'gemini' ? 'Used by the active provider.' : 'Saved for quick provider switching.'}
           onVisibilityChange={() => setShowGemini((value) => !value)}
           onChange={(value) => updateDraft('geminiApiKey', value)}
         />
@@ -321,6 +452,8 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           value={draft.openrouterApiKey}
           visible={showOpenrouter}
           configured={aiAgents.openrouterApiKeySet}
+          emphasized={!draft.selectedProvider || draft.selectedProvider === 'openrouter'}
+          helperText={draft.selectedProvider === 'openrouter' ? 'Used by the active provider.' : 'Saved for quick provider switching.'}
           onVisibilityChange={() => setShowOpenrouter((value) => !value)}
           onChange={(value) => updateDraft('openrouterApiKey', value)}
         />
@@ -385,6 +518,8 @@ type ApiKeyFieldProps = {
   value: string;
   visible: boolean;
   configured: boolean;
+  emphasized: boolean;
+  helperText: string;
   onVisibilityChange: () => void;
   onChange: (value: string) => void;
 };
@@ -396,11 +531,13 @@ function ApiKeyField({
   value,
   visible,
   configured,
+  emphasized,
+  helperText,
   onVisibilityChange,
   onChange,
 }: ApiKeyFieldProps) {
   return (
-    <div>
+    <div className={emphasized ? 'opacity-100' : 'opacity-60'}>
       <label htmlFor={id} className="mb-2 block text-xs uppercase tracking-widest text-slate-400">
         {label}
       </label>
@@ -422,7 +559,8 @@ function ApiKeyField({
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </div>
-      {configured && <p className="mt-1.5 text-xs text-emerald-400">API key is configured</p>}
+      <p className="mt-1.5 text-xs text-slate-400">{helperText}</p>
+      {configured && <p className="mt-1 text-xs text-emerald-400">API key is configured</p>}
     </div>
   );
 }

@@ -193,6 +193,13 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             let Some(summary) = summaries.get_mut(&(user_id, workout_id)) else {
                 return Err(WorkoutSummaryError::NotFound);
             };
+            if summary
+                .messages
+                .iter()
+                .any(|existing| existing.id == message.id)
+            {
+                return Ok(());
+            }
             summary.messages.push(message);
             summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
             Ok(())
@@ -237,6 +244,23 @@ impl InMemoryCoachReplyOperationRepository {
         self.calls.lock().unwrap().clone()
     }
 
+    pub(crate) fn get(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        user_message_id: &str,
+    ) -> Option<CoachReplyOperation> {
+        self.operations
+            .lock()
+            .unwrap()
+            .get(&(
+                user_id.to_string(),
+                workout_id.to_string(),
+                user_message_id.to_string(),
+            ))
+            .cloned()
+    }
+
     pub(crate) fn seed(&self, operation: CoachReplyOperation) {
         self.calls.lock().unwrap().push(format!(
             "seed:{}:{}:{:?}",
@@ -272,6 +296,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     fn claim_pending(
         &self,
         operation: CoachReplyOperation,
+        stale_before_epoch_seconds: i64,
     ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         let operations = self.operations.clone();
         let calls = self.calls.clone();
@@ -287,9 +312,27 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
             );
             let mut operations = operations.lock().unwrap();
             if let Some(existing) = operations.get(&key).cloned() {
-                if existing.status == CoachReplyOperationStatus::Failed {
-                    operations.insert(key, operation.clone());
-                    return Ok(CoachReplyClaimResult::Claimed(operation));
+                let reclaimable = match existing.status {
+                    CoachReplyOperationStatus::Pending => {
+                        existing.is_stale(stale_before_epoch_seconds)
+                    }
+                    CoachReplyOperationStatus::Failed => true,
+                    CoachReplyOperationStatus::Completed => false,
+                };
+                if reclaimable {
+                    let fallback_coach_message_id =
+                        operation.coach_message_id.clone().ok_or_else(|| {
+                            WorkoutSummaryError::Repository(
+                                "pending coach reply operation missing reserved coach message id"
+                                    .to_string(),
+                            )
+                        })?;
+                    let reclaimed = existing.reclaim(
+                        fallback_coach_message_id,
+                        operation.last_attempt_at_epoch_seconds,
+                    );
+                    operations.insert(key, reclaimed.clone());
+                    return Ok(CoachReplyClaimResult::Claimed(reclaimed));
                 }
                 return Ok(CoachReplyClaimResult::Existing(existing));
             }

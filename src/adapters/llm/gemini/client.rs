@@ -70,6 +70,7 @@ impl LlmChatPort for GeminiClient {
                             .expire_time
                             .as_deref()
                             .and_then(parse_expire_time_epoch_seconds);
+                        tracing::info!(provider = "gemini", model = %config.model, cache_created = provider_cache_id.is_some(), "gemini cache create request succeeded");
                     }
                 }
             }
@@ -88,6 +89,7 @@ impl LlmChatPort for GeminiClient {
             let status = response.status();
             if !status.is_success() {
                 let body = response.text().await.unwrap_or_default();
+                tracing::warn!(provider = "gemini", model = %config.model, status = status.as_u16(), "gemini generate request failed");
                 return Err(map_error(status, body));
             }
 

@@ -198,6 +198,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                         "user_id": &user_id,
                         "workout_id": &workout_id,
                         "saved_at_epoch_seconds": null,
+                        "messages.id": { "$ne": &message.id },
                     },
                     doc! {
                         "$push": { "messages": mongodb::bson::to_bson(&message).map_err(|error| WorkoutSummaryError::Repository(error.to_string()))? },
@@ -214,6 +215,14 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                     .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
                 return match existing {
+                    Some(document)
+                        if document
+                            .messages
+                            .iter()
+                            .any(|existing_message| existing_message.id == message.id) =>
+                    {
+                        Ok(())
+                    }
                     Some(document) if document.saved_at_epoch_seconds.is_some() => {
                         Err(WorkoutSummaryError::Locked)
                     }

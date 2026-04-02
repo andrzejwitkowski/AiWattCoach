@@ -117,6 +117,18 @@ impl LlmContextCacheRepository for MongoLlmContextCacheRepository {
             Ok(cache)
         })
     }
+
+    fn delete_by_user_id(&self, user_id: &str) -> BoxFuture<Result<(), LlmError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            collection
+                .delete_many(doc! { "user_id": &user_id })
+                .await
+                .map_err(|error| LlmError::Internal(error.to_string()))?;
+            Ok(())
+        })
+    }
 }
 
 fn map_domain_to_document(cache: &LlmContextCache) -> LlmContextCacheDocument {

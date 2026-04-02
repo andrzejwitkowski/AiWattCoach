@@ -182,20 +182,17 @@ pub(super) fn map_ai_connection_error_to_response(
     axum::Json<TestAiAgentsConnectionResponse>,
 ) {
     use axum::http::StatusCode;
-    let (status, message) = match error {
+    let message = error.to_string();
+    let status = match error {
         crate::domain::llm::LlmError::CredentialsNotConfigured
         | crate::domain::llm::LlmError::ProviderNotConfigured
         | crate::domain::llm::LlmError::ModelNotConfigured
         | crate::domain::llm::LlmError::UnsupportedProvider(_)
-        | crate::domain::llm::LlmError::ProviderRejected(_) => {
-            (StatusCode::BAD_REQUEST, error.to_string())
-        }
+        | crate::domain::llm::LlmError::ProviderRejected(_) => StatusCode::BAD_REQUEST,
         crate::domain::llm::LlmError::RateLimited(_)
         | crate::domain::llm::LlmError::Transport(_)
         | crate::domain::llm::LlmError::InvalidResponse(_)
-        | crate::domain::llm::LlmError::Internal(_) => {
-            (StatusCode::SERVICE_UNAVAILABLE, error.to_string())
-        }
+        | crate::domain::llm::LlmError::Internal(_) => StatusCode::SERVICE_UNAVAILABLE,
     };
 
     (

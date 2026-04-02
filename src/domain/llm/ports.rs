@@ -28,4 +28,6 @@ pub trait LlmContextCacheRepository: Send + Sync + 'static {
     ) -> BoxFuture<Result<Option<LlmContextCache>, LlmError>>;
 
     fn upsert(&self, cache: LlmContextCache) -> BoxFuture<Result<LlmContextCache, LlmError>>;
+
+    fn delete_by_user_id(&self, user_id: &str) -> BoxFuture<Result<(), LlmError>>;
 }

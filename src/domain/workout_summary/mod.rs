@@ -6,8 +6,9 @@ mod service;
 pub use coach::{MockWorkoutCoach, WorkoutCoach};
 pub use model::{
     validate_message_content, validate_rpe, CoachReply, CoachReplyClaimResult, CoachReplyOperation,
-    CoachReplyOperationStatus, CompletedCoachReply, ConversationMessage, MessageRole,
-    PersistedUserMessage, SendMessageResult, WorkoutSummary, WorkoutSummaryError,
+    CoachReplyOperationFailureKind, CoachReplyOperationStatus, CompletedCoachReply,
+    ConversationMessage, MessageRole, PendingCoachReplyCheckpoint, PersistedUserMessage,
+    SendMessageResult, WorkoutSummary, WorkoutSummaryError,
 };
 pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
 pub use service::{WorkoutSummaryService, WorkoutSummaryUseCases};

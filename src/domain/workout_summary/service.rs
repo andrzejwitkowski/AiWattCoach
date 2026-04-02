@@ -1,10 +1,13 @@
 use crate::domain::identity::{Clock, IdGenerator};
 
+use tracing::{info, warn};
+
 use super::{
     validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyClaimResult,
     CoachReplyOperation, CoachReplyOperationRepository, CoachReplyOperationStatus,
-    CompletedCoachReply, ConversationMessage, MessageRole, PersistedUserMessage, SendMessageResult,
-    WorkoutCoach, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
+    CompletedCoachReply, ConversationMessage, MessageRole, PendingCoachReplyCheckpoint,
+    PersistedUserMessage, SendMessageResult, WorkoutCoach, WorkoutSummary, WorkoutSummaryError,
+    WorkoutSummaryRepository,
 };
 
 pub trait WorkoutSummaryUseCases: Send + Sync {
@@ -89,6 +92,8 @@ where
     Time: Clock + Clone,
     Ids: IdGenerator + Clone,
 {
+    const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
+
     pub fn new(repository: Repo, reply_operations: Ops, clock: Time, ids: Ids) -> Self {
         Self::with_coach(
             repository,
@@ -133,6 +138,18 @@ where
         role: MessageRole,
         content: String,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
+        self.append_message_with_role_and_id(user_id, workout_id, role, content, None)
+            .await
+    }
+
+    async fn append_message_with_role_and_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        role: MessageRole,
+        content: String,
+        message_id: Option<String>,
+    ) -> Result<ConversationMessage, WorkoutSummaryError> {
         let summary = self.get_existing_summary(user_id, workout_id).await?;
         if summary.saved_at_epoch_seconds.is_some() {
             return Err(WorkoutSummaryError::Locked);
@@ -145,7 +162,7 @@ where
         let content = validate_message_content(&content)?;
         let now = self.clock.now_epoch_seconds();
         let message = ConversationMessage {
-            id: self.ids.new_id("message"),
+            id: message_id.unwrap_or_else(|| self.ids.new_id("message")),
             role,
             content,
             created_at_epoch_seconds: now,
@@ -190,6 +207,20 @@ where
             summary,
             coach_message,
         })
+    }
+
+    fn map_existing_llm_failure(
+        &self,
+        operation: CoachReplyOperation,
+    ) -> Result<WorkoutSummaryError, WorkoutSummaryError> {
+        let failure_kind = operation.failure_kind.ok_or_else(|| {
+            WorkoutSummaryError::Repository(
+                "failed coach reply operation missing failure kind".to_string(),
+            )
+        })?;
+        Ok(WorkoutSummaryError::Llm(
+            failure_kind.to_llm_error(operation.error_message),
+        ))
     }
 }
 
@@ -424,16 +455,19 @@ where
             }
 
             let now = service.clock.now_epoch_seconds();
+            let reserved_coach_message_id = service.ids.new_id("message");
             let pending_operation = CoachReplyOperation::pending(
                 user_id.clone(),
                 workout_id.clone(),
                 user_message.id.clone(),
                 Some(format!("workout-summary:{user_id}:{workout_id}")),
+                reserved_coach_message_id,
                 now,
             );
+            let stale_before_epoch_seconds = now - Self::STALE_PENDING_TIMEOUT_SECONDS;
             let operation = match service
                 .reply_operations
-                .claim_pending(pending_operation.clone())
+                .claim_pending(pending_operation.clone(), stale_before_epoch_seconds)
                 .await?
             {
                 CoachReplyClaimResult::Claimed(operation) => operation,
@@ -446,9 +480,77 @@ where
                     CoachReplyOperationStatus::Pending => {
                         return Err(WorkoutSummaryError::ReplyAlreadyPending);
                     }
-                    CoachReplyOperationStatus::Failed => pending_operation,
+                    CoachReplyOperationStatus::Failed => {
+                        return Err(service.map_existing_llm_failure(existing)?);
+                    }
                 },
             };
+
+            if let Some(existing_coach_message_id) = operation.coach_message_id.clone() {
+                if let Some(existing_coach_message) = service
+                    .repository
+                    .find_message_by_id(&user_id, &workout_id, &existing_coach_message_id)
+                    .await?
+                {
+                    let completed = operation.mark_completed_from_existing_message(
+                        existing_coach_message.id.clone(),
+                        service.clock.now_epoch_seconds(),
+                    );
+                    service.reply_operations.upsert(completed).await?;
+                    let summary = service.get_existing_summary(&user_id, &workout_id).await?;
+                    info!(
+                        workout_id = %workout_id,
+                        user_message_id = %user_message.id,
+                        coach_message_id = %existing_coach_message.id,
+                        "recovered coach reply from persisted message"
+                    );
+                    return Ok(CoachReply {
+                        summary,
+                        coach_message: existing_coach_message,
+                    });
+                }
+            }
+
+            if let Some(response_message) = operation.response_message.clone() {
+                let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+                    WorkoutSummaryError::Repository(
+                        "pending coach reply operation missing reserved coach message id"
+                            .to_string(),
+                    )
+                })?;
+                let coach_message = service
+                    .append_message_with_role_and_id(
+                        &user_id,
+                        &workout_id,
+                        MessageRole::Coach,
+                        response_message,
+                        Some(coach_message_id),
+                    )
+                    .await?;
+                let completed = operation.mark_completed_from_existing_message(
+                    coach_message.id.clone(),
+                    service.clock.now_epoch_seconds(),
+                );
+                service.reply_operations.upsert(completed).await?;
+                let summary = service.get_existing_summary(&user_id, &workout_id).await?;
+                info!(
+                    workout_id = %workout_id,
+                    user_message_id = %user_message.id,
+                    coach_message_id = %coach_message.id,
+                    "replayed persisted coach reply after partial crash"
+                );
+                return Ok(CoachReply {
+                    summary,
+                    coach_message,
+                });
+            }
+
+            info!(
+                workout_id = %workout_id,
+                user_message_id = %user_message.id,
+                attempt_count = operation.attempt_count,
+                "requesting workout summary coach reply"
+            );
 
             let llm_response = match service
                 .coach
@@ -457,19 +559,43 @@ where
             {
                 Ok(response) => response,
                 Err(error) => {
-                    let failed =
-                        operation.mark_failed(error.to_string(), service.clock.now_epoch_seconds());
+                    let failed = operation.mark_failed(&error, service.clock.now_epoch_seconds());
                     service.reply_operations.upsert(failed).await?;
+                    warn!(
+                        workout_id = %workout_id,
+                        user_message_id = %user_message.id,
+                        retryable = error.is_retryable(),
+                        error = %error,
+                        "workout summary coach reply failed"
+                    );
                     return Err(WorkoutSummaryError::Llm(error));
                 }
             };
 
+            let operation = operation.record_provider_response(PendingCoachReplyCheckpoint {
+                provider: llm_response.provider.clone(),
+                model: llm_response.model.clone(),
+                provider_request_id: llm_response.provider_request_id.clone(),
+                provider_cache_id: llm_response.cache.provider_cache_id.clone(),
+                token_usage: llm_response.usage.clone(),
+                cache_usage: llm_response.cache.clone(),
+                response_message: llm_response.message.clone(),
+                updated_at_epoch_seconds: service.clock.now_epoch_seconds(),
+            });
+            service.reply_operations.upsert(operation.clone()).await?;
+
+            let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+                WorkoutSummaryError::Repository(
+                    "pending coach reply operation missing reserved coach message id".to_string(),
+                )
+            })?;
             let coach_message = service
-                .append_message_with_role(
+                .append_message_with_role_and_id(
                     &user_id,
                     &workout_id,
                     MessageRole::Coach,
                     llm_response.message.clone(),
+                    Some(coach_message_id.clone()),
                 )
                 .await?;
 
