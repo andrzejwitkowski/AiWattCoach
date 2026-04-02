@@ -59,6 +59,7 @@ describe('AiAgentsCard', () => {
 
     expect(screen.getByLabelText(/active provider/i)).toHaveValue('openrouter');
     expect(screen.getByLabelText(/model/i)).toHaveValue('openai/gpt-4o-mini');
+    expect(screen.getByRole('button', { name: 'openai/gpt-5.4' })).toBeInTheDocument();
   });
 
   it('tests current values and omits unchanged masked provider key', async () => {
@@ -82,6 +83,7 @@ describe('AiAgentsCard', () => {
         selectedModel: 'anthropic/claude-3.5-sonnet',
       });
     });
+    expect(screen.getByText(/used saved key for unchanged fields/i)).toBeInTheDocument();
   });
 
   it('saves provider, model, and openrouter key', async () => {
@@ -170,7 +172,7 @@ describe('AiAgentsCard', () => {
     render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
-    expect(screen.getByText(/testing current ai provider values/i)).toBeInTheDocument();
+    expect(screen.getByText(/testing the current visible ai draft/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/model/i), {
       target: { value: 'gpt-4o-mini' },
@@ -189,5 +191,80 @@ describe('AiAgentsCard', () => {
 
     expect(screen.queryByText(/^OK$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/connection successful/i)).not.toBeInTheDocument();
+  });
+
+  it('autofills a recommended model when provider changes', () => {
+    render(<AiAgentsCard settings={buildSettings({ selectedProvider: null, selectedModel: null })} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'gemini' },
+    });
+
+    expect(screen.getByLabelText(/model/i)).toHaveValue('gemini-3.1-pro');
+  });
+
+  it('shows higher-end suggested models for each provider', () => {
+    render(<AiAgentsCard settings={buildSettings({ selectedProvider: 'openai', selectedModel: 'gpt-5.4' })} apiBaseUrl="" onSave={() => {}} />);
+
+    expect(screen.getByRole('button', { name: 'gpt-5.4' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'o1' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'gemini' },
+    });
+
+    expect(screen.getByRole('button', { name: 'gemini-3.1-pro' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'gemini-3.0-pro' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'openrouter' },
+    });
+
+    expect(screen.getByRole('button', { name: 'openai/gpt-5.4' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'google/gemini-3.1-pro' })).toBeInTheDocument();
+  });
+
+  it('shows inline validation and disables actions when provider config is incomplete', () => {
+    render(<AiAgentsCard settings={buildSettings({ selectedProvider: null, selectedModel: null })} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'openai' },
+    });
+    fireEvent.change(screen.getByLabelText(/model/i), {
+      target: { value: '' },
+    });
+
+    expect(screen.getByText(/choose a model for the selected provider/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^test connection$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^save ai config$/i })).toBeDisabled();
+  });
+
+  it('de-emphasizes irrelevant provider key fields', () => {
+    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    const openaiInput = screen.getByLabelText(/openai api key/i);
+    const openrouterInput = screen.getByLabelText(/openrouter api key/i);
+
+    expect(openrouterInput.parentElement?.parentElement).toHaveClass('opacity-100');
+    expect(openaiInput.parentElement?.parentElement).toHaveClass('opacity-60');
+  });
+
+  it('does not claim an inactive provider key is saved when none exists', () => {
+    render(
+      <AiAgentsCard
+        settings={buildSettings({
+          geminiApiKey: null,
+          geminiApiKeySet: false,
+          selectedProvider: 'openai',
+          selectedModel: 'gpt-5.4',
+        })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('Used by the active provider.')).toBeInTheDocument();
+    expect(screen.getAllByText('Saved for quick provider switching.')).toHaveLength(1);
+    expect(screen.queryByText('Optional unless you switch to this provider.')).toBeInTheDocument();
   });
 });

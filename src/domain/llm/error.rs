@@ -11,6 +11,22 @@ pub enum LlmError {
     Internal(String),
 }
 
+impl LlmError {
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            Self::CredentialsNotConfigured => false,
+            Self::ProviderNotConfigured => false,
+            Self::ModelNotConfigured => false,
+            Self::UnsupportedProvider(_) => false,
+            Self::Transport(_) => true,
+            Self::ProviderRejected(_) => false,
+            Self::RateLimited(_) => true,
+            Self::InvalidResponse(_) => true,
+            Self::Internal(_) => true,
+        }
+    }
+}
+
 impl std::fmt::Display for LlmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -50,6 +50,7 @@ impl LlmChatPort for OpenAiClient {
             let status = response.status();
             if !status.is_success() {
                 let body = response.text().await.unwrap_or_default();
+                tracing::warn!(provider = "openai", model = %config.model, status = status.as_u16(), "openai chat request failed");
                 return Err(map_error(status, body));
             }
 

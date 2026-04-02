@@ -110,7 +110,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let settings_repository =
         MongoUserSettingsRepository::new(mongo_client.clone(), &mongo_database);
     settings_repository.ensure_indexes().await?;
-    let settings_service = Arc::new(UserSettingsService::new(settings_repository, SystemClock));
+    let llm_context_cache_repository =
+        MongoLlmContextCacheRepository::new(mongo_client.clone(), &mongo_database);
+    llm_context_cache_repository.ensure_indexes().await?;
+    let settings_service = Arc::new(
+        UserSettingsService::new(settings_repository, SystemClock)
+            .with_llm_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
+    );
     let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let llm_http_client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
@@ -124,9 +130,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             OpenRouterClient::new(llm_http_client),
         ))
     };
-    let llm_context_cache_repository =
-        MongoLlmContextCacheRepository::new(mongo_client.clone(), &mongo_database);
-    llm_context_cache_repository.ensure_indexes().await?;
     let workout_summary_repository =
         MongoWorkoutSummaryRepository::new(mongo_client.clone(), &mongo_database);
     workout_summary_repository.ensure_indexes().await?;

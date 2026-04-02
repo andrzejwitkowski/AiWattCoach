@@ -67,23 +67,63 @@ where
 
         Box::pin(async move {
             let config = config_provider.get_config(&user_id).await?;
+            tracing::info!(
+                user_id = %user_id,
+                provider = %config.provider,
+                model = %config.model,
+                "selected llm provider for workout summary coach"
+            );
             let stable_context = build_stable_context(&summary);
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
             let context_hash =
                 hash_text(&format!("{WORKOUT_COACH_SYSTEM_PROMPT}\n{stable_context}"));
             let reusable_cache_id = if config.provider == LlmProvider::Gemini {
                 match (&context_cache_repository, cache_scope_key.as_deref()) {
-                    (Some(repository), Some(scope_key)) => repository
-                        .find_reusable(
-                            &user_id,
-                            &config.provider,
-                            &config.model,
-                            scope_key,
-                            &context_hash,
-                            clock.now_epoch_seconds(),
-                        )
-                        .await?
-                        .map(|cache| cache.provider_cache_id),
+                    (Some(repository), Some(scope_key)) => {
+                        let reusable = match repository
+                            .find_reusable(
+                                &user_id,
+                                &config.provider,
+                                &config.model,
+                                scope_key,
+                                &context_hash,
+                                clock.now_epoch_seconds(),
+                            )
+                            .await
+                        {
+                            Ok(reusable) => reusable,
+                            Err(error) => {
+                                tracing::warn!(
+                                    error = %error,
+                                    user_id = %user_id,
+                                    provider = %config.provider,
+                                    model = %config.model,
+                                    cache_scope_key = %scope_key,
+                                    "failed to load reusable gemini context cache"
+                                );
+                                None
+                            }
+                        };
+                        if let Some(cache) = reusable {
+                            tracing::info!(
+                                user_id = %user_id,
+                                provider = %config.provider,
+                                model = %config.model,
+                                cache_scope_key = %scope_key,
+                                "reusing persisted gemini context cache"
+                            );
+                            Some(cache.provider_cache_id)
+                        } else {
+                            tracing::info!(
+                                user_id = %user_id,
+                                provider = %config.provider,
+                                model = %config.model,
+                                cache_scope_key = %scope_key,
+                                "no reusable gemini context cache found"
+                            );
+                            None
+                        }
+                    }
                     _ => None,
                 }
             } else {
@@ -110,7 +150,7 @@ where
                     if let Err(error) = repository
                         .upsert(LlmContextCache {
                             user_id: user_id.clone(),
-                            provider: config.provider,
+                            provider: config.provider.clone(),
                             model: config.model.clone(),
                             scope_key,
                             context_hash,
@@ -122,6 +162,13 @@ where
                         .await
                     {
                         tracing::warn!(error = %error, "failed to persist reusable gemini context cache");
+                    } else {
+                        tracing::info!(
+                            user_id = %user_id,
+                            provider = %config.provider,
+                            model = %config.model,
+                            "persisted reusable gemini context cache"
+                        );
                     }
                 }
             }

@@ -841,6 +841,43 @@ async fn test_ai_agents_connection_returns_service_unavailable_for_timeout() {
 }
 
 #[tokio::test]
+async fn test_ai_agents_connection_returns_service_unavailable_for_invalid_response_errors() {
+    let app = settings_test_app_with_services(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(MockLlmChatService::returning_err(
+            aiwattcoach::domain::llm::LlmError::InvalidResponse(
+                "provider returned malformed payload".to_string(),
+            ),
+        ))),
+        Some(std::sync::Arc::new(TestLlmConfigProvider)),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "openaiApiKey": "sk-test-key",
+        "selectedProvider": "openai",
+        "selectedModel": "gpt-5.4"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/ai-agents/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
 async fn test_ai_agents_connection_returns_bad_request_when_provider_changes_without_model() {
     let mut existing_settings = UserSettings::new_defaults("user-1".to_string(), 1000);
     existing_settings.ai_agents = aiwattcoach::domain::settings::AiAgentsConfig {

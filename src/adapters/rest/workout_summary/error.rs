@@ -31,16 +31,10 @@ pub(super) fn map_workout_summary_error(error: &WorkoutSummaryError) -> Response
             StatusCode::CONFLICT.into_response()
         }
         WorkoutSummaryError::Llm(llm_error) => {
-            let status = match llm_error {
-                crate::domain::llm::LlmError::CredentialsNotConfigured
-                | crate::domain::llm::LlmError::ProviderNotConfigured
-                | crate::domain::llm::LlmError::ModelNotConfigured
-                | crate::domain::llm::LlmError::UnsupportedProvider(_)
-                | crate::domain::llm::LlmError::ProviderRejected(_) => StatusCode::BAD_REQUEST,
-                crate::domain::llm::LlmError::RateLimited(_)
-                | crate::domain::llm::LlmError::Transport(_)
-                | crate::domain::llm::LlmError::InvalidResponse(_)
-                | crate::domain::llm::LlmError::Internal(_) => StatusCode::SERVICE_UNAVAILABLE,
+            let status = if llm_error.is_retryable() {
+                StatusCode::SERVICE_UNAVAILABLE
+            } else {
+                StatusCode::BAD_REQUEST
             };
             let level = if status.is_server_error() {
                 Level::ERROR

@@ -68,6 +68,7 @@ pub trait CoachReplyOperationRepository: Send + Sync + 'static {
     fn claim_pending(
         &self,
         operation: CoachReplyOperation,
+        stale_before_epoch_seconds: i64,
     ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>>;
 
     fn upsert(

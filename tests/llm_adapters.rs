@@ -5,9 +5,16 @@ use aiwattcoach::{
         gemini::{cache::context_hash, client::GeminiClient},
         openai::client::OpenAiClient,
         openrouter::client::OpenRouterClient,
+        workout_summary_coach::LlmWorkoutCoach,
     },
     domain::llm::{
-        LlmChatMessage, LlmChatPort, LlmChatRequest, LlmMessageRole, LlmProvider, LlmProviderConfig,
+        BoxFuture as LlmBoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse,
+        LlmContextCache, LlmContextCacheRepository, LlmError, LlmMessageRole, LlmProvider,
+        LlmProviderConfig, LlmTokenUsage, UserLlmConfigProvider,
+    },
+    domain::{
+        identity::Clock,
+        workout_summary::{WorkoutCoach, WorkoutSummary},
     },
 };
 use axum::{
@@ -35,6 +42,90 @@ struct CapturedRequest {
 struct MockServer {
     base_url: String,
     state: MockServerState,
+}
+
+#[derive(Clone, Default)]
+struct CapturingChatPort {
+    requests: Arc<Mutex<Vec<LlmChatRequest>>>,
+}
+
+impl CapturingChatPort {
+    fn requests(&self) -> Vec<LlmChatRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+impl LlmChatPort for CapturingChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        self.requests.lock().unwrap().push(request);
+        Box::pin(async move {
+            Ok(LlmChatResponse {
+                provider: LlmProvider::Gemini,
+                model: "gemini-3.1-pro".to_string(),
+                message: "Gemini coach reply".to_string(),
+                provider_request_id: Some("req-1".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+#[derive(Clone)]
+struct FixedGeminiConfigProvider;
+
+impl UserLlmConfigProvider for FixedGeminiConfigProvider {
+    fn get_config(&self, _user_id: &str) -> LlmBoxFuture<Result<LlmProviderConfig, LlmError>> {
+        Box::pin(async {
+            Ok(LlmProviderConfig {
+                provider: LlmProvider::Gemini,
+                model: "gemini-3.1-pro".to_string(),
+                api_key: "gemini-key".to_string(),
+            })
+        })
+    }
+}
+
+#[derive(Clone)]
+struct FailingReusableCacheRepository;
+
+impl LlmContextCacheRepository for FailingReusableCacheRepository {
+    fn find_reusable(
+        &self,
+        _user_id: &str,
+        _provider: &LlmProvider,
+        _model: &str,
+        _scope_key: &str,
+        _context_hash: &str,
+        _now_epoch_seconds: i64,
+    ) -> LlmBoxFuture<Result<Option<LlmContextCache>, LlmError>> {
+        Box::pin(async {
+            Err(LlmError::Internal(
+                "cache lookup should not fail the coach reply".to_string(),
+            ))
+        })
+    }
+
+    fn upsert(&self, cache: LlmContextCache) -> LlmBoxFuture<Result<LlmContextCache, LlmError>> {
+        Box::pin(async move { Ok(cache) })
+    }
+
+    fn delete_by_user_id(&self, _user_id: &str) -> LlmBoxFuture<Result<(), LlmError>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[derive(Clone)]
+struct FixedClock;
+
+impl Clock for FixedClock {
+    fn now_epoch_seconds(&self) -> i64 {
+        1_700_000_000
+    }
 }
 
 impl MockServer {
@@ -83,6 +174,19 @@ fn sample_request() -> LlmChatRequest {
         cache_scope_key: Some("scope-1".to_string()),
         cache_key: Some("cache-key-1".to_string()),
         reusable_cache_id: None,
+    }
+}
+
+fn sample_summary() -> WorkoutSummary {
+    WorkoutSummary {
+        id: "summary-1".to_string(),
+        user_id: "user-1".to_string(),
+        workout_id: "workout-1".to_string(),
+        rpe: Some(6),
+        messages: Vec::new(),
+        saved_at_epoch_seconds: None,
+        created_at_epoch_seconds: 1_700_000_000,
+        updated_at_epoch_seconds: 1_700_000_000,
     }
 }
 
@@ -247,6 +351,28 @@ async fn gemini_client_skips_cache_creation_without_durable_cache_keys() {
         requests[0].body["systemInstruction"]["parts"][0]["text"],
         "system\n\nstable"
     );
+}
+
+#[tokio::test]
+async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let coach = LlmWorkoutCoach::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        FixedClock,
+    )
+    .with_context_cache_repository(Arc::new(FailingReusableCacheRepository));
+
+    let response = coach
+        .reply("user-1", &sample_summary(), "How did I do?")
+        .await
+        .unwrap();
+
+    assert_eq!(response.message, "Gemini coach reply");
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].reusable_cache_id, None);
 }
 
 #[tokio::test]

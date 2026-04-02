@@ -50,6 +50,7 @@ impl LlmChatPort for OpenRouterClient {
             let status = response.status();
             if !status.is_success() {
                 let body = response.text().await.unwrap_or_default();
+                tracing::warn!(provider = "openrouter", model = %config.model, status = status.as_u16(), "openrouter chat request failed");
                 return Err(map_error(status, body));
             }
 
