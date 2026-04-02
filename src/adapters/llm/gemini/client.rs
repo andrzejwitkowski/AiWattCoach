@@ -41,6 +41,7 @@ impl LlmChatPort for GeminiClient {
         let client = self.client.clone();
         let base_url = self.base_url.clone();
         let model = config.model.clone();
+        let api_model = normalize_gemini_model_name(&config.model).to_string();
         let message_count = request.conversation.len();
         let has_system_prompt = !request.system_prompt.trim().is_empty();
         let has_stable_context = !request.stable_context.trim().is_empty();
@@ -131,7 +132,7 @@ impl LlmChatPort for GeminiClient {
             let payload = mapping::map_generate_request(&request, provider_cache_id.clone());
             let generate_url = format!(
                 "{}/models/{}:generateContent?key={}",
-                base_url, config.model, config.api_key
+                base_url, api_model, config.api_key
             );
             tracing::info!(
                 provider = "gemini",
@@ -217,6 +218,10 @@ impl LlmChatPort for GeminiClient {
             })
         })
     }
+}
+
+fn normalize_gemini_model_name(model: &str) -> &str {
+    model.strip_prefix("google/").unwrap_or(model)
 }
 
 fn truncate_logged_response_body(body: &str) -> String {
