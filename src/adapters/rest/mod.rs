@@ -280,7 +280,7 @@ fn is_health_request(span: &Span) -> bool {
 }
 
 fn response_log_level(is_health_request: bool, status: StatusCode) -> Level {
-    if is_health_request && status.is_success() {
+    if is_health_request && status == StatusCode::NO_CONTENT {
         Level::DEBUG
     } else {
         status_level(status)
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn health_check_successes_log_at_debug() {
-        assert_eq!(response_log_level(true, StatusCode::OK), Level::DEBUG);
+        assert_eq!(response_log_level(true, StatusCode::OK), Level::INFO);
         assert_eq!(
             response_log_level(true, StatusCode::NO_CONTENT),
             Level::DEBUG
