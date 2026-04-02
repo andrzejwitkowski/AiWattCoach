@@ -1,6 +1,6 @@
 # LLM Coach Reply State Machine
 
-This document explains how workout-summary coach replies move through durable states, how retries work, and how recovery avoids duplicate LLM calls.
+This document explains how workout-summary coach replies move through durable states, how local write retries work, and how recovery avoids duplicate LLM calls.
 
 ## Scope
 
@@ -74,6 +74,18 @@ On every `generate_coach_reply` call, the service checks for reusable durable st
 4. If the operation is `Pending` and `response_message` is already checkpointed, append the reserved coach message, mark completed, and return it.
 5. Only if none of those recovery paths apply should the service treat the work as still pending or make a fresh provider call.
 
+## Same-Request Local Write Retries
+
+After the provider has already returned, the service now retries transient local `reply_operations.upsert(...)` failures inside the same request before surfacing an error.
+
+That retry is intentionally narrow:
+
+- it applies only to post-provider operation writes
+- it does not retry the external provider call itself
+- it does not change the durable recovery order on later requests
+
+This reduces the chance that a brief repository blip turns a completed provider call into a user-visible failure.
+
 ## Retry And Reclaim Behavior
 
 Stale `Pending` operations can be reclaimed. Reclaim uses a compare-and-swap predicate in Mongo so only one worker wins.
@@ -115,14 +127,20 @@ That avoids turning a stored provider failure into a repository error during rec
 
 The workflow currently handles these important windows safely:
 
-1. Provider reply succeeded and was checkpointed, but appending the coach message failed.
-2. Coach message append succeeded, but marking the operation `Completed` failed.
-3. A later retry sees the durable pending state and finalizes from stored data instead of re-calling the provider.
+1. Provider reply succeeded, the first checkpoint write fails transiently, and the same request retries the checkpoint locally.
+2. Provider fails and the initial failed-state write hits a transient repository error; the same request retries that write locally before returning the original LLM error.
+3. Provider reply succeeded and was checkpointed, but appending the coach message failed.
+4. Coach message append succeeded, but marking the operation `Completed` failed.
+5. A later retry sees the durable pending state and finalizes from stored data instead of re-calling the provider.
 
 ## Still Deferred
 
-One broader durability problem is intentionally deferred into the follow-up plan in `docs/plans/2026-04-02-durable-coach-reply-finalization.md`:
+The current workflow is more resilient to transient local repository failures, but it is still not a fully durable workflow engine.
 
-- if post-provider state writes fail before the provider response is durably checkpointed, the system can still lose that response and later re-call the provider
+Examples still outside the current guarantees:
 
-That follow-up is the remaining step toward fully durable post-provider finalization.
+- process crash between the provider returning and the successful retry of the first local checkpoint write
+- longer repository outages that outlive the bounded in-request retry window
+- any future requirement for durable outbox-style replay across process restarts without relying on the current request path
+
+Those cases would require a broader checkpointing or workflow redesign beyond the current bounded retry and replay model.

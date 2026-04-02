@@ -238,6 +238,8 @@ pub(crate) struct InMemoryCoachReplyOperationRepository {
     operations: Arc<Mutex<ReplyOperationStore>>,
     calls: Arc<Mutex<Vec<String>>>,
     fail_next_upsert: Arc<Mutex<Option<String>>>,
+    fail_next_pending_upsert: Arc<Mutex<Option<String>>>,
+    fail_next_failed_upsert: Arc<Mutex<Option<String>>>,
     fail_next_completed_upsert: Arc<Mutex<Option<String>>>,
 }
 
@@ -280,6 +282,14 @@ impl InMemoryCoachReplyOperationRepository {
 
     pub(crate) fn fail_next_completed_upsert(&self, message: impl Into<String>) {
         *self.fail_next_completed_upsert.lock().unwrap() = Some(message.into());
+    }
+
+    pub(crate) fn fail_next_pending_upsert(&self, message: impl Into<String>) {
+        *self.fail_next_pending_upsert.lock().unwrap() = Some(message.into());
+    }
+
+    pub(crate) fn fail_next_failed_upsert(&self, message: impl Into<String>) {
+        *self.fail_next_failed_upsert.lock().unwrap() = Some(message.into());
     }
 }
 
@@ -355,6 +365,8 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
         let operations = self.operations.clone();
         let calls = self.calls.clone();
         let fail_next_upsert = self.fail_next_upsert.clone();
+        let fail_next_pending_upsert = self.fail_next_pending_upsert.clone();
+        let fail_next_failed_upsert = self.fail_next_failed_upsert.clone();
         let fail_next_completed_upsert = self.fail_next_completed_upsert.clone();
         Box::pin(async move {
             calls.lock().unwrap().push(format!(
@@ -363,6 +375,16 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
             ));
             if let Some(message) = fail_next_upsert.lock().unwrap().take() {
                 return Err(WorkoutSummaryError::Repository(message));
+            }
+            if operation.status == CoachReplyOperationStatus::Pending {
+                if let Some(message) = fail_next_pending_upsert.lock().unwrap().take() {
+                    return Err(WorkoutSummaryError::Repository(message));
+                }
+            }
+            if operation.status == CoachReplyOperationStatus::Failed {
+                if let Some(message) = fail_next_failed_upsert.lock().unwrap().take() {
+                    return Err(WorkoutSummaryError::Repository(message));
+                }
             }
             if operation.status == CoachReplyOperationStatus::Completed {
                 if let Some(message) = fail_next_completed_upsert.lock().unwrap().take() {

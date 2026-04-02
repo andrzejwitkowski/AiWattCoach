@@ -605,7 +605,7 @@ async fn generate_coach_reply_replays_persisted_response_message_after_partial_c
 }
 
 #[tokio::test]
-async fn generate_coach_reply_recovers_when_completion_upsert_fails_after_coach_message_append() {
+async fn generate_coach_reply_retries_completion_write_after_coach_message_append() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let reply_operations = InMemoryCoachReplyOperationRepository::default();
     let coach = Arc::new(CountingCoach::default());
@@ -619,23 +619,97 @@ async fn generate_coach_reply_recovers_when_completion_upsert_fails_after_coach_
 
     reply_operations.fail_next_completed_upsert("completion write failed");
 
-    let first_error = service
+    let reply = service
         .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
         .await
-        .unwrap_err();
+        .unwrap();
 
+    assert_eq!(reply.coach_message.role, MessageRole::Coach);
+    assert_eq!(coach.calls(), vec!["Need feedback".to_string()]);
     assert_eq!(
-        first_error,
-        WorkoutSummaryError::Repository("completion write failed".to_string())
+        repository.calls(),
+        vec![
+            "append_message:workout-1:user".to_string(),
+            "append_message:workout-1:coach".to_string(),
+        ]
     );
+    assert_eq!(
+        reply_operations.calls(),
+        vec![
+            format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
+        ]
+    );
+}
 
-    let recovered = service
+#[tokio::test]
+async fn generate_coach_reply_retries_success_checkpoint_write_before_returning() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CountingCoach::default());
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations.clone(), coach.clone());
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    reply_operations.fail_next_pending_upsert("pending checkpoint write failed");
+
+    let reply = service
         .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
         .await
         .unwrap();
 
     assert_eq!(coach.calls(), vec!["Need feedback".to_string()]);
-    assert_eq!(recovered.coach_message.role, MessageRole::Coach);
+    assert_eq!(reply.coach_message.role, MessageRole::Coach);
+    assert_eq!(
+        reply_operations.calls(),
+        vec![
+            format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn generate_coach_reply_retries_failure_checkpoint_write_before_returning() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(AlwaysFailingCoach);
+    let service = test_service_with_coach(repository, reply_operations.clone(), coach);
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    reply_operations.fail_next_failed_upsert("failed checkpoint write failed");
+
+    let error = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::workout_summary::WorkoutSummaryError::Llm(LlmError::RateLimited(
+            "provider throttled".to_string()
+        ))
+    );
+    assert_eq!(
+        reply_operations.calls(),
+        vec![
+            format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Failed", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Failed", persisted.user_message.id),
+        ]
+    );
 }
 
 #[tokio::test]

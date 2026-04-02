@@ -10,6 +10,8 @@ use super::{
     WorkoutSummaryRepository,
 };
 
+const POST_PROVIDER_WRITE_ATTEMPTS: usize = 2;
+
 pub trait WorkoutSummaryUseCases: Send + Sync {
     fn get_summary(
         &self,
@@ -289,6 +291,57 @@ where
         }
 
         Ok(None)
+    }
+
+    async fn persist_post_provider_operation(
+        &self,
+        operation: CoachReplyOperation,
+        write_label: &'static str,
+    ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
+        let mut last_error = None;
+
+        for attempt in 1..=POST_PROVIDER_WRITE_ATTEMPTS {
+            match self.reply_operations.upsert(operation.clone()).await {
+                Ok(saved) => {
+                    if attempt > 1 {
+                        info!(
+                            workout_id = %saved.workout_id,
+                            user_message_id = %saved.user_message_id,
+                            attempt,
+                            max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
+                            operation_status = ?saved.status,
+                            write_label,
+                            "recovered post-provider coach reply write after retry"
+                        );
+                    }
+                    return Ok(saved);
+                }
+                Err(error @ WorkoutSummaryError::Repository(_)) => {
+                    if attempt == POST_PROVIDER_WRITE_ATTEMPTS {
+                        return Err(error);
+                    }
+
+                    warn!(
+                        workout_id = %operation.workout_id,
+                        user_message_id = %operation.user_message_id,
+                        attempt,
+                        max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
+                        operation_status = ?operation.status,
+                        write_label,
+                        error = %error,
+                        "retrying post-provider coach reply write after repository error"
+                    );
+                    last_error = Some(error);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| {
+            WorkoutSummaryError::Repository(
+                "post-provider coach reply write failed without error".to_string(),
+            )
+        }))
     }
 }
 
@@ -596,7 +649,9 @@ where
                 Ok(response) => response,
                 Err(error) => {
                     let failed = operation.mark_failed(&error, service.clock.now_epoch_seconds());
-                    service.reply_operations.upsert(failed).await?;
+                    service
+                        .persist_post_provider_operation(failed, "persist_failed_checkpoint")
+                        .await?;
                     warn!(
                         workout_id = %workout_id,
                         user_message_id = %user_message.id,
@@ -618,7 +673,9 @@ where
                 response_message: llm_response.message.clone(),
                 updated_at_epoch_seconds: service.clock.now_epoch_seconds(),
             });
-            service.reply_operations.upsert(operation.clone()).await?;
+            let operation = service
+                .persist_post_provider_operation(operation, "persist_success_checkpoint")
+                .await?;
 
             let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
                 WorkoutSummaryError::Repository(
@@ -646,7 +703,9 @@ where
                 cache_usage: llm_response.cache.clone(),
                 updated_at_epoch_seconds: service.clock.now_epoch_seconds(),
             });
-            service.reply_operations.upsert(completed).await?;
+            service
+                .persist_post_provider_operation(completed, "persist_completed_reply")
+                .await?;
 
             let summary = service.get_existing_summary(&user_id, &workout_id).await?;
 
@@ -660,7 +719,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
 
     use crate::domain::{
         identity::{Clock, IdGenerator},
@@ -719,6 +781,41 @@ mod tests {
                 "persisted failure without kind".to_string()
             ))
         );
+    }
+
+    #[tokio::test]
+    async fn persist_post_provider_operation_does_not_retry_non_repository_errors() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let service = WorkoutSummaryService::with_coach(
+            StubSummaryRepository,
+            NonRepositoryFailingReplyOperations {
+                attempts: attempts.clone(),
+            },
+            FixedClock,
+            FixedIds,
+            Arc::new(MockWorkoutCoach),
+        );
+
+        let error = service
+            .persist_post_provider_operation(
+                CoachReplyOperation::pending(
+                    "user-1".to_string(),
+                    "workout-1".to_string(),
+                    "message-1".to_string(),
+                    Some("workout-summary:user-1:workout-1".to_string()),
+                    "coach-message-1".to_string(),
+                    1_700_000_000,
+                ),
+                "persist_success_checkpoint",
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            WorkoutSummaryError::Validation("semantic failure".to_string())
+        );
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
     }
 
     #[derive(Clone)]
@@ -815,6 +912,43 @@ mod tests {
             operation: CoachReplyOperation,
         ) -> super::BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
             Box::pin(async move { Ok(operation) })
+        }
+    }
+
+    #[derive(Clone)]
+    struct NonRepositoryFailingReplyOperations {
+        attempts: Arc<AtomicUsize>,
+    }
+
+    impl CoachReplyOperationRepository for NonRepositoryFailingReplyOperations {
+        fn find_by_user_message_id(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _user_message_id: &str,
+        ) -> super::BoxFuture<Result<Option<CoachReplyOperation>, WorkoutSummaryError>> {
+            Box::pin(async { Ok(None) })
+        }
+
+        fn claim_pending(
+            &self,
+            _operation: CoachReplyOperation,
+            _stale_before_epoch_seconds: i64,
+        ) -> super::BoxFuture<Result<super::CoachReplyClaimResult, WorkoutSummaryError>> {
+            Box::pin(async { Err(WorkoutSummaryError::NotFound) })
+        }
+
+        fn upsert(
+            &self,
+            _operation: CoachReplyOperation,
+        ) -> super::BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+            let attempts = self.attempts.clone();
+            Box::pin(async move {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                Err(WorkoutSummaryError::Validation(
+                    "semantic failure".to_string(),
+                ))
+            })
         }
     }
 }
