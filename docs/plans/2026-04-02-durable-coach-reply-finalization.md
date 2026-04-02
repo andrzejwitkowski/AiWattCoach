@@ -1,7 +1,5 @@
 # Durable Coach Reply Finalization Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Ensure workout-summary coach replies remain recoverable and replayable even when any post-provider persistence step fails, without issuing duplicate provider calls.
 
 **Architecture:** Keep the workflow orchestration in `src/domain/workout_summary/service.rs`, keep persistence semantics in `src/adapters/mongo/coach_reply_operations.rs` and the summary repository, and preserve the repo rule that durable local state must exist before side effects become irrecoverable. The fix should treat the provider response as a checkpointed workflow stage, so crashes or repository errors after the LLM call can be resumed on the next request instead of re-calling the provider.

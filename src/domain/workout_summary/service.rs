@@ -210,20 +210,15 @@ where
         })
     }
 
-    fn map_existing_llm_failure(
-        &self,
-        operation: CoachReplyOperation,
-    ) -> Result<WorkoutSummaryError, WorkoutSummaryError> {
+    fn map_existing_llm_failure(&self, operation: CoachReplyOperation) -> WorkoutSummaryError {
         if let Some(failure_kind) = operation.failure_kind {
-            return Ok(WorkoutSummaryError::Llm(
-                failure_kind.to_llm_error(operation.error_message),
-            ));
+            return WorkoutSummaryError::Llm(failure_kind.to_llm_error(operation.error_message));
         }
 
-        Ok(WorkoutSummaryError::Llm(
-            crate::domain::llm::LlmError::Internal(operation.error_message.unwrap_or_else(|| {
-                "failed coach reply operation missing failure kind".to_string()
-            })),
+        WorkoutSummaryError::Llm(crate::domain::llm::LlmError::Internal(
+            operation
+                .error_message
+                .unwrap_or_else(|| "failed coach reply operation missing failure kind".to_string()),
         ))
     }
 
@@ -564,7 +559,7 @@ where
                             .await;
                     }
                     CoachReplyOperationStatus::Failed => {
-                        return Err(service.map_existing_llm_failure(existing)?);
+                        return Err(service.map_existing_llm_failure(existing));
                     }
                     CoachReplyOperationStatus::Pending => {
                         if let Some(reply) = service
@@ -719,7 +714,7 @@ mod tests {
         operation.failure_kind = None;
 
         assert_eq!(
-            service.map_existing_llm_failure(operation).unwrap(),
+            service.map_existing_llm_failure(operation),
             WorkoutSummaryError::Llm(LlmError::Internal(
                 "persisted failure without kind".to_string()
             ))
