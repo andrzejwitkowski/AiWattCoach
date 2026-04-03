@@ -4,7 +4,7 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate, Utc};
-use futures::future::join_all;
+use futures::{stream, StreamExt};
 
 use crate::domain::{
     identity::Clock,
@@ -25,6 +25,10 @@ pub trait TrainingContextBuilder: Send + Sync {
         workout_id: &str,
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
 }
+
+const MAX_RECENT_ACTIVITY_FETCHES: usize = 4;
+const STREAM_BUCKET_SIZE: usize = 5;
+const MAX_CHUNKS_PER_WORKOUT: usize = 48;
 
 #[derive(Clone)]
 pub struct DefaultTrainingContextBuilder<Time>
@@ -207,18 +211,25 @@ where
             .cloned()
             .collect::<Vec<_>>();
 
-        join_all(recent.into_iter().map(|activity| async move {
-            let fallback = activity.clone();
-            match self
-                .intervals_service
-                .get_activity(user_id, &activity.id)
-                .await
-            {
-                Ok(detailed) => detailed,
-                Err(_) => fallback,
-            }
-        }))
-        .await
+        stream::iter(recent)
+            .map(|activity| async move {
+                if activity_has_required_detail(&activity) {
+                    return activity;
+                }
+
+                let fallback = activity.clone();
+                match self
+                    .intervals_service
+                    .get_activity(user_id, &activity.id)
+                    .await
+                {
+                    Ok(detailed) => detailed,
+                    Err(_) => fallback,
+                }
+            })
+            .buffer_unordered(MAX_RECENT_ACTIVITY_FETCHES)
+            .collect()
+            .await
     }
 
     async fn load_recent_rpe_by_workout_id(
@@ -658,10 +669,34 @@ fn extract_and_average_stream(streams: &[ActivityStream], stream_type: &str) -> 
         .map(extract_numeric_values)
         .unwrap_or_default();
 
-    values
-        .chunks(5)
+    let chunks = values
+        .chunks(STREAM_BUCKET_SIZE)
         .map(|chunk| (chunk.iter().sum::<i32>() as f64 / chunk.len() as f64).round() as i32)
+        .collect::<Vec<_>>();
+
+    compress_stream_chunks(chunks)
+}
+
+fn compress_stream_chunks(chunks: Vec<i32>) -> Vec<i32> {
+    if chunks.len() <= MAX_CHUNKS_PER_WORKOUT {
+        return chunks;
+    }
+
+    let recent_count = MAX_CHUNKS_PER_WORKOUT / 2;
+    let summary_count = MAX_CHUNKS_PER_WORKOUT - recent_count;
+    let older_count = chunks.len() - recent_count;
+    let group_size = older_count.div_ceil(summary_count);
+    let summarized = chunks[..older_count]
+        .chunks(group_size)
+        .map(|group| (group.iter().sum::<i32>() as f64 / group.len() as f64).round() as i32);
+
+    summarized
+        .chain(chunks[older_count..].iter().copied())
         .collect()
+}
+
+fn activity_has_required_detail(activity: &Activity) -> bool {
+    !activity.details.streams.is_empty()
 }
 
 fn extract_numeric_values(value: &serde_json::Value) -> Vec<i32> {

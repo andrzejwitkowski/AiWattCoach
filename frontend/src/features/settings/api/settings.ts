@@ -61,31 +61,9 @@ function getAiAgentsFieldValue(
   return trimToUndefined(validatedValue);
 }
 
-function getCyclingTextFieldValue(
+function getOptionalStringFieldValue(
   data: unknown,
-  key: 'athletePrompt' | 'medications' | 'athleteNotes',
-  validatedValue: string | null | undefined,
-) {
-  if (!data || typeof data !== 'object' || !(key in data)) {
-    return undefined;
-  }
-
-  const rawValue = (data as Record<string, unknown>)[key];
-
-  if (rawValue === null) {
-    return null;
-  }
-
-  if (typeof rawValue === 'string' && rawValue.trim() === '') {
-    return null;
-  }
-
-  return trimToUndefined(validatedValue);
-}
-
-function getIntervalsFieldValue(
-  data: unknown,
-  key: 'apiKey' | 'athleteId',
+  key: string,
   validatedValue: string | null | undefined,
 ) {
   if (!data || typeof data !== 'object' || !(key in data)) {
@@ -181,8 +159,8 @@ export async function testAiAgentsConnection(apiBaseUrl: string, data: unknown) 
 export async function updateIntervals(apiBaseUrl: string, data: unknown) {
   const validated = updateIntervalsRequestSchema.parse(data);
   const body: Record<string, string | null> = {};
-  const apiKey = getIntervalsFieldValue(data, 'apiKey', validated.apiKey);
-  const athleteId = getIntervalsFieldValue(data, 'athleteId', validated.athleteId);
+  const apiKey = getOptionalStringFieldValue(data, 'apiKey', validated.apiKey);
+  const athleteId = getOptionalStringFieldValue(data, 'athleteId', validated.athleteId);
 
   if (apiKey !== undefined) {
     body.apiKey = apiKey;
@@ -215,10 +193,10 @@ export async function updateCycling(apiBaseUrl: string, data: unknown) {
   const validated = updateCyclingRequestSchema.parse(data);
   const body = {
     ...validated,
-    fullName: validated.fullName?.trim() || undefined,
-    athletePrompt: getCyclingTextFieldValue(data, 'athletePrompt', validated.athletePrompt),
-    medications: getCyclingTextFieldValue(data, 'medications', validated.medications),
-    athleteNotes: getCyclingTextFieldValue(data, 'athleteNotes', validated.athleteNotes),
+    fullName: getOptionalStringFieldValue(data, 'fullName', validated.fullName),
+    athletePrompt: getOptionalStringFieldValue(data, 'athletePrompt', validated.athletePrompt),
+    medications: getOptionalStringFieldValue(data, 'medications', validated.medications),
+    athleteNotes: getOptionalStringFieldValue(data, 'athleteNotes', validated.athleteNotes),
   };
   return patch(apiBaseUrl, '/api/settings/cycling', body);
 }

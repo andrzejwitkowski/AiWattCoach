@@ -107,7 +107,7 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
     setIsSaving(true);
     try {
       const req: Record<string, unknown> = {};
-      if (form.fullName) req.fullName = form.fullName;
+      req.fullName = form.fullName;
       if (form.age) {
         const age = parseInt(form.age, 10);
         if (!Number.isNaN(age)) req.age = age;

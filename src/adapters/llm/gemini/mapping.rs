@@ -3,6 +3,8 @@ use crate::domain::llm::{
     LlmProvider, LlmProviderConfig, LlmTokenUsage,
 };
 
+use crate::adapters::llm::context_prelude::non_empty_context_parts;
+
 use super::dto::{
     GeminiContent, GeminiCreateCacheRequest, GeminiGenerateContentRequest,
     GeminiGenerateContentResponse, GeminiTextPart,
@@ -13,13 +15,21 @@ pub fn map_generate_request(
     cached_content: Option<String>,
 ) -> GeminiGenerateContentRequest {
     let cached_content = request.reusable_cache_id.clone().or(cached_content);
-    let volatile_context = request.volatile_context.trim();
+    let context_parts = non_empty_context_parts([
+        ("user", request.system_prompt.as_str()),
+        ("user", request.stable_context.as_str()),
+        ("user", request.volatile_context.as_str()),
+    ]);
     let system_instruction = cached_content
         .is_none()
-        .then_some(())
-        .filter(|_| {
-            !request.system_prompt.trim().is_empty() || !request.stable_context.trim().is_empty()
+        .then(|| {
+            context_parts
+                .iter()
+                .take(2)
+                .map(|(_, content)| *content)
+                .collect::<Vec<_>>()
         })
+        .filter(|parts| !parts.is_empty())
         .map(|_| GeminiContent {
             role: "user".to_string(),
             parts: vec![GeminiTextPart {
@@ -30,14 +40,15 @@ pub fn map_generate_request(
         });
 
     GeminiGenerateContentRequest {
-        contents: (!volatile_context.is_empty())
-            .then(|| GeminiContent {
+        contents: context_parts
+            .iter()
+            .skip(2)
+            .map(|(_, content)| GeminiContent {
                 role: "user".to_string(),
                 parts: vec![GeminiTextPart {
-                    text: volatile_context.to_string(),
+                    text: (*content).to_string(),
                 }],
             })
-            .into_iter()
             .chain(request.conversation.iter().cloned().map(map_message))
             .collect(),
         system_instruction,

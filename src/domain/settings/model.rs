@@ -40,7 +40,7 @@ pub struct AnalysisOptions {
     pub analyze_without_heart_rate: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, PartialEq, Default)]
 pub struct CyclingSettings {
     pub full_name: Option<String>,
     pub age: Option<u32>,
@@ -53,6 +53,41 @@ pub struct CyclingSettings {
     pub medications: Option<String>,
     pub athlete_notes: Option<String>,
     pub last_zone_update_epoch_seconds: Option<i64>,
+}
+
+impl std::fmt::Debug for CyclingSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CyclingSettings")
+            .field("full_name", &self.full_name)
+            .field("age", &self.age)
+            .field("height_cm", &self.height_cm)
+            .field("weight_kg", &self.weight_kg)
+            .field("ftp_watts", &self.ftp_watts)
+            .field("hr_max_bpm", &self.hr_max_bpm)
+            .field("vo2_max", &self.vo2_max)
+            .field(
+                "athlete_prompt",
+                &RedactedOptionalText(&self.athlete_prompt),
+            )
+            .field("medications", &RedactedOptionalText(&self.medications))
+            .field("athlete_notes", &RedactedOptionalText(&self.athlete_notes))
+            .field(
+                "last_zone_update_epoch_seconds",
+                &self.last_zone_update_epoch_seconds,
+            )
+            .finish()
+    }
+}
+
+struct RedactedOptionalText<'a>(&'a Option<String>);
+
+impl std::fmt::Debug for RedactedOptionalText<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Some(value) => write!(f, "Some(<redacted:{} chars>)", value.chars().count()),
+            None => write!(f, "None"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -149,5 +184,22 @@ mod tests {
 
         assert_eq!(settings1, settings2);
         assert_ne!(settings1, settings3);
+    }
+
+    #[test]
+    fn cycling_settings_debug_redacts_sensitive_profile_fields() {
+        let settings = CyclingSettings {
+            athlete_prompt: Some("prompt details".to_string()),
+            medications: Some("medication details".to_string()),
+            athlete_notes: Some("note details".to_string()),
+            ..CyclingSettings::default()
+        };
+
+        let debug_output = format!("{settings:?}");
+
+        assert!(!debug_output.contains("prompt details"));
+        assert!(!debug_output.contains("medication details"));
+        assert!(!debug_output.contains("note details"));
+        assert!(debug_output.contains("<redacted:"));
     }
 }

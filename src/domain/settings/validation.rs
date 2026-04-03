@@ -107,3 +107,54 @@ pub fn validate_ai_model(model: Option<String>) -> Result<Option<String>, Settin
         None => Ok(None),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::validate_optional_profile_text;
+    use crate::domain::settings::SettingsError;
+
+    #[test]
+    fn validate_optional_profile_text_trims_value() {
+        let value = validate_optional_profile_text(
+            "athletePrompt",
+            Some("  stage race focus  ".to_string()),
+            100,
+        )
+        .unwrap();
+
+        assert_eq!(value, Some("stage race focus".to_string()));
+    }
+
+    #[test]
+    fn validate_optional_profile_text_returns_none_for_blank_values() {
+        assert_eq!(
+            validate_optional_profile_text("athletePrompt", Some("".to_string()), 100).unwrap(),
+            None
+        );
+        assert_eq!(
+            validate_optional_profile_text("athletePrompt", Some("   ".to_string()), 100).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn validate_optional_profile_text_allows_exact_max_length() {
+        let exact = "a".repeat(5);
+
+        let value =
+            validate_optional_profile_text("athletePrompt", Some(exact.clone()), 5).unwrap();
+
+        assert_eq!(value, Some(exact));
+    }
+
+    #[test]
+    fn validate_optional_profile_text_rejects_over_max_length() {
+        let error =
+            validate_optional_profile_text("athletePrompt", Some("a".repeat(6)), 5).unwrap_err();
+
+        assert_eq!(
+            error,
+            SettingsError::Validation("athletePrompt must be 5 characters or fewer".to_string())
+        );
+    }
+}

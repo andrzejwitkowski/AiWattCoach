@@ -50,7 +50,7 @@ struct OptionsDocument {
     analyze_without_heart_rate: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 struct CyclingDocument {
     full_name: Option<String>,
     age: Option<u32>,
@@ -63,6 +63,41 @@ struct CyclingDocument {
     medications: Option<String>,
     athlete_notes: Option<String>,
     last_zone_update_epoch_seconds: Option<i64>,
+}
+
+impl std::fmt::Debug for CyclingDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CyclingDocument")
+            .field("full_name", &self.full_name)
+            .field("age", &self.age)
+            .field("height_cm", &self.height_cm)
+            .field("weight_kg", &self.weight_kg)
+            .field("ftp_watts", &self.ftp_watts)
+            .field("hr_max_bpm", &self.hr_max_bpm)
+            .field("vo2_max", &self.vo2_max)
+            .field(
+                "athlete_prompt",
+                &RedactedOptionalText(&self.athlete_prompt),
+            )
+            .field("medications", &RedactedOptionalText(&self.medications))
+            .field("athlete_notes", &RedactedOptionalText(&self.athlete_notes))
+            .field(
+                "last_zone_update_epoch_seconds",
+                &self.last_zone_update_epoch_seconds,
+            )
+            .finish()
+    }
+}
+
+struct RedactedOptionalText<'a>(&'a Option<String>);
+
+impl std::fmt::Debug for RedactedOptionalText<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Some(value) => write!(f, "Some(<redacted:{} chars>)", value.chars().count()),
+            None => write!(f, "None"),
+        }
+    }
 }
 
 impl MongoUserSettingsRepository {
@@ -211,22 +246,23 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
+            let cycling_document = map_domain_cycling_to_document(&cycling);
             collection
                 .update_one(
                     doc! { "user_id": &user_id },
                     doc! {
                         "$set": {
-                            "cycling.full_name": &cycling.full_name,
-                            "cycling.age": cycling.age,
-                            "cycling.height_cm": cycling.height_cm,
-                            "cycling.weight_kg": cycling.weight_kg,
-                            "cycling.ftp_watts": cycling.ftp_watts,
-                            "cycling.hr_max_bpm": cycling.hr_max_bpm,
-                            "cycling.vo2_max": cycling.vo2_max,
-                            "cycling.athlete_prompt": &cycling.athlete_prompt,
-                            "cycling.medications": &cycling.medications,
-                            "cycling.athlete_notes": &cycling.athlete_notes,
-                            "cycling.last_zone_update_epoch_seconds": cycling.last_zone_update_epoch_seconds,
+                            "cycling.full_name": &cycling_document.full_name,
+                            "cycling.age": cycling_document.age,
+                            "cycling.height_cm": cycling_document.height_cm,
+                            "cycling.weight_kg": cycling_document.weight_kg,
+                            "cycling.ftp_watts": cycling_document.ftp_watts,
+                            "cycling.hr_max_bpm": cycling_document.hr_max_bpm,
+                            "cycling.vo2_max": cycling_document.vo2_max,
+                            "cycling.athlete_prompt": &cycling_document.athlete_prompt,
+                            "cycling.medications": &cycling_document.medications,
+                            "cycling.athlete_notes": &cycling_document.athlete_notes,
+                            "cycling.last_zone_update_epoch_seconds": cycling_document.last_zone_update_epoch_seconds,
                             "updated_at_epoch_seconds": updated_at,
                         }
                     },
@@ -260,19 +296,7 @@ fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
         options: AnalysisOptions {
             analyze_without_heart_rate: doc.options.analyze_without_heart_rate,
         },
-        cycling: CyclingSettings {
-            full_name: doc.cycling.full_name,
-            age: doc.cycling.age,
-            height_cm: doc.cycling.height_cm,
-            weight_kg: doc.cycling.weight_kg,
-            ftp_watts: doc.cycling.ftp_watts,
-            hr_max_bpm: doc.cycling.hr_max_bpm,
-            vo2_max: doc.cycling.vo2_max,
-            athlete_prompt: doc.cycling.athlete_prompt,
-            medications: doc.cycling.medications,
-            athlete_notes: doc.cycling.athlete_notes,
-            last_zone_update_epoch_seconds: doc.cycling.last_zone_update_epoch_seconds,
-        },
+        cycling: map_document_cycling_to_domain(doc.cycling),
         created_at_epoch_seconds: doc.created_at_epoch_seconds,
         updated_at_epoch_seconds: doc.updated_at_epoch_seconds,
     }
@@ -301,20 +325,40 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
         options: OptionsDocument {
             analyze_without_heart_rate: settings.options.analyze_without_heart_rate,
         },
-        cycling: CyclingDocument {
-            full_name: settings.cycling.full_name.clone(),
-            age: settings.cycling.age,
-            height_cm: settings.cycling.height_cm,
-            weight_kg: settings.cycling.weight_kg,
-            ftp_watts: settings.cycling.ftp_watts,
-            hr_max_bpm: settings.cycling.hr_max_bpm,
-            vo2_max: settings.cycling.vo2_max,
-            athlete_prompt: settings.cycling.athlete_prompt.clone(),
-            medications: settings.cycling.medications.clone(),
-            athlete_notes: settings.cycling.athlete_notes.clone(),
-            last_zone_update_epoch_seconds: settings.cycling.last_zone_update_epoch_seconds,
-        },
+        cycling: map_domain_cycling_to_document(&settings.cycling),
         created_at_epoch_seconds: settings.created_at_epoch_seconds,
         updated_at_epoch_seconds: settings.updated_at_epoch_seconds,
+    }
+}
+
+fn map_document_cycling_to_domain(cycling: CyclingDocument) -> CyclingSettings {
+    CyclingSettings {
+        full_name: cycling.full_name,
+        age: cycling.age,
+        height_cm: cycling.height_cm,
+        weight_kg: cycling.weight_kg,
+        ftp_watts: cycling.ftp_watts,
+        hr_max_bpm: cycling.hr_max_bpm,
+        vo2_max: cycling.vo2_max,
+        athlete_prompt: cycling.athlete_prompt,
+        medications: cycling.medications,
+        athlete_notes: cycling.athlete_notes,
+        last_zone_update_epoch_seconds: cycling.last_zone_update_epoch_seconds,
+    }
+}
+
+fn map_domain_cycling_to_document(cycling: &CyclingSettings) -> CyclingDocument {
+    CyclingDocument {
+        full_name: cycling.full_name.clone(),
+        age: cycling.age,
+        height_cm: cycling.height_cm,
+        weight_kg: cycling.weight_kg,
+        ftp_watts: cycling.ftp_watts,
+        hr_max_bpm: cycling.hr_max_bpm,
+        vo2_max: cycling.vo2_max,
+        athlete_prompt: cycling.athlete_prompt.clone(),
+        medications: cycling.medications.clone(),
+        athlete_notes: cycling.athlete_notes.clone(),
+        last_zone_update_epoch_seconds: cycling.last_zone_update_epoch_seconds,
     }
 }

@@ -3,31 +3,25 @@ use crate::domain::llm::{
     LlmProvider, LlmProviderConfig, LlmTokenUsage,
 };
 
+use crate::adapters::llm::context_prelude::non_empty_context_parts;
+
 use super::dto::{
     OpenRouterChatRequest, OpenRouterChatResponse, OpenRouterMessage, OpenRouterMessageContent,
     OpenRouterStringOrNumber, OpenRouterUsage,
 };
 
 pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenRouterChatRequest {
-    let mut messages = Vec::new();
-    if !request.system_prompt.trim().is_empty() {
-        messages.push(OpenRouterMessage {
-            role: "system".to_string(),
-            content: request.system_prompt,
-        });
-    }
-    if !request.stable_context.trim().is_empty() {
-        messages.push(OpenRouterMessage {
-            role: "system".to_string(),
-            content: request.stable_context,
-        });
-    }
-    if !request.volatile_context.trim().is_empty() {
-        messages.push(OpenRouterMessage {
-            role: "system".to_string(),
-            content: request.volatile_context,
-        });
-    }
+    let mut messages = non_empty_context_parts([
+        ("system", request.system_prompt.as_str()),
+        ("system", request.stable_context.as_str()),
+        ("system", request.volatile_context.as_str()),
+    ])
+    .into_iter()
+    .map(|(role, content)| OpenRouterMessage {
+        role: role.to_string(),
+        content: content.to_string(),
+    })
+    .collect::<Vec<_>>();
     messages.extend(request.conversation.into_iter().map(map_message));
 
     OpenRouterChatRequest {

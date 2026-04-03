@@ -338,4 +338,34 @@ describe('settings api', () => {
       }),
     });
   });
+
+  it('clears full name when a blank value is sent', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateCycling('', {
+      fullName: '   ',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/cycling', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        fullName: null,
+      }),
+    });
+  });
 });

@@ -87,8 +87,6 @@ where
                 build_volatile_context(&training_context.rendered.volatile_context);
             let estimated_request_tokens = training_context.rendered.approximate_tokens
                 + approximate_token_usage(WORKOUT_COACH_SYSTEM_PROMPT)
-                + approximate_token_usage(&stable_context)
-                + approximate_token_usage(&volatile_context)
                 + summary
                     .messages
                     .iter()

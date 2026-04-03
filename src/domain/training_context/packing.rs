@@ -28,6 +28,10 @@ pub fn approximate_token_count(value: &str) -> usize {
     value.chars().count().div_ceil(3)
 }
 
+fn is_empty_slice<T>(value: &[T]) -> bool {
+    value.is_empty()
+}
+
 #[derive(Serialize)]
 struct StablePayload<'a> {
     v: u8,
@@ -67,7 +71,9 @@ struct VolatilePayload<'a> {
     v: u8,
     g: i64,
     fx: CompactFocus<'a>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     rd: Vec<CompactRecentDay<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     ud: Vec<CompactUpcomingDay<'a>>,
 }
 
@@ -102,15 +108,25 @@ struct CompactFocus<'a> {
 
 #[derive(Serialize)]
 struct CompactProfile<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
     fnm: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     age: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     hcm: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     wkg: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ftp: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     hrm: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     vo2: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ap: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     meds: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<&'a str>,
 }
 
@@ -137,16 +153,27 @@ struct CompactHistory<'a> {
     we: &'a str,
     ac: usize,
     ttss: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ctl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     atl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tsb: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ftp: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ftpd: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     t7: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     t28: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     if28: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ef28: Option<f64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     lt: Vec<CompactHistoricalLoadTrend<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     w: Vec<CompactHistoricalWorkout<'a>>,
 }
 
@@ -185,10 +212,15 @@ struct CompactHistoricalLoadTrend<'a> {
     d: &'a str,
     days: u8,
     tss: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     t7: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     t28: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ctl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     atl: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tsb: Option<f64>,
 }
 
@@ -211,14 +243,23 @@ impl<'a> CompactHistoricalLoadTrend<'a> {
 struct CompactHistoricalWorkout<'a> {
     d: &'a str,
     id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     n: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ty: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     dur: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tss: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ifv: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ef: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     np: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ftp: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
 }
 
@@ -245,9 +286,13 @@ struct CompactRecentDay<'a> {
     d: &'a str,
     fr: bool,
     sick: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     sickn: Option<&'a str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     w: Vec<CompactRecentWorkout<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pw: Vec<CompactPlannedWorkout<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     sd: Vec<CompactSpecialDay<'a>>,
 }
 
@@ -281,17 +326,29 @@ impl<'a> CompactRecentDay<'a> {
 struct CompactRecentWorkout<'a> {
     id: &'a str,
     sd: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     n: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ty: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tss: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ef: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ifv: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     np: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ftp: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     rpe: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
+    #[serde(skip_serializing_if = "is_empty_slice")]
     p5: &'a [i32],
+    #[serde(skip_serializing_if = "is_empty_slice")]
     c5: &'a [i32],
+    #[serde(skip_serializing_if = "Option::is_none")]
     pw: Option<CompactPlannedWorkoutRef<'a>>,
 }
 
@@ -323,12 +380,18 @@ impl<'a> CompactRecentWorkout<'a> {
 struct CompactPlannedWorkoutRef<'a> {
     id: i64,
     sd: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     n: Option<&'a str>,
     c: &'a str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     bl: Vec<CompactPlannedWorkoutBlock>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     doc: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tss: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ifv: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     np: Option<i32>,
     done: bool,
 }
@@ -358,12 +421,18 @@ impl<'a> CompactPlannedWorkoutRef<'a> {
 struct CompactPlannedWorkout<'a> {
     id: i64,
     sd: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     n: Option<&'a str>,
     c: &'a str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     bl: Vec<CompactPlannedWorkoutBlock>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     doc: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tss: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ifv: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     np: Option<i32>,
     done: bool,
 }
@@ -392,9 +461,13 @@ impl<'a> CompactPlannedWorkout<'a> {
 #[derive(Serialize)]
 struct CompactPlannedWorkoutBlock {
     dur: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     minp: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     maxp: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     minw: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     maxw: Option<i32>,
 }
 
@@ -414,8 +487,10 @@ impl CompactPlannedWorkoutBlock {
 struct CompactSpecialDay<'a> {
     id: i64,
     sd: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     n: Option<&'a str>,
     c: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     desc: Option<&'a str>,
 }
 
@@ -435,7 +510,9 @@ impl<'a> CompactSpecialDay<'a> {
 struct CompactUpcomingDay<'a> {
     d: &'a str,
     fr: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pw: Vec<CompactPlannedWorkout<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     sd: Vec<CompactSpecialDay<'a>>,
 }
 
@@ -547,5 +624,27 @@ mod tests {
     fn approximate_token_count_is_conservative() {
         assert_eq!(approximate_token_count("abcdef"), 2);
         assert_eq!(approximate_token_count("abcdefg"), 3);
+    }
+
+    #[test]
+    fn compact_render_omits_nulls_and_empty_lists() {
+        let rendered = render_training_context(&TrainingContext {
+            generated_at_epoch_seconds: 1,
+            focus_workout_id: "w1".to_string(),
+            focus_kind: "summary".to_string(),
+            intervals_status: IntervalsStatusContext {
+                activities: "ok".to_string(),
+                events: "ok".to_string(),
+            },
+            profile: AthleteProfileContext::default(),
+            history: HistoricalTrainingContext::default(),
+            recent_days: Vec::new(),
+            upcoming_days: Vec::new(),
+        });
+
+        assert!(!rendered.stable_context.contains(":null"));
+        assert!(!rendered.stable_context.contains("\"lt\":[]"));
+        assert!(!rendered.volatile_context.contains("\"rd\":[]"));
+        assert!(!rendered.volatile_context.contains("\"ud\":[]"));
     }
 }

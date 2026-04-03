@@ -1,4 +1,5 @@
 pub mod adapter;
+pub mod context_prelude;
 pub mod dev_adapter;
 pub mod gemini;
 pub mod openai;
