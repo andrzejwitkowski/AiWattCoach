@@ -49,6 +49,9 @@ pub struct CyclingSettings {
     pub ftp_watts: Option<u32>,
     pub hr_max_bpm: Option<u32>,
     pub vo2_max: Option<f64>,
+    pub athlete_prompt: Option<String>,
+    pub medications: Option<String>,
+    pub athlete_notes: Option<String>,
     pub last_zone_update_epoch_seconds: Option<i64>,
 }
 

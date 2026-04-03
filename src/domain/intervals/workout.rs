@@ -19,6 +19,8 @@ pub struct WorkoutIntervalDefinition {
     pub repeat_count: usize,
     pub duration_seconds: Option<i32>,
     pub target_percent_ftp: Option<f64>,
+    pub min_target_percent_ftp: Option<f64>,
+    pub max_target_percent_ftp: Option<f64>,
     pub zone_id: Option<i32>,
 }
 
@@ -30,6 +32,8 @@ pub struct WorkoutSegment {
     pub start_offset_seconds: i32,
     pub end_offset_seconds: i32,
     pub target_percent_ftp: Option<f64>,
+    pub min_target_percent_ftp: Option<f64>,
+    pub max_target_percent_ftp: Option<f64>,
     pub zone_id: Option<i32>,
 }
 
@@ -66,6 +70,8 @@ pub struct MatchedWorkoutInterval {
     pub planned_label: String,
     pub planned_duration_seconds: i32,
     pub target_percent_ftp: Option<f64>,
+    pub min_target_percent_ftp: Option<f64>,
+    pub max_target_percent_ftp: Option<f64>,
     pub zone_id: Option<i32>,
     pub actual_interval_id: Option<i32>,
     pub actual_start_time_seconds: Option<i32>,

@@ -30,6 +30,9 @@ export const mockSettings: UserSettingsResponse = {
     ftpWatts: 280,
     hrMaxBpm: 192,
     vo2Max: 62,
+    athletePrompt: 'Masters athlete preparing for fondos and stage races. Prefers practical coaching feedback.',
+    medications: 'Seasonal antihistamine as needed.',
+    athleteNotes: 'Works a variable schedule and occasionally has limited sleep after travel.',
     lastZoneUpdateEpochSeconds: twelveDaysAgo,
   },
 };

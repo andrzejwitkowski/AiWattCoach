@@ -162,6 +162,7 @@ pub(super) fn build_test_request(user_id: &str) -> LlmChatRequest {
         user_id: user_id.to_string(),
         system_prompt: "You are a connection test assistant. Reply with OK only.".to_string(),
         stable_context: "llm connection test".to_string(),
+        volatile_context: String::new(),
         conversation: vec![crate::domain::llm::LlmChatMessage {
             role: crate::domain::llm::LlmMessageRole::User,
             content: "Reply with OK only.".to_string(),

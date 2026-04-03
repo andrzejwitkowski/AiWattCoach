@@ -49,6 +49,31 @@ function Field({ label, id, value, onChange, type = 'text', placeholder }: {
   );
 }
 
+function TextareaField({ label, id, value, onChange, placeholder, rows = 4 }: {
+  label: string;
+  id: string;
+  value: string | null;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400" htmlFor={id}>
+        {label}
+      </label>
+      <textarea
+        id={id}
+        rows={rows}
+        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-600 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+        placeholder={placeholder}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
 function MetricCard({ label, value, unit, accent }: { label: string; value: number | null; unit: string; accent: string }) {
   return (
     <div className={"flex flex-col items-center rounded-xl border p-4 " + accent}>
@@ -69,6 +94,9 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
     ftpWatts: cycling.ftpWatts?.toString() ?? '',
     hrMaxBpm: cycling.hrMaxBpm?.toString() ?? '',
     vo2Max: cycling.vo2Max?.toString() ?? '',
+    athletePrompt: cycling.athletePrompt ?? '',
+    medications: cycling.medications ?? '',
+    athleteNotes: cycling.athleteNotes ?? '',
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -104,6 +132,9 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
         const vo2 = parseFloat(form.vo2Max);
         if (!Number.isNaN(vo2)) req.vo2Max = vo2;
       }
+      req.athletePrompt = form.athletePrompt;
+      req.medications = form.medications;
+      req.athleteNotes = form.athleteNotes;
       await updateCycling(apiBaseUrl, req);
       onSave();
     } catch (err) {
@@ -226,6 +257,46 @@ export function CyclingSettingsCard({ settings, apiBaseUrl, onSave }: CyclingSet
           value={form.vo2Max}
           onChange={(v) => { setForm((p) => ({ ...p, vo2Max: v })); setSaveError(null); }}
           placeholder="62.0"
+        />
+      </div>
+
+      <div className="mt-8 grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <TextareaField
+            label="Athlete Prompt"
+            id="athlete-prompt"
+            value={form.athletePrompt}
+            onChange={(v) => { setForm((p) => ({ ...p, athletePrompt: v })); setSaveError(null); }}
+            placeholder="Context for the AI coach: goals, lifestyle, constraints, communication preferences."
+            rows={6}
+          />
+        </div>
+        <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4 text-sm text-slate-300">
+          <p className="text-[10px] uppercase tracking-widest text-slate-500">AI Context</p>
+          <p className="mt-3 leading-relaxed">
+            This information becomes part of the athlete profile used to build coaching context.
+            Keep it factual and durable. Sensitive details may be sent to the active LLM provider
+            during coach conversations.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <TextareaField
+          label="Medications"
+          id="medications"
+          value={form.medications}
+          onChange={(v) => { setForm((p) => ({ ...p, medications: v })); setSaveError(null); }}
+          placeholder="List medications, supplements, or medical factors relevant to coaching."
+          rows={5}
+        />
+        <TextareaField
+          label="Athlete Notes"
+          id="athlete-notes"
+          value={form.athleteNotes}
+          onChange={(v) => { setForm((p) => ({ ...p, athleteNotes: v })); setSaveError(null); }}
+          placeholder="Anything else the coach should always know: work schedule, sleep constraints, travel, preferences."
+          rows={5}
         />
       </div>
 

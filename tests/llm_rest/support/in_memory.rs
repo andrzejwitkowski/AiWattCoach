@@ -4,6 +4,7 @@ use std::{
 };
 
 use aiwattcoach::domain::{
+    intervals::{Activity, DateRange, Event, IntervalsError, IntervalsUseCases},
     llm::{BoxFuture as LlmBoxFuture, LlmContextCache, LlmContextCacheRepository, LlmError},
     settings::{
         AiAgentsConfig, AnalysisOptions, BoxFuture as SettingsBoxFuture, CyclingSettings,
@@ -366,6 +367,76 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
 #[derive(Clone, Default)]
 pub(crate) struct InMemoryCoachReplyOperationRepository {
     operations: Arc<Mutex<BTreeMap<ReplyOperationKey, CoachReplyOperation>>>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct InMemoryIntervalsService;
+
+impl IntervalsUseCases for InMemoryIntervalsService {
+    fn list_events(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> LlmBoxFuture<Result<Vec<Event>, IntervalsError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn get_event(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+    ) -> LlmBoxFuture<Result<Event, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn create_event(
+        &self,
+        _user_id: &str,
+        _event: aiwattcoach::domain::intervals::CreateEvent,
+    ) -> LlmBoxFuture<Result<Event, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn update_event(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+        _event: aiwattcoach::domain::intervals::UpdateEvent,
+    ) -> LlmBoxFuture<Result<Event, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn delete_event(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+    ) -> LlmBoxFuture<Result<(), IntervalsError>> {
+        unreachable!()
+    }
+
+    fn download_fit(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+    ) -> LlmBoxFuture<Result<Vec<u8>, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn list_activities(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> LlmBoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn get_activity(
+        &self,
+        _user_id: &str,
+        _activity_id: &str,
+    ) -> LlmBoxFuture<Result<Activity, IntervalsError>> {
+        unreachable!()
+    }
 }
 
 impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {

@@ -43,6 +43,9 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): 
       ftpWatts: null,
       hrMaxBpm: null,
       vo2Max: null,
+      athletePrompt: null,
+      medications: null,
+      athleteNotes: null,
       lastZoneUpdateEpochSeconds: null,
     },
   };
@@ -108,6 +111,25 @@ describe('IntervalsCard', () => {
 
     expect(screen.getByLabelText(/api key/i)).toHaveValue('next-api-key');
     expect(screen.getByLabelText(/athlete id/i)).toHaveValue('athlete-999');
+  });
+
+  it('sends explicit clears when saved intervals fields are blanked', async () => {
+    updateIntervalsMock.mockResolvedValue(
+      buildSettings({ apiKey: null, apiKeySet: false, athleteId: null, connected: false }),
+    );
+
+    render(<IntervalsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText(/athlete id/i), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: /^connect intervals$/i }));
+
+    await waitFor(() => {
+      expect(updateIntervalsMock).toHaveBeenCalledWith('', {
+        apiKey: null,
+        athleteId: null,
+      });
+    });
   });
 
   it('tests the currently displayed values and omits an unchanged masked api key', async () => {

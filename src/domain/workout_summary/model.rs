@@ -6,6 +6,7 @@ pub enum CoachReplyOperationFailureKind {
     CredentialsNotConfigured,
     ProviderNotConfigured,
     ModelNotConfigured,
+    ContextTooLarge,
     UnsupportedProvider,
     Transport,
     ProviderRejected,
@@ -20,6 +21,7 @@ impl CoachReplyOperationFailureKind {
             LlmError::CredentialsNotConfigured => Self::CredentialsNotConfigured,
             LlmError::ProviderNotConfigured => Self::ProviderNotConfigured,
             LlmError::ModelNotConfigured => Self::ModelNotConfigured,
+            LlmError::ContextTooLarge(_) => Self::ContextTooLarge,
             LlmError::UnsupportedProvider(_) => Self::UnsupportedProvider,
             LlmError::Transport(_) => Self::Transport,
             LlmError::ProviderRejected(_) => Self::ProviderRejected,
@@ -34,6 +36,10 @@ impl CoachReplyOperationFailureKind {
             Self::CredentialsNotConfigured => LlmError::CredentialsNotConfigured,
             Self::ProviderNotConfigured => LlmError::ProviderNotConfigured,
             Self::ModelNotConfigured => LlmError::ModelNotConfigured,
+            Self::ContextTooLarge => LlmError::ContextTooLarge(
+                message
+                    .unwrap_or_else(|| "packed training context exceeds model limits".to_string()),
+            ),
             Self::UnsupportedProvider => LlmError::UnsupportedProvider(
                 message.unwrap_or_else(|| "unknown provider".to_string()),
             ),

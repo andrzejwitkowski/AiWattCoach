@@ -270,6 +270,59 @@ async fn generate_coach_reply_preserves_structured_llm_errors() {
     );
 }
 
+#[derive(Clone)]
+struct OversizedContextCoach;
+
+impl WorkoutCoach for OversizedContextCoach {
+    fn reply(
+        &self,
+        _user_id: &str,
+        _summary: &WorkoutSummary,
+        _user_message: &str,
+    ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+        Box::pin(async move {
+            Err(LlmError::ContextTooLarge(
+                "packed training context exceeds model limits".to_string(),
+            ))
+        })
+    }
+}
+
+#[tokio::test]
+async fn generate_coach_reply_preserves_oversized_context_error() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let service = test_service_with_coach(
+        repository,
+        reply_operations.clone(),
+        Arc::new(OversizedContextCoach),
+    );
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    let error = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::workout_summary::WorkoutSummaryError::Llm(LlmError::ContextTooLarge(
+            "packed training context exceeds model limits".to_string()
+        ))
+    );
+    assert_eq!(
+        reply_operations.calls(),
+        vec![
+            format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Failed", persisted.user_message.id),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn generate_coach_reply_returns_dedicated_error_when_reply_is_already_pending() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());

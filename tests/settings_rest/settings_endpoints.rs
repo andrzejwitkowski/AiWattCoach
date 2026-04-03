@@ -191,7 +191,7 @@ async fn update_intervals_saves_athlete_id() {
 }
 
 #[tokio::test]
-async fn update_intervals_keeps_saved_credentials_when_blank_values_are_sent() {
+async fn update_intervals_clears_credentials_when_blank_values_are_sent() {
     let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
     settings.intervals.api_key = Some("saved-api-key".to_string());
     settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
@@ -216,6 +216,43 @@ async fn update_intervals_keeps_saved_credentials_when_blank_values_are_sent() {
                 .header(header::COOKIE, session_cookie("session-1"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let intervals = response_body.get("intervals").unwrap();
+
+    assert!(!intervals.get("apiKeySet").unwrap().as_bool().unwrap());
+    assert!(intervals.get("apiKey").is_none_or(|value| value.is_null()));
+    assert!(intervals.get("athleteId").is_some_and(Value::is_null));
+    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
+}
+
+#[tokio::test]
+async fn update_intervals_preserves_saved_credentials_when_fields_are_missing() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.intervals.api_key = Some("saved-api-key".to_string());
+    settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
+    settings.intervals.connected = true;
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/intervals")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from("{}"))
                 .unwrap(),
         )
         .await
@@ -359,6 +396,164 @@ async fn update_cycling_saves_biometrics() {
     assert_eq!(cycling.get("ftpWatts").unwrap().as_i64().unwrap(), 280);
     assert_eq!(cycling.get("hrMaxBpm").unwrap().as_i64().unwrap(), 192);
     assert_eq!(cycling.get("vo2Max").unwrap().as_f64().unwrap(), 58.0);
+}
+
+#[tokio::test]
+async fn update_cycling_trims_and_clears_full_name() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.cycling.full_name = Some("Saved Name".to_string());
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+    )
+    .await;
+
+    let trimmed_body = serde_json::json!({
+        "fullName": "  Alex Rivier  "
+    });
+
+    let trimmed_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/cycling")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&trimmed_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(trimmed_response.status(), StatusCode::OK);
+
+    let trimmed_response_body: Value = get_json(trimmed_response).await;
+    assert_eq!(
+        trimmed_response_body
+            .get("cycling")
+            .unwrap()
+            .get("fullName")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "Alex Rivier"
+    );
+
+    let clear_body = serde_json::json!({
+        "fullName": "   "
+    });
+
+    let clear_response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/cycling")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&clear_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(clear_response.status(), StatusCode::OK);
+
+    let clear_response_body: Value = get_json(clear_response).await;
+    assert!(clear_response_body
+        .get("cycling")
+        .unwrap()
+        .get("fullName")
+        .is_some_and(Value::is_null));
+}
+
+#[tokio::test]
+async fn update_cycling_saves_training_context_profile_fields() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "athletePrompt": "  Climbing specialist preparing for stage races.  ",
+        "medications": "  Iron supplement  ",
+        "athleteNotes": "  Responds poorly to back-to-back VO2 days.  "
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/cycling")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let cycling = response_body.get("cycling").unwrap();
+
+    assert_eq!(
+        cycling.get("athletePrompt").unwrap().as_str().unwrap(),
+        "Climbing specialist preparing for stage races."
+    );
+    assert_eq!(
+        cycling.get("medications").unwrap().as_str().unwrap(),
+        "Iron supplement"
+    );
+    assert_eq!(
+        cycling.get("athleteNotes").unwrap().as_str().unwrap(),
+        "Responds poorly to back-to-back VO2 days."
+    );
+}
+
+#[tokio::test]
+async fn update_cycling_clears_training_context_profile_fields() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.cycling.athlete_prompt = Some("saved athlete prompt".to_string());
+    settings.cycling.medications = Some("saved medication".to_string());
+    settings.cycling.athlete_notes = Some("saved athlete note".to_string());
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+    )
+    .await;
+
+    let body = serde_json::json!({
+        "athletePrompt": "   ",
+        "medications": null,
+        "athleteNotes": ""
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/cycling")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let cycling = response_body.get("cycling").unwrap();
+
+    assert!(cycling.get("athletePrompt").is_some_and(Value::is_null));
+    assert!(cycling.get("medications").is_some_and(Value::is_null));
+    assert!(cycling.get("athleteNotes").is_some_and(Value::is_null));
 }
 
 #[tokio::test]

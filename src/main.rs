@@ -40,6 +40,7 @@ use aiwattcoach::{
     },
     domain::intervals::IntervalsService,
     domain::settings::UserSettingsService,
+    domain::training_context::DefaultTrainingContextBuilder,
     domain::workout_summary::WorkoutSummaryService,
     telemetry::setup_telemetry,
     AppState,
@@ -136,20 +137,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let coach_reply_operation_repository =
         MongoCoachReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
     coach_reply_operation_repository.ensure_indexes().await?;
-    let workout_summary_service = Arc::new(WorkoutSummaryService::with_coach(
-        workout_summary_repository.clone(),
-        coach_reply_operation_repository.clone(),
-        SystemClock,
-        UuidIdGenerator,
-        Arc::new(
-            LlmWorkoutCoach::new(
-                llm_adapter.clone(),
-                llm_config_provider.clone(),
-                SystemClock,
-            )
-            .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
-        ),
-    ));
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
     if legacy_time_stream_cleanup_enabled {
@@ -181,6 +168,29 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         activity_repository,
         upload_operation_repository,
         activity_identity_extractor,
+    ));
+
+    let training_context_builder = Arc::new(DefaultTrainingContextBuilder::new(
+        settings_service.clone(),
+        intervals_service.clone(),
+        Arc::new(workout_summary_repository.clone()),
+        SystemClock,
+    ));
+
+    let workout_summary_service = Arc::new(WorkoutSummaryService::with_coach(
+        workout_summary_repository.clone(),
+        coach_reply_operation_repository.clone(),
+        SystemClock,
+        UuidIdGenerator,
+        Arc::new(
+            LlmWorkoutCoach::new(
+                llm_adapter.clone(),
+                llm_config_provider.clone(),
+                training_context_builder,
+                SystemClock,
+            )
+            .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
+        ),
     ));
 
     let intervals_connection_tester = if dev_intervals_enabled {

@@ -22,6 +22,12 @@ pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenR
             content: request.stable_context,
         });
     }
+    if !request.volatile_context.trim().is_empty() {
+        messages.push(OpenRouterMessage {
+            role: "system".to_string(),
+            content: request.volatile_context,
+        });
+    }
     messages.extend(request.conversation.into_iter().map(map_message));
 
     OpenRouterChatRequest {

@@ -13,6 +13,7 @@ pub fn map_generate_request(
     cached_content: Option<String>,
 ) -> GeminiGenerateContentRequest {
     let cached_content = request.reusable_cache_id.clone().or(cached_content);
+    let volatile_context = request.volatile_context.trim();
     let system_instruction = cached_content
         .is_none()
         .then_some(())
@@ -29,11 +30,15 @@ pub fn map_generate_request(
         });
 
     GeminiGenerateContentRequest {
-        contents: request
-            .conversation
-            .iter()
-            .cloned()
-            .map(map_message)
+        contents: (!volatile_context.is_empty())
+            .then(|| GeminiContent {
+                role: "user".to_string(),
+                parts: vec![GeminiTextPart {
+                    text: volatile_context.to_string(),
+                }],
+            })
+            .into_iter()
+            .chain(request.conversation.iter().cloned().map(map_message))
             .collect(),
         system_instruction,
         cached_content,

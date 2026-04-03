@@ -31,7 +31,9 @@ pub(super) fn map_workout_summary_error(error: &WorkoutSummaryError) -> Response
             StatusCode::CONFLICT.into_response()
         }
         WorkoutSummaryError::Llm(llm_error) => {
-            let status = if llm_error.is_retryable() {
+            let status = if matches!(llm_error, crate::domain::llm::LlmError::ContextTooLarge(_)) {
+                StatusCode::PAYLOAD_TOO_LARGE
+            } else if llm_error.is_retryable() {
                 StatusCode::SERVICE_UNAVAILABLE
             } else {
                 StatusCode::BAD_REQUEST

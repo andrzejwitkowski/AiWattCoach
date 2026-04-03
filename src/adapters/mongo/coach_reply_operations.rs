@@ -68,6 +68,7 @@ impl MongoCoachReplyOperationRepository {
             }
             CoachReplyOperationFailureKind::ProviderNotConfigured => "provider_not_configured",
             CoachReplyOperationFailureKind::ModelNotConfigured => "model_not_configured",
+            CoachReplyOperationFailureKind::ContextTooLarge => "context_too_large",
             CoachReplyOperationFailureKind::UnsupportedProvider => "unsupported_provider",
             CoachReplyOperationFailureKind::Transport => "transport",
             CoachReplyOperationFailureKind::ProviderRejected => "provider_rejected",
@@ -87,6 +88,7 @@ impl MongoCoachReplyOperationRepository {
             }
             "provider_not_configured" => Ok(CoachReplyOperationFailureKind::ProviderNotConfigured),
             "model_not_configured" => Ok(CoachReplyOperationFailureKind::ModelNotConfigured),
+            "context_too_large" => Ok(CoachReplyOperationFailureKind::ContextTooLarge),
             "unsupported_provider" => Ok(CoachReplyOperationFailureKind::UnsupportedProvider),
             "transport" => Ok(CoachReplyOperationFailureKind::Transport),
             "provider_rejected" => Ok(CoachReplyOperationFailureKind::ProviderRejected),

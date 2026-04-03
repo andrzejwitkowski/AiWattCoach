@@ -24,7 +24,13 @@ fn matching_segments(parsed: &ParsedWorkoutDoc) -> Vec<WorkoutSegment> {
     let work_segments = parsed
         .segments
         .iter()
-        .filter(|segment| segment.target_percent_ftp.unwrap_or_default() >= 75.0)
+        .filter(|segment| {
+            segment
+                .max_target_percent_ftp
+                .or(segment.min_target_percent_ftp)
+                .unwrap_or_default()
+                >= 75.0
+        })
         .cloned()
         .collect::<Vec<_>>();
 
@@ -32,7 +38,9 @@ fn matching_segments(parsed: &ParsedWorkoutDoc) -> Vec<WorkoutSegment> {
         parsed
             .segments
             .iter()
-            .filter(|segment| segment.target_percent_ftp.is_some())
+            .filter(|segment| {
+                segment.min_target_percent_ftp.is_some() || segment.max_target_percent_ftp.is_some()
+            })
             .cloned()
             .collect()
     } else {
@@ -73,8 +81,9 @@ fn evaluate_activity_match(
         .map(|(planned, actual)| {
             let expected_watts = ftp_watts.and_then(|ftp| {
                 planned
-                    .target_percent_ftp
-                    .map(|percent| (ftp as f64 * percent / 100.0).round() as i32)
+                    .min_target_percent_ftp
+                    .zip(planned.max_target_percent_ftp)
+                    .map(|(min, max)| (ftp as f64 * ((min + max) / 2.0) / 100.0).round() as i32)
             });
             let duration_score = similarity_score(
                 actual.duration_seconds as f64,
@@ -102,6 +111,8 @@ fn evaluate_activity_match(
                 planned_label: planned.label.clone(),
                 planned_duration_seconds: planned.duration_seconds,
                 target_percent_ftp: planned.target_percent_ftp,
+                min_target_percent_ftp: planned.min_target_percent_ftp,
+                max_target_percent_ftp: planned.max_target_percent_ftp,
                 zone_id: planned.zone_id,
                 actual_interval_id: actual.id,
                 actual_start_time_seconds: Some(actual.start_time_seconds),
@@ -193,7 +204,10 @@ fn detect_intervals_from_power_stream(
     let mut detected = Vec::new();
 
     for planned in planned_segments {
-        let Some(target_percent) = planned.target_percent_ftp else {
+        let Some((min_target_percent, max_target_percent)) = planned
+            .min_target_percent_ftp
+            .zip(planned.max_target_percent_ftp)
+        else {
             continue;
         };
         let window = planned.duration_seconds.max(30) as usize;
@@ -201,7 +215,8 @@ fn detect_intervals_from_power_stream(
             break;
         }
 
-        let expected_watts = (ftp_watts as f64 * target_percent / 100.0).round();
+        let expected_watts =
+            (ftp_watts as f64 * ((min_target_percent + max_target_percent) / 2.0) / 100.0).round();
         let mut best: Option<(usize, f64)> = None;
         for start in search_start..=(power_values.len() - window) {
             let end = start + window;

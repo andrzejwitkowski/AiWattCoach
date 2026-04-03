@@ -68,6 +68,7 @@ pub struct LlmChatRequest {
     pub user_id: String,
     pub system_prompt: String,
     pub stable_context: String,
+    pub volatile_context: String,
     pub conversation: Vec<LlmChatMessage>,
     pub cache_scope_key: Option<String>,
     pub cache_key: Option<String>,
@@ -120,6 +121,39 @@ pub fn hash_text(value: &str) -> String {
     format!("{digest:x}")
 }
 
+pub fn approximate_token_budget_for_model(model: &str) -> usize {
+    let normalized = normalize_model_name(model);
+
+    if normalized.starts_with("o1") || normalized.starts_with("o3") {
+        return 100_000;
+    }
+
+    if normalized.contains("gemini-2.5-pro") || normalized.contains("gemini-3.1-pro") {
+        return 120_000;
+    }
+
+    if normalized.contains("gemini") {
+        return 32_000;
+    }
+
+    if normalized.contains("gpt-4o")
+        || normalized.contains("gpt-4.5")
+        || normalized.contains("gpt-5")
+    {
+        return 28_000;
+    }
+
+    if normalized.contains("claude") {
+        return 32_000;
+    }
+
+    24_000
+}
+
+fn normalize_model_name(model: &str) -> String {
+    model.trim().to_ascii_lowercase().replace([' ', '_'], "-")
+}
+
 impl std::fmt::Debug for LlmProviderConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LlmProviderConfig")
@@ -136,6 +170,7 @@ impl std::fmt::Debug for LlmChatRequest {
             .field("user_id", &self.user_id)
             .field("system_prompt", &redact_value(&self.system_prompt))
             .field("stable_context", &redact_value(&self.stable_context))
+            .field("volatile_context", &redact_value(&self.volatile_context))
             .field("conversation_len", &self.conversation.len())
             .field("cache_scope_key", &self.cache_scope_key)
             .field("cache_key", &self.cache_key)
@@ -166,4 +201,23 @@ fn redact_value(value: &str) -> String {
     }
 
     format!("<redacted:{} chars>", value.chars().count())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::approximate_token_budget_for_model;
+
+    #[test]
+    fn approximate_token_budget_recognizes_frontier_models() {
+        assert_eq!(approximate_token_budget_for_model("gpt-4.5"), 28_000);
+        assert_eq!(approximate_token_budget_for_model("openai/gpt-4.5"), 28_000);
+        assert_eq!(
+            approximate_token_budget_for_model("gemini-3.1-pro"),
+            120_000
+        );
+        assert_eq!(
+            approximate_token_budget_for_model("google/gemini 3.1 pro"),
+            120_000
+        );
+    }
 }

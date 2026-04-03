@@ -3,6 +3,7 @@ pub enum LlmError {
     CredentialsNotConfigured,
     ProviderNotConfigured,
     ModelNotConfigured,
+    ContextTooLarge(String),
     UnsupportedProvider(String),
     Transport(String),
     ProviderRejected(String),
@@ -17,6 +18,7 @@ impl LlmError {
             Self::CredentialsNotConfigured => false,
             Self::ProviderNotConfigured => false,
             Self::ModelNotConfigured => false,
+            Self::ContextTooLarge(_) => false,
             Self::UnsupportedProvider(_) => false,
             Self::Transport(_) => true,
             Self::ProviderRejected(_) => false,
@@ -33,6 +35,7 @@ impl std::fmt::Display for LlmError {
             Self::CredentialsNotConfigured => write!(f, "LLM credentials are not configured"),
             Self::ProviderNotConfigured => write!(f, "LLM provider is not configured"),
             Self::ModelNotConfigured => write!(f, "LLM model is not configured"),
+            Self::ContextTooLarge(message) => write!(f, "{message}"),
             Self::UnsupportedProvider(provider) => {
                 write!(f, "Unsupported LLM provider: {provider}")
             }

@@ -43,6 +43,9 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['aiAgents']>): U
       ftpWatts: null,
       hrMaxBpm: null,
       vo2Max: null,
+      athletePrompt: null,
+      medications: null,
+      athleteNotes: null,
       lastZoneUpdateEpochSeconds: null,
     },
   };

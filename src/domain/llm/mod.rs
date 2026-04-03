@@ -4,7 +4,8 @@ mod ports;
 
 pub use error::LlmError;
 pub use model::{
-    hash_text, LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmContextCache,
-    LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage,
+    approximate_token_budget_for_model, hash_text, LlmCacheUsage, LlmChatMessage, LlmChatRequest,
+    LlmChatResponse, LlmContextCache, LlmMessageRole, LlmProvider, LlmProviderConfig,
+    LlmTokenUsage,
 };
 pub use ports::{BoxFuture, LlmChatPort, LlmContextCacheRepository, UserLlmConfigProvider};

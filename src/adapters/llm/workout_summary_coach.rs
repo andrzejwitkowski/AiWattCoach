@@ -3,10 +3,11 @@ use std::sync::Arc;
 use crate::domain::{
     identity::Clock,
     llm::{
-        hash_text, BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse,
-        LlmContextCache, LlmContextCacheRepository, LlmError, LlmMessageRole, LlmProvider,
-        UserLlmConfigProvider,
+        approximate_token_budget_for_model, hash_text, BoxFuture, LlmChatMessage, LlmChatPort,
+        LlmChatRequest, LlmChatResponse, LlmContextCache, LlmContextCacheRepository, LlmError,
+        LlmMessageRole, LlmProvider, UserLlmConfigProvider,
     },
+    training_context::TrainingContextBuilder,
     workout_summary::{WorkoutCoach, WorkoutSummary},
 };
 
@@ -17,6 +18,7 @@ where
 {
     llm_chat_port: Arc<dyn LlmChatPort>,
     config_provider: Arc<dyn UserLlmConfigProvider>,
+    training_context_builder: Arc<dyn TrainingContextBuilder>,
     context_cache_repository: Option<Arc<dyn LlmContextCacheRepository>>,
     clock: Time,
 }
@@ -28,11 +30,13 @@ where
     pub fn new(
         llm_chat_port: Arc<dyn LlmChatPort>,
         config_provider: Arc<dyn UserLlmConfigProvider>,
+        training_context_builder: Arc<dyn TrainingContextBuilder>,
         clock: Time,
     ) -> Self {
         Self {
             llm_chat_port,
             config_provider,
+            training_context_builder,
             context_cache_repository: None,
             clock,
         }
@@ -59,6 +63,7 @@ where
     ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
         let llm_chat_port = self.llm_chat_port.clone();
         let config_provider = self.config_provider.clone();
+        let training_context_builder = self.training_context_builder.clone();
         let context_cache_repository = self.context_cache_repository.clone();
         let clock = self.clock.clone();
         let user_id = user_id.to_string();
@@ -73,7 +78,29 @@ where
                 model = %config.model,
                 "selected llm provider for workout summary coach"
             );
-            let stable_context = build_stable_context(&summary);
+            let training_context = training_context_builder
+                .build(&user_id, &summary.workout_id)
+                .await?;
+            let stable_context =
+                build_stable_context(&summary, &training_context.rendered.stable_context);
+            let volatile_context =
+                build_volatile_context(&training_context.rendered.volatile_context);
+            let estimated_request_tokens = training_context.rendered.approximate_tokens
+                + approximate_token_usage(WORKOUT_COACH_SYSTEM_PROMPT)
+                + approximate_token_usage(&stable_context)
+                + approximate_token_usage(&volatile_context)
+                + summary
+                    .messages
+                    .iter()
+                    .map(|message| approximate_token_usage(&message.content))
+                    .sum::<usize>()
+                + approximate_token_usage(&user_message);
+            let token_budget = approximate_token_budget_for_model(&config.model);
+            if estimated_request_tokens > token_budget {
+                return Err(LlmError::ContextTooLarge(format!(
+                    "packed training context exceeds model limits: estimated {estimated_request_tokens} tokens exceeds {token_budget} token budget"
+                )));
+            }
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
             let context_hash =
                 hash_text(&format!("{WORKOUT_COACH_SYSTEM_PROMPT}\n{stable_context}"));
@@ -133,6 +160,7 @@ where
                 user_id: user_id.clone(),
                 system_prompt: WORKOUT_COACH_SYSTEM_PROMPT.to_string(),
                 stable_context,
+                volatile_context,
                 conversation: build_conversation(&summary, &user_message),
                 cache_scope_key: cache_scope_key.clone(),
                 cache_key: Some(context_hash.clone()),
@@ -178,18 +206,27 @@ where
     }
 }
 
-const WORKOUT_COACH_SYSTEM_PROMPT: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Respond briefly, ask one focused follow-up question, and stay grounded in the provided workout summary conversation only.";
+const WORKOUT_COACH_SYSTEM_PROMPT: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background, respond briefly, ask one focused follow-up question, and do not invent details beyond the provided context.";
 
-fn build_stable_context(summary: &WorkoutSummary) -> String {
+fn build_stable_context(summary: &WorkoutSummary, packed_training_context: &str) -> String {
     format!(
-        "workout_id: {}\nrpe: {}\nsaved: {}",
+        "workout_summary={{\"workoutId\":\"{}\",\"rpe\":{},\"saved\":{}}}\ntraining_context_stable={}",
         summary.workout_id,
         summary
             .rpe
             .map(|value| value.to_string())
-            .unwrap_or_else(|| "unknown".to_string()),
-        summary.saved_at_epoch_seconds.is_some()
+            .unwrap_or_else(|| "null".to_string()),
+        summary.saved_at_epoch_seconds.is_some(),
+        packed_training_context
     )
+}
+
+fn build_volatile_context(packed_training_context: &str) -> String {
+    format!("training_context_volatile={packed_training_context}")
+}
+
+fn approximate_token_usage(value: &str) -> usize {
+    value.chars().count().div_ceil(3)
 }
 
 fn build_conversation(summary: &WorkoutSummary, user_message: &str) -> Vec<LlmChatMessage> {

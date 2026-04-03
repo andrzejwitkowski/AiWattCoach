@@ -81,6 +81,11 @@ pub(super) struct CyclingDto {
     pub(super) hr_max_bpm: Option<u32>,
     #[serde(rename = "vo2Max")]
     pub(super) vo2_max: Option<f64>,
+    #[serde(rename = "athletePrompt")]
+    pub(super) athlete_prompt: Option<String>,
+    pub(super) medications: Option<String>,
+    #[serde(rename = "athleteNotes")]
+    pub(super) athlete_notes: Option<String>,
     #[serde(rename = "lastZoneUpdateEpochSeconds")]
     pub(super) last_zone_update_epoch_seconds: Option<i64>,
 }
@@ -101,10 +106,10 @@ pub(crate) struct UpdateAiAgentsRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct UpdateIntervalsRequest {
-    #[serde(rename = "apiKey")]
-    pub(super) api_key: Option<String>,
-    #[serde(rename = "athleteId")]
-    pub(super) athlete_id: Option<String>,
+    #[serde(default, rename = "apiKey")]
+    pub(super) api_key: OptionalStringInput,
+    #[serde(default, rename = "athleteId")]
+    pub(super) athlete_id: OptionalStringInput,
 }
 
 #[derive(Deserialize)]
@@ -115,8 +120,8 @@ pub(crate) struct UpdateOptionsRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct UpdateCyclingRequest {
-    #[serde(rename = "fullName")]
-    pub(super) full_name: Option<String>,
+    #[serde(default, rename = "fullName")]
+    pub(super) full_name: OptionalStringInput,
     pub(super) age: Option<u32>,
     #[serde(rename = "heightCm")]
     pub(super) height_cm: Option<u32>,
@@ -128,6 +133,12 @@ pub(crate) struct UpdateCyclingRequest {
     pub(super) hr_max_bpm: Option<u32>,
     #[serde(rename = "vo2Max")]
     pub(super) vo2_max: Option<f64>,
+    #[serde(default, rename = "athletePrompt")]
+    pub(super) athlete_prompt: OptionalStringInput,
+    #[serde(default)]
+    pub(super) medications: OptionalStringInput,
+    #[serde(default, rename = "athleteNotes")]
+    pub(super) athlete_notes: OptionalStringInput,
 }
 
 #[derive(Deserialize)]

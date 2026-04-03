@@ -48,6 +48,9 @@ const cyclingSettingsDataSchema = z.object({
   ftpWatts: z.number().nullable(),
   hrMaxBpm: z.number().nullable(),
   vo2Max: z.number().nullable(),
+  athletePrompt: z.string().nullable(),
+  medications: z.string().nullable(),
+  athleteNotes: z.string().nullable(),
   lastZoneUpdateEpochSeconds: z.number().nullable(),
 });
 
@@ -96,6 +99,9 @@ export const updateCyclingRequestSchema = z.object({
   ftpWatts: z.number().int().positive().max(2500).nullable().optional(),
   hrMaxBpm: z.number().int().positive().max(300).nullable().optional(),
   vo2Max: z.number().positive().max(100).nullable().optional(),
+  athletePrompt: z.string().max(6000).nullable().optional(),
+  medications: z.string().max(4000).nullable().optional(),
+  athleteNotes: z.string().max(8000).nullable().optional(),
 });
 
 export type UpdateCyclingRequest = z.infer<typeof updateCyclingRequestSchema>;

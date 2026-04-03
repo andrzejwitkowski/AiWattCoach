@@ -61,6 +61,50 @@ function getAiAgentsFieldValue(
   return trimToUndefined(validatedValue);
 }
 
+function getCyclingTextFieldValue(
+  data: unknown,
+  key: 'athletePrompt' | 'medications' | 'athleteNotes',
+  validatedValue: string | null | undefined,
+) {
+  if (!data || typeof data !== 'object' || !(key in data)) {
+    return undefined;
+  }
+
+  const rawValue = (data as Record<string, unknown>)[key];
+
+  if (rawValue === null) {
+    return null;
+  }
+
+  if (typeof rawValue === 'string' && rawValue.trim() === '') {
+    return null;
+  }
+
+  return trimToUndefined(validatedValue);
+}
+
+function getIntervalsFieldValue(
+  data: unknown,
+  key: 'apiKey' | 'athleteId',
+  validatedValue: string | null | undefined,
+) {
+  if (!data || typeof data !== 'object' || !(key in data)) {
+    return undefined;
+  }
+
+  const rawValue = (data as Record<string, unknown>)[key];
+
+  if (rawValue === null) {
+    return null;
+  }
+
+  if (typeof rawValue === 'string' && rawValue.trim() === '') {
+    return null;
+  }
+
+  return trimToUndefined(validatedValue);
+}
+
 export async function loadSettings(apiBaseUrl: string) {
   try {
     const data = await get(apiBaseUrl, '/api/settings');
@@ -136,11 +180,18 @@ export async function testAiAgentsConnection(apiBaseUrl: string, data: unknown) 
 
 export async function updateIntervals(apiBaseUrl: string, data: unknown) {
   const validated = updateIntervalsRequestSchema.parse(data);
-  const trimmed = {
-    apiKey: validated.apiKey?.trim() || undefined,
-    athleteId: validated.athleteId?.trim() || undefined,
-  };
-  return patch(apiBaseUrl, '/api/settings/intervals', trimmed);
+  const body: Record<string, string | null> = {};
+  const apiKey = getIntervalsFieldValue(data, 'apiKey', validated.apiKey);
+  const athleteId = getIntervalsFieldValue(data, 'athleteId', validated.athleteId);
+
+  if (apiKey !== undefined) {
+    body.apiKey = apiKey;
+  }
+  if (athleteId !== undefined) {
+    body.athleteId = athleteId;
+  }
+
+  return patch(apiBaseUrl, '/api/settings/intervals', body);
 }
 
 export async function testIntervalsConnection(apiBaseUrl: string, data: unknown) {
@@ -162,5 +213,12 @@ export async function updateOptions(apiBaseUrl: string, data: unknown) {
 
 export async function updateCycling(apiBaseUrl: string, data: unknown) {
   const validated = updateCyclingRequestSchema.parse(data);
-  return patch(apiBaseUrl, '/api/settings/cycling', validated);
+  const body = {
+    ...validated,
+    fullName: validated.fullName?.trim() || undefined,
+    athletePrompt: getCyclingTextFieldValue(data, 'athletePrompt', validated.athletePrompt),
+    medications: getCyclingTextFieldValue(data, 'medications', validated.medications),
+    athleteNotes: getCyclingTextFieldValue(data, 'athleteNotes', validated.athleteNotes),
+  };
+  return patch(apiBaseUrl, '/api/settings/cycling', body);
 }

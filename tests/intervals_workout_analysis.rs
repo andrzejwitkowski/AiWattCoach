@@ -12,6 +12,8 @@ fn parse_workout_doc_expands_repeats_and_estimates_summary_metrics() {
     assert_eq!(parsed.intervals[0].definition, "- 10min 55%");
     assert_eq!(parsed.intervals[1].repeat_count, 4);
     assert_eq!(parsed.intervals[1].duration_seconds, Some(480));
+    assert_eq!(parsed.intervals[1].min_target_percent_ftp, Some(95.0));
+    assert_eq!(parsed.intervals[1].max_target_percent_ftp, Some(95.0));
     assert_eq!(parsed.intervals[1].target_percent_ftp, Some(95.0));
     assert_eq!(parsed.intervals[1].zone_id, Some(4));
 
@@ -98,6 +100,8 @@ fn parse_workout_doc_supports_zone_tokens_for_segments_and_summary() {
     let parsed = parse_workout_doc(Some("10m Z2\n5m Z4\n2m Z6"), Some(300));
 
     assert_eq!(parsed.intervals.len(), 3);
+    assert_eq!(parsed.intervals[0].min_target_percent_ftp, Some(65.0));
+    assert_eq!(parsed.intervals[0].max_target_percent_ftp, Some(65.0));
     assert_eq!(parsed.intervals[0].target_percent_ftp, Some(65.0));
     assert_eq!(parsed.intervals[0].zone_id, Some(2));
     assert_eq!(parsed.intervals[1].target_percent_ftp, Some(98.0));
@@ -114,6 +118,20 @@ fn parse_workout_doc_supports_zone_tokens_for_segments_and_summary() {
     assert_eq!(parsed.summary.estimated_average_power_watts, Some(247));
     assert_eq!(parsed.summary.estimated_normalized_power_watts, Some(276));
     assert_eq!(parsed.summary.estimated_training_stress_score, Some(23.9));
+}
+
+#[test]
+fn parse_workout_doc_preserves_percent_ranges() {
+    let parsed = parse_workout_doc(Some("- 3x10min 88-92%"), Some(300));
+
+    assert_eq!(parsed.intervals.len(), 1);
+    assert_eq!(parsed.intervals[0].min_target_percent_ftp, Some(88.0));
+    assert_eq!(parsed.intervals[0].max_target_percent_ftp, Some(92.0));
+    assert_eq!(parsed.intervals[0].target_percent_ftp, Some(90.0));
+    assert_eq!(parsed.segments.len(), 3);
+    assert_eq!(parsed.segments[0].min_target_percent_ftp, Some(88.0));
+    assert_eq!(parsed.segments[0].max_target_percent_ftp, Some(92.0));
+    assert_eq!(parsed.summary.total_duration_seconds, 1800);
 }
 
 #[test]

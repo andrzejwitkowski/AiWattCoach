@@ -19,7 +19,10 @@ use aiwattcoach::{
     },
     build_app_with_frontend_dist,
     config::AppState,
-    domain::{settings::UserSettingsService, workout_summary::WorkoutSummaryService},
+    domain::{
+        settings::UserSettingsService, training_context::DefaultTrainingContextBuilder,
+        workout_summary::WorkoutSummaryService,
+    },
     Settings,
 };
 use axum::body::to_bytes;
@@ -29,8 +32,8 @@ use super::{
     identity::TestIdentityServiceWithSession,
     in_memory::{
         sample_summary, sample_user_settings, InMemoryCoachReplyOperationRepository,
-        InMemoryLlmContextCacheRepository, InMemoryUserSettingsRepository,
-        InMemoryWorkoutSummaryRepository,
+        InMemoryIntervalsService, InMemoryLlmContextCacheRepository,
+        InMemoryUserSettingsRepository, InMemoryWorkoutSummaryRepository,
     },
     server::TestLlmUpstreamServer,
 };
@@ -112,11 +115,20 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
         SystemClock,
         UuidIdGenerator,
         Arc::new(
-            LlmWorkoutCoach::new(
-                llm_adapter.clone(),
-                llm_config_provider.clone(),
-                SystemClock,
-            )
+            {
+                let training_context_builder = Arc::new(DefaultTrainingContextBuilder::new(
+                    settings_service.clone(),
+                    Arc::new(InMemoryIntervalsService),
+                    Arc::new(summary_repository.clone()),
+                    SystemClock,
+                ));
+                LlmWorkoutCoach::new(
+                    llm_adapter.clone(),
+                    llm_config_provider.clone(),
+                    training_context_builder,
+                    SystemClock,
+                )
+            }
             .with_context_cache_repository(Arc::new(cache_repository)),
         ),
     ));

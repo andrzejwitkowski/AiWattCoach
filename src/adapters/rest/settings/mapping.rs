@@ -44,6 +44,9 @@ pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
             ftp_watts: settings.cycling.ftp_watts,
             hr_max_bpm: settings.cycling.hr_max_bpm,
             vo2_max: settings.cycling.vo2_max,
+            athlete_prompt: settings.cycling.athlete_prompt.clone(),
+            medications: settings.cycling.medications.clone(),
+            athlete_notes: settings.cycling.athlete_notes.clone(),
             last_zone_update_epoch_seconds: settings.cycling.last_zone_update_epoch_seconds,
         },
     }
@@ -116,10 +119,14 @@ pub(super) fn map_intervals_update(
     body: UpdateIntervalsRequest,
     current: &UserSettings,
 ) -> IntervalsConfig {
-    let api_key =
-        normalize_optional_patch_value(body.api_key).or(current.intervals.api_key.clone());
-    let athlete_id =
-        normalize_optional_patch_value(body.athlete_id).or(current.intervals.athlete_id.clone());
+    let api_key = apply_field_update(
+        normalize_string_input(body.api_key),
+        current.intervals.api_key.clone(),
+    );
+    let athlete_id = apply_field_update(
+        normalize_string_input(body.athlete_id),
+        current.intervals.athlete_id.clone(),
+    );
 
     IntervalsConfig {
         connected: if api_key != current.intervals.api_key
@@ -145,17 +152,6 @@ pub(super) fn map_options_update(
     }
 }
 
-fn normalize_optional_patch_value(value: Option<String>) -> Option<String> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    })
-}
-
 pub(super) fn map_cycling_update(
     body: UpdateCyclingRequest,
     current: &UserSettings,
@@ -169,15 +165,40 @@ pub(super) fn map_cycling_update(
     let hr_max_bpm =
         validation::validate_cycling_hr(body.hr_max_bpm.or(current.cycling.hr_max_bpm))?;
     let vo2_max = validation::validate_cycling_vo2(body.vo2_max.or(current.cycling.vo2_max))?;
+    let full_name_update = normalize_string_input(body.full_name);
+    let athlete_prompt_update = normalize_string_input(body.athlete_prompt);
+    let medications_update = normalize_string_input(body.medications);
+    let athlete_notes_update = normalize_string_input(body.athlete_notes);
+    let athlete_prompt = validation::validate_optional_profile_text(
+        "athletePrompt",
+        apply_field_update(
+            athlete_prompt_update,
+            current.cycling.athlete_prompt.clone(),
+        ),
+        6000,
+    )?;
+    let medications = validation::validate_optional_profile_text(
+        "medications",
+        apply_field_update(medications_update, current.cycling.medications.clone()),
+        4000,
+    )?;
+    let athlete_notes = validation::validate_optional_profile_text(
+        "athleteNotes",
+        apply_field_update(athlete_notes_update, current.cycling.athlete_notes.clone()),
+        8000,
+    )?;
 
     Ok(CyclingSettings {
-        full_name: body.full_name.or(current.cycling.full_name.clone()),
+        full_name: apply_field_update(full_name_update, current.cycling.full_name.clone()),
         age,
         height_cm,
         weight_kg,
         ftp_watts,
         hr_max_bpm,
         vo2_max,
+        athlete_prompt,
+        medications,
+        athlete_notes,
         last_zone_update_epoch_seconds: current.cycling.last_zone_update_epoch_seconds,
     })
 }

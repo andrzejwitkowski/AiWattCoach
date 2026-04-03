@@ -60,6 +60,19 @@ async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
         Some("Bearer or-saved-key")
     );
     assert_eq!(requests[0].body["model"], "openai/gpt-4o-mini");
+    let messages = requests[0].body["messages"]
+        .as_array()
+        .expect("messages should be an array");
+    assert!(messages.iter().any(|message| {
+        message["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("training_context_stable="))
+    }));
+    assert!(messages.iter().any(|message| {
+        message["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("training_context_volatile="))
+    }));
 }
 
 #[tokio::test]

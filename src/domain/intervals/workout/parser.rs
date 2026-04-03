@@ -44,7 +44,12 @@ pub fn parse_workout_doc(workout_doc: Option<&str>, ftp_watts: Option<i32>) -> P
                 duration_seconds,
                 start_offset_seconds,
                 end_offset_seconds,
-                target_percent_ftp: interval.target_percent_ftp,
+                target_percent_ftp: mean_target_percent_from_bounds(
+                    interval.min_target_percent_ftp,
+                    interval.max_target_percent_ftp,
+                ),
+                min_target_percent_ftp: interval.min_target_percent_ftp,
+                max_target_percent_ftp: interval.max_target_percent_ftp,
                 zone_id: interval.zone_id,
             });
             start_offset_seconds = end_offset_seconds;
@@ -65,16 +70,33 @@ fn parse_workout_line(definition: &str) -> WorkoutIntervalDefinition {
     let clean = normalize_definition(definition);
     let tokens = clean.split_whitespace().collect::<Vec<_>>();
     let (repeat_count, duration_seconds) = parse_repeat_and_duration(&tokens).unwrap_or((1, None));
-    let target_percent_ftp = tokens.iter().find_map(|token| parse_target_percent(token));
+    let (min_target_percent_ftp, max_target_percent_ftp) = tokens
+        .iter()
+        .find_map(|token| parse_target_percent_range(token))
+        .map(|(min, max)| (Some(min), Some(max)))
+        .unwrap_or((None, None));
     let zone_id = tokens.iter().find_map(|token| parse_zone_token(token));
-    let target_percent_ftp = target_percent_ftp.or_else(|| zone_id.map(percent_for_zone));
+    let (min_target_percent_ftp, max_target_percent_ftp) =
+        if min_target_percent_ftp.is_some() || max_target_percent_ftp.is_some() {
+            (min_target_percent_ftp, max_target_percent_ftp)
+        } else if let Some(zone_id) = zone_id {
+            let percent = percent_for_zone(zone_id);
+            (Some(percent), Some(percent))
+        } else {
+            (None, None)
+        };
 
     WorkoutIntervalDefinition {
         definition: normalized_definition,
         repeat_count,
         duration_seconds,
-        target_percent_ftp,
-        zone_id: zone_id.or_else(|| target_percent_ftp.map(zone_for_percent)),
+        target_percent_ftp: mean_target_percent_from_bounds(
+            min_target_percent_ftp,
+            max_target_percent_ftp,
+        ),
+        min_target_percent_ftp,
+        max_target_percent_ftp,
+        zone_id: zone_id.or_else(|| min_target_percent_ftp.map(zone_for_percent)),
     }
 }
 
@@ -124,26 +146,34 @@ fn parse_duration_token(token: &str) -> Option<i32> {
     Some(seconds.round() as i32)
 }
 
-fn parse_target_percent(token: &str) -> Option<f64> {
+fn parse_target_percent_range(token: &str) -> Option<(f64, f64)> {
     let value = token.trim().trim_end_matches(',');
     if !value.ends_with('%') {
         return None;
     }
 
     let raw = value.trim_end_matches('%');
-    let percent = if let Some((start, end)) = raw.split_once('-') {
+    let (min_percent, max_percent) = if let Some((start, end)) = raw.split_once('-') {
         let start = start.parse::<f64>().ok()?;
         let end = end.parse::<f64>().ok()?;
-        (start + end) / 2.0
+        (start.min(end), start.max(end))
     } else {
-        raw.parse::<f64>().ok()?
+        let percent = raw.parse::<f64>().ok()?;
+        (percent, percent)
     };
 
-    if !percent.is_finite() || percent <= 0.0 {
+    if !min_percent.is_finite()
+        || !max_percent.is_finite()
+        || min_percent <= 0.0
+        || max_percent <= 0.0
+    {
         return None;
     }
 
-    Some(super::round_to(percent, 1))
+    Some((
+        super::round_to(min_percent, 1),
+        super::round_to(max_percent, 1),
+    ))
 }
 
 fn parse_zone_token(token: &str) -> Option<i32> {
@@ -188,9 +218,9 @@ fn build_workout_summary(segments: &[WorkoutSegment], ftp_watts: Option<i32>) ->
     let total_segments = segments.len();
 
     if total_duration_seconds <= 0
-        || segments
-            .iter()
-            .any(|segment| segment.target_percent_ftp.is_none())
+        || segments.iter().any(|segment| {
+            segment.min_target_percent_ftp.is_none() || segment.max_target_percent_ftp.is_none()
+        })
     {
         return WorkoutSummary {
             total_segments,
@@ -206,15 +236,15 @@ fn build_workout_summary(segments: &[WorkoutSegment], ftp_watts: Option<i32>) ->
     let average_intensity = segments
         .iter()
         .map(|segment| {
-            (segment.duration_seconds as f64)
-                * (segment.target_percent_ftp.unwrap_or_default() / 100.0)
+            let target_percent_ftp = mean_target_percent(segment);
+            (segment.duration_seconds as f64) * (target_percent_ftp / 100.0)
         })
         .sum::<f64>()
         / total_duration;
     let normalized_intensity = (segments
         .iter()
         .map(|segment| {
-            let intensity = segment.target_percent_ftp.unwrap_or_default() / 100.0;
+            let intensity = mean_target_percent(segment) / 100.0;
             (segment.duration_seconds as f64) * intensity.powi(4)
         })
         .sum::<f64>()
@@ -238,5 +268,19 @@ fn build_workout_summary(segments: &[WorkoutSegment], ftp_watts: Option<i32>) ->
         estimated_average_power_watts,
         estimated_intensity_factor: Some(estimated_intensity_factor),
         estimated_training_stress_score: Some(estimated_training_stress_score),
+    }
+}
+
+fn mean_target_percent(segment: &WorkoutSegment) -> f64 {
+    let min = segment.min_target_percent_ftp.unwrap_or_default();
+    let max = segment.max_target_percent_ftp.unwrap_or(min);
+    (min + max) / 2.0
+}
+
+fn mean_target_percent_from_bounds(min: Option<f64>, max: Option<f64>) -> Option<f64> {
+    match (min, max) {
+        (Some(min), Some(max)) => Some((min + max) / 2.0),
+        (Some(value), None) | (None, Some(value)) => Some(value),
+        (None, None) => None,
     }
 }

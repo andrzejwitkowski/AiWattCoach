@@ -14,6 +14,10 @@ use aiwattcoach::{
     },
     domain::{
         identity::Clock,
+        training_context::{
+            IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
+            TrainingContextBuildResult, TrainingContextBuilder,
+        },
         workout_summary::{WorkoutCoach, WorkoutSummary},
     },
 };
@@ -130,6 +134,41 @@ impl Clock for FixedClock {
     }
 }
 
+#[derive(Clone)]
+struct StubTrainingContextBuilder;
+
+impl TrainingContextBuilder for StubTrainingContextBuilder {
+    fn build(
+        &self,
+        _user_id: &str,
+        workout_id: &str,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            Ok(TrainingContextBuildResult {
+                context: TrainingContext {
+                    generated_at_epoch_seconds: 1_700_000_000,
+                    focus_workout_id: workout_id,
+                    focus_kind: "activity".to_string(),
+                    intervals_status: IntervalsStatusContext {
+                        activities: "ok".to_string(),
+                        events: "ok".to_string(),
+                    },
+                    profile: Default::default(),
+                    history: Default::default(),
+                    recent_days: Vec::new(),
+                    upcoming_days: Vec::new(),
+                },
+                rendered: RenderedTrainingContext {
+                    stable_context: "{\"stable\":true}".to_string(),
+                    volatile_context: "{\"volatile\":true}".to_string(),
+                    approximate_tokens: 100,
+                },
+            })
+        })
+    }
+}
+
 impl MockServer {
     async fn start() -> Self {
         let state = MockServerState::default();
@@ -169,6 +208,7 @@ fn sample_request() -> LlmChatRequest {
         user_id: "user-1".to_string(),
         system_prompt: "system".to_string(),
         stable_context: "stable".to_string(),
+        volatile_context: "volatile".to_string(),
         conversation: vec![LlmChatMessage {
             role: LlmMessageRole::User,
             content: "How did I do?".to_string(),
@@ -384,6 +424,7 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
     let coach = LlmWorkoutCoach::new(
         chat_port.clone(),
         Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
         FixedClock,
     )
     .with_context_cache_repository(Arc::new(FailingReusableCacheRepository));
@@ -398,6 +439,10 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].reusable_cache_id, None);
+    assert_eq!(
+        requests[0].volatile_context,
+        "training_context_volatile={\"volatile\":true}"
+    );
 }
 
 #[tokio::test]

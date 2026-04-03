@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { testAiAgentsConnection, testIntervalsConnection, updateAiAgents } from './settings';
+import { testAiAgentsConnection, testIntervalsConnection, updateAiAgents, updateCycling, updateIntervals } from './settings';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 
 const originalFetch = global.fetch;
@@ -87,6 +87,38 @@ describe('settings api', () => {
     await expect(testIntervalsConnection('', { apiKey: 'live-api-key' })).rejects.toBeInstanceOf(
       HttpError,
     );
+  });
+
+  it('preserves explicit clears in intervals update requests', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateIntervals('', {
+      apiKey: '',
+      athleteId: null,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/intervals', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        apiKey: null,
+        athleteId: null,
+      }),
+    });
   });
 
   it('posts ai test settings and parses a successful response', async () => {
@@ -233,6 +265,76 @@ describe('settings api', () => {
       body: JSON.stringify({
         selectedProvider: null,
         selectedModel: null,
+      }),
+    });
+  });
+
+  it('trims athlete profile context fields in cycling updates', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateCycling('', {
+      fullName: ' Alex ',
+      athletePrompt: '  Stage-race focus  ',
+      medications: '  Iron  ',
+      athleteNotes: '  Needs extra recovery  ',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/cycling', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        fullName: 'Alex',
+        athletePrompt: 'Stage-race focus',
+        medications: 'Iron',
+        athleteNotes: 'Needs extra recovery',
+      }),
+    });
+  });
+
+  it('clears athlete profile context fields when blank values are sent', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateCycling('', {
+      athletePrompt: '',
+      medications: '   ',
+      athleteNotes: null,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/cycling', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        athletePrompt: null,
+        medications: null,
+        athleteNotes: null,
       }),
     });
   });

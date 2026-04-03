@@ -56,6 +56,30 @@ pub fn validate_cycling_vo2(vo2_max: Option<f64>) -> Result<Option<f64>, Setting
     }
 }
 
+pub fn validate_optional_profile_text(
+    field_name: &str,
+    value: Option<String>,
+    max_chars: usize,
+) -> Result<Option<String>, SettingsError> {
+    match value {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+
+            if trimmed.chars().count() > max_chars {
+                return Err(SettingsError::Validation(format!(
+                    "{field_name} must be {max_chars} characters or fewer"
+                )));
+            }
+
+            Ok(Some(trimmed.to_string()))
+        }
+        None => Ok(None),
+    }
+}
+
 pub fn validate_ai_provider(
     provider: Option<LlmProvider>,
 ) -> Result<Option<LlmProvider>, SettingsError> {
