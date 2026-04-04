@@ -28,7 +28,8 @@ For each raw 1-second power sample `P`, compute encoded level `L` as:
 Then:
 
 - smooth a 1-second spike or dip when the changed level differs from the surrounding level by less than `3`
-- do not smooth that 1-second change when the surrounding level is in the FTP zone `90..=110`
+- do not smooth that 1-second change when either the surrounding level or the changed level is in the FTP zone `90..=110`
+- preserve boundary crossings into or out of the FTP zone, such as `89,90,89`
 - run-length encode consecutive identical levels into `"Level:Seconds"`
 
 Example:

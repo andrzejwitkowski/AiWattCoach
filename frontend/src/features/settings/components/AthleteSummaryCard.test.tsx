@@ -128,7 +128,15 @@ describe('AthleteSummaryCard', () => {
   });
 
   it('generates and updates the summary textbox', async () => {
-    loadAthleteSummaryMock.mockResolvedValue({ exists: false, stale: true, summaryText: null });
+    loadAthleteSummaryMock
+      .mockResolvedValueOnce({ exists: false, stale: true, summaryText: null })
+      .mockResolvedValueOnce({
+        exists: true,
+        stale: false,
+        summaryText: 'Well-rounded athlete with strong diesel engine and improving tempo control.',
+        generatedAtEpochSeconds: 1_700_000_000,
+        updatedAtEpochSeconds: 1_700_000_000,
+      });
     generateAthleteSummaryMock.mockResolvedValue({
       exists: true,
       stale: false,
@@ -152,6 +160,41 @@ describe('AthleteSummaryCard', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/athlete summary/i)).toHaveValue(
         'Well-rounded athlete with strong diesel engine and improving tempo control.',
+      );
+    });
+  });
+
+  it('reloads the latest summary when generate returns an error after work was submitted', async () => {
+    loadAthleteSummaryMock
+      .mockResolvedValueOnce({ exists: true, stale: false, summaryText: 'Old summary' })
+      .mockResolvedValueOnce({
+        exists: true,
+        stale: false,
+        summaryText: 'Refreshed summary from follow-up load',
+        generatedAtEpochSeconds: 1_700_000_100,
+        updatedAtEpochSeconds: 1_700_000_100,
+      });
+    generateAthleteSummaryMock.mockRejectedValue(new Error('POST /api/athlete-summary/generate failed: 503'));
+
+    render(<AthleteSummaryCard settings={buildSettings()} apiBaseUrl="" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /refresh athlete summary/i })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /refresh athlete summary/i }));
+
+    await waitFor(() => {
+      expect(generateAthleteSummaryMock).toHaveBeenCalledWith('');
+    });
+
+    await waitFor(() => {
+      expect(loadAthleteSummaryMock).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/athlete summary/i)).toHaveValue(
+        'Refreshed summary from follow-up load',
       );
     });
   });

@@ -8,7 +8,7 @@
 
 ---
 
-### Task 1: Save the approved data shape
+## Task 1: Save the approved data shape
 
 **Files:**
 - Modify: `src/domain/training_context/model.rs`
@@ -29,7 +29,7 @@ pub compressed_power_levels: Vec<String>,
 
 Run the packing and service tests after they are added.
 
-### Task 2: Add compression tests and implementation
+## Task 2: Add compression tests and implementation
 
 **Files:**
 - Modify: `src/domain/training_context/service.rs`
@@ -71,7 +71,7 @@ cargo test compressed_power -- --nocapture
 
 Expected: PASS.
 
-### Task 3: Pack `pc` instead of `p5`
+## Task 3: Pack `pc` instead of `p5`
 
 **Files:**
 - Modify: `src/domain/training_context/packing.rs`
@@ -104,7 +104,7 @@ cargo test compact_render -- --nocapture
 
 Expected: PASS.
 
-### Task 4: Update the workout coach prompt
+## Task 4: Update the workout coach prompt
 
 **Files:**
 - Modify: `src/adapters/llm/workout_summary_coach.rs`
@@ -143,7 +143,7 @@ cargo test llm_workout_coach --test llm_adapters -- --nocapture
 
 Expected: PASS.
 
-### Task 5: Update LLM flow assertions
+## Task 5: Update LLM flow assertions
 
 **Files:**
 - Modify: `tests/llm_rest/workout_summary_flow.rs`
@@ -176,7 +176,7 @@ cargo test send_message_uses_saved_openrouter_settings_through_live_adapter --te
 
 Expected: PASS.
 
-### Task 6: Run full verification
+## Task 6: Run full verification
 
 **Files:**
 - No file changes expected

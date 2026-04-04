@@ -793,29 +793,31 @@ fn run_length_encode_levels(levels: &[i32]) -> Vec<String> {
     encoded
 }
 
+#[derive(Clone, Copy)]
+struct EncodedPowerRun {
+    level: i32,
+    duration_seconds: usize,
+}
+
 fn compress_encoded_runs(runs: Vec<String>) -> Vec<String> {
     if runs.len() <= MAX_CHUNKS_PER_WORKOUT {
         return runs;
     }
 
-    let levels = runs
-        .into_iter()
-        .flat_map(|run| {
-            let (level, duration) = run
-                .split_once(':')
-                .expect("encoded power run should contain level and duration");
-            let level = level
-                .parse::<i32>()
-                .expect("encoded power level should parse as i32");
-            let duration = duration
-                .parse::<usize>()
-                .expect("encoded power duration should parse as usize");
-            std::iter::repeat_n(level, duration)
-        })
-        .collect::<Vec<_>>();
+    let runs = parse_encoded_runs(runs);
+    let recent_count = MAX_CHUNKS_PER_WORKOUT / 2;
+    let summary_count = MAX_CHUNKS_PER_WORKOUT - recent_count;
+    let older_count = runs.len() - recent_count;
+    let group_size = older_count.div_ceil(summary_count);
+    let summarized = runs[..older_count]
+        .chunks(group_size)
+        .map(summarize_encoded_run_group);
 
-    let summarized = compress_stream_chunks(levels);
-    run_length_encode_levels(&summarized)
+    format_encoded_runs(merge_adjacent_runs(
+        summarized
+            .chain(runs[older_count..].iter().copied())
+            .collect::<Vec<_>>(),
+    ))
 }
 
 fn compress_stream_chunks(chunks: Vec<i32>) -> Vec<i32> {
@@ -833,6 +835,60 @@ fn compress_stream_chunks(chunks: Vec<i32>) -> Vec<i32> {
 
     summarized
         .chain(chunks[older_count..].iter().copied())
+        .collect()
+}
+
+fn parse_encoded_runs(runs: Vec<String>) -> Vec<EncodedPowerRun> {
+    runs.into_iter()
+        .map(|run| {
+            let (level, duration) = run
+                .split_once(':')
+                .expect("encoded power run should contain level and duration");
+            EncodedPowerRun {
+                level: level
+                    .parse::<i32>()
+                    .expect("encoded power level should parse as i32"),
+                duration_seconds: duration
+                    .parse::<usize>()
+                    .expect("encoded power duration should parse as usize"),
+            }
+        })
+        .collect()
+}
+
+fn summarize_encoded_run_group(group: &[EncodedPowerRun]) -> EncodedPowerRun {
+    let total_duration_seconds = group.iter().map(|run| run.duration_seconds).sum::<usize>();
+    let weighted_level_sum = group
+        .iter()
+        .map(|run| run.level as f64 * run.duration_seconds as f64)
+        .sum::<f64>();
+
+    EncodedPowerRun {
+        level: (weighted_level_sum / total_duration_seconds as f64).round() as i32,
+        duration_seconds: total_duration_seconds,
+    }
+}
+
+fn merge_adjacent_runs(runs: Vec<EncodedPowerRun>) -> Vec<EncodedPowerRun> {
+    let mut merged: Vec<EncodedPowerRun> = Vec::with_capacity(runs.len());
+
+    for run in runs {
+        if let Some(previous) = merged.last_mut() {
+            if previous.level == run.level {
+                previous.duration_seconds += run.duration_seconds;
+                continue;
+            }
+        }
+
+        merged.push(run);
+    }
+
+    merged
+}
+
+fn format_encoded_runs(runs: Vec<EncodedPowerRun>) -> Vec<String> {
+    runs.into_iter()
+        .map(|run| format!("{}:{}", run.level, run.duration_seconds))
         .collect()
 }
 
@@ -1778,6 +1834,17 @@ mod tests {
     }
 
     #[test]
+    fn compressed_power_run_cap_preserves_total_duration_seconds() {
+        let noisy = (0..120)
+            .map(|index| if index % 2 == 0 { 300 } else { 0 })
+            .collect::<Vec<_>>();
+
+        let encoded = compress_power_stream(&noisy, Some(300));
+
+        assert_eq!(sum_encoded_durations(&encoded), noisy.len());
+    }
+
+    #[test]
     fn compressed_power_returns_empty_without_valid_ftp() {
         assert!(compress_power_stream(&[300, 300, 300], None).is_empty());
         assert!(compress_power_stream(&[300, 300, 300], Some(0)).is_empty());
@@ -1930,5 +1997,17 @@ mod tests {
                 .map(|point| point.date.as_str()),
             Some("2026-02-21")
         );
+    }
+
+    fn sum_encoded_durations(runs: &[String]) -> usize {
+        runs.iter()
+            .map(|run| {
+                run.split_once(':')
+                    .expect("encoded power run should contain level and duration")
+                    .1
+                    .parse::<usize>()
+                    .expect("encoded power duration should parse as usize")
+            })
+            .sum()
     }
 }

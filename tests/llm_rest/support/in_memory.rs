@@ -827,10 +827,9 @@ mod tests {
 
     #[test]
     fn sample_activity_uses_current_date_for_recent_window() {
+        let expected_date_prefix = Utc::now().format("%Y-%m-%d").to_string();
         let activity = sample_activity("ride-1");
 
-        assert!(activity
-            .start_date_local
-            .starts_with(&Utc::now().format("%Y-%m-%d").to_string()));
+        assert!(activity.start_date_local.starts_with(&expected_date_prefix));
     }
 }

@@ -314,11 +314,13 @@ where
                 AthleteSummaryGenerationClaimResult::Existing(operation) => {
                     match operation.status {
                         AthleteSummaryGenerationOperationStatus::Completed => {
-                            if let Some(summary) = service
-                                .recover_completed_operation(existing.as_ref(), &operation)
-                                .await?
-                            {
-                                return Ok(summary);
+                            if !force {
+                                if let Some(summary) = service
+                                    .recover_completed_operation(existing.as_ref(), &operation)
+                                    .await?
+                                {
+                                    return Ok(summary);
+                                }
                             }
 
                             operation
