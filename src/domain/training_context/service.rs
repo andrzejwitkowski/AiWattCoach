@@ -473,7 +473,7 @@ fn build_recent_workout(
     summaries_by_id: &HashMap<String, u8>,
 ) -> RecentWorkoutContext {
     let compressed_power_levels = compress_power_stream(
-        &extract_raw_stream(&activity.details.streams, "watts"),
+        &extract_power_stream(&activity.details.streams),
         activity.metrics.ftp_watts,
     );
     let cadence_values_5s = extract_and_average_stream(&activity.details.streams, "cadence");
@@ -721,6 +721,15 @@ fn extract_raw_stream(streams: &[ActivityStream], stream_type: &str) -> Vec<i32>
         .unwrap_or_default()
 }
 
+fn extract_power_stream(streams: &[ActivityStream]) -> Vec<i32> {
+    streams
+        .iter()
+        .find(|stream| stream.stream_type.eq_ignore_ascii_case("watts"))
+        .and_then(|stream| stream.data.as_ref())
+        .map(extract_power_values)
+        .unwrap_or_default()
+}
+
 fn compress_power_stream(values: &[i32], ftp_watts: Option<i32>) -> Vec<String> {
     let Some(ftp_watts) = ftp_watts.filter(|value| *value > 0) else {
         return Vec::new();
@@ -904,6 +913,22 @@ fn extract_numeric_values(value: &serde_json::Value) -> Vec<i32> {
                 .iter()
                 .filter_map(|item| item.as_i64())
                 .filter_map(|item| i32::try_from(item).ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn extract_power_values(value: &serde_json::Value) -> Vec<i32> {
+    value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| {
+                    item.as_i64()
+                        .and_then(|value| i32::try_from(value).ok())
+                        .unwrap_or(0)
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -1848,6 +1873,24 @@ mod tests {
     fn compressed_power_returns_empty_without_valid_ftp() {
         assert!(compress_power_stream(&[300, 300, 300], None).is_empty());
         assert!(compress_power_stream(&[300, 300, 300], Some(0)).is_empty());
+    }
+
+    #[test]
+    fn compressed_power_preserves_missing_watts_samples_as_zero_second_runs() {
+        let streams = vec![ActivityStream {
+            stream_type: "watts".to_string(),
+            name: None,
+            data: Some(serde_json::json!([200, null, 210])),
+            data2: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        }];
+
+        let encoded = compress_power_stream(&extract_power_stream(&streams), Some(300));
+
+        assert_eq!(encoded, vec!["36:1", "0:1", "41:1"]);
+        assert_eq!(sum_encoded_durations(&encoded), 3);
     }
 
     #[tokio::test]
