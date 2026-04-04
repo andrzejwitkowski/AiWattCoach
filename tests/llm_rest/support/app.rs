@@ -31,7 +31,7 @@ use mongodb::Client;
 use super::{
     identity::TestIdentityServiceWithSession,
     in_memory::{
-        sample_summary, sample_user_settings, InMemoryAthleteSummaryService,
+        sample_activity, sample_summary, sample_user_settings, InMemoryAthleteSummaryService,
         InMemoryCoachReplyOperationRepository, InMemoryIntervalsService,
         InMemoryLlmContextCacheRepository, InMemoryUserSettingsRepository,
         InMemoryWorkoutSummaryRepository,
@@ -49,6 +49,7 @@ pub(crate) struct LlmRestTestContext {
     settings_repository: InMemoryUserSettingsRepository,
     summary_repository: InMemoryWorkoutSummaryRepository,
     athlete_summary_service: InMemoryAthleteSummaryService,
+    intervals_service: InMemoryIntervalsService,
     _fixture: FrontendFixture,
 }
 
@@ -82,6 +83,17 @@ impl LlmRestTestContext {
     pub(crate) fn seed_athlete_summary(&self, summary: Option<AthleteSummary>, stale: bool) {
         self.athlete_summary_service.seed(summary, stale);
     }
+
+    pub(crate) fn seed_activity(&self, activity: aiwattcoach::domain::intervals::Activity) {
+        self.intervals_service.seed_activities(vec![activity]);
+    }
+
+    pub(crate) fn default_activity(
+        &self,
+        activity_id: &str,
+    ) -> aiwattcoach::domain::intervals::Activity {
+        sample_activity(activity_id)
+    }
 }
 
 pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
@@ -104,6 +116,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
     let summary_repository = InMemoryWorkoutSummaryRepository::default();
     let reply_operation_repository = InMemoryCoachReplyOperationRepository::default();
     let athlete_summary_service = InMemoryAthleteSummaryService::default();
+    let intervals_service = InMemoryIntervalsService::default();
 
     let settings_service = Arc::new(
         UserSettingsService::new(settings_repository.clone(), SystemClock)
@@ -126,7 +139,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
                 {
                     let training_context_builder = Arc::new(DefaultTrainingContextBuilder::new(
                         settings_service.clone(),
-                        Arc::new(InMemoryIntervalsService),
+                        Arc::new(intervals_service.clone()),
                         Arc::new(summary_repository.clone()),
                         SystemClock,
                     ));
@@ -169,6 +182,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
         settings_repository,
         summary_repository,
         athlete_summary_service,
+        intervals_service,
         _fixture: fixture,
     }
 }

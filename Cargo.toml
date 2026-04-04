@@ -41,3 +41,6 @@ redundant_clone = "warn"
 needless_borrow = "warn"
 needless_borrows_for_generic_args = "warn"
 ptr_arg = "warn"
+
+[profile.dev]
+debug = 1
