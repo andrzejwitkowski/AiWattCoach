@@ -33,6 +33,34 @@ pub struct AthleteSummary {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AthleteSummaryGenerationOperationStatus {
+    Pending,
+    Completed,
+    Failed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AthleteSummaryGenerationOperation {
+    pub user_id: String,
+    pub status: AthleteSummaryGenerationOperationStatus,
+    pub summary_text: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub error_message: Option<String>,
+    pub started_at_epoch_seconds: i64,
+    pub last_attempt_at_epoch_seconds: i64,
+    pub attempt_count: u32,
+    pub created_at_epoch_seconds: i64,
+    pub updated_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AthleteSummaryGenerationClaimResult {
+    Claimed(AthleteSummaryGenerationOperation),
+    Existing(AthleteSummaryGenerationOperation),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AthleteSummaryState {
     pub summary: Option<AthleteSummary>,
     pub stale: bool,

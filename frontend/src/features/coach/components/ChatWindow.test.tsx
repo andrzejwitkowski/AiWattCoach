@@ -36,6 +36,45 @@ describe('ChatWindow', () => {
     expect(screen.getByText(/coach is typing/i)).toBeInTheDocument();
   });
 
+  it('renders system messages with a distinct marker from coach replies', () => {
+    const { container } = render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'Great job on the session.',
+            createdAtEpochSeconds: 1711000200,
+          },
+          {
+            id: 'message-2',
+            role: 'system',
+            content: 'Summary generation resumed after reconnect.',
+            createdAtEpochSeconds: 1711000300,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        error={null}
+        onSendMessage={async () => true}
+      />,
+    );
+
+    expect(screen.getByText(/great job on the session/i)).toBeInTheDocument();
+    expect(screen.getByText(/summary generation resumed after reconnect/i)).toBeInTheDocument();
+
+    const coachMessage = container.querySelector('[data-message-role="coach"]');
+    const systemMessage = container.querySelector('[data-message-role="system"]');
+
+    expect(coachMessage).not.toBeNull();
+    expect(systemMessage).not.toBeNull();
+    expect(systemMessage).not.toHaveClass('rounded-tl-none');
+    expect(coachMessage).toHaveClass('rounded-tl-none');
+  });
+
   it('sends trimmed input text', async () => {
     const onSendMessage = vi.fn().mockResolvedValue(true);
 

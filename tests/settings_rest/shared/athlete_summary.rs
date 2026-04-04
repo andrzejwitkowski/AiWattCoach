@@ -42,18 +42,30 @@ impl AthleteSummaryUseCases for TestAthleteSummaryService {
     fn generate_summary(
         &self,
         user_id: &str,
-        _force: bool,
+        force: bool,
     ) -> BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
         let mut summaries = self.summaries.lock().unwrap();
+
+        if !force {
+            if let Some(existing) = summaries.get(user_id).cloned() {
+                return Box::pin(async move { Ok(existing) });
+            }
+        }
+
+        let existing = summaries.get(user_id).cloned();
+        let generated_at_epoch_seconds = existing
+            .as_ref()
+            .map(|existing| existing.generated_at_epoch_seconds + 1)
+            .unwrap_or(2_000);
         let generated = AthleteSummary {
             user_id: user_id.to_string(),
             summary_text: "OK".to_string(),
-            generated_at_epoch_seconds: 2_000,
-            created_at_epoch_seconds: summaries
-                .get(user_id)
+            generated_at_epoch_seconds,
+            created_at_epoch_seconds: existing
+                .as_ref()
                 .map(|existing| existing.created_at_epoch_seconds)
-                .unwrap_or(2_000),
-            updated_at_epoch_seconds: 2_000,
+                .unwrap_or(generated_at_epoch_seconds),
+            updated_at_epoch_seconds: generated_at_epoch_seconds,
             provider: Some("openai".to_string()),
             model: Some("gpt-4o-mini".to_string()),
         };
@@ -72,33 +84,22 @@ impl AthleteSummaryUseCases for TestAthleteSummaryService {
         &self,
         user_id: &str,
     ) -> BoxFuture<Result<EnsuredAthleteSummary, AthleteSummaryError>> {
-        let mut summaries = self.summaries.lock().unwrap();
-        let existing = summaries.get(user_id).cloned();
-        let was_regenerated = existing.is_none();
-        let generated = AthleteSummary {
-            user_id: user_id.to_string(),
-            summary_text: if was_regenerated {
-                "OK (generated)".to_string()
-            } else {
-                existing
-                    .as_ref()
-                    .map(|existing| existing.summary_text.clone())
-                    .unwrap_or_else(|| "OK".to_string())
-            },
-            generated_at_epoch_seconds: 2_000,
-            created_at_epoch_seconds: existing
-                .as_ref()
-                .map(|existing| existing.created_at_epoch_seconds)
-                .unwrap_or(2_000),
-            updated_at_epoch_seconds: 2_000,
-            provider: Some("openai".to_string()),
-            model: Some("gpt-4o-mini".to_string()),
-        };
-        summaries.insert(user_id.to_string(), generated.clone());
+        let existing = self.summaries.lock().unwrap().get(user_id).cloned();
+
+        if let Some(existing) = existing {
+            return Box::pin(async move {
+                Ok(EnsuredAthleteSummary {
+                    summary: existing,
+                    was_regenerated: false,
+                })
+            });
+        }
+
+        let generated = self.generate_summary(user_id, false);
         Box::pin(async move {
             Ok(EnsuredAthleteSummary {
-                summary: generated,
-                was_regenerated,
+                summary: generated.await?,
+                was_regenerated: true,
             })
         })
     }

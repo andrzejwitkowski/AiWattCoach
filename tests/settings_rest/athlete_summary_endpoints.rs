@@ -5,6 +5,8 @@ use axum::{
 use serde_json::Value;
 use tower::util::ServiceExt;
 
+use aiwattcoach::domain::athlete_summary::AthleteSummaryUseCases;
+
 use crate::shared::{
     get_json, session_cookie, settings_test_app_with_athlete_summary, MockLlmChatService,
     TestAthleteSummaryService, TestIdentityServiceWithSession, TestLlmConfigProvider,
@@ -223,4 +225,30 @@ async fn generate_athlete_summary_is_idempotent_for_repeated_requests() {
         current_body.get("summaryText").and_then(Value::as_str),
         Some("OK")
     );
+}
+
+#[tokio::test]
+async fn test_athlete_summary_service_matches_real_generation_contract() {
+    let service = TestAthleteSummaryService::empty();
+
+    let initial = service.generate_summary("user-1", false).await.unwrap();
+    let reused = service.generate_summary("user-1", false).await.unwrap();
+    let regenerated = service.generate_summary("user-1", true).await.unwrap();
+    let ensured = service.ensure_fresh_summary_state("user-1").await.unwrap();
+    let ensured_missing = service.ensure_fresh_summary_state("user-2").await.unwrap();
+
+    assert_eq!(initial.summary_text, "OK");
+    assert_eq!(reused.summary_text, "OK");
+    assert_eq!(regenerated.summary_text, "OK");
+    assert_eq!(
+        initial.generated_at_epoch_seconds,
+        reused.generated_at_epoch_seconds
+    );
+    assert!(
+        regenerated.generated_at_epoch_seconds > reused.generated_at_epoch_seconds,
+        "forced generation should regenerate even when a fresh summary exists"
+    );
+    assert!(!ensured.was_regenerated);
+    assert_eq!(ensured.summary.summary_text, regenerated.summary_text);
+    assert!(ensured_missing.was_regenerated);
 }

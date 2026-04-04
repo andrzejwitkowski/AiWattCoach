@@ -1,6 +1,7 @@
 pub mod activities;
 pub mod activity_upload_operations;
 pub mod athlete_summary;
+pub mod athlete_summary_generation_operations;
 pub mod client;
 pub mod coach_reply_operations;
 mod error;

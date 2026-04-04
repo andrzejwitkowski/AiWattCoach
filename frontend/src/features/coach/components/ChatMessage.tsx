@@ -13,17 +13,20 @@ function formatTimestamp(epochSeconds: number): string {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  const isSystem = message.role === 'system';
+  const containerClassName = ['flex', isUser ? 'justify-end' : 'justify-start'].join(' ');
+  const bubbleClassName = [
+    'max-w-[85%] rounded-2xl border px-4 py-4',
+    isUser
+      ? 'rounded-tr-none border-cyan-300/20 bg-cyan-300/10 text-cyan-50'
+      : isSystem
+        ? 'border-amber-200/20 bg-amber-100/10 text-amber-50'
+        : 'rounded-tl-none border-white/10 bg-white/5 text-white',
+  ].join(' ');
 
   return (
-    <div className={['flex', isUser ? 'justify-end' : 'justify-start'].join(' ')}>
-      <div
-        className={[
-          'max-w-[85%] rounded-2xl border px-4 py-4',
-          isUser
-            ? 'rounded-tr-none border-cyan-300/20 bg-cyan-300/10 text-cyan-50'
-            : 'rounded-tl-none border-white/10 bg-white/5 text-white',
-        ].join(' ')}
-      >
+    <div className={containerClassName}>
+      <div className={bubbleClassName} data-message-role={message.role}>
         <p className="whitespace-pre-wrap text-base leading-7">{message.content}</p>
         <p className="mt-3 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
           {formatTimestamp(message.createdAtEpochSeconds)}

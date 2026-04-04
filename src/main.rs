@@ -24,6 +24,7 @@ use aiwattcoach::{
             activities::MongoActivityRepository,
             activity_upload_operations::MongoActivityUploadOperationRepository,
             athlete_summary::MongoAthleteSummaryRepository,
+            athlete_summary_generation_operations::MongoAthleteSummaryGenerationOperationRepository,
             client::{create_client, ensure_database_exists, verify_connection},
             coach_reply_operations::MongoCoachReplyOperationRepository,
             llm_context_cache::MongoLlmContextCacheRepository,
@@ -140,6 +141,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let athlete_summary_repository =
         MongoAthleteSummaryRepository::new(mongo_client.clone(), &mongo_database);
     athlete_summary_repository.ensure_indexes().await?;
+    let athlete_summary_generation_operation_repository =
+        MongoAthleteSummaryGenerationOperationRepository::new(
+            mongo_client.clone(),
+            &mongo_database,
+        );
+    athlete_summary_generation_operation_repository
+        .ensure_indexes()
+        .await?;
     let coach_reply_operation_repository =
         MongoCoachReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
     coach_reply_operation_repository.ensure_indexes().await?;
@@ -184,6 +193,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     ));
     let athlete_summary_service = Arc::new(AthleteSummaryService::new(
         athlete_summary_repository,
+        athlete_summary_generation_operation_repository,
         AthleteSummaryLlmGenerator::new(
             llm_adapter.clone(),
             llm_config_provider.clone(),
