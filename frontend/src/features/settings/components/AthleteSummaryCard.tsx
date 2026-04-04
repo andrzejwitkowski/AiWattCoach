@@ -147,7 +147,11 @@ export function AthleteSummaryCard({ settings, apiBaseUrl }: AthleteSummaryCardP
       ) : null}
 
       {status ? (
-        <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${statusClasses}`}>
+        <div
+          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${statusClasses}`}
+          role={status.tone === 'error' ? 'alert' : 'status'}
+          aria-live={status.tone === 'error' ? 'assertive' : 'polite'}
+        >
           <div className="flex items-start gap-3">
             <StatusIcon
               size={16}

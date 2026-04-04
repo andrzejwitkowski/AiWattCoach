@@ -90,7 +90,8 @@ where
             );
             let volatile_context =
                 build_volatile_context(&training_context.rendered.volatile_context);
-            let estimated_request_tokens = training_context.rendered.approximate_tokens
+            let estimated_request_tokens = approximate_token_usage(&stable_context)
+                + approximate_token_usage(&volatile_context)
                 + approximate_token_usage(WORKOUT_COACH_SYSTEM_PROMPT)
                 + summary
                     .messages
@@ -176,11 +177,11 @@ where
                 provider = %config.provider,
                 model = %config.model,
                 estimated_request_tokens,
-                system_prompt = %request.system_prompt,
-                stable_context = %request.stable_context,
-                volatile_context = %request.volatile_context,
-                conversation = ?request.conversation,
-                "logging full workout summary llm request"
+                system_prompt_chars = request.system_prompt.chars().count(),
+                stable_context_chars = request.stable_context.chars().count(),
+                volatile_context_chars = request.volatile_context.chars().count(),
+                conversation_messages = request.conversation.len(),
+                "prepared workout summary llm request"
             );
 
             let response = llm_chat_port.chat(config.clone(), request).await?;

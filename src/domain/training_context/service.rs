@@ -106,7 +106,7 @@ where
             .map_err(|error| LlmError::Internal(error.to_string()))?;
         let today = epoch_seconds_to_date(self.clock.now_epoch_seconds());
         let history_trend_days = 24 * 7;
-        let history_warmup_days = 42;
+        let history_warmup_days = 120;
         let history_start =
             today - Duration::days((history_trend_days + history_warmup_days - 1) as i64);
         let recent_start = today - Duration::days(13);
@@ -328,8 +328,8 @@ fn build_historical_context(
         .sum::<i32>();
     let daily_tss = build_daily_tss_map(start, end, activities);
     let load_trend = build_load_trend(&daily_tss, 42, 42);
-    let ctl = rolling_average(&daily_tss, 42);
-    let atl = rolling_average(&daily_tss, 7);
+    let ctl = ewma_latest(&daily_tss, 42);
+    let atl = ewma_latest(&daily_tss, 7);
     let tsb = match (ctl, atl) {
         (Some(ctl), Some(atl)) => Some(round_to_2(ctl - atl)),
         _ => None,
@@ -832,30 +832,51 @@ fn build_load_trend_point(
     sample_days: u8,
     period_tss: i32,
 ) -> HistoricalLoadTrendPoint {
+    let ctl = ewma_at_index(entries, end_index, ctl_window_days);
+    let atl = ewma_at_index(entries, end_index, 7);
+
     HistoricalLoadTrendPoint {
         date: entries[end_index].0.format("%Y-%m-%d").to_string(),
         sample_days,
         period_tss,
         rolling_tss_7d: rolling_average_at_index(entries, end_index, 7),
         rolling_tss_28d: rolling_average_at_index(entries, end_index, 28),
-        ctl: rolling_average_at_index(entries, end_index, ctl_window_days),
-        atl: rolling_average_at_index(entries, end_index, 7),
-        tsb: match (
-            rolling_average_at_index(entries, end_index, ctl_window_days),
-            rolling_average_at_index(entries, end_index, 7),
-        ) {
+        ctl,
+        atl,
+        tsb: match (ctl, atl) {
             (Some(ctl), Some(atl)) => Some(round_to_2(ctl - atl)),
             _ => None,
         },
     }
 }
 
-fn rolling_average(values: &BTreeMap<NaiveDate, i32>, window_days: usize) -> Option<f64> {
-    if values.is_empty() || values.len() < window_days {
+fn ewma_latest(values: &BTreeMap<NaiveDate, i32>, time_constant_days: usize) -> Option<f64> {
+    let entries = values
+        .iter()
+        .map(|(date, tss)| (*date, *tss))
+        .collect::<Vec<_>>();
+    entries
+        .len()
+        .checked_sub(1)
+        .and_then(|end_index| ewma_at_index(&entries, end_index, time_constant_days))
+}
+
+fn ewma_at_index(
+    values: &[(NaiveDate, i32)],
+    end_index: usize,
+    time_constant_days: usize,
+) -> Option<f64> {
+    if values.is_empty() || time_constant_days == 0 || end_index >= values.len() {
         return None;
     }
-    let total = values.values().rev().take(window_days).sum::<i32>();
-    Some(round_to_2(total as f64 / window_days as f64))
+
+    let alpha = 1.0 / time_constant_days as f64;
+    let mut current = 0.0;
+    for (_, tss) in values.iter().take(end_index + 1) {
+        current += (*tss as f64 - current) * alpha;
+    }
+
+    Some(round_to_2(current))
 }
 
 fn rolling_average_at_index(
@@ -1624,5 +1645,128 @@ mod tests {
             .rendered
             .volatile_context
             .contains("\"fx\":{\"k\":\"summary\"}"));
+    }
+
+    #[test]
+    fn build_daily_tss_map_includes_zero_load_rest_days() {
+        let start = NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2026, 4, 4).unwrap();
+        let activities = vec![Activity {
+            id: "ride-1".to_string(),
+            athlete_id: None,
+            start_date_local: "2026-04-03T08:00:00".to_string(),
+            start_date: None,
+            name: None,
+            description: None,
+            activity_type: None,
+            source: None,
+            external_id: None,
+            device_name: None,
+            distance_meters: None,
+            moving_time_seconds: None,
+            elapsed_time_seconds: None,
+            total_elevation_gain_meters: None,
+            total_elevation_loss_meters: None,
+            average_speed_mps: None,
+            max_speed_mps: None,
+            average_heart_rate_bpm: None,
+            max_heart_rate_bpm: None,
+            average_cadence_rpm: None,
+            trainer: false,
+            commute: false,
+            race: false,
+            has_heart_rate: false,
+            stream_types: Vec::new(),
+            tags: Vec::new(),
+            metrics: ActivityMetrics {
+                training_stress_score: Some(80),
+                normalized_power_watts: None,
+                intensity_factor: None,
+                efficiency_factor: None,
+                variability_index: None,
+                average_power_watts: None,
+                ftp_watts: None,
+                total_work_joules: None,
+                calories: None,
+                trimp: None,
+                power_load: None,
+                heart_rate_load: None,
+                pace_load: None,
+                strain_score: None,
+            },
+            details: ActivityDetails {
+                intervals: Vec::new(),
+                interval_groups: Vec::new(),
+                streams: Vec::new(),
+                interval_summary: Vec::new(),
+                skyline_chart: Vec::new(),
+                power_zone_times: Vec::new(),
+                heart_rate_zone_times: Vec::new(),
+                pace_zone_times: Vec::new(),
+                gap_zone_times: Vec::new(),
+            },
+            details_unavailable_reason: None,
+        }];
+
+        let daily_tss = build_daily_tss_map(start, end, &activities);
+
+        assert_eq!(daily_tss.len(), 4);
+        assert_eq!(
+            daily_tss.get(&NaiveDate::from_ymd_opt(2026, 4, 1).unwrap()),
+            Some(&0)
+        );
+        assert_eq!(
+            daily_tss.get(&NaiveDate::from_ymd_opt(2026, 4, 2).unwrap()),
+            Some(&0)
+        );
+        assert_eq!(
+            daily_tss.get(&NaiveDate::from_ymd_opt(2026, 4, 3).unwrap()),
+            Some(&80)
+        );
+        assert_eq!(
+            daily_tss.get(&NaiveDate::from_ymd_opt(2026, 4, 4).unwrap()),
+            Some(&0)
+        );
+    }
+
+    #[test]
+    fn build_load_trend_uses_exponential_ctl_and_atl_not_simple_rolling_averages() {
+        let start = NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+        let values = [100, 0, 100, 0, 100, 0, 100]
+            .into_iter()
+            .enumerate()
+            .map(|(index, tss)| (start + Duration::days(index as i64), tss))
+            .collect::<BTreeMap<_, _>>();
+
+        let load_trend = build_load_trend(&values, 7, 42);
+        let last = load_trend.last().unwrap();
+
+        assert_eq!(last.rolling_tss_7d, Some(57.14));
+        assert_eq!(last.ctl, Some(8.87));
+        assert_eq!(last.atl, Some(38.16));
+        assert_eq!(last.tsb, Some(-29.29));
+    }
+
+    #[tokio::test]
+    async fn builder_requests_longer_history_warmup_for_load_seed() {
+        let builder = DefaultTrainingContextBuilder::new(
+            Arc::new(TestSettingsService),
+            Arc::new(TestIntervalsService),
+            Arc::new(TestWorkoutSummaryRepository),
+            FixedClock,
+        );
+
+        let result = builder.build("user-1", "ride-1").await.unwrap();
+
+        assert_eq!(result.context.history.window_start, "2025-06-20");
+        assert_eq!(
+            result
+                .context
+                .history
+                .load_trend
+                .first()
+                .map(|point| point.date.as_str()),
+            Some("2026-02-21")
+        );
     }
 }

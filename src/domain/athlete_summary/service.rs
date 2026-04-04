@@ -58,10 +58,9 @@ where
 
     fn current_week_monday_epoch_seconds(&self) -> i64 {
         let now = self.clock.now_epoch_seconds();
-        let now = Utc
-            .timestamp_opt(now, 0)
-            .single()
-            .expect("valid epoch seconds");
+        let Some(now) = Utc.timestamp_opt(now, 0).single() else {
+            return 0;
+        };
         let date = now.date_naive();
         let offset = match date.weekday() {
             Weekday::Mon => 0,
@@ -70,9 +69,8 @@ where
         let monday = date - chrono::Duration::days(offset);
         monday
             .and_hms_opt(0, 0, 0)
-            .expect("valid monday midnight")
-            .and_utc()
-            .timestamp()
+            .map(|datetime| datetime.and_utc().timestamp())
+            .unwrap_or(0)
     }
 
     fn is_stale(&self, summary: &AthleteSummary) -> bool {
@@ -135,22 +133,17 @@ where
         let user_id = user_id.to_string();
         let service = self.clone();
         Box::pin(async move {
-            if !force {
-                if let Some(existing) = service.repository.find_by_user_id(&user_id).await? {
-                    if !service.is_stale(&existing) {
-                        return Ok(existing);
-                    }
+            let existing = service.repository.find_by_user_id(&user_id).await?;
 
-                    return service
-                        .generate_and_upsert_summary(user_id, existing.created_at_epoch_seconds)
-                        .await;
+            if !force {
+                if let Some(existing) = existing.as_ref() {
+                    if !service.is_stale(existing) {
+                        return Ok(existing.clone());
+                    }
                 }
             }
 
-            let created_at = service
-                .repository
-                .find_by_user_id(&user_id)
-                .await?
+            let created_at = existing
                 .as_ref()
                 .map(|summary| summary.created_at_epoch_seconds)
                 .unwrap_or_else(|| service.clock.now_epoch_seconds());

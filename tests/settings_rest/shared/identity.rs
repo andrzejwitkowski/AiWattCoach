@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use aiwattcoach::domain::identity::{
     AppUser, AuthSession, GoogleLoginStart, GoogleLoginSuccess, IdentityError, IdentityUseCases,
     Role,
@@ -60,6 +62,24 @@ pub(crate) struct TestIdentityServiceWithSession {
     pub(crate) session_id: String,
     pub(crate) user_id: String,
     pub(crate) roles: Vec<Role>,
+    pub(crate) sessions: HashMap<String, (String, String, Vec<Role>)>,
+}
+
+impl TestIdentityServiceWithSession {
+    pub(crate) fn with_sessions(sessions: Vec<(&str, &str, &str)>) -> Self {
+        Self {
+            sessions: sessions
+                .into_iter()
+                .map(|(session_id, user_id, email)| {
+                    (
+                        session_id.to_string(),
+                        (user_id.to_string(), email.to_string(), Vec::new()),
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
 }
 
 impl IdentityUseCases for TestIdentityServiceWithSession {
@@ -105,6 +125,24 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
         &self,
         session_id: &str,
     ) -> BoxFuture<Result<Option<AppUser>, IdentityError>> {
+        if !self.sessions.is_empty() {
+            let sessions = self.sessions.clone();
+            let session_id = session_id.to_string();
+            return Box::pin(async move {
+                Ok(sessions.get(&session_id).map(|(user_id, email, roles)| {
+                    AppUser::new(
+                        user_id.clone(),
+                        format!("google-subject-{user_id}"),
+                        email.clone(),
+                        roles.clone(),
+                        Some("Test User".to_string()),
+                        None,
+                        true,
+                    )
+                }))
+            });
+        }
+
         let roles = self.roles.clone();
         let user_id = self.user_id.clone();
         let session_id_check = session_id.to_string();

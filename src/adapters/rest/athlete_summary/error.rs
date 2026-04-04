@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use serde::Serialize;
+use tracing::warn;
 
 use crate::domain::athlete_summary::AthleteSummaryError;
 
@@ -21,13 +22,16 @@ pub(super) fn map_athlete_summary_error(error: &AthleteSummaryError) -> Response
             }),
         )
             .into_response(),
-        AthleteSummaryError::Unavailable(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        )
-            .into_response(),
+        AthleteSummaryError::Unavailable(_) => {
+            warn!(error = %error, "athlete summary unavailable");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "athlete summary service unavailable".to_string(),
+                }),
+            )
+                .into_response()
+        }
         AthleteSummaryError::Repository(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorResponse {
@@ -35,12 +39,15 @@ pub(super) fn map_athlete_summary_error(error: &AthleteSummaryError) -> Response
             }),
         )
             .into_response(),
-        AthleteSummaryError::Llm(error) => (
-            StatusCode::BAD_GATEWAY,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        )
-            .into_response(),
+        AthleteSummaryError::Llm(_) => {
+            warn!(error = %error, "athlete summary generation failed");
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(ErrorResponse {
+                    error: "athlete summary generation failed".to_string(),
+                }),
+            )
+                .into_response()
+        }
     }
 }

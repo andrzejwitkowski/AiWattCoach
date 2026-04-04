@@ -149,8 +149,10 @@ describe('AthleteSummaryCard', () => {
       expect(generateAthleteSummaryMock).toHaveBeenCalledWith('');
     });
 
-    expect(screen.getByLabelText(/athlete summary/i)).toHaveValue(
-      'Well-rounded athlete with strong diesel engine and improving tempo control.',
-    );
+    await waitFor(() => {
+      expect(screen.getByLabelText(/athlete summary/i)).toHaveValue(
+        'Well-rounded athlete with strong diesel engine and improving tempo control.',
+      );
+    });
   });
 });

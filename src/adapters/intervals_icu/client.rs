@@ -8,6 +8,8 @@ use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _}
 use opentelemetry_http::HeaderInjector;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use reqwest::{Client, RequestBuilder, StatusCode};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 const DEFAULT_BASE_URL: &str = "https://intervals.icu";
@@ -90,10 +92,24 @@ impl IntervalsIcuClient {
 }
 
 pub(super) fn truncate_logged_response_body(body: &str) -> String {
-    if body.chars().count() <= MAX_LOGGED_RESPONSE_BODY_CHARS {
-        return body.to_string();
-    }
+    let chars = body.chars().count();
+    let bytes = body.len();
+    let digest = Sha256::digest(body.as_bytes());
+    let hash_prefix = format!("{:x}", digest);
+    let hash_prefix = &hash_prefix[..12.min(hash_prefix.len())];
 
-    let truncated: String = body.chars().take(MAX_LOGGED_RESPONSE_BODY_CHARS).collect();
-    format!("{truncated}...(truncated)")
+    let shape = match serde_json::from_str::<Value>(body) {
+        Ok(Value::Array(items)) => format!("array(count={})", items.len()),
+        Ok(Value::Object(map)) => format!("object(keys={})", map.len()),
+        Ok(_) => "other".to_string(),
+        Err(_) => {
+            if chars > MAX_LOGGED_RESPONSE_BODY_CHARS {
+                format!("other(truncated_at_chars={MAX_LOGGED_RESPONSE_BODY_CHARS})")
+            } else {
+                "other".to_string()
+            }
+        }
+    };
+
+    format!("payload chars={chars} bytes={bytes} type={shape} hash={hash_prefix}")
 }

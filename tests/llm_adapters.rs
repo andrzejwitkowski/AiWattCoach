@@ -500,7 +500,7 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
 }
 
 #[tokio::test]
-async fn llm_workout_coach_logs_full_builder_request() {
+async fn llm_workout_coach_logs_redacted_builder_request_metadata_only() {
     let chat_port = Arc::new(CapturingChatPort::default());
     let coach = LlmWorkoutCoach::new(
         chat_port.clone(),
@@ -517,14 +517,16 @@ async fn llm_workout_coach_logs_full_builder_request() {
     })
     .await;
 
-    assert!(logs.contains("logging full workout summary llm request"));
-    assert!(logs.contains("\"system_prompt\":\"You are an AI cycling coach"));
-    assert!(logs.contains("training_context_stable="));
-    assert!(logs.contains("training_context_volatile="));
-    assert!(logs.contains("\\\"stable\\\":true"));
-    assert!(logs.contains("\\\"volatile\\\":true"));
-    assert!(logs.contains("conversation"));
-    assert!(logs.contains("How did I do?"));
+    assert!(logs.contains("prepared workout summary llm request"));
+    assert!(logs.contains("estimated_request_tokens"));
+    assert!(logs.contains("system_prompt_chars"));
+    assert!(logs.contains("stable_context_chars"));
+    assert!(logs.contains("volatile_context_chars"));
+    assert!(logs.contains("conversation_messages"));
+    assert!(!logs.contains("logging full workout summary llm request"));
+    assert!(!logs.contains("training_context_stable="));
+    assert!(!logs.contains("training_context_volatile="));
+    assert!(!logs.contains("How did I do?"));
 
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);

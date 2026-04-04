@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add a failing OpenRouter mapping test for cached prefix blocks
+## Task 1: Add a failing OpenRouter mapping test for cached prefix blocks
 
 **Files:**
 - Modify: `tests/llm_adapters.rs`
@@ -36,7 +36,7 @@ Update OpenRouter DTOs and mapping so the request can represent either plain str
 Run: `cargo test --test llm_adapters openrouter_request_caches_stable_prefix_only -- --nocapture`
 Expected: PASS
 
-### Task 2: Keep response parsing and adapter behavior intact
+## Task 2: Keep response parsing and adapter behavior intact
 
 **Files:**
 - Modify: `src/adapters/llm/openrouter/dto.rs`

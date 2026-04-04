@@ -1,6 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use aiwattcoach::domain::{
+    athlete_summary::{
+        AthleteSummaryError, AthleteSummaryState, AthleteSummaryUseCases, EnsuredAthleteSummary,
+    },
     llm::{BoxFuture, LlmCacheUsage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
     workout_summary::{
         CoachReplyOperation, MessageRole, PendingCoachReplyCheckpoint, WorkoutCoach,
@@ -82,6 +85,46 @@ impl WorkoutCoach for CapturingAthleteSummaryCoach {
                 cache: LlmCacheUsage::default(),
             })
         })
+    }
+}
+
+#[derive(Clone)]
+struct FailingAthleteSummaryService {
+    error: AthleteSummaryError,
+}
+
+impl AthleteSummaryUseCases for FailingAthleteSummaryService {
+    fn get_summary_state(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<AthleteSummaryState, AthleteSummaryError>> {
+        let error = self.error.clone();
+        Box::pin(async move { Err(error) })
+    }
+
+    fn generate_summary(
+        &self,
+        _user_id: &str,
+        _force: bool,
+    ) -> BoxFuture<Result<aiwattcoach::domain::athlete_summary::AthleteSummary, AthleteSummaryError>>
+    {
+        unreachable!()
+    }
+
+    fn ensure_fresh_summary(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<aiwattcoach::domain::athlete_summary::AthleteSummary, AthleteSummaryError>>
+    {
+        unreachable!()
+    }
+
+    fn ensure_fresh_summary_state(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<EnsuredAthleteSummary, AthleteSummaryError>> {
+        let error = self.error.clone();
+        Box::pin(async move { Err(error) })
     }
 }
 
@@ -248,6 +291,36 @@ async fn generate_coach_reply_marks_when_athlete_summary_was_regenerated() {
         Some("Coach reply to: Need feedback")
     );
     assert!(reply.athlete_summary_was_regenerated);
+}
+
+#[tokio::test]
+async fn generate_coach_reply_continues_when_athlete_summary_is_unavailable() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CapturingAthleteSummaryCoach::default());
+    let athlete_summary_service = Arc::new(FailingAthleteSummaryService {
+        error: AthleteSummaryError::Unavailable("temporary outage".to_string()),
+    });
+    let service = test_service_with_coach_and_athlete_summary(
+        repository,
+        reply_operations,
+        coach.clone(),
+        athlete_summary_service,
+    );
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    let reply = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(coach.athlete_summary_texts(), vec![None]);
+    assert_eq!(reply.coach_message.content, "Coach reply to: Need feedback");
+    assert!(!reply.athlete_summary_was_regenerated);
 }
 
 #[tokio::test]

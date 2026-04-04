@@ -370,31 +370,22 @@ where
             return Ok((None, false));
         };
 
-        let ensured = service
-            .ensure_fresh_summary_state(user_id)
-            .await
-            .map_err(map_athlete_summary_error)?;
+        let ensured = match service.ensure_fresh_summary_state(user_id).await {
+            Ok(ensured) => ensured,
+            Err(crate::domain::athlete_summary::AthleteSummaryError::Llm(error)) => {
+                return Err(WorkoutSummaryError::Llm(error));
+            }
+            Err(error) => {
+                warn!(
+                    user_id = %user_id,
+                    error = %error,
+                    "athlete summary skipped while generating coach reply"
+                );
+                return Ok((None, false));
+            }
+        };
 
         Ok((Some(ensured.summary.summary_text), ensured.was_regenerated))
-    }
-}
-
-fn map_athlete_summary_error(
-    error: crate::domain::athlete_summary::AthleteSummaryError,
-) -> WorkoutSummaryError {
-    match error {
-        crate::domain::athlete_summary::AthleteSummaryError::Llm(error) => {
-            WorkoutSummaryError::Llm(error)
-        }
-        crate::domain::athlete_summary::AthleteSummaryError::NotConfigured => {
-            WorkoutSummaryError::Repository(
-                "athlete summary generation is not configured".to_string(),
-            )
-        }
-        crate::domain::athlete_summary::AthleteSummaryError::Unavailable(message)
-        | crate::domain::athlete_summary::AthleteSummaryError::Repository(message) => {
-            WorkoutSummaryError::Repository(message)
-        }
     }
 }
 
@@ -601,11 +592,18 @@ where
             let summary = service.get_existing_summary(&user_id, &workout_id).await?;
             let athlete_summary_may_regenerate_before_reply =
                 if let Some(athlete_summary_service) = &service.athlete_summary_service {
-                    athlete_summary_service
-                        .get_summary_state(&user_id)
-                        .await
-                        .map(|state| state.stale)
-                        .unwrap_or(false)
+                    match athlete_summary_service.get_summary_state(&user_id).await {
+                        Ok(state) => state.stale,
+                        Err(error) => {
+                            warn!(
+                                user_id = %user_id,
+                                workout_id = %workout_id,
+                                error = %error,
+                                "athlete summary hint lookup failed while appending user message"
+                            );
+                            false
+                        }
+                    }
                 } else {
                     false
                 };

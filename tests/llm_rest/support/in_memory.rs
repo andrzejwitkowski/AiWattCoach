@@ -153,6 +153,18 @@ impl InMemoryAthleteSummaryService {
     pub(crate) fn seed(&self, summary: Option<AthleteSummary>, stale: bool) {
         *self.state.lock().unwrap() = AthleteSummaryState { summary, stale };
     }
+
+    fn make_summary(&self, user_id: String, created_at_epoch_seconds: i64) -> AthleteSummary {
+        AthleteSummary {
+            user_id,
+            summary_text: "Generated athlete summary".to_string(),
+            generated_at_epoch_seconds: 1_700_000_000,
+            created_at_epoch_seconds,
+            updated_at_epoch_seconds: 1_700_000_000,
+            provider: Some("openrouter".to_string()),
+            model: Some("google/gemini-3-flash-preview".to_string()),
+        }
+    }
 }
 
 impl Default for InMemoryAthleteSummaryService {
@@ -184,6 +196,7 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
     ) -> aiwattcoach::domain::athlete_summary::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>
     {
         let state = self.state.clone();
+        let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
             let mut state = state.lock().unwrap();
@@ -193,19 +206,14 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
                 }
             }
 
-            let summary = AthleteSummary {
+            let summary = service.make_summary(
                 user_id,
-                summary_text: "Generated athlete summary".to_string(),
-                generated_at_epoch_seconds: 1_700_000_000,
-                created_at_epoch_seconds: state
+                state
                     .summary
                     .as_ref()
                     .map(|summary| summary.created_at_epoch_seconds)
                     .unwrap_or(1_700_000_000),
-                updated_at_epoch_seconds: 1_700_000_000,
-                provider: Some("openrouter".to_string()),
-                model: Some("google/gemini-3-flash-preview".to_string()),
-            };
+            );
             state.summary = Some(summary.clone());
             state.stale = false;
             Ok(summary)
@@ -218,6 +226,7 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
     ) -> aiwattcoach::domain::athlete_summary::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>
     {
         let state = self.state.clone();
+        let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
             let mut state = state.lock().unwrap();
@@ -227,19 +236,14 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
                 }
             }
 
-            let summary = AthleteSummary {
+            let summary = service.make_summary(
                 user_id,
-                summary_text: "Generated athlete summary".to_string(),
-                generated_at_epoch_seconds: 1_700_000_000,
-                created_at_epoch_seconds: state
+                state
                     .summary
                     .as_ref()
                     .map(|summary| summary.created_at_epoch_seconds)
                     .unwrap_or(1_700_000_000),
-                updated_at_epoch_seconds: 1_700_000_000,
-                provider: Some("openrouter".to_string()),
-                model: Some("google/gemini-3-flash-preview".to_string()),
-            };
+            );
             state.summary = Some(summary.clone());
             state.stale = false;
             Ok(summary)
@@ -253,6 +257,7 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
         Result<EnsuredAthleteSummary, AthleteSummaryError>,
     > {
         let state = self.state.clone();
+        let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
             let mut state = state.lock().unwrap();
@@ -262,32 +267,19 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
                 if let Some(summary) = state.summary.clone() {
                     summary
                 } else {
-                    let summary = AthleteSummary {
-                        user_id,
-                        summary_text: "Generated athlete summary".to_string(),
-                        generated_at_epoch_seconds: 1_700_000_000,
-                        created_at_epoch_seconds: 1_700_000_000,
-                        updated_at_epoch_seconds: 1_700_000_000,
-                        provider: Some("openrouter".to_string()),
-                        model: Some("google/gemini-3-flash-preview".to_string()),
-                    };
+                    let summary = service.make_summary(user_id, 1_700_000_000);
                     state.summary = Some(summary.clone());
                     summary
                 }
             } else {
-                let summary = AthleteSummary {
+                let summary = service.make_summary(
                     user_id,
-                    summary_text: "Generated athlete summary".to_string(),
-                    generated_at_epoch_seconds: 1_700_000_000,
-                    created_at_epoch_seconds: state
+                    state
                         .summary
                         .as_ref()
                         .map(|summary| summary.created_at_epoch_seconds)
                         .unwrap_or(1_700_000_000),
-                    updated_at_epoch_seconds: 1_700_000_000,
-                    provider: Some("openrouter".to_string()),
-                    model: Some("google/gemini-3-flash-preview".to_string()),
-                };
+                );
                 state.summary = Some(summary.clone());
                 state.stale = false;
                 summary

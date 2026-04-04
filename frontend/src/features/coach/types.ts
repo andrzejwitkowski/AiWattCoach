@@ -55,7 +55,7 @@ export const coachMessageWsMessageSchema = z.object({
 
 export const systemMessageWsMessageSchema = z.object({
   type: z.literal('system_message'),
-  content: z.string(),
+  content: z.string().trim().min(1),
 });
 
 export const errorWsMessageSchema = z.object({

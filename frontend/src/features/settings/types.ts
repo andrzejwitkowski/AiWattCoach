@@ -65,8 +65,8 @@ export const athleteSummaryResponseSchema = z.object({
   exists: z.boolean(),
   stale: z.boolean(),
   summaryText: z.string().nullable().optional(),
-  generatedAtEpochSeconds: z.number().nullable().optional(),
-  updatedAtEpochSeconds: z.number().nullable().optional(),
+  generatedAtEpochSeconds: z.number().int().nullable().optional(),
+  updatedAtEpochSeconds: z.number().int().nullable().optional(),
 });
 
 export type UserSettingsResponse = z.infer<typeof userSettingsResponseSchema>;

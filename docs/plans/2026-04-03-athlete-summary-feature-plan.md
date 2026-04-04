@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Athlete summary domain and repository
+## Task 1: Athlete summary domain and repository
 
 **Files:**
 - Create: `src/domain/athlete_summary/model.rs`
@@ -36,7 +36,7 @@ Run focused cargo tests for new athlete-summary service tests.
 **Step 4: Re-run tests**
 Run the same focused tests and confirm pass.
 
-### Task 2: REST API for fetch and generate
+## Task 2: REST API for fetch and generate
 
 **Files:**
 - Create: `src/adapters/rest/athlete_summary/dto.rs`
@@ -62,7 +62,7 @@ Run focused REST tests.
 **Step 4: Re-run tests**
 Run focused REST tests and confirm pass.
 
-### Task 3: Settings UI card with read-only summary textbox
+## Task 3: Settings UI card with read-only summary textbox
 
 **Files:**
 - Create: `frontend/src/features/settings/api/athleteSummary.ts`
@@ -87,7 +87,7 @@ Run focused Vitest file.
 **Step 4: Re-run tests**
 Run focused Vitest file and confirm pass.
 
-### Task 4: Inject athlete summary into cached coach prompt
+## Task 4: Inject athlete summary into cached coach prompt
 
 **Files:**
 - Modify: `src/adapters/llm/workout_summary_coach.rs`
@@ -107,7 +107,7 @@ Run focused LLM adapter test.
 **Step 4: Re-run test**
 Run focused test and confirm pass.
 
-### Task 5: Websocket system message for summary generation
+## Task 5: Websocket system message for summary generation
 
 **Files:**
 - Modify: `src/adapters/rest/workout_summary/dto.rs`
@@ -131,7 +131,7 @@ Run focused websocket flow test.
 **Step 4: Re-run test**
 Run focused websocket flow test and confirm pass.
 
-### Task 6: Final verification
+## Task 6: Final verification
 
 **Files:**
 - No new files

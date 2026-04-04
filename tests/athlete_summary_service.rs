@@ -24,6 +24,7 @@ impl Clock for FixedClock {
 struct InMemoryAthleteSummaryRepository {
     summary: Arc<Mutex<Option<AthleteSummary>>>,
     find_calls: Arc<Mutex<u32>>,
+    upsert_calls: Arc<Mutex<u32>>,
 }
 
 impl InMemoryAthleteSummaryRepository {
@@ -31,6 +32,7 @@ impl InMemoryAthleteSummaryRepository {
         Self {
             summary: Arc::new(Mutex::new(Some(summary))),
             find_calls: Arc::new(Mutex::new(0)),
+            upsert_calls: Arc::new(Mutex::new(0)),
         }
     }
 }
@@ -53,7 +55,9 @@ impl AthleteSummaryRepository for InMemoryAthleteSummaryRepository {
     ) -> aiwattcoach::domain::athlete_summary::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>
     {
         let store = self.summary.clone();
+        let upsert_calls = self.upsert_calls.clone();
         Box::pin(async move {
+            *upsert_calls.lock().unwrap() += 1;
             *store.lock().unwrap() = Some(summary.clone());
             Ok(summary)
         })
@@ -63,6 +67,10 @@ impl AthleteSummaryRepository for InMemoryAthleteSummaryRepository {
 impl InMemoryAthleteSummaryRepository {
     fn find_call_count(&self) -> u32 {
         *self.find_calls.lock().unwrap()
+    }
+
+    fn upsert_call_count(&self) -> u32 {
+        *self.upsert_calls.lock().unwrap()
     }
 }
 
@@ -111,7 +119,7 @@ async fn ensure_fresh_summary_generates_when_missing() {
     let repository = InMemoryAthleteSummaryRepository::default();
     let generator = StubGenerator::new("fresh summary");
     let service = AthleteSummaryService::new(
-        repository,
+        repository.clone(),
         generator.clone(),
         FixedClock {
             now_epoch_seconds: 1_775_564_800,
@@ -122,6 +130,7 @@ async fn ensure_fresh_summary_generates_when_missing() {
 
     assert_eq!(summary.summary_text, "fresh summary");
     assert_eq!(generator.call_count(), 1);
+    assert_eq!(repository.upsert_call_count(), 1);
 }
 
 #[tokio::test]
@@ -163,7 +172,7 @@ async fn ensure_fresh_summary_regenerates_when_older_than_monday() {
     });
     let generator = StubGenerator::new("fresh summary");
     let service = AthleteSummaryService::new(
-        repository,
+        repository.clone(),
         generator.clone(),
         FixedClock {
             now_epoch_seconds: 1_775_564_800,
@@ -174,6 +183,7 @@ async fn ensure_fresh_summary_regenerates_when_older_than_monday() {
 
     assert_eq!(summary.summary_text, "fresh summary");
     assert_eq!(generator.call_count(), 1);
+    assert_eq!(repository.upsert_call_count(), 1);
 }
 
 #[tokio::test]
@@ -189,7 +199,7 @@ async fn generate_summary_force_true_regenerates_even_when_fresh() {
     });
     let generator = StubGenerator::new("forced summary");
     let service = AthleteSummaryService::new(
-        repository,
+        repository.clone(),
         generator.clone(),
         FixedClock {
             now_epoch_seconds: 1_775_564_800,
@@ -200,6 +210,7 @@ async fn generate_summary_force_true_regenerates_even_when_fresh() {
 
     assert_eq!(summary.summary_text, "forced summary");
     assert_eq!(generator.call_count(), 1);
+    assert_eq!(repository.upsert_call_count(), 1);
 }
 
 #[tokio::test]

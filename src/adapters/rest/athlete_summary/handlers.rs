@@ -7,10 +7,7 @@ use axum::{
     Json,
 };
 
-use crate::{
-    config::AppState,
-    domain::{athlete_summary::AthleteSummaryUseCases, identity::IdentityUseCases},
-};
+use crate::{config::AppState, domain::athlete_summary::AthleteSummaryUseCases};
 
 use super::{error::map_athlete_summary_error, mapping::map_summary_state_to_dto};
 
@@ -61,9 +58,4 @@ async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String
 
 fn athlete_summary_service(state: &AppState) -> Option<&Arc<dyn AthleteSummaryUseCases>> {
     state.athlete_summary_service.as_ref()
-}
-
-#[allow(dead_code)]
-fn identity_service(state: &AppState) -> Option<&Arc<dyn IdentityUseCases>> {
-    state.identity_service.as_ref()
 }

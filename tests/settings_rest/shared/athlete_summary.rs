@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 
 use aiwattcoach::domain::athlete_summary::{
     AthleteSummary, AthleteSummaryError, AthleteSummaryState, AthleteSummaryUseCases,
@@ -8,13 +8,13 @@ use aiwattcoach::domain::athlete_summary::{
 use super::app::BoxFuture;
 
 pub(crate) struct TestAthleteSummaryService {
-    summary: Mutex<Option<AthleteSummary>>,
+    summaries: Mutex<HashMap<String, AthleteSummary>>,
 }
 
 impl TestAthleteSummaryService {
     pub(crate) fn empty() -> Self {
         Self {
-            summary: Mutex::new(None),
+            summaries: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -28,9 +28,9 @@ impl Default for TestAthleteSummaryService {
 impl AthleteSummaryUseCases for TestAthleteSummaryService {
     fn get_summary_state(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> BoxFuture<Result<AthleteSummaryState, AthleteSummaryError>> {
-        let summary = self.summary.lock().unwrap().clone();
+        let summary = self.summaries.lock().unwrap().get(user_id).cloned();
         Box::pin(async move {
             Ok(AthleteSummaryState {
                 stale: summary.is_none(),
@@ -44,20 +44,20 @@ impl AthleteSummaryUseCases for TestAthleteSummaryService {
         user_id: &str,
         _force: bool,
     ) -> BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
-        let mut summary = self.summary.lock().unwrap();
+        let mut summaries = self.summaries.lock().unwrap();
         let generated = AthleteSummary {
             user_id: user_id.to_string(),
             summary_text: "OK".to_string(),
             generated_at_epoch_seconds: 2_000,
-            created_at_epoch_seconds: summary
-                .as_ref()
+            created_at_epoch_seconds: summaries
+                .get(user_id)
                 .map(|existing| existing.created_at_epoch_seconds)
                 .unwrap_or(2_000),
             updated_at_epoch_seconds: 2_000,
             provider: Some("openai".to_string()),
             model: Some("gpt-4o-mini".to_string()),
         };
-        *summary = Some(generated.clone());
+        summaries.insert(user_id.to_string(), generated.clone());
         Box::pin(async move { Ok(generated) })
     }
 
@@ -72,20 +72,21 @@ impl AthleteSummaryUseCases for TestAthleteSummaryService {
         &self,
         user_id: &str,
     ) -> BoxFuture<Result<EnsuredAthleteSummary, AthleteSummaryError>> {
-        let mut summary = self.summary.lock().unwrap();
-        let was_regenerated = summary.is_none();
+        let mut summaries = self.summaries.lock().unwrap();
+        let existing = summaries.get(user_id).cloned();
+        let was_regenerated = existing.is_none();
         let generated = AthleteSummary {
             user_id: user_id.to_string(),
             summary_text: if was_regenerated {
                 "OK (generated)".to_string()
             } else {
-                summary
+                existing
                     .as_ref()
                     .map(|existing| existing.summary_text.clone())
                     .unwrap_or_else(|| "OK".to_string())
             },
             generated_at_epoch_seconds: 2_000,
-            created_at_epoch_seconds: summary
+            created_at_epoch_seconds: existing
                 .as_ref()
                 .map(|existing| existing.created_at_epoch_seconds)
                 .unwrap_or(2_000),
@@ -93,7 +94,7 @@ impl AthleteSummaryUseCases for TestAthleteSummaryService {
             provider: Some("openai".to_string()),
             model: Some("gpt-4o-mini".to_string()),
         };
-        *summary = Some(generated.clone());
+        summaries.insert(user_id.to_string(), generated.clone());
         Box::pin(async move {
             Ok(EnsuredAthleteSummary {
                 summary: generated,
