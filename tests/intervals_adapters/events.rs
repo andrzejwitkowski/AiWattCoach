@@ -10,6 +10,7 @@ use aiwattcoach::{
 use axum::http::StatusCode;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_sdk::trace::SdkTracerProvider;
+use serde_json::json;
 use tracing::Instrument as _;
 use tracing_subscriber::{layer::SubscriberExt, Registry};
 
@@ -188,4 +189,108 @@ async fn intervals_client_maps_upstream_auth_failures_to_credentials_error() {
     let result = client.get_event(&test_credentials(), 401).await;
 
     assert_eq!(result, Err(IntervalsError::CredentialsNotConfigured));
+}
+
+#[tokio::test]
+async fn intervals_client_accepts_string_event_ids() {
+    let server = TestIntervalsServer::start().await;
+    server.set_list_events_raw(json!([
+        {
+            "id": "101",
+            "start_date_local": "2026-03-22",
+            "name": "Workout 101",
+            "category": "WORKOUT",
+            "description": "structured workout",
+            "indoor": true,
+            "color": "blue",
+            "workout_doc": "- 5min 55%"
+        }
+    ]));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let events = client
+        .list_events(
+            &test_credentials(),
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-03-31".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].id, 101);
+    assert_eq!(events[0].category, EventCategory::Workout);
+}
+
+#[tokio::test]
+async fn intervals_client_skips_malformed_events_in_list_response() {
+    let server = TestIntervalsServer::start().await;
+    server.set_list_events_raw(json!([
+        {
+            "id": 101,
+            "start_date_local": "2026-03-22",
+            "name": "Workout 101",
+            "category": "WORKOUT",
+            "description": "structured workout",
+            "indoor": true,
+            "color": "blue",
+            "workout_doc": "- 5min 55%"
+        },
+        {
+            "id": { "unexpected": true },
+            "start_date_local": "2026-03-23",
+            "name": "Broken event",
+            "category": "WORKOUT"
+        }
+    ]));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let events = client
+        .list_events(
+            &test_credentials(),
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-03-31".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].id, 101);
+}
+
+#[tokio::test]
+async fn intervals_client_tolerates_object_valued_optional_event_fields() {
+    let server = TestIntervalsServer::start().await;
+    server.set_list_events_raw(json!([
+        {
+            "id": 102201749,
+            "start_date_local": "2026-04-01T08:00:00",
+            "name": "Bieżnia",
+            "category": "WORKOUT",
+            "description": "\n- 1h\n- 4.5km 60:00/km Pace",
+            "indoor": true,
+            "color": { "name": "blue" },
+            "workout_doc": "- 1h"
+        }
+    ]));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let events = client
+        .list_events(
+            &test_credentials(),
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-04-30".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].id, 102201749);
+    assert_eq!(events[0].color, None);
 }

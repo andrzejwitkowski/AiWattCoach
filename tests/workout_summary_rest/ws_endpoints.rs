@@ -243,7 +243,8 @@ async fn websocket_rejects_messages_when_queue_is_full() {
 
 #[tokio::test]
 async fn websocket_disconnect_does_not_generate_queued_follow_up_replies() {
-    let service = TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")]);
+    let service = TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")])
+        .with_coach_reply_delay(Duration::from_millis(250));
     let app =
         workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
 
@@ -274,19 +275,51 @@ async fn websocket_disconnect_does_not_generate_queued_follow_up_replies() {
         .await
         .unwrap();
 
-    let _ = timeout(Duration::from_secs(1), socket.next())
+    let first_frame = timeout(Duration::from_secs(1), socket.next())
         .await
         .unwrap()
         .unwrap()
-        .unwrap();
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+
+    let first_payload: Value = serde_json::from_str(&first_frame).unwrap();
+    assert_eq!(
+        first_payload.get("type").and_then(Value::as_str),
+        Some("coach_typing")
+    );
 
     socket.close(None).await.unwrap();
 
-    tokio::time::sleep(Duration::from_millis(1800)).await;
+    timeout(Duration::from_secs(2), async {
+        loop {
+            let summary = service.summary("user-1", "workout-1").unwrap();
+            let processed = service.processed_user_messages();
+
+            if summary.messages.len() >= 2 || processed.len() >= 2 {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .unwrap();
 
     let summary = service.summary("user-1", "workout-1").unwrap();
-    assert_eq!(summary.messages.len(), 1);
+    assert_eq!(service.processed_user_messages(), vec!["First".to_string()]);
+    assert_eq!(summary.messages.len(), 2);
+    assert_eq!(
+        summary.messages[0].role,
+        aiwattcoach::domain::workout_summary::MessageRole::User
+    );
     assert_eq!(summary.messages[0].content, "First");
+    assert_eq!(
+        summary.messages[1].role,
+        aiwattcoach::domain::workout_summary::MessageRole::Coach
+    );
+    assert_eq!(summary.messages[1].content, "Coach reply to: First");
 }
 
 #[tokio::test]

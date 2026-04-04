@@ -11,7 +11,29 @@ pub struct OpenRouterChatRequest {
 #[derive(Serialize)]
 pub struct OpenRouterMessage {
     pub role: String,
-    pub content: String,
+    pub content: OpenRouterRequestContent,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum OpenRouterRequestContent {
+    Text(String),
+    Parts(Vec<OpenRouterRequestContentPart>),
+}
+
+#[derive(Serialize)]
+pub struct OpenRouterRequestContentPart {
+    #[serde(rename = "type")]
+    pub part_type: String,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<OpenRouterCacheControl>,
+}
+
+#[derive(Serialize)]
+pub struct OpenRouterCacheControl {
+    #[serde(rename = "type")]
+    pub cache_type: String,
 }
 
 #[derive(Deserialize)]

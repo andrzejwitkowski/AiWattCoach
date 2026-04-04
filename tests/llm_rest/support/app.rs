@@ -20,8 +20,8 @@ use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
     domain::{
-        settings::UserSettingsService, training_context::DefaultTrainingContextBuilder,
-        workout_summary::WorkoutSummaryService,
+        athlete_summary::AthleteSummary, settings::UserSettingsService,
+        training_context::DefaultTrainingContextBuilder, workout_summary::WorkoutSummaryService,
     },
     Settings,
 };
@@ -31,9 +31,10 @@ use mongodb::Client;
 use super::{
     identity::TestIdentityServiceWithSession,
     in_memory::{
-        sample_summary, sample_user_settings, InMemoryCoachReplyOperationRepository,
-        InMemoryIntervalsService, InMemoryLlmContextCacheRepository,
-        InMemoryUserSettingsRepository, InMemoryWorkoutSummaryRepository,
+        sample_summary, sample_user_settings, InMemoryAthleteSummaryService,
+        InMemoryCoachReplyOperationRepository, InMemoryIntervalsService,
+        InMemoryLlmContextCacheRepository, InMemoryUserSettingsRepository,
+        InMemoryWorkoutSummaryRepository,
     },
     server::TestLlmUpstreamServer,
 };
@@ -47,6 +48,7 @@ pub(crate) struct LlmRestTestContext {
     pub(crate) server: TestLlmUpstreamServer,
     settings_repository: InMemoryUserSettingsRepository,
     summary_repository: InMemoryWorkoutSummaryRepository,
+    athlete_summary_service: InMemoryAthleteSummaryService,
     _fixture: FrontendFixture,
 }
 
@@ -76,6 +78,10 @@ impl LlmRestTestContext {
     ) -> aiwattcoach::domain::workout_summary::WorkoutSummary {
         sample_summary(workout_id)
     }
+
+    pub(crate) fn seed_athlete_summary(&self, summary: Option<AthleteSummary>, stale: bool) {
+        self.athlete_summary_service.seed(summary, stale);
+    }
 }
 
 pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
@@ -97,6 +103,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
     let cache_repository = InMemoryLlmContextCacheRepository::default();
     let summary_repository = InMemoryWorkoutSummaryRepository::default();
     let reply_operation_repository = InMemoryCoachReplyOperationRepository::default();
+    let athlete_summary_service = InMemoryAthleteSummaryService::default();
 
     let settings_service = Arc::new(
         UserSettingsService::new(settings_repository.clone(), SystemClock)
@@ -109,29 +116,32 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
         GeminiClient::new(llm_http_client.clone()).with_base_url(server.gemini_base_url()),
         OpenRouterClient::new(llm_http_client).with_base_url(server.openrouter_base_url()),
     ));
-    let workout_summary_service = Arc::new(WorkoutSummaryService::with_coach(
-        summary_repository.clone(),
-        reply_operation_repository,
-        SystemClock,
-        UuidIdGenerator,
-        Arc::new(
-            {
-                let training_context_builder = Arc::new(DefaultTrainingContextBuilder::new(
-                    settings_service.clone(),
-                    Arc::new(InMemoryIntervalsService),
-                    Arc::new(summary_repository.clone()),
-                    SystemClock,
-                ));
-                LlmWorkoutCoach::new(
-                    llm_adapter.clone(),
-                    llm_config_provider.clone(),
-                    training_context_builder,
-                    SystemClock,
-                )
-            }
-            .with_context_cache_repository(Arc::new(cache_repository)),
-        ),
-    ));
+    let workout_summary_service = Arc::new(
+        WorkoutSummaryService::with_coach(
+            summary_repository.clone(),
+            reply_operation_repository,
+            SystemClock,
+            UuidIdGenerator,
+            Arc::new(
+                {
+                    let training_context_builder = Arc::new(DefaultTrainingContextBuilder::new(
+                        settings_service.clone(),
+                        Arc::new(InMemoryIntervalsService),
+                        Arc::new(summary_repository.clone()),
+                        SystemClock,
+                    ));
+                    LlmWorkoutCoach::new(
+                        llm_adapter.clone(),
+                        llm_config_provider.clone(),
+                        training_context_builder,
+                        SystemClock,
+                    )
+                }
+                .with_context_cache_repository(Arc::new(cache_repository)),
+            ),
+        )
+        .with_athlete_summary_service(Arc::new(athlete_summary_service.clone())),
+    );
 
     let app = build_app_with_frontend_dist(
         AppState::new(
@@ -147,6 +157,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
             24,
         )
         .with_settings_service(settings_service)
+        .with_athlete_summary_service(Arc::new(athlete_summary_service.clone()))
         .with_llm_services(llm_adapter, llm_config_provider)
         .with_workout_summary_service(workout_summary_service),
         fixture.dist_dir(),
@@ -157,6 +168,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
         server,
         settings_repository,
         summary_repository,
+        athlete_summary_service,
         _fixture: fixture,
     }
 }

@@ -10,7 +10,8 @@ use aiwattcoach::domain::{
 
 use crate::shared::{
     default_dev_coach, existing_summary, test_service, test_service_with_coach,
-    InMemoryCoachReplyOperationRepository, InMemoryWorkoutSummaryRepository,
+    test_service_with_coach_and_athlete_summary, InMemoryCoachReplyOperationRepository,
+    InMemoryWorkoutSummaryRepository, StubAthleteSummaryService,
 };
 
 #[derive(Clone, Default)]
@@ -24,12 +25,24 @@ impl CountingCoach {
     }
 }
 
+#[derive(Clone, Default)]
+struct CapturingAthleteSummaryCoach {
+    athlete_summary_texts: Arc<Mutex<Vec<Option<String>>>>,
+}
+
+impl CapturingAthleteSummaryCoach {
+    fn athlete_summary_texts(&self) -> Vec<Option<String>> {
+        self.athlete_summary_texts.lock().unwrap().clone()
+    }
+}
+
 impl WorkoutCoach for CountingCoach {
     fn reply(
         &self,
         _user_id: &str,
         _summary: &WorkoutSummary,
         user_message: &str,
+        _athlete_summary_text: Option<&str>,
     ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
         self.calls.lock().unwrap().push(user_message.to_string());
         let message = format!("Coach reply to: {user_message}");
@@ -39,6 +52,32 @@ impl WorkoutCoach for CountingCoach {
                 model: "counting-coach".to_string(),
                 message,
                 provider_request_id: Some("counting-req-1".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: LlmCacheUsage::default(),
+            })
+        })
+    }
+}
+
+impl WorkoutCoach for CapturingAthleteSummaryCoach {
+    fn reply(
+        &self,
+        _user_id: &str,
+        _summary: &WorkoutSummary,
+        user_message: &str,
+        athlete_summary_text: Option<&str>,
+    ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+        self.athlete_summary_texts
+            .lock()
+            .unwrap()
+            .push(athlete_summary_text.map(str::to_string));
+        let message = format!("Coach reply to: {user_message}");
+        Box::pin(async move {
+            Ok(LlmChatResponse {
+                provider: LlmProvider::OpenAi,
+                model: "capturing-coach".to_string(),
+                message,
+                provider_request_id: Some("capturing-req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
             })
@@ -122,6 +161,93 @@ async fn generate_coach_reply_persists_pending_operation_before_coach_message() 
             "append_message:workout-1:coach".to_string(),
         ]
     );
+    assert!(!reply.athlete_summary_was_regenerated);
+}
+
+#[tokio::test]
+async fn generate_coach_reply_passes_fresh_athlete_summary_text_to_coach_once() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CapturingAthleteSummaryCoach::default());
+    let athlete_summary_service =
+        Arc::new(StubAthleteSummaryService::fresh("Fresh athlete summary"));
+    let service = test_service_with_coach_and_athlete_summary(
+        repository,
+        reply_operations,
+        coach.clone(),
+        athlete_summary_service.clone(),
+    );
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    let reply = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        athlete_summary_service.calls(),
+        vec![
+            "get_summary_state".to_string(),
+            "ensure_fresh_summary_state".to_string()
+        ]
+    );
+    assert_eq!(
+        coach.athlete_summary_texts(),
+        vec![Some("Fresh athlete summary".to_string())]
+    );
+    assert!(!reply.athlete_summary_was_regenerated);
+}
+
+#[tokio::test]
+async fn generate_coach_reply_marks_when_athlete_summary_was_regenerated() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CapturingAthleteSummaryCoach::default());
+    let athlete_summary_service = Arc::new(StubAthleteSummaryService::stale(
+        "Refreshed athlete summary",
+    ));
+    let service = test_service_with_coach_and_athlete_summary(
+        repository,
+        reply_operations,
+        coach.clone(),
+        athlete_summary_service.clone(),
+    );
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    let reply = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        athlete_summary_service.calls(),
+        vec![
+            "get_summary_state".to_string(),
+            "ensure_fresh_summary_state".to_string()
+        ]
+    );
+    assert_eq!(
+        coach.athlete_summary_texts(),
+        vec![Some("Refreshed athlete summary (regenerated)".to_string())]
+    );
+    assert_eq!(reply.coach_message.content, "Coach reply to: Need feedback");
+    assert_eq!(
+        reply
+            .summary
+            .messages
+            .last()
+            .map(|message| message.content.as_str()),
+        Some("Coach reply to: Need feedback")
+    );
+    assert!(reply.athlete_summary_was_regenerated);
 }
 
 #[tokio::test]
@@ -182,6 +308,7 @@ impl WorkoutCoach for AlwaysFailingCoach {
         _user_id: &str,
         _summary: &WorkoutSummary,
         _user_message: &str,
+        _athlete_summary_text: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
         Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
     > {
@@ -210,6 +337,7 @@ impl WorkoutCoach for OneTimeFailureCoach {
         _user_id: &str,
         _summary: &WorkoutSummary,
         user_message: &str,
+        _athlete_summary_text: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
         Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
     > {
@@ -279,6 +407,7 @@ impl WorkoutCoach for OversizedContextCoach {
         _user_id: &str,
         _summary: &WorkoutSummary,
         _user_message: &str,
+        _athlete_summary_text: Option<&str>,
     ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
         Box::pin(async move {
             Err(LlmError::ContextTooLarge(

@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::{Arc, Mutex};
 
 use aiwattcoach::{
@@ -30,6 +32,8 @@ use axum::{
 };
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
+
+use support::tracing_capture::capture_tracing_logs;
 
 #[derive(Clone, Default)]
 struct MockServerState {
@@ -148,7 +152,7 @@ impl TrainingContextBuilder for StubTrainingContextBuilder {
             Ok(TrainingContextBuildResult {
                 context: TrainingContext {
                     generated_at_epoch_seconds: 1_700_000_000,
-                    focus_workout_id: workout_id,
+                    focus_workout_id: Some(workout_id),
                     focus_kind: "activity".to_string(),
                     intervals_status: IntervalsStatusContext {
                         activities: "ok".to_string(),
@@ -166,6 +170,13 @@ impl TrainingContextBuilder for StubTrainingContextBuilder {
                 },
             })
         })
+    }
+
+    fn build_athlete_summary_context(
+        &self,
+        _user_id: &str,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build("user-1", "athlete-summary")
     }
 }
 
@@ -382,6 +393,49 @@ async fn openrouter_client_maps_cache_discount_and_write_tokens() {
 }
 
 #[tokio::test]
+async fn openrouter_request_caches_stable_prefix_only() {
+    let server = MockServer::start().await;
+    let client = OpenRouterClient::new(reqwest::Client::new())
+        .with_base_url(format!("{}/api/v1", server.base_url));
+
+    client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "google/gemini-3-flash-preview".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    let messages = requests[0].body["messages"].as_array().unwrap();
+
+    assert!(messages[0]["content"].is_array());
+    assert_eq!(messages[0]["content"][0]["type"], "text");
+    assert_eq!(messages[0]["content"][0]["text"], "system");
+    assert_eq!(
+        messages[0]["content"][0]["cache_control"]["type"],
+        "ephemeral"
+    );
+    assert_eq!(messages[1]["content"][0]["text"], "stable");
+    assert_eq!(
+        messages[1]["content"][0]["cache_control"]["type"],
+        "ephemeral"
+    );
+    assert_eq!(messages[2]["content"][0]["text"], "volatile");
+    assert_eq!(
+        messages[2]["content"][0]["cache_control"]["type"],
+        "ephemeral"
+    );
+    assert_eq!(messages[3]["role"], "user");
+    assert_eq!(messages[3]["content"], "How did I do?");
+    assert!(messages[3].get("cache_control").is_none());
+}
+
+#[tokio::test]
 async fn gemini_client_skips_cache_creation_without_durable_cache_keys() {
     let server = MockServer::start().await;
     let client = GeminiClient::new(reqwest::Client::new())
@@ -430,7 +484,7 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
     .with_context_cache_repository(Arc::new(FailingReusableCacheRepository));
 
     let response = coach
-        .reply("user-1", &sample_summary(), "How did I do?")
+        .reply("user-1", &sample_summary(), "How did I do?", None)
         .await
         .unwrap();
 
@@ -443,6 +497,65 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
         requests[0].volatile_context,
         "training_context_volatile={\"volatile\":true}"
     );
+}
+
+#[tokio::test]
+async fn llm_workout_coach_logs_full_builder_request() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let coach = LlmWorkoutCoach::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let (_, logs) = capture_tracing_logs(|| async {
+        coach
+            .reply("user-1", &sample_summary(), "How did I do?", None)
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(logs.contains("logging full workout summary llm request"));
+    assert!(logs.contains("\"system_prompt\":\"You are an AI cycling coach"));
+    assert!(logs.contains("training_context_stable="));
+    assert!(logs.contains("training_context_volatile="));
+    assert!(logs.contains("\\\"stable\\\":true"));
+    assert!(logs.contains("\\\"volatile\\\":true"));
+    assert!(logs.contains("conversation"));
+    assert!(logs.contains("How did I do?"));
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(!requests[0].stable_context.contains("\"saved\":"));
+}
+
+#[tokio::test]
+async fn llm_workout_coach_includes_athlete_summary_in_stable_context() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let coach = LlmWorkoutCoach::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    coach
+        .reply(
+            "user-1",
+            &sample_summary(),
+            "How did I do?",
+            Some("Athlete is durable, handles load well, but fades on repeated anaerobic work."),
+        )
+        .await
+        .unwrap();
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0]
+        .stable_context
+        .contains("athlete_summary_text=Athlete is durable, handles load well"));
 }
 
 #[tokio::test]

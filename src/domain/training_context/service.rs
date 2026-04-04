@@ -24,6 +24,11 @@ pub trait TrainingContextBuilder: Send + Sync {
         user_id: &str,
         workout_id: &str,
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
+
+    fn build_athlete_summary_context(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
 }
 
 const MAX_RECENT_ACTIVITY_FETCHES: usize = 4;
@@ -73,6 +78,15 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move { builder.build_impl(&user_id, &workout_id).await })
+    }
+
+    fn build_athlete_summary_context(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        let builder = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { builder.build_impl(&user_id, "athlete-summary").await })
     }
 }
 
@@ -150,6 +164,19 @@ where
             .filter(|event| event_date(event) > today && event_date(event) <= upcoming_end)
             .cloned()
             .collect::<Vec<_>>();
+        let configured_ftp = settings
+            .cycling
+            .ftp_watts
+            .and_then(|value| i32::try_from(value).ok());
+        let matched_recent_workouts = build_event_activity_matches(
+            &recent_events,
+            &detailed_recent_activities,
+            configured_ftp,
+        );
+        let recent_interval_blocks_by_activity_id = build_recent_interval_blocks_by_activity_id(
+            &detailed_recent_activities,
+            &matched_recent_workouts,
+        );
 
         let profile = AthleteProfileContext {
             full_name: settings.cycling.full_name,
@@ -164,17 +191,19 @@ where
             athlete_notes: settings.cycling.athlete_notes,
         };
 
-        let history = build_historical_context(history_start, today, &history_activities);
+        let history = build_historical_context(
+            history_start,
+            today,
+            &history_activities,
+            &recent_interval_blocks_by_activity_id,
+        );
         let recent_days = build_recent_day_contexts(
             recent_start,
             today,
             &recent_events,
             &detailed_recent_activities,
             &summaries_by_id,
-            settings
-                .cycling
-                .ftp_watts
-                .and_then(|value| i32::try_from(value).ok()),
+            &matched_recent_workouts,
         );
         let upcoming_days =
             build_upcoming_day_contexts(today + Duration::days(1), upcoming_end, &upcoming_events);
@@ -182,7 +211,11 @@ where
 
         let context = TrainingContext {
             generated_at_epoch_seconds: self.clock.now_epoch_seconds(),
-            focus_workout_id: workout_id.to_string(),
+            focus_workout_id: if focus_kind == "summary" {
+                None
+            } else {
+                Some(workout_id.to_string())
+            },
             focus_kind,
             intervals_status: IntervalsStatusContext {
                 activities: activities_status,
@@ -264,6 +297,7 @@ fn build_historical_context(
     start: NaiveDate,
     end: NaiveDate,
     activities: &[Activity],
+    recent_interval_blocks_by_activity_id: &HashMap<String, Vec<PlannedWorkoutBlockContext>>,
 ) -> HistoricalTrainingContext {
     let workouts = activities
         .iter()
@@ -281,6 +315,10 @@ fn build_historical_context(
             normalized_power_watts: activity.metrics.normalized_power_watts,
             ftp_watts: activity.metrics.ftp_watts,
             variability_index: activity.metrics.variability_index,
+            interval_blocks: recent_interval_blocks_by_activity_id
+                .get(&activity.id)
+                .cloned()
+                .unwrap_or_default(),
         })
         .collect::<Vec<_>>();
 
@@ -289,7 +327,7 @@ fn build_historical_context(
         .filter_map(|activity| activity.metrics.training_stress_score)
         .sum::<i32>();
     let daily_tss = build_daily_tss_map(start, end, activities);
-    let load_trend = build_load_trend(&daily_tss, 24 * 7, 42, 28);
+    let load_trend = build_load_trend(&daily_tss, 42, 42);
     let ctl = rolling_average(&daily_tss, 42);
     let atl = rolling_average(&daily_tss, 7);
     let tsb = match (ctl, atl) {
@@ -343,11 +381,10 @@ fn build_recent_day_contexts(
     events: &[Event],
     detailed_activities: &[Activity],
     summaries_by_id: &HashMap<String, u8>,
-    configured_ftp: Option<i32>,
+    matched: &EventActivityMatches,
 ) -> Vec<RecentDayContext> {
     let activities_by_date = group_activities_by_date(detailed_activities);
     let events_by_date = group_events_by_date(events);
-    let matched = build_event_activity_matches(events, detailed_activities, configured_ftp);
 
     date_range_inclusive(start, end)
         .into_iter()
@@ -753,44 +790,39 @@ fn build_load_trend(
     values: &BTreeMap<NaiveDate, i32>,
     trend_days: usize,
     ctl_window_days: usize,
-    recent_daily_days: usize,
 ) -> Vec<HistoricalLoadTrendPoint> {
     let entries = values
         .iter()
         .map(|(date, tss)| (*date, *tss))
         .collect::<Vec<_>>();
     let start_index = entries.len().saturating_sub(trend_days);
-    let recent_start_index = entries.len().saturating_sub(recent_daily_days);
-    let older_end_index = recent_start_index.max(start_index);
-
-    let mut trend = Vec::new();
-
-    let mut index = start_index;
-    while index < older_end_index {
-        let end_index = (index + 6).min(older_end_index.saturating_sub(1));
-        let period_tss = entries[index..=end_index]
-            .iter()
-            .map(|(_, value)| *value)
-            .sum::<i32>();
-
-        trend.push(build_load_trend_point(
-            &entries,
-            end_index,
-            ctl_window_days,
-            (end_index - index + 1) as u8,
-            period_tss,
-        ));
-
-        index = end_index + 1;
-    }
-
-    trend.extend(entries.iter().enumerate().skip(older_end_index).map(
-        |(index, (_, daily_tss))| {
+    entries
+        .iter()
+        .enumerate()
+        .skip(start_index)
+        .map(|(index, (_, daily_tss))| {
             build_load_trend_point(&entries, index, ctl_window_days, 1, *daily_tss)
-        },
-    ));
+        })
+        .collect()
+}
 
-    trend
+fn build_recent_interval_blocks_by_activity_id(
+    detailed_activities: &[Activity],
+    matched: &EventActivityMatches,
+) -> HashMap<String, Vec<PlannedWorkoutBlockContext>> {
+    detailed_activities
+        .iter()
+        .filter_map(|activity| {
+            matched.activity_to_event.get(&activity.id).map(|event| {
+                let parsed =
+                    parse_workout_doc(event.workout_doc.as_deref(), activity.metrics.ftp_watts);
+                (
+                    activity.id.clone(),
+                    build_planned_workout_blocks(&parsed.segments, activity.metrics.ftp_watts),
+                )
+            })
+        })
+        .collect()
 }
 
 fn build_load_trend_point(
@@ -1447,7 +1479,7 @@ mod tests {
         assert_eq!(result.context.intervals_status.activities, "ok");
         assert_eq!(result.context.intervals_status.events, "ok");
         assert_eq!(result.context.recent_days.len(), 14);
-        assert_eq!(result.context.history.load_trend.len(), 20 + 28);
+        assert_eq!(result.context.history.load_trend.len(), 42);
         assert_eq!(
             result
                 .context
@@ -1455,7 +1487,16 @@ mod tests {
                 .load_trend
                 .first()
                 .map(|point| point.sample_days),
-            Some(7)
+            Some(1)
+        );
+        assert_eq!(
+            result
+                .context
+                .history
+                .load_trend
+                .first()
+                .map(|point| point.date.as_str()),
+            Some("2026-02-21")
         );
         assert_eq!(
             result
@@ -1527,6 +1568,13 @@ mod tests {
             recent_day.workouts[0]
                 .planned_workout
                 .as_ref()
+                .map(|planned| planned.interval_blocks.len()),
+            Some(2)
+        );
+        assert_eq!(
+            recent_day.workouts[0]
+                .planned_workout
+                .as_ref()
                 .and_then(|planned| planned.interval_blocks.first())
                 .and_then(|block| block.min_target_watts),
             Some(270)
@@ -1547,6 +1595,34 @@ mod tests {
             .stable_context
             .contains("prefers concise coaching"));
         assert!(result.rendered.stable_context.contains("\"lt\":["));
+        assert!(result.rendered.stable_context.contains("\"days\":1"));
+        assert!(result.rendered.stable_context.contains("\"bl\":["));
         assert!(result.rendered.volatile_context.contains("\"ride-1\""));
+    }
+
+    #[tokio::test]
+    async fn build_athlete_summary_context_uses_explicit_summary_focus() {
+        let builder = DefaultTrainingContextBuilder::new(
+            Arc::new(TestSettingsService),
+            Arc::new(TestIntervalsService),
+            Arc::new(TestWorkoutSummaryRepository),
+            FixedClock,
+        );
+
+        let result = builder
+            .build_athlete_summary_context("user-1")
+            .await
+            .unwrap();
+
+        assert_eq!(result.context.focus_kind, "summary");
+        assert_eq!(result.context.focus_workout_id, None);
+        assert!(result
+            .rendered
+            .volatile_context
+            .contains("\"k\":\"summary\""));
+        assert!(result
+            .rendered
+            .volatile_context
+            .contains("\"fx\":{\"k\":\"summary\"}"));
     }
 }

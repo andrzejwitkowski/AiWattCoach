@@ -79,6 +79,8 @@ pub(super) struct ServerWsMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<ConversationMessageDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<WorkoutSummaryDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -88,6 +90,7 @@ pub(super) fn coach_typing_message() -> ServerWsMessage {
     ServerWsMessage {
         message_type: "coach_typing".to_string(),
         message: None,
+        content: None,
         summary: None,
         error: None,
     }
@@ -100,7 +103,18 @@ pub(super) fn coach_message(
     ServerWsMessage {
         message_type: "coach_message".to_string(),
         message: Some(message),
+        content: None,
         summary: Some(summary),
+        error: None,
+    }
+}
+
+pub(super) fn system_message(content: impl Into<String>) -> ServerWsMessage {
+    ServerWsMessage {
+        message_type: "system_message".to_string(),
+        message: None,
+        content: Some(content.into()),
+        summary: None,
         error: None,
     }
 }
@@ -109,6 +123,7 @@ pub(super) fn error_message(message: impl Into<String>) -> ServerWsMessage {
     ServerWsMessage {
         message_type: "error".to_string(),
         message: None,
+        content: None,
         summary: None,
         error: Some(message.into()),
     }

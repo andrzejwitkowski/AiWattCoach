@@ -27,6 +27,7 @@ pub(crate) struct CapturedRequest {
 pub(super) struct ServerState {
     pub(super) requests: Arc<Mutex<Vec<CapturedRequest>>>,
     pub(super) list_events: Arc<Mutex<Vec<ResponseEvent>>>,
+    pub(super) list_events_raw: Arc<Mutex<Option<serde_json::Value>>>,
     pub(super) list_activities: Arc<Mutex<Vec<ResponseActivity>>>,
     pub(super) list_activities_raw: Arc<Mutex<Option<serde_json::Value>>>,
     pub(super) created_event: Arc<Mutex<Option<ResponseEvent>>>,
@@ -50,6 +51,7 @@ impl Default for ServerState {
         Self {
             requests: Arc::new(Mutex::new(Vec::new())),
             list_events: Arc::new(Mutex::new(Vec::new())),
+            list_events_raw: Arc::new(Mutex::new(None)),
             list_activities: Arc::new(Mutex::new(Vec::new())),
             list_activities_raw: Arc::new(Mutex::new(None)),
             created_event: Arc::new(Mutex::new(None)),
@@ -95,6 +97,10 @@ impl TestIntervalsServer {
 
     pub(crate) fn push_event(&self, event: ResponseEvent) {
         self.state.list_events.lock().unwrap().push(event);
+    }
+
+    pub(crate) fn set_list_events_raw(&self, payload: serde_json::Value) {
+        *self.state.list_events_raw.lock().unwrap() = Some(payload);
     }
 
     pub(crate) fn set_created_event(&self, event: ResponseEvent) {

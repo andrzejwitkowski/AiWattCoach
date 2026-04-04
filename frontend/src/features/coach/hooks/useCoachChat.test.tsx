@@ -228,6 +228,36 @@ describe('useCoachChat', () => {
     expect(result.current.isSaved).toBe(false);
   });
 
+  it('does not treat a system message as completed conversation', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('101');
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'system_message',
+            content: 'First the summary is being generated - wait a moment',
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    expect(result.current.hasConversation).toBe(false);
+  });
+
   it('redirects to the landing page on auth failure', async () => {
     vi.mocked(getWorkoutSummary).mockRejectedValue(new AuthenticationError());
     Object.defineProperty(window, 'location', {

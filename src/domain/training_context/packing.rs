@@ -83,7 +83,7 @@ impl<'a> VolatilePayload<'a> {
             v: 1,
             g: context.generated_at_epoch_seconds,
             fx: CompactFocus {
-                id: &context.focus_workout_id,
+                id: context.focus_workout_id.as_deref(),
                 k: &context.focus_kind,
             },
             rd: context
@@ -102,7 +102,8 @@ impl<'a> VolatilePayload<'a> {
 
 #[derive(Serialize)]
 struct CompactFocus<'a> {
-    id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<&'a str>,
     k: &'a str,
 }
 
@@ -261,6 +262,8 @@ struct CompactHistoricalWorkout<'a> {
     ftp: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    bl: Vec<CompactPlannedWorkoutBlock>,
 }
 
 impl<'a> CompactHistoricalWorkout<'a> {
@@ -277,6 +280,11 @@ impl<'a> CompactHistoricalWorkout<'a> {
             np: workout.normalized_power_watts,
             ftp: workout.ftp_watts,
             vi: workout.variability_index,
+            bl: workout
+                .interval_blocks
+                .iter()
+                .map(CompactPlannedWorkoutBlock::from_block)
+                .collect(),
         }
     }
 }
@@ -539,14 +547,15 @@ impl<'a> CompactUpcomingDay<'a> {
 mod tests {
     use super::*;
     use crate::domain::training_context::model::{
-        HistoricalTrainingContext, PlannedWorkoutReference, RecentWorkoutContext,
+        HistoricalTrainingContext, HistoricalWorkoutContext, PlannedWorkoutReference,
+        RecentWorkoutContext,
     };
 
     #[test]
     fn compact_render_is_non_empty_and_estimates_tokens() {
         let context = TrainingContext {
             generated_at_epoch_seconds: 1,
-            focus_workout_id: "workout-1".to_string(),
+            focus_workout_id: Some("workout-1".to_string()),
             focus_kind: "activity".to_string(),
             intervals_status: IntervalsStatusContext {
                 activities: "ok".to_string(),
@@ -568,6 +577,17 @@ mod tests {
                     ctl: Some(65.2),
                     atl: Some(58.6),
                     tsb: Some(6.6),
+                }],
+                workouts: vec![HistoricalWorkoutContext {
+                    activity_id: "ride-1".to_string(),
+                    interval_blocks: vec![PlannedWorkoutBlockContext {
+                        duration_seconds: 480,
+                        min_percent_ftp: Some(90.0),
+                        max_percent_ftp: Some(95.0),
+                        min_target_watts: Some(270),
+                        max_target_watts: Some(285),
+                    }],
+                    ..HistoricalWorkoutContext::default()
                 }],
                 ..HistoricalTrainingContext::default()
             },
@@ -609,13 +629,13 @@ mod tests {
         assert!(rendered.stable_context.contains(
             "\"lt\":[{\"d\":\"2026-03-31\",\"days\":1,\"tss\":42,\"t7\":37.5,\"t28\":51.3"
         ));
+        assert!(rendered.stable_context.contains(
+            "\"bl\":[{\"dur\":480,\"minp\":90.0,\"maxp\":95.0,\"minw\":270,\"maxw\":285}]"
+        ));
         assert!(rendered.volatile_context.contains("\"sick\":true"));
         assert!(rendered
             .volatile_context
             .contains("\"sickn\":\"felt unwell\""));
-        assert!(rendered.volatile_context.contains(
-            "\"bl\":[{\"dur\":480,\"minp\":90.0,\"maxp\":95.0,\"minw\":270,\"maxw\":285}]"
-        ));
         assert!(rendered.volatile_context.contains("\"p5\":[200,220]"));
         assert!(rendered.approximate_tokens > 0);
     }
@@ -630,7 +650,7 @@ mod tests {
     fn compact_render_omits_nulls_and_empty_lists() {
         let rendered = render_training_context(&TrainingContext {
             generated_at_epoch_seconds: 1,
-            focus_workout_id: "w1".to_string(),
+            focus_workout_id: None,
             focus_kind: "summary".to_string(),
             intervals_status: IntervalsStatusContext {
                 activities: "ok".to_string(),

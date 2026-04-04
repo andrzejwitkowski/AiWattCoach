@@ -1,5 +1,6 @@
 import { useSettings } from '../features/settings/context/SettingsContext';
 import { AiAgentsCard } from '../features/settings/components/AiAgentsCard';
+import { AthleteSummaryCard } from '../features/settings/components/AthleteSummaryCard';
 import { CyclingSettingsCard } from '../features/settings/components/CyclingSettingsCard';
 import { IntervalsCard } from '../features/settings/components/IntervalsCard';
 import { OptionsCard } from '../features/settings/components/OptionsCard';
@@ -60,6 +61,7 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
           onSave={handleSave}
         />
       </div>
+      <AthleteSummaryCard settings={settings} apiBaseUrl={apiBaseUrl} />
       <OptionsCard
         settings={settings}
         apiBaseUrl={apiBaseUrl}

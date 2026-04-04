@@ -15,13 +15,15 @@ use aiwattcoach::{
             settings_adapter::{IntervalsSettingsAdapter, SettingsIntervalsProvider},
         },
         llm::{
-            adapter::LlmAdapter, dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
+            adapter::LlmAdapter, athlete_summary_generator::AthleteSummaryLlmGenerator,
+            dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
             openai::client::OpenAiClient, openrouter::client::OpenRouterClient,
             settings_adapter::SettingsLlmConfigProvider, workout_summary_coach::LlmWorkoutCoach,
         },
         mongo::{
             activities::MongoActivityRepository,
             activity_upload_operations::MongoActivityUploadOperationRepository,
+            athlete_summary::MongoAthleteSummaryRepository,
             client::{create_client, ensure_database_exists, verify_connection},
             coach_reply_operations::MongoCoachReplyOperationRepository,
             llm_context_cache::MongoLlmContextCacheRepository,
@@ -35,6 +37,7 @@ use aiwattcoach::{
     },
     build_app,
     config::Settings,
+    domain::athlete_summary::AthleteSummaryService,
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
     },
@@ -134,6 +137,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let workout_summary_repository =
         MongoWorkoutSummaryRepository::new(mongo_client.clone(), &mongo_database);
     workout_summary_repository.ensure_indexes().await?;
+    let athlete_summary_repository =
+        MongoAthleteSummaryRepository::new(mongo_client.clone(), &mongo_database);
+    athlete_summary_repository.ensure_indexes().await?;
     let coach_reply_operation_repository =
         MongoCoachReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
     coach_reply_operation_repository.ensure_indexes().await?;
@@ -176,22 +182,34 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Arc::new(workout_summary_repository.clone()),
         SystemClock,
     ));
-
-    let workout_summary_service = Arc::new(WorkoutSummaryService::with_coach(
-        workout_summary_repository.clone(),
-        coach_reply_operation_repository.clone(),
-        SystemClock,
-        UuidIdGenerator,
-        Arc::new(
-            LlmWorkoutCoach::new(
-                llm_adapter.clone(),
-                llm_config_provider.clone(),
-                training_context_builder,
-                SystemClock,
-            )
-            .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
+    let athlete_summary_service = Arc::new(AthleteSummaryService::new(
+        athlete_summary_repository,
+        AthleteSummaryLlmGenerator::new(
+            llm_adapter.clone(),
+            llm_config_provider.clone(),
+            training_context_builder.clone(),
         ),
+        SystemClock,
     ));
+
+    let workout_summary_service = Arc::new(
+        WorkoutSummaryService::with_coach(
+            workout_summary_repository.clone(),
+            coach_reply_operation_repository.clone(),
+            SystemClock,
+            UuidIdGenerator,
+            Arc::new(
+                LlmWorkoutCoach::new(
+                    llm_adapter.clone(),
+                    llm_config_provider.clone(),
+                    training_context_builder,
+                    SystemClock,
+                )
+                .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
+            ),
+        )
+        .with_athlete_summary_service(athlete_summary_service.clone()),
+    );
 
     let intervals_connection_tester = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
@@ -210,6 +228,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 auth.session.ttl_hours,
             )
             .with_settings_service(settings_service)
+            .with_athlete_summary_service(athlete_summary_service)
             .with_llm_services(llm_adapter, llm_config_provider)
             .with_workout_summary_service(workout_summary_service)
             .with_intervals_service(intervals_service)
