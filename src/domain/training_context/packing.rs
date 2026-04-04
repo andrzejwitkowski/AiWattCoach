@@ -353,7 +353,7 @@ struct CompactRecentWorkout<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
     #[serde(skip_serializing_if = "is_empty_slice")]
-    p5: &'a [i32],
+    pc: &'a [String],
     #[serde(skip_serializing_if = "is_empty_slice")]
     c5: &'a [i32],
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -374,7 +374,7 @@ impl<'a> CompactRecentWorkout<'a> {
             ftp: workout.ftp_watts,
             rpe: workout.rpe,
             vi: workout.variability_index,
-            p5: &workout.power_values_5s,
+            pc: &workout.compressed_power_levels,
             c5: &workout.cadence_values_5s,
             pw: workout
                 .planned_workout
@@ -598,7 +598,7 @@ mod tests {
                 workouts: vec![RecentWorkoutContext {
                     activity_id: "ride-1".to_string(),
                     start_date_local: "2026-04-01T08:00:00".to_string(),
-                    power_values_5s: vec![200, 220],
+                    compressed_power_levels: vec!["36:1".to_string(), "46:1".to_string()],
                     cadence_values_5s: vec![85, 88],
                     planned_workout: Some(PlannedWorkoutReference {
                         event_id: 101,
@@ -636,7 +636,10 @@ mod tests {
         assert!(rendered
             .volatile_context
             .contains("\"sickn\":\"felt unwell\""));
-        assert!(rendered.volatile_context.contains("\"p5\":[200,220]"));
+        assert!(rendered
+            .volatile_context
+            .contains("\"pc\":[\"36:1\",\"46:1\"]"));
+        assert!(!rendered.volatile_context.contains("\"p5\":"));
         assert!(rendered.approximate_tokens > 0);
     }
 

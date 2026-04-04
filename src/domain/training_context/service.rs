@@ -472,7 +472,10 @@ fn build_recent_workout(
     matched_event: Option<&Event>,
     summaries_by_id: &HashMap<String, u8>,
 ) -> RecentWorkoutContext {
-    let power_values_5s = extract_and_average_stream(&activity.details.streams, "watts");
+    let compressed_power_levels = compress_power_stream(
+        &extract_raw_stream(&activity.details.streams, "watts"),
+        activity.metrics.ftp_watts,
+    );
     let cadence_values_5s = extract_and_average_stream(&activity.details.streams, "cadence");
     let planned_workout = matched_event.map(|event| {
         let parsed = parse_workout_doc(event.workout_doc.as_deref(), activity.metrics.ftp_watts);
@@ -506,7 +509,7 @@ fn build_recent_workout(
         ftp_watts: activity.metrics.ftp_watts,
         rpe: summaries_by_id.get(&activity.id).copied(),
         variability_index: activity.metrics.variability_index,
-        power_values_5s,
+        compressed_power_levels,
         cadence_values_5s,
         planned_workout,
     }
@@ -699,12 +702,7 @@ fn infer_focus_kind(
 }
 
 fn extract_and_average_stream(streams: &[ActivityStream], stream_type: &str) -> Vec<i32> {
-    let values = streams
-        .iter()
-        .find(|stream| stream.stream_type.eq_ignore_ascii_case(stream_type))
-        .and_then(|stream| stream.data.as_ref())
-        .map(extract_numeric_values)
-        .unwrap_or_default();
+    let values = extract_raw_stream(streams, stream_type);
 
     let chunks = values
         .chunks(STREAM_BUCKET_SIZE)
@@ -712,6 +710,112 @@ fn extract_and_average_stream(streams: &[ActivityStream], stream_type: &str) -> 
         .collect::<Vec<_>>();
 
     compress_stream_chunks(chunks)
+}
+
+fn extract_raw_stream(streams: &[ActivityStream], stream_type: &str) -> Vec<i32> {
+    streams
+        .iter()
+        .find(|stream| stream.stream_type.eq_ignore_ascii_case(stream_type))
+        .and_then(|stream| stream.data.as_ref())
+        .map(extract_numeric_values)
+        .unwrap_or_default()
+}
+
+fn compress_power_stream(values: &[i32], ftp_watts: Option<i32>) -> Vec<String> {
+    let Some(ftp_watts) = ftp_watts.filter(|value| *value > 0) else {
+        return Vec::new();
+    };
+
+    let mut levels = values
+        .iter()
+        .map(|value| encode_power_level(*value, ftp_watts))
+        .collect::<Vec<_>>();
+
+    smooth_single_second_level_noise(&mut levels);
+    compress_encoded_runs(run_length_encode_levels(&levels))
+}
+
+fn encode_power_level(power_watts: i32, ftp_watts: i32) -> i32 {
+    if power_watts <= 0 {
+        return 0;
+    }
+
+    ((power_watts as f64 / ftp_watts as f64).powf(2.5) * 100.0).round() as i32
+}
+
+fn smooth_single_second_level_noise(levels: &mut [i32]) {
+    if levels.len() < 3 {
+        return;
+    }
+
+    for index in 1..(levels.len() - 1) {
+        let previous = levels[index - 1];
+        let current = levels[index];
+        let next = levels[index + 1];
+
+        if previous != next {
+            continue;
+        }
+
+        if (current - previous).abs() >= 3 {
+            continue;
+        }
+
+        if (90..=110).contains(&previous) || (90..=110).contains(&current) {
+            continue;
+        }
+
+        levels[index] = previous;
+    }
+}
+
+fn run_length_encode_levels(levels: &[i32]) -> Vec<String> {
+    let Some((&first, rest)) = levels.split_first() else {
+        return Vec::new();
+    };
+
+    let mut encoded = Vec::new();
+    let mut current_level = first;
+    let mut duration_seconds = 1;
+
+    for &level in rest {
+        if level == current_level {
+            duration_seconds += 1;
+            continue;
+        }
+
+        encoded.push(format!("{current_level}:{duration_seconds}"));
+        current_level = level;
+        duration_seconds = 1;
+    }
+
+    encoded.push(format!("{current_level}:{duration_seconds}"));
+    encoded
+}
+
+fn compress_encoded_runs(runs: Vec<String>) -> Vec<String> {
+    if runs.len() <= MAX_CHUNKS_PER_WORKOUT {
+        return runs;
+    }
+
+    let levels = runs
+        .into_iter()
+        .flat_map(|run| {
+            let (level, duration) = run
+                .split_once(':')
+                .expect("encoded power run should contain level and duration");
+            let level = level
+                .parse::<i32>()
+                .expect("encoded power level should parse as i32");
+            let duration = duration
+                .parse::<usize>()
+                .expect("encoded power duration should parse as usize");
+            std::iter::repeat_n(level, duration)
+        })
+        .collect::<Vec<_>>();
+
+    let summarized = compress_stream_chunks(levels);
+    run_length_encode_levels(&summarized)
 }
 
 fn compress_stream_chunks(chunks: Vec<i32>) -> Vec<i32> {
@@ -1573,7 +1677,16 @@ mod tests {
         assert_eq!(recent_day.workouts.len(), 1);
         assert!(!recent_day.sick_day);
         assert_eq!(recent_day.workouts[0].rpe, Some(7));
-        assert_eq!(recent_day.workouts[0].power_values_5s, vec![240]);
+        assert_eq!(
+            recent_day.workouts[0].compressed_power_levels,
+            vec![
+                "36:1".to_string(),
+                "46:1".to_string(),
+                "57:1".to_string(),
+                "70:1".to_string(),
+                "84:1".to_string(),
+            ]
+        );
         assert_eq!(
             recent_day.workouts[0]
                 .planned_workout
@@ -1619,6 +1732,55 @@ mod tests {
         assert!(result.rendered.stable_context.contains("\"days\":1"));
         assert!(result.rendered.stable_context.contains("\"bl\":["));
         assert!(result.rendered.volatile_context.contains("\"ride-1\""));
+        assert!(result.rendered.volatile_context.contains("\"pc\":["));
+        assert!(!result.rendered.volatile_context.contains("\"p5\":["));
+    }
+
+    #[test]
+    fn compressed_power_merges_identical_levels_into_runs() {
+        assert_eq!(
+            compress_power_stream(&[300, 300, 300], Some(300)),
+            vec!["100:3"]
+        );
+    }
+
+    #[test]
+    fn compressed_power_smooths_single_second_spike_outside_ftp_zone() {
+        assert_eq!(
+            compress_power_stream(&[210, 214, 210], Some(300)),
+            vec!["41:3"]
+        );
+    }
+
+    #[test]
+    fn compressed_power_preserves_single_second_change_in_ftp_zone() {
+        assert_eq!(
+            compress_power_stream(&[287, 290, 287], Some(300)),
+            vec!["90:1", "92:1", "90:1"]
+        );
+    }
+
+    #[test]
+    fn compressed_power_preserves_boundary_change_when_changed_level_enters_ftp_zone() {
+        assert_eq!(
+            compress_power_stream(&[286, 287, 286], Some(300)),
+            vec!["89:1", "90:1", "89:1"]
+        );
+    }
+
+    #[test]
+    fn compressed_power_applies_run_cap_for_noisy_streams() {
+        let noisy = (0..120)
+            .map(|index| if index % 2 == 0 { 300 } else { 0 })
+            .collect::<Vec<_>>();
+
+        assert!(compress_power_stream(&noisy, Some(300)).len() <= MAX_CHUNKS_PER_WORKOUT);
+    }
+
+    #[test]
+    fn compressed_power_returns_empty_without_valid_ftp() {
+        assert!(compress_power_stream(&[300, 300, 300], None).is_empty());
+        assert!(compress_power_stream(&[300, 300, 300], Some(0)).is_empty());
     }
 
     #[tokio::test]
