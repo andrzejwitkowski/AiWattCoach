@@ -363,12 +363,14 @@ pub struct ConversationMessage {
 pub struct PersistedUserMessage {
     pub summary: WorkoutSummary,
     pub user_message: ConversationMessage,
+    pub athlete_summary_may_regenerate_before_reply: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoachReply {
     pub summary: WorkoutSummary,
     pub coach_message: ConversationMessage,
+    pub athlete_summary_was_regenerated: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

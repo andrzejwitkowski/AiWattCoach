@@ -14,7 +14,7 @@ pub struct TrainingContextBuildResult {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrainingContext {
     pub generated_at_epoch_seconds: i64,
-    pub focus_workout_id: String,
+    pub focus_workout_id: Option<String>,
     pub focus_kind: String,
     pub intervals_status: IntervalsStatusContext,
     pub profile: AthleteProfileContext,
@@ -87,6 +87,7 @@ pub struct HistoricalWorkoutContext {
     pub normalized_power_watts: Option<i32>,
     pub ftp_watts: Option<i32>,
     pub variability_index: Option<f64>,
+    pub interval_blocks: Vec<PlannedWorkoutBlockContext>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]

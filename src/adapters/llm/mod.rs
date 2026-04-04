@@ -1,4 +1,5 @@
 pub mod adapter;
+pub mod athlete_summary_generator;
 pub mod context_prelude;
 pub mod dev_adapter;
 pub mod gemini;

@@ -61,7 +61,16 @@ export const userSettingsResponseSchema = z.object({
   cycling: cyclingSettingsDataSchema,
 });
 
+export const athleteSummaryResponseSchema = z.object({
+  exists: z.boolean(),
+  stale: z.boolean(),
+  summaryText: z.string().nullable().optional(),
+  generatedAtEpochSeconds: z.number().int().nullable().optional(),
+  updatedAtEpochSeconds: z.number().int().nullable().optional(),
+});
+
 export type UserSettingsResponse = z.infer<typeof userSettingsResponseSchema>;
+export type AthleteSummaryResponse = z.infer<typeof athleteSummaryResponseSchema>;
 
 export const updateAiAgentsRequestSchema = z.object({
   openaiApiKey: z.string().nullable().optional(),

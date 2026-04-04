@@ -8,7 +8,7 @@ use super::{
         map_activity_interval, map_activity_interval_group, map_activity_response,
         map_activity_stream, should_persist_stream,
     },
-    ApiFailure, IntervalsIcuClient,
+    truncate_logged_response_body, ApiFailure, IntervalsIcuClient,
 };
 use crate::adapters::intervals_icu::dto::{
     ActivityIntervalsResponse, ActivityResponse, ActivityStreamResponse,
@@ -99,30 +99,40 @@ impl IntervalsIcuClient {
         .await;
 
         match intervals_result {
-            Ok(intervals_response) => {
-                match intervals_response.json::<ActivityIntervalsResponse>().await {
-                    Ok(intervals) => {
-                        activity.details.intervals = intervals
-                            .icu_intervals
-                            .into_iter()
-                            .map(map_activity_interval)
-                            .collect();
-                        activity.details.interval_groups = intervals
-                            .icu_groups
-                            .into_iter()
-                            .map(map_activity_interval_group)
-                            .collect();
-                    }
-                    Err(error) => {
-                        let error = map_api_error(error);
-                        tracing::warn!(
-                            activity_id,
-                            %error,
-                            "intervals enrichment payload could not be parsed; returning base activity without intervals"
-                        );
+            Ok(intervals_response) => match intervals_response.text().await {
+                Ok(response_body) => {
+                    match serde_json::from_str::<ActivityIntervalsResponse>(&response_body) {
+                        Ok(intervals) => {
+                            activity.details.intervals = intervals
+                                .icu_intervals
+                                .into_iter()
+                                .map(map_activity_interval)
+                                .collect();
+                            activity.details.interval_groups = intervals
+                                .icu_groups
+                                .into_iter()
+                                .map(map_activity_interval_group)
+                                .collect();
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                activity_id,
+                                %error,
+                                response_body = %truncate_logged_response_body(&response_body),
+                                "intervals enrichment payload could not be parsed; returning base activity without intervals"
+                            );
+                        }
                     }
                 }
-            }
+                Err(error) => {
+                    let error = map_api_error(error);
+                    tracing::warn!(
+                        activity_id,
+                        %error,
+                        "intervals enrichment response body could not be read; returning base activity without intervals"
+                    );
+                }
+            },
             Err(failure) => {
                 tracing::warn!(
                     activity_id,

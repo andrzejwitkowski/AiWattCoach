@@ -1,4 +1,9 @@
-use crate::domain::identity::{Clock, IdGenerator};
+use std::sync::Arc;
+
+use crate::domain::{
+    athlete_summary::AthleteSummaryUseCases,
+    identity::{Clock, IdGenerator},
+};
 
 use tracing::{info, warn};
 
@@ -85,6 +90,7 @@ where
     clock: Time,
     ids: Ids,
     coach: std::sync::Arc<dyn WorkoutCoach>,
+    athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
 }
 
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
@@ -119,7 +125,16 @@ where
             clock,
             ids,
             coach,
+            athlete_summary_service: None,
         }
+    }
+
+    pub fn with_athlete_summary_service(
+        mut self,
+        athlete_summary_service: Arc<dyn AthleteSummaryUseCases>,
+    ) -> Self {
+        self.athlete_summary_service = Some(athlete_summary_service);
+        self
     }
 
     async fn get_existing_summary(
@@ -209,6 +224,7 @@ where
         Ok(CoachReply {
             summary,
             coach_message,
+            athlete_summary_was_regenerated: false,
         })
     }
 
@@ -252,6 +268,7 @@ where
                 return Ok(Some(CoachReply {
                     summary,
                     coach_message: existing_coach_message,
+                    athlete_summary_was_regenerated: false,
                 }));
             }
         }
@@ -287,6 +304,7 @@ where
             return Ok(Some(CoachReply {
                 summary,
                 coach_message,
+                athlete_summary_was_regenerated: false,
             }));
         }
 
@@ -342,6 +360,32 @@ where
                 "post-provider coach reply write failed without error".to_string(),
             )
         }))
+    }
+
+    async fn ensure_athlete_summary(
+        &self,
+        user_id: &str,
+    ) -> Result<(Option<String>, bool), WorkoutSummaryError> {
+        let Some(service) = &self.athlete_summary_service else {
+            return Ok((None, false));
+        };
+
+        let ensured = match service.ensure_fresh_summary_state(user_id).await {
+            Ok(ensured) => ensured,
+            Err(crate::domain::athlete_summary::AthleteSummaryError::Llm(error)) => {
+                return Err(WorkoutSummaryError::Llm(error));
+            }
+            Err(error) => {
+                warn!(
+                    user_id = %user_id,
+                    error = %error,
+                    "athlete summary skipped while generating coach reply"
+                );
+                return Ok((None, false));
+            }
+        };
+
+        Ok((Some(ensured.summary.summary_text), ensured.was_regenerated))
     }
 }
 
@@ -546,10 +590,28 @@ where
                 .await?;
 
             let summary = service.get_existing_summary(&user_id, &workout_id).await?;
+            let athlete_summary_may_regenerate_before_reply =
+                if let Some(athlete_summary_service) = &service.athlete_summary_service {
+                    match athlete_summary_service.get_summary_state(&user_id).await {
+                        Ok(state) => state.stale,
+                        Err(error) => {
+                            warn!(
+                                user_id = %user_id,
+                                workout_id = %workout_id,
+                                error = %error,
+                                "athlete summary hint lookup failed while appending user message"
+                            );
+                            false
+                        }
+                    }
+                } else {
+                    false
+                };
 
             Ok(PersistedUserMessage {
                 summary,
                 user_message,
+                athlete_summary_may_regenerate_before_reply,
             })
         })
     }
@@ -640,10 +702,17 @@ where
             );
 
             let summary = service.get_existing_summary(&user_id, &workout_id).await?;
+            let (athlete_summary_text, athlete_summary_was_regenerated) =
+                service.ensure_athlete_summary(&user_id).await?;
 
             let llm_response = match service
                 .coach
-                .reply(&user_id, &summary, &user_message.content)
+                .reply(
+                    &user_id,
+                    &summary,
+                    &user_message.content,
+                    athlete_summary_text.as_deref(),
+                )
                 .await
             {
                 Ok(response) => response,
@@ -712,6 +781,7 @@ where
             Ok(CoachReply {
                 summary,
                 coach_message,
+                athlete_summary_was_regenerated,
             })
         })
     }

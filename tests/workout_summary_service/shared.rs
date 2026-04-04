@@ -5,6 +5,10 @@ use std::{
 };
 
 use aiwattcoach::domain::{
+    athlete_summary::{
+        AthleteSummary, AthleteSummaryError, AthleteSummaryState, AthleteSummaryUseCases,
+        EnsuredAthleteSummary,
+    },
     identity::{Clock, IdGenerator},
     llm::{LlmCacheUsage, LlmChatResponse, LlmProvider, LlmTokenUsage},
     workout_summary::{
@@ -439,6 +443,27 @@ pub(crate) fn test_service_with_coach(
     )
 }
 
+pub(crate) fn test_service_with_coach_and_athlete_summary(
+    repository: InMemoryWorkoutSummaryRepository,
+    reply_operations: InMemoryCoachReplyOperationRepository,
+    coach: Arc<dyn WorkoutCoach>,
+    athlete_summary_service: Arc<dyn AthleteSummaryUseCases>,
+) -> WorkoutSummaryService<
+    InMemoryWorkoutSummaryRepository,
+    InMemoryCoachReplyOperationRepository,
+    TestClock,
+    TestIdGenerator,
+> {
+    WorkoutSummaryService::with_coach(
+        repository,
+        reply_operations,
+        TestClock,
+        TestIdGenerator::default(),
+        coach,
+    )
+    .with_athlete_summary_service(athlete_summary_service)
+}
+
 pub(crate) fn default_dev_coach() -> Arc<dyn WorkoutCoach> {
     Arc::new(DevWorkoutCoach)
 }
@@ -465,6 +490,7 @@ impl WorkoutCoach for DevWorkoutCoach {
         _user_id: &str,
         _summary: &WorkoutSummary,
         user_message: &str,
+        _athlete_summary_text: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
         Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
     > {
@@ -479,6 +505,99 @@ impl WorkoutCoach for DevWorkoutCoach {
                 provider_request_id: Some("dev-request-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
+            })
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct StubAthleteSummaryService {
+    summary: Option<AthleteSummary>,
+    stale: bool,
+    regenerated_summary_text: Option<String>,
+    calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl StubAthleteSummaryService {
+    pub(crate) fn fresh(summary_text: &str) -> Self {
+        Self {
+            summary: Some(AthleteSummary {
+                user_id: "user-1".to_string(),
+                summary_text: summary_text.to_string(),
+                generated_at_epoch_seconds: 1_700_000_000,
+                created_at_epoch_seconds: 1_700_000_000,
+                updated_at_epoch_seconds: 1_700_000_000,
+                provider: Some("openrouter".to_string()),
+                model: Some("google/gemini-3-flash-preview".to_string()),
+            }),
+            stale: false,
+            regenerated_summary_text: None,
+            calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub(crate) fn stale(summary_text: &str) -> Self {
+        let mut service = Self::fresh(summary_text);
+        service.stale = true;
+        service.regenerated_summary_text = Some(format!("{summary_text} (regenerated)"));
+        service
+    }
+
+    pub(crate) fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl AthleteSummaryUseCases for StubAthleteSummaryService {
+    fn get_summary_state(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<AthleteSummaryState, AthleteSummaryError>> {
+        let summary = self.summary.clone();
+        let stale = self.stale;
+        let calls = self.calls.clone();
+        Box::pin(async move {
+            calls.lock().unwrap().push("get_summary_state".to_string());
+            Ok(AthleteSummaryState { summary, stale })
+        })
+    }
+
+    fn generate_summary(
+        &self,
+        _user_id: &str,
+        _force: bool,
+    ) -> BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
+        unreachable!()
+    }
+
+    fn ensure_fresh_summary(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
+        unreachable!()
+    }
+
+    fn ensure_fresh_summary_state(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<EnsuredAthleteSummary, AthleteSummaryError>> {
+        let mut summary = self.summary.clone().expect("summary should exist in test");
+        let stale = self.stale;
+        let regenerated_summary_text = self.regenerated_summary_text.clone();
+        let calls = self.calls.clone();
+        Box::pin(async move {
+            calls
+                .lock()
+                .unwrap()
+                .push("ensure_fresh_summary_state".to_string());
+            if stale {
+                if let Some(text) = regenerated_summary_text {
+                    summary.summary_text = text;
+                }
+            }
+            Ok(EnsuredAthleteSummary {
+                summary,
+                was_regenerated: stale,
             })
         })
     }

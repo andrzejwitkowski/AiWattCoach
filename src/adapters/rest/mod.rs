@@ -1,4 +1,5 @@
 mod admin;
+mod athlete_summary;
 mod auth;
 mod cookies;
 mod health;
@@ -76,6 +77,14 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         )
         .route("/api/settings/options", patch(settings::update_options))
         .route("/api/settings/cycling", patch(settings::update_cycling))
+        .route(
+            "/api/athlete-summary",
+            get(athlete_summary::get_athlete_summary),
+        )
+        .route(
+            "/api/athlete-summary/generate",
+            post(athlete_summary::generate_athlete_summary),
+        )
         .route(
             "/api/workout-summaries",
             get(workout_summary::list_summaries),

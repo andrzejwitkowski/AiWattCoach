@@ -60,6 +60,7 @@ where
         user_id: &str,
         summary: &WorkoutSummary,
         user_message: &str,
+        athlete_summary_text: Option<&str>,
     ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
         let llm_chat_port = self.llm_chat_port.clone();
         let config_provider = self.config_provider.clone();
@@ -69,6 +70,7 @@ where
         let user_id = user_id.to_string();
         let summary = summary.clone();
         let user_message = user_message.to_string();
+        let athlete_summary_text = athlete_summary_text.map(str::to_string);
 
         Box::pin(async move {
             let config = config_provider.get_config(&user_id).await?;
@@ -81,11 +83,15 @@ where
             let training_context = training_context_builder
                 .build(&user_id, &summary.workout_id)
                 .await?;
-            let stable_context =
-                build_stable_context(&summary, &training_context.rendered.stable_context);
+            let stable_context = build_stable_context(
+                &summary,
+                &training_context.rendered.stable_context,
+                athlete_summary_text.as_deref(),
+            );
             let volatile_context =
                 build_volatile_context(&training_context.rendered.volatile_context);
-            let estimated_request_tokens = training_context.rendered.approximate_tokens
+            let estimated_request_tokens = approximate_token_usage(&stable_context)
+                + approximate_token_usage(&volatile_context)
                 + approximate_token_usage(WORKOUT_COACH_SYSTEM_PROMPT)
                 + summary
                     .messages
@@ -165,6 +171,19 @@ where
                 reusable_cache_id,
             };
 
+            tracing::info!(
+                user_id = %user_id,
+                workout_id = %summary.workout_id,
+                provider = %config.provider,
+                model = %config.model,
+                estimated_request_tokens,
+                system_prompt_chars = request.system_prompt.chars().count(),
+                stable_context_chars = request.stable_context.chars().count(),
+                volatile_context_chars = request.volatile_context.chars().count(),
+                conversation_messages = request.conversation.len(),
+                "prepared workout summary llm request"
+            );
+
             let response = llm_chat_port.chat(config.clone(), request).await?;
 
             if config.provider == LlmProvider::Gemini {
@@ -206,17 +225,28 @@ where
 
 const WORKOUT_COACH_SYSTEM_PROMPT: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background, respond briefly, ask one focused follow-up question, and do not invent details beyond the provided context.";
 
-fn build_stable_context(summary: &WorkoutSummary, packed_training_context: &str) -> String {
-    format!(
-        "workout_summary={{\"workoutId\":\"{}\",\"rpe\":{},\"saved\":{}}}\ntraining_context_stable={}",
+fn build_stable_context(
+    summary: &WorkoutSummary,
+    packed_training_context: &str,
+    athlete_summary_text: Option<&str>,
+) -> String {
+    let mut context = format!(
+        "workout_summary={{\"workoutId\":\"{}\",\"rpe\":{}}}",
         summary.workout_id,
         summary
             .rpe
             .map(|value| value.to_string())
             .unwrap_or_else(|| "null".to_string()),
-        summary.saved_at_epoch_seconds.is_some(),
-        packed_training_context
-    )
+    );
+
+    if let Some(summary_text) = athlete_summary_text.filter(|value| !value.trim().is_empty()) {
+        context.push_str(&format!("\nathlete_summary_text={summary_text}"));
+    }
+
+    context.push_str(&format!(
+        "\ntraining_context_stable={packed_training_context}"
+    ));
+    context
 }
 
 fn build_volatile_context(packed_training_context: &str) -> String {

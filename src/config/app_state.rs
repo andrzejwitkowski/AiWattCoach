@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use mongodb::Client;
 
+use crate::domain::athlete_summary::AthleteSummaryUseCases;
 use crate::domain::identity::IdentityUseCases;
 use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
@@ -17,6 +18,7 @@ pub struct AppState {
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
+    pub athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
     pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
     pub llm_chat_service: Option<Arc<dyn LlmChatPort>>,
     pub llm_config_provider: Option<Arc<dyn UserLlmConfigProvider>>,
@@ -41,6 +43,7 @@ impl AppState {
             identity_service: None,
             intervals_service: None,
             settings_service: None,
+            athlete_summary_service: None,
             workout_summary_service: None,
             llm_chat_service: None,
             llm_config_provider: None,
@@ -81,6 +84,14 @@ impl AppState {
         workout_summary_service: Arc<dyn WorkoutSummaryUseCases>,
     ) -> Self {
         self.workout_summary_service = Some(workout_summary_service);
+        self
+    }
+
+    pub fn with_athlete_summary_service(
+        mut self,
+        athlete_summary_service: Arc<dyn AthleteSummaryUseCases>,
+    ) -> Self {
+        self.athlete_summary_service = Some(athlete_summary_service);
         self
     }
 

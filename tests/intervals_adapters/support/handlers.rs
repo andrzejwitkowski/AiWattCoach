@@ -96,7 +96,11 @@ async fn list_events_handler(
         headers,
         None,
     );
-    Json(state.list_events.lock().unwrap().clone())
+    if let Some(payload) = state.list_events_raw.lock().unwrap().clone() {
+        return Json(payload).into_response();
+    }
+
+    Json(state.list_events.lock().unwrap().clone()).into_response()
 }
 
 async fn test_connection_handler(

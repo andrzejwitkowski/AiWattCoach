@@ -6,7 +6,8 @@ use crate::domain::llm::{
 use crate::adapters::llm::context_prelude::non_empty_context_parts;
 
 use super::dto::{
-    OpenRouterChatRequest, OpenRouterChatResponse, OpenRouterMessage, OpenRouterMessageContent,
+    OpenRouterCacheControl, OpenRouterChatRequest, OpenRouterChatResponse, OpenRouterMessage,
+    OpenRouterMessageContent, OpenRouterRequestContent, OpenRouterRequestContentPart,
     OpenRouterStringOrNumber, OpenRouterUsage,
 };
 
@@ -19,7 +20,13 @@ pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenR
     .into_iter()
     .map(|(role, content)| OpenRouterMessage {
         role: role.to_string(),
-        content: content.to_string(),
+        content: OpenRouterRequestContent::Parts(vec![OpenRouterRequestContentPart {
+            part_type: "text".to_string(),
+            text: content.to_string(),
+            cache_control: Some(OpenRouterCacheControl {
+                cache_type: "ephemeral".to_string(),
+            }),
+        }]),
     })
     .collect::<Vec<_>>();
     messages.extend(request.conversation.into_iter().map(map_message));
@@ -90,7 +97,7 @@ fn map_message(message: LlmChatMessage) -> OpenRouterMessage {
             LlmMessageRole::User => "user".to_string(),
             LlmMessageRole::Assistant => "assistant".to_string(),
         },
-        content: message.content,
+        content: OpenRouterRequestContent::Text(message.content),
     }
 }
 

@@ -53,6 +53,7 @@ fn log_intervals_error(level: Level, status: StatusCode, error: &IntervalsError)
             status = status.as_u16(),
             status_class = status_class(status),
             error_kind,
+            error = %error,
             "intervals request failed"
         ),
         Level::WARN => tracing::event!(
@@ -60,6 +61,7 @@ fn log_intervals_error(level: Level, status: StatusCode, error: &IntervalsError)
             status = status.as_u16(),
             status_class = status_class(status),
             error_kind,
+            error = %error,
             "intervals request failed"
         ),
         _ => unreachable!("unexpected log level"),

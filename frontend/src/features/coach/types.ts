@@ -1,7 +1,7 @@
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
 import { z } from 'zod';
 
-export const conversationMessageRoleSchema = z.enum(['user', 'coach']);
+export const conversationMessageRoleSchema = z.enum(['user', 'coach', 'system']);
 
 export const conversationMessageSchema = z.object({
   id: z.string(),
@@ -53,6 +53,11 @@ export const coachMessageWsMessageSchema = z.object({
   summary: workoutSummarySchema,
 });
 
+export const systemMessageWsMessageSchema = z.object({
+  type: z.literal('system_message'),
+  content: z.string().trim().min(1),
+});
+
 export const errorWsMessageSchema = z.object({
   type: z.literal('error'),
   error: z.string(),
@@ -61,6 +66,7 @@ export const errorWsMessageSchema = z.object({
 export const serverWsMessageSchema = z.discriminatedUnion('type', [
   coachTypingWsMessageSchema,
   coachMessageWsMessageSchema,
+  systemMessageWsMessageSchema,
   errorWsMessageSchema,
 ]);
 

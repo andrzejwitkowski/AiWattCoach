@@ -11,6 +11,7 @@ use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
     domain::{
+        athlete_summary::AthleteSummaryUseCases,
         identity::IdentityUseCases,
         intervals::IntervalsConnectionTester,
         llm::{LlmChatPort, UserLlmConfigProvider},
@@ -70,6 +71,25 @@ pub(crate) async fn settings_test_app_with_services(
     llm_chat_service: Option<std::sync::Arc<dyn LlmChatPort>>,
     llm_config_provider: Option<std::sync::Arc<dyn UserLlmConfigProvider>>,
 ) -> axum::Router {
+    settings_test_app_with_athlete_summary(
+        identity_service,
+        settings_service,
+        intervals_connection_tester,
+        llm_chat_service,
+        llm_config_provider,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn settings_test_app_with_athlete_summary(
+    identity_service: impl IdentityUseCases + 'static,
+    settings_service: impl UserSettingsUseCases + 'static,
+    intervals_connection_tester: Option<std::sync::Arc<dyn IntervalsConnectionTester>>,
+    llm_chat_service: Option<std::sync::Arc<dyn LlmChatPort>>,
+    llm_config_provider: Option<std::sync::Arc<dyn UserLlmConfigProvider>>,
+    athlete_summary_service: Option<std::sync::Arc<dyn AthleteSummaryUseCases>>,
+) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
 
@@ -93,6 +113,10 @@ pub(crate) async fn settings_test_app_with_services(
 
     if let (Some(chat_service), Some(config_provider)) = (llm_chat_service, llm_config_provider) {
         app_state = app_state.with_llm_services(chat_service, config_provider);
+    }
+
+    if let Some(service) = athlete_summary_service {
+        app_state = app_state.with_athlete_summary_service(service);
     }
 
     build_app_with_frontend_dist(app_state, fixture.dist_dir())

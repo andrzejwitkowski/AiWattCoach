@@ -269,6 +269,112 @@ async fn completed_activity_partial_enrichment_preserves_inline_intervals_when_d
 }
 
 #[tokio::test]
+async fn completed_activity_detail_accepts_stringified_interval_metrics() {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sample("i206", "Loaded Ride"));
+    server.set_activity_intervals_raw(serde_json::json!({
+        "icu_intervals": [
+            {
+                "id": "1",
+                "label": "Tempo",
+                "type": "WORK",
+                "group_id": 1,
+                "start_index": "10",
+                "end_index": "50",
+                "start_time": "600",
+                "end_time": "1200",
+                "moving_time": "600",
+                "elapsed_time": "620",
+                "distance": "10000.0",
+                "average_watts": "250",
+                "weighted_average_watts": "260",
+                "training_load": "22.4",
+                "average_heartrate": "160",
+                "average_cadence": "90.0",
+                "average_speed": "11.5",
+                "average_stride": null,
+                "zone": "3"
+            }
+        ],
+        "icu_groups": [
+            {
+                "id": 1,
+                "count": "2",
+                "start_index": "10",
+                "moving_time": "1200",
+                "elapsed_time": "1240",
+                "distance": "20000.0",
+                "average_watts": "245",
+                "weighted_average_watts": "255",
+                "training_load": "44.0",
+                "average_heartrate": "158",
+                "average_cadence": "89.5",
+                "average_speed": "11.4",
+                "average_stride": null
+            }
+        ]
+    }));
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let activity = client
+        .get_activity(&test_credentials(), "i206")
+        .await
+        .unwrap();
+
+    assert_eq!(activity.details.intervals.len(), 1);
+    assert_eq!(activity.details.intervals[0].id, Some(1));
+    assert_eq!(activity.details.intervals[0].group_id.as_deref(), Some("1"));
+    assert_eq!(activity.details.intervals[0].zone, Some(3));
+    assert_eq!(activity.details.interval_groups.len(), 1);
+    assert_eq!(activity.details.interval_groups[0].id, "1");
+    assert_eq!(activity.details.streams.len(), 1);
+}
+
+#[tokio::test]
+async fn completed_activity_detail_accepts_null_interval_groups() {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sample("i208", "Loaded Ride"));
+    server.set_activity_intervals_raw(serde_json::json!({
+        "icu_intervals": [
+            {
+                "start_index": 0,
+                "distance": 30768.39,
+                "moving_time": 3653,
+                "elapsed_time": 3653,
+                "average_watts": 189,
+                "weighted_average_watts": 198,
+                "training_load": 39.54313,
+                "average_heartrate": 137,
+                "average_cadence": 79,
+                "average_speed": 8.422221,
+                "average_stride": null,
+                "zone": 1,
+                "group_id": null,
+                "label": null,
+                "type": null,
+                "id": null,
+                "start_time": null,
+                "end_time": null,
+                "end_index": null
+            }
+        ],
+        "icu_groups": null
+    }));
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let activity = client
+        .get_activity(&test_credentials(), "i208")
+        .await
+        .unwrap();
+
+    assert_eq!(activity.details.intervals.len(), 1);
+    assert!(activity.details.interval_groups.is_empty());
+    assert_eq!(activity.details.streams.len(), 1);
+}
+
+#[tokio::test]
 async fn completed_activity_partial_enrichment_preserves_streams_when_streams_payload_is_malformed()
 {
     let server = TestIntervalsServer::start().await;

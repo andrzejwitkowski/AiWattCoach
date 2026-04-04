@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use aiwattcoach::domain::{
     llm::BoxFuture,
@@ -12,6 +15,7 @@ use aiwattcoach::domain::{
 pub(crate) struct TestWorkoutSummaryService {
     summaries: Arc<Mutex<Vec<WorkoutSummary>>>,
     processed_user_messages: Arc<Mutex<Vec<String>>>,
+    coach_reply_delay: Option<Duration>,
 }
 
 impl TestWorkoutSummaryService {
@@ -19,7 +23,13 @@ impl TestWorkoutSummaryService {
         Self {
             summaries: Arc::new(Mutex::new(summaries)),
             processed_user_messages: Arc::new(Mutex::new(Vec::new())),
+            coach_reply_delay: None,
         }
+    }
+
+    pub(crate) fn with_coach_reply_delay(mut self, delay: Duration) -> Self {
+        self.coach_reply_delay = Some(delay);
+        self
     }
 
     pub(crate) fn processed_user_messages(&self) -> Vec<String> {
@@ -300,6 +310,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             Ok(PersistedUserMessage {
                 summary: summary.clone(),
                 user_message,
+                athlete_summary_may_regenerate_before_reply: false,
             })
         })
     }
@@ -311,9 +322,14 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
+        let coach_reply_delay = self.coach_reply_delay;
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            if let Some(delay) = coach_reply_delay {
+                tokio::time::sleep(delay).await;
+            }
+
             let mut summaries = summaries.lock().unwrap();
             let Some(summary) = summaries
                 .iter_mut()
@@ -356,6 +372,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             Ok(CoachReply {
                 summary: summary.clone(),
                 coach_message,
+                athlete_summary_was_regenerated: false,
             })
         })
     }

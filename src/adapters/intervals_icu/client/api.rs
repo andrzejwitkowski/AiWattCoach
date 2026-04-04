@@ -12,9 +12,9 @@ use crate::domain::intervals::{
 };
 
 use super::{
-    errors::{map_api_error, map_connection_error},
+    errors::{map_api_error, map_connection_error, map_error_response},
     mapping::{map_activity_response, map_category_to_string, map_event_response},
-    IntervalsIcuClient,
+    truncate_logged_response_body, IntervalsIcuClient,
 };
 
 impl IntervalsApiPort for IntervalsIcuClient {
@@ -29,19 +29,111 @@ impl IntervalsApiPort for IntervalsIcuClient {
         let url = self.athlete_url(&credentials.athlete_id, "/events.json");
 
         Box::pin(async move {
+            tracing::info!(
+                provider = "intervals_icu",
+                method = "GET",
+                url = %url,
+                oldest = %range.oldest,
+                newest = %range.newest,
+                "sending intervals events request"
+            );
+
             let response = client
-                .get(url)
+                .get(url.clone())
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .query(&[("oldest", &range.oldest), ("newest", &range.newest)]);
             let response = Self::with_trace_context(response)
                 .send()
                 .await
-                .map_err(map_connection_error)?;
+                .map_err(|error| {
+                    let error = map_connection_error(error);
+                    tracing::warn!(
+                        provider = "intervals_icu",
+                        method = "GET",
+                        url = %url,
+                        error = %error,
+                        "intervals events transport failure"
+                    );
+                    error
+                })?;
 
-            let response = response.error_for_status().map_err(map_api_error)?;
-            let payload: Vec<EventResponse> = response.json().await.map_err(map_api_error)?;
+            if !response.status().is_success() {
+                let failure = map_error_response(response).await;
+                tracing::warn!(
+                    provider = "intervals_icu",
+                    method = "GET",
+                    url = %url,
+                    status = failure.status.map(|status| status.as_u16()).unwrap_or_default(),
+                    error = %failure.error,
+                    response_body = %failure
+                        .response_body
+                        .as_deref()
+                        .map(truncate_logged_response_body)
+                        .unwrap_or_default(),
+                    "intervals events request failed"
+                );
+                return Err(failure.error);
+            }
 
-            Ok(payload.into_iter().map(map_event_response).collect())
+            let response_body = response.text().await.map_err(|error| {
+                let message = error.without_url().to_string();
+                tracing::warn!(
+                    provider = "intervals_icu",
+                    method = "GET",
+                    url = %url,
+                    error = %message,
+                    "intervals events response body read failed"
+                );
+                IntervalsError::ApiError(message)
+            })?;
+
+            let payload: Vec<Value> = serde_json::from_str(&response_body).map_err(|error| {
+                let message = error.to_string();
+                tracing::warn!(
+                    provider = "intervals_icu",
+                    method = "GET",
+                    url = %url,
+                    error = %message,
+                    response_body = %truncate_logged_response_body(&response_body),
+                    "intervals events response json parsing failed"
+                );
+                IntervalsError::ApiError(message)
+            })?;
+
+            let mut events = Vec::with_capacity(payload.len());
+            for (index, value) in payload.into_iter().enumerate() {
+                let event_id = value.get("id").map(|id| match id {
+                    Value::String(value) => value.clone(),
+                    Value::Number(value) => value.to_string(),
+                    other => other.to_string(),
+                });
+
+                match serde_json::from_value::<EventResponse>(value.clone()) {
+                    Ok(event) => events.push(map_event_response(event)),
+                    Err(error) => {
+                        tracing::warn!(
+                            provider = "intervals_icu",
+                            method = "GET",
+                            url = %url,
+                            event_index = index,
+                            event_id = event_id.as_deref().unwrap_or(""),
+                            error = %error,
+                            event_body = %truncate_logged_response_body(&value.to_string()),
+                            "skipping malformed intervals event from list response"
+                        );
+                    }
+                }
+            }
+
+            tracing::info!(
+                provider = "intervals_icu",
+                method = "GET",
+                url = %url,
+                event_count = events.len(),
+                "intervals events request succeeded"
+            );
+
+            Ok(events)
         })
     }
 

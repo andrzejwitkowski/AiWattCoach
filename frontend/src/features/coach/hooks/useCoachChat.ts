@@ -96,6 +96,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
   const pendingSocketRef = useRef<PendingSocketState | null>(null);
   const currentWorkoutIdRef = useRef<string | null>(workoutId);
   const savingRequestIdRef = useRef(0);
+  const localSystemMessageIdRef = useRef(0);
 
   useEffect(() => {
     currentWorkoutIdRef.current = workoutId;
@@ -235,6 +236,21 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
             setSummary(parsed.summary);
             setMessages(parsed.summary.messages);
             setDraftRpe(parsed.summary.rpe);
+            setIsCoachTyping(false);
+            return;
+          }
+
+          if (parsed.type === 'system_message') {
+            localSystemMessageIdRef.current += 1;
+            setMessages((current) => [
+              ...current,
+              {
+                id: `system-${localSystemMessageIdRef.current}`,
+                role: 'system',
+                content: parsed.content,
+                createdAtEpochSeconds: Math.floor(Date.now() / 1000),
+              },
+            ]);
             setIsCoachTyping(false);
             return;
           }
