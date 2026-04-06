@@ -204,6 +204,7 @@ where
             &detailed_recent_activities,
             &summaries_by_id,
             &matched_recent_workouts,
+            configured_ftp,
         );
         let upcoming_days =
             build_upcoming_day_contexts(today + Duration::days(1), upcoming_end, &upcoming_events);
@@ -382,6 +383,7 @@ fn build_recent_day_contexts(
     detailed_activities: &[Activity],
     summaries_by_id: &HashMap<String, u8>,
     matched: &EventActivityMatches,
+    configured_ftp: Option<i32>,
 ) -> Vec<RecentDayContext> {
     let activities_by_date = group_activities_by_date(detailed_activities);
     let events_by_date = group_events_by_date(events);
@@ -415,6 +417,7 @@ fn build_recent_day_contexts(
                         activity,
                         matched.activity_to_event.get(&activity.id),
                         summaries_by_id,
+                        configured_ftp,
                     )
                 })
                 .collect::<Vec<_>>();
@@ -471,10 +474,11 @@ fn build_recent_workout(
     activity: &Activity,
     matched_event: Option<&Event>,
     summaries_by_id: &HashMap<String, u8>,
+    configured_ftp: Option<i32>,
 ) -> RecentWorkoutContext {
     let compressed_power_levels = compress_power_stream(
         &extract_power_stream(&activity.details.streams),
-        activity.metrics.ftp_watts,
+        activity.metrics.ftp_watts.or(configured_ftp),
     );
     let cadence_values_5s = extract_and_average_stream(&activity.details.streams, "cadence");
     let planned_workout = matched_event.map(|event| {
@@ -1815,6 +1819,150 @@ mod tests {
         assert!(result.rendered.volatile_context.contains("\"ride-1\""));
         assert!(result.rendered.volatile_context.contains("\"pc\":["));
         assert!(!result.rendered.volatile_context.contains("\"p5\":["));
+    }
+
+    #[tokio::test]
+    async fn builder_uses_configured_ftp_when_activity_ftp_is_missing() {
+        #[derive(Clone)]
+        struct MissingActivityFtpIntervalsService;
+
+        impl IntervalsUseCases for MissingActivityFtpIntervalsService {
+            fn list_events(
+                &self,
+                user_id: &str,
+                range: &DateRange,
+            ) -> crate::domain::intervals::BoxFuture<Result<Vec<Event>, IntervalsError>>
+            {
+                TestIntervalsService.list_events(user_id, range)
+            }
+
+            fn get_event(
+                &self,
+                _user_id: &str,
+                _event_id: i64,
+            ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn create_event(
+                &self,
+                _user_id: &str,
+                _event: crate::domain::intervals::CreateEvent,
+            ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn update_event(
+                &self,
+                _user_id: &str,
+                _event_id: i64,
+                _event: crate::domain::intervals::UpdateEvent,
+            ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn delete_event(
+                &self,
+                _user_id: &str,
+                _event_id: i64,
+            ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+                unreachable!()
+            }
+
+            fn download_fit(
+                &self,
+                _user_id: &str,
+                _event_id: i64,
+            ) -> crate::domain::intervals::BoxFuture<Result<Vec<u8>, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn list_activities(
+                &self,
+                user_id: &str,
+                range: &DateRange,
+            ) -> crate::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>>
+            {
+                let user_id = user_id.to_string();
+                let range = range.clone();
+                Box::pin(async move {
+                    let mut activities = TestIntervalsService
+                        .list_activities(&user_id, &range)
+                        .await?;
+                    activities[0].metrics.ftp_watts = None;
+                    Ok(activities)
+                })
+            }
+
+            fn get_activity(
+                &self,
+                user_id: &str,
+                activity_id: &str,
+            ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+                let user_id = user_id.to_string();
+                let activity_id = activity_id.to_string();
+                Box::pin(async move {
+                    let mut activity = TestIntervalsService
+                        .get_activity(&user_id, &activity_id)
+                        .await?;
+                    activity.metrics.ftp_watts = None;
+                    Ok(activity)
+                })
+            }
+
+            fn upload_activity(
+                &self,
+                _user_id: &str,
+                _upload: crate::domain::intervals::UploadActivity,
+            ) -> crate::domain::intervals::BoxFuture<
+                Result<crate::domain::intervals::UploadedActivities, IntervalsError>,
+            > {
+                unreachable!()
+            }
+
+            fn update_activity(
+                &self,
+                _user_id: &str,
+                _activity_id: &str,
+                _activity: crate::domain::intervals::UpdateActivity,
+            ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn delete_activity(
+                &self,
+                _user_id: &str,
+                _activity_id: &str,
+            ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+                unreachable!()
+            }
+        }
+
+        let builder = DefaultTrainingContextBuilder::new(
+            Arc::new(TestSettingsService),
+            Arc::new(MissingActivityFtpIntervalsService),
+            Arc::new(TestWorkoutSummaryRepository),
+            FixedClock,
+        );
+
+        let result = builder.build("user-1", "ride-1").await.unwrap();
+        let recent_day = result
+            .context
+            .recent_days
+            .iter()
+            .find(|day| day.date == "2026-04-03")
+            .expect("recent day should exist");
+
+        assert_eq!(
+            recent_day.workouts[0].compressed_power_levels,
+            vec![
+                "36:1".to_string(),
+                "46:1".to_string(),
+                "57:1".to_string(),
+                "70:1".to_string(),
+                "84:1".to_string(),
+            ]
+        );
     }
 
     #[test]
