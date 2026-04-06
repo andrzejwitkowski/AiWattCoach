@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin};
 
 use super::{
-    CoachReplyClaimResult, CoachReplyOperation, ConversationMessage, WorkoutSummary,
+    CoachReplyClaimResult, CoachReplyOperation, ConversationMessage, WorkoutRecap, WorkoutSummary,
     WorkoutSummaryError,
 };
 
@@ -46,6 +46,14 @@ pub trait WorkoutSummaryRepository: Send + Sync + 'static {
         user_id: &str,
         workout_id: &str,
         saved_at_epoch_seconds: Option<i64>,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>>;
+
+    fn persist_workout_recap(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        recap: WorkoutRecap,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>>;
 

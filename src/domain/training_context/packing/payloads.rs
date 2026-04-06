@@ -1,39 +1,15 @@
 use serde::Serialize;
 
-use super::model::{
+use super::is_empty_slice;
+use crate::domain::training_context::model::{
     AthleteProfileContext, HistoricalLoadTrendPoint, HistoricalTrainingContext,
     HistoricalWorkoutContext, IntervalsStatusContext, PlannedWorkoutBlockContext,
-    PlannedWorkoutContext, PlannedWorkoutReference, RecentDayContext, RecentWorkoutContext,
-    RenderedTrainingContext, SpecialDayContext, TrainingContext, UpcomingDayContext,
+    PlannedWorkoutContext, PlannedWorkoutReference, ProjectedDayContext, ProjectedWorkoutContext,
+    RecentDayContext, RecentWorkoutContext, SpecialDayContext, TrainingContext, UpcomingDayContext,
 };
 
-pub fn render_training_context(context: &TrainingContext) -> RenderedTrainingContext {
-    let stable_payload = StablePayload::from_context(context);
-    let volatile_payload = VolatilePayload::from_context(context);
-    let stable_context =
-        serde_json::to_string(&stable_payload).expect("stable training context should serialize");
-    let volatile_context = serde_json::to_string(&volatile_payload)
-        .expect("volatile training context should serialize");
-    let approximate_tokens =
-        approximate_token_count(&stable_context) + approximate_token_count(&volatile_context);
-
-    RenderedTrainingContext {
-        stable_context,
-        volatile_context,
-        approximate_tokens,
-    }
-}
-
-pub fn approximate_token_count(value: &str) -> usize {
-    value.chars().count().div_ceil(3)
-}
-
-fn is_empty_slice<T>(value: &[T]) -> bool {
-    value.is_empty()
-}
-
 #[derive(Serialize)]
-struct StablePayload<'a> {
+pub(super) struct StablePayload<'a> {
     v: u8,
     i: CompactIntervalsStatus<'a>,
     p: CompactProfile<'a>,
@@ -41,7 +17,7 @@ struct StablePayload<'a> {
 }
 
 impl<'a> StablePayload<'a> {
-    fn from_context(context: &'a TrainingContext) -> Self {
+    pub(super) fn from_context(context: &'a TrainingContext) -> Self {
         Self {
             v: 1,
             i: CompactIntervalsStatus::from_status(&context.intervals_status),
@@ -67,7 +43,7 @@ impl<'a> CompactIntervalsStatus<'a> {
 }
 
 #[derive(Serialize)]
-struct VolatilePayload<'a> {
+pub(super) struct VolatilePayload<'a> {
     v: u8,
     g: i64,
     fx: CompactFocus<'a>,
@@ -75,10 +51,12 @@ struct VolatilePayload<'a> {
     rd: Vec<CompactRecentDay<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     ud: Vec<CompactUpcomingDay<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pd: Vec<CompactProjectedDay<'a>>,
 }
 
 impl<'a> VolatilePayload<'a> {
-    fn from_context(context: &'a TrainingContext) -> Self {
+    pub(super) fn from_context(context: &'a TrainingContext) -> Self {
         Self {
             v: 1,
             g: context.generated_at_epoch_seconds,
@@ -95,6 +73,11 @@ impl<'a> VolatilePayload<'a> {
                 .upcoming_days
                 .iter()
                 .map(CompactUpcomingDay::from_upcoming_day)
+                .collect(),
+            pd: context
+                .projected_days
+                .iter()
+                .map(CompactProjectedDay::from_projected_day)
                 .collect(),
         }
     }
@@ -351,6 +334,8 @@ struct CompactRecentWorkout<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     rpe: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    recap: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     vi: Option<f64>,
     #[serde(skip_serializing_if = "is_empty_slice")]
     pc: &'a [String],
@@ -373,6 +358,7 @@ impl<'a> CompactRecentWorkout<'a> {
             np: workout.normalized_power_watts,
             ftp: workout.ftp_watts,
             rpe: workout.rpe,
+            recap: workout.workout_recap.as_deref(),
             vi: workout.variability_index,
             pc: &workout.compressed_power_levels,
             c5: &workout.cadence_values_5s,
@@ -543,131 +529,52 @@ impl<'a> CompactUpcomingDay<'a> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::training_context::model::{
-        HistoricalTrainingContext, HistoricalWorkoutContext, PlannedWorkoutReference,
-        RecentWorkoutContext,
-    };
+#[derive(Serialize)]
+struct CompactProjectedDay<'a> {
+    d: &'a str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    w: Vec<CompactProjectedWorkout<'a>>,
+}
 
-    #[test]
-    fn compact_render_is_non_empty_and_estimates_tokens() {
-        let context = TrainingContext {
-            generated_at_epoch_seconds: 1,
-            focus_workout_id: Some("workout-1".to_string()),
-            focus_kind: "activity".to_string(),
-            intervals_status: IntervalsStatusContext {
-                activities: "ok".to_string(),
-                events: "ok".to_string(),
-            },
-            profile: AthleteProfileContext {
-                athlete_prompt: Some("Climb-focused athlete".to_string()),
-                ..AthleteProfileContext::default()
-            },
-            history: HistoricalTrainingContext {
-                window_start: "2025-10-01".to_string(),
-                window_end: "2026-04-01".to_string(),
-                load_trend: vec![HistoricalLoadTrendPoint {
-                    date: "2026-03-31".to_string(),
-                    sample_days: 1,
-                    period_tss: 42,
-                    rolling_tss_7d: Some(37.5),
-                    rolling_tss_28d: Some(51.3),
-                    ctl: Some(65.2),
-                    atl: Some(58.6),
-                    tsb: Some(6.6),
-                }],
-                workouts: vec![HistoricalWorkoutContext {
-                    activity_id: "ride-1".to_string(),
-                    interval_blocks: vec![PlannedWorkoutBlockContext {
-                        duration_seconds: 480,
-                        min_percent_ftp: Some(90.0),
-                        max_percent_ftp: Some(95.0),
-                        min_target_watts: Some(270),
-                        max_target_watts: Some(285),
-                    }],
-                    ..HistoricalWorkoutContext::default()
-                }],
-                ..HistoricalTrainingContext::default()
-            },
-            recent_days: vec![RecentDayContext {
-                date: "2026-04-01".to_string(),
-                sick_day: true,
-                sick_note: Some("felt unwell".to_string()),
-                workouts: vec![RecentWorkoutContext {
-                    activity_id: "ride-1".to_string(),
-                    start_date_local: "2026-04-01T08:00:00".to_string(),
-                    compressed_power_levels: vec!["36:1".to_string(), "46:1".to_string()],
-                    cadence_values_5s: vec![85, 88],
-                    planned_workout: Some(PlannedWorkoutReference {
-                        event_id: 101,
-                        start_date_local: "2026-04-01T07:00:00".to_string(),
-                        category: "WORKOUT".to_string(),
-                        interval_blocks: vec![PlannedWorkoutBlockContext {
-                            duration_seconds: 480,
-                            min_percent_ftp: Some(90.0),
-                            max_percent_ftp: Some(95.0),
-                            min_target_watts: Some(270),
-                            max_target_watts: Some(285),
-                        }],
-                        completed: true,
-                        ..PlannedWorkoutReference::default()
-                    }),
-                    ..RecentWorkoutContext::default()
-                }],
-                ..RecentDayContext::default()
-            }],
-            upcoming_days: Vec::new(),
-        };
-
-        let rendered = render_training_context(&context);
-
-        assert!(rendered
-            .stable_context
-            .contains("\"ap\":\"Climb-focused athlete\""));
-        assert!(rendered.stable_context.contains(
-            "\"lt\":[{\"d\":\"2026-03-31\",\"days\":1,\"tss\":42,\"t7\":37.5,\"t28\":51.3"
-        ));
-        assert!(rendered.stable_context.contains(
-            "\"bl\":[{\"dur\":480,\"minp\":90.0,\"maxp\":95.0,\"minw\":270,\"maxw\":285}]"
-        ));
-        assert!(rendered.volatile_context.contains("\"sick\":true"));
-        assert!(rendered
-            .volatile_context
-            .contains("\"sickn\":\"felt unwell\""));
-        assert!(rendered
-            .volatile_context
-            .contains("\"pc\":[\"36:1\",\"46:1\"]"));
-        assert!(!rendered.volatile_context.contains("\"p5\":"));
-        assert!(rendered.approximate_tokens > 0);
+impl<'a> CompactProjectedDay<'a> {
+    fn from_projected_day(day: &'a ProjectedDayContext) -> Self {
+        Self {
+            d: &day.date,
+            w: day
+                .workouts
+                .iter()
+                .map(CompactProjectedWorkout::from_projected_workout)
+                .collect(),
+        }
     }
+}
 
-    #[test]
-    fn approximate_token_count_is_conservative() {
-        assert_eq!(approximate_token_count("abcdef"), 2);
-        assert_eq!(approximate_token_count("abcdefg"), 3);
-    }
+#[derive(Serialize)]
+struct CompactProjectedWorkout<'a> {
+    swid: &'a str,
+    sd: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    n: Option<&'a str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    bl: Vec<CompactPlannedWorkoutBlock>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    doc: Option<&'a str>,
+    rest: bool,
+}
 
-    #[test]
-    fn compact_render_omits_nulls_and_empty_lists() {
-        let rendered = render_training_context(&TrainingContext {
-            generated_at_epoch_seconds: 1,
-            focus_workout_id: None,
-            focus_kind: "summary".to_string(),
-            intervals_status: IntervalsStatusContext {
-                activities: "ok".to_string(),
-                events: "ok".to_string(),
-            },
-            profile: AthleteProfileContext::default(),
-            history: HistoricalTrainingContext::default(),
-            recent_days: Vec::new(),
-            upcoming_days: Vec::new(),
-        });
-
-        assert!(!rendered.stable_context.contains(":null"));
-        assert!(!rendered.stable_context.contains("\"lt\":[]"));
-        assert!(!rendered.volatile_context.contains("\"rd\":[]"));
-        assert!(!rendered.volatile_context.contains("\"ud\":[]"));
+impl<'a> CompactProjectedWorkout<'a> {
+    fn from_projected_workout(workout: &'a ProjectedWorkoutContext) -> Self {
+        Self {
+            swid: &workout.source_workout_id,
+            sd: &workout.start_date_local,
+            n: workout.name.as_deref(),
+            bl: workout
+                .interval_blocks
+                .iter()
+                .map(CompactPlannedWorkoutBlock::from_block)
+                .collect(),
+            doc: workout.raw_workout_doc.as_deref(),
+            rest: workout.rest_day,
+        }
     }
 }

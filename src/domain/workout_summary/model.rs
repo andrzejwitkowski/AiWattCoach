@@ -341,8 +341,36 @@ pub struct WorkoutSummary {
     pub rpe: Option<u8>,
     pub messages: Vec<ConversationMessage>,
     pub saved_at_epoch_seconds: Option<i64>,
+    pub workout_recap_text: Option<String>,
+    pub workout_recap_provider: Option<String>,
+    pub workout_recap_model: Option<String>,
+    pub workout_recap_generated_at_epoch_seconds: Option<i64>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkoutRecap {
+    pub text: String,
+    pub provider: String,
+    pub model: String,
+    pub generated_at_epoch_seconds: i64,
+}
+
+impl WorkoutRecap {
+    pub fn generated(
+        text: impl Into<String>,
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        generated_at_epoch_seconds: i64,
+    ) -> Self {
+        Self {
+            text: text.into(),
+            provider: provider.into(),
+            model: model.into(),
+            generated_at_epoch_seconds,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -389,6 +417,10 @@ impl WorkoutSummary {
             rpe: None,
             messages: Vec::new(),
             saved_at_epoch_seconds: None,
+            workout_recap_text: None,
+            workout_recap_provider: None,
+            workout_recap_model: None,
+            workout_recap_generated_at_epoch_seconds: None,
             created_at_epoch_seconds: now_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
         }
