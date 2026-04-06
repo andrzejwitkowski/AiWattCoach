@@ -34,15 +34,20 @@ export function AthleteSummaryCard({ settings, apiBaseUrl }: AthleteSummaryCardP
     return hasProvider && hasKey && intervalsReady;
   }, [settings]);
 
+  async function refreshSummary() {
+    const loaded = await loadAthleteSummary(apiBaseUrl);
+    setSummary(loaded);
+    return loaded;
+  }
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       setIsLoading(true);
       try {
-        const loaded = await loadAthleteSummary(apiBaseUrl);
+        await refreshSummary();
         if (!cancelled) {
-          setSummary(loaded);
           setStatus(null);
         }
       } catch (error) {
@@ -76,14 +81,28 @@ export function AthleteSummaryCard({ settings, apiBaseUrl }: AthleteSummaryCardP
       message: 'Generating athlete summary...',
     });
     try {
-      const generated = await generateAthleteSummary(apiBaseUrl);
-      setSummary(generated);
+      await generateAthleteSummary(apiBaseUrl);
+      await refreshSummary();
       setStatus({
         tone: 'success',
         label: 'Updated',
         message: 'Athlete summary updated.',
       });
     } catch (error) {
+      try {
+        const latest = await refreshSummary();
+        if (latest.exists && latest.summaryText) {
+          setStatus({
+            tone: 'success',
+            label: 'Updated',
+            message: 'Athlete summary updated.',
+          });
+          return;
+        }
+      } catch {
+        // Fall through to the original generate error so the user sees the failed action.
+      }
+
       setStatus({
         tone: 'error',
         label: 'Failed',

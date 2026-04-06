@@ -493,7 +493,7 @@ async fn generate_summary_when_missing_claims_pending_operation_before_calling_g
 }
 
 #[tokio::test]
-async fn generate_summary_reuses_completed_operation_with_persisted_summary_without_second_generator_call(
+async fn generate_summary_non_force_reuses_completed_operation_with_persisted_summary_without_second_generator_call(
 ) {
     let call_log = new_call_log();
     let repository = InMemoryAthleteSummaryRepository::with_summary(
@@ -514,12 +514,41 @@ async fn generate_summary_reuses_completed_operation_with_persisted_summary_with
         },
     );
 
-    let summary = service.generate_summary(USER_ID, true).await.unwrap();
+    let summary = service.generate_summary(USER_ID, false).await.unwrap();
 
     assert_eq!(summary.summary_text, "persisted summary");
     assert_eq!(generator.call_count(), 0);
-    assert_eq!(operations.claim_pending_call_count(), 1);
+    assert_eq!(operations.claim_pending_call_count(), 0);
     assert_eq!(operations.upsert_call_count(), 0);
+}
+
+#[tokio::test]
+async fn generate_summary_force_true_ignores_completed_operation_and_regenerates() {
+    let call_log = new_call_log();
+    let repository = InMemoryAthleteSummaryRepository::with_summary(
+        call_log.clone(),
+        summary("persisted summary", THIS_WEEK_EPOCH_SECONDS),
+    );
+    let operations = InMemoryAthleteSummaryOperationRepository::with_operation(
+        call_log.clone(),
+        completed_operation("persisted summary"),
+    );
+    let generator = StubGenerator::succeeds_with(call_log, "forced refresh summary");
+    let service = AthleteSummaryService::new(
+        repository.clone(),
+        operations.clone(),
+        generator.clone(),
+        FixedClock {
+            now_epoch_seconds: NOW_EPOCH_SECONDS,
+        },
+    );
+
+    let summary = service.generate_summary(USER_ID, true).await.unwrap();
+
+    assert_eq!(summary.summary_text, "forced refresh summary");
+    assert_eq!(generator.call_count(), 1);
+    assert_eq!(repository.upsert_call_count(), 1);
+    assert_eq!(operations.upsert_call_count(), 1);
 }
 
 #[tokio::test]

@@ -561,6 +561,44 @@ async fn llm_workout_coach_includes_athlete_summary_in_stable_context() {
 }
 
 #[tokio::test]
+async fn llm_workout_coach_describes_power_compression_in_system_prompt() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let coach = LlmWorkoutCoach::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    coach
+        .reply("user-1", &sample_summary(), "How did I do?", None)
+        .await
+        .unwrap();
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].system_prompt.contains("pc"));
+    assert!(requests[0].system_prompt.contains("level:seconds"));
+    assert!(requests[0]
+        .system_prompt
+        .contains("round((watts / ftp)^2.5 * 100)"));
+    assert!(requests[0].system_prompt.contains("90-110"));
+    assert!(requests[0]
+        .system_prompt
+        .contains("isolated 1-second spike or dip"));
+    assert!(requests[0].system_prompt.contains("v=schema version"));
+    assert!(requests[0].system_prompt.contains("fx=focus"));
+    assert!(requests[0].system_prompt.contains("rd=recent days"));
+    assert!(requests[0].system_prompt.contains("ud=upcoming days"));
+    assert!(requests[0].system_prompt.contains("sd=start_date_local"));
+    assert!(requests[0].system_prompt.contains("ifv=intensity_factor"));
+    assert!(requests[0].system_prompt.contains("bl=interval blocks"));
+    assert!(requests[0]
+        .system_prompt
+        .contains("c5=cadence values in 5-second buckets"));
+}
+
+#[tokio::test]
 async fn context_hash_includes_field_boundaries() {
     let first = LlmChatRequest {
         system_prompt: "ab".to_string(),

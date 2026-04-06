@@ -204,6 +204,7 @@ where
             &detailed_recent_activities,
             &summaries_by_id,
             &matched_recent_workouts,
+            configured_ftp,
         );
         let upcoming_days =
             build_upcoming_day_contexts(today + Duration::days(1), upcoming_end, &upcoming_events);
@@ -382,6 +383,7 @@ fn build_recent_day_contexts(
     detailed_activities: &[Activity],
     summaries_by_id: &HashMap<String, u8>,
     matched: &EventActivityMatches,
+    configured_ftp: Option<i32>,
 ) -> Vec<RecentDayContext> {
     let activities_by_date = group_activities_by_date(detailed_activities);
     let events_by_date = group_events_by_date(events);
@@ -415,6 +417,7 @@ fn build_recent_day_contexts(
                         activity,
                         matched.activity_to_event.get(&activity.id),
                         summaries_by_id,
+                        configured_ftp,
                     )
                 })
                 .collect::<Vec<_>>();
@@ -471,8 +474,12 @@ fn build_recent_workout(
     activity: &Activity,
     matched_event: Option<&Event>,
     summaries_by_id: &HashMap<String, u8>,
+    configured_ftp: Option<i32>,
 ) -> RecentWorkoutContext {
-    let power_values_5s = extract_and_average_stream(&activity.details.streams, "watts");
+    let compressed_power_levels = compress_power_stream(
+        &extract_power_stream(&activity.details.streams),
+        activity.metrics.ftp_watts.or(configured_ftp),
+    );
     let cadence_values_5s = extract_and_average_stream(&activity.details.streams, "cadence");
     let planned_workout = matched_event.map(|event| {
         let parsed = parse_workout_doc(event.workout_doc.as_deref(), activity.metrics.ftp_watts);
@@ -506,7 +513,7 @@ fn build_recent_workout(
         ftp_watts: activity.metrics.ftp_watts,
         rpe: summaries_by_id.get(&activity.id).copied(),
         variability_index: activity.metrics.variability_index,
-        power_values_5s,
+        compressed_power_levels,
         cadence_values_5s,
         planned_workout,
     }
@@ -699,12 +706,7 @@ fn infer_focus_kind(
 }
 
 fn extract_and_average_stream(streams: &[ActivityStream], stream_type: &str) -> Vec<i32> {
-    let values = streams
-        .iter()
-        .find(|stream| stream.stream_type.eq_ignore_ascii_case(stream_type))
-        .and_then(|stream| stream.data.as_ref())
-        .map(extract_numeric_values)
-        .unwrap_or_default();
+    let values = extract_raw_stream(streams, stream_type);
 
     let chunks = values
         .chunks(STREAM_BUCKET_SIZE)
@@ -712,6 +714,123 @@ fn extract_and_average_stream(streams: &[ActivityStream], stream_type: &str) -> 
         .collect::<Vec<_>>();
 
     compress_stream_chunks(chunks)
+}
+
+fn extract_raw_stream(streams: &[ActivityStream], stream_type: &str) -> Vec<i32> {
+    streams
+        .iter()
+        .find(|stream| stream.stream_type.eq_ignore_ascii_case(stream_type))
+        .and_then(|stream| stream.data.as_ref())
+        .map(extract_numeric_values)
+        .unwrap_or_default()
+}
+
+fn extract_power_stream(streams: &[ActivityStream]) -> Vec<i32> {
+    streams
+        .iter()
+        .find(|stream| stream.stream_type.eq_ignore_ascii_case("watts"))
+        .and_then(|stream| stream.data.as_ref())
+        .map(extract_power_values)
+        .unwrap_or_default()
+}
+
+fn compress_power_stream(values: &[i32], ftp_watts: Option<i32>) -> Vec<String> {
+    let Some(ftp_watts) = ftp_watts.filter(|value| *value > 0) else {
+        return Vec::new();
+    };
+
+    let mut levels = values
+        .iter()
+        .map(|value| encode_power_level(*value, ftp_watts))
+        .collect::<Vec<_>>();
+
+    smooth_single_second_level_noise(&mut levels);
+    compress_encoded_runs(run_length_encode_levels(&levels))
+}
+
+fn encode_power_level(power_watts: i32, ftp_watts: i32) -> i32 {
+    if power_watts <= 0 {
+        return 0;
+    }
+
+    ((power_watts as f64 / ftp_watts as f64).powf(2.5) * 100.0).round() as i32
+}
+
+fn smooth_single_second_level_noise(levels: &mut [i32]) {
+    if levels.len() < 3 {
+        return;
+    }
+
+    for index in 1..(levels.len() - 1) {
+        let previous = levels[index - 1];
+        let current = levels[index];
+        let next = levels[index + 1];
+
+        if previous != next {
+            continue;
+        }
+
+        if (current - previous).abs() >= 3 {
+            continue;
+        }
+
+        if (90..=110).contains(&previous) || (90..=110).contains(&current) {
+            continue;
+        }
+
+        levels[index] = previous;
+    }
+}
+
+fn run_length_encode_levels(levels: &[i32]) -> Vec<String> {
+    let Some((&first, rest)) = levels.split_first() else {
+        return Vec::new();
+    };
+
+    let mut encoded = Vec::new();
+    let mut current_level = first;
+    let mut duration_seconds = 1;
+
+    for &level in rest {
+        if level == current_level {
+            duration_seconds += 1;
+            continue;
+        }
+
+        encoded.push(format!("{current_level}:{duration_seconds}"));
+        current_level = level;
+        duration_seconds = 1;
+    }
+
+    encoded.push(format!("{current_level}:{duration_seconds}"));
+    encoded
+}
+
+#[derive(Clone, Copy)]
+struct EncodedPowerRun {
+    level: i32,
+    duration_seconds: usize,
+}
+
+fn compress_encoded_runs(runs: Vec<String>) -> Vec<String> {
+    if runs.len() <= MAX_CHUNKS_PER_WORKOUT {
+        return runs;
+    }
+
+    let runs = parse_encoded_runs(runs);
+    let recent_count = MAX_CHUNKS_PER_WORKOUT / 2;
+    let summary_count = MAX_CHUNKS_PER_WORKOUT - recent_count;
+    let older_count = runs.len() - recent_count;
+    let group_size = older_count.div_ceil(summary_count);
+    let summarized = runs[..older_count]
+        .chunks(group_size)
+        .map(summarize_encoded_run_group);
+
+    format_encoded_runs(merge_adjacent_runs(
+        summarized
+            .chain(runs[older_count..].iter().copied())
+            .collect::<Vec<_>>(),
+    ))
 }
 
 fn compress_stream_chunks(chunks: Vec<i32>) -> Vec<i32> {
@@ -732,6 +851,60 @@ fn compress_stream_chunks(chunks: Vec<i32>) -> Vec<i32> {
         .collect()
 }
 
+fn parse_encoded_runs(runs: Vec<String>) -> Vec<EncodedPowerRun> {
+    runs.into_iter()
+        .map(|run| {
+            let (level, duration) = run
+                .split_once(':')
+                .expect("encoded power run should contain level and duration");
+            EncodedPowerRun {
+                level: level
+                    .parse::<i32>()
+                    .expect("encoded power level should parse as i32"),
+                duration_seconds: duration
+                    .parse::<usize>()
+                    .expect("encoded power duration should parse as usize"),
+            }
+        })
+        .collect()
+}
+
+fn summarize_encoded_run_group(group: &[EncodedPowerRun]) -> EncodedPowerRun {
+    let total_duration_seconds = group.iter().map(|run| run.duration_seconds).sum::<usize>();
+    let weighted_level_sum = group
+        .iter()
+        .map(|run| run.level as f64 * run.duration_seconds as f64)
+        .sum::<f64>();
+
+    EncodedPowerRun {
+        level: (weighted_level_sum / total_duration_seconds as f64).round() as i32,
+        duration_seconds: total_duration_seconds,
+    }
+}
+
+fn merge_adjacent_runs(runs: Vec<EncodedPowerRun>) -> Vec<EncodedPowerRun> {
+    let mut merged: Vec<EncodedPowerRun> = Vec::with_capacity(runs.len());
+
+    for run in runs {
+        if let Some(previous) = merged.last_mut() {
+            if previous.level == run.level {
+                previous.duration_seconds += run.duration_seconds;
+                continue;
+            }
+        }
+
+        merged.push(run);
+    }
+
+    merged
+}
+
+fn format_encoded_runs(runs: Vec<EncodedPowerRun>) -> Vec<String> {
+    runs.into_iter()
+        .map(|run| format!("{}:{}", run.level, run.duration_seconds))
+        .collect()
+}
+
 fn activity_has_required_detail(activity: &Activity) -> bool {
     !activity.details.streams.is_empty()
 }
@@ -744,6 +917,22 @@ fn extract_numeric_values(value: &serde_json::Value) -> Vec<i32> {
                 .iter()
                 .filter_map(|item| item.as_i64())
                 .filter_map(|item| i32::try_from(item).ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn extract_power_values(value: &serde_json::Value) -> Vec<i32> {
+    value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| {
+                    item.as_i64()
+                        .and_then(|value| i32::try_from(value).ok())
+                        .unwrap_or(0)
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -1573,7 +1762,16 @@ mod tests {
         assert_eq!(recent_day.workouts.len(), 1);
         assert!(!recent_day.sick_day);
         assert_eq!(recent_day.workouts[0].rpe, Some(7));
-        assert_eq!(recent_day.workouts[0].power_values_5s, vec![240]);
+        assert_eq!(
+            recent_day.workouts[0].compressed_power_levels,
+            vec![
+                "36:1".to_string(),
+                "46:1".to_string(),
+                "57:1".to_string(),
+                "70:1".to_string(),
+                "84:1".to_string(),
+            ]
+        );
         assert_eq!(
             recent_day.workouts[0]
                 .planned_workout
@@ -1619,6 +1817,228 @@ mod tests {
         assert!(result.rendered.stable_context.contains("\"days\":1"));
         assert!(result.rendered.stable_context.contains("\"bl\":["));
         assert!(result.rendered.volatile_context.contains("\"ride-1\""));
+        assert!(result.rendered.volatile_context.contains("\"pc\":["));
+        assert!(!result.rendered.volatile_context.contains("\"p5\":["));
+    }
+
+    #[tokio::test]
+    async fn builder_uses_configured_ftp_when_activity_ftp_is_missing() {
+        #[derive(Clone)]
+        struct MissingActivityFtpIntervalsService;
+
+        impl IntervalsUseCases for MissingActivityFtpIntervalsService {
+            fn list_events(
+                &self,
+                user_id: &str,
+                range: &DateRange,
+            ) -> crate::domain::intervals::BoxFuture<Result<Vec<Event>, IntervalsError>>
+            {
+                TestIntervalsService.list_events(user_id, range)
+            }
+
+            fn get_event(
+                &self,
+                _user_id: &str,
+                _event_id: i64,
+            ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn create_event(
+                &self,
+                _user_id: &str,
+                _event: crate::domain::intervals::CreateEvent,
+            ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn update_event(
+                &self,
+                _user_id: &str,
+                _event_id: i64,
+                _event: crate::domain::intervals::UpdateEvent,
+            ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn delete_event(
+                &self,
+                _user_id: &str,
+                _event_id: i64,
+            ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+                unreachable!()
+            }
+
+            fn download_fit(
+                &self,
+                _user_id: &str,
+                _event_id: i64,
+            ) -> crate::domain::intervals::BoxFuture<Result<Vec<u8>, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn list_activities(
+                &self,
+                user_id: &str,
+                range: &DateRange,
+            ) -> crate::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>>
+            {
+                let user_id = user_id.to_string();
+                let range = range.clone();
+                Box::pin(async move {
+                    let mut activities = TestIntervalsService
+                        .list_activities(&user_id, &range)
+                        .await?;
+                    activities[0].metrics.ftp_watts = None;
+                    Ok(activities)
+                })
+            }
+
+            fn get_activity(
+                &self,
+                user_id: &str,
+                activity_id: &str,
+            ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+                let user_id = user_id.to_string();
+                let activity_id = activity_id.to_string();
+                Box::pin(async move {
+                    let mut activity = TestIntervalsService
+                        .get_activity(&user_id, &activity_id)
+                        .await?;
+                    activity.metrics.ftp_watts = None;
+                    Ok(activity)
+                })
+            }
+
+            fn upload_activity(
+                &self,
+                _user_id: &str,
+                _upload: crate::domain::intervals::UploadActivity,
+            ) -> crate::domain::intervals::BoxFuture<
+                Result<crate::domain::intervals::UploadedActivities, IntervalsError>,
+            > {
+                unreachable!()
+            }
+
+            fn update_activity(
+                &self,
+                _user_id: &str,
+                _activity_id: &str,
+                _activity: crate::domain::intervals::UpdateActivity,
+            ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+                unreachable!()
+            }
+
+            fn delete_activity(
+                &self,
+                _user_id: &str,
+                _activity_id: &str,
+            ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+                unreachable!()
+            }
+        }
+
+        let builder = DefaultTrainingContextBuilder::new(
+            Arc::new(TestSettingsService),
+            Arc::new(MissingActivityFtpIntervalsService),
+            Arc::new(TestWorkoutSummaryRepository),
+            FixedClock,
+        );
+
+        let result = builder.build("user-1", "ride-1").await.unwrap();
+        let recent_day = result
+            .context
+            .recent_days
+            .iter()
+            .find(|day| day.date == "2026-04-03")
+            .expect("recent day should exist");
+
+        assert_eq!(
+            recent_day.workouts[0].compressed_power_levels,
+            vec![
+                "36:1".to_string(),
+                "46:1".to_string(),
+                "57:1".to_string(),
+                "70:1".to_string(),
+                "84:1".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn compressed_power_merges_identical_levels_into_runs() {
+        assert_eq!(
+            compress_power_stream(&[300, 300, 300], Some(300)),
+            vec!["100:3"]
+        );
+    }
+
+    #[test]
+    fn compressed_power_smooths_single_second_spike_outside_ftp_zone() {
+        assert_eq!(
+            compress_power_stream(&[210, 214, 210], Some(300)),
+            vec!["41:3"]
+        );
+    }
+
+    #[test]
+    fn compressed_power_preserves_single_second_change_in_ftp_zone() {
+        assert_eq!(
+            compress_power_stream(&[287, 290, 287], Some(300)),
+            vec!["90:1", "92:1", "90:1"]
+        );
+    }
+
+    #[test]
+    fn compressed_power_preserves_boundary_change_when_changed_level_enters_ftp_zone() {
+        assert_eq!(
+            compress_power_stream(&[286, 287, 286], Some(300)),
+            vec!["89:1", "90:1", "89:1"]
+        );
+    }
+
+    #[test]
+    fn compressed_power_applies_run_cap_for_noisy_streams() {
+        let noisy = (0..120)
+            .map(|index| if index % 2 == 0 { 300 } else { 0 })
+            .collect::<Vec<_>>();
+
+        assert!(compress_power_stream(&noisy, Some(300)).len() <= MAX_CHUNKS_PER_WORKOUT);
+    }
+
+    #[test]
+    fn compressed_power_run_cap_preserves_total_duration_seconds() {
+        let noisy = (0..120)
+            .map(|index| if index % 2 == 0 { 300 } else { 0 })
+            .collect::<Vec<_>>();
+
+        let encoded = compress_power_stream(&noisy, Some(300));
+
+        assert_eq!(sum_encoded_durations(&encoded), noisy.len());
+    }
+
+    #[test]
+    fn compressed_power_returns_empty_without_valid_ftp() {
+        assert!(compress_power_stream(&[300, 300, 300], None).is_empty());
+        assert!(compress_power_stream(&[300, 300, 300], Some(0)).is_empty());
+    }
+
+    #[test]
+    fn compressed_power_preserves_missing_watts_samples_as_zero_second_runs() {
+        let streams = vec![ActivityStream {
+            stream_type: "watts".to_string(),
+            name: None,
+            data: Some(serde_json::json!([200, null, 210])),
+            data2: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        }];
+
+        let encoded = compress_power_stream(&extract_power_stream(&streams), Some(300));
+
+        assert_eq!(encoded, vec!["36:1", "0:1", "41:1"]);
+        assert_eq!(sum_encoded_durations(&encoded), 3);
     }
 
     #[tokio::test]
@@ -1768,5 +2188,17 @@ mod tests {
                 .map(|point| point.date.as_str()),
             Some("2026-02-21")
         );
+    }
+
+    fn sum_encoded_durations(runs: &[String]) -> usize {
+        runs.iter()
+            .map(|run| {
+                run.split_once(':')
+                    .expect("encoded power run should contain level and duration")
+                    .1
+                    .parse::<usize>()
+                    .expect("encoded power duration should parse as usize")
+            })
+            .sum()
     }
 }
