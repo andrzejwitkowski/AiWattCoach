@@ -1,6 +1,6 @@
 use std::{
     sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use futures::TryStreamExt;
@@ -19,7 +19,9 @@ static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[tokio::test]
 async fn workout_summary_repository_prefers_current_workout_id_over_legacy_event_id() {
-    let fixture = MongoFixture::new().await;
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
     let repository = MongoWorkoutSummaryRepository::new(fixture.client.clone(), &fixture.database);
     repository.ensure_indexes().await.unwrap();
 
@@ -91,7 +93,9 @@ async fn workout_summary_repository_prefers_current_workout_id_over_legacy_event
 
 #[tokio::test]
 async fn workout_summary_repository_list_uses_legacy_fallback_when_current_match_is_absent() {
-    let fixture = MongoFixture::new().await;
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
     let repository = MongoWorkoutSummaryRepository::new(fixture.client.clone(), &fixture.database);
     repository.ensure_indexes().await.unwrap();
 
@@ -141,7 +145,9 @@ async fn workout_summary_repository_list_uses_legacy_fallback_when_current_match
 
 #[tokio::test]
 async fn workout_summary_repository_creates_legacy_event_id_index() {
-    let fixture = MongoFixture::new().await;
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
     let repository = MongoWorkoutSummaryRepository::new(fixture.client.clone(), &fixture.database);
     repository.ensure_indexes().await.unwrap();
 
@@ -171,19 +177,39 @@ struct MongoFixture {
     database: String,
 }
 
+async fn mongo_fixture_or_skip() -> Option<MongoFixture> {
+    match MongoFixture::new().await {
+        Ok(fixture) => Some(fixture),
+        Err(error) => {
+            eprintln!("skipping workout_summary_mongo test: {error}");
+            None
+        }
+    }
+}
+
 impl MongoFixture {
-    async fn new() -> Self {
+    async fn new() -> Result<Self, String> {
         let settings = Settings::test_defaults();
+        let mongo_uri = settings.mongo.uri.clone();
         let client = Client::with_uri_str(&settings.mongo.uri)
             .await
-            .expect("test mongo client should be created");
+            .map_err(|error| {
+                format!("failed to create test mongo client for {mongo_uri}: {error}")
+            })?;
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            client.database("admin").run_command(doc! { "ping": 1 }),
+        )
+        .await
+        .map_err(|_| format!("timed out connecting to Mongo at {mongo_uri}"))?
+        .map_err(|error| format!("failed to connect to Mongo at {mongo_uri}: {error}"))?;
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let counter = TEST_DB_COUNTER.fetch_add(1, Ordering::Relaxed);
         let database = format!("aiwattcoach_workout_summary_mongo_{unique}_{counter}");
-        Self { client, database }
+        Ok(Self { client, database })
     }
 
     fn collection(&self) -> mongodb::Collection<mongodb::bson::Document> {
