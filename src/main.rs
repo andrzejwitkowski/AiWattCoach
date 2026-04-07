@@ -18,7 +18,9 @@ use aiwattcoach::{
             adapter::LlmAdapter, athlete_summary_generator::AthleteSummaryLlmGenerator,
             dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
             openai::client::OpenAiClient, openrouter::client::OpenRouterClient,
-            settings_adapter::SettingsLlmConfigProvider, workout_summary_coach::LlmWorkoutCoach,
+            settings_adapter::SettingsLlmConfigProvider,
+            training_plan_generator::TrainingPlanLlmGenerator,
+            workout_summary_coach::LlmWorkoutCoach,
         },
         mongo::{
             activities::MongoActivityRepository,
@@ -31,6 +33,9 @@ use aiwattcoach::{
             login_state::MongoLoginStateRepository,
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
+            training_plan_generation_operations::MongoTrainingPlanGenerationOperationRepository,
+            training_plan_projections::MongoTrainingPlanProjectionRepository,
+            training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
             users::MongoUserRepository,
             workout_summary::MongoWorkoutSummaryRepository,
         },
@@ -45,13 +50,89 @@ use aiwattcoach::{
     domain::intervals::IntervalsService,
     domain::settings::UserSettingsService,
     domain::training_context::DefaultTrainingContextBuilder,
-    domain::workout_summary::WorkoutSummaryService,
+    domain::training_plan::TrainingPlanGenerationService,
+    domain::workout_summary::{WorkoutSummaryError, WorkoutSummaryService},
     telemetry::setup_telemetry,
     AppState,
 };
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tracing::info;
+
+#[derive(Clone)]
+struct TrainingPlanWorkoutSummaryAdapter<Service> {
+    workout_summary_service: Arc<Service>,
+}
+
+impl<Service> TrainingPlanWorkoutSummaryAdapter<Service> {
+    fn new(workout_summary_service: Arc<Service>) -> Self {
+        Self {
+            workout_summary_service,
+        }
+    }
+}
+
+impl<Service> aiwattcoach::domain::training_plan::TrainingPlanWorkoutSummaryPort
+    for TrainingPlanWorkoutSummaryAdapter<Service>
+where
+    Service: aiwattcoach::domain::workout_summary::WorkoutSummaryUseCases + Send + Sync + 'static,
+{
+    fn persist_workout_recap(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        recap: aiwattcoach::domain::workout_summary::WorkoutRecap,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<(), aiwattcoach::domain::training_plan::TrainingPlanError>,
+    > {
+        let workout_summary_service = self.workout_summary_service.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            workout_summary_service
+                .persist_workout_recap(&user_id, &workout_id, recap)
+                .await
+                .map(|_| ())
+                .map_err(map_workout_summary_error)
+        })
+    }
+}
+
+fn map_workout_summary_error(
+    error: WorkoutSummaryError,
+) -> aiwattcoach::domain::training_plan::TrainingPlanError {
+    match error {
+        WorkoutSummaryError::Validation(message) => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(message)
+        }
+        WorkoutSummaryError::Locked => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
+                "workout summary is saved and cannot be edited".to_string(),
+            )
+        }
+        WorkoutSummaryError::NotFound => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
+                "workout summary not found".to_string(),
+            )
+        }
+        WorkoutSummaryError::AlreadyExists => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
+                "workout summary already exists".to_string(),
+            )
+        }
+        WorkoutSummaryError::ReplyAlreadyPending => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+                "coach reply generation is already pending for this message".to_string(),
+            )
+        }
+        WorkoutSummaryError::Llm(error) => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(error.to_string())
+        }
+        WorkoutSummaryError::Repository(message) => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Repository(message)
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -152,6 +233,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let coach_reply_operation_repository =
         MongoCoachReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
     coach_reply_operation_repository.ensure_indexes().await?;
+    let training_plan_snapshot_repository =
+        MongoTrainingPlanSnapshotRepository::new(mongo_client.clone(), &mongo_database);
+    training_plan_snapshot_repository.ensure_indexes().await?;
+    let training_plan_projection_repository =
+        MongoTrainingPlanProjectionRepository::new(mongo_client.clone(), &mongo_database);
+    training_plan_projection_repository.ensure_indexes().await?;
+    let training_plan_generation_operation_repository =
+        MongoTrainingPlanGenerationOperationRepository::new(mongo_client.clone(), &mongo_database);
+    training_plan_generation_operation_repository
+        .ensure_indexes()
+        .await?;
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
     if legacy_time_stream_cleanup_enabled {
@@ -185,12 +277,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         activity_identity_extractor,
     ));
 
-    let training_context_builder = Arc::new(DefaultTrainingContextBuilder::new(
-        settings_service.clone(),
-        intervals_service.clone(),
-        Arc::new(workout_summary_repository.clone()),
-        SystemClock,
-    ));
+    let training_context_builder = Arc::new(
+        DefaultTrainingContextBuilder::new(
+            settings_service.clone(),
+            intervals_service.clone(),
+            Arc::new(workout_summary_repository.clone()),
+            SystemClock,
+        )
+        .with_training_plan_projection_repository(Arc::new(
+            training_plan_projection_repository.clone(),
+        )),
+    );
     let athlete_summary_service = Arc::new(AthleteSummaryService::new(
         athlete_summary_repository,
         athlete_summary_generation_operation_repository,
@@ -212,13 +309,31 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 LlmWorkoutCoach::new(
                     llm_adapter.clone(),
                     llm_config_provider.clone(),
-                    training_context_builder,
+                    training_context_builder.clone(),
                     SystemClock,
                 )
                 .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
             ),
         )
         .with_athlete_summary_service(athlete_summary_service.clone()),
+    );
+    let training_plan_service = Arc::new(TrainingPlanGenerationService::new(
+        training_plan_snapshot_repository,
+        training_plan_projection_repository,
+        training_plan_generation_operation_repository,
+        TrainingPlanLlmGenerator::new(
+            llm_adapter.clone(),
+            llm_config_provider.clone(),
+            training_context_builder.clone(),
+            SystemClock,
+        ),
+        TrainingPlanWorkoutSummaryAdapter::new(workout_summary_service.clone()),
+        SystemClock,
+    ));
+    let workout_summary_service = Arc::new(
+        (*workout_summary_service)
+            .clone()
+            .with_training_plan_service(training_plan_service),
     );
 
     let intervals_connection_tester = if dev_intervals_enabled {
@@ -318,123 +433,5 @@ async fn wait_for_sigterm(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{
-        error::Error,
-        io::{Error as IoError, Write},
-        sync::{Arc, Mutex},
-    };
-
-    #[cfg(unix)]
-    use super::wait_for_sigterm;
-    use super::{finish_server_shutdown, wait_for_ctrl_c};
-    use tokio::sync::Notify;
-    use tokio::time::{timeout, Duration};
-
-    #[derive(Clone, Default)]
-    struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
-
-    impl SharedLogBuffer {
-        fn contents(&self) -> String {
-            String::from_utf8(self.0.lock().expect("log buffer mutex poisoned").clone())
-                .expect("log buffer contained invalid utf-8")
-        }
-    }
-
-    impl Write for SharedLogBuffer {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0
-                .lock()
-                .expect("log buffer mutex poisoned")
-                .extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for SharedLogBuffer {
-        type Writer = SharedLogBuffer;
-
-        fn make_writer(&'a self) -> Self::Writer {
-            self.clone()
-        }
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn ctrl_c_registration_error_logs_and_does_not_finish_shutdown_future() {
-        let logs = SharedLogBuffer::default();
-        let subscriber = tracing_subscriber::fmt()
-            .with_ansi(false)
-            .without_time()
-            .with_target(false)
-            .with_writer(logs.clone())
-            .finish();
-        let _default = tracing::subscriber::set_default(subscriber);
-
-        let result = timeout(
-            Duration::from_millis(50),
-            wait_for_ctrl_c(
-                async { Err(IoError::other("boom")) },
-                Arc::new(Notify::new()),
-            ),
-        )
-        .await;
-
-        assert!(result.is_err());
-        let output = logs.contents();
-        assert!(output.contains("Failed to listen for Ctrl+C"));
-        assert!(output.contains("boom"));
-    }
-
-    #[cfg(unix)]
-    #[tokio::test(flavor = "current_thread")]
-    async fn sigterm_registration_error_logs_and_does_not_finish_shutdown_future() {
-        let logs = SharedLogBuffer::default();
-        let subscriber = tracing_subscriber::fmt()
-            .with_ansi(false)
-            .without_time()
-            .with_target(false)
-            .with_writer(logs.clone())
-            .finish();
-        let _default = tracing::subscriber::set_default(subscriber);
-
-        let result = timeout(
-            Duration::from_millis(50),
-            wait_for_sigterm(Err(IoError::other("boom")), Arc::new(Notify::new())),
-        )
-        .await;
-
-        assert!(result.is_err());
-        let output = logs.contents();
-        assert!(output.contains("Failed to listen for SIGTERM"));
-        assert!(output.contains("boom"));
-    }
-
-    #[test]
-    fn finish_server_shutdown_returns_ok_when_both_succeed() {
-        assert!(finish_server_shutdown(Ok(()), Ok(())).is_ok());
-    }
-
-    #[test]
-    fn finish_server_shutdown_returns_telemetry_error_when_server_succeeds() {
-        let error = finish_server_shutdown(Ok(()), Err(Box::new(IoError::other("telemetry boom"))))
-            .expect_err("telemetry error should be returned");
-
-        assert!(error.to_string().contains("telemetry boom"));
-    }
-
-    #[test]
-    fn finish_server_shutdown_combines_server_and_telemetry_errors() {
-        let telemetry_error: Box<dyn Error + Send + Sync> =
-            Box::new(IoError::other("telemetry boom"));
-        let error =
-            finish_server_shutdown(Err(IoError::other("server boom")), Err(telemetry_error))
-                .expect_err("combined error should be returned");
-
-        assert!(error.to_string().contains("server boom"));
-        assert!(error.to_string().contains("telemetry boom"));
-    }
-}
+#[path = "main_tests.rs"]
+mod tests;

@@ -7,7 +7,7 @@ use aiwattcoach::domain::{
     llm::BoxFuture,
     workout_summary::{
         validate_message_content, CoachReply, MessageRole, PersistedUserMessage, SendMessageResult,
-        WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+        WorkoutRecap, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
     },
 };
 
@@ -84,7 +84,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 return Ok(existing);
             }
 
-            let summary = sample_summary(&workout_id);
+            let summary = sample_summary_for_user(&user_id, &workout_id);
             summaries.push(summary.clone());
             Ok(summary)
         })
@@ -198,6 +198,34 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
 
             summary.saved_at_epoch_seconds = None;
             summary.updated_at_epoch_seconds = 1_700_000_300;
+            Ok(summary.clone())
+        })
+    }
+
+    fn persist_workout_recap(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        recap: WorkoutRecap,
+    ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        let summaries = self.summaries.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            let mut summaries = summaries.lock().unwrap();
+            let Some(summary) = summaries
+                .iter_mut()
+                .find(|summary| summary.user_id == user_id && summary.workout_id == workout_id)
+            else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+
+            summary.workout_recap_text = Some(recap.text);
+            summary.workout_recap_provider = Some(recap.provider);
+            summary.workout_recap_model = Some(recap.model);
+            summary.workout_recap_generated_at_epoch_seconds =
+                Some(recap.generated_at_epoch_seconds);
+            summary.updated_at_epoch_seconds = 1_700_000_100;
             Ok(summary.clone())
         })
     }
@@ -379,13 +407,21 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
 }
 
 pub(crate) fn sample_summary(workout_id: &str) -> WorkoutSummary {
+    sample_summary_for_user("user-1", workout_id)
+}
+
+fn sample_summary_for_user(user_id: &str, workout_id: &str) -> WorkoutSummary {
     WorkoutSummary {
         id: format!("summary-{workout_id}"),
-        user_id: "user-1".to_string(),
+        user_id: user_id.to_string(),
         workout_id: workout_id.to_string(),
         rpe: Some(6),
         messages: Vec::new(),
         saved_at_epoch_seconds: None,
+        workout_recap_text: None,
+        workout_recap_provider: None,
+        workout_recap_model: None,
+        workout_recap_generated_at_epoch_seconds: None,
         created_at_epoch_seconds: 1_700_000_000,
         updated_at_epoch_seconds: 1_700_000_000,
     }

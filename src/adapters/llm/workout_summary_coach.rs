@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
+
 use crate::domain::{
     identity::Clock,
     llm::{
@@ -90,9 +92,10 @@ where
             );
             let volatile_context =
                 build_volatile_context(&training_context.rendered.volatile_context);
+            let system_prompt = workout_coach_system_prompt();
             let estimated_request_tokens = approximate_token_usage(&stable_context)
                 + approximate_token_usage(&volatile_context)
-                + approximate_token_usage(WORKOUT_COACH_SYSTEM_PROMPT)
+                + approximate_token_usage(&system_prompt)
                 + summary
                     .messages
                     .iter()
@@ -106,8 +109,7 @@ where
                 )));
             }
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
-            let context_hash =
-                hash_text(&format!("{WORKOUT_COACH_SYSTEM_PROMPT}\n{stable_context}"));
+            let context_hash = hash_text(&format!("{system_prompt}\n{stable_context}"));
             let reusable_cache_id = if config.provider == LlmProvider::Gemini {
                 match (&context_cache_repository, cache_scope_key.as_deref()) {
                     (Some(repository), Some(scope_key)) => {
@@ -162,7 +164,7 @@ where
             };
             let request = LlmChatRequest {
                 user_id: user_id.clone(),
-                system_prompt: WORKOUT_COACH_SYSTEM_PROMPT.to_string(),
+                system_prompt,
                 stable_context,
                 volatile_context,
                 conversation: build_conversation(&summary, &user_message),
@@ -223,7 +225,7 @@ where
     }
 }
 
-const WORKOUT_COACH_SYSTEM_PROMPT: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background, respond briefly, ask one focused follow-up question, and do not invent details beyond the provided context. Packed context legend: v=schema version, i=intervals status, p=athlete profile, h=historical training, g=generated_at epoch seconds, fx=focus, rd=recent days, ud=upcoming days. Common inner fields: id=identifier, k=kind, d=date, sd=start_date_local, n=name, ty=activity type, c=category, desc=description, fr=free day, sick=sick day flag, sickn=sick note, w=workouts, pw=planned workouts, doc=raw workout doc, done=completed flag, dur=duration seconds, tss=training stress score, ifv=intensity_factor, ef=efficiency_factor, np=normalized_power_watts, ftp=ftp_watts, vi=variability_index, rpe=session rpe, bl=interval blocks, minp/maxp=target percent FTP bounds, minw/maxw=target watt bounds, c5=cadence values in 5-second buckets. Intervals status uses a=activities status and e=events status. Profile fields include fnm=full name, hcm=height cm, wkg=weight kg, hrm=max heart rate, vo2=VO2 max, ap=athlete prompt. In training_context_volatile recent workout power may be packed in pc as an array of level:seconds strings. For pc, each level is round((watts / ftp)^2.5 * 100). Consecutive identical levels are run-length encoded. Only an isolated 1-second spike or dip is smoothed when both neighboring levels match, the change is under 3 levels, and neither the surrounding level nor the changed level is in the FTP zone 90-110.";
+const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background, respond briefly, ask one focused follow-up question, and do not invent details beyond the provided context.";
 
 fn build_stable_context(
     summary: &WorkoutSummary,
@@ -255,6 +257,13 @@ fn build_volatile_context(packed_training_context: &str) -> String {
 
 fn approximate_token_usage(value: &str) -> usize {
     value.chars().count().div_ceil(3)
+}
+
+fn workout_coach_system_prompt() -> String {
+    format!(
+        "{} {}",
+        WORKOUT_COACH_SYSTEM_PROMPT_BASE, PACKED_TRAINING_CONTEXT_LEGEND
+    )
 }
 
 fn build_conversation(summary: &WorkoutSummary, user_message: &str) -> Vec<LlmChatMessage> {

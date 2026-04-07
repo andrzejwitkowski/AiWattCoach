@@ -1,4 +1,5 @@
 mod model;
+mod planned_workout;
 mod ports;
 mod service;
 mod workout;
@@ -11,6 +12,12 @@ pub use model::{
     ActivityUploadOperationStatus, ActivityZoneTime, CreateEvent, DateRange, Event, EventCategory,
     EventFileUpload, IntervalsCredentials, IntervalsError, UpdateActivity, UpdateEvent,
     UploadActivity, UploadedActivities,
+};
+pub use planned_workout::{
+    parse_planned_workout, parse_planned_workout_days, serialize_planned_workout, PlannedWorkout,
+    PlannedWorkoutDay, PlannedWorkoutDays, PlannedWorkoutLine, PlannedWorkoutParseError,
+    PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
+    PlannedWorkoutText,
 };
 pub use ports::{
     ActivityFileIdentityExtractorPort, ActivityRepositoryPort,

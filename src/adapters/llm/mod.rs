@@ -6,4 +6,5 @@ pub mod gemini;
 pub mod openai;
 pub mod openrouter;
 pub mod settings_adapter;
+pub mod training_plan_generator;
 pub mod workout_summary_coach;

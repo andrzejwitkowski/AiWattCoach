@@ -21,6 +21,7 @@ pub struct TrainingContext {
     pub history: HistoricalTrainingContext,
     pub recent_days: Vec<RecentDayContext>,
     pub upcoming_days: Vec<UpcomingDayContext>,
+    pub projected_days: Vec<ProjectedDayContext>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -86,7 +87,9 @@ pub struct HistoricalWorkoutContext {
     pub efficiency_factor: Option<f64>,
     pub normalized_power_watts: Option<i32>,
     pub ftp_watts: Option<i32>,
+    pub workout_recap: Option<String>,
     pub variability_index: Option<f64>,
+    pub compressed_power_levels: Vec<String>,
     pub interval_blocks: Vec<PlannedWorkoutBlockContext>,
 }
 
@@ -113,6 +116,7 @@ pub struct RecentWorkoutContext {
     pub normalized_power_watts: Option<i32>,
     pub ftp_watts: Option<i32>,
     pub rpe: Option<u8>,
+    pub workout_recap: Option<String>,
     pub variability_index: Option<f64>,
     pub compressed_power_levels: Vec<String>,
     pub cadence_values_5s: Vec<i32>,
@@ -171,4 +175,20 @@ pub struct UpcomingDayContext {
     pub free_day: bool,
     pub planned_workouts: Vec<PlannedWorkoutContext>,
     pub special_days: Vec<SpecialDayContext>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ProjectedDayContext {
+    pub date: String,
+    pub workouts: Vec<ProjectedWorkoutContext>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ProjectedWorkoutContext {
+    pub source_workout_id: String,
+    pub start_date_local: String,
+    pub name: Option<String>,
+    pub interval_blocks: Vec<PlannedWorkoutBlockContext>,
+    pub raw_workout_doc: Option<String>,
+    pub rest_day: bool,
 }

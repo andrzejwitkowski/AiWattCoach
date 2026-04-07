@@ -8,7 +8,7 @@ pub use model::{
     validate_message_content, validate_rpe, CoachReply, CoachReplyClaimResult, CoachReplyOperation,
     CoachReplyOperationFailureKind, CoachReplyOperationStatus, CompletedCoachReply,
     ConversationMessage, MessageRole, PendingCoachReplyCheckpoint, PersistedUserMessage,
-    SendMessageResult, WorkoutSummary, WorkoutSummaryError,
+    SendMessageResult, WorkoutRecap, WorkoutSummary, WorkoutSummaryError,
 };
 pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
 pub use service::{WorkoutSummaryService, WorkoutSummaryUseCases};
