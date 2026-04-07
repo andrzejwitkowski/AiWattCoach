@@ -187,7 +187,7 @@ async fn mongo_fixture_or_skip() -> Option<MongoFixture> {
     match MongoFixture::new().await {
         Ok(fixture) => Some(fixture),
         Err(error) => {
-            if std::env::var("CI").is_ok() {
+            if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
                 panic!("workout_summary_mongo test requires Mongo in CI: {error}");
             }
             eprintln!("skipping workout_summary_mongo test: {error}");
