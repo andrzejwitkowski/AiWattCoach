@@ -290,43 +290,66 @@ pub(super) fn projected_workout_name(workout: &PlannedWorkout) -> Option<String>
 pub(super) fn projected_interval_blocks(
     workout: &PlannedWorkout,
 ) -> Vec<PlannedWorkoutBlockContext> {
-    let mut repeat_count = 1usize;
+    let mut blocks = Vec::new();
+    let mut repeated_steps = Vec::new();
+    let mut repeat_count: Option<usize> = None;
 
-    workout
-        .lines
-        .iter()
-        .flat_map(|line| match line {
+    for line in &workout.lines {
+        match line {
             PlannedWorkoutLine::Repeat(repeat) => {
-                repeat_count = repeat.count;
-                Vec::new()
+                flush_repeated_steps(&mut blocks, &mut repeated_steps, repeat_count.take());
+                repeat_count = Some(repeat.count);
             }
             PlannedWorkoutLine::Step(step) => {
-                let (min_percent_ftp, max_percent_ftp, min_target_watts, max_target_watts) =
-                    match &step.target {
-                        PlannedWorkoutTarget::PercentFtp { min, max } => {
-                            (Some(*min), Some(*max), None, None)
-                        }
-                        PlannedWorkoutTarget::WattsRange { min, max } => {
-                            (None, None, Some(*min), Some(*max))
-                        }
-                    };
-                let block = PlannedWorkoutBlockContext {
-                    duration_seconds: step.duration_seconds,
-                    min_percent_ftp,
-                    max_percent_ftp,
-                    min_target_watts,
-                    max_target_watts,
-                };
-                let expanded = vec![block; repeat_count];
-                repeat_count = 1;
-                expanded
+                let block = planned_block_from_step(step);
+                if repeat_count.is_some() {
+                    repeated_steps.push(block);
+                } else {
+                    blocks.push(block);
+                }
             }
             PlannedWorkoutLine::Text(_) => {
-                repeat_count = 1;
-                Vec::new()
+                flush_repeated_steps(&mut blocks, &mut repeated_steps, repeat_count.take());
             }
-        })
-        .collect()
+        }
+    }
+
+    flush_repeated_steps(&mut blocks, &mut repeated_steps, repeat_count.take());
+    blocks
+}
+
+fn planned_block_from_step(
+    step: &crate::domain::intervals::PlannedWorkoutStep,
+) -> PlannedWorkoutBlockContext {
+    let (min_percent_ftp, max_percent_ftp, min_target_watts, max_target_watts) = match &step.target
+    {
+        PlannedWorkoutTarget::PercentFtp { min, max } => (Some(*min), Some(*max), None, None),
+        PlannedWorkoutTarget::WattsRange { min, max } => (None, None, Some(*min), Some(*max)),
+    };
+
+    PlannedWorkoutBlockContext {
+        duration_seconds: step.duration_seconds,
+        min_percent_ftp,
+        max_percent_ftp,
+        min_target_watts,
+        max_target_watts,
+    }
+}
+
+fn flush_repeated_steps(
+    blocks: &mut Vec<PlannedWorkoutBlockContext>,
+    repeated_steps: &mut Vec<PlannedWorkoutBlockContext>,
+    repeat_count: Option<usize>,
+) {
+    if repeated_steps.is_empty() {
+        return;
+    }
+
+    let count = repeat_count.unwrap_or(1);
+    for _ in 0..count {
+        blocks.extend(repeated_steps.iter().cloned());
+    }
+    repeated_steps.clear();
 }
 
 fn build_projected_planned_workout(

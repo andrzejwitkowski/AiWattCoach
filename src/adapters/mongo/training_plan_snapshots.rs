@@ -1,4 +1,4 @@
-use mongodb::{bson::doc, Collection};
+use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::training_plan::{
@@ -45,6 +45,22 @@ impl MongoTrainingPlanSnapshotRepository {
 
     pub(super) fn collection(&self) -> Collection<TrainingPlanSnapshotDocument> {
         self.collection.clone()
+    }
+
+    pub async fn ensure_indexes(&self) -> Result<(), TrainingPlanError> {
+        self.collection
+            .create_indexes([IndexModel::builder()
+                .keys(doc! { "operation_key": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("training_plan_snapshots_operation_key_unique".to_string())
+                        .unique(true)
+                        .build(),
+                )
+                .build()])
+            .await
+            .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+        Ok(())
     }
 
     pub(super) fn map_snapshot_to_document(

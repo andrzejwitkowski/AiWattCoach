@@ -68,15 +68,14 @@ fn parses_dated_outer_format_with_multiple_days_and_rest_day() {
 
     assert_eq!(parsed.days.len(), 3);
     assert_eq!(parsed.days[0].date, "2026-04-01");
-    assert!(parsed.days[0].workout.is_some());
+    assert!(parsed.days[0].planned_workout().is_some());
     assert_eq!(parsed.days[1].date, "2026-04-02");
-    assert!(parsed.days[1].rest_day);
-    assert!(parsed.days[1].workout.is_none());
+    assert!(parsed.days[1].is_rest_day());
+    assert!(parsed.days[1].planned_workout().is_none());
     assert_eq!(parsed.days[2].date, "2026-04-03");
     assert_eq!(
         parsed.days[2]
-            .workout
-            .as_ref()
+            .planned_workout()
             .map(|workout| workout.lines.len()),
         Some(2)
     );

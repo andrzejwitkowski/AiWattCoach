@@ -272,7 +272,23 @@ async fn builder_uses_chronological_ftp_change_and_expands_projected_repeats() {
             .find(|day| day.date == "2026-04-07")
             .and_then(|day| day.workouts.first())
             .map(|workout| workout.interval_blocks.len()),
-        Some(2)
+        Some(5)
+    );
+    assert_eq!(
+        result
+            .context
+            .projected_days
+            .iter()
+            .find(|day| day.date == "2026-04-07")
+            .and_then(|day| day.workouts.first())
+            .map(|workout| {
+                workout
+                    .interval_blocks
+                    .iter()
+                    .map(|block| block.duration_seconds)
+                    .collect::<Vec<_>>()
+            }),
+        Some(vec![600, 180, 600, 180, 300])
     );
     assert_eq!(
         result

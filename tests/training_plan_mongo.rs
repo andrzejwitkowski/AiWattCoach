@@ -173,7 +173,7 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
 
     let second_snapshot =
         sample_snapshot("training-plan:user-1:workout-1:1700086400", "2026-04-07");
-    let (_, active_days) = repository
+    let (_, projected_days) = repository
         .replace_window(
             second_snapshot.clone(),
             sample_projected_days(&second_snapshot, "2026-04-07"),
@@ -199,7 +199,7 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
         .await
         .unwrap();
 
-    assert_eq!(active_days.len(), 13);
+    assert_eq!(projected_days.len(), 14);
 
     let active_for_user = repository.list_active_by_user_id("user-1").await.unwrap();
     assert!(active_for_user
@@ -291,7 +291,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
         .await
         .unwrap();
 
-    let (_, active_days) = repository
+    let (_, projected_days) = repository
         .replace_window(
             snapshot.clone(),
             sample_projected_days(&snapshot, "2026-04-06"),
@@ -301,7 +301,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
         .await
         .unwrap();
 
-    assert_eq!(active_days.len(), 13);
+    assert_eq!(projected_days.len(), 14);
 
     let stored_days = fixture
         .client
@@ -325,7 +325,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
 }
 
 #[tokio::test]
-async fn training_plan_projection_repository_creates_operation_active_date_index() {
+async fn training_plan_projection_repository_creates_operation_unsuperseded_date_index() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
     };
@@ -349,8 +349,42 @@ async fn training_plan_projection_repository_creates_operation_active_date_index
             .options
             .as_ref()
             .and_then(|options| options.name.as_deref())
-            == Some("training_plan_projected_days_operation_active_date")
-            && index.keys == doc! { "operation_key": 1, "active": 1, "date": 1 }
+            == Some("training_plan_projected_days_operation_unsuperseded_date")
+            && index.keys
+                == doc! { "operation_key": 1, "superseded_at_epoch_seconds": 1, "date": 1 }
+    }));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn training_plan_snapshot_repository_creates_unique_operation_key_index() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoTrainingPlanSnapshotRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let indexes = fixture
+        .client
+        .database(&fixture.database)
+        .collection::<mongodb::bson::Document>("training_plan_snapshots")
+        .list_indexes()
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+
+    assert!(indexes.iter().any(|index| {
+        index
+            .options
+            .as_ref()
+            .and_then(|options| options.name.as_deref())
+            == Some("training_plan_snapshots_operation_key_unique")
+            && index.keys == doc! { "operation_key": 1 }
+            && index.options.as_ref().and_then(|options| options.unique) == Some(true)
     }));
 
     fixture.cleanup().await;
@@ -468,7 +502,7 @@ fn sample_snapshot_for_user(
 
 fn sample_projected_days(
     snapshot: &TrainingPlanSnapshot,
-    today: &str,
+    _today: &str,
 ) -> Vec<TrainingPlanProjectedDay> {
     snapshot
         .days
@@ -480,7 +514,6 @@ fn sample_projected_days(
             date: day.date.clone(),
             rest_day: day.rest_day,
             workout: day.workout.clone(),
-            active: day.date.as_str() > today,
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: snapshot.created_at_epoch_seconds,
             updated_at_epoch_seconds: snapshot.created_at_epoch_seconds,

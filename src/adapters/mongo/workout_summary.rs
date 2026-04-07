@@ -407,6 +407,10 @@ async fn find_preferred_documents(
         .map(|document| (document.workout_id.clone(), document))
         .collect::<std::collections::BTreeMap<_, _>>();
 
+    // Migration semantics: current documents keyed by `workout_id` win first.
+    // Legacy documents are fetched by `event_id` only for missing workout ids,
+    // and `or_insert` keeps the current `workout_id` match preferred when both exist.
+
     let missing_workout_ids = workout_ids
         .iter()
         .filter(|workout_id| !preferred_by_workout_id.contains_key(workout_id.as_str()))

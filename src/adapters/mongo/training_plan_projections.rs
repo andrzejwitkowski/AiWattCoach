@@ -30,7 +30,6 @@ struct TrainingPlanProjectedDayDocument {
     date: String,
     rest_day: bool,
     workout: Option<PlannedWorkoutDocument>,
-    active: bool,
     superseded_at_epoch_seconds: Option<i64>,
     created_at_epoch_seconds: i64,
     updated_at_epoch_seconds: i64,
@@ -62,36 +61,25 @@ impl MongoTrainingPlanProjectionRepository {
                     )
                     .build(),
                 IndexModel::builder()
-                    .keys(doc! { "user_id": 1, "active": 1, "date": 1 })
+                    .keys(doc! { "user_id": 1, "superseded_at_epoch_seconds": 1, "date": 1 })
                     .options(
                         IndexOptions::builder()
-                            .name("training_plan_projected_days_user_active_date".to_string())
+                            .name("training_plan_projected_days_user_unsuperseded_date".to_string())
                             .build(),
                     )
                     .build(),
                 IndexModel::builder()
-                    .keys(doc! { "operation_key": 1, "active": 1, "date": 1 })
+                    .keys(doc! { "operation_key": 1, "superseded_at_epoch_seconds": 1, "date": 1 })
                     .options(
                         IndexOptions::builder()
-                            .name("training_plan_projected_days_operation_active_date".to_string())
+                            .name(
+                                "training_plan_projected_days_operation_unsuperseded_date"
+                                    .to_string(),
+                            )
                             .build(),
                     )
                     .build(),
             ])
-            .await
-            .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
-
-        self.snapshot_repository
-            .collection()
-            .create_indexes([IndexModel::builder()
-                .keys(doc! { "operation_key": 1 })
-                .options(
-                    IndexOptions::builder()
-                        .name("training_plan_snapshots_operation_key_unique".to_string())
-                        .unique(true)
-                        .build(),
-                )
-                .build()])
             .await
             .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
 
@@ -108,7 +96,10 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         let user_id = user_id.to_string();
         Box::pin(async move {
             let documents = collection
-                .find(doc! { "user_id": &user_id, "active": true })
+                .find(doc! {
+                    "user_id": &user_id,
+                    "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                })
                 .sort(doc! { "date": 1 })
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
@@ -131,7 +122,10 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         let operation_key = operation_key.to_string();
         Box::pin(async move {
             let documents = collection
-                .find(doc! { "operation_key": &operation_key, "active": true })
+                .find(doc! {
+                    "operation_key": &operation_key,
+                    "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                })
                 .sort(doc! { "date": 1 })
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
@@ -178,7 +172,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .update_many(
                     doc! {
                         "user_id": &snapshot.user_id,
-                        "active": true,
+                        "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
                         "date": {
                             "$gte": std::cmp::max(today.as_str(), snapshot.start_date.as_str()),
                             "$lte": &snapshot.end_date,
@@ -186,7 +180,6 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                     },
                     doc! {
                         "$set": {
-                            "active": false,
                             "superseded_at_epoch_seconds": replaced_at_epoch_seconds,
                             "updated_at_epoch_seconds": replaced_at_epoch_seconds,
                         }
@@ -219,13 +212,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                     .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
             }
 
-            Ok((
-                snapshot_clone,
-                projected_days
-                    .into_iter()
-                    .filter(|day| day.active)
-                    .collect(),
-            ))
+            Ok((snapshot_clone, projected_days))
         })
     }
 }
@@ -244,7 +231,6 @@ fn map_projected_day_to_document(
             .as_ref()
             .map(map_planned_workout_to_document)
             .transpose()?,
-        active: day.active,
         superseded_at_epoch_seconds: day.superseded_at_epoch_seconds,
         created_at_epoch_seconds: day.created_at_epoch_seconds,
         updated_at_epoch_seconds: day.updated_at_epoch_seconds,
@@ -264,7 +250,6 @@ fn map_document_to_projected_day(
             .workout
             .map(map_document_to_planned_workout)
             .transpose()?,
-        active: document.active,
         superseded_at_epoch_seconds: document.superseded_at_epoch_seconds,
         created_at_epoch_seconds: document.created_at_epoch_seconds,
         updated_at_epoch_seconds: document.updated_at_epoch_seconds,

@@ -77,8 +77,38 @@ pub struct PlannedWorkoutDays {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlannedWorkoutDay {
     pub date: String,
-    pub rest_day: bool,
-    pub workout: Option<PlannedWorkout>,
+    rest_day: bool,
+    workout: Option<PlannedWorkout>,
+}
+
+impl PlannedWorkoutDay {
+    pub fn rest(date: String) -> Self {
+        Self {
+            date,
+            rest_day: true,
+            workout: None,
+        }
+    }
+
+    pub fn workout(date: String, workout: PlannedWorkout) -> Self {
+        Self {
+            date,
+            rest_day: false,
+            workout: Some(workout),
+        }
+    }
+
+    pub fn is_rest_day(&self) -> bool {
+        self.rest_day
+    }
+
+    pub fn planned_workout(&self) -> Option<&PlannedWorkout> {
+        self.workout.as_ref()
+    }
+
+    pub fn into_workout(self) -> Option<PlannedWorkout> {
+        self.workout
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

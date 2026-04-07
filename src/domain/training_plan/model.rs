@@ -49,10 +49,15 @@ pub struct TrainingPlanProjectedDay {
     pub date: String,
     pub rest_day: bool,
     pub workout: Option<PlannedWorkout>,
-    pub active: bool,
     pub superseded_at_epoch_seconds: Option<i64>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
+}
+
+impl TrainingPlanProjectedDay {
+    pub fn is_active_on(&self, today: &str) -> bool {
+        self.superseded_at_epoch_seconds.is_none() && self.date.as_str() > today
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

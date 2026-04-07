@@ -235,6 +235,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     coach_reply_operation_repository.ensure_indexes().await?;
     let training_plan_snapshot_repository =
         MongoTrainingPlanSnapshotRepository::new(mongo_client.clone(), &mongo_database);
+    training_plan_snapshot_repository.ensure_indexes().await?;
     let training_plan_projection_repository =
         MongoTrainingPlanProjectionRepository::new(mongo_client.clone(), &mongo_database);
     training_plan_projection_repository.ensure_indexes().await?;

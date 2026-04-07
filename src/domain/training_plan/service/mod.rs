@@ -1,17 +1,21 @@
-use chrono::{NaiveDate, TimeZone, Utc};
+mod correction;
+mod parsing;
+mod snapshot;
+
+use chrono::{TimeZone, Utc};
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::domain::{
     ai_workflow::{ValidationIssue, WorkflowPhase, WorkflowStatus},
     identity::Clock,
-    intervals::{parse_planned_workout_days, PlannedWorkoutDay},
     workout_summary::WorkoutRecap,
 };
 
 use super::{
     BoxFuture, GeneratedTrainingPlan, TrainingPlanDay, TrainingPlanError,
     TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanGenerationOperationRepository, TrainingPlanGenerator, TrainingPlanProjectedDay,
+    TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
     TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
     TrainingPlanWorkoutSummaryPort,
 };
@@ -49,10 +53,10 @@ pub struct TrainingPlanGenerationService<
     clock: Time,
 }
 
-struct ParsedPlanWindow {
-    days_by_date: BTreeMap<String, TrainingPlanDay>,
-    issues: Vec<ValidationIssue>,
-    invalid_day_sections: Vec<String>,
+pub(super) struct ParsedPlanWindow {
+    pub(super) days_by_date: BTreeMap<String, TrainingPlanDay>,
+    pub(super) issues: Vec<ValidationIssue>,
+    pub(super) invalid_day_sections: Vec<String>,
 }
 
 impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time>
@@ -121,10 +125,14 @@ where
         let Some(snapshot) = self.snapshots.find_by_operation_key(operation_key).await? else {
             return Ok(None);
         };
+        let today = self.today_string();
         let active_projected_days = self
             .projections
             .find_active_by_operation_key(operation_key)
-            .await?;
+            .await?
+            .into_iter()
+            .filter(|day| day.is_active_on(&today))
+            .collect();
         Ok(Some(GeneratedTrainingPlan {
             snapshot,
             active_projected_days,
@@ -155,217 +163,6 @@ where
         }
 
         Ok(Some(generated))
-    }
-
-    fn map_parsed_day(day: PlannedWorkoutDay) -> TrainingPlanDay {
-        TrainingPlanDay {
-            date: day.date,
-            rest_day: day.rest_day,
-            workout: day.workout,
-        }
-    }
-
-    fn split_into_day_blocks(
-        &self,
-        input: &str,
-    ) -> Result<Vec<(String, String)>, TrainingPlanError> {
-        let mut blocks = Vec::new();
-        let mut current_date: Option<String> = None;
-        let mut current_lines = Vec::new();
-
-        for raw_line in input.lines() {
-            let line = raw_line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            if Self::is_exact_date(line) {
-                if let Some(date) = current_date.take() {
-                    let mut block = Vec::with_capacity(current_lines.len() + 1);
-                    block.push(date.clone());
-                    block.extend(current_lines.clone());
-                    blocks.push((date, block.join("\n")));
-                    current_lines.clear();
-                }
-                current_date = Some(line.to_string());
-                continue;
-            }
-
-            if current_date.is_none() {
-                return Err(TrainingPlanError::Validation(
-                    "content before first date header".to_string(),
-                ));
-            }
-
-            current_lines.push(line.to_string());
-        }
-
-        if let Some(date) = current_date {
-            let mut block = Vec::with_capacity(current_lines.len() + 1);
-            block.push(date.clone());
-            block.extend(current_lines);
-            blocks.push((date, block.join("\n")));
-        }
-
-        Ok(blocks)
-    }
-
-    fn is_exact_date(value: &str) -> bool {
-        let bytes = value.as_bytes();
-        bytes.len() == 10
-            && bytes[0..4].iter().all(u8::is_ascii_digit)
-            && bytes[4] == b'-'
-            && bytes[5..7].iter().all(u8::is_ascii_digit)
-            && bytes[7] == b'-'
-            && bytes[8..10].iter().all(u8::is_ascii_digit)
-    }
-
-    fn parse_window(&self, raw_window: &str) -> Result<ParsedPlanWindow, TrainingPlanError> {
-        let blocks = self.split_into_day_blocks(raw_window)?;
-        let mut days_by_date = BTreeMap::new();
-        let mut issues = Vec::new();
-        let mut invalid_day_sections = Vec::new();
-
-        for (date, block) in blocks {
-            if days_by_date.contains_key(&date) {
-                return Err(TrainingPlanError::Validation(format!(
-                    "duplicate planned workout day: {date}"
-                )));
-            }
-
-            match parse_planned_workout_days(&block) {
-                Ok(parsed) => {
-                    if let Some(day) = parsed.days.into_iter().next() {
-                        days_by_date.insert(date, Self::map_parsed_day(day));
-                    }
-                }
-                Err(error) => {
-                    issues.push(ValidationIssue {
-                        scope: date,
-                        message: error.to_string(),
-                    });
-                    invalid_day_sections.push(block);
-                }
-            }
-        }
-
-        Ok(ParsedPlanWindow {
-            days_by_date,
-            issues,
-            invalid_day_sections,
-        })
-    }
-
-    fn merge_corrections(
-        &self,
-        base_days: &mut BTreeMap<String, TrainingPlanDay>,
-        corrected_days: BTreeMap<String, TrainingPlanDay>,
-        invalid_dates: &BTreeSet<String>,
-    ) {
-        for (date, day) in corrected_days {
-            if invalid_dates.contains(&date) {
-                base_days.insert(date, day);
-            }
-        }
-    }
-
-    fn days_are_contiguous(days: &[TrainingPlanDay]) -> bool {
-        days.windows(2).all(|window| {
-            let left = NaiveDate::parse_from_str(&window[0].date, "%Y-%m-%d").ok();
-            let right = NaiveDate::parse_from_str(&window[1].date, "%Y-%m-%d").ok();
-            match (left, right) {
-                (Some(left), Some(right)) => right == left + chrono::Duration::days(1),
-                _ => false,
-            }
-        })
-    }
-
-    fn validate_snapshot_days(
-        &self,
-        days_by_date: &BTreeMap<String, TrainingPlanDay>,
-    ) -> Result<Vec<TrainingPlanDay>, TrainingPlanError> {
-        let days = days_by_date.values().cloned().collect::<Vec<_>>();
-        if days.len() != Self::SNAPSHOT_DAY_COUNT || !Self::days_are_contiguous(&days) {
-            return Err(TrainingPlanError::Validation(format!(
-                "training plan window must contain exactly {} contiguous dated days",
-                Self::SNAPSHOT_DAY_COUNT
-            )));
-        }
-        Ok(days)
-    }
-
-    fn build_snapshot(
-        &self,
-        user_id: &str,
-        workout_id: &str,
-        operation_key: &str,
-        saved_at_epoch_seconds: i64,
-        days: Vec<TrainingPlanDay>,
-    ) -> Result<TrainingPlanSnapshot, TrainingPlanError> {
-        let start_date = days.first().map(|day| day.date.clone()).ok_or_else(|| {
-            TrainingPlanError::Validation("training plan window is empty".to_string())
-        })?;
-        let end_date = days.last().map(|day| day.date.clone()).ok_or_else(|| {
-            TrainingPlanError::Validation("training plan window is empty".to_string())
-        })?;
-
-        Ok(TrainingPlanSnapshot {
-            user_id: user_id.to_string(),
-            workout_id: workout_id.to_string(),
-            operation_key: operation_key.to_string(),
-            saved_at_epoch_seconds,
-            start_date,
-            end_date,
-            days,
-            created_at_epoch_seconds: self.clock.now_epoch_seconds(),
-        })
-    }
-
-    fn build_projected_days(
-        &self,
-        snapshot: &TrainingPlanSnapshot,
-    ) -> Vec<TrainingPlanProjectedDay> {
-        let today = self.today_string();
-        snapshot
-            .days
-            .iter()
-            .map(|day| TrainingPlanProjectedDay {
-                user_id: snapshot.user_id.clone(),
-                workout_id: snapshot.workout_id.clone(),
-                operation_key: snapshot.operation_key.clone(),
-                date: day.date.clone(),
-                rest_day: day.rest_day,
-                workout: day.workout.clone(),
-                active: day.date > today,
-                superseded_at_epoch_seconds: None,
-                created_at_epoch_seconds: self.clock.now_epoch_seconds(),
-                updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
-            })
-            .collect()
-    }
-
-    fn expected_active_projected_dates(&self, snapshot: &TrainingPlanSnapshot) -> BTreeSet<String> {
-        let today = self.today_string();
-        snapshot
-            .days
-            .iter()
-            .filter(|day| day.date > today)
-            .map(|day| day.date.clone())
-            .collect()
-    }
-
-    fn is_projection_persisted(
-        &self,
-        snapshot: &TrainingPlanSnapshot,
-        active_projected_days: &[TrainingPlanProjectedDay],
-    ) -> bool {
-        let expected_dates = self.expected_active_projected_dates(snapshot);
-        let actual_dates = active_projected_days
-            .iter()
-            .filter(|day| day.active && day.operation_key == snapshot.operation_key)
-            .map(|day| day.date.clone())
-            .collect::<BTreeSet<_>>();
-        actual_dates == expected_dates
     }
 
     async fn fail_operation(
@@ -422,17 +219,22 @@ where
         snapshot: TrainingPlanSnapshot,
         operation: TrainingPlanGenerationOperation,
     ) -> Result<GeneratedTrainingPlan, TrainingPlanError> {
+        let today = self.today_string();
         let operation = operation.with_projection_update(self.clock.now_epoch_seconds());
         let operation = self.operations.upsert(operation).await?;
-        let (snapshot, active_projected_days) = self
+        let (snapshot, projected_days) = self
             .projections
             .replace_window(
                 snapshot.clone(),
                 self.build_projected_days(&snapshot),
-                &self.today_string(),
+                &today,
                 self.clock.now_epoch_seconds(),
             )
             .await?;
+        let active_projected_days = projected_days
+            .into_iter()
+            .filter(|day| day.is_active_on(&today))
+            .collect::<Vec<_>>();
         let operation = self
             .operations
             .upsert(operation.mark_projection_persisted(self.clock.now_epoch_seconds()))
@@ -572,13 +374,6 @@ where
                 recap
             };
 
-            if operation.workout_recap_text.is_some() && operation.raw_plan_response.is_none() {
-                service
-                    .workout_summary
-                    .persist_workout_recap(&user_id, &workout_id, recap.clone())
-                    .await?;
-            }
-
             let raw_plan_response =
                 if let Some(raw_plan_response) = operation.raw_plan_response.clone() {
                     raw_plan_response
@@ -678,13 +473,13 @@ where
                         .iter()
                         .map(|issue| issue.scope.clone())
                         .collect::<BTreeSet<_>>();
-                    issues = merge_unresolved_issues(
+                    issues = correction::merge_unresolved_issues(
                         &issues,
                         &corrected.issues,
                         &corrected_dates,
                         &corrected_invalid_dates,
                     );
-                    invalid_day_sections = merge_invalid_day_sections(
+                    invalid_day_sections = correction::merge_invalid_day_sections(
                         &invalid_day_sections,
                         &corrected.invalid_day_sections,
                         &corrected_dates,
@@ -777,13 +572,13 @@ where
                         .iter()
                         .map(|issue| issue.scope.clone())
                         .collect::<BTreeSet<_>>();
-                    issues = merge_unresolved_issues(
+                    issues = correction::merge_unresolved_issues(
                         &issues,
                         &corrected.issues,
                         &corrected_dates,
                         &corrected_invalid_dates,
                     );
-                    invalid_day_sections = merge_invalid_day_sections(
+                    invalid_day_sections = correction::merge_invalid_day_sections(
                         &invalid_day_sections,
                         &corrected.invalid_day_sections,
                         &corrected_dates,
@@ -855,54 +650,4 @@ where
             service.persist_projection(snapshot, operation).await
         })
     }
-}
-
-fn merge_unresolved_issues(
-    previous: &[ValidationIssue],
-    corrected: &[ValidationIssue],
-    corrected_dates: &BTreeSet<String>,
-    corrected_invalid_dates: &BTreeSet<String>,
-) -> Vec<ValidationIssue> {
-    let mut merged_by_scope = previous
-        .iter()
-        .filter(|issue| {
-            !corrected_dates.contains(&issue.scope)
-                || corrected_invalid_dates.contains(&issue.scope)
-        })
-        .map(|issue| (issue.scope.clone(), issue.clone()))
-        .collect::<BTreeMap<_, _>>();
-
-    for issue in corrected {
-        merged_by_scope.insert(issue.scope.clone(), issue.clone());
-    }
-
-    merged_by_scope.into_values().collect()
-}
-
-fn merge_invalid_day_sections(
-    previous_sections: &[String],
-    corrected_sections: &[String],
-    corrected_dates: &BTreeSet<String>,
-    corrected_invalid_dates: &BTreeSet<String>,
-) -> Vec<String> {
-    let mut merged_by_date = previous_sections
-        .iter()
-        .filter_map(|section| {
-            section
-                .lines()
-                .next()
-                .filter(|date| {
-                    !corrected_dates.contains(*date) || corrected_invalid_dates.contains(*date)
-                })
-                .map(|date| (date.to_string(), section.clone()))
-        })
-        .collect::<BTreeMap<_, _>>();
-
-    for section in corrected_sections {
-        if let Some(date) = section.lines().next() {
-            merged_by_date.insert(date.to_string(), section.clone());
-        }
-    }
-
-    merged_by_date.into_values().collect()
 }

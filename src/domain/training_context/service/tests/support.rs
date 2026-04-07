@@ -345,7 +345,6 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
                             }),
                         ],
                     }),
-                    active: true,
                     superseded_at_epoch_seconds: None,
                     created_at_epoch_seconds: 1,
                     updated_at_epoch_seconds: 1,
@@ -375,9 +374,27 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
                                     max: 97.0,
                                 },
                             }),
+                            PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                                duration_seconds: 180,
+                                kind: PlannedWorkoutStepKind::Steady,
+                                target: PlannedWorkoutTarget::PercentFtp {
+                                    min: 55.0,
+                                    max: 55.0,
+                                },
+                            }),
+                            PlannedWorkoutLine::Text(PlannedWorkoutText {
+                                text: "Cooldown".to_string(),
+                            }),
+                            PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                                duration_seconds: 300,
+                                kind: PlannedWorkoutStepKind::Steady,
+                                target: PlannedWorkoutTarget::PercentFtp {
+                                    min: 50.0,
+                                    max: 50.0,
+                                },
+                            }),
                         ],
                     }),
-                    active: true,
                     superseded_at_epoch_seconds: None,
                     created_at_epoch_seconds: 1,
                     updated_at_epoch_seconds: 1,
