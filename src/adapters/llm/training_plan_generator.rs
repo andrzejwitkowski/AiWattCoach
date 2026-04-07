@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use serde_json::json;
 
+use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
+
 use crate::domain::{
     ai_workflow::ValidationIssue,
     identity::Clock,
@@ -14,9 +16,10 @@ use crate::domain::{
     workout_summary::WorkoutRecap,
 };
 
-const TRAINING_PLAN_RECAP_SYSTEM_PROMPT: &str = "You are an AI cycling coach generating a completed workout recap from packed training context. Use only the provided context, stay factual, concise, and avoid inventing details.";
-const TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT: &str = "You are an AI cycling coach generating a 14-day internal cycling plan window. Return only dated workout-plan text sections that the backend parser can validate. Use the packed training context and the completed workout recap as the planning basis.";
-const TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT: &str = "You are an AI cycling coach helping correct invalid dated workout sections in a 14-day internal cycling plan window. Only rewrite the invalid dated sections provided. Return only corrected dated workout-plan text sections that the backend parser can validate.";
+const TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach generating a completed workout recap from packed training context. Use only the provided context, stay factual, concise, and avoid inventing details.";
+const TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Generate a 14-day internal cycling plan window using only the backend-supported workout grammar. Use the packed training context and the completed workout recap as the planning basis.";
+const TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Help correct invalid dated workout sections using only the backend-supported workout grammar. Only rewrite the invalid dated sections provided.";
+const TRAINING_PLAN_OUTPUT_GRAMMAR: &str = "Critical rules: Output ONLY the raw workout text. Do not include commentary, greetings, markdown fences, or prose before/after the dated sections. Every actionable workout step MUST begin with a hyphen followed by a space (`- `). Do not invent syntax. Output grammar: One dated section per day. Start each section with a YYYY-MM-DD line. Follow with either `Rest Day` or workout-builder text lines. Block titles and descriptions are allowed on lines that do not start with `- ` and do not end with `x`. Step syntax: `- [Duration] [Target]`. Ramp syntax: `- [Duration] ramp [Start Target]-[End Target]`. Repeat headers must end with `x`, such as `Main Set 4x`. Supported durations: `30s`, `5m`, `45m`. Supported targets: `65%`, `95-105%`, `120-160W`. Example step: `- 45m 65%`. Example output: `2026-04-06\nWarmup\n- 15m ramp 100-270W\n2026-04-07\nRest Day`. Do not use cadence, zone targets, inline text cues, hour units, or distance units because the current backend parser does not accept them. For correction prompts, Only output corrected dated sections for the invalid dates you are fixing.";
 
 #[derive(Clone)]
 pub struct TrainingPlanLlmGenerator<Time>
@@ -90,7 +93,7 @@ where
                     config.clone(),
                     LlmChatRequest {
                         user_id,
-                        system_prompt: TRAINING_PLAN_RECAP_SYSTEM_PROMPT.to_string(),
+                        system_prompt: training_plan_recap_system_prompt(),
                         stable_context,
                         volatile_context,
                         conversation: vec![LlmChatMessage {
@@ -161,7 +164,7 @@ where
                     config,
                     LlmChatRequest {
                         user_id,
-                        system_prompt: TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT.to_string(),
+                        system_prompt: training_plan_initial_window_system_prompt(),
                         stable_context,
                         volatile_context,
                         conversation: vec![LlmChatMessage {
@@ -236,7 +239,7 @@ where
                     config,
                     LlmChatRequest {
                         user_id,
-                        system_prompt: TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT.to_string(),
+                        system_prompt: training_plan_correction_system_prompt(),
                         stable_context,
                         volatile_context,
                         conversation: vec![LlmChatMessage {
@@ -258,4 +261,29 @@ where
 
 fn map_llm_error(error: LlmError) -> TrainingPlanError {
     TrainingPlanError::Unavailable(error.to_string())
+}
+
+fn training_plan_recap_system_prompt() -> String {
+    format!(
+        "{} {}",
+        TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE, PACKED_TRAINING_CONTEXT_LEGEND
+    )
+}
+
+fn training_plan_initial_window_system_prompt() -> String {
+    format!(
+        "{} {} {}",
+        TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE,
+        TRAINING_PLAN_OUTPUT_GRAMMAR,
+        PACKED_TRAINING_CONTEXT_LEGEND
+    )
+}
+
+fn training_plan_correction_system_prompt() -> String {
+    format!(
+        "{} {} {}",
+        TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE,
+        TRAINING_PLAN_OUTPUT_GRAMMAR,
+        PACKED_TRAINING_CONTEXT_LEGEND
+    )
 }

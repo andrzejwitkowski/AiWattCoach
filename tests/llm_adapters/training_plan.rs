@@ -97,6 +97,105 @@ async fn training_plan_generator_builds_workout_recap_request_from_training_cont
 }
 
 #[tokio::test]
+async fn training_plan_generator_describes_packed_context_legend_in_system_prompts() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    generator
+        .generate_workout_recap("user-1", "workout-1", 1_699_999_000)
+        .await
+        .unwrap();
+
+    let prompt = &chat_port.requests()[0].system_prompt;
+    assert!(prompt.contains("Packed context legend"));
+    assert!(prompt.contains("v=schema version"));
+    assert!(prompt.contains("fx=focus"));
+    assert!(prompt.contains("rd=recent days"));
+    assert!(prompt.contains("ud=upcoming days"));
+    assert!(prompt.contains("pd=projected days"));
+    assert!(prompt.contains("pc"));
+    assert!(prompt.contains("level:seconds"));
+    assert!(prompt.contains("rounded to the nearest 10W bucket"));
+    assert!(prompt.contains("round((watts / ftp)^2.5 * 100)"));
+    assert!(prompt.contains("same encoded level are run-length encoded"));
+}
+
+#[tokio::test]
+async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "gemini",
+                "gemini-3.1-pro",
+                1_700_000_000,
+            ),
+        )
+        .await
+        .unwrap();
+
+    let initial_prompt = &chat_port.requests()[0].system_prompt;
+    assert!(initial_prompt.contains("strict syntax generator"));
+    assert!(initial_prompt.contains("Output ONLY the raw workout text"));
+    assert!(initial_prompt
+        .contains("Every actionable workout step MUST begin with a hyphen followed by a space"));
+    assert!(initial_prompt.contains("Output grammar"));
+    assert!(initial_prompt.contains("YYYY-MM-DD"));
+    assert!(initial_prompt.contains("One dated section per day"));
+    assert!(initial_prompt.contains("Rest Day"));
+    assert!(initial_prompt.contains("- [Duration] [Target]"));
+    assert!(initial_prompt.contains("- [Duration] ramp [Start Target]-[End Target]"));
+    assert!(initial_prompt.contains("Supported durations"));
+    assert!(initial_prompt.contains("Supported targets"));
+    assert!(initial_prompt.contains("Do not use cadence"));
+    assert!(initial_prompt.contains("- 45m 65%"));
+
+    generator
+        .correct_invalid_days(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "gemini",
+                "gemini-3.1-pro",
+                1_700_000_000,
+            ),
+            "2026-04-05\n- 10m nonsense",
+            vec![ValidationIssue {
+                scope: "2026-04-05".to_string(),
+                message: "invalid planned workout step".to_string(),
+            }],
+        )
+        .await
+        .unwrap();
+
+    let correction_prompt = &chat_port.requests()[1].system_prompt;
+    assert!(correction_prompt.contains("strict syntax generator"));
+    assert!(correction_prompt.contains("Output ONLY the raw workout text"));
+    assert!(correction_prompt.contains("Output grammar"));
+    assert!(correction_prompt.contains("YYYY-MM-DD"));
+    assert!(correction_prompt.contains("One dated section per day"));
+    assert!(correction_prompt.contains("Only output corrected dated sections"));
+}
+
+#[tokio::test]
 async fn training_plan_generator_builds_initial_window_request_with_recap() {
     let chat_port = Arc::new(CapturingChatPort::default());
     let generator = TrainingPlanLlmGenerator::new(

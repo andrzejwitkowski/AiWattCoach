@@ -1,4 +1,4 @@
-use super::helpers::*;
+use super::support::*;
 
 #[tokio::test]
 async fn generates_snapshot_and_projected_days_for_saved_workout() {

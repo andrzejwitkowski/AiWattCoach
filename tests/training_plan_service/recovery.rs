@@ -1,4 +1,4 @@
-use super::helpers::*;
+use super::support::*;
 
 #[tokio::test]
 async fn reclaim_resumes_from_stored_checkpoints_without_regenerating_completed_phases() {
