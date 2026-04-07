@@ -27,28 +27,45 @@ pub(super) fn build_historical_context(
     start: NaiveDate,
     end: NaiveDate,
     activities: &[Activity],
+    detailed_activities_by_id: &HashMap<String, Activity>,
+    workout_recaps_by_id: &HashMap<String, String>,
+    configured_ftp: Option<i32>,
     recent_interval_blocks_by_activity_id: &HashMap<String, Vec<PlannedWorkoutBlockContext>>,
 ) -> HistoricalTrainingContext {
     let workouts = activities
         .iter()
-        .map(|activity| HistoricalWorkoutContext {
-            date: date_key(&activity.start_date_local),
-            activity_id: activity.id.clone(),
-            name: activity.name.clone(),
-            activity_type: activity.activity_type.clone(),
-            duration_seconds: activity
-                .elapsed_time_seconds
-                .or(activity.moving_time_seconds),
-            training_stress_score: activity.metrics.training_stress_score,
-            intensity_factor: activity.metrics.intensity_factor,
-            efficiency_factor: activity.metrics.efficiency_factor,
-            normalized_power_watts: activity.metrics.normalized_power_watts,
-            ftp_watts: activity.metrics.ftp_watts,
-            variability_index: activity.metrics.variability_index,
-            interval_blocks: recent_interval_blocks_by_activity_id
+        .map(|activity| {
+            let compressed_power_levels = detailed_activities_by_id
                 .get(&activity.id)
-                .cloned()
-                .unwrap_or_default(),
+                .map(|detailed| {
+                    compress_power_stream(
+                        &extract_power_stream(&detailed.details.streams),
+                        detailed.metrics.ftp_watts.or(configured_ftp),
+                    )
+                })
+                .unwrap_or_default();
+
+            HistoricalWorkoutContext {
+                date: date_key(&activity.start_date_local),
+                activity_id: activity.id.clone(),
+                name: activity.name.clone(),
+                activity_type: activity.activity_type.clone(),
+                duration_seconds: activity
+                    .elapsed_time_seconds
+                    .or(activity.moving_time_seconds),
+                training_stress_score: activity.metrics.training_stress_score,
+                intensity_factor: activity.metrics.intensity_factor,
+                efficiency_factor: activity.metrics.efficiency_factor,
+                normalized_power_watts: activity.metrics.normalized_power_watts,
+                ftp_watts: activity.metrics.ftp_watts,
+                workout_recap: workout_recaps_by_id.get(&activity.id).cloned(),
+                variability_index: activity.metrics.variability_index,
+                compressed_power_levels,
+                interval_blocks: recent_interval_blocks_by_activity_id
+                    .get(&activity.id)
+                    .cloned()
+                    .unwrap_or_default(),
+            }
         })
         .collect::<Vec<_>>();
 

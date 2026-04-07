@@ -162,6 +162,26 @@ fn rejects_invalid_calendar_date_headers() {
 }
 
 #[test]
+fn rejects_empty_input_without_any_date_headers() {
+    let error = parse_planned_workout_days("").expect_err("should fail");
+
+    assert!(
+        error.to_string().contains("no date headers found"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn rejects_whitespace_only_input_without_any_date_headers() {
+    let error = parse_planned_workout_days("   \n\n  ").expect_err("should fail");
+
+    assert!(
+        error.to_string().contains("no date headers found"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn rejects_non_positive_target_values() {
     let percent_error = parse_planned_workout("- 15m 0%").expect_err("percent should fail");
     let watts_error = parse_planned_workout("- 15m ramp 0-120W").expect_err("watts should fail");

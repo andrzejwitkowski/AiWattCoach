@@ -87,7 +87,9 @@ pub struct HistoricalWorkoutContext {
     pub efficiency_factor: Option<f64>,
     pub normalized_power_watts: Option<i32>,
     pub ftp_watts: Option<i32>,
+    pub workout_recap: Option<String>,
     pub variability_index: Option<f64>,
+    pub compressed_power_levels: Vec<String>,
     pub interval_blocks: Vec<PlannedWorkoutBlockContext>,
 }
 

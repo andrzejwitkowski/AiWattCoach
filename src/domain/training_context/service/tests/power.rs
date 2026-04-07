@@ -22,18 +22,26 @@ fn compressed_power_smooths_single_second_spike_outside_ftp_zone() {
 }
 
 #[test]
-fn compressed_power_preserves_single_second_change_in_ftp_zone() {
+fn compressed_power_merges_single_second_change_within_same_power_bucket() {
     assert_eq!(
         compress_power_stream(&[287, 290, 287], Some(300)),
-        vec!["90:1", "92:1", "90:1"]
+        vec!["92:3"]
     );
 }
 
 #[test]
-fn compressed_power_preserves_boundary_change_when_changed_level_enters_ftp_zone() {
+fn compressed_power_merges_boundary_change_when_bucketed_level_matches() {
     assert_eq!(
         compress_power_stream(&[286, 287, 286], Some(300)),
-        vec!["89:1", "90:1", "89:1"]
+        vec!["92:3"]
+    );
+}
+
+#[test]
+fn compressed_power_buckets_watts_to_nearest_ten_before_encoding() {
+    assert_eq!(
+        compress_power_stream(&[284, 286, 289], Some(300)),
+        vec!["84:1", "92:2"]
     );
 }
 

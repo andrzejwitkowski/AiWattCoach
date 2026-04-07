@@ -6,8 +6,8 @@ use crate::domain::{
     ai_workflow::ValidationIssue,
     identity::Clock,
     llm::{
-        approximate_token_budget_for_model, BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest,
-        LlmError, LlmMessageRole, UserLlmConfigProvider,
+        BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmError, LlmMessageRole,
+        UserLlmConfigProvider,
     },
     training_context::TrainingContextBuilder,
     training_plan::{TrainingPlanError, TrainingPlanGenerator},
@@ -85,14 +85,6 @@ where
             );
             let user_prompt = "Generate a concise workout recap for the completed workout. Focus on execution quality, response to the session, and what matters for planning the next training window.";
 
-            ensure_request_fits_budget(
-                &config.model,
-                TRAINING_PLAN_RECAP_SYSTEM_PROMPT,
-                &stable_context,
-                &volatile_context,
-                user_prompt,
-            )?;
-
             let response = llm_chat_port
                 .chat(
                     config.clone(),
@@ -163,14 +155,6 @@ where
                 context.rendered.volatile_context
             );
             let user_prompt = "Generate the next 14 dated days starting the day after the completed workout. Return only dated sections in parser-friendly workout-builder text. Include rest days explicitly when needed.";
-
-            ensure_request_fits_budget(
-                &config.model,
-                TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT,
-                &stable_context,
-                &volatile_context,
-                user_prompt,
-            )?;
 
             let response = llm_chat_port
                 .chat(
@@ -247,14 +231,6 @@ where
                 "Correct only these invalid dated sections. Keep valid days untouched.\n\nInvalid sections:\n{invalid_day_sections}\n\nValidation issues:\n{issues_text}"
             );
 
-            ensure_request_fits_budget(
-                &config.model,
-                TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT,
-                &stable_context,
-                &volatile_context,
-                &user_prompt,
-            )?;
-
             let response = llm_chat_port
                 .chat(
                     config,
@@ -278,27 +254,6 @@ where
             Ok(response.message)
         })
     }
-}
-
-fn ensure_request_fits_budget(
-    model: &str,
-    system_prompt: &str,
-    stable_context: &str,
-    volatile_context: &str,
-    user_prompt: &str,
-) -> Result<(), TrainingPlanError> {
-    let estimated_tokens = system_prompt.len() / 4
-        + stable_context.len() / 4
-        + volatile_context.len() / 4
-        + user_prompt.len() / 4;
-
-    if estimated_tokens > approximate_token_budget_for_model(model) {
-        return Err(TrainingPlanError::Unavailable(
-            "training plan prompt exceeds the selected model token budget".to_string(),
-        ));
-    }
-
-    Ok(())
 }
 
 fn map_llm_error(error: LlmError) -> TrainingPlanError {

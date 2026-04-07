@@ -2,6 +2,8 @@ use crate::domain::intervals::{Activity, ActivityStream};
 
 use super::{MAX_CHUNKS_PER_WORKOUT, STREAM_BUCKET_SIZE};
 
+const POWER_BUCKET_WATTS: i32 = 10;
+
 pub(super) fn extract_and_average_stream(
     streams: &[ActivityStream],
     stream_type: &str,
@@ -53,7 +55,14 @@ fn encode_power_level(power_watts: i32, ftp_watts: i32) -> i32 {
         return 0;
     }
 
+    let power_watts = round_to_nearest_power_bucket(power_watts);
+
     ((power_watts as f64 / ftp_watts as f64).powf(2.5) * 100.0).round() as i32
+}
+
+fn round_to_nearest_power_bucket(power_watts: i32) -> i32 {
+    let half_bucket = POWER_BUCKET_WATTS / 2;
+    ((power_watts + half_bucket) / POWER_BUCKET_WATTS) * POWER_BUCKET_WATTS
 }
 
 fn smooth_single_second_level_noise(levels: &mut [i32]) {

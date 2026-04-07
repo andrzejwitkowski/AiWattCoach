@@ -130,16 +130,20 @@ where
             .await
             .map_err(|error| LlmError::Internal(error.to_string()))?;
         let today = epoch_seconds_to_date(self.clock.now_epoch_seconds());
+        let focus_date = self
+            .resolve_focus_date(user_id, workout_id)
+            .await
+            .unwrap_or(today);
         let history_trend_days = 24 * 7;
         let history_warmup_days = 120;
         let history_start =
-            today - Duration::days((history_trend_days + history_warmup_days - 1) as i64);
-        let recent_start = today - Duration::days(13);
-        let upcoming_end = today + Duration::days(14);
+            focus_date - Duration::days((history_trend_days + history_warmup_days - 1) as i64);
+        let recent_start = focus_date - Duration::days(13);
+        let upcoming_end = focus_date + Duration::days(14);
 
         let activities_range = DateRange {
             oldest: history_start.format("%Y-%m-%d").to_string(),
-            newest: today.format("%Y-%m-%d").to_string(),
+            newest: focus_date.format("%Y-%m-%d").to_string(),
         };
         let events_range = DateRange {
             oldest: recent_start.format("%Y-%m-%d").to_string(),
@@ -167,30 +171,39 @@ where
         let recent_activity_ids = history_activities
             .iter()
             .filter(|activity| {
-                activity_date(activity) >= recent_start && activity_date(activity) <= today
+                activity_date(activity) >= recent_start && activity_date(activity) <= focus_date
             })
             .map(|activity| activity.id.clone())
             .collect::<Vec<_>>();
 
         let detailed_recent_activities = self
-            .load_detailed_recent_activities(user_id, &history_activities, recent_start, today)
+            .load_detailed_recent_activities(user_id, &history_activities, recent_start, focus_date)
             .await;
+        let historical_activity_ids = history_activities
+            .iter()
+            .map(|activity| activity.id.clone())
+            .collect::<Vec<_>>();
         let summaries_by_id = self
-            .load_recent_rpe_by_workout_id(user_id, &recent_activity_ids, &events)
+            .load_rpe_by_workout_id(user_id, &recent_activity_ids, &events)
             .await;
         let workout_recaps_by_id = self
-            .load_recent_workout_recaps_by_workout_id(user_id, &recent_activity_ids, &events)
+            .load_workout_recaps_by_workout_id(user_id, &historical_activity_ids, &events)
             .await;
-        let projected_days = self.load_projected_day_contexts(user_id).await;
+        let projected_days = self.load_projected_day_contexts(user_id, focus_date).await;
+        let detailed_recent_activities_by_id = detailed_recent_activities
+            .iter()
+            .cloned()
+            .map(|activity| (activity.id.clone(), activity))
+            .collect::<HashMap<_, _>>();
 
         let recent_events = events
             .iter()
-            .filter(|event| event_date(event) >= recent_start && event_date(event) <= today)
+            .filter(|event| event_date(event) >= recent_start && event_date(event) <= focus_date)
             .cloned()
             .collect::<Vec<_>>();
         let upcoming_events = events
             .iter()
-            .filter(|event| event_date(event) > today && event_date(event) <= upcoming_end)
+            .filter(|event| event_date(event) > focus_date && event_date(event) <= upcoming_end)
             .cloned()
             .collect::<Vec<_>>();
         let configured_ftp = settings
@@ -223,13 +236,16 @@ where
 
         let history = build_historical_context(
             history_start,
-            today,
+            focus_date,
             &history_activities,
+            &detailed_recent_activities_by_id,
+            &workout_recaps_by_id,
+            configured_ftp,
             &recent_interval_blocks_by_activity_id,
         );
         let recent_days = build_recent_day_contexts(
             recent_start,
-            today,
+            focus_date,
             &recent_events,
             &detailed_recent_activities,
             RecentWorkoutSummaryLookup {
@@ -239,8 +255,11 @@ where
             &matched_recent_workouts,
             configured_ftp,
         );
-        let upcoming_days =
-            build_upcoming_day_contexts(today + Duration::days(1), upcoming_end, &upcoming_events);
+        let upcoming_days = build_upcoming_day_contexts(
+            focus_date + Duration::days(1),
+            upcoming_end,
+            &upcoming_events,
+        );
         let focus_kind = infer_focus_kind(workout_id, &recent_days, &upcoming_days);
 
         let context = TrainingContext {
@@ -300,7 +319,7 @@ where
             .await
     }
 
-    async fn load_recent_rpe_by_workout_id(
+    async fn load_rpe_by_workout_id(
         &self,
         user_id: &str,
         activity_ids: &[String],
@@ -327,7 +346,7 @@ where
         }
     }
 
-    async fn load_recent_workout_recaps_by_workout_id(
+    async fn load_workout_recaps_by_workout_id(
         &self,
         user_id: &str,
         activity_ids: &[String],
@@ -358,22 +377,26 @@ where
         }
     }
 
-    async fn load_projected_day_contexts(&self, user_id: &str) -> Vec<ProjectedDayContext> {
+    async fn load_projected_day_contexts(
+        &self,
+        user_id: &str,
+        focus_date: NaiveDate,
+    ) -> Vec<ProjectedDayContext> {
         let Some(repository) = &self.training_plan_projection_repository else {
             return Vec::new();
         };
-
-        let today = epoch_seconds_to_date(self.clock.now_epoch_seconds())
-            .format("%Y-%m-%d")
-            .to_string();
 
         let projected_days = match repository.list_active_by_user_id(user_id).await {
             Ok(projected_days) => projected_days,
             Err(_) => return Vec::new(),
         };
+        let focus_date = focus_date.format("%Y-%m-%d").to_string();
 
         let mut grouped = BTreeMap::<String, Vec<ProjectedWorkoutContext>>::new();
-        for day in projected_days.into_iter().filter(|day| day.date > today) {
+        for day in projected_days
+            .into_iter()
+            .filter(|day| day.date > focus_date)
+        {
             grouped
                 .entry(day.date.clone())
                 .or_default()
@@ -395,5 +418,26 @@ where
             .into_iter()
             .map(|(date, workouts)| ProjectedDayContext { date, workouts })
             .collect()
+    }
+
+    async fn resolve_focus_date(&self, user_id: &str, workout_id: &str) -> Option<NaiveDate> {
+        if workout_id == "athlete-summary" {
+            return None;
+        }
+
+        if let Ok(activity) = self
+            .intervals_service
+            .get_activity(user_id, workout_id)
+            .await
+        {
+            return Some(activity_date(&activity));
+        }
+
+        let event_id = workout_id.parse::<i64>().ok()?;
+        self.intervals_service
+            .get_event(user_id, event_id)
+            .await
+            .ok()
+            .map(|event| event_date(&event))
     }
 }

@@ -69,6 +69,10 @@ pub fn parse_planned_workout_days(
         days.push(parse_day(&date, &current_lines)?);
     }
 
+    if days.is_empty() {
+        return Err(PlannedWorkoutParseError::new("no date headers found"));
+    }
+
     Ok(PlannedWorkoutDays { days })
 }
 

@@ -3,6 +3,10 @@ use std::sync::Arc;
 use crate::domain::{
     intervals::{Activity, DateRange, Event, IntervalsError, IntervalsUseCases},
     training_context::TrainingContextBuilder,
+    training_plan::{
+        TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
+        TrainingPlanSnapshot,
+    },
 };
 
 use super::{
@@ -168,12 +172,21 @@ async fn builder_renders_recent_and_historical_context() {
     assert!(result.rendered.stable_context.contains("\"lt\":["));
     assert!(result.rendered.stable_context.contains("\"days\":1"));
     assert!(result.rendered.stable_context.contains("\"bl\":["));
+    assert!(result
+        .rendered
+        .stable_context
+        .contains("\"recap\":\"Strong sweet spot execution with steady control\""));
+    assert!(result
+        .rendered
+        .stable_context
+        .contains("\"pc\":[\"36:1\",\"46:1\",\"57:1\",\"70:1\",\"84:1\"]"));
     assert!(result.rendered.volatile_context.contains("\"ride-1\""));
     assert!(result
         .rendered
         .volatile_context
         .contains("Strong sweet spot execution with steady control"));
     assert!(result.rendered.volatile_context.contains("\"pc\":["));
+    assert!(result.rendered.volatile_context.contains("\"tss\":80"));
     assert!(result.rendered.volatile_context.contains("\"pd\":["));
     assert!(result
         .rendered
@@ -248,6 +261,203 @@ async fn builder_ignores_projected_days_on_or_before_today() {
         .projected_days
         .iter()
         .all(|day| day.date.as_str() > "2026-04-03"));
+}
+
+#[tokio::test]
+async fn builder_anchors_windows_to_focus_activity_date() {
+    #[derive(Clone)]
+    struct OlderFocusIntervalsService;
+
+    impl IntervalsUseCases for OlderFocusIntervalsService {
+        fn list_events(
+            &self,
+            _user_id: &str,
+            _range: &DateRange,
+        ) -> crate::domain::intervals::BoxFuture<Result<Vec<Event>, IntervalsError>> {
+            Box::pin(async move { Ok(Vec::new()) })
+        }
+
+        fn get_event(
+            &self,
+            _user_id: &str,
+            _event_id: i64,
+        ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+            Box::pin(async move { Err(IntervalsError::NotFound) })
+        }
+
+        fn create_event(
+            &self,
+            _user_id: &str,
+            _event: crate::domain::intervals::CreateEvent,
+        ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn update_event(
+            &self,
+            _user_id: &str,
+            _event_id: i64,
+            _event: crate::domain::intervals::UpdateEvent,
+        ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn delete_event(
+            &self,
+            _user_id: &str,
+            _event_id: i64,
+        ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+            unreachable!()
+        }
+
+        fn download_fit(
+            &self,
+            _user_id: &str,
+            _event_id: i64,
+        ) -> crate::domain::intervals::BoxFuture<Result<Vec<u8>, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn list_activities(
+            &self,
+            _user_id: &str,
+            _range: &DateRange,
+        ) -> crate::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+            Box::pin(async move {
+                let mut activity = sample_activity_with_ftp(Some(300));
+                activity.id = "ride-older".to_string();
+                activity.start_date_local = "2026-03-20T08:00:00".to_string();
+                Ok(vec![activity])
+            })
+        }
+
+        fn get_activity(
+            &self,
+            _user_id: &str,
+            _activity_id: &str,
+        ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+            Box::pin(async move {
+                let mut activity = sample_activity_with_ftp(Some(300));
+                activity.id = "ride-older".to_string();
+                activity.start_date_local = "2026-03-20T08:00:00".to_string();
+                Ok(activity)
+            })
+        }
+
+        fn upload_activity(
+            &self,
+            _user_id: &str,
+            _upload: crate::domain::intervals::UploadActivity,
+        ) -> crate::domain::intervals::BoxFuture<
+            Result<crate::domain::intervals::UploadedActivities, IntervalsError>,
+        > {
+            unreachable!()
+        }
+
+        fn update_activity(
+            &self,
+            _user_id: &str,
+            _activity_id: &str,
+            _activity: crate::domain::intervals::UpdateActivity,
+        ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn delete_activity(
+            &self,
+            _user_id: &str,
+            _activity_id: &str,
+        ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+            unreachable!()
+        }
+    }
+
+    #[derive(Clone)]
+    struct OlderFocusProjectionRepository;
+
+    impl TrainingPlanProjectionRepository for OlderFocusProjectionRepository {
+        fn list_active_by_user_id(
+            &self,
+            _user_id: &str,
+        ) -> crate::domain::training_plan::BoxFuture<
+            Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
+        > {
+            Box::pin(async move {
+                Ok(vec![
+                    TrainingPlanProjectedDay {
+                        user_id: "user-1".to_string(),
+                        workout_id: "ride-older".to_string(),
+                        operation_key: "training-plan:user-1:ride-older:1775174400".to_string(),
+                        date: "2026-03-21".to_string(),
+                        rest_day: false,
+                        workout: None,
+                        superseded_at_epoch_seconds: None,
+                        created_at_epoch_seconds: 1,
+                        updated_at_epoch_seconds: 1,
+                    },
+                    TrainingPlanProjectedDay {
+                        user_id: "user-1".to_string(),
+                        workout_id: "ride-older".to_string(),
+                        operation_key: "training-plan:user-1:ride-older:1775174400".to_string(),
+                        date: "2026-03-24".to_string(),
+                        rest_day: true,
+                        workout: None,
+                        superseded_at_epoch_seconds: None,
+                        created_at_epoch_seconds: 1,
+                        updated_at_epoch_seconds: 1,
+                    },
+                ])
+            })
+        }
+
+        fn find_active_by_operation_key(
+            &self,
+            _operation_key: &str,
+        ) -> crate::domain::training_plan::BoxFuture<
+            Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
+        > {
+            unreachable!()
+        }
+
+        fn replace_window(
+            &self,
+            _snapshot: TrainingPlanSnapshot,
+            _projected_days: Vec<TrainingPlanProjectedDay>,
+            _today: &str,
+            _replaced_at_epoch_seconds: i64,
+        ) -> crate::domain::training_plan::BoxFuture<
+            Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>,
+        > {
+            unreachable!()
+        }
+    }
+
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(OlderFocusIntervalsService),
+        Arc::new(TestWorkoutSummaryRepository),
+        FixedClock,
+    )
+    .with_training_plan_projection_repository(Arc::new(OlderFocusProjectionRepository));
+
+    let result = builder.build("user-1", "ride-older").await.unwrap();
+
+    assert_eq!(result.context.focus_kind, "activity");
+    assert_eq!(result.context.history.window_end, "2026-03-20");
+    assert!(result
+        .context
+        .recent_days
+        .iter()
+        .any(|day| day.date == "2026-03-20" && !day.workouts.is_empty()));
+    assert_eq!(
+        result
+            .context
+            .projected_days
+            .iter()
+            .map(|day| day.date.as_str())
+            .collect::<Vec<_>>(),
+        vec!["2026-03-21", "2026-03-24"]
+    );
 }
 
 #[tokio::test]
