@@ -207,23 +207,21 @@ fn build_recent_workout(
     workout_recaps_by_id: &HashMap<String, String>,
     configured_ftp: Option<i32>,
 ) -> RecentWorkoutContext {
+    let resolved_ftp = activity.metrics.ftp_watts.or(configured_ftp);
     let compressed_power_levels = compress_power_stream(
         &extract_power_stream(&activity.details.streams),
-        activity.metrics.ftp_watts.or(configured_ftp),
+        resolved_ftp,
     );
     let cadence_values_5s = extract_and_average_stream(&activity.details.streams, "cadence");
     let planned_workout = matched_event.map(|event| {
-        let parsed = parse_workout_doc(event.workout_doc.as_deref(), activity.metrics.ftp_watts);
+        let parsed = parse_workout_doc(event.workout_doc.as_deref(), resolved_ftp);
 
         PlannedWorkoutReference {
             event_id: event.id,
             start_date_local: event.start_date_local.clone(),
             name: event.name.clone(),
             category: event.category.as_str().to_string(),
-            interval_blocks: build_planned_workout_blocks(
-                &parsed.segments,
-                activity.metrics.ftp_watts,
-            ),
+            interval_blocks: build_planned_workout_blocks(&parsed.segments, resolved_ftp),
             raw_workout_doc: event.workout_doc.clone(),
             estimated_training_stress_score: parsed.summary.estimated_training_stress_score,
             estimated_intensity_factor: parsed.summary.estimated_intensity_factor,
@@ -371,12 +369,13 @@ fn infer_sick_note(special_days: &[SpecialDayContext]) -> Option<String> {
         }
 
         let normalized = text.trim().to_ascii_lowercase();
-        if normalized.contains("sick")
-            || normalized.contains("ill")
-            || normalized.contains("unwell")
-            || normalized.contains("fever")
-            || normalized.contains("cold")
-            || normalized.contains("flu")
+        let tokens = normalized
+            .split(|ch: char| !ch.is_ascii_alphanumeric())
+            .filter(|token| !token.is_empty())
+            .collect::<Vec<_>>();
+        if tokens
+            .iter()
+            .any(|token| matches!(*token, "sick" | "ill" | "unwell" | "fever" | "cold" | "flu"))
         {
             Some(text.trim().to_string())
         } else {

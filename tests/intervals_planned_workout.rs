@@ -151,6 +151,18 @@ fn rejects_date_header_with_no_body() {
 }
 
 #[test]
+fn rejects_invalid_calendar_date_headers() {
+    let error = parse_planned_workout_days("2026-13-99\nrest day").expect_err("should fail");
+
+    assert!(
+        error
+            .to_string()
+            .contains("content before first date header"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn rejects_non_positive_target_values() {
     let percent_error = parse_planned_workout("- 15m 0%").expect_err("percent should fail");
     let watts_error = parse_planned_workout("- 15m ramp 0-120W").expect_err("watts should fail");

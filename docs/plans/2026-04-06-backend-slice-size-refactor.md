@@ -8,6 +8,8 @@
 
 ---
 
+## Tasks
+
 ### Task 1: Split `training_context` service into focused modules
 
 **Files:**

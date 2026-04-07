@@ -4,6 +4,7 @@ use serde_json::json;
 
 use crate::domain::{
     ai_workflow::ValidationIssue,
+    identity::Clock,
     llm::{
         approximate_token_budget_for_model, BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest,
         LlmError, LlmMessageRole, UserLlmConfigProvider,
@@ -18,27 +19,39 @@ const TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT: &str = "You are an AI cycling 
 const TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT: &str = "You are an AI cycling coach helping correct invalid dated workout sections in a 14-day internal cycling plan window. Only rewrite the invalid dated sections provided. Return only corrected dated workout-plan text sections that the backend parser can validate.";
 
 #[derive(Clone)]
-pub struct TrainingPlanLlmGenerator {
+pub struct TrainingPlanLlmGenerator<Time>
+where
+    Time: Clock,
+{
     llm_chat_port: Arc<dyn LlmChatPort>,
     llm_config_provider: Arc<dyn UserLlmConfigProvider>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
+    clock: Time,
 }
 
-impl TrainingPlanLlmGenerator {
+impl<Time> TrainingPlanLlmGenerator<Time>
+where
+    Time: Clock,
+{
     pub fn new(
         llm_chat_port: Arc<dyn LlmChatPort>,
         llm_config_provider: Arc<dyn UserLlmConfigProvider>,
         training_context_builder: Arc<dyn TrainingContextBuilder>,
+        clock: Time,
     ) -> Self {
         Self {
             llm_chat_port,
             llm_config_provider,
             training_context_builder,
+            clock,
         }
     }
 }
 
-impl TrainingPlanGenerator for TrainingPlanLlmGenerator {
+impl<Time> TrainingPlanGenerator for TrainingPlanLlmGenerator<Time>
+where
+    Time: Clock,
+{
     fn generate_workout_recap(
         &self,
         user_id: &str,
@@ -48,6 +61,7 @@ impl TrainingPlanGenerator for TrainingPlanLlmGenerator {
         let llm_chat_port = self.llm_chat_port.clone();
         let llm_config_provider = self.llm_config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
+        let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
 
@@ -99,11 +113,12 @@ impl TrainingPlanGenerator for TrainingPlanLlmGenerator {
                 .await
                 .map_err(map_llm_error)?;
 
+            let generated_at_epoch_seconds = clock.now_epoch_seconds();
             Ok(WorkoutRecap::generated(
                 response.message,
                 response.provider.as_str(),
                 response.model,
-                saved_at_epoch_seconds,
+                generated_at_epoch_seconds,
             ))
         })
     }

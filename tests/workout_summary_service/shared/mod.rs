@@ -32,6 +32,6 @@ pub(crate) use reply_operations::InMemoryCoachReplyOperationRepository;
 pub(crate) use services::{
     default_dev_coach, existing_summary, test_service, test_service_with_coach,
     test_service_with_coach_and_athlete_summary, test_service_with_training_plan,
-    RecordingTrainingPlanService, StubAthleteSummaryService,
+    PersistCheckingTrainingPlanService, RecordingTrainingPlanService, StubAthleteSummaryService,
 };
 pub(crate) use summary_repository::InMemoryWorkoutSummaryRepository;

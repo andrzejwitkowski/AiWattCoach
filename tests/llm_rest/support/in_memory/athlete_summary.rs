@@ -1,13 +1,18 @@
+use std::collections::BTreeMap;
+
 use super::*;
 
 #[derive(Clone)]
 pub(crate) struct InMemoryAthleteSummaryService {
-    state: Arc<Mutex<AthleteSummaryState>>,
+    state_by_user_id: Arc<Mutex<BTreeMap<String, AthleteSummaryState>>>,
 }
 
 impl InMemoryAthleteSummaryService {
-    pub(crate) fn seed(&self, summary: Option<AthleteSummary>, stale: bool) {
-        *self.state.lock().unwrap() = AthleteSummaryState { summary, stale };
+    pub(crate) fn seed(&self, user_id: &str, summary: Option<AthleteSummary>, stale: bool) {
+        self.state_by_user_id
+            .lock()
+            .unwrap()
+            .insert(user_id.to_string(), AthleteSummaryState { summary, stale });
     }
 
     fn make_summary(&self, user_id: String, created_at_epoch_seconds: i64) -> AthleteSummary {
@@ -26,10 +31,7 @@ impl InMemoryAthleteSummaryService {
 impl Default for InMemoryAthleteSummaryService {
     fn default() -> Self {
         Self {
-            state: Arc::new(Mutex::new(AthleteSummaryState {
-                summary: None,
-                stale: true,
-            })),
+            state_by_user_id: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 }
@@ -37,11 +39,20 @@ impl Default for InMemoryAthleteSummaryService {
 impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
     fn get_summary_state(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> aiwattcoach::domain::athlete_summary::BoxFuture<
         Result<AthleteSummaryState, AthleteSummaryError>,
     > {
-        let state = self.state.lock().unwrap().clone();
+        let state = self
+            .state_by_user_id
+            .lock()
+            .unwrap()
+            .get(user_id)
+            .cloned()
+            .unwrap_or(AthleteSummaryState {
+                summary: None,
+                stale: true,
+            });
         Box::pin(async move { Ok(state) })
     }
 
@@ -51,11 +62,17 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
         force: bool,
     ) -> aiwattcoach::domain::athlete_summary::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>
     {
-        let state = self.state.clone();
+        let state_by_user_id = self.state_by_user_id.clone();
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            let mut state = state.lock().unwrap();
+            let mut states = state_by_user_id.lock().unwrap();
+            let state = states
+                .entry(user_id.clone())
+                .or_insert(AthleteSummaryState {
+                    summary: None,
+                    stale: true,
+                });
             if !force && !state.stale {
                 if let Some(summary) = state.summary.clone() {
                     return Ok(summary);
@@ -81,11 +98,17 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
         user_id: &str,
     ) -> aiwattcoach::domain::athlete_summary::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>
     {
-        let state = self.state.clone();
+        let state_by_user_id = self.state_by_user_id.clone();
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            let mut state = state.lock().unwrap();
+            let mut states = state_by_user_id.lock().unwrap();
+            let state = states
+                .entry(user_id.clone())
+                .or_insert(AthleteSummaryState {
+                    summary: None,
+                    stale: true,
+                });
             if !state.stale {
                 if let Some(summary) = state.summary.clone() {
                     return Ok(summary);
@@ -112,11 +135,17 @@ impl AthleteSummaryUseCases for InMemoryAthleteSummaryService {
     ) -> aiwattcoach::domain::athlete_summary::BoxFuture<
         Result<EnsuredAthleteSummary, AthleteSummaryError>,
     > {
-        let state = self.state.clone();
+        let state_by_user_id = self.state_by_user_id.clone();
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            let mut state = state.lock().unwrap();
+            let mut states = state_by_user_id.lock().unwrap();
+            let state = states
+                .entry(user_id.clone())
+                .or_insert(AthleteSummaryState {
+                    summary: None,
+                    stale: true,
+                });
             let was_regenerated = state.stale || state.summary.is_none();
 
             let summary = if !state.stale {

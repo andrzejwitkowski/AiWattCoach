@@ -1,7 +1,7 @@
 use crate::domain::intervals::ActivityStream;
 
 use super::super::{
-    power::{compress_power_stream, extract_power_stream},
+    power::{compress_power_stream, extract_and_average_stream, extract_power_stream},
     MAX_CHUNKS_PER_WORKOUT,
 };
 
@@ -39,7 +39,7 @@ fn compressed_power_preserves_boundary_change_when_changed_level_enters_ftp_zone
 
 #[test]
 fn compressed_power_applies_run_cap_for_noisy_streams() {
-    let noisy = (0..120)
+    let noisy = (0..(MAX_CHUNKS_PER_WORKOUT * 2 + 1))
         .map(|index| if index % 2 == 0 { 300 } else { 0 })
         .collect::<Vec<_>>();
 
@@ -48,7 +48,7 @@ fn compressed_power_applies_run_cap_for_noisy_streams() {
 
 #[test]
 fn compressed_power_run_cap_preserves_total_duration_seconds() {
-    let noisy = (0..120)
+    let noisy = (0..(MAX_CHUNKS_PER_WORKOUT * 2 + 1))
         .map(|index| if index % 2 == 0 { 300 } else { 0 })
         .collect::<Vec<_>>();
 
@@ -79,6 +79,21 @@ fn compressed_power_preserves_missing_watts_samples_as_zero_second_runs() {
 
     assert_eq!(encoded, vec!["36:1", "0:1", "41:1"]);
     assert_eq!(sum_encoded_durations(&encoded), 3);
+}
+
+#[test]
+fn extract_and_average_stream_preserves_missing_samples_for_alignment() {
+    let streams = vec![ActivityStream {
+        stream_type: "cadence".to_string(),
+        name: None,
+        data: Some(serde_json::json!([80, null, 84])),
+        data2: None,
+        value_type_is_array: false,
+        custom: false,
+        all_null: false,
+    }];
+
+    assert_eq!(extract_and_average_stream(&streams, "cadence"), vec![55]);
 }
 
 fn sum_encoded_durations(runs: &[String]) -> usize {

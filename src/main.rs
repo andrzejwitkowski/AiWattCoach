@@ -51,7 +51,7 @@ use aiwattcoach::{
     domain::settings::UserSettingsService,
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_plan::TrainingPlanGenerationService,
-    domain::workout_summary::WorkoutSummaryService,
+    domain::workout_summary::{WorkoutSummaryError, WorkoutSummaryService},
     telemetry::setup_telemetry,
     AppState,
 };
@@ -93,12 +93,44 @@ where
                 .persist_workout_recap(&user_id, &workout_id, recap)
                 .await
                 .map(|_| ())
-                .map_err(|error| {
-                    aiwattcoach::domain::training_plan::TrainingPlanError::Repository(
-                        error.to_string(),
-                    )
-                })
+                .map_err(map_workout_summary_error)
         })
+    }
+}
+
+fn map_workout_summary_error(
+    error: WorkoutSummaryError,
+) -> aiwattcoach::domain::training_plan::TrainingPlanError {
+    match error {
+        WorkoutSummaryError::Validation(message) => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(message)
+        }
+        WorkoutSummaryError::Locked => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
+                "workout summary is saved and cannot be edited".to_string(),
+            )
+        }
+        WorkoutSummaryError::NotFound => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
+                "workout summary not found".to_string(),
+            )
+        }
+        WorkoutSummaryError::AlreadyExists => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
+                "workout summary already exists".to_string(),
+            )
+        }
+        WorkoutSummaryError::ReplyAlreadyPending => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+                "coach reply generation is already pending for this message".to_string(),
+            )
+        }
+        WorkoutSummaryError::Llm(error) => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(error.to_string())
+        }
+        WorkoutSummaryError::Repository(message) => {
+            aiwattcoach::domain::training_plan::TrainingPlanError::Repository(message)
+        }
     }
 }
 
@@ -292,6 +324,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             llm_adapter.clone(),
             llm_config_provider.clone(),
             training_context_builder.clone(),
+            SystemClock,
         ),
         TrainingPlanWorkoutSummaryAdapter::new(workout_summary_service.clone()),
         SystemClock,

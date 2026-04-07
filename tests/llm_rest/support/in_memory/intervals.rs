@@ -7,7 +7,9 @@ pub(crate) struct InMemoryIntervalsService {
 
 impl InMemoryIntervalsService {
     pub(crate) fn seed_activities(&self, activities: Vec<Activity>) {
-        *self.activities.lock().unwrap() = activities;
+        let mut stored = self.activities.lock().unwrap();
+        stored.clear();
+        stored.extend(activities);
     }
 }
 
@@ -63,33 +65,45 @@ impl IntervalsUseCases for InMemoryIntervalsService {
 
     fn list_activities(
         &self,
-        _user_id: &str,
+        user_id: &str,
         _range: &DateRange,
     ) -> LlmBoxFuture<Result<Vec<Activity>, IntervalsError>> {
-        let activities = self.activities.lock().unwrap().clone();
+        let user_id = user_id.to_string();
+        let activities = self
+            .activities
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|activity| activity.athlete_id.as_deref() == Some(user_id.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
         Box::pin(async move { Ok(activities) })
     }
 
     fn get_activity(
         &self,
-        _user_id: &str,
+        user_id: &str,
         activity_id: &str,
     ) -> LlmBoxFuture<Result<Activity, IntervalsError>> {
+        let user_id = user_id.to_string();
         let activities = self.activities.lock().unwrap().clone();
         let activity_id = activity_id.to_string();
         Box::pin(async move {
             activities
                 .into_iter()
-                .find(|activity| activity.id == activity_id)
+                .find(|activity| {
+                    activity.id == activity_id
+                        && activity.athlete_id.as_deref() == Some(user_id.as_str())
+                })
                 .ok_or(IntervalsError::NotFound)
         })
     }
 }
 
-pub(crate) fn sample_activity(activity_id: &str) -> Activity {
+pub(crate) fn sample_activity(user_id: &str, activity_id: &str) -> Activity {
     Activity {
         id: activity_id.to_string(),
-        athlete_id: None,
+        athlete_id: Some(user_id.to_string()),
         start_date_local: format!("{}T08:00:00", Utc::now().format("%Y-%m-%d")),
         start_date: None,
         name: Some("Sweet Spot".to_string()),
@@ -172,17 +186,48 @@ mod tests {
     #[tokio::test]
     async fn get_activity_returns_requested_seeded_activity() {
         let service = InMemoryIntervalsService::default();
-        service.seed_activities(vec![sample_activity("ride-1"), sample_activity("ride-2")]);
+        service.seed_activities(vec![
+            sample_activity("user-1", "ride-1"),
+            sample_activity("user-1", "ride-2"),
+            sample_activity("user-2", "ride-3"),
+        ]);
 
         let activity = service.get_activity("user-1", "ride-2").await.unwrap();
 
         assert_eq!(activity.id, "ride-2");
     }
 
+    #[tokio::test]
+    async fn list_and_get_activity_scope_results_by_user_id() {
+        let service = InMemoryIntervalsService::default();
+        service.seed_activities(vec![
+            sample_activity("user-1", "ride-1"),
+            sample_activity("user-2", "ride-2"),
+        ]);
+
+        let listed = service
+            .list_activities(
+                "user-1",
+                &DateRange {
+                    oldest: "2026-01-01".to_string(),
+                    newest: "2026-12-31".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, "ride-1");
+        assert_eq!(
+            service.get_activity("user-1", "ride-2").await,
+            Err(IntervalsError::NotFound)
+        );
+    }
+
     #[test]
     fn sample_activity_uses_current_date_for_recent_window() {
         let expected_date_prefix = Utc::now().format("%Y-%m-%d").to_string();
-        let activity = sample_activity("ride-1");
+        let activity = sample_activity("user-1", "ride-1");
 
         assert!(activity.start_date_local.starts_with(&expected_date_prefix));
     }

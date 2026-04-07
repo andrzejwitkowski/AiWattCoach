@@ -142,6 +142,14 @@ async fn builder_renders_recent_and_historical_context() {
             .and_then(|block| block.min_target_watts),
         Some(270)
     );
+    assert_eq!(
+        recent_day.workouts[0]
+            .planned_workout
+            .as_ref()
+            .and_then(|planned| planned.interval_blocks.first())
+            .and_then(|block| block.max_target_watts),
+        Some(285)
+    );
     let sick_day = result
         .context
         .recent_days
@@ -513,5 +521,21 @@ async fn builder_uses_configured_ftp_when_activity_ftp_is_missing() {
             "70:1".to_string(),
             "84:1".to_string(),
         ]
+    );
+    assert_eq!(
+        recent_day.workouts[0]
+            .planned_workout
+            .as_ref()
+            .and_then(|planned| planned.interval_blocks.first())
+            .and_then(|block| block.min_target_watts),
+        Some(270)
+    );
+    assert_eq!(
+        recent_day.workouts[0]
+            .planned_workout
+            .as_ref()
+            .and_then(|planned| planned.interval_blocks.first())
+            .and_then(|block| block.max_target_watts),
+        Some(285)
     );
 }

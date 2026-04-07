@@ -4,7 +4,8 @@ use aiwattcoach::domain::workout_summary::{
 
 use crate::shared::{
     existing_summary, test_service, test_service_with_training_plan,
-    InMemoryWorkoutSummaryRepository, RecordingTrainingPlanService,
+    InMemoryWorkoutSummaryRepository, PersistCheckingTrainingPlanService,
+    RecordingTrainingPlanService,
 };
 
 #[tokio::test]
@@ -82,35 +83,20 @@ async fn mark_saved_persists_saved_state() {
 #[tokio::test]
 async fn mark_saved_triggers_training_plan_generation_after_persisting_saved_state() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
-    let training_plan = RecordingTrainingPlanService::default();
+    let training_plan = PersistCheckingTrainingPlanService::new(repository.clone());
     let service = test_service_with_training_plan(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
     );
 
-    let error = service.mark_saved("user-1", "workout-1").await.unwrap_err();
+    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(
-        error,
-        WorkoutSummaryError::Repository("training plan result not seeded in test".to_string())
-    );
+    assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
     assert_eq!(
         repository.calls(),
         vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]
     );
-    assert_eq!(
-        training_plan.calls(),
-        vec!["generate_for_saved_workout:user-1:workout-1:1700000000".to_string()]
-    );
-    assert_eq!(
-        repository
-            .find_by_user_id_and_workout_id("user-1", "workout-1")
-            .await
-            .unwrap()
-            .unwrap()
-            .saved_at_epoch_seconds,
-        Some(1_700_000_000)
-    );
+    assert!(training_plan.observed_persisted_saved_at());
 }
 
 #[tokio::test]
@@ -124,12 +110,9 @@ async fn repeat_mark_saved_retries_training_plan_generation_for_already_saved_su
         std::sync::Arc::new(training_plan.clone()),
     );
 
-    let error = service.mark_saved("user-1", "workout-1").await.unwrap_err();
+    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(
-        error,
-        WorkoutSummaryError::Repository("training plan result not seeded in test".to_string())
-    );
+    assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
     assert_eq!(repository.calls(), Vec::<String>::new());
     assert_eq!(
         training_plan.calls(),
@@ -149,12 +132,9 @@ async fn mark_saved_maps_training_plan_failure_to_repository_error_after_persist
     let service =
         test_service_with_training_plan(repository.clone(), std::sync::Arc::new(training_plan));
 
-    let error = service.mark_saved("user-1", "workout-1").await.unwrap_err();
+    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(
-        error,
-        WorkoutSummaryError::Repository("llm temporarily unavailable".to_string())
-    );
+    assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
     assert_eq!(
         repository.calls(),
         vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]

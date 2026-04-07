@@ -28,7 +28,7 @@ async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
     );
     context.seed_user_settings(settings);
     context.seed_summary(context.default_summary("workout-1"));
-    context.seed_activity(context.default_activity("workout-1"));
+    context.seed_activity(context.default_activity("user-1", "workout-1"));
 
     let response = context
         .app
@@ -94,6 +94,7 @@ async fn workout_summary_websocket_creates_and_reuses_gemini_cache() {
     context.seed_user_settings(settings);
     context.seed_summary(context.default_summary("workout-1"));
     context.seed_athlete_summary(
+        "user-1",
         Some(AthleteSummary {
             user_id: "user-1".to_string(),
             summary_text: "Fresh athlete summary".to_string(),
@@ -189,7 +190,7 @@ async fn workout_summary_websocket_sends_system_message_before_reply_when_summar
     settings.intervals.athlete_id = Some("i248035".to_string());
     context.seed_user_settings(settings);
     context.seed_summary(context.default_summary("workout-1"));
-    context.seed_athlete_summary(None, true);
+    context.seed_athlete_summary("user-1", None, true);
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -249,6 +250,7 @@ async fn workout_summary_websocket_skips_system_message_when_athlete_summary_is_
     context.seed_user_settings(settings);
     context.seed_summary(context.default_summary("workout-1"));
     context.seed_athlete_summary(
+        "user-1",
         Some(AthleteSummary {
             user_id: "user-1".to_string(),
             summary_text: "Fresh athlete summary".to_string(),

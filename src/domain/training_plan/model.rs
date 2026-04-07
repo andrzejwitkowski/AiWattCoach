@@ -142,6 +142,31 @@ impl TrainingPlanGenerationOperation {
         }
     }
 
+    fn clone_pending_update(&self, updated_at_epoch_seconds: i64) -> Self {
+        Self {
+            operation_key: self.operation_key.clone(),
+            user_id: self.user_id.clone(),
+            workout_id: self.workout_id.clone(),
+            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
+            status: WorkflowStatus::Pending,
+            workout_recap_text: self.workout_recap_text.clone(),
+            workout_recap_provider: self.workout_recap_provider.clone(),
+            workout_recap_model: self.workout_recap_model.clone(),
+            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
+            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
+            raw_plan_response: self.raw_plan_response.clone(),
+            raw_correction_response: self.raw_correction_response.clone(),
+            validation_issues: self.validation_issues.clone(),
+            attempts: self.attempts.clone(),
+            failure: None,
+            started_at_epoch_seconds: self.started_at_epoch_seconds,
+            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
+            attempt_count: self.attempt_count,
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
+            updated_at_epoch_seconds,
+        }
+    }
+
     pub fn with_workout_recap(
         &self,
         text: String,
@@ -171,28 +196,13 @@ impl TrainingPlanGenerationOperation {
             recorded_at_epoch_seconds,
         });
 
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Pending,
-            workout_recap_text: Some(text),
-            workout_recap_provider: Some(provider),
-            workout_recap_model: Some(model),
-            workout_recap_generated_at_epoch_seconds: Some(recorded_at_epoch_seconds),
-            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_correction_response: self.raw_correction_response.clone(),
-            validation_issues: self.validation_issues.clone(),
-            attempts,
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: recorded_at_epoch_seconds,
-        }
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.workout_recap_text = Some(text);
+        updated.workout_recap_provider = Some(provider);
+        updated.workout_recap_model = Some(model);
+        updated.workout_recap_generated_at_epoch_seconds = Some(recorded_at_epoch_seconds);
+        updated.attempts = attempts;
+        updated
     }
 
     pub fn with_raw_plan_response(
@@ -200,28 +210,9 @@ impl TrainingPlanGenerationOperation {
         raw_plan_response: String,
         recorded_at_epoch_seconds: i64,
     ) -> Self {
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Pending,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
-            raw_plan_response: Some(raw_plan_response),
-            raw_correction_response: self.raw_correction_response.clone(),
-            validation_issues: self.validation_issues.clone(),
-            attempts: self.attempts.clone(),
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: recorded_at_epoch_seconds,
-        }
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.raw_plan_response = Some(raw_plan_response);
+        updated
     }
 
     pub fn with_validation_issues(
@@ -229,28 +220,9 @@ impl TrainingPlanGenerationOperation {
         validation_issues: Vec<ValidationIssue>,
         updated_at_epoch_seconds: i64,
     ) -> Self {
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Pending,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_correction_response: self.raw_correction_response.clone(),
-            validation_issues,
-            attempts: self.attempts.clone(),
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds,
-        }
+        let mut updated = self.clone_pending_update(updated_at_epoch_seconds);
+        updated.validation_issues = validation_issues;
+        updated
     }
 
     pub fn with_correction_response(
@@ -270,28 +242,10 @@ impl TrainingPlanGenerationOperation {
             recorded_at_epoch_seconds,
         });
 
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Pending,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_correction_response: Some(raw_correction_response),
-            validation_issues: self.validation_issues.clone(),
-            attempts,
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: recorded_at_epoch_seconds,
-        }
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.raw_correction_response = Some(raw_correction_response);
+        updated.attempts = attempts;
+        updated
     }
 
     pub fn with_projection_update(&self, recorded_at_epoch_seconds: i64) -> Self {
@@ -306,53 +260,16 @@ impl TrainingPlanGenerationOperation {
             recorded_at_epoch_seconds,
         });
 
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Pending,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: None,
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_correction_response: self.raw_correction_response.clone(),
-            validation_issues: self.validation_issues.clone(),
-            attempts,
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: recorded_at_epoch_seconds,
-        }
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.projection_persisted_at_epoch_seconds = None;
+        updated.attempts = attempts;
+        updated
     }
 
     pub fn mark_projection_persisted(&self, recorded_at_epoch_seconds: i64) -> Self {
-        Self {
-            operation_key: self.operation_key.clone(),
-            user_id: self.user_id.clone(),
-            workout_id: self.workout_id.clone(),
-            saved_at_epoch_seconds: self.saved_at_epoch_seconds,
-            status: WorkflowStatus::Pending,
-            workout_recap_text: self.workout_recap_text.clone(),
-            workout_recap_provider: self.workout_recap_provider.clone(),
-            workout_recap_model: self.workout_recap_model.clone(),
-            workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
-            projection_persisted_at_epoch_seconds: Some(recorded_at_epoch_seconds),
-            raw_plan_response: self.raw_plan_response.clone(),
-            raw_correction_response: self.raw_correction_response.clone(),
-            validation_issues: self.validation_issues.clone(),
-            attempts: self.attempts.clone(),
-            failure: None,
-            started_at_epoch_seconds: self.started_at_epoch_seconds,
-            last_attempt_at_epoch_seconds: self.last_attempt_at_epoch_seconds,
-            attempt_count: self.attempt_count,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: recorded_at_epoch_seconds,
-        }
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.projection_persisted_at_epoch_seconds = Some(recorded_at_epoch_seconds);
+        updated
     }
 
     pub fn mark_completed(&self, updated_at_epoch_seconds: i64) -> Self {

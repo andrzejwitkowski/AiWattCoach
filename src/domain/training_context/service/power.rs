@@ -215,8 +215,11 @@ fn extract_numeric_values(value: &serde_json::Value) -> Vec<i32> {
         .map(|items| {
             items
                 .iter()
-                .filter_map(|item| item.as_i64())
-                .filter_map(|item| i32::try_from(item).ok())
+                .map(|item| {
+                    item.as_i64()
+                        .and_then(|value| i32::try_from(value).ok())
+                        .unwrap_or(0)
+                })
                 .collect()
         })
         .unwrap_or_default()

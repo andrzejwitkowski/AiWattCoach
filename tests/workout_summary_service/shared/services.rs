@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use super::*;
 
 pub(crate) fn test_service(
@@ -99,6 +101,7 @@ pub(crate) fn existing_summary() -> WorkoutSummary {
 pub(crate) struct RecordingTrainingPlanService {
     calls: Arc<Mutex<Vec<String>>>,
     next_result: Arc<Mutex<Option<Result<GeneratedTrainingPlan, TrainingPlanError>>>>,
+    observed_persisted_saved_at: Arc<AtomicBool>,
 }
 
 impl RecordingTrainingPlanService {
@@ -108,6 +111,10 @@ impl RecordingTrainingPlanService {
 
     pub(crate) fn fail_next(&self, error: TrainingPlanError) {
         *self.next_result.lock().unwrap() = Some(Err(error));
+    }
+
+    pub(crate) fn observed_persisted_saved_at(&self) -> bool {
+        self.observed_persisted_saved_at.load(Ordering::Relaxed)
     }
 }
 
@@ -133,6 +140,60 @@ impl TrainingPlanUseCases for RecordingTrainingPlanService {
             }
             Err(TrainingPlanError::Unavailable(
                 "training plan result not seeded in test".to_string(),
+            ))
+        })
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct PersistCheckingTrainingPlanService {
+    repository: InMemoryWorkoutSummaryRepository,
+    delegate: RecordingTrainingPlanService,
+}
+
+impl PersistCheckingTrainingPlanService {
+    pub(crate) fn new(repository: InMemoryWorkoutSummaryRepository) -> Self {
+        Self {
+            repository,
+            delegate: RecordingTrainingPlanService::default(),
+        }
+    }
+
+    pub(crate) fn observed_persisted_saved_at(&self) -> bool {
+        self.delegate.observed_persisted_saved_at()
+    }
+}
+
+impl TrainingPlanUseCases for PersistCheckingTrainingPlanService {
+    fn generate_for_saved_workout(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<GeneratedTrainingPlan, TrainingPlanError>,
+    > {
+        let repository = self.repository.clone();
+        let delegate = self.delegate.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            let persisted_saved_at = repository
+                .find_by_user_id_and_workout_id(&user_id, &workout_id)
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+                .and_then(|summary| summary.saved_at_epoch_seconds);
+            delegate.observed_persisted_saved_at.store(
+                persisted_saved_at == Some(saved_at_epoch_seconds),
+                Ordering::Relaxed,
+            );
+            delegate.calls.lock().unwrap().push(format!(
+                "generate_for_saved_workout:{user_id}:{workout_id}:{saved_at_epoch_seconds}"
+            ));
+            delegate.next_result.lock().unwrap().take().unwrap_or(Err(
+                TrainingPlanError::Unavailable(
+                    "training plan result not seeded in test".to_string(),
+                ),
             ))
         })
     }

@@ -57,24 +57,20 @@ pub(super) fn build_load_trend(
 pub(super) fn build_recent_interval_blocks_by_activity_id(
     detailed_activities: &[Activity],
     matched: &EventActivityMatches,
+    configured_ftp: Option<i32>,
 ) -> HashMap<String, Vec<PlannedWorkoutBlockContext>> {
     detailed_activities
         .iter()
         .filter_map(|activity| {
             matched.activity_to_event.get(&activity.id).map(|event| {
-                let parsed =
-                    parse_workout_doc(event.workout_doc.as_deref(), activity.metrics.ftp_watts);
+                let resolved_ftp = activity.metrics.ftp_watts.or(configured_ftp);
+                let parsed = parse_workout_doc(event.workout_doc.as_deref(), resolved_ftp);
                 (
                     activity.id.clone(),
                     event
                         .workout_doc
                         .as_ref()
-                        .map(|_| {
-                            build_recent_interval_blocks(
-                                &parsed.segments,
-                                activity.metrics.ftp_watts,
-                            )
-                        })
+                        .map(|_| build_recent_interval_blocks(&parsed.segments, resolved_ftp))
                         .unwrap_or_default(),
                 )
             })

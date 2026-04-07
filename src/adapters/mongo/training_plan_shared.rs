@@ -31,10 +31,16 @@ enum PlannedWorkoutLineDocument {
     },
 }
 
-pub(crate) fn map_planned_workout_to_document(workout: &PlannedWorkout) -> PlannedWorkoutDocument {
-    PlannedWorkoutDocument {
-        lines: workout.lines.iter().map(map_line_to_document).collect(),
-    }
+pub(crate) fn map_planned_workout_to_document(
+    workout: &PlannedWorkout,
+) -> Result<PlannedWorkoutDocument, TrainingPlanError> {
+    Ok(PlannedWorkoutDocument {
+        lines: workout
+            .lines
+            .iter()
+            .map(map_line_to_document)
+            .collect::<Result<Vec<_>, _>>()?,
+    })
 }
 
 pub(crate) fn map_document_to_planned_workout(
@@ -49,16 +55,22 @@ pub(crate) fn map_document_to_planned_workout(
     })
 }
 
-fn map_line_to_document(line: &PlannedWorkoutLine) -> PlannedWorkoutLineDocument {
+fn map_line_to_document(
+    line: &PlannedWorkoutLine,
+) -> Result<PlannedWorkoutLineDocument, TrainingPlanError> {
     match line {
         PlannedWorkoutLine::Text(PlannedWorkoutText { text }) => {
-            PlannedWorkoutLineDocument::Text { text: text.clone() }
+            Ok(PlannedWorkoutLineDocument::Text { text: text.clone() })
         }
         PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat { title, count }) => {
-            PlannedWorkoutLineDocument::Repeat {
+            Ok(PlannedWorkoutLineDocument::Repeat {
                 title: title.clone(),
-                count: *count as i64,
-            }
+                count: i64::try_from(*count).map_err(|_| {
+                    TrainingPlanError::Repository(
+                        "planned workout repeat count exceeds Mongo integer range".to_string(),
+                    )
+                })?,
+            })
         }
         PlannedWorkoutLine::Step(PlannedWorkoutStep {
             duration_seconds,
@@ -73,7 +85,7 @@ fn map_line_to_document(line: &PlannedWorkoutLine) -> PlannedWorkoutLineDocument
                     (None, None, Some(*min), Some(*max))
                 }
             };
-            PlannedWorkoutLineDocument::Step {
+            Ok(PlannedWorkoutLineDocument::Step {
                 duration_seconds: *duration_seconds,
                 step_kind: match kind {
                     PlannedWorkoutStepKind::Steady => "steady",
@@ -84,7 +96,7 @@ fn map_line_to_document(line: &PlannedWorkoutLine) -> PlannedWorkoutLineDocument
                 percent_max,
                 watts_min,
                 watts_max,
-            }
+            })
         }
     }
 }

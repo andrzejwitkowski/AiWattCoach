@@ -159,10 +159,12 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         let projected_day_documents = projected_days
             .iter()
             .map(map_projected_day_to_document)
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, _>>();
         let today = today.to_string();
         let snapshot_clone = snapshot.clone();
         Box::pin(async move {
+            let snapshot_document = snapshot_document?;
+            let projected_day_documents = projected_day_documents?;
             collection
                 .update_many(
                     doc! {
@@ -223,19 +225,23 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
 
 fn map_projected_day_to_document(
     day: &TrainingPlanProjectedDay,
-) -> TrainingPlanProjectedDayDocument {
-    TrainingPlanProjectedDayDocument {
+) -> Result<TrainingPlanProjectedDayDocument, TrainingPlanError> {
+    Ok(TrainingPlanProjectedDayDocument {
         user_id: day.user_id.clone(),
         workout_id: day.workout_id.clone(),
         operation_key: day.operation_key.clone(),
         date: day.date.clone(),
         rest_day: day.rest_day,
-        workout: day.workout.as_ref().map(map_planned_workout_to_document),
+        workout: day
+            .workout
+            .as_ref()
+            .map(map_planned_workout_to_document)
+            .transpose()?,
         active: day.active,
         superseded_at_epoch_seconds: day.superseded_at_epoch_seconds,
         created_at_epoch_seconds: day.created_at_epoch_seconds,
         updated_at_epoch_seconds: day.updated_at_epoch_seconds,
-    }
+    })
 }
 
 fn map_document_to_projected_day(

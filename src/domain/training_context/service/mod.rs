@@ -205,6 +205,7 @@ where
         let recent_interval_blocks_by_activity_id = build_recent_interval_blocks_by_activity_id(
             &detailed_recent_activities,
             &matched_recent_workouts,
+            configured_ftp,
         );
 
         let profile = AthleteProfileContext {

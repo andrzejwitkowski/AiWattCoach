@@ -1,4 +1,4 @@
-# Review Followups Implementation Plan
+# Review Follow-ups Implementation Plan
 
 **Goal:** Close the remaining final-review findings around projection replay healing, workout-summary legacy identifier ambiguity, reclaimed correction retry budget, and small follow-up test/doc nits.
 
@@ -7,6 +7,8 @@
 **Tech Stack:** Rust, MongoDB, cargo test, cargo fmt, cargo clippy
 
 ---
+
+## Tasks
 
 ### Task 1: Make projection replay heal partial same-operation inserts
 

@@ -80,8 +80,13 @@ impl LlmRestTestContext {
         sample_summary(workout_id)
     }
 
-    pub(crate) fn seed_athlete_summary(&self, summary: Option<AthleteSummary>, stale: bool) {
-        self.athlete_summary_service.seed(summary, stale);
+    pub(crate) fn seed_athlete_summary(
+        &self,
+        user_id: &str,
+        summary: Option<AthleteSummary>,
+        stale: bool,
+    ) {
+        self.athlete_summary_service.seed(user_id, summary, stale);
     }
 
     pub(crate) fn seed_activity(&self, activity: aiwattcoach::domain::intervals::Activity) {
@@ -90,9 +95,10 @@ impl LlmRestTestContext {
 
     pub(crate) fn default_activity(
         &self,
+        user_id: &str,
         activity_id: &str,
     ) -> aiwattcoach::domain::intervals::Activity {
-        sample_activity(activity_id)
+        sample_activity(user_id, activity_id)
     }
 }
 

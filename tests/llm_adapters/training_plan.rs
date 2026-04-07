@@ -6,7 +6,9 @@ use aiwattcoach::{
     domain::workout_summary::WorkoutRecap,
 };
 
-use crate::support::{CapturingChatPort, FixedGeminiConfigProvider, StubTrainingContextBuilder};
+use crate::support::{
+    CapturingChatPort, FixedClock, FixedGeminiConfigProvider, StubTrainingContextBuilder,
+};
 
 #[tokio::test]
 async fn training_plan_generator_builds_workout_recap_request_from_training_context() {
@@ -15,16 +17,18 @@ async fn training_plan_generator_builds_workout_recap_request_from_training_cont
         chat_port.clone(),
         Arc::new(FixedGeminiConfigProvider),
         Arc::new(StubTrainingContextBuilder),
+        FixedClock,
     );
 
     let recap = generator
-        .generate_workout_recap("user-1", "workout-1", 1_700_000_000)
+        .generate_workout_recap("user-1", "workout-1", 1_699_999_000)
         .await
         .unwrap();
 
     assert_eq!(recap.text, "Gemini coach reply");
     assert_eq!(recap.provider, "gemini");
     assert_eq!(recap.model, "gemini-3.1-pro");
+    assert_eq!(recap.generated_at_epoch_seconds, 1_700_000_000);
 
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);
@@ -50,6 +54,7 @@ async fn training_plan_generator_builds_initial_window_request_with_recap() {
         chat_port.clone(),
         Arc::new(FixedGeminiConfigProvider),
         Arc::new(StubTrainingContextBuilder),
+        FixedClock,
     );
 
     let response = generator
@@ -89,6 +94,7 @@ async fn training_plan_generator_builds_correction_request_with_issues_and_inval
         chat_port.clone(),
         Arc::new(FixedGeminiConfigProvider),
         Arc::new(StubTrainingContextBuilder),
+        FixedClock,
     );
 
     let response = generator

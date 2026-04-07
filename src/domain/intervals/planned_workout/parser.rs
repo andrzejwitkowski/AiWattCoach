@@ -1,3 +1,5 @@
+use chrono::NaiveDate;
+
 use super::{
     PlannedWorkout, PlannedWorkoutDay, PlannedWorkoutDays, PlannedWorkoutLine,
     PlannedWorkoutParseError, PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind,
@@ -296,11 +298,5 @@ fn normalize_spaces(value: &str) -> String {
 }
 
 fn is_exact_date(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    bytes.len() == 10
-        && bytes[0..4].iter().all(u8::is_ascii_digit)
-        && bytes[4] == b'-'
-        && bytes[5..7].iter().all(u8::is_ascii_digit)
-        && bytes[7] == b'-'
-        && bytes[8..10].iter().all(u8::is_ascii_digit)
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
 }

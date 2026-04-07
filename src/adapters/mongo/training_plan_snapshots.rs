@@ -49,17 +49,21 @@ impl MongoTrainingPlanSnapshotRepository {
 
     pub(super) fn map_snapshot_to_document(
         snapshot: &TrainingPlanSnapshot,
-    ) -> TrainingPlanSnapshotDocument {
-        TrainingPlanSnapshotDocument {
+    ) -> Result<TrainingPlanSnapshotDocument, TrainingPlanError> {
+        Ok(TrainingPlanSnapshotDocument {
             user_id: snapshot.user_id.clone(),
             workout_id: snapshot.workout_id.clone(),
             operation_key: snapshot.operation_key.clone(),
             saved_at_epoch_seconds: snapshot.saved_at_epoch_seconds,
             start_date: snapshot.start_date.clone(),
             end_date: snapshot.end_date.clone(),
-            days: snapshot.days.iter().map(map_day_to_document).collect(),
+            days: snapshot
+                .days
+                .iter()
+                .map(map_day_to_document)
+                .collect::<Result<Vec<_>, _>>()?,
             created_at_epoch_seconds: snapshot.created_at_epoch_seconds,
-        }
+        })
     }
 
     pub(super) fn map_document_to_snapshot(
@@ -99,12 +103,18 @@ impl TrainingPlanSnapshotRepository for MongoTrainingPlanSnapshotRepository {
     }
 }
 
-fn map_day_to_document(day: &TrainingPlanDay) -> TrainingPlanDayDocument {
-    TrainingPlanDayDocument {
+fn map_day_to_document(
+    day: &TrainingPlanDay,
+) -> Result<TrainingPlanDayDocument, TrainingPlanError> {
+    Ok(TrainingPlanDayDocument {
         date: day.date.clone(),
         rest_day: day.rest_day,
-        workout: day.workout.as_ref().map(map_planned_workout_to_document),
-    }
+        workout: day
+            .workout
+            .as_ref()
+            .map(map_planned_workout_to_document)
+            .transpose()?,
+    })
 }
 
 fn map_document_to_day(

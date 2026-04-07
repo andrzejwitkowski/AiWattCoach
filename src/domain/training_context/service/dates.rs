@@ -1,4 +1,4 @@
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{Duration, NaiveDate};
 
 use crate::domain::intervals::{Activity, Event, IntervalsError};
 
@@ -43,7 +43,7 @@ pub(super) fn parse_date(value: &str) -> NaiveDate {
 pub(super) fn epoch_seconds_to_date(epoch_seconds: i64) -> NaiveDate {
     chrono::DateTime::from_timestamp(epoch_seconds, 0)
         .map(|time| time.date_naive())
-        .unwrap_or_else(|| Utc::now().date_naive())
+        .unwrap_or_else(|| chrono::DateTime::UNIX_EPOCH.date_naive())
 }
 
 pub(super) fn round_to_2(value: f64) -> f64 {

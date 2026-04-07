@@ -124,10 +124,18 @@ where
                     &service.training_plan_service,
                     existing.saved_at_epoch_seconds,
                 ) {
-                    training_plan_service
+                    if let Err(error) = training_plan_service
                         .generate_for_saved_workout(&user_id, &workout_id, saved_at_epoch_seconds)
                         .await
-                        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+                    {
+                        warn!(
+                            user_id,
+                            workout_id,
+                            saved_at_epoch_seconds,
+                            error = %error,
+                            "Saved workout summary remains persisted after training plan generation retry failure"
+                        );
+                    }
                 }
                 return Ok(existing);
             }
@@ -144,10 +152,18 @@ where
                 .await?;
 
             if let Some(training_plan_service) = &service.training_plan_service {
-                training_plan_service
+                if let Err(error) = training_plan_service
                     .generate_for_saved_workout(&user_id, &workout_id, now)
                     .await
-                    .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+                {
+                    warn!(
+                        user_id,
+                        workout_id,
+                        saved_at_epoch_seconds = now,
+                        error = %error,
+                        "Saved workout summary remains persisted after training plan generation failure"
+                    );
+                }
             }
 
             service.get_existing_summary(&user_id, &workout_id).await
