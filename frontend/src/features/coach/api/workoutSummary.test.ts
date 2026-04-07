@@ -101,7 +101,14 @@ describe('workoutSummary api', () => {
 
   it('saves workout summary', async () => {
     global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ summary: { ...summaryFixture, savedAtEpochSeconds: 1711000300 } }), {
+      new Response(JSON.stringify({
+        summary: { ...summaryFixture, savedAtEpochSeconds: 1711000300 },
+        workflow: {
+          recapStatus: 'generated',
+          planStatus: 'skipped',
+          messages: ['Workout recap generated.'],
+        },
+      }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
@@ -109,7 +116,10 @@ describe('workoutSummary api', () => {
 
     const result = await saveWorkoutSummary('', '101');
 
-    expect(result.savedAtEpochSeconds).toBe(1711000300);
+    expect(result.summary.savedAtEpochSeconds).toBe(1711000300);
+    expect(result.workflow.recapStatus).toBe('generated');
+    expect(result.workflow.planStatus).toBe('skipped');
+    expect(result.workflow.messages).toEqual(['Workout recap generated.']);
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/workout-summaries/101/state',
       expect.objectContaining({
@@ -119,9 +129,36 @@ describe('workoutSummary api', () => {
     );
   });
 
+  it('parses failed save workflow statuses', async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        summary: { ...summaryFixture, savedAtEpochSeconds: 1711000300 },
+        workflow: {
+          recapStatus: 'generated',
+          planStatus: 'failed',
+          messages: ['Workout recap generated.', '14-day schedule failed.'],
+        },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    const result = await saveWorkoutSummary('', '101');
+
+    expect(result.workflow.planStatus).toBe('failed');
+    expect(result.workflow.messages).toEqual([
+      'Workout recap generated.',
+      '14-day schedule failed.',
+    ]);
+  });
+
   it('reopens workout summary', async () => {
     global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ summary: summaryFixture }), {
+      new Response(JSON.stringify({
+        summary: summaryFixture,
+        workflow: { recapStatus: 'unchanged', planStatus: 'unchanged', messages: [] },
+      }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
@@ -129,7 +166,7 @@ describe('workoutSummary api', () => {
 
     const result = await reopenWorkoutSummary('', '101');
 
-    expect(result.savedAtEpochSeconds).toBeNull();
+    expect(result.summary.savedAtEpochSeconds).toBeNull();
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/workout-summaries/101/state',
       expect.objectContaining({

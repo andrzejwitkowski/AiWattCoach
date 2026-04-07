@@ -429,6 +429,22 @@ impl ActivityRepositoryPort for MongoActivityRepository {
         })
     }
 
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let result = collection
+                .find_one(doc! { "user_id": &user_id })
+                .sort(doc! { "start_date_local": -1 })
+                .await
+                .map_err(|error| IntervalsError::Internal(error.to_string()))?;
+            Ok(result.map(|document| normalize_activity(document.payload)))
+        })
+    }
+
     fn find_by_user_id_and_external_id(
         &self,
         user_id: &str,

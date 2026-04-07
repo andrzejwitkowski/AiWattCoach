@@ -72,6 +72,8 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
     > {
+        let user_id = user_id.to_string();
+        let snapshots = self.snapshots.clone();
         let days = self
             .projected_days
             .lock()
@@ -80,7 +82,23 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
             .filter(|day| day.user_id == user_id && day.superseded_at_epoch_seconds.is_none())
             .cloned()
             .collect::<Vec<_>>();
-        Box::pin(async move { Ok(days) })
+        Box::pin(async move {
+            let snapshot_start_dates = snapshots
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|snapshot| snapshot.user_id == user_id)
+                .map(|snapshot| (snapshot.operation_key.clone(), snapshot.start_date.clone()))
+                .collect::<std::collections::HashMap<_, _>>();
+            Ok(days
+                .into_iter()
+                .filter(|day| {
+                    snapshot_start_dates
+                        .get(&day.operation_key)
+                        .is_some_and(|start_date| day.date > *start_date)
+                })
+                .collect())
+        })
     }
 
     fn find_active_by_operation_key(
@@ -89,6 +107,7 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
     > {
+        let snapshots = self.snapshots.clone();
         let days = self
             .projected_days
             .lock()
@@ -99,7 +118,22 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
             })
             .cloned()
             .collect::<Vec<_>>();
-        Box::pin(async move { Ok(days) })
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            let snapshot_start_date = snapshots
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|snapshot| snapshot.operation_key == operation_key)
+                .map(|snapshot| snapshot.start_date.clone());
+            let Some(snapshot_start_date) = snapshot_start_date else {
+                return Ok(Vec::new());
+            };
+            Ok(days
+                .into_iter()
+                .filter(|day| day.date > snapshot_start_date)
+                .collect())
+        })
     }
 
     fn replace_window(

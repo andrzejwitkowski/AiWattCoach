@@ -21,6 +21,13 @@ use super::{
 };
 
 pub trait TrainingPlanUseCases: Send + Sync {
+    fn generate_recap_for_saved_workout(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<WorkoutRecap, TrainingPlanError>>;
+
     fn generate_for_saved_workout(
         &self,
         user_id: &str,
@@ -272,6 +279,28 @@ where
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone + 'static,
     Time: Clock + Clone + 'static,
 {
+    fn generate_recap_for_saved_workout(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<WorkoutRecap, TrainingPlanError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            let recap = service
+                .generator
+                .generate_workout_recap(&user_id, &workout_id, saved_at_epoch_seconds)
+                .await?;
+            service
+                .workout_summary
+                .persist_workout_recap(&user_id, &workout_id, recap.clone())
+                .await?;
+            Ok(recap)
+        })
+    }
+
     fn generate_for_saved_workout(
         &self,
         user_id: &str,

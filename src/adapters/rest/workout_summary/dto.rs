@@ -1,5 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum SaveWorkflowStatusDto {
+    Generated,
+    Skipped,
+    Failed,
+    Unchanged,
+}
+
 #[derive(Deserialize)]
 pub(in crate::adapters::rest) struct WorkoutSummaryPath {
     pub workout_id: String,
@@ -20,6 +29,16 @@ pub(in crate::adapters::rest) struct UpdateRpeRequest {
 #[derive(Serialize)]
 pub(super) struct WorkoutSummaryStateResponse {
     pub summary: WorkoutSummaryDto,
+    pub workflow: SaveWorkflowDto,
+}
+
+#[derive(Serialize)]
+pub(super) struct SaveWorkflowDto {
+    #[serde(rename = "recapStatus")]
+    pub recap_status: SaveWorkflowStatusDto,
+    #[serde(rename = "planStatus")]
+    pub plan_status: SaveWorkflowStatusDto,
+    pub messages: Vec<String>,
 }
 
 #[derive(Deserialize)]

@@ -3,9 +3,11 @@ use aiwattcoach::domain::workout_summary::{
 };
 
 use crate::shared::{
-    existing_summary, test_service, test_service_with_training_plan,
+    existing_summary, existing_summary_with_finished_conversation, test_service,
+    test_service_with_training_plan, test_service_with_training_plan_and_latest_activity,
     InMemoryWorkoutSummaryRepository, PersistCheckingTrainingPlanService,
-    RecordingTrainingPlanService, RefreshingTrainingPlanService,
+    RecordingLatestCompletedActivityService, RecordingTrainingPlanService,
+    RefreshingTrainingPlanService,
 };
 
 #[tokio::test]
@@ -67,13 +69,15 @@ async fn update_rpe_rejects_values_outside_expected_range() {
 }
 
 #[tokio::test]
-async fn mark_saved_persists_saved_state() {
+async fn mark_saved_returns_workflow_statuses_after_persisting_saved_state() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let service = test_service(repository.clone());
 
-    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
+    assert_eq!(result.summary.saved_at_epoch_seconds, Some(1_700_000_000));
+    assert_eq!(result.workflow.recap_status.as_str(), "skipped");
+    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
     assert_eq!(
         repository.calls(),
         vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]
@@ -81,17 +85,178 @@ async fn mark_saved_persists_saved_state() {
 }
 
 #[tokio::test]
-async fn mark_saved_triggers_training_plan_generation_after_persisting_saved_state() {
+async fn mark_saved_skips_recap_and_plan_without_finished_conversation() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
-    let training_plan = PersistCheckingTrainingPlanService::new(repository.clone());
+    let training_plan = RecordingTrainingPlanService::default();
     let service = test_service_with_training_plan(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
     );
 
-    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
+    assert_eq!(result.workflow.recap_status.as_str(), "skipped");
+    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
+    assert_eq!(
+        result.workflow.messages,
+        vec!["No finished coach conversation to process.".to_string()]
+    );
+    assert_eq!(training_plan.calls(), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn mark_saved_generates_recap_only_for_finished_conversation_on_non_latest_activity() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "workout-older".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-latest"));
+    let service = test_service_with_training_plan_and_latest_activity(
+        repository,
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
+    );
+
+    let result = service.mark_saved("user-1", "workout-older").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "generated");
+    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
+    assert_eq!(
+        result.workflow.messages,
+        vec![
+            "Workout recap generated.".to_string(),
+            "14-day schedule skipped because this is not the latest completed activity."
+                .to_string(),
+        ]
+    );
+    assert_eq!(
+        training_plan.calls(),
+        vec!["generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_generates_recap_and_plan_for_latest_completed_activity() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(
+        existing_summary_with_finished_conversation(),
+    );
+    let training_plan = RecordingTrainingPlanService::default();
+    training_plan.succeed_next(aiwattcoach::domain::training_plan::GeneratedTrainingPlan {
+        snapshot: aiwattcoach::domain::training_plan::TrainingPlanSnapshot {
+            user_id: "user-1".to_string(),
+            workout_id: "workout-1".to_string(),
+            operation_key: "training-plan:user-1:workout-1:1700000000".to_string(),
+            saved_at_epoch_seconds: 1_700_000_000,
+            start_date: "2026-04-06".to_string(),
+            end_date: "2026-04-19".to_string(),
+            days: Vec::new(),
+            created_at_epoch_seconds: 1_700_000_000,
+        },
+        active_projected_days: Vec::new(),
+        was_generated: true,
+    });
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
+        repository,
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "generated");
+    assert_eq!(result.workflow.plan_status.as_str(), "generated");
+    assert_eq!(
+        result.workflow.messages,
+        vec![
+            "Workout recap generated.".to_string(),
+            "14-day schedule generated.".to_string(),
+        ]
+    );
+    assert_eq!(
+        training_plan.calls(),
+        vec![
+            "generate_recap_for_saved_workout:user-1:workout-1:1700000000".to_string(),
+            "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_reports_failed_plan_generation_for_latest_completed_activity() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(
+        existing_summary_with_finished_conversation(),
+    );
+    let training_plan = RecordingTrainingPlanService::default();
+    training_plan.fail_next(
+        aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+            "llm temporarily unavailable".to_string(),
+        ),
+    );
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
+        repository,
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "generated");
+    assert_eq!(result.workflow.plan_status.as_str(), "failed");
+    assert_eq!(
+        result.workflow.messages,
+        vec![
+            "Workout recap generated.".to_string(),
+            "14-day schedule failed.".to_string(),
+        ]
+    );
+    assert_eq!(
+        training_plan.calls(),
+        vec![
+            "generate_recap_for_saved_workout:user-1:workout-1:1700000000".to_string(),
+            "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_skips_generation_when_training_plan_service_is_not_configured() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(
+        existing_summary_with_finished_conversation(),
+    );
+    let service = test_service(repository);
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "skipped");
+    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
+    assert_eq!(
+        result.workflow.messages,
+        vec![
+            "Workout recap skipped.".to_string(),
+            "14-day schedule skipped because this is not the latest completed activity."
+                .to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_triggers_training_plan_generation_after_persisting_saved_state() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(
+        existing_summary_with_finished_conversation(),
+    );
+    let training_plan = PersistCheckingTrainingPlanService::new(repository.clone());
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
+        repository.clone(),
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.summary.saved_at_epoch_seconds, Some(1_700_000_000));
     assert_eq!(
         repository.calls(),
         vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]
@@ -101,7 +266,7 @@ async fn mark_saved_triggers_training_plan_generation_after_persisting_saved_sta
 
 #[tokio::test]
 async fn repeat_mark_saved_retries_training_plan_generation_for_already_saved_summary() {
-    let mut summary = existing_summary();
+    let mut summary = existing_summary_with_finished_conversation();
     summary.saved_at_epoch_seconds = Some(1_700_000_000);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
@@ -110,9 +275,15 @@ async fn repeat_mark_saved_retries_training_plan_generation_for_already_saved_su
         std::sync::Arc::new(training_plan.clone()),
     );
 
-    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
+    assert_eq!(result.summary.saved_at_epoch_seconds, Some(1_700_000_000));
+    assert_eq!(result.workflow.recap_status.as_str(), "unchanged");
+    assert_eq!(result.workflow.plan_status.as_str(), "failed");
+    assert_eq!(
+        result.workflow.messages,
+        vec!["14-day schedule failed on retry.".to_string()]
+    );
     assert_eq!(repository.calls(), Vec::<String>::new());
     assert_eq!(
         training_plan.calls(),
@@ -121,11 +292,95 @@ async fn repeat_mark_saved_retries_training_plan_generation_for_already_saved_su
 }
 
 #[tokio::test]
-async fn repeat_mark_saved_reloads_summary_after_successful_training_plan_retry() {
-    let mut summary = existing_summary();
+async fn repeat_mark_saved_skips_retry_when_training_plan_service_is_not_configured() {
+    let mut summary = existing_summary_with_finished_conversation();
     summary.saved_at_epoch_seconds = Some(1_700_000_000);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
-    let mut refreshed_summary = existing_summary();
+    let service = test_service(repository.clone());
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.summary.saved_at_epoch_seconds, Some(1_700_000_000));
+    assert_eq!(result.workflow.recap_status.as_str(), "unchanged");
+    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
+    assert_eq!(result.workflow.messages, Vec::<String>::new());
+    assert_eq!(repository.calls(), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn repeat_mark_saved_reports_generated_recap_when_retry_persists_recap_before_failure() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RefreshingTrainingPlanService::new_with_failure(
+        repository.clone(),
+        {
+            let mut refreshed = existing_summary_with_finished_conversation();
+            refreshed.saved_at_epoch_seconds = Some(1_700_000_000);
+            refreshed.workout_recap_text = Some("Retry recap".to_string());
+            refreshed.workout_recap_provider = Some("openrouter".to_string());
+            refreshed.workout_recap_model = Some("google/gemini-3-flash-preview".to_string());
+            refreshed.workout_recap_generated_at_epoch_seconds = Some(1_700_000_123);
+            refreshed.updated_at_epoch_seconds = 1_700_000_123;
+            refreshed
+        },
+        aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+            "plan generation failed after recap persisted".to_string(),
+        ),
+    );
+    let service = test_service_with_training_plan(
+        repository.clone(),
+        std::sync::Arc::new(training_plan.clone()),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "generated");
+    assert_eq!(result.workflow.plan_status.as_str(), "failed");
+    assert_eq!(
+        result.workflow.messages,
+        vec![
+            "Workout recap generated on retry.".to_string(),
+            "14-day schedule failed on retry.".to_string(),
+        ]
+    );
+    assert_eq!(
+        result.summary.workout_recap_text.as_deref(),
+        Some("Retry recap")
+    );
+}
+
+#[tokio::test]
+async fn repeat_mark_saved_keeps_recap_unchanged_when_retry_fails_after_existing_recap() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    summary.workout_recap_text = Some("Existing recap".to_string());
+    summary.workout_recap_provider = Some("openrouter".to_string());
+    summary.workout_recap_model = Some("google/gemini-3-flash-preview".to_string());
+    summary.workout_recap_generated_at_epoch_seconds = Some(1_700_000_010);
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    let service = test_service_with_training_plan(
+        repository.clone(),
+        std::sync::Arc::new(training_plan.clone()),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "unchanged");
+    assert_eq!(result.workflow.plan_status.as_str(), "failed");
+    assert_eq!(
+        result.workflow.messages,
+        vec!["14-day schedule failed on retry.".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn repeat_mark_saved_reloads_summary_after_successful_training_plan_retry() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let mut refreshed_summary = existing_summary_with_finished_conversation();
     refreshed_summary.saved_at_epoch_seconds = Some(1_700_000_000);
     refreshed_summary.workout_recap_text = Some("Refreshed recap after retry".to_string());
     refreshed_summary.updated_at_epoch_seconds = 1_700_000_111;
@@ -149,13 +404,19 @@ async fn repeat_mark_saved_reloads_summary_after_successful_training_plan_retry(
         std::sync::Arc::new(training_plan.clone()),
     );
 
-    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
     assert_eq!(
-        summary.workout_recap_text.as_deref(),
+        result.summary.workout_recap_text.as_deref(),
         Some("Refreshed recap after retry")
     );
-    assert_eq!(summary.updated_at_epoch_seconds, 1_700_000_111);
+    assert_eq!(result.summary.updated_at_epoch_seconds, 1_700_000_111);
+    assert_eq!(result.workflow.recap_status.as_str(), "generated");
+    assert_eq!(result.workflow.plan_status.as_str(), "unchanged");
+    assert_eq!(
+        result.workflow.messages,
+        vec!["Workout recap generated on retry.".to_string()]
+    );
     assert_eq!(repository.calls(), Vec::<String>::new());
     assert_eq!(
         training_plan.calls(),
@@ -164,8 +425,52 @@ async fn repeat_mark_saved_reloads_summary_after_successful_training_plan_retry(
 }
 
 #[tokio::test]
+async fn repeat_mark_saved_does_not_report_generated_recap_for_timestamp_only_retry_changes() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    summary.workout_recap_text = Some("Existing recap".to_string());
+    summary.workout_recap_provider = Some("openrouter".to_string());
+    summary.workout_recap_model = Some("google/gemini-3-flash-preview".to_string());
+    summary.workout_recap_generated_at_epoch_seconds = Some(1_700_000_010);
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let mut refreshed_summary = existing_summary_with_finished_conversation();
+    refreshed_summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    refreshed_summary.workout_recap_text = Some("Existing recap".to_string());
+    refreshed_summary.workout_recap_provider = Some("openrouter".to_string());
+    refreshed_summary.workout_recap_model = Some("google/gemini-3-flash-preview".to_string());
+    refreshed_summary.workout_recap_generated_at_epoch_seconds = Some(1_700_000_111);
+    let training_plan = RefreshingTrainingPlanService::new(repository.clone(), refreshed_summary);
+    training_plan.succeed_next(aiwattcoach::domain::training_plan::GeneratedTrainingPlan {
+        snapshot: aiwattcoach::domain::training_plan::TrainingPlanSnapshot {
+            user_id: "user-1".to_string(),
+            workout_id: "workout-1".to_string(),
+            operation_key: "training-plan:user-1:workout-1:1700000000".to_string(),
+            saved_at_epoch_seconds: 1_700_000_000,
+            start_date: "2026-04-06".to_string(),
+            end_date: "2026-04-19".to_string(),
+            days: Vec::new(),
+            created_at_epoch_seconds: 1_700_000_000,
+        },
+        active_projected_days: Vec::new(),
+        was_generated: false,
+    });
+    let service = test_service_with_training_plan(
+        repository.clone(),
+        std::sync::Arc::new(training_plan.clone()),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "unchanged");
+    assert_eq!(result.workflow.plan_status.as_str(), "unchanged");
+    assert_eq!(result.workflow.messages, Vec::<String>::new());
+}
+
+#[tokio::test]
 async fn mark_saved_maps_training_plan_failure_to_repository_error_after_persisting_save() {
-    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(
+        existing_summary_with_finished_conversation(),
+    );
     let training_plan = RecordingTrainingPlanService::default();
     training_plan.fail_next(
         aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
@@ -175,9 +480,9 @@ async fn mark_saved_maps_training_plan_failure_to_repository_error_after_persist
     let service =
         test_service_with_training_plan(repository.clone(), std::sync::Arc::new(training_plan));
 
-    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
+    assert_eq!(result.summary.saved_at_epoch_seconds, Some(1_700_000_000));
     assert_eq!(
         repository.calls(),
         vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]

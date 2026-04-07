@@ -1,8 +1,12 @@
 use crate::domain::workout_summary::{
-    ConversationMessage, MessageRole, SendMessageResult, WorkoutSummary,
+    ConversationMessage, MessageRole, SaveSummaryResult, SaveWorkflowResult, SaveWorkflowStatus,
+    SendMessageResult, WorkoutSummary,
 };
 
-use super::dto::{ConversationMessageDto, SendMessageResponseDto, WorkoutSummaryDto};
+use super::dto::{
+    ConversationMessageDto, SaveWorkflowDto, SaveWorkflowStatusDto, SendMessageResponseDto,
+    WorkoutSummaryDto,
+};
 
 pub(super) fn map_summary_to_dto(summary: WorkoutSummary) -> WorkoutSummaryDto {
     WorkoutSummaryDto {
@@ -25,6 +29,39 @@ pub(super) fn map_send_message_result_to_dto(result: SendMessageResult) -> SendM
         summary: map_summary_to_dto(result.summary),
         user_message: map_message_to_dto(result.user_message),
         coach_message: map_message_to_dto(result.coach_message),
+    }
+}
+
+pub(super) fn map_save_summary_result_to_dto(
+    result: SaveSummaryResult,
+) -> (WorkoutSummaryDto, SaveWorkflowDto) {
+    (
+        map_summary_to_dto(result.summary),
+        SaveWorkflowDto {
+            recap_status: map_workflow_status_to_dto(result.workflow.recap_status),
+            plan_status: map_workflow_status_to_dto(result.workflow.plan_status),
+            messages: result.workflow.messages,
+        },
+    )
+}
+
+pub(super) fn unchanged_save_summary_result(summary: WorkoutSummary) -> SaveSummaryResult {
+    SaveSummaryResult {
+        summary,
+        workflow: SaveWorkflowResult {
+            recap_status: SaveWorkflowStatus::Unchanged,
+            plan_status: SaveWorkflowStatus::Unchanged,
+            messages: Vec::new(),
+        },
+    }
+}
+
+fn map_workflow_status_to_dto(status: SaveWorkflowStatus) -> SaveWorkflowStatusDto {
+    match status {
+        SaveWorkflowStatus::Generated => SaveWorkflowStatusDto::Generated,
+        SaveWorkflowStatus::Skipped => SaveWorkflowStatusDto::Skipped,
+        SaveWorkflowStatus::Failed => SaveWorkflowStatusDto::Failed,
+        SaveWorkflowStatus::Unchanged => SaveWorkflowStatusDto::Unchanged,
     }
 }
 

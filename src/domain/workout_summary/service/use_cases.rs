@@ -1,5 +1,22 @@
 use super::*;
 
+#[derive(Clone, PartialEq, Eq)]
+struct RecapSnapshot {
+    text: Option<String>,
+    provider: Option<String>,
+    model: Option<String>,
+}
+
+impl RecapSnapshot {
+    fn from_summary(summary: &WorkoutSummary) -> Self {
+        Self {
+            text: summary.workout_recap_text.clone(),
+            provider: summary.workout_recap_provider.clone(),
+            model: summary.workout_recap_model.clone(),
+        }
+    }
+}
+
 impl<Repo, Ops, Time, Ids> WorkoutSummaryUseCases for WorkoutSummaryService<Repo, Ops, Time, Ids>
 where
     Repo: WorkoutSummaryRepository + Clone,
@@ -113,13 +130,15 @@ where
         &self,
         user_id: &str,
         workout_id: &str,
-    ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+    ) -> BoxFuture<Result<SaveSummaryResult, WorkoutSummaryError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
             let existing = service.get_existing_summary(&user_id, &workout_id).await?;
             if existing.saved_at_epoch_seconds.is_some() {
+                let recap_before_retry = RecapSnapshot::from_summary(&existing);
+
                 if let (Some(training_plan_service), Some(saved_at_epoch_seconds)) = (
                     &service.training_plan_service,
                     existing.saved_at_epoch_seconds,
@@ -128,8 +147,39 @@ where
                         .generate_for_saved_workout(&user_id, &workout_id, saved_at_epoch_seconds)
                         .await
                     {
-                        Ok(_) => {
-                            return service.get_existing_summary(&user_id, &workout_id).await;
+                        Ok(generated_plan) => {
+                            let summary =
+                                service.get_existing_summary(&user_id, &workout_id).await?;
+                            let recap_status =
+                                if RecapSnapshot::from_summary(&summary) != recap_before_retry {
+                                    SaveWorkflowStatus::Generated
+                                } else {
+                                    SaveWorkflowStatus::Unchanged
+                                };
+                            return Ok(SaveSummaryResult {
+                                summary,
+                                workflow: SaveWorkflowResult {
+                                    recap_status: recap_status.clone(),
+                                    plan_status: if generated_plan.was_generated {
+                                        SaveWorkflowStatus::Generated
+                                    } else {
+                                        SaveWorkflowStatus::Unchanged
+                                    },
+                                    messages: match (recap_status, generated_plan.was_generated) {
+                                        (SaveWorkflowStatus::Generated, true) => vec![
+                                            "Workout recap generated on retry.".to_string(),
+                                            "14-day schedule generated on retry.".to_string(),
+                                        ],
+                                        (SaveWorkflowStatus::Generated, false) => {
+                                            vec!["Workout recap generated on retry.".to_string()]
+                                        }
+                                        (_, true) => {
+                                            vec!["14-day schedule generated on retry.".to_string()]
+                                        }
+                                        _ => Vec::new(),
+                                    },
+                                },
+                            });
                         }
                         Err(error) => {
                             warn!(
@@ -139,10 +189,41 @@ where
                                 error = %error,
                                 "Saved workout summary remains persisted after training plan generation retry failure"
                             );
+
+                            let summary =
+                                service.get_existing_summary(&user_id, &workout_id).await?;
+                            let recap_status =
+                                if RecapSnapshot::from_summary(&summary) != recap_before_retry {
+                                    SaveWorkflowStatus::Generated
+                                } else {
+                                    SaveWorkflowStatus::Unchanged
+                                };
+                            return Ok(SaveSummaryResult {
+                                summary,
+                                workflow: SaveWorkflowResult {
+                                    recap_status: recap_status.clone(),
+                                    plan_status: SaveWorkflowStatus::Failed,
+                                    messages: if recap_status == SaveWorkflowStatus::Generated {
+                                        vec![
+                                            "Workout recap generated on retry.".to_string(),
+                                            "14-day schedule failed on retry.".to_string(),
+                                        ]
+                                    } else {
+                                        vec!["14-day schedule failed on retry.".to_string()]
+                                    },
+                                },
+                            });
                         }
                     }
                 }
-                return Ok(existing);
+                return Ok(SaveSummaryResult {
+                    summary: existing,
+                    workflow: SaveWorkflowResult {
+                        recap_status: SaveWorkflowStatus::Unchanged,
+                        plan_status: SaveWorkflowStatus::Skipped,
+                        messages: Vec::new(),
+                    },
+                });
             }
             if existing.rpe.is_none() {
                 return Err(WorkoutSummaryError::Validation(
@@ -156,22 +237,119 @@ where
                 .set_saved_state(&user_id, &workout_id, Some(now), now)
                 .await?;
 
-            if let Some(training_plan_service) = &service.training_plan_service {
-                if let Err(error) = training_plan_service
-                    .generate_for_saved_workout(&user_id, &workout_id, now)
-                    .await
-                {
-                    warn!(
-                        user_id,
-                        workout_id,
-                        saved_at_epoch_seconds = now,
-                        error = %error,
-                        "Saved workout summary remains persisted after training plan generation failure"
-                    );
-                }
+            let has_finished_conversation = existing
+                .messages
+                .iter()
+                .any(|message| message.role == MessageRole::Coach);
+
+            if !has_finished_conversation {
+                let summary = service.get_existing_summary(&user_id, &workout_id).await?;
+                return Ok(SaveSummaryResult {
+                    summary,
+                    workflow: SaveWorkflowResult {
+                        recap_status: SaveWorkflowStatus::Skipped,
+                        plan_status: SaveWorkflowStatus::Skipped,
+                        messages: vec!["No finished coach conversation to process.".to_string()],
+                    },
+                });
             }
 
-            service.get_existing_summary(&user_id, &workout_id).await
+            let is_latest_completed_activity = if let Some(latest_completed_activity_service) =
+                &service.latest_completed_activity_service
+            {
+                latest_completed_activity_service
+                    .latest_completed_activity_id(&user_id)
+                    .await?
+                    .as_deref()
+                    == Some(workout_id.as_str())
+            } else {
+                false
+            };
+
+            let recap_status = if let Some(training_plan_service) = &service.training_plan_service {
+                match training_plan_service
+                    .generate_recap_for_saved_workout(&user_id, &workout_id, now)
+                    .await
+                {
+                    Ok(_) => SaveWorkflowStatus::Generated,
+                    Err(error) => {
+                        warn!(
+                            user_id,
+                            workout_id,
+                            saved_at_epoch_seconds = now,
+                            error = %error,
+                            "Saved workout summary remains persisted after recap generation failure"
+                        );
+                        SaveWorkflowStatus::Failed
+                    }
+                }
+            } else {
+                SaveWorkflowStatus::Skipped
+            };
+
+            let plan_status = if is_latest_completed_activity {
+                if let Some(training_plan_service) = &service.training_plan_service {
+                    match training_plan_service
+                        .generate_for_saved_workout(&user_id, &workout_id, now)
+                        .await
+                    {
+                        Ok(_) => SaveWorkflowStatus::Generated,
+                        Err(error) => {
+                            warn!(
+                                user_id,
+                                workout_id,
+                                saved_at_epoch_seconds = now,
+                                error = %error,
+                                "Saved workout summary remains persisted after training plan generation failure"
+                            );
+                            SaveWorkflowStatus::Failed
+                        }
+                    }
+                } else {
+                    SaveWorkflowStatus::Skipped
+                }
+            } else {
+                SaveWorkflowStatus::Skipped
+            };
+
+            let summary = service.get_existing_summary(&user_id, &workout_id).await?;
+            Ok(SaveSummaryResult {
+                summary,
+                workflow: SaveWorkflowResult {
+                    recap_status: recap_status.clone(),
+                    plan_status: plan_status.clone(),
+                    messages: if is_latest_completed_activity {
+                        vec![
+                            if recap_status == SaveWorkflowStatus::Generated {
+                                "Workout recap generated.".to_string()
+                            } else if recap_status == SaveWorkflowStatus::Failed {
+                                "Workout recap failed.".to_string()
+                            } else {
+                                "Workout recap skipped.".to_string()
+                            },
+                            if plan_status == SaveWorkflowStatus::Generated {
+                                "14-day schedule generated.".to_string()
+                            } else if plan_status == SaveWorkflowStatus::Failed {
+                                "14-day schedule failed.".to_string()
+                            } else {
+                                "14-day schedule skipped.".to_string()
+                            },
+                        ]
+                    } else {
+                        vec![
+                            if recap_status == SaveWorkflowStatus::Generated {
+                                "Workout recap generated.".to_string()
+                            } else if recap_status == SaveWorkflowStatus::Failed {
+                                "Workout recap failed.".to_string()
+                            } else {
+                                "Workout recap skipped.".to_string()
+                            },
+                            "14-day schedule skipped because this is not the latest completed activity."
+                                .to_string(),
+                        ]
+                    },
+                },
+            })
         })
     }
 

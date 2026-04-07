@@ -234,6 +234,25 @@ async fn save_summary_marks_summary_as_saved() {
             .and_then(Value::as_i64),
         Some(1_700_000_100)
     );
+    assert_eq!(
+        body.get("workflow")
+            .and_then(|workflow| workflow.get("recapStatus"))
+            .and_then(Value::as_str),
+        Some("skipped")
+    );
+    assert_eq!(
+        body.get("workflow")
+            .and_then(|workflow| workflow.get("planStatus"))
+            .and_then(Value::as_str),
+        Some("skipped")
+    );
+    assert_eq!(
+        body.get("workflow")
+            .and_then(|workflow| workflow.get("messages"))
+            .and_then(Value::as_array)
+            .map(|messages| messages.len()),
+        Some(0)
+    );
 }
 
 #[tokio::test]
@@ -292,6 +311,25 @@ async fn reopen_summary_clears_saved_flag() {
         .get("summary")
         .and_then(|summary| summary.get("savedAtEpochSeconds"))
         .is_some_and(Value::is_null));
+    assert_eq!(
+        body.get("workflow")
+            .and_then(|workflow| workflow.get("recapStatus"))
+            .and_then(Value::as_str),
+        Some("unchanged")
+    );
+    assert_eq!(
+        body.get("workflow")
+            .and_then(|workflow| workflow.get("planStatus"))
+            .and_then(Value::as_str),
+        Some("unchanged")
+    );
+    assert_eq!(
+        body.get("workflow")
+            .and_then(|workflow| workflow.get("messages"))
+            .and_then(Value::as_array)
+            .map(|messages| messages.len()),
+        Some(0)
+    );
 }
 
 #[tokio::test]

@@ -5,3 +5,4 @@ pub mod llm;
 pub mod mongo;
 pub mod rest;
 pub mod support;
+pub mod workout_summary_latest_activity;

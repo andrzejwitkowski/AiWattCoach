@@ -82,6 +82,16 @@ function temporaryMessage(content: string): ConversationMessage {
   };
 }
 
+function localSystemMessages(contents: string[], startId: number): ConversationMessage[] {
+  const createdAtEpochSeconds = Math.floor(Date.now() / 1000);
+  return contents.map((content, index) => ({
+    id: `system-${startId + index}`,
+    role: 'system',
+    content,
+    createdAtEpochSeconds,
+  }));
+}
+
 export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): UseCoachChatResult {
   const [summary, setSummary] = useState<WorkoutSummary | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -386,9 +396,24 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
         applySummaryState(nextSummary, requestedWorkoutId);
       }
 
-      nextSummary = await saveWorkoutSummary(apiBaseUrl, requestedWorkoutId);
+      const saveResult = await saveWorkoutSummary(apiBaseUrl, requestedWorkoutId);
+      nextSummary = saveResult.summary;
 
       applySummaryState(nextSummary, requestedWorkoutId);
+      if (saveResult.workflow.messages.length > 0) {
+        const startId = localSystemMessageIdRef.current + 1;
+        localSystemMessageIdRef.current += saveResult.workflow.messages.length;
+        setMessages((current) => {
+          if (currentWorkoutIdRef.current !== requestedWorkoutId) {
+            return current;
+          }
+
+          return [
+            ...current,
+            ...localSystemMessages(saveResult.workflow.messages, startId),
+          ];
+        });
+      }
       return nextSummary;
     } catch (saveError) {
       if (saveError instanceof StaleWorkoutSelectionError) {
@@ -422,9 +447,9 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     setError(null);
 
     try {
-      const nextSummary = await reopenWorkoutSummary(apiBaseUrl, requestedWorkoutId);
-      applySummaryState(nextSummary, requestedWorkoutId);
-      return nextSummary;
+      const reopenResult = await reopenWorkoutSummary(apiBaseUrl, requestedWorkoutId);
+      applySummaryState(reopenResult.summary, requestedWorkoutId);
+      return reopenResult.summary;
     } catch (saveError) {
       if (saveError instanceof StaleWorkoutSelectionError) {
         return null;
