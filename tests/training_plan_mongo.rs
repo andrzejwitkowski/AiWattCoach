@@ -228,6 +228,60 @@ async fn training_plan_projection_repository_keeps_past_days_active_when_late_wi
 }
 
 #[tokio::test]
+async fn training_plan_projection_repository_replay_heals_partial_same_operation_inserts() {
+    let fixture = MongoFixture::new().await;
+    let repository =
+        MongoTrainingPlanProjectionRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let snapshot = sample_snapshot("training-plan:user-1:workout-1:1700000000", "2026-04-06");
+    let partial_projected_days = sample_projected_days(&snapshot)
+        .into_iter()
+        .take(5)
+        .collect::<Vec<_>>();
+
+    repository
+        .replace_window(
+            snapshot.clone(),
+            partial_projected_days,
+            "2026-04-06",
+            1_700_000_000,
+        )
+        .await
+        .unwrap();
+
+    let (_, active_days) = repository
+        .replace_window(
+            snapshot.clone(),
+            sample_projected_days(&snapshot),
+            "2026-04-06",
+            1_700_000_100,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(active_days.len(), 13);
+
+    let stored_days = fixture
+        .client
+        .database(&fixture.database)
+        .collection::<mongodb::bson::Document>("training_plan_projected_days")
+        .find(doc! { "operation_key": &snapshot.operation_key })
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+    assert_eq!(stored_days.len(), 14);
+
+    let active_for_operation = repository
+        .find_active_by_operation_key(&snapshot.operation_key)
+        .await
+        .unwrap();
+    assert_eq!(active_for_operation.len(), 13);
+}
+
+#[tokio::test]
 async fn training_plan_projection_repository_creates_operation_active_date_index() {
     let fixture = MongoFixture::new().await;
     let repository =

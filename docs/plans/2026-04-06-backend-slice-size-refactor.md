@@ -133,7 +133,7 @@ Run:
 
 Expected: PASS.
 
-### Task 6: Run broader verification and reviewer passes
+### Task 6: Run broader verification
 
 **Files:**
 - Modify only if verification or review exposes a real issue
@@ -144,12 +144,3 @@ Run:
 - `cargo test -- --nocapture`
 - `cargo fmt --all --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-
-**Step 2: Run reviewer passes**
-
-Run three passes over the resulting diff:
-- strict reviewer pass
-- very strict reviewer pass
-- nitpicker pass
-
-Use focused review context and report findings by severity with file references.

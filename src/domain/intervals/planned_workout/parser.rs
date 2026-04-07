@@ -263,9 +263,10 @@ fn serialize_line(line: &PlannedWorkoutLine) -> String {
 
 fn serialize_duration(duration_seconds: i32) -> String {
     if duration_seconds % 60 == 0 {
-        format!("{}m", duration_seconds / 60)
+        let duration_minutes = duration_seconds / 60;
+        format!("{duration_minutes}m")
     } else {
-        format!("{}s", duration_seconds)
+        format!("{duration_seconds}s")
     }
 }
 

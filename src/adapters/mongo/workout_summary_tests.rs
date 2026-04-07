@@ -1,8 +1,9 @@
 use mongodb::bson::{doc, from_document, Bson};
 
 use super::{
-    legacy_workout_id_filter, legacy_workout_ids_filter, map_document_to_domain,
-    map_domain_to_document, ConversationMessageDocument, WorkoutSummaryDocument,
+    current_workout_id_filter, document_identity_filter, legacy_event_id_filter,
+    map_document_to_domain, map_domain_to_document, ConversationMessageDocument,
+    WorkoutSummaryDocument,
 };
 use crate::domain::workout_summary::{WorkoutSummary, WorkoutSummaryError};
 
@@ -102,32 +103,72 @@ fn map_domain_to_document_includes_recap_fields() {
 }
 
 #[test]
-fn legacy_workout_filter_matches_workout_id_or_event_id() {
+fn current_workout_filter_matches_workout_id() {
     assert_eq!(
-        legacy_workout_id_filter("user-1", "workout-1"),
+        current_workout_id_filter("user-1", "workout-1"),
         doc! {
             "user_id": "user-1",
-            "$or": [
-                { "workout_id": "workout-1" },
-                { "event_id": "workout-1" },
-            ]
+            "workout_id": "workout-1",
         }
     );
 }
 
 #[test]
-fn legacy_workout_ids_filter_matches_workout_id_or_event_id_lists() {
+fn legacy_event_filter_matches_event_id() {
     assert_eq!(
-        legacy_workout_ids_filter(
-            "user-1",
-            &["workout-1".to_string(), "workout-2".to_string()]
-        ),
+        legacy_event_id_filter("user-1", "workout-1"),
         doc! {
             "user_id": "user-1",
-            "$or": [
-                { "workout_id": { "$in": ["workout-1", "workout-2"] } },
-                { "event_id": { "$in": ["workout-1", "workout-2"] } },
-            ]
+            "event_id": "workout-1",
+        }
+    );
+}
+
+#[test]
+fn document_identity_filter_prefers_object_id() {
+    let id = mongodb::bson::oid::ObjectId::parse_str("507f1f77bcf86cd799439011").unwrap();
+    let document = WorkoutSummaryDocument {
+        id: Some(id),
+        summary_id: "summary-1".to_string(),
+        user_id: "user-1".to_string(),
+        workout_id: "workout-1".to_string(),
+        rpe: None,
+        messages: Vec::new(),
+        saved_at_epoch_seconds: None,
+        workout_recap_text: None,
+        workout_recap_provider: None,
+        workout_recap_model: None,
+        workout_recap_generated_at_epoch_seconds: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 1,
+    };
+
+    assert_eq!(document_identity_filter(&document), doc! { "_id": id });
+}
+
+#[test]
+fn document_identity_filter_falls_back_to_summary_and_user() {
+    let document = WorkoutSummaryDocument {
+        id: None,
+        summary_id: "summary-1".to_string(),
+        user_id: "user-1".to_string(),
+        workout_id: "workout-1".to_string(),
+        rpe: None,
+        messages: Vec::new(),
+        saved_at_epoch_seconds: None,
+        workout_recap_text: None,
+        workout_recap_provider: None,
+        workout_recap_model: None,
+        workout_recap_generated_at_epoch_seconds: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 1,
+    };
+
+    assert_eq!(
+        document_identity_filter(&document),
+        doc! {
+            "summary_id": "summary-1",
+            "user_id": "user-1",
         }
     );
 }

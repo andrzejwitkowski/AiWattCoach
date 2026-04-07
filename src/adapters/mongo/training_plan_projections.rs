@@ -194,10 +194,20 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
 
             if !projected_day_documents.is_empty() {
-                collection
-                    .insert_many(projected_day_documents)
-                    .await
-                    .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+                for projected_day_document in projected_day_documents {
+                    collection
+                        .replace_one(
+                            doc! {
+                                "user_id": &projected_day_document.user_id,
+                                "operation_key": &projected_day_document.operation_key,
+                                "date": &projected_day_document.date,
+                            },
+                            &projected_day_document,
+                        )
+                        .upsert(true)
+                        .await
+                        .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+                }
             }
 
             Ok((

@@ -102,10 +102,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
-            let document = collection
-                .find_one(legacy_workout_id_filter(&user_id, &workout_id))
-                .await
-                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+            let document = find_preferred_document(&collection, &user_id, &workout_id).await?;
             document.map(map_document_to_domain).transpose()
         })
     }
@@ -118,16 +115,17 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            let documents = collection
-                .find(legacy_workout_ids_filter(&user_id, &workout_ids))
-                .await
-                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
-            let documents = documents
+            workout_ids
+                .into_iter()
+                .map(|workout_id| {
+                    let collection = collection.clone();
+                    let user_id = user_id.clone();
+                    async move { find_preferred_document(&collection, &user_id, &workout_id).await }
+                })
+                .collect::<futures::stream::FuturesOrdered<_>>()
+                .try_filter_map(|document| async move { Ok(document) })
                 .try_collect::<Vec<_>>()
-                .await
-                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
-
-            documents
+                .await?
                 .into_iter()
                 .map(map_document_to_domain)
                 .collect::<Result<Vec<_>, _>>()
@@ -162,9 +160,18 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            let Some(document) =
+                find_preferred_document(&collection, &user_id, &workout_id).await?
+            else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+            if document.saved_at_epoch_seconds.is_some() {
+                return Err(WorkoutSummaryError::Locked);
+            }
+
             let result = collection
                 .update_one(
-                    with_open_summary_filter(legacy_workout_id_filter(&user_id, &workout_id)),
+                    document_identity_filter(&document),
                     doc! {
                         "$set": {
                             "rpe": i32::from(rpe),
@@ -176,18 +183,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
             if result.matched_count == 0 {
-                let existing = collection
-                    .find_one(legacy_workout_id_filter(&user_id, &workout_id))
-                    .await
-                    .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
-
-                return match existing {
-                    Some(document) if document.saved_at_epoch_seconds.is_some() => {
-                        Err(WorkoutSummaryError::Locked)
-                    }
-                    Some(_) => Err(WorkoutSummaryError::NotFound),
-                    None => Err(WorkoutSummaryError::NotFound),
-                };
+                return Err(WorkoutSummaryError::NotFound);
             }
 
             Ok(())
@@ -206,12 +202,25 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         let workout_id = workout_id.to_string();
         let message = map_message_to_document(message);
         Box::pin(async move {
+            let Some(document) =
+                find_preferred_document(&collection, &user_id, &workout_id).await?
+            else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+            if document
+                .messages
+                .iter()
+                .any(|existing_message| existing_message.id == message.id)
+            {
+                return Ok(());
+            }
+            if document.saved_at_epoch_seconds.is_some() {
+                return Err(WorkoutSummaryError::Locked);
+            }
+
             let result = collection
                 .update_one(
-                    with_message_append_filter(
-                        legacy_workout_id_filter(&user_id, &workout_id),
-                        &message.id,
-                    ),
+                    with_message_append_filter(document_identity_filter(&document), &message.id),
                     doc! {
                         "$push": { "messages": mongodb::bson::to_bson(&message).map_err(|error| WorkoutSummaryError::Repository(error.to_string()))? },
                         "$set": { "updated_at_epoch_seconds": updated_at_epoch_seconds },
@@ -221,10 +230,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
             if result.matched_count == 0 {
-                let existing = collection
-                    .find_one(legacy_workout_id_filter(&user_id, &workout_id))
-                    .await
-                    .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+                let existing = find_preferred_document(&collection, &user_id, &workout_id).await?;
 
                 return match existing {
                     Some(document)
@@ -258,9 +264,15 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            let Some(document) =
+                find_preferred_document(&collection, &user_id, &workout_id).await?
+            else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+
             let result = collection
                 .update_one(
-                    legacy_workout_id_filter(&user_id, &workout_id),
+                    document_identity_filter(&document),
                     doc! {
                         "$set": {
                             "saved_at_epoch_seconds": saved_at_epoch_seconds,
@@ -290,9 +302,15 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            let Some(document) =
+                find_preferred_document(&collection, &user_id, &workout_id).await?
+            else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+
             let result = collection
                 .update_one(
-                    legacy_workout_id_filter(&user_id, &workout_id),
+                    document_identity_filter(&document),
                     doc! {
                         "$set": {
                             "workout_recap_text": recap.text,
@@ -327,14 +345,13 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         let workout_id = workout_id.to_string();
         let message_id = message_id.to_string();
         Box::pin(async move {
-            let document = collection
-                .find_one(legacy_workout_id_filter(&user_id, &workout_id))
-                .projection(doc! {
-                    "messages": { "$elemMatch": { "id": &message_id } },
-                    "_id": 0,
-                })
-                .await
-                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+            let document = find_preferred_message_lookup_document(
+                &collection,
+                &user_id,
+                &workout_id,
+                &message_id,
+            )
+            .await?;
 
             let message = document
                 .and_then(|document| document.messages.into_iter().next())
@@ -346,29 +363,74 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
     }
 }
 
-fn legacy_workout_id_filter(user_id: &str, workout_id: &str) -> mongodb::bson::Document {
-    doc! {
-        "user_id": user_id,
-        "$or": [
-            { "workout_id": workout_id },
-            { "event_id": workout_id },
-        ]
+async fn find_preferred_document(
+    collection: &Collection<WorkoutSummaryDocument>,
+    user_id: &str,
+    workout_id: &str,
+) -> Result<Option<WorkoutSummaryDocument>, WorkoutSummaryError> {
+    if let Some(document) = collection
+        .find_one(current_workout_id_filter(user_id, workout_id))
+        .await
+        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?
+    {
+        return Ok(Some(document));
+    }
+
+    collection
+        .find_one(legacy_event_id_filter(user_id, workout_id))
+        .await
+        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))
+}
+
+async fn find_preferred_message_lookup_document(
+    collection: &Collection<WorkoutSummaryMessageLookupDocument>,
+    user_id: &str,
+    workout_id: &str,
+    message_id: &str,
+) -> Result<Option<WorkoutSummaryMessageLookupDocument>, WorkoutSummaryError> {
+    let projection = doc! {
+        "messages": { "$elemMatch": { "id": message_id } },
+        "_id": 0,
+    };
+
+    if let Some(document) = collection
+        .find_one(current_workout_id_filter(user_id, workout_id))
+        .projection(projection.clone())
+        .await
+        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?
+    {
+        return Ok(Some(document));
+    }
+
+    collection
+        .find_one(legacy_event_id_filter(user_id, workout_id))
+        .projection(projection)
+        .await
+        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))
+}
+
+fn document_identity_filter(document: &WorkoutSummaryDocument) -> mongodb::bson::Document {
+    match document.id {
+        Some(id) => doc! { "_id": id },
+        None => doc! {
+            "summary_id": &document.summary_id,
+            "user_id": &document.user_id,
+        },
     }
 }
 
-fn legacy_workout_ids_filter(user_id: &str, workout_ids: &[String]) -> mongodb::bson::Document {
+fn current_workout_id_filter(user_id: &str, workout_id: &str) -> mongodb::bson::Document {
     doc! {
         "user_id": user_id,
-        "$or": [
-            { "workout_id": { "$in": workout_ids } },
-            { "event_id": { "$in": workout_ids } },
-        ]
+        "workout_id": workout_id,
     }
 }
 
-fn with_open_summary_filter(mut filter: mongodb::bson::Document) -> mongodb::bson::Document {
-    filter.insert("saved_at_epoch_seconds", Bson::Null);
-    filter
+fn legacy_event_id_filter(user_id: &str, workout_id: &str) -> mongodb::bson::Document {
+    doc! {
+        "user_id": user_id,
+        "event_id": workout_id,
+    }
 }
 
 fn with_message_append_filter(

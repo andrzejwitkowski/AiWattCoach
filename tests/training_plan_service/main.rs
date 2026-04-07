@@ -798,6 +798,38 @@ async fn correction_retry_exhaustion_marks_failed_operation_and_keeps_raw_respon
 }
 
 #[tokio::test]
+async fn reclaim_with_stored_invalid_correction_response_keeps_full_retry_budget() {
+    let built = build_service_with_operation(
+        new_call_log(),
+        stale_pending_operation_with_invalid_correction_response(),
+        vec![],
+        vec![],
+        vec![
+            Ok(single_invalid_day("2026-04-10")),
+            Ok(single_invalid_day("2026-04-10")),
+        ],
+        SECOND_DAY,
+    );
+
+    let error = built
+        .service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        TrainingPlanError::Unavailable("training plan generation failed validation".to_string())
+    );
+    assert_eq!(built.generator.correction_call_count(), 2);
+
+    let operation = built.operations.stored_operation();
+    assert_eq!(operation.status, WorkflowStatus::Failed);
+    assert_eq!(operation.validation_issues.len(), 1);
+    assert_eq!(operation.validation_issues[0].scope, "2026-04-10");
+}
+
+#[tokio::test]
 async fn correction_retry_persists_latest_invalid_scope_after_scope_shifts() {
     let built = build_service(
         new_call_log(),
@@ -1328,6 +1360,10 @@ fn single_rest_day(date: &str) -> String {
     format!("{date}\nRest Day")
 }
 
+fn single_invalid_day(date: &str) -> String {
+    format!("{date}\nBroken session\n- nope")
+}
+
 fn stale_pending_operation_with_checkpoints() -> TrainingPlanGenerationOperation {
     TrainingPlanGenerationOperation {
         operation_key: format!(
@@ -1379,6 +1415,37 @@ fn stale_pending_operation_with_recap_only() -> TrainingPlanGenerationOperation 
             attempt_number: 1,
             recorded_at_epoch_seconds: date_epoch(FIRST_DAY),
         }],
+        failure: None,
+        started_at_epoch_seconds: date_epoch(FIRST_DAY),
+        last_attempt_at_epoch_seconds: date_epoch(FIRST_DAY),
+        attempt_count: 1,
+        created_at_epoch_seconds: date_epoch(FIRST_DAY),
+        updated_at_epoch_seconds: date_epoch(SECOND_DAY),
+    }
+}
+
+fn stale_pending_operation_with_invalid_correction_response() -> TrainingPlanGenerationOperation {
+    TrainingPlanGenerationOperation {
+        operation_key: format!(
+            "training-plan:{USER_ID}:{WORKOUT_ID}:{}",
+            date_epoch(FIRST_DAY)
+        ),
+        user_id: USER_ID.to_string(),
+        workout_id: WORKOUT_ID.to_string(),
+        saved_at_epoch_seconds: date_epoch(FIRST_DAY),
+        status: WorkflowStatus::Pending,
+        workout_recap_text: Some(workout_recap().text),
+        workout_recap_provider: Some("openrouter".to_string()),
+        workout_recap_model: Some(MODEL.to_string()),
+        workout_recap_generated_at_epoch_seconds: Some(date_epoch(FIRST_DAY) - 600),
+        projection_persisted_at_epoch_seconds: None,
+        raw_plan_response: Some(plan_with_invalid_day(FIRST_DAY, "2026-04-10")),
+        raw_correction_response: Some(single_invalid_day("2026-04-10")),
+        validation_issues: vec![ValidationIssue {
+            scope: "2026-04-10".to_string(),
+            message: "invalid planned workout step: - nope".to_string(),
+        }],
+        attempts: Vec::new(),
         failure: None,
         started_at_epoch_seconds: date_epoch(FIRST_DAY),
         last_attempt_at_epoch_seconds: date_epoch(FIRST_DAY),

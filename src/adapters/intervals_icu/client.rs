@@ -95,7 +95,7 @@ pub(super) fn truncate_logged_response_body(body: &str) -> String {
     let chars = body.chars().count();
     let bytes = body.len();
     let digest = Sha256::digest(body.as_bytes());
-    let hash_prefix = format!("{:x}", digest);
+    let hash_prefix = format!("{digest:x}");
     let hash_prefix = &hash_prefix[..12.min(hash_prefix.len())];
 
     let shape = match serde_json::from_str::<Value>(body) {

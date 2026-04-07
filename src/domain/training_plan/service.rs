@@ -680,13 +680,16 @@ where
                         .collect::<BTreeSet<_>>();
                 }
 
-                let already_attempted_correction = operation.raw_correction_response.is_some();
-                for attempt_index in 0..Self::MAX_CORRECTION_ATTEMPTS {
+                let correction_attempts_recorded = operation
+                    .attempts
+                    .iter()
+                    .filter(|attempt| attempt.phase == WorkflowPhase::Correction)
+                    .count();
+                let correction_attempts_remaining =
+                    Self::MAX_CORRECTION_ATTEMPTS.saturating_sub(correction_attempts_recorded);
+                for _ in 0..correction_attempts_remaining {
                     if issues.is_empty() {
                         break;
-                    }
-                    if already_attempted_correction && attempt_index == 0 {
-                        continue;
                     }
 
                     let correction_response = match service

@@ -84,7 +84,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 return Ok(existing);
             }
 
-            let summary = sample_summary(&workout_id);
+            let summary = sample_summary_for_user(&user_id, &workout_id);
             summaries.push(summary.clone());
             Ok(summary)
         })
@@ -407,9 +407,13 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
 }
 
 pub(crate) fn sample_summary(workout_id: &str) -> WorkoutSummary {
+    sample_summary_for_user("user-1", workout_id)
+}
+
+fn sample_summary_for_user(user_id: &str, workout_id: &str) -> WorkoutSummary {
     WorkoutSummary {
         id: format!("summary-{workout_id}"),
-        user_id: "user-1".to_string(),
+        user_id: user_id.to_string(),
         workout_id: workout_id.to_string(),
         rpe: Some(6),
         messages: Vec::new(),

@@ -64,8 +64,9 @@ async fn ctrl_c_registration_error_logs_and_does_not_finish_shutdown_future() {
 
     assert!(result.is_err());
     let output = logs.contents();
-    assert!(output.contains("Failed to listen for Ctrl+C"));
-    assert!(output.contains("boom"));
+    assert!(output
+        .lines()
+        .any(|line| { line.contains("Failed to listen for Ctrl+C") && line.contains("boom") }));
 }
 
 #[cfg(unix)]
@@ -88,8 +89,9 @@ async fn sigterm_registration_error_logs_and_does_not_finish_shutdown_future() {
 
     assert!(result.is_err());
     let output = logs.contents();
-    assert!(output.contains("Failed to listen for SIGTERM"));
-    assert!(output.contains("boom"));
+    assert!(output
+        .lines()
+        .any(|line| { line.contains("Failed to listen for SIGTERM") && line.contains("boom") }));
 }
 
 #[test]
