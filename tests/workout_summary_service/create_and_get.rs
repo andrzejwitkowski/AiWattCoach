@@ -5,7 +5,7 @@ use aiwattcoach::domain::workout_summary::{
 use crate::shared::{
     existing_summary, test_service, test_service_with_training_plan,
     InMemoryWorkoutSummaryRepository, PersistCheckingTrainingPlanService,
-    RecordingTrainingPlanService,
+    RecordingTrainingPlanService, RefreshingTrainingPlanService,
 };
 
 #[tokio::test]
@@ -113,6 +113,49 @@ async fn repeat_mark_saved_retries_training_plan_generation_for_already_saved_su
     let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
 
     assert_eq!(summary.saved_at_epoch_seconds, Some(1_700_000_000));
+    assert_eq!(repository.calls(), Vec::<String>::new());
+    assert_eq!(
+        training_plan.calls(),
+        vec!["generate_for_saved_workout:user-1:workout-1:1700000000".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn repeat_mark_saved_reloads_summary_after_successful_training_plan_retry() {
+    let mut summary = existing_summary();
+    summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let mut refreshed_summary = existing_summary();
+    refreshed_summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    refreshed_summary.workout_recap_text = Some("Refreshed recap after retry".to_string());
+    refreshed_summary.updated_at_epoch_seconds = 1_700_000_111;
+    let training_plan = RefreshingTrainingPlanService::new(repository.clone(), refreshed_summary);
+    training_plan.succeed_next(aiwattcoach::domain::training_plan::GeneratedTrainingPlan {
+        snapshot: aiwattcoach::domain::training_plan::TrainingPlanSnapshot {
+            user_id: "user-1".to_string(),
+            workout_id: "workout-1".to_string(),
+            operation_key: "training-plan:user-1:workout-1:1700000000".to_string(),
+            saved_at_epoch_seconds: 1_700_000_000,
+            start_date: "2026-04-06".to_string(),
+            end_date: "2026-04-19".to_string(),
+            days: Vec::new(),
+            created_at_epoch_seconds: 1_700_000_000,
+        },
+        active_projected_days: Vec::new(),
+        was_generated: false,
+    });
+    let service = test_service_with_training_plan(
+        repository.clone(),
+        std::sync::Arc::new(training_plan.clone()),
+    );
+
+    let summary = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(
+        summary.workout_recap_text.as_deref(),
+        Some("Refreshed recap after retry")
+    );
+    assert_eq!(summary.updated_at_epoch_seconds, 1_700_000_111);
     assert_eq!(repository.calls(), Vec::<String>::new());
     assert_eq!(
         training_plan.calls(),

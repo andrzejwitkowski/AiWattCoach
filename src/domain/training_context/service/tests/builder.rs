@@ -8,8 +8,8 @@ use crate::domain::{
 use super::{
     super::DefaultTrainingContextBuilder,
     support::{
-        sample_activity_with_ftp, FixedClock, TestIntervalsService, TestSettingsService,
-        TestTrainingPlanProjectionRepository, TestWorkoutSummaryRepository,
+        sample_activity_with_ftp, FixedClock, FtpOrderingIntervalsService, TestIntervalsService,
+        TestSettingsService, TestTrainingPlanProjectionRepository, TestWorkoutSummaryRepository,
     },
 };
 
@@ -248,6 +248,44 @@ async fn builder_ignores_projected_days_on_or_before_today() {
         .projected_days
         .iter()
         .all(|day| day.date.as_str() > "2026-04-03"));
+}
+
+#[tokio::test]
+async fn builder_uses_chronological_ftp_change_and_expands_projected_repeats() {
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(FtpOrderingIntervalsService),
+        Arc::new(TestWorkoutSummaryRepository),
+        FixedClock,
+    )
+    .with_training_plan_projection_repository(Arc::new(TestTrainingPlanProjectionRepository));
+
+    let result = builder.build("user-1", "ride-late").await.unwrap();
+
+    assert_eq!(result.context.history.ftp_current, Some(320));
+    assert_eq!(result.context.history.ftp_change, Some(40));
+    assert_eq!(
+        result
+            .context
+            .projected_days
+            .iter()
+            .find(|day| day.date == "2026-04-07")
+            .and_then(|day| day.workouts.first())
+            .map(|workout| workout.interval_blocks.len()),
+        Some(2)
+    );
+    assert_eq!(
+        result
+            .context
+            .recent_days
+            .iter()
+            .find(|day| day.date == "2026-04-03")
+            .and_then(|day| day.workouts.first())
+            .and_then(|workout| workout.planned_workout.as_ref())
+            .and_then(|planned| planned.interval_blocks.first())
+            .and_then(|block| block.min_target_watts),
+        Some(288)
+    );
 }
 
 #[tokio::test]

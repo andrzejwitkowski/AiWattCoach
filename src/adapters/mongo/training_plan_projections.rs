@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
@@ -165,6 +167,13 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         Box::pin(async move {
             let snapshot_document = snapshot_document?;
             let projected_day_documents = projected_day_documents?;
+            validate_replacement_scope(&snapshot, &projected_days)?;
+            if projected_day_documents.is_empty() {
+                return Err(TrainingPlanError::Validation(
+                    "training plan projection window must contain at least one projected day"
+                        .to_string(),
+                ));
+            }
             collection
                 .update_many(
                     doc! {
@@ -195,21 +204,19 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
 
-            if !projected_day_documents.is_empty() {
-                for projected_day_document in projected_day_documents {
-                    collection
-                        .replace_one(
-                            doc! {
-                                "user_id": &projected_day_document.user_id,
-                                "operation_key": &projected_day_document.operation_key,
-                                "date": &projected_day_document.date,
-                            },
-                            &projected_day_document,
-                        )
-                        .upsert(true)
-                        .await
-                        .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
-                }
+            for projected_day_document in projected_day_documents {
+                collection
+                    .replace_one(
+                        doc! {
+                            "user_id": &projected_day_document.user_id,
+                            "operation_key": &projected_day_document.operation_key,
+                            "date": &projected_day_document.date,
+                        },
+                        &projected_day_document,
+                    )
+                    .upsert(true)
+                    .await
+                    .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
             }
 
             Ok((
@@ -262,4 +269,29 @@ fn map_document_to_projected_day(
         created_at_epoch_seconds: document.created_at_epoch_seconds,
         updated_at_epoch_seconds: document.updated_at_epoch_seconds,
     })
+}
+
+fn validate_replacement_scope(
+    snapshot: &TrainingPlanSnapshot,
+    projected_days: &[TrainingPlanProjectedDay],
+) -> Result<(), TrainingPlanError> {
+    let expected_dates = snapshot
+        .days
+        .iter()
+        .map(|day| day.date.as_str())
+        .collect::<BTreeSet<_>>();
+
+    for day in projected_days {
+        if day.user_id != snapshot.user_id
+            || day.workout_id != snapshot.workout_id
+            || day.operation_key != snapshot.operation_key
+            || !expected_dates.contains(day.date.as_str())
+        {
+            return Err(TrainingPlanError::Validation(
+                "projected day replacement set does not match snapshot scope".to_string(),
+            ));
+        }
+    }
+
+    Ok(())
 }

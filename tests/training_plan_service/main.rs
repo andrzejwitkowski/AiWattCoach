@@ -164,9 +164,25 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
             }
 
             for projected_day in &projected_days {
-                stored.push(projected_day.clone());
+                if let Some(existing) = stored.iter_mut().find(|existing| {
+                    existing.user_id == projected_day.user_id
+                        && existing.operation_key == projected_day.operation_key
+                        && existing.date == projected_day.date
+                }) {
+                    *existing = projected_day.clone();
+                } else {
+                    stored.push(projected_day.clone());
+                }
             }
-            snapshots.lock().unwrap().push(snapshot.clone());
+            let mut stored_snapshots = snapshots.lock().unwrap();
+            if let Some(existing) = stored_snapshots
+                .iter_mut()
+                .find(|existing| existing.operation_key == snapshot.operation_key)
+            {
+                *existing = snapshot.clone();
+            } else {
+                stored_snapshots.push(snapshot.clone());
+            }
 
             Ok((
                 snapshot,
@@ -623,6 +639,42 @@ async fn replay_of_same_saved_workout_generation_is_idempotent() {
 }
 
 #[tokio::test]
+async fn existing_pending_operation_returns_unavailable_without_calling_generator() {
+    let operation = TrainingPlanGenerationOperation::pending(
+        format!(
+            "training-plan:{USER_ID}:{WORKOUT_ID}:{}",
+            date_epoch(FIRST_DAY)
+        ),
+        USER_ID.to_string(),
+        WORKOUT_ID.to_string(),
+        date_epoch(FIRST_DAY),
+        date_epoch(SECOND_DAY),
+    );
+    let built = build_service_with_operation(
+        new_call_log(),
+        operation,
+        vec![Ok(workout_recap())],
+        vec![Ok(valid_plan_window(FIRST_DAY))],
+        vec![Ok(single_rest_day("2026-04-10"))],
+        SECOND_DAY,
+    );
+
+    let error = built
+        .service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        TrainingPlanError::Unavailable("training plan generation already in progress".to_string())
+    );
+    assert_eq!(built.generator.recap_call_count(), 0);
+    assert_eq!(built.generator.initial_plan_call_count(), 0);
+    assert_eq!(built.generator.correction_call_count(), 0);
+}
+
+#[tokio::test]
 async fn next_day_generation_supersedes_only_overlapping_future_projected_days() {
     let first = build_service(
         new_call_log(),
@@ -862,6 +914,40 @@ async fn correction_retry_persists_latest_invalid_scope_after_scope_shifts() {
     assert_eq!(correction_inputs.len(), 2);
     assert_eq!(correction_inputs[0].1[0].scope, "2026-04-10");
     assert_eq!(correction_inputs[1].1[0].scope, "2026-04-11");
+}
+
+#[tokio::test]
+async fn correction_retry_keeps_omitted_invalid_day_in_retry_set() {
+    let built = build_service(
+        new_call_log(),
+        vec![Ok(workout_recap())],
+        vec![Ok(plan_with_invalid_day(FIRST_DAY, "2026-04-10"))],
+        vec![
+            Ok("2026-04-11\nRest Day".to_string()),
+            Ok(plan_with_invalid_day(FIRST_DAY, "2026-04-10")),
+        ],
+        FIRST_DAY,
+    );
+
+    let error = built
+        .service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        TrainingPlanError::Unavailable("training plan generation failed validation".to_string())
+    );
+
+    let correction_inputs = built.generator.correction_inputs();
+    assert_eq!(correction_inputs.len(), 2);
+    assert_eq!(correction_inputs[0].1[0].scope, "2026-04-10");
+    assert_eq!(correction_inputs[1].1[0].scope, "2026-04-10");
+
+    let operation = built.operations.stored_operation();
+    assert_eq!(operation.validation_issues.len(), 1);
+    assert_eq!(operation.validation_issues[0].scope, "2026-04-10");
 }
 
 #[tokio::test]
@@ -1152,18 +1238,20 @@ async fn replay_does_not_heal_pending_operation_when_snapshot_exists_without_pro
         .projected_days
         .store_snapshot_only(snapshot_for_first_day());
 
-    let result = built
+    let error = built
         .service
         .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
         .await
-        .unwrap();
+        .unwrap_err();
 
-    assert!(result.was_generated);
-    assert_eq!(result.active_projected_days.len(), 13);
+    assert_eq!(
+        error,
+        TrainingPlanError::Unavailable("training plan generation already in progress".to_string())
+    );
 
     let operation = built.operations.stored_operation();
-    assert_eq!(operation.status, WorkflowStatus::Completed);
-    assert_eq!(built.projected_days.stored_days().len(), 14);
+    assert_eq!(operation.status, WorkflowStatus::Pending);
+    assert!(built.projected_days.stored_days().is_empty());
 }
 
 #[tokio::test]

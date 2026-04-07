@@ -23,6 +23,13 @@ impl InMemoryWorkoutSummaryRepository {
     pub(crate) fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
     }
+
+    pub(crate) fn overwrite_summary(&self, summary: WorkoutSummary) {
+        self.summaries.lock().unwrap().insert(
+            (summary.user_id.clone(), summary.workout_id.clone()),
+            summary,
+        );
+    }
 }
 
 impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {

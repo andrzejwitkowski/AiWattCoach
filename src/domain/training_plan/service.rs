@@ -515,7 +515,12 @@ where
                                 .to_string(),
                         ));
                     }
-                    WorkflowStatus::Pending | WorkflowStatus::Failed => existing,
+                    WorkflowStatus::Pending => {
+                        return Err(TrainingPlanError::Unavailable(
+                            "training plan generation already in progress".to_string(),
+                        ));
+                    }
+                    WorkflowStatus::Failed => existing,
                 },
             };
 
@@ -658,13 +663,33 @@ where
                                 .await?)
                         }
                     };
+                    let corrected_dates = corrected
+                        .days_by_date
+                        .keys()
+                        .cloned()
+                        .collect::<BTreeSet<_>>();
                     service.merge_corrections(
                         &mut days_by_date,
                         corrected.days_by_date,
                         &invalid_dates,
                     );
-                    issues = corrected.issues;
-                    invalid_day_sections = corrected.invalid_day_sections;
+                    let corrected_invalid_dates = corrected
+                        .issues
+                        .iter()
+                        .map(|issue| issue.scope.clone())
+                        .collect::<BTreeSet<_>>();
+                    issues = merge_unresolved_issues(
+                        &issues,
+                        &corrected.issues,
+                        &corrected_dates,
+                        &corrected_invalid_dates,
+                    );
+                    invalid_day_sections = merge_invalid_day_sections(
+                        &invalid_day_sections,
+                        &corrected.invalid_day_sections,
+                        &corrected_dates,
+                        &corrected_invalid_dates,
+                    );
                     if operation.validation_issues != issues {
                         operation = service
                             .operations
@@ -737,13 +762,33 @@ where
                                 .await?)
                         }
                     };
+                    let corrected_dates = corrected
+                        .days_by_date
+                        .keys()
+                        .cloned()
+                        .collect::<BTreeSet<_>>();
                     service.merge_corrections(
                         &mut days_by_date,
                         corrected.days_by_date,
                         &invalid_dates,
                     );
-                    issues = corrected.issues;
-                    invalid_day_sections = corrected.invalid_day_sections;
+                    let corrected_invalid_dates = corrected
+                        .issues
+                        .iter()
+                        .map(|issue| issue.scope.clone())
+                        .collect::<BTreeSet<_>>();
+                    issues = merge_unresolved_issues(
+                        &issues,
+                        &corrected.issues,
+                        &corrected_dates,
+                        &corrected_invalid_dates,
+                    );
+                    invalid_day_sections = merge_invalid_day_sections(
+                        &invalid_day_sections,
+                        &corrected.invalid_day_sections,
+                        &corrected_dates,
+                        &corrected_invalid_dates,
+                    );
                     if operation.validation_issues != issues {
                         operation = service
                             .operations
@@ -810,4 +855,54 @@ where
             service.persist_projection(snapshot, operation).await
         })
     }
+}
+
+fn merge_unresolved_issues(
+    previous: &[ValidationIssue],
+    corrected: &[ValidationIssue],
+    corrected_dates: &BTreeSet<String>,
+    corrected_invalid_dates: &BTreeSet<String>,
+) -> Vec<ValidationIssue> {
+    let mut merged_by_scope = previous
+        .iter()
+        .filter(|issue| {
+            !corrected_dates.contains(&issue.scope)
+                || corrected_invalid_dates.contains(&issue.scope)
+        })
+        .map(|issue| (issue.scope.clone(), issue.clone()))
+        .collect::<BTreeMap<_, _>>();
+
+    for issue in corrected {
+        merged_by_scope.insert(issue.scope.clone(), issue.clone());
+    }
+
+    merged_by_scope.into_values().collect()
+}
+
+fn merge_invalid_day_sections(
+    previous_sections: &[String],
+    corrected_sections: &[String],
+    corrected_dates: &BTreeSet<String>,
+    corrected_invalid_dates: &BTreeSet<String>,
+) -> Vec<String> {
+    let mut merged_by_date = previous_sections
+        .iter()
+        .filter_map(|section| {
+            section
+                .lines()
+                .next()
+                .filter(|date| {
+                    !corrected_dates.contains(*date) || corrected_invalid_dates.contains(*date)
+                })
+                .map(|date| (date.to_string(), section.clone()))
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    for section in corrected_sections {
+        if let Some(date) = section.lines().next() {
+            merged_by_date.insert(date.to_string(), section.clone());
+        }
+    }
+
+    merged_by_date.into_values().collect()
 }

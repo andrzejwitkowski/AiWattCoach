@@ -89,6 +89,8 @@ async fn workout_summary_repository_prefers_current_workout_id_over_legacy_event
         .find(|document| document.get_str("summary_id").unwrap() == "summary-legacy")
         .unwrap();
     assert_eq!(legacy.get_i32("rpe").unwrap(), 3);
+
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
@@ -141,6 +143,8 @@ async fn workout_summary_repository_list_uses_legacy_fallback_when_current_match
     assert!(summaries
         .iter()
         .any(|summary| summary.id == "summary-fallback"));
+
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
@@ -170,6 +174,8 @@ async fn workout_summary_repository_creates_legacy_event_id_index() {
             == Some("workout_summaries_user_event")
             && index.keys == doc! { "user_id": 1, "event_id": 1 }
     }));
+
+    fixture.cleanup().await;
 }
 
 struct MongoFixture {
@@ -181,6 +187,9 @@ async fn mongo_fixture_or_skip() -> Option<MongoFixture> {
     match MongoFixture::new().await {
         Ok(fixture) => Some(fixture),
         Err(error) => {
+            if std::env::var("CI").is_ok() {
+                panic!("workout_summary_mongo test requires Mongo in CI: {error}");
+            }
             eprintln!("skipping workout_summary_mongo test: {error}");
             None
         }
@@ -217,15 +226,9 @@ impl MongoFixture {
             .database(&self.database)
             .collection("workout_summaries")
     }
-}
 
-impl Drop for MongoFixture {
-    fn drop(&mut self) {
-        let client = self.client.clone();
-        let database = self.database.clone();
-        tokio::spawn(async move {
-            let _ = client.database(&database).drop().await;
-        });
+    async fn cleanup(self) {
+        let _ = self.client.database(&self.database).drop().await;
     }
 }
 

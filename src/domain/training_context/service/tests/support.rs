@@ -361,6 +361,12 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
                             PlannedWorkoutLine::Text(PlannedWorkoutText {
                                 text: "AI Threshold".to_string(),
                             }),
+                            PlannedWorkoutLine::Repeat(
+                                crate::domain::intervals::PlannedWorkoutRepeat {
+                                    title: Some("Main Set".to_string()),
+                                    count: 2,
+                                },
+                            ),
                             PlannedWorkoutLine::Step(PlannedWorkoutStep {
                                 duration_seconds: 600,
                                 kind: PlannedWorkoutStepKind::Steady,
@@ -400,6 +406,136 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
     > {
         unreachable!()
     }
+}
+
+#[derive(Clone)]
+pub(super) struct FtpOrderingIntervalsService;
+
+impl IntervalsUseCases for FtpOrderingIntervalsService {
+    fn list_events(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> crate::domain::intervals::BoxFuture<Result<Vec<Event>, IntervalsError>> {
+        Box::pin(async move {
+            Ok(vec![Event {
+                id: 101,
+                start_date_local: "2026-04-03T07:00:00".to_string(),
+                name: Some("Workout match".to_string()),
+                category: EventCategory::Workout,
+                description: None,
+                indoor: false,
+                color: None,
+                workout_doc: Some("- 2x10min 90-95%".to_string()),
+            }])
+        })
+    }
+
+    fn get_event(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn create_event(
+        &self,
+        _user_id: &str,
+        _event: crate::domain::intervals::CreateEvent,
+    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn update_event(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+        _event: crate::domain::intervals::UpdateEvent,
+    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn delete_event(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+    ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+        unreachable!()
+    }
+
+    fn download_fit(
+        &self,
+        _user_id: &str,
+        _event_id: i64,
+    ) -> crate::domain::intervals::BoxFuture<Result<Vec<u8>, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn list_activities(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> crate::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        Box::pin(async move {
+            Ok(vec![
+                sample_activity_on_date_with_ftp("ride-late", "2026-04-03T08:00:00", Some(320)),
+                sample_activity_on_date_with_ftp("ride-early", "2026-03-15T08:00:00", Some(280)),
+            ])
+        })
+    }
+
+    fn get_activity(
+        &self,
+        _user_id: &str,
+        _activity_id: &str,
+    ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+        Box::pin(async move {
+            Ok(sample_activity_on_date_with_ftp(
+                "ride-late",
+                "2026-04-03T08:00:00",
+                Some(320),
+            ))
+        })
+    }
+
+    fn upload_activity(
+        &self,
+        _user_id: &str,
+        _upload: crate::domain::intervals::UploadActivity,
+    ) -> crate::domain::intervals::BoxFuture<
+        Result<crate::domain::intervals::UploadedActivities, IntervalsError>,
+    > {
+        unreachable!()
+    }
+
+    fn update_activity(
+        &self,
+        _user_id: &str,
+        _activity_id: &str,
+        _activity: crate::domain::intervals::UpdateActivity,
+    ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+        unreachable!()
+    }
+
+    fn delete_activity(
+        &self,
+        _user_id: &str,
+        _activity_id: &str,
+    ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+        unreachable!()
+    }
+}
+
+pub(super) fn sample_activity_on_date_with_ftp(
+    id: &str,
+    start_date_local: &str,
+    ftp_watts: Option<i32>,
+) -> Activity {
+    let mut activity = sample_activity_with_ftp(ftp_watts);
+    activity.id = id.to_string();
+    activity.start_date_local = start_date_local.to_string();
+    activity
 }
 
 pub(super) fn sample_activity_with_ftp(ftp_watts: Option<i32>) -> Activity {

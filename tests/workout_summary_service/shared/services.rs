@@ -113,6 +113,10 @@ impl RecordingTrainingPlanService {
         *self.next_result.lock().unwrap() = Some(Err(error));
     }
 
+    pub(crate) fn succeed_next(&self, result: GeneratedTrainingPlan) {
+        *self.next_result.lock().unwrap() = Some(Ok(result));
+    }
+
     pub(crate) fn observed_persisted_saved_at(&self) -> bool {
         self.observed_persisted_saved_at.load(Ordering::Relaxed)
     }
@@ -161,6 +165,58 @@ impl PersistCheckingTrainingPlanService {
 
     pub(crate) fn observed_persisted_saved_at(&self) -> bool {
         self.delegate.observed_persisted_saved_at()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct RefreshingTrainingPlanService {
+    repository: InMemoryWorkoutSummaryRepository,
+    delegate: RecordingTrainingPlanService,
+    refreshed_summary: WorkoutSummary,
+}
+
+impl RefreshingTrainingPlanService {
+    pub(crate) fn new(
+        repository: InMemoryWorkoutSummaryRepository,
+        refreshed_summary: WorkoutSummary,
+    ) -> Self {
+        Self {
+            repository,
+            delegate: RecordingTrainingPlanService::default(),
+            refreshed_summary,
+        }
+    }
+
+    pub(crate) fn calls(&self) -> Vec<String> {
+        self.delegate.calls()
+    }
+
+    pub(crate) fn succeed_next(&self, result: GeneratedTrainingPlan) {
+        self.delegate.succeed_next(result);
+    }
+}
+
+impl TrainingPlanUseCases for RefreshingTrainingPlanService {
+    fn generate_for_saved_workout(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<GeneratedTrainingPlan, TrainingPlanError>,
+    > {
+        let repository = self.repository.clone();
+        let delegate = self.delegate.clone();
+        let refreshed_summary = self.refreshed_summary.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            let result = delegate
+                .generate_for_saved_workout(&user_id, &workout_id, saved_at_epoch_seconds)
+                .await?;
+            repository.overwrite_summary(refreshed_summary);
+            Ok(result)
+        })
     }
 }
 

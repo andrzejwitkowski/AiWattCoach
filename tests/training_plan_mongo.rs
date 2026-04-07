@@ -78,6 +78,8 @@ async fn training_plan_generation_operation_repository_round_trips_and_reclaims_
         }
         other => panic!("expected reclaimed operation, got {other:?}"),
     }
+
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
@@ -112,6 +114,8 @@ async fn training_plan_generation_operation_repository_round_trips_recap_timesta
         Some(1_699_999_400)
     );
     assert_eq!(found.updated_at_epoch_seconds, 1_700_000_000);
+
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
@@ -129,7 +133,7 @@ async fn training_plan_snapshot_repository_finds_snapshot_by_operation_key() {
     projection_repository
         .replace_window(
             snapshot.clone(),
-            sample_projected_days(&snapshot),
+            sample_projected_days(&snapshot, "2026-04-06"),
             "2026-04-06",
             1_700_000_000,
         )
@@ -142,6 +146,8 @@ async fn training_plan_snapshot_repository_finds_snapshot_by_operation_key() {
         .unwrap();
 
     assert_eq!(found, Some(snapshot));
+
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
@@ -158,7 +164,7 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
     repository
         .replace_window(
             first_snapshot.clone(),
-            sample_projected_days(&first_snapshot),
+            sample_projected_days(&first_snapshot, "2026-04-06"),
             "2026-04-06",
             1_700_000_000,
         )
@@ -170,7 +176,7 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
     let (_, active_days) = repository
         .replace_window(
             second_snapshot.clone(),
-            sample_projected_days(&second_snapshot),
+            sample_projected_days(&second_snapshot, "2026-04-07"),
             "2026-04-07",
             1_700_086_400,
         )
@@ -186,7 +192,7 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
     repository
         .replace_window(
             other_user_snapshot.clone(),
-            sample_projected_days(&other_user_snapshot),
+            sample_projected_days(&other_user_snapshot, "2026-04-07"),
             "2026-04-07",
             1_700_086_400,
         )
@@ -209,6 +215,8 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
         .await
         .unwrap();
     assert!(first_active.is_empty());
+
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
@@ -225,7 +233,7 @@ async fn training_plan_projection_repository_keeps_past_days_active_when_late_wi
     repository
         .replace_window(
             first_snapshot.clone(),
-            sample_projected_days(&first_snapshot),
+            sample_projected_days(&first_snapshot, "2026-04-06"),
             "2026-04-06",
             1_700_000_000,
         )
@@ -237,10 +245,10 @@ async fn training_plan_projection_repository_keeps_past_days_active_when_late_wi
     repository
         .replace_window(
             replacement_snapshot,
-            sample_projected_days(&sample_snapshot(
-                "training-plan:user-1:workout-1:1700432000",
-                "2026-04-06",
-            )),
+            sample_projected_days(
+                &sample_snapshot("training-plan:user-1:workout-1:1700432000", "2026-04-06"),
+                "2026-04-10",
+            ),
             "2026-04-10",
             1_700_432_000,
         )
@@ -254,6 +262,8 @@ async fn training_plan_projection_repository_keeps_past_days_active_when_late_wi
 
     assert!(first_active.iter().any(|day| day.date == "2026-04-07"));
     assert!(first_active.iter().any(|day| day.date == "2026-04-09"));
+
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
@@ -266,7 +276,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
     repository.ensure_indexes().await.unwrap();
 
     let snapshot = sample_snapshot("training-plan:user-1:workout-1:1700000000", "2026-04-06");
-    let partial_projected_days = sample_projected_days(&snapshot)
+    let partial_projected_days = sample_projected_days(&snapshot, "2026-04-06")
         .into_iter()
         .take(5)
         .collect::<Vec<_>>();
@@ -284,7 +294,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
     let (_, active_days) = repository
         .replace_window(
             snapshot.clone(),
-            sample_projected_days(&snapshot),
+            sample_projected_days(&snapshot, "2026-04-06"),
             "2026-04-06",
             1_700_000_100,
         )
@@ -310,6 +320,8 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
         .await
         .unwrap();
     assert_eq!(active_for_operation.len(), 13);
+
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
@@ -340,6 +352,8 @@ async fn training_plan_projection_repository_creates_operation_active_date_index
             == Some("training_plan_projected_days_operation_active_date")
             && index.keys == doc! { "operation_key": 1, "active": 1, "date": 1 }
     }));
+
+    fixture.cleanup().await;
 }
 
 struct MongoFixture {
@@ -351,6 +365,9 @@ async fn mongo_fixture_or_skip() -> Option<MongoFixture> {
     match MongoFixture::new().await {
         Ok(fixture) => Some(fixture),
         Err(error) => {
+            if std::env::var("CI").is_ok() {
+                panic!("training_plan_mongo test requires Mongo in CI: {error}");
+            }
             eprintln!("skipping training_plan_mongo test: {error}");
             None
         }
@@ -381,15 +398,9 @@ impl MongoFixture {
         let database = format!("aiwattcoach_training_plan_mongo_{unique}_{counter}");
         Ok(Self { client, database })
     }
-}
 
-impl Drop for MongoFixture {
-    fn drop(&mut self) {
-        let client = self.client.clone();
-        let database = self.database.clone();
-        tokio::spawn(async move {
-            let _ = client.database(&database).drop().await;
-        });
+    async fn cleanup(self) {
+        let _ = self.client.database(&self.database).drop().await;
     }
 }
 
@@ -455,7 +466,10 @@ fn sample_snapshot_for_user(
     }
 }
 
-fn sample_projected_days(snapshot: &TrainingPlanSnapshot) -> Vec<TrainingPlanProjectedDay> {
+fn sample_projected_days(
+    snapshot: &TrainingPlanSnapshot,
+    today: &str,
+) -> Vec<TrainingPlanProjectedDay> {
     snapshot
         .days
         .iter()
@@ -466,7 +480,7 @@ fn sample_projected_days(snapshot: &TrainingPlanSnapshot) -> Vec<TrainingPlanPro
             date: day.date.clone(),
             rest_day: day.rest_day,
             workout: day.workout.clone(),
-            active: day.date > snapshot.start_date,
+            active: day.date.as_str() > today,
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: snapshot.created_at_epoch_seconds,
             updated_at_epoch_seconds: snapshot.created_at_epoch_seconds,

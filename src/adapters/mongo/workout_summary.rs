@@ -115,20 +115,12 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            workout_ids
-                .into_iter()
-                .map(|workout_id| {
-                    let collection = collection.clone();
-                    let user_id = user_id.clone();
-                    async move { find_preferred_document(&collection, &user_id, &workout_id).await }
-                })
-                .collect::<futures::stream::FuturesOrdered<_>>()
-                .try_filter_map(|document| async move { Ok(document) })
-                .try_collect::<Vec<_>>()
+            let preferred_documents = find_preferred_documents(&collection, &user_id, &workout_ids)
                 .await?
                 .into_iter()
                 .map(map_document_to_domain)
-                .collect::<Result<Vec<_>, _>>()
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(preferred_documents)
         })
     }
 
@@ -171,7 +163,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
 
             let result = collection
                 .update_one(
-                    document_identity_filter(&document),
+                    editable_document_identity_filter(&document),
                     doc! {
                         "$set": {
                             "rpe": i32::from(rpe),
@@ -183,7 +175,15 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
             if result.matched_count == 0 {
-                return Err(WorkoutSummaryError::NotFound);
+                let existing = find_preferred_document(&collection, &user_id, &workout_id).await?;
+
+                return match existing {
+                    Some(document) if document.saved_at_epoch_seconds.is_some() => {
+                        Err(WorkoutSummaryError::Locked)
+                    }
+                    Some(_) => Err(WorkoutSummaryError::NotFound),
+                    None => Err(WorkoutSummaryError::NotFound),
+                };
             }
 
             Ok(())
@@ -382,6 +382,62 @@ async fn find_preferred_document(
         .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))
 }
 
+async fn find_preferred_documents(
+    collection: &Collection<WorkoutSummaryDocument>,
+    user_id: &str,
+    workout_ids: &[String],
+) -> Result<Vec<WorkoutSummaryDocument>, WorkoutSummaryError> {
+    if workout_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let current_documents = collection
+        .find(doc! {
+            "user_id": user_id,
+            "workout_id": { "$in": workout_ids },
+        })
+        .await
+        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+
+    let mut preferred_by_workout_id = current_documents
+        .into_iter()
+        .map(|document| (document.workout_id.clone(), document))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let missing_workout_ids = workout_ids
+        .iter()
+        .filter(|workout_id| !preferred_by_workout_id.contains_key(workout_id.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if !missing_workout_ids.is_empty() {
+        let legacy_documents = collection
+            .find(doc! {
+                "user_id": user_id,
+                "event_id": { "$in": &missing_workout_ids },
+            })
+            .await
+            .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+
+        for document in legacy_documents {
+            preferred_by_workout_id
+                .entry(document.workout_id.clone())
+                .or_insert(document);
+        }
+    }
+
+    Ok(workout_ids
+        .iter()
+        .filter_map(|workout_id| preferred_by_workout_id.remove(workout_id))
+        .collect())
+}
+
 async fn find_preferred_message_lookup_document(
     collection: &Collection<WorkoutSummaryMessageLookupDocument>,
     user_id: &str,
@@ -417,6 +473,12 @@ fn document_identity_filter(document: &WorkoutSummaryDocument) -> mongodb::bson:
             "user_id": &document.user_id,
         },
     }
+}
+
+fn editable_document_identity_filter(document: &WorkoutSummaryDocument) -> mongodb::bson::Document {
+    let mut filter = document_identity_filter(document);
+    filter.insert("saved_at_epoch_seconds", Bson::Null);
+    filter
 }
 
 fn current_workout_id_filter(user_id: &str, workout_id: &str) -> mongodb::bson::Document {

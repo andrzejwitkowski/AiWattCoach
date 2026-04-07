@@ -363,13 +363,14 @@ where
             return Vec::new();
         };
 
+        let today = epoch_seconds_to_date(self.clock.now_epoch_seconds())
+            .format("%Y-%m-%d")
+            .to_string();
+
         let projected_days = match repository.list_active_by_user_id(user_id).await {
             Ok(projected_days) => projected_days,
             Err(_) => return Vec::new(),
         };
-        let today = epoch_seconds_to_date(self.clock.now_epoch_seconds())
-            .format("%Y-%m-%d")
-            .to_string();
 
         let mut grouped = BTreeMap::<String, Vec<ProjectedWorkoutContext>>::new();
         for day in projected_days.into_iter().filter(|day| day.date > today) {

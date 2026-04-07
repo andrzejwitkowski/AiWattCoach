@@ -5,7 +5,7 @@ use chrono::{Duration, NaiveDate};
 use crate::domain::{
     intervals::{
         find_best_activity_match, parse_workout_doc, Activity, Event, EventCategory,
-        PlannedWorkout, PlannedWorkoutTarget, WorkoutSegment,
+        PlannedWorkout, PlannedWorkoutLine, PlannedWorkoutTarget, WorkoutSegment,
     },
     training_context::model::{
         HistoricalTrainingContext, HistoricalWorkoutContext, PlannedWorkoutBlockContext,
@@ -64,13 +64,25 @@ pub(super) fn build_historical_context(
         (Some(ctl), Some(atl)) => Some(round_to_2(ctl - atl)),
         _ => None,
     };
-    let ftp_values = activities
+    let ftp_samples = activities
         .iter()
-        .filter_map(|activity| activity.metrics.ftp_watts)
+        .filter_map(|activity| {
+            activity
+                .metrics
+                .ftp_watts
+                .map(|ftp| (date_key(&activity.start_date_local), ftp))
+        })
         .collect::<Vec<_>>();
-    let ftp_current = ftp_values.last().copied();
+    let ftp_current = ftp_samples
+        .iter()
+        .max_by_key(|(date, _)| date.as_str())
+        .map(|(_, ftp)| *ftp);
+    let ftp_earliest = ftp_samples
+        .iter()
+        .min_by_key(|(date, _)| date.as_str())
+        .map(|(_, ftp)| *ftp);
     let ftp_change = ftp_current
-        .zip(ftp_values.first().copied())
+        .zip(ftp_earliest)
         .map(|(latest, earliest)| latest - earliest);
     let average_tss_7d = average_recent_tss(&daily_tss, 7);
     let average_tss_28d = average_recent_tss(&daily_tss, 28);
@@ -278,49 +290,67 @@ pub(super) fn projected_workout_name(workout: &PlannedWorkout) -> Option<String>
 pub(super) fn projected_interval_blocks(
     workout: &PlannedWorkout,
 ) -> Vec<PlannedWorkoutBlockContext> {
+    let mut repeat_count = 1usize;
+
     workout
         .lines
         .iter()
-        .filter_map(|line| line.step())
-        .map(|step| {
-            let (min_percent_ftp, max_percent_ftp, min_target_watts, max_target_watts) =
-                match &step.target {
-                    PlannedWorkoutTarget::PercentFtp { min, max } => {
-                        (Some(*min), Some(*max), None, None)
-                    }
-                    PlannedWorkoutTarget::WattsRange { min, max } => {
-                        (None, None, Some(*min), Some(*max))
-                    }
+        .flat_map(|line| match line {
+            PlannedWorkoutLine::Repeat(repeat) => {
+                repeat_count = repeat.count;
+                Vec::new()
+            }
+            PlannedWorkoutLine::Step(step) => {
+                let (min_percent_ftp, max_percent_ftp, min_target_watts, max_target_watts) =
+                    match &step.target {
+                        PlannedWorkoutTarget::PercentFtp { min, max } => {
+                            (Some(*min), Some(*max), None, None)
+                        }
+                        PlannedWorkoutTarget::WattsRange { min, max } => {
+                            (None, None, Some(*min), Some(*max))
+                        }
+                    };
+                let block = PlannedWorkoutBlockContext {
+                    duration_seconds: step.duration_seconds,
+                    min_percent_ftp,
+                    max_percent_ftp,
+                    min_target_watts,
+                    max_target_watts,
                 };
-            PlannedWorkoutBlockContext {
-                duration_seconds: step.duration_seconds,
-                min_percent_ftp,
-                max_percent_ftp,
-                min_target_watts,
-                max_target_watts,
+                let expanded = vec![block; repeat_count];
+                repeat_count = 1;
+                expanded
+            }
+            PlannedWorkoutLine::Text(_) => {
+                repeat_count = 1;
+                Vec::new()
             }
         })
         .collect()
 }
 
-pub(super) fn projected_raw_workout_doc(workout: &PlannedWorkout) -> String {
-    crate::domain::intervals::serialize_planned_workout(workout)
-}
-
-fn build_planned_workout(event: &Event, completed: bool) -> PlannedWorkoutContext {
-    let parsed = parse_workout_doc(event.workout_doc.as_deref(), None);
+fn build_projected_planned_workout(
+    event: &Event,
+    completed: bool,
+    ftp_watts: Option<i32>,
+) -> PlannedWorkoutContext {
+    let parsed = parse_workout_doc(event.workout_doc.as_deref(), ftp_watts);
     PlannedWorkoutContext {
         event_id: event.id,
         start_date_local: event.start_date_local.clone(),
         name: event.name.clone(),
         category: event.category.as_str().to_string(),
-        interval_blocks: build_planned_workout_blocks(&parsed.segments, None),
+        interval_blocks: build_planned_workout_blocks(&parsed.segments, ftp_watts),
         raw_workout_doc: event.workout_doc.clone(),
         estimated_training_stress_score: parsed.summary.estimated_training_stress_score,
         estimated_intensity_factor: parsed.summary.estimated_intensity_factor,
         estimated_normalized_power_watts: parsed.summary.estimated_normalized_power_watts,
         completed,
     }
+}
+
+fn build_planned_workout(event: &Event, completed: bool) -> PlannedWorkoutContext {
+    build_projected_planned_workout(event, completed, None)
 }
 
 fn build_special_day(event: &Event) -> SpecialDayContext {
@@ -410,14 +440,10 @@ pub(super) fn build_event_activity_matches(
             .iter()
             .filter(|activity| date_key(&activity.start_date_local) == event_date)
             .collect::<Vec<_>>();
-        let effective_ftp = configured_ftp.or_else(|| {
-            same_day
-                .iter()
-                .find_map(|activity| activity.metrics.ftp_watts)
-        });
-        let parsed = parse_workout_doc(event.workout_doc.as_deref(), effective_ftp);
 
         for activity in same_day {
+            let effective_ftp = activity.metrics.ftp_watts.or(configured_ftp);
+            let parsed = parse_workout_doc(event.workout_doc.as_deref(), effective_ftp);
             if let Some(candidate) =
                 find_best_activity_match(&parsed, std::slice::from_ref(activity), effective_ftp)
             {
@@ -449,6 +475,10 @@ pub(super) fn build_event_activity_matches(
     }
 
     matches
+}
+
+pub(super) fn projected_raw_workout_doc(workout: &PlannedWorkout) -> String {
+    crate::domain::intervals::serialize_planned_workout(workout)
 }
 
 fn group_activities_by_date(activities: &[Activity]) -> BTreeMap<String, Vec<Activity>> {
