@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -219,6 +220,7 @@ describe('WorkoutDetailModal interval interaction', () => {
   });
 
   it('supports keyboard activation for interval rows and chips', async () => {
+    const user = userEvent.setup();
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(
       makeActivity({
@@ -256,7 +258,7 @@ describe('WorkoutDetailModal interval interaction', () => {
 
     const ride2Chip = screen.getAllByText('Ride 2').find((element) => element.getAttribute('data-interval-chip-active') === 'false') as HTMLElement;
     ride2Chip.focus();
-    fireEvent.keyDown(ride2Chip, { key: 'Enter' });
+    await user.keyboard('{Enter}');
 
     expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
 
@@ -266,5 +268,138 @@ describe('WorkoutDetailModal interval interaction', () => {
 
     const activeRows = Array.from(document.querySelectorAll('[data-interval-row-active="true"]'));
     expect(activeRows.some((element) => element.textContent?.includes('Ride 1'))).toBe(true);
+  });
+
+  it('renders interval chips as toggle buttons with pressed state', async () => {
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a51',
+        startDateLocal: '2026-04-06T08:00:00',
+        name: 'Accessible Ride',
+        movingTimeSeconds: 1200,
+        elapsedTimeSeconds: 1200,
+        hasHeartRate: true,
+        streamTypes: ['watts'],
+        metrics: { trainingStressScore: 20, normalizedPowerWatts: 210, intensityFactor: 0.75, averagePowerWatts: 205, ftpWatts: 280 },
+        details: {
+          intervals: [
+            makeActivityInterval({ id: 1, label: 'Ride 1', averagePowerWatts: 200, averageHeartRateBpm: 140, zone: 3 }),
+            makeActivityInterval({ id: 2, label: 'Ride 2', startTimeSeconds: 600, endTimeSeconds: 1200, averagePowerWatts: 240, averageHeartRateBpm: 150, zone: 4 }),
+          ],
+          streams: [makeActivityStream({ data: Array.from({ length: 1200 }, (_, index) => (index < 600 ? 200 : 240)) })],
+        },
+      }),
+    );
+
+    renderActivityModal(
+      makeActivity({
+        id: 'a51',
+        startDateLocal: '2026-04-06T08:00:00',
+        name: 'Accessible Ride',
+        movingTimeSeconds: 1200,
+        elapsedTimeSeconds: 1200,
+        hasHeartRate: true,
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    const ride2Chip = screen.getAllByRole('button', { name: 'Ride 2' }).find((element) => element.getAttribute('data-interval-chip-active') === 'false') as HTMLButtonElement;
+    expect(ride2Chip).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(ride2Chip);
+
+    expect(ride2Chip).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps chip selection stable when the pointer hovers before clicking', async () => {
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a52',
+        startDateLocal: '2026-04-07T08:00:00',
+        name: 'Sticky Selection Ride',
+        movingTimeSeconds: 1200,
+        elapsedTimeSeconds: 1200,
+        hasHeartRate: true,
+        streamTypes: ['watts'],
+        metrics: { trainingStressScore: 20, normalizedPowerWatts: 210, intensityFactor: 0.75, averagePowerWatts: 205, ftpWatts: 280 },
+        details: {
+          intervals: [
+            makeActivityInterval({ id: 1, label: 'Ride 1', averagePowerWatts: 200, averageHeartRateBpm: 140, zone: 3 }),
+            makeActivityInterval({ id: 2, label: 'Ride 2', startTimeSeconds: 600, endTimeSeconds: 1200, averagePowerWatts: 240, averageHeartRateBpm: 150, zone: 4 }),
+          ],
+          streams: [makeActivityStream({ data: Array.from({ length: 1200 }, (_, index) => (index < 600 ? 200 : 240)) })],
+        },
+      }),
+    );
+
+    renderActivityModal(
+      makeActivity({
+        id: 'a52',
+        startDateLocal: '2026-04-07T08:00:00',
+        name: 'Sticky Selection Ride',
+        movingTimeSeconds: 1200,
+        elapsedTimeSeconds: 1200,
+        hasHeartRate: true,
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    const ride2Chip = screen.getAllByRole('button', { name: 'Ride 2' }).find((element) => element.getAttribute('data-interval-chip-active') === 'false') as HTMLButtonElement;
+
+    fireEvent.mouseEnter(ride2Chip);
+    fireEvent.click(ride2Chip);
+    expect(ride2Chip).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.mouseLeave(ride2Chip);
+    expect(ride2Chip).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.mouseEnter(ride2Chip);
+    fireEvent.click(ride2Chip);
+    expect(ride2Chip).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('previews interval readout when a chip receives keyboard focus', async () => {
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a53',
+        startDateLocal: '2026-04-08T08:00:00',
+        name: 'Focus Ride',
+        movingTimeSeconds: 1200,
+        elapsedTimeSeconds: 1200,
+        hasHeartRate: true,
+        streamTypes: ['watts'],
+        metrics: { trainingStressScore: 20, normalizedPowerWatts: 210, intensityFactor: 0.75, averagePowerWatts: 205, ftpWatts: 280 },
+        details: {
+          intervals: [
+            makeActivityInterval({ id: 1, label: 'Ride 1', averagePowerWatts: 200, averageHeartRateBpm: 140, zone: 3 }),
+            makeActivityInterval({ id: 2, label: 'Ride 2', startTimeSeconds: 600, endTimeSeconds: 1200, averagePowerWatts: 240, averageHeartRateBpm: 150, zone: 4 }),
+          ],
+          streams: [makeActivityStream({ data: Array.from({ length: 1200 }, (_, index) => (index < 600 ? 200 : 240)) })],
+        },
+      }),
+    );
+
+    renderActivityModal(
+      makeActivity({
+        id: 'a53',
+        startDateLocal: '2026-04-08T08:00:00',
+        name: 'Focus Ride',
+        movingTimeSeconds: 1200,
+        elapsedTimeSeconds: 1200,
+        hasHeartRate: true,
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    const ride2Chip = screen.getAllByRole('button', { name: 'Ride 2' }).find((element) => element.getAttribute('data-interval-chip-active') === 'false') as HTMLButtonElement;
+    fireEvent.focus(ride2Chip);
+
+    expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('240 W');
   });
 });

@@ -134,6 +134,7 @@
     "importedWorkoutDetailsUnavailable": "Intervals.icu did not expose detailed data for this imported workout.",
     "compliance": "compliance",
     "powerChart": "Power Chart",
+    "workoutStructure": "Workout Structure",
     "intervalMatches": "Interval Matches",
     "completedIntervals": "Completed Intervals",
     "moreItems_one": "+{{count}} more item",

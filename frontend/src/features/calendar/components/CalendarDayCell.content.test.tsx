@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import '../../../i18n';
@@ -105,6 +105,132 @@ describe('CalendarDayCell content', () => {
     expect(container).not.toHaveTextContent('Swim');
   });
 
+  it('does not leak planned summary metrics into a mixed day activity subtitle', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 27),
+      dateKey: '2026-03-27',
+      events: [
+        makeEvent({
+          id: 40,
+          name: 'Planned Build',
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 3600,
+              estimatedTrainingStressScore: 64.4,
+            },
+          },
+        }),
+      ],
+      activities: [
+        makeActivity({
+          id: 'a40',
+          name: 'Evening Ride',
+          movingTimeSeconds: null,
+          elapsedTimeSeconds: null,
+          metrics: { trainingStressScore: null },
+          hasHeartRate: false,
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+
+    expect(container).toHaveTextContent('Evening Ride');
+    expect(container).toHaveTextContent('Ride');
+    expect(container).not.toHaveTextContent('64.4 TSS');
+    expect(container).not.toHaveTextContent('60 min');
+  });
+
+  it('shows planned workout summary details and coach label for planned-only days', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 27),
+      dateKey: '2026-03-27',
+      events: [
+        makeEvent({
+          id: 5,
+          name: 'Coach Build',
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 3600,
+              estimatedTrainingStressScore: 64,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Planned Workout')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Coach Build')).toBeInTheDocument();
+    expect(within(dayCell).getByText('60 min • 64 TSS')).toBeInTheDocument();
+  });
+
+  it('does not show the coach planned badge for non-workout events', () => {
+    const day = makeCalendarDay({
+      events: [
+        makeEvent({
+          id: 6,
+          name: 'Club Race',
+          category: 'RACE',
+          eventDefinition: {
+            intervals: [],
+            segments: [],
+            rawWorkoutDoc: null,
+            summary: {
+              totalDurationSeconds: 0,
+              estimatedTrainingStressScore: null,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).queryByText('Planned Workout')).not.toBeInTheDocument();
+    expect(within(dayCell).getByText('Club Race')).toBeInTheDocument();
+  });
+
+  it('does not show the planned workout badge for completed events without loaded activities', () => {
+    const day = makeCalendarDay({
+      events: [
+        makeEvent({
+          id: 41,
+          name: 'Completed Build',
+          actualWorkout: {
+            activityId: 'a41',
+            activityName: 'Completed Build Outside',
+          },
+          eventDefinition: {
+            intervals: [
+              {
+                definition: '20min tempo',
+                repeatCount: 1,
+                durationSeconds: 1200,
+                targetPercentFtp: 90,
+                zoneId: 3,
+              },
+            ],
+            summary: {
+              totalDurationSeconds: 1200,
+              estimatedTrainingStressScore: 30,
+            },
+          },
+        }),
+      ],
+      activities: [],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).queryByText('Planned Workout')).not.toBeInTheDocument();
+    expect(within(dayCell).getByText('Completed Build')).toBeInTheDocument();
+  });
+
   it('does not render a clickable button without a real select handler', () => {
     const day = makeCalendarDay({
       date: new Date(2026, 2, 29),
@@ -112,10 +238,11 @@ describe('CalendarDayCell content', () => {
       events: [makeEvent({ id: 7, name: 'Planned ride', indoor: false })],
     });
 
-    render(<CalendarDayCell day={day} isToday={false} />);
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
 
-    expect(screen.queryByRole('button', { name: /planned ride/i })).not.toBeInTheDocument();
-    expect(screen.getByText('Planned ride')).toBeInTheDocument();
+    expect(within(dayCell).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(dayCell).getByText('Planned ride')).toBeInTheDocument();
   });
 
   it('renders a clickable button when a select handler is provided', () => {

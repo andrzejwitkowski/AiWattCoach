@@ -134,6 +134,7 @@
     "importedWorkoutDetailsUnavailable": "Intervals.icu nie udostępniło szczegółowych danych dla tego importowanego treningu.",
     "compliance": "zgodność",
     "powerChart": "Wykres mocy",
+    "workoutStructure": "Struktura treningu",
     "intervalMatches": "Dopasowane interwały",
     "completedIntervals": "Ukończone interwały",
     "moreItems_one": "+{{count}} dodatkowy wpis",

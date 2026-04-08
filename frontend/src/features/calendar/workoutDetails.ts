@@ -12,6 +12,23 @@ export type WorkoutBar = {
   widthUnits: number;
 };
 
+export type PlannedWorkoutStructureItem = {
+  id: string;
+  label: string;
+  detail: string | null;
+  durationSeconds: number | null;
+};
+
+export type PlannedWorkoutChartInterval = {
+  id: string;
+  startSecond: number;
+  endSecond: number;
+  label: string;
+};
+
+type PlannedIntervalDefinition = IntervalEvent['eventDefinition']['intervals'][number];
+type PlannedWorkoutSegment = IntervalEvent['eventDefinition']['segments'][number];
+
 const POWER_ZONE_COLORS: Record<number, string> = {
   1: '#6b7280',
   2: '#00e3fd',
@@ -22,17 +39,41 @@ const POWER_ZONE_COLORS: Record<number, string> = {
   7: '#800020',
 };
 
+const DEFAULT_ZONE_TARGET_PERCENT: Record<number, number> = {
+  1: 55,
+  2: 70,
+  3: 85,
+  4: 100,
+  5: 115,
+  6: 130,
+  7: 150,
+};
+
+export function isPlannedWorkoutEvent(
+  event: IntervalEvent | null | undefined,
+): event is IntervalEvent {
+  if (!event || event.category !== 'WORKOUT') {
+    return false;
+  }
+
+  return event.eventDefinition.intervals.length > 0
+    || event.eventDefinition.segments.length > 0
+    || event.eventDefinition.summary.totalDurationSeconds > 0
+    || event.eventDefinition.summary.totalSegments > 0
+    || Boolean(event.eventDefinition.rawWorkoutDoc?.trim());
+}
+
 export function buildPlannedWorkoutBars(event: IntervalEvent): WorkoutBar[] {
-  const segments = event.eventDefinition.segments ?? [];
-  if (segments.length === 0) {
+  const expandedSegments = buildExpandedPlannedSegments(event);
+  if (expandedSegments.length === 0) {
     return event.eventDefinition.intervals.map((interval, index, all) => ({
       height: 35 + Math.round((index / Math.max(1, all.length - 1)) * 55),
       color: POWER_ZONE_COLORS[interval.zoneId ?? 2] ?? POWER_ZONE_COLORS[2],
-      widthUnits: normalizeWidthUnits(interval.durationSeconds),
+      widthUnits: plannedIntervalTotalDurationSeconds(interval),
     }));
   }
 
-  return segments.map((segment) => ({
+  return expandedSegments.map((segment) => ({
     height: heightForPercent(segment.targetPercentFtp),
     color: POWER_ZONE_COLORS[segment.zoneId ?? 2] ?? POWER_ZONE_COLORS[2],
     widthUnits: normalizeWidthUnits(segment.durationSeconds),
@@ -86,6 +127,136 @@ export function buildMatchedWorkoutBars(actualWorkout: IntervalEvent['actualWork
   }));
 }
 
+export function buildPlannedWorkoutPowerSeries(
+  event: IntervalEvent,
+  sampleDurationSeconds = 5,
+): number[] {
+  const segments = buildExpandedPlannedSegments(event);
+
+  if (segments.length > 0) {
+    return segments.flatMap((segment) =>
+      Array.from(
+        {
+          length: plannedSampleCount(segment.durationSeconds, sampleDurationSeconds),
+        },
+        () => plannedTargetValue(segment.targetPercentFtp, segment.zoneId),
+      ),
+    );
+  }
+
+  return event.eventDefinition.intervals.flatMap((interval) =>
+    Array.from(
+      {
+        length: plannedSampleCount(plannedIntervalTotalDurationSeconds(interval), sampleDurationSeconds),
+      },
+      () => plannedTargetValue(interval.targetPercentFtp, interval.zoneId),
+    ),
+  );
+}
+
+export function buildPlannedWorkoutChartIntervals(
+  event: IntervalEvent,
+): PlannedWorkoutChartInterval[] {
+  const segments = buildExpandedPlannedSegments(event);
+
+  if (segments.length > 0) {
+    return segments.map((segment) => ({
+      id: `planned-${event.id}-${segment.order}`,
+      startSecond: segment.startOffsetSeconds,
+      endSecond: segment.endOffsetSeconds,
+      label: segment.label,
+    }));
+  }
+
+  let currentOffset = 0;
+
+  return event.eventDefinition.intervals.map((interval, index) => {
+    const durationSeconds = plannedIntervalTotalDurationSeconds(interval);
+    const chartInterval = {
+      id: `planned-${event.id}-interval-${index}`,
+      startSecond: currentOffset,
+      endSecond: currentOffset + durationSeconds,
+      label: formatPlannedWorkoutIntervalLabel(interval),
+    };
+    currentOffset += durationSeconds;
+    return chartInterval;
+  });
+}
+
+export function buildPlannedWorkoutStructureItems(
+  event: IntervalEvent,
+): PlannedWorkoutStructureItem[] {
+  if (event.eventDefinition.intervals.length > 0) {
+    return event.eventDefinition.intervals.map((interval, index) => ({
+      id: `interval-${index}`,
+      label: formatPlannedWorkoutIntervalLabel(interval),
+      detail: buildPlannedWorkoutIntervalDetail(interval),
+      durationSeconds: plannedIntervalTotalDurationSeconds(interval),
+    }));
+  }
+
+  const segments = buildExpandedPlannedSegments(event);
+
+  if (segments.length > 0) {
+    return segments.map((segment) => ({
+      id: `segment-${segment.order}`,
+      label: segment.label,
+      detail: buildSegmentDetail(segment),
+      durationSeconds: segment.durationSeconds,
+    }));
+  }
+
+  const rawWorkoutDoc = event.eventDefinition.rawWorkoutDoc?.trim();
+
+  if (!rawWorkoutDoc) {
+    return [];
+  }
+
+  return rawWorkoutDoc
+    .split('\n')
+    .map((line) => normalizeWorkoutText(line))
+    .filter(Boolean)
+    .map((label, index) => ({
+      id: `raw-${index}`,
+      label,
+      detail: null,
+      durationSeconds: null,
+    }));
+}
+
+export function formatPlannedWorkoutIntervalLabel(
+  interval: PlannedIntervalDefinition,
+): string {
+  const definition = normalizeWorkoutText(interval.definition);
+
+  if (definition) {
+    return formatDefinitionLabel(definition, interval.repeatCount);
+  }
+
+  const durationLabel = formatDurationLabel(interval.durationSeconds);
+  const targetLabel = buildPlannedTargetLabel(
+    interval.targetPercentFtp,
+    interval.zoneId,
+  );
+  const baseLabel = targetLabel ? `${durationLabel} @ ${targetLabel}` : durationLabel;
+
+  return interval.repeatCount > 1
+    ? `${interval.repeatCount} x ${baseLabel}`
+    : baseLabel;
+}
+
+export function buildPlannedTargetLabel(
+  targetPercentFtp: number | null | undefined,
+  zoneId: number | null | undefined,
+): string | null {
+  if (targetPercentFtp !== null && targetPercentFtp !== undefined && targetPercentFtp > 0) {
+    return `${trimTrailingZeros(targetPercentFtp)}% FTP`;
+  }
+
+  const fallbackPercent = zoneId ? DEFAULT_ZONE_TARGET_PERCENT[zoneId] : null;
+  return fallbackPercent ? `Z${zoneId} target` : null;
+}
+
 export function selectWorkoutDetail(
   dateKey: string,
   event: IntervalEvent | null,
@@ -96,15 +267,31 @@ export function selectWorkoutDetail(
     : activity
       ? [activity]
       : [];
+
+  if (activities.length === 0) {
+    return {
+      dateKey,
+      event: event?.actualWorkout || isPlannedWorkoutEvent(event) ? event : null,
+      activity: null,
+    };
+  }
+
   const matchedActivity = event?.actualWorkout?.activityId
     ? activities.find((candidate) => candidate.id === event.actualWorkout?.activityId) ?? null
     : null;
-  const selectedEvent = matchedActivity ? event : null;
+
+  if (matchedActivity) {
+    return {
+      dateKey,
+      event,
+      activity: matchedActivity,
+    };
+  }
 
   return {
     dateKey,
-    event: selectedEvent,
-    activity: selectedEvent ? matchedActivity : activities[0] ?? null,
+    event: isPlannedWorkoutEvent(event) ? event : null,
+    activity: activities[0] ?? null,
   };
 }
 
@@ -163,6 +350,140 @@ function normalizeWidthUnits(durationSeconds: number | null | undefined): number
   }
 
   return durationSeconds;
+}
+
+function buildPlannedWorkoutIntervalDetail(
+  interval: PlannedIntervalDefinition,
+): string | null {
+  if (interval.repeatCount > 1) {
+    return formatDurationLabel(plannedIntervalTotalDurationSeconds(interval));
+  }
+
+  const detailParts = [
+    interval.durationSeconds ? formatDurationLabel(interval.durationSeconds) : null,
+    buildPlannedTargetLabel(interval.targetPercentFtp, interval.zoneId),
+  ].filter(Boolean);
+
+  return detailParts.length > 0 ? detailParts.join(' • ') : null;
+}
+
+function buildExpandedPlannedSegments(
+  event: IntervalEvent,
+): PlannedWorkoutSegment[] {
+  const segments = event.eventDefinition.segments ?? [];
+
+  if (segments.length === 0) {
+    return [];
+  }
+
+  const summaryDuration = event.eventDefinition.summary.totalDurationSeconds;
+  const segmentDuration = segments.reduce((total, segment) => total + segment.durationSeconds, 0);
+  if (summaryDuration <= 0 || segmentDuration <= 0 || segmentDuration >= summaryDuration) {
+    return segments;
+  }
+
+  const repeatCount = inferSegmentRepeatCount(event, segmentDuration, summaryDuration);
+  if (repeatCount <= 1) {
+    return segments;
+  }
+
+  return Array.from({ length: repeatCount }, (_, repeatIndex) => {
+    const repeatOffset = repeatIndex * segmentDuration;
+
+    return segments.map((segment, segmentIndex) => ({
+      ...segment,
+      order: (repeatIndex * segments.length) + segmentIndex,
+      label: repeatCount > 1 ? `${segment.label} ${repeatIndex + 1}` : segment.label,
+      startOffsetSeconds: segment.startOffsetSeconds + repeatOffset,
+      endOffsetSeconds: segment.endOffsetSeconds + repeatOffset,
+    }));
+  }).flat();
+}
+
+function inferSegmentRepeatCount(
+  event: IntervalEvent,
+  segmentDuration: number,
+  summaryDuration: number,
+): number {
+  const intervalRepeatCount = event.eventDefinition.intervals.reduce(
+    (maxRepeatCount, interval) => Math.max(maxRepeatCount, interval.repeatCount),
+    1,
+  );
+
+  const repeatedDuration = segmentDuration * intervalRepeatCount;
+  if (repeatedDuration === summaryDuration) {
+    return intervalRepeatCount;
+  }
+
+  const inferredRepeatCount = Math.round(summaryDuration / segmentDuration);
+  return inferredRepeatCount > 1 && (segmentDuration * inferredRepeatCount) === summaryDuration
+    ? inferredRepeatCount
+    : 1;
+}
+
+function plannedIntervalTotalDurationSeconds(
+  interval: PlannedIntervalDefinition,
+): number {
+  return normalizeWidthUnits(interval.durationSeconds) * Math.max(1, interval.repeatCount);
+}
+
+function buildSegmentDetail(segment: PlannedWorkoutSegment): string | null {
+  const detailParts = [
+    formatDurationLabel(segment.durationSeconds),
+    buildPlannedTargetLabel(segment.targetPercentFtp, segment.zoneId),
+  ].filter(Boolean);
+
+  return detailParts.length > 0 ? detailParts.join(' • ') : null;
+}
+
+function plannedSampleCount(
+  durationSeconds: number | null | undefined,
+  sampleDurationSeconds: number,
+): number {
+  const normalizedDuration = normalizeWidthUnits(durationSeconds);
+  return Math.max(1, Math.ceil(normalizedDuration / Math.max(1, sampleDurationSeconds)));
+}
+
+function plannedTargetValue(
+  targetPercentFtp: number | null | undefined,
+  zoneId: number | null | undefined,
+): number {
+  if (targetPercentFtp !== null && targetPercentFtp !== undefined && targetPercentFtp > 0) {
+    return Math.round(targetPercentFtp);
+  }
+
+  return zoneId ? DEFAULT_ZONE_TARGET_PERCENT[zoneId] ?? DEFAULT_ZONE_TARGET_PERCENT[4] : DEFAULT_ZONE_TARGET_PERCENT[4];
+}
+
+function formatDefinitionLabel(definition: string, repeatCount: number): string {
+  let label = definition
+    .replace(/\b(\d+)x(?=\d)/gi, '$1 x ')
+    .replace(/(\d+(?:\.\d+)?)%\s*ftp\b/gi, '$1% FTP')
+    .replace(/(\d+(?:\.\d+)?)%(?!\s*FTP\b)/g, '$1% FTP')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (repeatCount > 1 && shouldWrapRepeatBlock(label, repeatCount)) {
+    label = `${repeatCount} x (${label})`;
+  }
+
+  return label;
+}
+
+function normalizeWorkoutText(value: string | null | undefined): string {
+  return (value ?? '').replace(/^[-*]\s*/, '').replace(/\s+/g, ' ').trim();
+}
+
+function startsWithRepeat(label: string, repeatCount: number): boolean {
+  return new RegExp(`^${repeatCount}\\s*x\\b`, 'i').test(label);
+}
+
+function shouldWrapRepeatBlock(label: string, repeatCount: number): boolean {
+  return !startsWithRepeat(label, repeatCount);
+}
+
+function trimTrailingZeros(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
 }
 
 function buildSkylineChartBars(encodedCharts: string[]): WorkoutBar[] {

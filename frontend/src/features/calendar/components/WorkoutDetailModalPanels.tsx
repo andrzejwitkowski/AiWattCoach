@@ -1,12 +1,15 @@
-import {useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import type {IntervalActivity, IntervalEvent} from '../../intervals/types';
 import {
   buildCompletedWorkoutPreviewBars,
   buildFiveSecondAveragePowerSeries,
+  buildPlannedWorkoutChartIntervals,
   buildMatchedWorkoutBars,
   buildPlannedWorkoutBars,
+  buildPlannedWorkoutPowerSeries,
+  buildPlannedWorkoutStructureItems,
   extractCompletedPowerValues,
   formatDurationLabel,
 } from '../workoutDetails';
@@ -25,11 +28,40 @@ import {PowerChart} from './WorkoutDetailPowerChart';
 export function PlannedWorkoutPanel({event}: { event: IntervalEvent }) {
   const {t} = useTranslation();
   const bars = buildPlannedWorkoutBars(event);
+  const structureItems = buildPlannedWorkoutStructureItems(event);
   const summary = event.eventDefinition.summary;
+  const powerSeries = buildPlannedWorkoutPowerSeries(event);
+  const chartIntervals = buildPlannedWorkoutChartIntervals(event);
+  const [hoveredIntervalKey, setHoveredIntervalKey] = useState<string | null>(null);
+  const [selectedIntervalKey, setSelectedIntervalKey] = useState<string | null>(null);
+  const highlightedIntervalKey = chartIntervals.some((interval) => interval.id === (hoveredIntervalKey ?? selectedIntervalKey))
+    ? (hoveredIntervalKey ?? selectedIntervalKey)
+    : null;
+  const activeInterval = chartIntervals.find((interval) => interval.id === highlightedIntervalKey) ?? null;
+
+  useEffect(() => {
+    setHoveredIntervalKey(null);
+    setSelectedIntervalKey(null);
+  }, [event.id]);
 
   return (
     <div className="space-y-6">
       <WorkoutBars bars={bars} />
+      {powerSeries.length > 0 ? (
+        <PowerChart
+          activeInterval={activeInterval}
+          activeIntervalKey={highlightedIntervalKey}
+          formatMaxValueLabel={(value) => `${value}% FTP max target`}
+          formatValueLabel={(value) => `${value}% FTP`}
+          intervals={chartIntervals}
+          onHoverIntervalChange={setHoveredIntervalKey}
+          onSelectIntervalChange={setSelectedIntervalKey}
+          selectedIntervalKey={selectedIntervalKey}
+          sampleDurationSeconds={5}
+          title={t('calendar.powerChart')}
+          values={powerSeries}
+        />
+      ) : null}
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label={t('calendar.duration')} value={formatDurationLabel(summary.totalDurationSeconds)} />
         <MetricCard
@@ -45,6 +77,31 @@ export function PlannedWorkoutPanel({event}: { event: IntervalEvent }) {
           value={summary.estimatedNormalizedPowerWatts !== null ? `${summary.estimatedNormalizedPowerWatts} W` : '--'}
         />
       </div>
+      {structureItems.length > 0 ? (
+        <div className="rounded-2xl border border-white/6 bg-[#171a1d] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">{t('calendar.workoutStructure')}</p>
+          <div className="mt-4 space-y-3">
+            {structureItems.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-xl border border-white/6 bg-white/[0.03] px-4 py-3"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-sm font-bold text-[#f9f9fd]">{item.label}</p>
+                  {item.durationSeconds ? (
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">
+                      {formatDurationLabel(item.durationSeconds)}
+                    </p>
+                  ) : null}
+                </div>
+                {item.detail ? (
+                  <p className="mt-1 text-xs text-slate-400">{item.detail}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -124,6 +181,7 @@ export function CompletedWorkoutPanel({event, activity}: {
           intervals={chartIntervalOverlays}
           onHoverIntervalChange={setHoveredIntervalKey}
           onSelectIntervalChange={setSelectedIntervalKey}
+          selectedIntervalKey={selectedIntervalKey}
           title={t('calendar.powerChart')}
           values={powerSeries}
         />

@@ -15,9 +15,12 @@ type ChartSamplePoint = {
 type PowerChartProps = {
   activeInterval: ChartIntervalOverlay | null;
   activeIntervalKey: string | null;
+  formatMaxValueLabel?: (value: number) => string;
+  formatValueLabel?: (value: number) => string;
   intervals: ChartIntervalOverlay[];
   onHoverIntervalChange: (intervalKey: string | null) => void;
   onSelectIntervalChange: (intervalKey: string | null) => void;
+  selectedIntervalKey?: string | null;
   sampleDurationSeconds?: number;
   title: string;
   values: number[];
@@ -26,9 +29,12 @@ type PowerChartProps = {
 export function PowerChart({
   activeInterval,
   activeIntervalKey,
+  formatMaxValueLabel = (value) => `${value} W max (5s avg)`,
+  formatValueLabel = (value) => `${value} W`,
   intervals,
   onHoverIntervalChange,
   onSelectIntervalChange,
+  selectedIntervalKey = null,
   sampleDurationSeconds = 1,
   title,
   values,
@@ -48,7 +54,7 @@ export function PowerChart({
   const hoveredSample = hoveredSampleIndex !== null ? sampledPoints[hoveredSampleIndex] : null;
   const pinnedSample = activeInterval ? samplePointForInterval(sampledPoints, activeInterval) : null;
   const displayedSample = hoveredSample ?? pinnedSample;
-  const maxValue = Math.max(...sampledPoints.map((point) => point.value), 1);
+  const maxValue = Math.max(...values, 1);
   const chartHeight = 220;
   const chartWidth = 1000;
   const points = sampledPoints
@@ -95,10 +101,10 @@ export function PowerChart({
               data-hover-power-readout="true"
               className="text-xs font-bold uppercase tracking-[0.18em] text-slate-300"
             >
-              {formatChartTimeLabel(displayedSample.second)} • {displayedSample.value} W
+              {formatChartTimeLabel(displayedSample.second)} • {formatValueLabel(displayedSample.value)}
             </p>
           ) : null}
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">{maxValue} W max (5s avg)</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">{formatMaxValueLabel(maxValue)}</p>
         </div>
       </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-[linear-gradient(180deg,rgba(210,255,154,0.16)_0%,rgba(210,255,154,0.03)_100%)] p-3">
@@ -182,24 +188,20 @@ export function PowerChart({
       {intervals.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {intervals.map((interval, index) => (
-            <span
+            <button
               key={`${interval.label}-${interval.startSecond}-${index}`}
+              type="button"
               data-interval-chip-active={interval.id === activeIntervalKey ? 'true' : 'false'}
               className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] transition ${interval.id === activeIntervalKey ? 'border-[#d2ff9a]/40 bg-[#d2ff9a]/12 text-[#f4ffd9]' : 'border-white/8 bg-white/[0.04] text-slate-300'}`}
-              onClick={() => onSelectIntervalChange(activeIntervalKey === interval.id ? null : interval.id)}
+              aria-pressed={interval.id === selectedIntervalKey}
+              onClick={() => onSelectIntervalChange(selectedIntervalKey === interval.id ? null : interval.id)}
+              onFocus={() => onHoverIntervalChange(interval.id)}
+              onBlur={() => onHoverIntervalChange(null)}
               onMouseEnter={() => onHoverIntervalChange(interval.id)}
               onMouseLeave={() => onHoverIntervalChange(null)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onSelectIntervalChange(activeIntervalKey === interval.id ? null : interval.id);
-                }
-              }}
-              role="button"
-              tabIndex={0}
             >
               {interval.label}
-            </span>
+            </button>
           ))}
         </div>
       ) : null}

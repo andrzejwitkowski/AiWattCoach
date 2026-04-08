@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -58,7 +58,7 @@ describe('CalendarWeekSection', () => {
     expect(screen.getByText(/fetching data/i)).toBeInTheDocument();
   });
 
-  it('selects the displayed activity when the day activity is unrelated to the event', async () => {
+  it('keeps the planned workout attached when the day activity is unrelated to it', async () => {
     const week = createWeek('loaded');
     week.days[0] = {
       ...week.days[0],
@@ -145,8 +145,50 @@ describe('CalendarWeekSection', () => {
 
     expect(onSelectWorkout).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
-      event: null,
+      event: week.days[0].events[0],
       activity: week.days[0].activities[0],
+    });
+  });
+
+  it('keeps planned-only days selectable as planned workouts', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [{
+        id: 99,
+        startDateLocal: '2026-03-23',
+        name: 'Coach Build',
+        category: 'WORKOUT',
+        description: null,
+        indoor: false,
+        color: null,
+        eventDefinition: {
+          rawWorkoutDoc: '- 45min 80%',
+          intervals: [],
+          segments: [],
+          summary: {
+            totalSegments: 1,
+            totalDurationSeconds: 2700,
+            estimatedNormalizedPowerWatts: null,
+            estimatedAveragePowerWatts: null,
+            estimatedIntensityFactor: 0.8,
+            estimatedTrainingStressScore: 42,
+          },
+        },
+        actualWorkout: null,
+      }],
+      activities: [],
+    };
+
+    const onSelectWorkout = vi.fn();
+    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /coach build/i }));
+
+    expect(onSelectWorkout).toHaveBeenCalledWith({
+      dateKey: '2026-03-23',
+      event: week.days[0].events[0],
+      activity: null,
     });
   });
 
@@ -422,20 +464,30 @@ describe('CalendarWeekSection', () => {
       events: [{
         id: 14,
         startDateLocal: '2026-03-23',
-        name: 'Planned workout',
+        name: 'Coach Build',
         category: 'WORKOUT',
         description: null,
         indoor: false,
         color: null,
-        eventDefinition: emptyEventDefinition(),
+        eventDefinition: {
+          ...emptyEventDefinition(),
+          summary: {
+            totalSegments: 1,
+            totalDurationSeconds: 2700,
+            estimatedNormalizedPowerWatts: null,
+            estimatedAveragePowerWatts: null,
+            estimatedIntensityFactor: 0.8,
+            estimatedTrainingStressScore: 42,
+          },
+        },
         actualWorkout: null,
       }],
       activities: [],
     };
 
-    render(<CalendarWeekSection week={week} />);
+    const { container } = render(<CalendarWeekSection week={week} />);
 
-    expect(screen.queryByRole('button', { name: /planned workout/i })).not.toBeInTheDocument();
-    expect(screen.getByText('Planned workout')).toBeInTheDocument();
+    expect(container.querySelector('.calendar-grid button')).toBeNull();
+    expect(within(container).getByText('Coach Build')).toBeInTheDocument();
   });
 });

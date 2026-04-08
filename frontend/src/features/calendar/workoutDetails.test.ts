@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
-import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildFiveSecondAveragePowerSeries, buildMatchedWorkoutBars, buildPlannedWorkoutBars, extractCompletedPowerValues, formatDurationLabel, selectWorkoutDetail } from './workoutDetails';
+import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildFiveSecondAveragePowerSeries, buildMatchedWorkoutBars, buildPlannedWorkoutBars, buildPlannedWorkoutChartIntervals, buildPlannedWorkoutPowerSeries, buildPlannedWorkoutStructureItems, extractCompletedPowerValues, formatDurationLabel, formatPlannedWorkoutIntervalLabel, isPlannedWorkoutEvent, selectWorkoutDetail } from './workoutDetails';
 
 describe('workoutDetails', () => {
   it('builds planned bars from parsed workout segments with zone colors', () => {
@@ -260,6 +260,238 @@ describe('workoutDetails', () => {
     ]);
   });
 
+  it('formats planned interval labels with grouped repeat structure', () => {
+    expect(
+      formatPlannedWorkoutIntervalLabel({
+        definition: '- 4x120% ftp 2min and 2min of rest 50%',
+        repeatCount: 4,
+        durationSeconds: 240,
+        targetPercentFtp: 120,
+        zoneId: 5,
+      }),
+    ).toBe('4 x 120% FTP 2min and 2min of rest 50% FTP');
+  });
+
+  it('builds planned structure items from interval definitions before raw text fallback', () => {
+    const event: IntervalEvent = {
+      id: 99,
+      startDateLocal: '2026-03-30',
+      name: 'Builder',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 2x20min 90%',
+        intervals: [
+          {
+            definition: '- 2x20min 90%',
+            repeatCount: 2,
+            durationSeconds: 1200,
+            targetPercentFtp: 90,
+            zoneId: 3,
+          },
+        ],
+        segments: [],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 2400,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutStructureItems(event)).toEqual([
+      {
+        id: 'interval-0',
+        label: '2 x 20min 90% FTP',
+        detail: '40m',
+        durationSeconds: 2400,
+      },
+    ]);
+  });
+
+  it('builds planned power series from segments for the detail chart', () => {
+    const event: IntervalEvent = {
+      id: 101,
+      startDateLocal: '2026-03-30',
+      name: 'Threshold Build',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: null,
+        intervals: [],
+        segments: [
+          {
+            order: 0,
+            label: 'Warmup',
+            durationSeconds: 600,
+            startOffsetSeconds: 0,
+            endOffsetSeconds: 600,
+            targetPercentFtp: 65,
+            zoneId: 2,
+          },
+          {
+            order: 1,
+            label: 'Threshold',
+            durationSeconds: 300,
+            startOffsetSeconds: 600,
+            endOffsetSeconds: 900,
+            targetPercentFtp: 100,
+            zoneId: 4,
+          },
+        ],
+        summary: {
+          totalSegments: 2,
+          totalDurationSeconds: 900,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutPowerSeries(event, 300)).toEqual([65, 65, 100]);
+  });
+
+  it('expands repeated interval definitions in planned power series and chart intervals', () => {
+    const event: IntervalEvent = {
+      id: 102,
+      startDateLocal: '2026-03-30',
+      name: 'Repeat Build',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 2x20min 90%',
+        intervals: [
+          {
+            definition: '- 2x20min 90%',
+            repeatCount: 2,
+            durationSeconds: 1200,
+            targetPercentFtp: 90,
+            zoneId: 3,
+          },
+        ],
+        segments: [],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 2400,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutPowerSeries(event, 600)).toEqual([90, 90, 90, 90]);
+    expect(buildPlannedWorkoutChartIntervals(event)).toEqual([
+      {
+        id: 'planned-102-interval-0',
+        startSecond: 0,
+        endSecond: 2400,
+        label: '2 x 20min 90% FTP',
+      },
+    ]);
+  });
+
+  it('expands segment templates to the full planned duration when summary implies repeats', () => {
+    const event: IntervalEvent = {
+      id: 104,
+      startDateLocal: '2026-03-30',
+      name: 'VO2 Template',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 4x120% ftp 2min and 2min of rest 50%',
+        intervals: [
+          {
+            definition: '- 4x120% ftp 2min and 2min of rest 50%',
+            repeatCount: 4,
+            durationSeconds: 240,
+            targetPercentFtp: 120,
+            zoneId: 5,
+          },
+        ],
+        segments: [
+          {
+            order: 0,
+            label: 'Work',
+            durationSeconds: 120,
+            startOffsetSeconds: 0,
+            endOffsetSeconds: 120,
+            targetPercentFtp: 120,
+            zoneId: 5,
+          },
+          {
+            order: 1,
+            label: 'Rest',
+            durationSeconds: 120,
+            startOffsetSeconds: 120,
+            endOffsetSeconds: 240,
+            targetPercentFtp: 50,
+            zoneId: 1,
+          },
+        ],
+        summary: {
+          totalSegments: 2,
+          totalDurationSeconds: 960,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutBars(event).map((bar) => bar.widthUnits)).toEqual([120, 120, 120, 120, 120, 120, 120, 120]);
+    expect(buildPlannedWorkoutPowerSeries(event, 120)).toEqual([120, 50, 120, 50, 120, 50, 120, 50]);
+    expect(buildPlannedWorkoutChartIntervals(event)).toHaveLength(8);
+    expect(buildPlannedWorkoutChartIntervals(event).at(-1)?.endSecond).toBe(960);
+  });
+
+  it('does not treat non-workout events as planned workouts', () => {
+    const event: IntervalEvent = {
+      id: 103,
+      startDateLocal: '2026-03-30',
+      name: 'A race',
+      category: 'RACE',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 20min 90%',
+        intervals: [],
+        segments: [],
+        summary: {
+          totalSegments: 0,
+          totalDurationSeconds: 1200,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(isPlannedWorkoutEvent(event)).toBe(false);
+  });
+
   it('formats compact duration labels', () => {
     expect(formatDurationLabel(45)).toBe('45s');
     expect(formatDurationLabel(3900)).toBe('1h 05m');
@@ -370,7 +602,7 @@ describe('workoutDetails', () => {
     expect(selection.event?.id).toBe(event.id);
   });
 
-  it('keeps an unrelated activity selection in completed mode instead of forcing the event', () => {
+  it('keeps an unrelated non-planned event selection in completed mode instead of forcing the event', () => {
     const event: IntervalEvent = {
       id: 14,
       startDateLocal: '2026-03-22',
@@ -454,6 +686,145 @@ describe('workoutDetails', () => {
       dateKey: '2026-03-22',
       event: null,
       activity,
+    });
+  });
+
+  it('keeps a real planned workout alongside an unrelated same-day activity', () => {
+    const event: IntervalEvent = {
+      id: 16,
+      startDateLocal: '2026-03-22',
+      name: 'Planned workout',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 2x20min 90%',
+        intervals: [
+          {
+            definition: '- 2x20min 90%',
+            repeatCount: 2,
+            durationSeconds: 1200,
+            targetPercentFtp: 90,
+            zoneId: 3,
+          },
+        ],
+        segments: [],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 2400,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    const activity: IntervalActivity = {
+      id: 'a-unrelated',
+      startDateLocal: '2026-03-22T08:00:00',
+      startDate: '2026-03-22T07:00:00Z',
+      name: 'Unrelated ride',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: null,
+      movingTimeSeconds: null,
+      elapsedTimeSeconds: null,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: false,
+      streamTypes: [],
+      tags: [],
+      metrics: {
+        trainingStressScore: null,
+        normalizedPowerWatts: null,
+        intensityFactor: null,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: null,
+        ftpWatts: null,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [],
+        intervalGroups: [],
+        streams: [],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+      detailsUnavailableReason: null,
+    };
+
+    expect(selectWorkoutDetail('2026-03-22', event, [activity])).toEqual({
+      dateKey: '2026-03-22',
+      event,
+      activity,
+    });
+  });
+
+  it('keeps completed events selectable when activities are not loaded yet', () => {
+    const event: IntervalEvent = {
+      id: 15,
+      startDateLocal: '2026-03-22',
+      name: 'Completed workout',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: null,
+        intervals: [],
+        segments: [],
+        summary: {
+          totalSegments: 0,
+          totalDurationSeconds: 0,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: {
+        activityId: 'a-completed',
+        activityName: 'Completed workout outside',
+        startDateLocal: '2026-03-22T08:00:00',
+        powerValues: [],
+        cadenceValues: [],
+        heartRateValues: [],
+        speedValues: [],
+        averagePowerWatts: null,
+        normalizedPowerWatts: null,
+        trainingStressScore: null,
+        intensityFactor: null,
+        complianceScore: 0.8,
+        matchedIntervals: [],
+      },
+    };
+
+    expect(selectWorkoutDetail('2026-03-22', event, [])).toEqual({
+      dateKey: '2026-03-22',
+      event,
+      activity: null,
     });
   });
 
