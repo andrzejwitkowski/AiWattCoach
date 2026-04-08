@@ -95,9 +95,9 @@ describe('WorkoutDetailModal actions', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText('Race Prep')).toBeInTheDocument());
+    const downloadButton = await screen.findByRole('button', { name: /download fit/i });
 
-    await userEvent.click(screen.getByRole('button', { name: /download fit/i }));
+    await userEvent.click(downloadButton);
 
     await waitFor(() => expect(mockedDownloadFit).toHaveBeenCalledWith('', 31));
 
@@ -176,9 +176,9 @@ describe('WorkoutDetailModal actions', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText('Predicted Build')).toBeInTheDocument());
+    const syncButton = await screen.findByRole('button', { name: /sync to intervals/i });
 
-    await userEvent.click(screen.getByRole('button', { name: /sync to intervals/i }));
+    await userEvent.click(syncButton);
 
     await waitFor(() => expect(mockedSyncPlannedWorkout).toHaveBeenCalledWith('', 'training-plan:user-1:w1:1', '2026-03-26'));
     await waitFor(() => expect(screen.getByText(/synced/i)).toBeInTheDocument());
@@ -230,9 +230,9 @@ describe('WorkoutDetailModal actions', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText('Predicted Failure')).toBeInTheDocument());
+    const syncButton = await screen.findByRole('button', { name: /sync to intervals/i });
 
-    await userEvent.click(screen.getByRole('button', { name: /sync to intervals/i }));
+    await userEvent.click(syncButton);
 
     await waitFor(() => expect(screen.getByText(/unable to sync this planned workout to intervals right now/i)).toBeInTheDocument());
   });
