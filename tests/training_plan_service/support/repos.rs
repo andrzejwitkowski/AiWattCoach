@@ -136,6 +136,47 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
         })
     }
 
+    fn find_active_by_user_id_and_operation_key(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
+    > {
+        let snapshots = self.snapshots.clone();
+        let days = self
+            .projected_days
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|day| {
+                day.user_id == user_id
+                    && day.operation_key == operation_key
+                    && day.superseded_at_epoch_seconds.is_none()
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let operation_key = operation_key.to_string();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let snapshot_start_date = snapshots
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|snapshot| {
+                    snapshot.user_id == user_id && snapshot.operation_key == operation_key
+                })
+                .map(|snapshot| snapshot.start_date.clone());
+            let Some(snapshot_start_date) = snapshot_start_date else {
+                return Ok(Vec::new());
+            };
+            Ok(days
+                .into_iter()
+                .filter(|day| day.date > snapshot_start_date)
+                .collect())
+        })
+    }
+
     fn replace_window(
         &self,
         snapshot: TrainingPlanSnapshot,

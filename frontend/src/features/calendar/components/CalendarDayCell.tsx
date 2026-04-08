@@ -23,6 +23,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     ? primaryEvent
     : null;
   const isPlannedOnly = Boolean(!primaryActivity && primaryPlannedWorkoutEvent);
+  const plannedSyncStatus = primaryPlannedWorkoutEvent?.syncStatus ?? null;
   const hasTraining = Boolean(primaryActivity || primaryEvent);
   const extraItemCount = Math.max(0, day.activities.length + day.events.length - 1);
   const title = hasTraining
@@ -72,9 +73,16 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         <div className="mt-auto">
           <CalendarMiniChart bars={bars} tone={tone} />
           {isPlannedOnly ? (
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#00e3fd]">
-              {t('calendar.plannedWorkout')}
-            </p>
+            <div className="mb-2 flex flex-wrap gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#00e3fd]">
+                {t('calendar.plannedWorkout')}
+              </p>
+              {plannedSyncStatus === 'modified' ? (
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffd7a1]">
+                  {t('calendar.modified')}
+                </p>
+              ) : null}
+            </div>
           ) : null}
           <p className="truncate text-[11px] font-bold text-[#f9f9fd]">{title}</p>
           <p className="text-[10px] text-slate-500">{subtitle}</p>

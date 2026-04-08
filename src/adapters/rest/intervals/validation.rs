@@ -77,7 +77,7 @@ pub(super) fn parse_category(category: &str) -> Option<EventCategory> {
     EventCategory::from_str(category).ok()
 }
 
-pub(super) fn is_valid_date(date: &str) -> bool {
+pub(crate) fn is_valid_date(date: &str) -> bool {
     let mut segments = date.split('-');
     let (Some(year), Some(month), Some(day), None) = (
         segments.next(),

@@ -11,7 +11,18 @@ use std::{
 use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
-    domain::{identity::IdentityUseCases, intervals::IntervalsUseCases},
+    domain::{
+        calendar::{
+            BoxFuture as CalendarBoxFuture, CalendarError, CalendarService,
+            PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository,
+        },
+        identity::{Clock, IdentityUseCases},
+        intervals::{DateRange, IntervalsUseCases},
+        training_plan::{
+            BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, TrainingPlanProjectedDay,
+            TrainingPlanProjectionRepository, TrainingPlanSnapshot,
+        },
+    },
     Settings,
 };
 use mongodb::Client;
@@ -22,10 +33,29 @@ static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) async fn intervals_test_app(
     identity_service: impl IdentityUseCases + 'static,
-    intervals_service: impl IntervalsUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+) -> axum::Router {
+    intervals_test_app_with_projections(
+        identity_service,
+        intervals_service,
+        EmptyTrainingPlanProjectionRepository,
+    )
+    .await
+}
+
+pub(crate) async fn intervals_test_app_with_projections(
+    identity_service: impl IdentityUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+    projections: impl TrainingPlanProjectionRepository + Clone + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
+    let calendar_service = Arc::new(CalendarService::new(
+        intervals_service.clone(),
+        projections,
+        InMemoryPlannedWorkoutSyncRepository,
+        TestClock,
+    ));
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -40,9 +70,87 @@ pub(crate) async fn intervals_test_app(
             false,
             24,
         )
+        .with_calendar_service(calendar_service)
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
     )
+}
+
+#[derive(Clone)]
+struct TestClock;
+
+impl Clock for TestClock {
+    fn now_epoch_seconds(&self) -> i64 {
+        1_700_000_000
+    }
+}
+
+#[derive(Clone)]
+struct EmptyTrainingPlanProjectionRepository;
+
+impl TrainingPlanProjectionRepository for EmptyTrainingPlanProjectionRepository {
+    fn list_active_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> TrainingPlanBoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn find_active_by_operation_key(
+        &self,
+        _operation_key: &str,
+    ) -> TrainingPlanBoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn find_active_by_user_id_and_operation_key(
+        &self,
+        _user_id: &str,
+        _operation_key: &str,
+    ) -> TrainingPlanBoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn replace_window(
+        &self,
+        snapshot: TrainingPlanSnapshot,
+        projected_days: Vec<TrainingPlanProjectedDay>,
+        _today: &str,
+        _replaced_at_epoch_seconds: i64,
+    ) -> TrainingPlanBoxFuture<
+        Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>,
+    > {
+        Box::pin(async move { Ok((snapshot, projected_days)) })
+    }
+}
+
+#[derive(Clone, Default)]
+struct InMemoryPlannedWorkoutSyncRepository;
+
+impl PlannedWorkoutSyncRepository for InMemoryPlannedWorkoutSyncRepository {
+    fn find_by_user_id_and_projection(
+        &self,
+        _user_id: &str,
+        _operation_key: &str,
+        _date: &str,
+    ) -> CalendarBoxFuture<Result<Option<PlannedWorkoutSyncRecord>, CalendarError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn list_by_user_id_and_range(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> CalendarBoxFuture<Result<Vec<PlannedWorkoutSyncRecord>, CalendarError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn upsert(
+        &self,
+        record: PlannedWorkoutSyncRecord,
+    ) -> CalendarBoxFuture<Result<PlannedWorkoutSyncRecord, CalendarError>> {
+        Box::pin(async move { Ok(record) })
+    }
 }
 
 struct FrontendFixture {

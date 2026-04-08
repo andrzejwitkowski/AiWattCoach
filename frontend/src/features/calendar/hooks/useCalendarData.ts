@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { listActivities, listEvents } from '../../intervals/api/intervals';
+import { listActivities, listCalendarEvents } from '../../intervals/api/intervals';
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import {
@@ -87,7 +87,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const loadRange = useCallback(async (startMonday: Date, count: number) => {
     const range = formatDateRange(startMonday, count);
     const [events, activities] = await Promise.all([
-      listEvents(apiBaseUrl, range),
+      listCalendarEvents(apiBaseUrl, range),
       listActivities(apiBaseUrl, range),
     ]);
 

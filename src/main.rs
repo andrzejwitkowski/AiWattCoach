@@ -31,6 +31,7 @@ use aiwattcoach::{
             coach_reply_operations::MongoCoachReplyOperationRepository,
             llm_context_cache::MongoLlmContextCacheRepository,
             login_state::MongoLoginStateRepository,
+            planned_workout_syncs::MongoPlannedWorkoutSyncRepository,
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
             training_plan_generation_operations::MongoTrainingPlanGenerationOperationRepository,
@@ -45,6 +46,7 @@ use aiwattcoach::{
     build_app,
     config::Settings,
     domain::athlete_summary::AthleteSummaryService,
+    domain::calendar::CalendarService,
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
     },
@@ -245,6 +247,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     training_plan_generation_operation_repository
         .ensure_indexes()
         .await?;
+    let planned_workout_sync_repository =
+        MongoPlannedWorkoutSyncRepository::new(mongo_client.clone(), &mongo_database);
+    planned_workout_sync_repository.ensure_indexes().await?;
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
     if legacy_time_stream_cleanup_enabled {
@@ -323,7 +328,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     );
     let training_plan_service = Arc::new(TrainingPlanGenerationService::new(
         training_plan_snapshot_repository,
-        training_plan_projection_repository,
+        training_plan_projection_repository.clone(),
         training_plan_generation_operation_repository,
         TrainingPlanLlmGenerator::new(
             llm_adapter.clone(),
@@ -332,6 +337,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             SystemClock,
         ),
         TrainingPlanWorkoutSummaryAdapter::new(workout_summary_service.clone()),
+        SystemClock,
+    ));
+    let calendar_service = Arc::new(CalendarService::new(
+        (*intervals_service).clone(),
+        training_plan_projection_repository.clone(),
+        planned_workout_sync_repository,
         SystemClock,
     ));
     let workout_summary_service = Arc::new(
@@ -357,6 +368,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 auth.session.ttl_hours,
             )
             .with_settings_service(settings_service)
+            .with_calendar_service(calendar_service)
             .with_athlete_summary_service(athlete_summary_service)
             .with_llm_services(llm_adapter, llm_config_provider)
             .with_workout_summary_service(workout_summary_service)

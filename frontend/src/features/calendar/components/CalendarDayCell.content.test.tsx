@@ -167,6 +167,38 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByText('60 min • 64 TSS')).toBeInTheDocument();
   });
 
+  it('shows modified label for predicted workouts with pending schedule changes', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 27),
+      dateKey: '2026-03-27',
+      events: [
+        makeEvent({
+          id: -5,
+          name: 'Coach Build',
+          plannedSource: 'predicted',
+          syncStatus: 'modified',
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-27',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-03-27',
+            sourceWorkoutId: 'w1',
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 3600,
+              estimatedTrainingStressScore: 64,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Modified')).toBeInTheDocument();
+  });
+
   it('does not show the coach planned badge for non-workout events', () => {
     const day = makeCalendarDay({
       events: [

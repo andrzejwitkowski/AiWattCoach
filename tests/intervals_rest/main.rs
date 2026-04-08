@@ -3,6 +3,7 @@ mod support;
 
 mod activities;
 mod app;
+mod calendar_events;
 mod error_logging;
 mod event_mutations;
 mod event_queries;

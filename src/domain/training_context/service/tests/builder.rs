@@ -419,6 +419,16 @@ async fn builder_anchors_windows_to_focus_activity_date() {
             unreachable!()
         }
 
+        fn find_active_by_user_id_and_operation_key(
+            &self,
+            _user_id: &str,
+            _operation_key: &str,
+        ) -> crate::domain::training_plan::BoxFuture<
+            Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
+        > {
+            unreachable!()
+        }
+
         fn replace_window(
             &self,
             _snapshot: TrainingPlanSnapshot,

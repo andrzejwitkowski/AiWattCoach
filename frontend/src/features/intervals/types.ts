@@ -88,6 +88,7 @@ export const eventFileUploadSchema = z.object({
 
 export const intervalEventSchema = z.object({
   id: z.number().int(),
+  calendarEntryId: z.string().optional(),
   startDateLocal: z.string(),
   name: z.string().nullable(),
   category: z.string(),
@@ -95,7 +96,16 @@ export const intervalEventSchema = z.object({
   indoor: z.boolean(),
   color: z.string().nullable(),
   eventDefinition: eventDefinitionSchema,
-  actualWorkout: actualWorkoutSchema.nullable(),
+  actualWorkout: actualWorkoutSchema.nullable().default(null),
+  plannedSource: z.enum(['intervals', 'predicted']).optional(),
+  syncStatus: z.enum(['unsynced', 'pending', 'synced', 'modified', 'failed']).nullable().optional(),
+  linkedIntervalsEventId: z.number().int().nullable().optional(),
+  projectedWorkout: z.object({
+    projectedWorkoutId: z.string(),
+    operationKey: z.string(),
+    date: z.string(),
+    sourceWorkoutId: z.string(),
+  }).nullable().optional(),
 });
 
 export const intervalEventsResponseSchema = z.array(intervalEventSchema);

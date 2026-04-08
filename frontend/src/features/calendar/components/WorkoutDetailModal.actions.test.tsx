@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { makeActualWorkout, makeEvent, makeEventDefinition, makeSelection, makeWorkoutSummary } from '../testData';
-import { mockedDownloadFit, mockedLoadActivity, mockedLoadEvent } from './WorkoutDetailModal.testHelpers';
+import { HttpError } from '../../../lib/httpClient';
+import { mockedDownloadFit, mockedLoadActivity, mockedLoadEvent, mockedSyncPlannedWorkout } from './WorkoutDetailModal.testHelpers';
 import { WorkoutDetailModal } from './WorkoutDetailModal';
 
 afterEach(() => {
@@ -108,5 +109,162 @@ describe('WorkoutDetailModal actions', () => {
     createElementSpy.mockRestore();
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
+  });
+
+  it('syncs a planned workout from the modal action', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: -91,
+        startDateLocal: '2026-03-26',
+        name: 'Predicted Build',
+        plannedSource: 'predicted',
+        syncStatus: 'modified',
+        projectedWorkout: {
+          projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+          operationKey: 'training-plan:user-1:w1:1',
+          date: '2026-03-26',
+          sourceWorkoutId: 'w1',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 60min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 3600 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+    mockedSyncPlannedWorkout.mockResolvedValue(
+      makeEvent({
+        id: 91,
+        startDateLocal: '2026-03-26',
+        name: 'Predicted Build',
+        plannedSource: 'predicted',
+        syncStatus: 'synced',
+        linkedIntervalsEventId: 91,
+        projectedWorkout: {
+          projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+          operationKey: 'training-plan:user-1:w1:1',
+          date: '2026-03-26',
+          sourceWorkoutId: 'w1',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 60min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 3600 }),
+        }),
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-03-26',
+          event: makeEvent({
+            id: -91,
+            startDateLocal: '2026-03-26',
+            name: 'Predicted Build',
+            plannedSource: 'predicted',
+            syncStatus: 'modified',
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+              operationKey: 'training-plan:user-1:w1:1',
+              date: '2026-03-26',
+              sourceWorkoutId: 'w1',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Predicted Build')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /sync to intervals/i }));
+
+    await waitFor(() => expect(mockedSyncPlannedWorkout).toHaveBeenCalledWith('', 'training-plan:user-1:w1:1', '2026-03-26'));
+    await waitFor(() => expect(screen.getByText(/synced/i)).toBeInTheDocument());
+  });
+
+  it('shows sync failure feedback when the planned workout sync request fails', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: -92,
+        startDateLocal: '2026-03-27',
+        name: 'Predicted Failure',
+        plannedSource: 'predicted',
+        syncStatus: 'modified',
+        projectedWorkout: {
+          projectedWorkoutId: 'training-plan:user-1:w1:2:2026-03-27',
+          operationKey: 'training-plan:user-1:w1:2',
+          date: '2026-03-27',
+          sourceWorkoutId: 'w2',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 45min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 2700 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+    mockedSyncPlannedWorkout.mockRejectedValue(new HttpError(502, 'bad gateway'));
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-03-27',
+          event: makeEvent({
+            id: -92,
+            startDateLocal: '2026-03-27',
+            name: 'Predicted Failure',
+            plannedSource: 'predicted',
+            syncStatus: 'modified',
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:2:2026-03-27',
+              operationKey: 'training-plan:user-1:w1:2',
+              date: '2026-03-27',
+              sourceWorkoutId: 'w2',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Predicted Failure')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /sync to intervals/i }));
+
+    await waitFor(() => expect(screen.getByText(/unable to sync this planned workout to intervals right now/i)).toBeInTheDocument());
+  });
+
+  it('does not request event details for unsynced predicted workouts', async () => {
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-03-28',
+          event: makeEvent({
+            id: -93,
+            startDateLocal: '2026-03-28',
+            name: 'Unsynced Prediction',
+            plannedSource: 'predicted',
+            syncStatus: 'unsynced',
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:3:2026-03-28',
+              operationKey: 'training-plan:user-1:w1:3',
+              date: '2026-03-28',
+              sourceWorkoutId: 'w3',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Unsynced Prediction')).toBeInTheDocument());
+
+    expect(mockedLoadEvent).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
-import { createEvent, deleteEvent, downloadFit, listEvents, loadEvent, updateEvent } from './intervals';
+import { createEvent, deleteEvent, downloadFit, listEvents, loadEvent, syncPlannedWorkout, updateEvent } from './intervals';
 import { createFetchMock, useFetchMock } from './testHelpers';
 
 describe('intervals api events', () => {
@@ -18,14 +18,14 @@ describe('intervals api events', () => {
               description: 'desc',
               indoor: true,
               color: 'blue',
-              eventDefinition: {
-                rawWorkoutDoc: '- 10min 55%',
-                intervals: [{ definition: '- 10min 55%', repeatCount: 1, durationSeconds: 600, targetPercentFtp: 55, zoneId: 1 }],
-                segments: [{ order: 0, label: '10min 55%', durationSeconds: 600, startOffsetSeconds: 0, endOffsetSeconds: 600, targetPercentFtp: 55, zoneId: 1 }],
-                summary: { totalSegments: 1, totalDurationSeconds: 600, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: 0.55, estimatedTrainingStressScore: 5 },
-              },
-              actualWorkout: null,
+            eventDefinition: {
+              rawWorkoutDoc: '- 10min 55%',
+              intervals: [{ definition: '- 10min 55%', repeatCount: 1, durationSeconds: 600, targetPercentFtp: 55, zoneId: 1 }],
+              segments: [{ order: 0, label: '10min 55%', durationSeconds: 600, startOffsetSeconds: 0, endOffsetSeconds: 600, targetPercentFtp: 55, zoneId: 1 }],
+              summary: { totalSegments: 1, totalDurationSeconds: 600, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: 0.55, estimatedTrainingStressScore: 5 },
             },
+            plannedSource: 'intervals',
+          },
           ]),
           { status: 200, headers: { 'content-type': 'application/json' } },
         ),
@@ -147,5 +147,55 @@ describe('intervals api events', () => {
 
     useFetchMock(createFetchMock().mockResolvedValueOnce(new Response(null, { status: 502 })));
     await expect(downloadFit('', 4)).rejects.toBeInstanceOf(HttpError);
+  });
+
+  it('syncs one predicted planned workout', async () => {
+    const fetchMock = useFetchMock(
+      createFetchMock().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 91,
+            calendarEntryId: 'predicted:training-plan:user-1:w1:1:2026-03-26',
+            startDateLocal: '2026-03-26',
+            name: 'Predicted Build',
+            category: 'WORKOUT',
+            description: null,
+            indoor: false,
+            color: null,
+            eventDefinition: {
+              rawWorkoutDoc: '- 60min endurance',
+              intervals: [],
+              segments: [],
+              summary: { totalSegments: 1, totalDurationSeconds: 3600, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: null, estimatedTrainingStressScore: null },
+            },
+            actualWorkout: null,
+            plannedSource: 'predicted',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 91,
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+              operationKey: 'training-plan:user-1:w1:1',
+              date: '2026-03-26',
+              sourceWorkoutId: 'w1',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const result = await syncPlannedWorkout('', 'training-plan:user-1:w1:1', '2026-03-26');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/calendar/planned-workouts/training-plan%3Auser-1%3Aw1%3A1/2026-03-26/sync', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: undefined,
+    });
+    expect(result.syncStatus).toBe('synced');
+    expect(result.linkedIntervalsEventId).toBe(91);
   });
 });
