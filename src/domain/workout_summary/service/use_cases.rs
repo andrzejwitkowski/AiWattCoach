@@ -17,6 +17,19 @@ impl RecapSnapshot {
     }
 }
 
+fn status_message(
+    status: &SaveWorkflowStatus,
+    generated: &str,
+    failed: &str,
+    skipped: &str,
+) -> String {
+    match status {
+        SaveWorkflowStatus::Generated => generated.to_string(),
+        SaveWorkflowStatus::Failed => failed.to_string(),
+        _ => skipped.to_string(),
+    }
+}
+
 impl<Repo, Ops, Time, Ids> WorkoutSummaryUseCases for WorkoutSummaryService<Repo, Ops, Time, Ids>
 where
     Repo: WorkoutSummaryRepository + Clone,
@@ -320,30 +333,27 @@ where
                     plan_status: plan_status.clone(),
                     messages: if is_latest_completed_activity {
                         vec![
-                            if recap_status == SaveWorkflowStatus::Generated {
-                                "Workout recap generated.".to_string()
-                            } else if recap_status == SaveWorkflowStatus::Failed {
-                                "Workout recap failed.".to_string()
-                            } else {
-                                "Workout recap skipped.".to_string()
-                            },
-                            if plan_status == SaveWorkflowStatus::Generated {
-                                "14-day schedule generated.".to_string()
-                            } else if plan_status == SaveWorkflowStatus::Failed {
-                                "14-day schedule failed.".to_string()
-                            } else {
-                                "14-day schedule skipped.".to_string()
-                            },
+                            status_message(
+                                &recap_status,
+                                "Workout recap generated.",
+                                "Workout recap failed.",
+                                "Workout recap skipped.",
+                            ),
+                            status_message(
+                                &plan_status,
+                                "14-day schedule generated.",
+                                "14-day schedule failed.",
+                                "14-day schedule skipped.",
+                            ),
                         ]
                     } else {
                         vec![
-                            if recap_status == SaveWorkflowStatus::Generated {
-                                "Workout recap generated.".to_string()
-                            } else if recap_status == SaveWorkflowStatus::Failed {
-                                "Workout recap failed.".to_string()
-                            } else {
-                                "Workout recap skipped.".to_string()
-                            },
+                            status_message(
+                                &recap_status,
+                                "Workout recap generated.",
+                                "Workout recap failed.",
+                                "Workout recap skipped.",
+                            ),
                             "14-day schedule skipped because this is not the latest completed activity."
                                 .to_string(),
                         ]

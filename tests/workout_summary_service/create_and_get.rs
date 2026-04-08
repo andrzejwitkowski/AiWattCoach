@@ -114,7 +114,7 @@ async fn mark_saved_generates_recap_only_for_finished_conversation_on_non_latest
     let service = test_service_with_training_plan_and_latest_activity(
         repository,
         std::sync::Arc::new(training_plan.clone()),
-        std::sync::Arc::new(latest_activity),
+        std::sync::Arc::new(latest_activity.clone()),
     );
 
     let result = service.mark_saved("user-1", "workout-older").await.unwrap();
@@ -132,6 +132,10 @@ async fn mark_saved_generates_recap_only_for_finished_conversation_on_non_latest
     assert_eq!(
         training_plan.calls(),
         vec!["generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string()]
+    );
+    assert_eq!(
+        latest_activity.calls(),
+        vec!["latest_completed_activity_id:user-1".to_string()]
     );
 }
 

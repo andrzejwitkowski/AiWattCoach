@@ -140,13 +140,19 @@ pub(crate) struct RecordingTrainingPlanService {
 #[derive(Clone, Default)]
 pub(crate) struct RecordingLatestCompletedActivityService {
     latest_activity_id: Arc<Mutex<Option<String>>>,
+    calls: Arc<Mutex<Vec<String>>>,
 }
 
 impl RecordingLatestCompletedActivityService {
     pub(crate) fn new(latest_activity_id: Option<&str>) -> Self {
         Self {
             latest_activity_id: Arc::new(Mutex::new(latest_activity_id.map(str::to_string))),
+            calls: Arc::new(Mutex::new(Vec::new())),
         }
+    }
+
+    pub(crate) fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
     }
 }
 
@@ -155,11 +161,19 @@ impl aiwattcoach::domain::workout_summary::LatestCompletedActivityUseCases
 {
     fn latest_completed_activity_id(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> aiwattcoach::domain::workout_summary::BoxFuture<Result<Option<String>, WorkoutSummaryError>>
     {
         let latest_activity_id = self.latest_activity_id.lock().unwrap().clone();
-        Box::pin(async move { Ok(latest_activity_id) })
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            calls
+                .lock()
+                .unwrap()
+                .push(format!("latest_completed_activity_id:{user_id}"));
+            Ok(latest_activity_id)
+        })
     }
 }
 

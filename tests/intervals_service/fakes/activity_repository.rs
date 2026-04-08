@@ -19,6 +19,7 @@ pub(crate) enum RepoCall {
         oldest: String,
         newest: String,
     },
+    FindLatest(String),
     FindExternalId(String),
     FindFallbackIdentity(String),
 }
@@ -308,8 +309,13 @@ impl ActivityRepositoryPort for FakeActivityRepository {
         user_id: &str,
     ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
         let store = self.stored.clone();
+        let calls = self.call_log.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
+            calls
+                .lock()
+                .unwrap()
+                .push(RepoCall::FindLatest(user_id.clone()));
             let mut activities = store
                 .lock()
                 .unwrap()
