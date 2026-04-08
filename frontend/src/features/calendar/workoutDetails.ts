@@ -254,7 +254,7 @@ export function buildPlannedTargetLabel(
   }
 
   const fallbackPercent = zoneId ? DEFAULT_ZONE_TARGET_PERCENT[zoneId] : null;
-  return fallbackPercent ? `Z${zoneId} target` : null;
+  return fallbackPercent ? `${trimTrailingZeros(fallbackPercent)}% FTP` : null;
 }
 
 export function selectWorkoutDetail(
