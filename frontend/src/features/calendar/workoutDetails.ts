@@ -67,15 +67,15 @@ export function buildPlannedWorkoutBars(event: IntervalEvent): WorkoutBar[] {
   const expandedSegments = buildExpandedPlannedSegments(event);
   if (expandedSegments.length === 0) {
     return event.eventDefinition.intervals.map((interval) => ({
-      height: heightForPercent(plannedTargetValue(interval.targetPercentFtp, interval.zoneId)),
-      color: POWER_ZONE_COLORS[interval.zoneId ?? 2] ?? POWER_ZONE_COLORS[2],
+      height: plannedBarHeight(interval.targetPercentFtp, interval.zoneId),
+      color: plannedBarColor(interval.targetPercentFtp, interval.zoneId),
       widthUnits: plannedIntervalTotalDurationSeconds(interval),
     }));
   }
 
   return expandedSegments.map((segment) => ({
-    height: heightForPercent(plannedTargetValue(segment.targetPercentFtp, segment.zoneId)),
-    color: POWER_ZONE_COLORS[segment.zoneId ?? 2] ?? POWER_ZONE_COLORS[2],
+    height: plannedBarHeight(segment.targetPercentFtp, segment.zoneId),
+    color: plannedBarColor(segment.targetPercentFtp, segment.zoneId),
     widthUnits: normalizeWidthUnits(segment.durationSeconds),
   }));
 }
@@ -233,12 +233,16 @@ export function formatPlannedWorkoutIntervalLabel(
     return formatDefinitionLabel(definition, interval.repeatCount);
   }
 
-  const durationLabel = formatDurationLabel(interval.durationSeconds);
+  const durationLabel = interval.durationSeconds !== null && interval.durationSeconds !== undefined
+    ? formatDurationLabel(interval.durationSeconds)
+    : null;
   const targetLabel = buildPlannedTargetLabel(
     interval.targetPercentFtp,
     interval.zoneId,
   );
-  const baseLabel = targetLabel ? `${durationLabel} @ ${targetLabel}` : durationLabel;
+  const baseLabel = durationLabel && targetLabel
+    ? `${durationLabel} @ ${targetLabel}`
+    : durationLabel ?? targetLabel ?? formatDurationLabel(plannedIntervalTotalDurationSeconds(interval));
 
   return interval.repeatCount > 1
     ? `${interval.repeatCount} x ${baseLabel}`
@@ -364,11 +368,16 @@ function buildPlannedWorkoutIntervalDetail(
   interval: PlannedIntervalDefinition,
 ): string | null {
   if (interval.repeatCount > 1) {
-    return formatDurationLabel(plannedIntervalTotalDurationSeconds(interval));
+    const totalDurationSeconds = plannedIntervalAggregateDurationSeconds(interval);
+    return totalDurationSeconds !== null
+      ? formatDurationLabel(totalDurationSeconds)
+      : null;
   }
 
   const detailParts = [
-    interval.durationSeconds ? formatDurationLabel(interval.durationSeconds) : null,
+    interval.durationSeconds !== null && interval.durationSeconds !== undefined
+      ? formatDurationLabel(interval.durationSeconds)
+      : null,
     buildPlannedTargetLabel(interval.targetPercentFtp, interval.zoneId),
   ].filter(Boolean);
 
@@ -432,7 +441,7 @@ function inferSegmentRepeatCount(
 function plannedIntervalTotalDurationSeconds(
   interval: PlannedIntervalDefinition,
 ): number {
-  return normalizeWidthUnits(interval.durationSeconds) * Math.max(1, interval.repeatCount);
+  return normalizeWidthUnits(plannedIntervalAggregateDurationSeconds(interval));
 }
 
 function buildSegmentDetail(segment: PlannedWorkoutSegment): string | null {
@@ -461,6 +470,76 @@ function plannedTargetValue(
   }
 
   return zoneId ? DEFAULT_ZONE_TARGET_PERCENT[zoneId] ?? DEFAULT_ZONE_TARGET_PERCENT[4] : DEFAULT_ZONE_TARGET_PERCENT[4];
+}
+
+function plannedIntervalAggregateDurationSeconds(
+  interval: PlannedIntervalDefinition,
+): number | null {
+  if (interval.durationSeconds === null || interval.durationSeconds === undefined) {
+    return null;
+  }
+
+  return interval.durationSeconds * Math.max(1, interval.repeatCount);
+}
+
+function plannedBarHeight(
+  targetPercentFtp: number | null | undefined,
+  zoneId: number | null | undefined,
+): number {
+  const targetValue = plannedTargetValueOrNull(targetPercentFtp, zoneId);
+  return targetValue !== null ? heightForPercent(targetValue) : 45;
+}
+
+function plannedBarColor(
+  targetPercentFtp: number | null | undefined,
+  zoneId: number | null | undefined,
+): string {
+  const derivedZoneId = resolvePlannedZoneId(targetPercentFtp, zoneId);
+  return derivedZoneId ? POWER_ZONE_COLORS[derivedZoneId] ?? POWER_ZONE_COLORS[4] : POWER_ZONE_COLORS[1];
+}
+
+function plannedTargetValueOrNull(
+  targetPercentFtp: number | null | undefined,
+  zoneId: number | null | undefined,
+): number | null {
+  if (targetPercentFtp !== null && targetPercentFtp !== undefined && targetPercentFtp > 0) {
+    return Math.round(targetPercentFtp);
+  }
+
+  return zoneId ? DEFAULT_ZONE_TARGET_PERCENT[zoneId] ?? null : null;
+}
+
+function resolvePlannedZoneId(
+  targetPercentFtp: number | null | undefined,
+  zoneId: number | null | undefined,
+): number | null {
+  if (zoneId) {
+    return zoneId;
+  }
+
+  if (targetPercentFtp === null || targetPercentFtp === undefined || targetPercentFtp <= 0) {
+    return null;
+  }
+
+  if (targetPercentFtp <= 55) {
+    return 1;
+  }
+  if (targetPercentFtp < 76) {
+    return 2;
+  }
+  if (targetPercentFtp < 91) {
+    return 3;
+  }
+  if (targetPercentFtp < 106) {
+    return 4;
+  }
+  if (targetPercentFtp < 121) {
+    return 5;
+  }
+  if (targetPercentFtp < 151) {
+    return 6;
+  }
+  return 7;
 }
 
 function formatDefinitionLabel(definition: string, repeatCount: number): string {

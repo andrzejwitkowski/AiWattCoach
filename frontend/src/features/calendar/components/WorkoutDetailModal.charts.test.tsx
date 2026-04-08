@@ -177,6 +177,30 @@ describe('WorkoutDetailModal charts and interaction', () => {
     expect(screen.getByText('999 W max (5s avg)')).toBeInTheDocument();
   });
 
+  it('shows a zero max label for all-zero power series while keeping the chart renderable', async () => {
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a-zero',
+        details: {
+          streams: [makeActivityStream({ data: [0, 0, 0, 0, 0] })],
+        },
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({ dateKey: '2026-03-30', activity: makeActivity({ id: 'a-zero' }) })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    expect(screen.getByText('0 W max (5s avg)')).toBeInTheDocument();
+  });
+
   it('shows hovered power readout next to the max power label', async () => {
     mockedLoadEvent.mockResolvedValue(
       makeEvent({

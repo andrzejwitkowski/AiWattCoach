@@ -137,6 +137,82 @@ describe('workoutDetails', () => {
     ]);
   });
 
+  it('renders neutral planned bars when both target percent and zone are unknown', () => {
+    const event: IntervalEvent = {
+      id: 20,
+      startDateLocal: '2026-03-22',
+      name: 'Unknown Build',
+      category: 'WORKOUT',
+      description: null,
+      indoor: true,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: null,
+        intervals: [
+          {
+            definition: '',
+            repeatCount: 1,
+            durationSeconds: 600,
+            targetPercentFtp: null,
+            zoneId: null,
+          },
+        ],
+        segments: [],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 600,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutBars(event)).toEqual([
+      { height: 45, color: '#6b7280', widthUnits: 600 },
+    ]);
+  });
+
+  it('derives planned bar color from ftp target when zone is missing', () => {
+    const event: IntervalEvent = {
+      id: 21,
+      startDateLocal: '2026-03-22',
+      name: 'Target Build',
+      category: 'WORKOUT',
+      description: null,
+      indoor: true,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: null,
+        intervals: [
+          {
+            definition: '',
+            repeatCount: 1,
+            durationSeconds: 300,
+            targetPercentFtp: 115,
+            zoneId: null,
+          },
+        ],
+        segments: [],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 300,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutBars(event)).toEqual([
+      { height: 100, color: '#facc15', widthUnits: 300 },
+    ]);
+  });
+
   it('builds completed bars from actual intervals before falling back to streams', () => {
     const activity: IntervalActivity = {
       id: 'a1',
@@ -356,6 +432,18 @@ describe('workoutDetails', () => {
         zoneId: 5,
       }),
     ).toBe('4 x 120% FTP 2min and 2min of rest 50% FTP');
+  });
+
+  it('formats planned interval labels without inventing a zero duration', () => {
+    expect(
+      formatPlannedWorkoutIntervalLabel({
+        definition: '',
+        repeatCount: 1,
+        durationSeconds: null,
+        targetPercentFtp: 90,
+        zoneId: null,
+      }),
+    ).toBe('90% FTP');
   });
 
   it('builds planned structure items from interval definitions before raw text fallback', () => {

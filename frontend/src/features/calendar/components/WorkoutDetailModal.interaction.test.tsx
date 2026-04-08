@@ -402,4 +402,48 @@ describe('WorkoutDetailModal interval interaction', () => {
 
     expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('240 W');
   });
+
+  it('keeps focus preview active when the pointer leaves a focused chip', async () => {
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a54',
+        startDateLocal: '2026-04-09T08:00:00',
+        name: 'Focus Sticky Ride',
+        movingTimeSeconds: 1200,
+        elapsedTimeSeconds: 1200,
+        hasHeartRate: true,
+        streamTypes: ['watts'],
+        metrics: { trainingStressScore: 20, normalizedPowerWatts: 210, intensityFactor: 0.75, averagePowerWatts: 205, ftpWatts: 280 },
+        details: {
+          intervals: [
+            makeActivityInterval({ id: 1, label: 'Ride 1', averagePowerWatts: 200, averageHeartRateBpm: 140, zone: 3 }),
+            makeActivityInterval({ id: 2, label: 'Ride 2', startTimeSeconds: 600, endTimeSeconds: 1200, averagePowerWatts: 240, averageHeartRateBpm: 150, zone: 4 }),
+          ],
+          streams: [makeActivityStream({ data: Array.from({ length: 1200 }, (_, index) => (index < 600 ? 200 : 240)) })],
+        },
+      }),
+    );
+
+    renderActivityModal(
+      makeActivity({
+        id: 'a54',
+        startDateLocal: '2026-04-09T08:00:00',
+        name: 'Focus Sticky Ride',
+        movingTimeSeconds: 1200,
+        elapsedTimeSeconds: 1200,
+        hasHeartRate: true,
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
+
+    const ride2Chip = screen.getAllByRole('button', { name: 'Ride 2' }).find((element) => element.getAttribute('data-interval-chip-active') === 'false') as HTMLButtonElement;
+    fireEvent.focus(ride2Chip);
+    fireEvent.mouseEnter(ride2Chip);
+    fireEvent.mouseLeave(ride2Chip);
+
+    expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('240 W');
+    expect(screen.getAllByText('Ride 2').some((element) => element.getAttribute('data-interval-chip-active') === 'true')).toBe(true);
+  });
 });
