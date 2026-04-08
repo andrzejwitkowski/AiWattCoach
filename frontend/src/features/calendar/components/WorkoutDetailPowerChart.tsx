@@ -1,4 +1,4 @@
-import {type MouseEvent, useState} from 'react';
+import {type MouseEvent, useRef, useState} from 'react';
 
 export type ChartIntervalOverlay = {
   id: string;
@@ -15,9 +15,12 @@ type ChartSamplePoint = {
 type PowerChartProps = {
   activeInterval: ChartIntervalOverlay | null;
   activeIntervalKey: string | null;
+  formatMaxValueLabel?: (value: number) => string;
+  formatValueLabel?: (value: number) => string;
   intervals: ChartIntervalOverlay[];
   onHoverIntervalChange: (intervalKey: string | null) => void;
   onSelectIntervalChange: (intervalKey: string | null) => void;
+  selectedIntervalKey?: string | null;
   sampleDurationSeconds?: number;
   title: string;
   values: number[];
@@ -26,9 +29,12 @@ type PowerChartProps = {
 export function PowerChart({
   activeInterval,
   activeIntervalKey,
+  formatMaxValueLabel = (value) => `${value} W max (5s avg)`,
+  formatValueLabel = (value) => `${value} W`,
   intervals,
   onHoverIntervalChange,
   onSelectIntervalChange,
+  selectedIntervalKey = null,
   sampleDurationSeconds = 1,
   title,
   values,
@@ -40,6 +46,8 @@ export function PowerChart({
   );
   const sampledPoints = samplePowerValues(values, 180, sampleDurationSeconds);
   const [hoveredSampleIndex, setHoveredSampleIndex] = useState<number | null>(null);
+  const hoveredChipIntervalIdRef = useRef<string | null>(null);
+  const focusedChipIntervalIdRef = useRef<string | null>(null);
 
   if (sampledPoints.length === 0) {
     return null;
@@ -48,13 +56,14 @@ export function PowerChart({
   const hoveredSample = hoveredSampleIndex !== null ? sampledPoints[hoveredSampleIndex] : null;
   const pinnedSample = activeInterval ? samplePointForInterval(sampledPoints, activeInterval) : null;
   const displayedSample = hoveredSample ?? pinnedSample;
-  const maxValue = Math.max(...sampledPoints.map((point) => point.value), 1);
+  const displayMaxValue = values.reduce((max, value) => Math.max(max, value), 0);
+  const chartMaxValue = Math.max(...sampledPoints.map((point) => Math.max(0, point.value)), 1);
   const chartHeight = 220;
   const chartWidth = 1000;
   const points = sampledPoints
     .map((point, index) => {
       const x = sampledPoints.length === 1 ? 0 : (index / (sampledPoints.length - 1)) * chartWidth;
-      const normalized = Math.max(0, point.value) / maxValue;
+      const normalized = Math.max(0, point.value) / chartMaxValue;
       const y = chartHeight - (normalized * chartHeight);
       return `${x},${y}`;
     })
@@ -68,7 +77,7 @@ export function PowerChart({
     : (markerIndex / (sampledPoints.length - 1)) * chartWidth;
   const markerY = displayedSample === null
     ? null
-    : chartHeight - ((Math.max(0, displayedSample.value) / maxValue) * chartHeight);
+    : chartHeight - ((Math.max(0, displayedSample.value) / chartMaxValue) * chartHeight);
 
   const handleChartPointerMove = (event: MouseEvent<SVGSVGElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -95,10 +104,10 @@ export function PowerChart({
               data-hover-power-readout="true"
               className="text-xs font-bold uppercase tracking-[0.18em] text-slate-300"
             >
-              {formatChartTimeLabel(displayedSample.second)} • {displayedSample.value} W
+              {formatChartTimeLabel(displayedSample.second)} • {formatValueLabel(displayedSample.value)}
             </p>
           ) : null}
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">{maxValue} W max (5s avg)</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">{formatMaxValueLabel(displayMaxValue)}</p>
         </div>
       </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-[linear-gradient(180deg,rgba(210,255,154,0.16)_0%,rgba(210,255,154,0.03)_100%)] p-3">
@@ -182,24 +191,38 @@ export function PowerChart({
       {intervals.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {intervals.map((interval, index) => (
-            <span
+            <button
               key={`${interval.label}-${interval.startSecond}-${index}`}
+              type="button"
               data-interval-chip-active={interval.id === activeIntervalKey ? 'true' : 'false'}
               className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] transition ${interval.id === activeIntervalKey ? 'border-[#d2ff9a]/40 bg-[#d2ff9a]/12 text-[#f4ffd9]' : 'border-white/8 bg-white/[0.04] text-slate-300'}`}
-              onClick={() => onSelectIntervalChange(activeIntervalKey === interval.id ? null : interval.id)}
-              onMouseEnter={() => onHoverIntervalChange(interval.id)}
-              onMouseLeave={() => onHoverIntervalChange(null)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onSelectIntervalChange(activeIntervalKey === interval.id ? null : interval.id);
-                }
+              aria-pressed={interval.id === selectedIntervalKey}
+              onClick={() => onSelectIntervalChange(selectedIntervalKey === interval.id ? null : interval.id)}
+              onFocus={() => {
+                focusedChipIntervalIdRef.current = interval.id;
+                onHoverIntervalChange(interval.id);
               }}
-              role="button"
-              tabIndex={0}
+              onBlur={() => {
+                if (focusedChipIntervalIdRef.current === interval.id) {
+                  focusedChipIntervalIdRef.current = null;
+                }
+
+                onHoverIntervalChange(hoveredChipIntervalIdRef.current);
+              }}
+              onMouseEnter={() => {
+                hoveredChipIntervalIdRef.current = interval.id;
+                onHoverIntervalChange(interval.id);
+              }}
+              onMouseLeave={() => {
+                if (hoveredChipIntervalIdRef.current === interval.id) {
+                  hoveredChipIntervalIdRef.current = null;
+                }
+
+                onHoverIntervalChange(focusedChipIntervalIdRef.current);
+              }}
             >
               {interval.label}
-            </span>
+            </button>
           ))}
         </div>
       ) : null}

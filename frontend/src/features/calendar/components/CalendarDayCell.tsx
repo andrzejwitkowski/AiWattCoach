@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { CalendarDay } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
-import { buildCompletedWorkoutPreviewBars, buildPlannedWorkoutBars, type WorkoutBar } from '../workoutDetails';
+import { buildCompletedWorkoutPreviewBars, buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
 import { CalendarMiniChart } from './CalendarMiniChart';
 
 type CalendarDayCellProps = {
@@ -19,6 +19,10 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const primaryActivity = day.activities[0] ?? null;
   const primaryEvent = day.events[0] ?? null;
+  const primaryPlannedWorkoutEvent = primaryEvent && !primaryEvent.actualWorkout && isPlannedWorkoutEvent(primaryEvent)
+    ? primaryEvent
+    : null;
+  const isPlannedOnly = Boolean(!primaryActivity && primaryPlannedWorkoutEvent);
   const hasTraining = Boolean(primaryActivity || primaryEvent);
   const extraItemCount = Math.max(0, day.activities.length + day.events.length - 1);
   const title = hasTraining
@@ -32,7 +36,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     })
     : t('calendar.restDay');
   const subtitle = hasTraining
-    ? buildSubtitle(primaryActivity, primaryEvent, locale, {
+    ? buildSubtitle(primaryActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
       workout: t('calendar.workout'),
       race: t('calendar.eventRace'),
       ride: t('calendar.eventRide'),
@@ -44,7 +48,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const tone: Tone = hasTraining
     ? getTone(primaryActivity, primaryEvent)
     : 'muted';
-  const bars = buildBars(primaryActivity, primaryEvent);
+  const bars = buildBars(primaryActivity, primaryPlannedWorkoutEvent);
   const Icon = hasTraining
     ? getIcon(primaryActivity, primaryEvent)
     : BedDouble;
@@ -67,6 +71,11 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       {hasTraining ? (
         <div className="mt-auto">
           <CalendarMiniChart bars={bars} tone={tone} />
+          {isPlannedOnly ? (
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#00e3fd]">
+              {t('calendar.plannedWorkout')}
+            </p>
+          ) : null}
           <p className="truncate text-[11px] font-bold text-[#f9f9fd]">{title}</p>
           <p className="text-[10px] text-slate-500">{subtitle}</p>
           {extraItemCount > 0 ? (
@@ -135,11 +144,16 @@ function buildSubtitle(
     unknown: string;
   },
 ): string {
-  const durationSeconds = dayActivity?.movingTimeSeconds ?? 0;
+  const eventSummary = dayEvent?.eventDefinition.summary ?? null;
+  const durationSeconds = dayActivity?.movingTimeSeconds ?? eventSummary?.totalDurationSeconds ?? 0;
   const durationMinutes = durationSeconds > 0
     ? new Intl.NumberFormat(locale, { style: 'unit', unit: 'minute', unitDisplay: 'short', maximumFractionDigits: 0 }).format(Math.round(durationSeconds / 60))
     : null;
-  const tss = dayActivity?.metrics.trainingStressScore ?? null;
+  const estimatedTss = eventSummary?.estimatedTrainingStressScore;
+  const tss = dayActivity?.metrics.trainingStressScore
+    ?? (estimatedTss !== null && estimatedTss !== undefined
+      ? Math.round(estimatedTss)
+      : null);
 
   if (durationMinutes && tss !== null) {
     return `${durationMinutes} • ${tss} TSS`;

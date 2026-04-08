@@ -62,8 +62,10 @@ describe('WorkoutDetailModal planned mode', () => {
     await waitFor(() => expect(screen.getByText('Sweet Spot')).toBeInTheDocument());
 
     expect(screen.getByText(/planned workout/i)).toBeInTheDocument();
-    expect(screen.getByText(/24m/i)).toBeInTheDocument();
+    expect(within(metricCard('Duration')).getByText('24m')).toBeInTheDocument();
     expect(screen.getByText(/0.95 IF/i)).toBeInTheDocument();
+    expect(screen.getByText(/workout structure/i)).toBeInTheDocument();
+    expect(screen.getByText('3 x 8min 95% FTP')).toBeInTheDocument();
   });
 
   it('keeps planned workout details visible when activity loading fails', async () => {
@@ -170,5 +172,72 @@ describe('WorkoutDetailModal planned mode', () => {
     expect(screen.queryByText('18 TSS')).not.toBeInTheDocument();
     expect(screen.queryByText('228 W')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /download fit/i })).toBeInTheDocument();
+  });
+
+  it('renders the planned chart and grouped workout structure for repeat blocks', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 77,
+        name: 'VO2 Builder',
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: 'Main Set\n- 4x120% ftp 2min and 2min of rest 50%',
+          intervals: [
+            makeIntervalDefinition({
+              definition: '- 4x120% ftp 2min and 2min of rest 50%',
+              repeatCount: 4,
+              durationSeconds: 240,
+              targetPercentFtp: 120,
+              zoneId: 5,
+            }),
+          ],
+          segments: [
+            makeWorkoutSegment({
+              order: 0,
+              label: 'Work',
+              durationSeconds: 120,
+              startOffsetSeconds: 0,
+              endOffsetSeconds: 120,
+              targetPercentFtp: 120,
+              zoneId: 5,
+            }),
+            makeWorkoutSegment({
+              order: 1,
+              label: 'Rest',
+              durationSeconds: 120,
+              startOffsetSeconds: 120,
+              endOffsetSeconds: 240,
+              targetPercentFtp: 50,
+              zoneId: 1,
+            }),
+          ],
+          summary: makeWorkoutSummary({
+            totalSegments: 2,
+            totalDurationSeconds: 960,
+            estimatedNormalizedPowerWatts: 310,
+            estimatedAveragePowerWatts: 280,
+            estimatedIntensityFactor: 0.94,
+            estimatedTrainingStressScore: 44,
+          }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          event: makeEvent({ id: 77, name: 'VO2 Builder' }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('VO2 Builder')).toBeInTheDocument());
+
+    expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    expect(screen.getByText('120% FTP max target')).toBeInTheDocument();
+    expect(screen.getByText('4 x 120% FTP 2min and 2min of rest 50% FTP')).toBeInTheDocument();
+    expect(within(metricCard('Duration')).getByText('16m')).toBeInTheDocument();
   });
 });
