@@ -149,7 +149,10 @@ function buildSubtitle(
   const durationMinutes = durationSeconds > 0
     ? new Intl.NumberFormat(locale, { style: 'unit', unit: 'minute', unitDisplay: 'short', maximumFractionDigits: 0 }).format(Math.round(durationSeconds / 60))
     : null;
-  const tss = dayActivity?.metrics.trainingStressScore ?? eventSummary?.estimatedTrainingStressScore ?? null;
+  const tss = dayActivity?.metrics.trainingStressScore
+    ?? (eventSummary?.estimatedTrainingStressScore !== undefined
+      ? Math.round(eventSummary.estimatedTrainingStressScore)
+      : null);
 
   if (durationMinutes && tss !== null) {
     return `${durationMinutes} • ${tss} TSS`;
