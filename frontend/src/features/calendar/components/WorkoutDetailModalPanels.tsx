@@ -51,7 +51,12 @@ export function PlannedWorkoutPanel({event}: { event: IntervalEvent }) {
         <PowerChart
           activeInterval={activeInterval}
           activeIntervalKey={highlightedIntervalKey}
-          formatMaxValueLabel={(value) => `${value}% FTP max target`}
+          formatMaxValueLabel={(value) =>
+            t('calendar.powerChartMaxTargetLabel', {
+              defaultValue: '{{value}}% FTP max target',
+              value,
+            })
+          }
           formatValueLabel={(value) => `${value}% FTP`}
           intervals={chartIntervals}
           onHoverIntervalChange={setHoveredIntervalKey}
