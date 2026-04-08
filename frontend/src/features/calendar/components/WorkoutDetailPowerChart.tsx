@@ -54,7 +54,7 @@ export function PowerChart({
   const hoveredSample = hoveredSampleIndex !== null ? sampledPoints[hoveredSampleIndex] : null;
   const pinnedSample = activeInterval ? samplePointForInterval(sampledPoints, activeInterval) : null;
   const displayedSample = hoveredSample ?? pinnedSample;
-  const maxValue = Math.max(...values, 1);
+  const maxValue = values.reduce((max, value) => Math.max(max, value), 1);
   const chartHeight = 220;
   const chartWidth = 1000;
   const points = sampledPoints
