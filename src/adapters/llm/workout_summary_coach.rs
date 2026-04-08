@@ -260,10 +260,7 @@ fn approximate_token_usage(value: &str) -> usize {
 }
 
 fn workout_coach_system_prompt() -> String {
-    format!(
-        "{} {}",
-        WORKOUT_COACH_SYSTEM_PROMPT_BASE, PACKED_TRAINING_CONTEXT_LEGEND
-    )
+    format!("{WORKOUT_COACH_SYSTEM_PROMPT_BASE} {PACKED_TRAINING_CONTEXT_LEGEND}")
 }
 
 fn build_conversation(summary: &WorkoutSummary, user_message: &str) -> Vec<LlmChatMessage> {

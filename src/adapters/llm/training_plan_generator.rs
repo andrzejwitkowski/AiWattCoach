@@ -264,26 +264,17 @@ fn map_llm_error(error: LlmError) -> TrainingPlanError {
 }
 
 fn training_plan_recap_system_prompt() -> String {
-    format!(
-        "{} {}",
-        TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE, PACKED_TRAINING_CONTEXT_LEGEND
-    )
+    format!("{TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE} {PACKED_TRAINING_CONTEXT_LEGEND}")
 }
 
 fn training_plan_initial_window_system_prompt() -> String {
     format!(
-        "{} {} {}",
-        TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE,
-        TRAINING_PLAN_OUTPUT_GRAMMAR,
-        PACKED_TRAINING_CONTEXT_LEGEND
+        "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} {TRAINING_PLAN_OUTPUT_GRAMMAR} {PACKED_TRAINING_CONTEXT_LEGEND}"
     )
 }
 
 fn training_plan_correction_system_prompt() -> String {
     format!(
-        "{} {} {}",
-        TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE,
-        TRAINING_PLAN_OUTPUT_GRAMMAR,
-        PACKED_TRAINING_CONTEXT_LEGEND
+        "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} {TRAINING_PLAN_OUTPUT_GRAMMAR} {PACKED_TRAINING_CONTEXT_LEGEND}"
     )
 }

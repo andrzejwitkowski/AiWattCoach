@@ -40,6 +40,7 @@ use aiwattcoach::{
             workout_summary::MongoWorkoutSummaryRepository,
         },
         support::{SystemClock, UuidIdGenerator},
+        workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
     build_app,
     config::Settings,
@@ -272,7 +273,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let intervals_service = Arc::new(IntervalsService::new(
         intervals_api_client,
         intervals_settings_provider,
-        activity_repository,
+        activity_repository.clone(),
         upload_operation_repository,
         activity_identity_extractor,
     ));
@@ -315,7 +316,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
             ),
         )
-        .with_athlete_summary_service(athlete_summary_service.clone()),
+        .with_athlete_summary_service(athlete_summary_service.clone())
+        .with_latest_completed_activity_service(Arc::new(
+            LatestCompletedActivityAdapter::new(activity_repository.clone()),
+        )),
     );
     let training_plan_service = Arc::new(TrainingPlanGenerationService::new(
         training_plan_snapshot_repository,

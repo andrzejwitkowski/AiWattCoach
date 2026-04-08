@@ -149,6 +149,11 @@ pub trait ActivityRepositoryPort: Clone + Send + Sync + 'static {
         activity_id: &str,
     ) -> BoxFuture<Result<Option<Activity>, IntervalsError>>;
 
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<Activity>, IntervalsError>>;
+
     fn find_by_user_id_and_external_id(
         &self,
         user_id: &str,
@@ -262,6 +267,20 @@ impl ActivityRepositoryPort for NoopActivityRepository {
                 .unwrap_or_default()
                 .into_iter()
                 .find(|activity| activity.id == activity_id))
+        })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let stored = stored.lock().expect("noop activity repo mutex poisoned");
+            let mut activities = stored.get(&user_id).cloned().unwrap_or_default();
+            activities.sort_by(|left, right| right.start_date_local.cmp(&left.start_date_local));
+            Ok(activities.into_iter().next())
         })
     }
 

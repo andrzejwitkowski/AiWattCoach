@@ -55,7 +55,7 @@ export async function saveWorkoutSummary(apiBaseUrl: string, workoutId: string) 
     `/api/workout-summaries/${normalizeWorkoutTargetId(workoutId)}/state`,
     { saved: true },
   );
-  return saveWorkoutSummaryResponseSchema.parse(data).summary;
+  return saveWorkoutSummaryResponseSchema.parse(data);
 }
 
 export async function reopenWorkoutSummary(apiBaseUrl: string, workoutId: string) {
@@ -64,7 +64,7 @@ export async function reopenWorkoutSummary(apiBaseUrl: string, workoutId: string
     `/api/workout-summaries/${normalizeWorkoutTargetId(workoutId)}/state`,
     { saved: false },
   );
-  return saveWorkoutSummaryResponseSchema.parse(data).summary;
+  return saveWorkoutSummaryResponseSchema.parse(data);
 }
 
 export async function sendWorkoutSummaryMessage(apiBaseUrl: string, workoutId: string, payload: unknown) {

@@ -11,4 +11,7 @@ pub use model::{
     SendMessageResult, WorkoutRecap, WorkoutSummary, WorkoutSummaryError,
 };
 pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
-pub use service::{WorkoutSummaryService, WorkoutSummaryUseCases};
+pub use service::{
+    LatestCompletedActivityUseCases, SaveSummaryResult, SaveWorkflowResult, SaveWorkflowStatus,
+    WorkoutSummaryService, WorkoutSummaryUseCases,
+};

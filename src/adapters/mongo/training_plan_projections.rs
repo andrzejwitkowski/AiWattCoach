@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
@@ -93,6 +93,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         user_id: &str,
     ) -> BoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
         let collection = self.collection.clone();
+        let snapshot_collection = self.snapshot_repository.collection();
         let user_id = user_id.to_string();
         Box::pin(async move {
             let documents = collection
@@ -107,9 +108,31 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
 
+            let snapshot_documents = snapshot_collection
+                .find(doc! { "user_id": &user_id })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            let snapshot_start_dates = snapshot_documents
+                .into_iter()
+                .map(MongoTrainingPlanSnapshotRepository::map_document_to_snapshot)
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .map(|snapshot| (snapshot.operation_key, snapshot.start_date))
+                .collect::<HashMap<_, _>>();
+
             documents
                 .into_iter()
                 .map(map_document_to_projected_day)
+                .filter_map(|day| match day {
+                    Ok(day) => snapshot_start_dates
+                        .get(&day.operation_key)
+                        .filter(|start_date| day.date > **start_date)
+                        .map(|_| Ok(day)),
+                    Err(error) => Some(Err(error)),
+                })
                 .collect()
         })
     }
@@ -119,6 +142,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         operation_key: &str,
     ) -> BoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
         let collection = self.collection.clone();
+        let snapshot_collection = self.snapshot_repository.collection();
         let operation_key = operation_key.to_string();
         Box::pin(async move {
             let documents = collection
@@ -133,9 +157,23 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
 
+            let snapshot = snapshot_collection
+                .find_one(doc! { "operation_key": &operation_key })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            let Some(snapshot) = snapshot else {
+                return Ok(Vec::new());
+            };
+            let snapshot = MongoTrainingPlanSnapshotRepository::map_document_to_snapshot(snapshot)?;
+
             documents
                 .into_iter()
                 .map(map_document_to_projected_day)
+                .filter_map(|day| match day {
+                    Ok(day) if day.date > snapshot.start_date => Some(Ok(day)),
+                    Ok(_) => None,
+                    Err(error) => Some(Err(error)),
+                })
                 .collect()
         })
     }

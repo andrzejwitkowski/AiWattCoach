@@ -53,7 +53,7 @@ pub trait WorkoutSummaryUseCases: Send + Sync {
         &self,
         user_id: &str,
         workout_id: &str,
-    ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>>;
+    ) -> BoxFuture<Result<SaveSummaryResult, WorkoutSummaryError>>;
 
     fn reopen_summary(
         &self,
@@ -90,6 +90,45 @@ pub trait WorkoutSummaryUseCases: Send + Sync {
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>>;
 }
 
+pub trait LatestCompletedActivityUseCases: Send + Sync {
+    fn latest_completed_activity_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<String>, WorkoutSummaryError>>;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SaveWorkflowStatus {
+    Generated,
+    Skipped,
+    Failed,
+    Unchanged,
+}
+
+impl SaveWorkflowStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Generated => "generated",
+            Self::Skipped => "skipped",
+            Self::Failed => "failed",
+            Self::Unchanged => "unchanged",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SaveWorkflowResult {
+    pub recap_status: SaveWorkflowStatus,
+    pub plan_status: SaveWorkflowStatus,
+    pub messages: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SaveSummaryResult {
+    pub summary: WorkoutSummary,
+    pub workflow: SaveWorkflowResult,
+}
+
 #[derive(Clone)]
 pub struct WorkoutSummaryService<Repo, Ops, Time, Ids>
 where
@@ -105,6 +144,7 @@ where
     coach: Arc<dyn WorkoutCoach>,
     athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
     training_plan_service: Option<Arc<dyn TrainingPlanUseCases>>,
+    latest_completed_activity_service: Option<Arc<dyn LatestCompletedActivityUseCases>>,
 }
 
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
@@ -141,6 +181,7 @@ where
             coach,
             athlete_summary_service: None,
             training_plan_service: None,
+            latest_completed_activity_service: None,
         }
     }
 
@@ -157,6 +198,14 @@ where
         training_plan_service: Arc<dyn TrainingPlanUseCases>,
     ) -> Self {
         self.training_plan_service = Some(training_plan_service);
+        self
+    }
+
+    pub fn with_latest_completed_activity_service(
+        mut self,
+        latest_completed_activity_service: Arc<dyn LatestCompletedActivityUseCases>,
+    ) -> Self {
+        self.latest_completed_activity_service = Some(latest_completed_activity_service);
         self
     }
 

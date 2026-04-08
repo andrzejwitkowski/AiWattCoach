@@ -36,6 +36,11 @@ export const sendMessageResponseSchema = z.object({
 
 export const saveWorkoutSummaryResponseSchema = z.object({
   summary: workoutSummarySchema,
+  workflow: z.object({
+    recapStatus: z.enum(['generated', 'skipped', 'failed', 'unchanged']),
+    planStatus: z.enum(['generated', 'skipped', 'failed', 'unchanged']),
+    messages: z.array(z.string()),
+  }),
 });
 
 export const clientWsMessageSchema = z.object({

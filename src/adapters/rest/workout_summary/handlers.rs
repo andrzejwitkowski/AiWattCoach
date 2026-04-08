@@ -14,7 +14,10 @@ use super::{
         WorkoutSummaryPath, WorkoutSummaryStateResponse,
     },
     error::map_workout_summary_error,
-    mapping::{map_send_message_result_to_dto, map_summary_to_dto},
+    mapping::{
+        map_save_summary_result_to_dto, map_send_message_result_to_dto, map_summary_to_dto,
+        unchanged_save_summary_result,
+    },
 };
 
 #[derive(Serialize)]
@@ -161,14 +164,17 @@ pub async fn set_saved_state(
     let result = if body.saved {
         service.mark_saved(&user_id, &path.workout_id).await
     } else {
-        service.reopen_summary(&user_id, &path.workout_id).await
+        service
+            .reopen_summary(&user_id, &path.workout_id)
+            .await
+            .map(unchanged_save_summary_result)
     };
 
     match result {
-        Ok(summary) => Json(WorkoutSummaryStateResponse {
-            summary: map_summary_to_dto(summary),
-        })
-        .into_response(),
+        Ok(result) => {
+            let (summary, workflow) = map_save_summary_result_to_dto(result);
+            Json(WorkoutSummaryStateResponse { summary, workflow }).into_response()
+        }
         Err(error) => map_workout_summary_error(&error),
     }
 }

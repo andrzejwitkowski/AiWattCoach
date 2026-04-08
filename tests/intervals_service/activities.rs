@@ -1,9 +1,10 @@
 use std::sync::{Arc, Mutex};
 
 use aiwattcoach::domain::intervals::{
-    ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics, ActivityStream,
-    DateRange, IntervalsError, IntervalsService, IntervalsUseCases,
-    NoopActivityFileIdentityExtractor, NoopActivityUploadOperationRepository, UpdateActivity,
+    ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
+    ActivityRepositoryPort, ActivityStream, DateRange, IntervalsError, IntervalsService,
+    IntervalsUseCases, NoopActivityFileIdentityExtractor, NoopActivityUploadOperationRepository,
+    UpdateActivity,
 };
 
 use crate::{
@@ -281,6 +282,27 @@ async fn list_activities_does_not_clobber_existing_enriched_completed_activity()
     assert_eq!(persisted.details, enriched.details);
     assert_eq!(persisted.stream_types, enriched.stream_types);
     assert_eq!(persisted.tags, enriched.tags);
+}
+
+#[tokio::test]
+async fn fake_activity_repository_logs_latest_lookup() {
+    let repository = FakeActivityRepository::default();
+    let mut older = sample_activity("i89", "Older Ride");
+    older.start_date_local = "2026-03-21T08:00:00".to_string();
+    let latest = sample_activity("i90", "Latest Ride");
+    repository
+        .stored
+        .lock()
+        .unwrap()
+        .insert("user-1".to_string(), vec![older, latest.clone()]);
+
+    let activity = repository.find_latest_by_user_id("user-1").await.unwrap();
+
+    assert_eq!(activity, Some(latest));
+    assert_eq!(
+        repository.call_log.lock().unwrap().as_slice(),
+        &[RepoCall::FindLatest("user-1".to_string())]
+    );
 }
 
 #[tokio::test]

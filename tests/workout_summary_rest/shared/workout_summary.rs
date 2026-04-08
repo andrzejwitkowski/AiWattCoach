@@ -6,8 +6,9 @@ use std::{
 use aiwattcoach::domain::{
     llm::BoxFuture,
     workout_summary::{
-        validate_message_content, CoachReply, MessageRole, PersistedUserMessage, SendMessageResult,
-        WorkoutRecap, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+        validate_message_content, CoachReply, MessageRole, PersistedUserMessage, SaveSummaryResult,
+        SaveWorkflowResult, SaveWorkflowStatus, SendMessageResult, WorkoutRecap, WorkoutSummary,
+        WorkoutSummaryError, WorkoutSummaryUseCases,
     },
 };
 
@@ -154,7 +155,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         &self,
         user_id: &str,
         workout_id: &str,
-    ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+    ) -> BoxFuture<Result<SaveSummaryResult, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -175,7 +176,14 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
 
             summary.saved_at_epoch_seconds = Some(1_700_000_100);
             summary.updated_at_epoch_seconds = 1_700_000_100;
-            Ok(summary.clone())
+            Ok(SaveSummaryResult {
+                summary: summary.clone(),
+                workflow: SaveWorkflowResult {
+                    recap_status: SaveWorkflowStatus::Skipped,
+                    plan_status: SaveWorkflowStatus::Skipped,
+                    messages: Vec::new(),
+                },
+            })
         })
     }
 

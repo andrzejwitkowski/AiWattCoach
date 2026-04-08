@@ -30,9 +30,10 @@ mod summary_repository;
 pub(crate) use identity::{TestClock, TestIdGenerator};
 pub(crate) use reply_operations::InMemoryCoachReplyOperationRepository;
 pub(crate) use services::{
-    default_dev_coach, existing_summary, test_service, test_service_with_coach,
-    test_service_with_coach_and_athlete_summary, test_service_with_training_plan,
-    PersistCheckingTrainingPlanService, RecordingTrainingPlanService,
-    RefreshingTrainingPlanService, StubAthleteSummaryService,
+    default_dev_coach, existing_summary, existing_summary_with_finished_conversation, test_service,
+    test_service_with_coach, test_service_with_coach_and_athlete_summary,
+    test_service_with_training_plan, test_service_with_training_plan_and_latest_activity,
+    PersistCheckingTrainingPlanService, RecordingLatestCompletedActivityService,
+    RecordingTrainingPlanService, RefreshingTrainingPlanService, StubAthleteSummaryService,
 };
 pub(crate) use summary_repository::InMemoryWorkoutSummaryRepository;

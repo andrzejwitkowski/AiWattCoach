@@ -188,7 +188,14 @@ describe('useCoachChat', () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
     vi.mocked(updateWorkoutSummaryRpe).mockResolvedValue({ ...summaryFixture, rpe: 9 });
-    vi.mocked(saveWorkoutSummary).mockResolvedValue({ ...summaryFixture, rpe: 9, savedAtEpochSeconds: 3 });
+    vi.mocked(saveWorkoutSummary).mockResolvedValue({
+      summary: { ...summaryFixture, rpe: 9, savedAtEpochSeconds: 3 },
+      workflow: {
+        recapStatus: 'generated',
+        planStatus: 'skipped',
+        messages: ['Workout recap generated.', '14-day schedule skipped because this is not the latest completed activity.'],
+      },
+    });
 
     const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
 
@@ -207,12 +214,19 @@ describe('useCoachChat', () => {
     expect(updateWorkoutSummaryRpe).toHaveBeenCalledWith('', '101', 9);
     expect(saveWorkoutSummary).toHaveBeenCalledWith('', '101');
     expect(result.current.isSaved).toBe(true);
+    expect(result.current.messages.at(-2)?.role).toBe('system');
+    expect(result.current.messages.at(-2)?.content).toBe('Workout recap generated.');
+    expect(result.current.messages.at(-1)?.role).toBe('system');
+    expect(result.current.messages.at(-1)?.content).toBe('14-day schedule skipped because this is not the latest completed activity.');
   });
 
   it('reopens a saved summary for editing', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockResolvedValue({ ...summaryFixture, savedAtEpochSeconds: 3 });
-    vi.mocked(reopenWorkoutSummary).mockResolvedValue(summaryFixture);
+    vi.mocked(reopenWorkoutSummary).mockResolvedValue({
+      summary: summaryFixture,
+      workflow: { recapStatus: 'unchanged', planStatus: 'unchanged', messages: [] },
+    });
 
     const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
 
@@ -226,6 +240,32 @@ describe('useCoachChat', () => {
 
     expect(reopenWorkoutSummary).toHaveBeenCalledWith('', '101');
     expect(result.current.isSaved).toBe(false);
+  });
+
+  it('appends failed workflow messages after save', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+    vi.mocked(saveWorkoutSummary).mockResolvedValue({
+      summary: { ...summaryFixture, savedAtEpochSeconds: 3 },
+      workflow: {
+        recapStatus: 'generated',
+        planStatus: 'failed',
+        messages: ['Workout recap generated.', '14-day schedule failed.'],
+      },
+    });
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('101');
+    });
+
+    await act(async () => {
+      await result.current.saveSummary();
+    });
+
+    expect(result.current.messages.at(-2)?.content).toBe('Workout recap generated.');
+    expect(result.current.messages.at(-1)?.content).toBe('14-day schedule failed.');
   });
 
   it('does not treat a system message as completed conversation', async () => {
@@ -337,7 +377,10 @@ describe('useCoachChat', () => {
     });
 
     act(() => {
-      resolveSave?.({ ...summaryFixture, workoutId: '101', savedAtEpochSeconds: 3 });
+      resolveSave?.({
+        summary: { ...summaryFixture, workoutId: '101', savedAtEpochSeconds: 3 },
+        workflow: { recapStatus: 'generated', planStatus: 'generated', messages: ['Workout recap generated.', '14-day schedule generated.'] },
+      });
     });
 
     await expect(savePromise).resolves.toBeNull();
