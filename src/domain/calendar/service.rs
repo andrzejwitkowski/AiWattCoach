@@ -366,7 +366,7 @@ fn build_update_event(day: &TrainingPlanProjectedDay) -> UpdateEvent {
         category: Some(EventCategory::Workout),
         start_date_local: Some(day.date.clone()),
         name: projected_workout_name(day),
-        description: Some(String::new()),
+        description: None,
         indoor: Some(false),
         color: None,
         workout_doc: day.workout.as_ref().map(serialize_projected_workout),

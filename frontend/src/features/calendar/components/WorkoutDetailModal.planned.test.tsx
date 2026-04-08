@@ -240,4 +240,56 @@ describe('WorkoutDetailModal planned mode', () => {
     expect(screen.getByText('4 x 120% FTP 2min and 2min of rest 50% FTP')).toBeInTheDocument();
     expect(within(metricCard('Duration')).getByText('16m')).toBeInTheDocument();
   });
+
+  it('preserves predicted sync metadata when linked event details are loaded', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 91,
+        startDateLocal: '2026-03-26',
+        name: 'Predicted Build',
+        description: 'Intervals description',
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 60min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 3600 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-03-26',
+          event: makeEvent({
+            id: -91,
+            startDateLocal: '2026-03-26',
+            name: 'Predicted Build',
+            plannedSource: 'predicted',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 91,
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+              operationKey: 'training-plan:user-1:w1:1',
+              date: '2026-03-26',
+              sourceWorkoutId: 'w1',
+            },
+            eventDefinition: makeEventDefinition({
+              rawWorkoutDoc: '- 60min endurance',
+              summary: makeWorkoutSummary({ totalDurationSeconds: 3600 }),
+            }),
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(mockedLoadEvent).toHaveBeenCalledWith('', 91));
+
+    expect(screen.getByText(/planned workout/i)).toBeInTheDocument();
+    expect(screen.getByText(/synced/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sync to intervals/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /download fit/i })).toBeInTheDocument();
+    expect(screen.getByText('Predicted Build')).toBeInTheDocument();
+  });
 });

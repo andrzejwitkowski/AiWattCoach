@@ -169,6 +169,69 @@ async fn sync_planned_workout_returns_synced_calendar_event() {
 }
 
 #[tokio::test]
+async fn sync_planned_workout_preserves_existing_remote_description() {
+    let intervals_service = ScopedIntervalsService::with_user_events([(
+        "user-1",
+        vec![Event {
+            id: 41,
+            start_date_local: "2026-03-26".to_string(),
+            name: Some("Build Session".to_string()),
+            category: EventCategory::Workout,
+            description: Some("Keep this description".to_string()),
+            indoor: true,
+            color: Some("blue".to_string()),
+            workout_doc: Some(serialize_planned_workout(&build_planned_workout(
+                "Build Session",
+            ))),
+        }],
+    )]);
+    let app = intervals_test_app_with_projections(
+        TestIdentityServiceWithSession::default(),
+        intervals_service.clone(),
+        TestTrainingPlanProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2026-03-26",
+            "Build Session",
+        )]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/2026-03-26/sync")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let updated_events = intervals_service
+        .list_events(
+            "user-1",
+            &aiwattcoach::domain::intervals::DateRange {
+                oldest: "2026-03-26".to_string(),
+                newest: "2026-03-26".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated_events.len(), 1);
+    assert_eq!(updated_events[0].id, 41);
+    assert_eq!(updated_events[0].name.as_deref(), Some("Build Session"));
+    assert_eq!(
+        updated_events[0].description.as_deref(),
+        Some("Keep this description")
+    );
+}
+
+#[tokio::test]
 async fn sync_planned_workout_is_scoped_to_authenticated_user() {
     let app = intervals_test_app_with_projections(
         SessionMappedIdentityService::with_users([

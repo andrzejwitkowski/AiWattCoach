@@ -4,6 +4,7 @@ import {useTranslation} from 'react-i18next';
 
 import {downloadFit, loadActivity, loadEvent} from '../../intervals/api/intervals';
 import {AuthenticationError} from '../../../lib/httpClient';
+import type {IntervalEvent} from '../../intervals/types';
 import type {WorkoutDetailSelection} from '../workoutDetails';
 import {CompletedWorkoutDetailModal} from './CompletedWorkoutDetailModal';
 import {PlannedWorkoutDetailModal} from './PlannedWorkoutDetailModal';
@@ -57,7 +58,9 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
             }
 
             setState({
-                event: eventResult.status === 'fulfilled' ? (eventResult.value ?? selection.event) : selection.event,
+                event: eventResult.status === 'fulfilled'
+                    ? mergeSelectedEvent(selection.event, eventResult.value)
+                    : selection.event,
                 activity: activityResult.status === 'fulfilled' ? activityResult.value : selection.activity,
                 loading: false,
             });
@@ -171,4 +174,30 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
             </div>
         </div>
     );
+}
+
+function mergeSelectedEvent(
+    selectedEvent: WorkoutDetailSelection['event'],
+    loadedEvent: IntervalEvent | null,
+): WorkoutDetailSelection['event'] {
+    if (!selectedEvent) {
+        return loadedEvent;
+    }
+
+    if (!loadedEvent) {
+        return selectedEvent;
+    }
+
+    if (selectedEvent.plannedSource !== 'predicted') {
+        return loadedEvent;
+    }
+
+    return {
+        ...loadedEvent,
+        calendarEntryId: selectedEvent.calendarEntryId,
+        plannedSource: selectedEvent.plannedSource,
+        syncStatus: selectedEvent.syncStatus,
+        linkedIntervalsEventId: selectedEvent.linkedIntervalsEventId,
+        projectedWorkout: selectedEvent.projectedWorkout,
+    };
 }
