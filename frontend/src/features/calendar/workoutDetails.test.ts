@@ -51,6 +51,92 @@ describe('workoutDetails', () => {
     expect(bars[0]).toEqual({ height: 100, color: '#facc15', widthUnits: 240 });
   });
 
+  it('builds interval-only planned bars from target intensity instead of index order', () => {
+    const event: IntervalEvent = {
+      id: 17,
+      startDateLocal: '2026-03-22',
+      name: 'Steady Builder',
+      category: 'WORKOUT',
+      description: null,
+      indoor: true,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 2x20min 90%',
+        intervals: [
+          {
+            definition: '- 2x20min 90%',
+            repeatCount: 2,
+            durationSeconds: 1200,
+            targetPercentFtp: 90,
+            zoneId: 3,
+          },
+        ],
+        segments: [],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 2400,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutBars(event)).toEqual([
+      { height: 90, color: '#52c41a', widthUnits: 2400 },
+    ]);
+  });
+
+  it('uses zone fallback target heights for planned bars when ftp percent is missing', () => {
+    const event: IntervalEvent = {
+      id: 18,
+      startDateLocal: '2026-03-22',
+      name: 'Zone Builder',
+      category: 'WORKOUT',
+      description: null,
+      indoor: true,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: null,
+        intervals: [
+          {
+            definition: '10min z2',
+            repeatCount: 1,
+            durationSeconds: 600,
+            targetPercentFtp: null,
+            zoneId: 2,
+          },
+        ],
+        segments: [
+          {
+            order: 0,
+            label: 'Zone 2',
+            durationSeconds: 600,
+            startOffsetSeconds: 0,
+            endOffsetSeconds: 600,
+            targetPercentFtp: null,
+            zoneId: 2,
+          },
+        ],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 600,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutBars(event)).toEqual([
+      { height: 70, color: '#00e3fd', widthUnits: 600 },
+    ]);
+  });
+
   it('builds completed bars from actual intervals before falling back to streams', () => {
     const activity: IntervalActivity = {
       id: 'a1',
@@ -825,6 +911,105 @@ describe('workoutDetails', () => {
       dateKey: '2026-03-22',
       event,
       activity: null,
+    });
+  });
+
+  it('does not pair a completed event with an unrelated visible activity when the match is missing', () => {
+    const event: IntervalEvent = {
+      id: 19,
+      startDateLocal: '2026-03-22',
+      name: 'Completed workout',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: '- 20min 95%',
+        intervals: [],
+        segments: [],
+        summary: {
+          totalSegments: 0,
+          totalDurationSeconds: 0,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: {
+        activityId: 'a-match',
+        activityName: 'Matched ride',
+        startDateLocal: '2026-03-22T08:00:00',
+        powerValues: [],
+        cadenceValues: [],
+        heartRateValues: [],
+        speedValues: [],
+        averagePowerWatts: null,
+        normalizedPowerWatts: null,
+        trainingStressScore: null,
+        intensityFactor: null,
+        complianceScore: 0.8,
+        matchedIntervals: [],
+      },
+    };
+
+    const activity: IntervalActivity = {
+      id: 'a-unrelated',
+      startDateLocal: '2026-03-22T07:00:00',
+      startDate: '2026-03-22T06:00:00Z',
+      name: 'Morning spin',
+      description: null,
+      activityType: 'Ride',
+      source: null,
+      externalId: null,
+      deviceName: null,
+      distanceMeters: null,
+      movingTimeSeconds: null,
+      elapsedTimeSeconds: null,
+      totalElevationGainMeters: null,
+      averageSpeedMps: null,
+      averageHeartRateBpm: null,
+      averageCadenceRpm: null,
+      trainer: false,
+      commute: false,
+      race: false,
+      hasHeartRate: false,
+      streamTypes: [],
+      tags: [],
+      metrics: {
+        trainingStressScore: null,
+        normalizedPowerWatts: null,
+        intensityFactor: null,
+        efficiencyFactor: null,
+        variabilityIndex: null,
+        averagePowerWatts: null,
+        ftpWatts: null,
+        totalWorkJoules: null,
+        calories: null,
+        trimp: null,
+        powerLoad: null,
+        heartRateLoad: null,
+        paceLoad: null,
+        strainScore: null,
+      },
+      details: {
+        intervals: [],
+        intervalGroups: [],
+        streams: [],
+        intervalSummary: [],
+        skylineChart: [],
+        powerZoneTimes: [],
+        heartRateZoneTimes: [],
+        paceZoneTimes: [],
+        gapZoneTimes: [],
+      },
+      detailsUnavailableReason: null,
+    };
+
+    expect(selectWorkoutDetail('2026-03-22', event, [activity])).toEqual({
+      dateKey: '2026-03-22',
+      event: null,
+      activity,
     });
   });
 

@@ -66,15 +66,15 @@ export function isPlannedWorkoutEvent(
 export function buildPlannedWorkoutBars(event: IntervalEvent): WorkoutBar[] {
   const expandedSegments = buildExpandedPlannedSegments(event);
   if (expandedSegments.length === 0) {
-    return event.eventDefinition.intervals.map((interval, index, all) => ({
-      height: 35 + Math.round((index / Math.max(1, all.length - 1)) * 55),
+    return event.eventDefinition.intervals.map((interval) => ({
+      height: heightForPercent(plannedTargetValue(interval.targetPercentFtp, interval.zoneId)),
       color: POWER_ZONE_COLORS[interval.zoneId ?? 2] ?? POWER_ZONE_COLORS[2],
       widthUnits: plannedIntervalTotalDurationSeconds(interval),
     }));
   }
 
   return expandedSegments.map((segment) => ({
-    height: heightForPercent(segment.targetPercentFtp),
+    height: heightForPercent(plannedTargetValue(segment.targetPercentFtp, segment.zoneId)),
     color: POWER_ZONE_COLORS[segment.zoneId ?? 2] ?? POWER_ZONE_COLORS[2],
     widthUnits: normalizeWidthUnits(segment.durationSeconds),
   }));
@@ -285,6 +285,14 @@ export function selectWorkoutDetail(
       dateKey,
       event,
       activity: matchedActivity,
+    };
+  }
+
+  if (event?.actualWorkout) {
+    return {
+      dateKey,
+      event: null,
+      activity: activities[0] ?? null,
     };
   }
 

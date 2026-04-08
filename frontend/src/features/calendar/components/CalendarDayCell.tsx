@@ -36,7 +36,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     })
     : t('calendar.restDay');
   const subtitle = hasTraining
-    ? buildSubtitle(primaryActivity, primaryEvent, locale, {
+    ? buildSubtitle(primaryActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
       workout: t('calendar.workout'),
       race: t('calendar.eventRace'),
       ride: t('calendar.eventRide'),
@@ -144,7 +144,7 @@ function buildSubtitle(
     unknown: string;
   },
 ): string {
-  const eventSummary = dayActivity ? null : dayEvent?.eventDefinition.summary;
+  const eventSummary = dayEvent?.eventDefinition.summary ?? null;
   const durationSeconds = dayActivity?.movingTimeSeconds ?? eventSummary?.totalDurationSeconds ?? 0;
   const durationMinutes = durationSeconds > 0
     ? new Intl.NumberFormat(locale, { style: 'unit', unit: 'minute', unitDisplay: 'short', maximumFractionDigits: 0 }).format(Math.round(durationSeconds / 60))

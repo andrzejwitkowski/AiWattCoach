@@ -446,14 +446,128 @@ describe('CalendarWeekSection', () => {
     };
 
     const onSelectWorkout = vi.fn();
-    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+    const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /morning spin/i }));
+    const dayButtons = Array.from(container.querySelectorAll('.calendar-grid button')) as HTMLButtonElement[];
+    const morningSpinButton = dayButtons.find((button) => button.textContent?.includes('Morning spin'));
+    expect(morningSpinButton).toBeDefined();
+
+    await userEvent.click(morningSpinButton as HTMLButtonElement);
 
     expect(onSelectWorkout).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
       event: week.days[0].events[0],
       activity: week.days[0].activities[1],
+    });
+  });
+
+  it('falls back to the visible activity when a completed event match is missing', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [{
+        id: 15,
+        startDateLocal: '2026-03-23',
+        name: 'Completed workout',
+        category: 'WORKOUT',
+        description: null,
+        indoor: false,
+        color: null,
+        eventDefinition: {
+          rawWorkoutDoc: '- 20min 95%',
+          intervals: [],
+          segments: [],
+          summary: {
+            totalSegments: 0,
+            totalDurationSeconds: 0,
+            estimatedNormalizedPowerWatts: null,
+            estimatedAveragePowerWatts: null,
+            estimatedIntensityFactor: null,
+            estimatedTrainingStressScore: null,
+          },
+        },
+        actualWorkout: {
+          activityId: 'a-missing',
+          activityName: 'Matched ride',
+          startDateLocal: '2026-03-23T08:30:00',
+          powerValues: [],
+          cadenceValues: [],
+          heartRateValues: [],
+          speedValues: [],
+          averagePowerWatts: null,
+          normalizedPowerWatts: null,
+          trainingStressScore: null,
+          intensityFactor: null,
+          complianceScore: 0.8,
+          matchedIntervals: [],
+        },
+      }],
+      activities: [{
+        id: 'a-other',
+        startDateLocal: '2026-03-23T07:00:00',
+        startDate: '2026-03-23T06:00:00Z',
+        name: 'Morning spin',
+        description: null,
+        activityType: 'Ride',
+        source: null,
+        externalId: null,
+        deviceName: null,
+        distanceMeters: null,
+        movingTimeSeconds: null,
+        elapsedTimeSeconds: null,
+        totalElevationGainMeters: null,
+        averageSpeedMps: null,
+        averageHeartRateBpm: null,
+        averageCadenceRpm: null,
+        trainer: false,
+        commute: false,
+        race: false,
+        hasHeartRate: false,
+        streamTypes: [],
+        tags: [],
+        metrics: {
+          trainingStressScore: null,
+          normalizedPowerWatts: null,
+          intensityFactor: null,
+          efficiencyFactor: null,
+          variabilityIndex: null,
+          averagePowerWatts: null,
+          ftpWatts: null,
+          totalWorkJoules: null,
+          calories: null,
+          trimp: null,
+          powerLoad: null,
+          heartRateLoad: null,
+          paceLoad: null,
+          strainScore: null,
+        },
+        details: {
+          intervals: [],
+          intervalGroups: [],
+          streams: [],
+          intervalSummary: [],
+          skylineChart: [],
+          powerZoneTimes: [],
+          heartRateZoneTimes: [],
+          paceZoneTimes: [],
+          gapZoneTimes: [],
+        },
+      }],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+
+    const morningSpinButton = Array.from(container.querySelectorAll('.calendar-grid button'))
+      .find((button) => button.textContent?.includes('Morning spin')) as HTMLButtonElement | undefined;
+    expect(morningSpinButton).toBeDefined();
+
+    await userEvent.click(morningSpinButton as HTMLButtonElement);
+
+    expect(onSelectWorkout).toHaveBeenCalledWith({
+      dateKey: '2026-03-23',
+      event: null,
+      activity: week.days[0].activities[0],
     });
   });
 

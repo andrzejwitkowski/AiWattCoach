@@ -229,6 +229,8 @@ describe('CalendarDayCell content', () => {
 
     expect(within(dayCell).queryByText('Planned Workout')).not.toBeInTheDocument();
     expect(within(dayCell).getByText('Completed Build')).toBeInTheDocument();
+    expect(dayCell).not.toHaveTextContent('20 min');
+    expect(dayCell).not.toHaveTextContent('30 TSS');
   });
 
   it('does not render a clickable button without a real select handler', () => {
