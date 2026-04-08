@@ -1,5 +1,6 @@
 pub mod ai_workflow;
 pub mod athlete_summary;
+pub mod calendar;
 pub mod identity;
 pub mod intervals;
 pub mod llm;

@@ -123,6 +123,7 @@ export function makeEvent(overrides: EventOverrides = {}): IntervalEvent {
 
   return {
     id: 1,
+    calendarEntryId: 'intervals:1',
     startDateLocal: '2026-03-25',
     name: 'Workout',
     category: 'WORKOUT',
@@ -136,6 +137,10 @@ export function makeEvent(overrides: EventOverrides = {}): IntervalEvent {
         : actualWorkout === null
           ? null
           : makeActualWorkout(actualWorkout),
+    plannedSource: 'intervals',
+    syncStatus: null,
+    linkedIntervalsEventId: null,
+    projectedWorkout: null,
     ...eventOverrides,
   };
 }

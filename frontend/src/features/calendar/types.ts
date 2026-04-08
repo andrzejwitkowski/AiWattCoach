@@ -9,6 +9,8 @@ export type CalendarDay = {
   activities: IntervalActivity[];
 };
 
+export type PlannedWorkoutSyncStatus = 'unsynced' | 'pending' | 'synced' | 'modified' | 'failed';
+
 export type CalendarWeekSummary = {
   totalTss: number;
   targetTss: number | null;

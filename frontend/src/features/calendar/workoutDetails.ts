@@ -29,6 +29,10 @@ export type PlannedWorkoutChartInterval = {
 type PlannedIntervalDefinition = IntervalEvent['eventDefinition']['intervals'][number];
 type PlannedWorkoutSegment = IntervalEvent['eventDefinition']['segments'][number];
 
+function plannedEventKey(event: IntervalEvent): string {
+  return event.calendarEntryId ?? String(event.id);
+}
+
 const POWER_ZONE_COLORS: Record<number, string> = {
   1: '#6b7280',
   2: '#00e3fd',
@@ -161,7 +165,7 @@ export function buildPlannedWorkoutChartIntervals(
 
   if (segments.length > 0) {
     return segments.map((segment) => ({
-      id: `planned-${event.id}-${segment.order}`,
+      id: `planned-${plannedEventKey(event)}-${segment.order}`,
       startSecond: segment.startOffsetSeconds,
       endSecond: segment.endOffsetSeconds,
       label: segment.label,
@@ -173,7 +177,7 @@ export function buildPlannedWorkoutChartIntervals(
   return event.eventDefinition.intervals.map((interval, index) => {
     const durationSeconds = plannedIntervalTotalDurationSeconds(interval);
     const chartInterval = {
-      id: `planned-${event.id}-interval-${index}`,
+      id: `planned-${plannedEventKey(event)}-interval-${index}`,
       startSecond: currentOffset,
       endSecond: currentOffset + durationSeconds,
       label: formatPlannedWorkoutIntervalLabel(interval),

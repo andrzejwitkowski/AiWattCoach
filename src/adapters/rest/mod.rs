@@ -1,6 +1,7 @@
 mod admin;
 mod athlete_summary;
 mod auth;
+mod calendar;
 mod cookies;
 mod health;
 mod intervals;
@@ -84,6 +85,11 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route(
             "/api/athlete-summary/generate",
             post(athlete_summary::generate_athlete_summary),
+        )
+        .route("/api/calendar/events", get(calendar::list_events))
+        .route(
+            "/api/calendar/planned-workouts/{operation_key}/{date}/sync",
+            post(calendar::sync_planned_workout),
         )
         .route(
             "/api/workout-summaries",

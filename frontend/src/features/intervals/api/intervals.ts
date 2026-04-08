@@ -32,9 +32,26 @@ export async function listEvents(apiBaseUrl: string, query: unknown) {
   return intervalEventsResponseSchema.parse(data);
 }
 
+export async function listCalendarEvents(apiBaseUrl: string, query: unknown) {
+  const validated = listEventsQuerySchema.parse(query);
+  const path = `/api/calendar/events?${toQueryString(validated)}`;
+  const data = await get(apiBaseUrl, path);
+  return intervalEventsResponseSchema.parse(data);
+}
+
 export async function loadEvent(apiBaseUrl: string, eventId: number) {
   const data = await get(apiBaseUrl, `/api/intervals/events/${eventId}`);
   return intervalEventSchema.parse(data);
+}
+
+export async function syncPlannedWorkout(apiBaseUrl: string, operationKey: string, date: string) {
+  const validated = listEventsQuerySchema.pick({ oldest: true }).parse({ oldest: date });
+  const result = await post<undefined, unknown>(
+    apiBaseUrl,
+    `/api/calendar/planned-workouts/${encodeURIComponent(operationKey)}/${encodeURIComponent(validated.oldest)}/sync`,
+    undefined,
+  );
+  return intervalEventSchema.parse(result);
 }
 
 export async function createEvent(apiBaseUrl: string, data: unknown) {

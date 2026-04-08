@@ -4,8 +4,10 @@ import {useTranslation} from 'react-i18next';
 
 import {downloadFit, loadActivity, loadEvent} from '../../intervals/api/intervals';
 import {AuthenticationError} from '../../../lib/httpClient';
+import type {IntervalEvent} from '../../intervals/types';
 import type {WorkoutDetailSelection} from '../workoutDetails';
-import {CompletedWorkoutPanel, PlannedWorkoutPanel} from './WorkoutDetailModalPanels';
+import {CompletedWorkoutDetailModal} from './CompletedWorkoutDetailModal';
+import {PlannedWorkoutDetailModal} from './PlannedWorkoutDetailModal';
 
 type WorkoutDetailModalProps = {
     apiBaseUrl: string;
@@ -23,18 +25,24 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
     const {t} = useTranslation();
     const [state, setState] = useState<ModalState>({event: null, activity: null, loading: false});
     const [downloadingFit, setDownloadingFit] = useState(false);
+    const [syncingToIntervals, setSyncingToIntervals] = useState(false);
+    const [syncError, setSyncError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!selection) {
             setState({event: null, activity: null, loading: false});
+            setSyncError(null);
             return;
         }
 
         let cancelled = false;
+        setSyncError(null);
         setState({event: null, activity: null, loading: true});
 
         void Promise.allSettled([
-            selection.event ? loadEvent(apiBaseUrl, selection.event.id) : Promise.resolve(null),
+            selection.event && (selection.event.plannedSource !== 'predicted' || selection.event.linkedIntervalsEventId)
+                ? loadEvent(apiBaseUrl, selection.event.linkedIntervalsEventId ?? selection.event.id)
+                : Promise.resolve(null),
             selection.activity ? loadActivity(apiBaseUrl, selection.activity.id) : Promise.resolve(null),
         ]).then(([eventResult, activityResult]) => {
             if (cancelled) {
@@ -50,7 +58,9 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
             }
 
             setState({
-                event: eventResult.status === 'fulfilled' ? eventResult.value : selection.event,
+                event: eventResult.status === 'fulfilled'
+                    ? mergeSelectedEvent(selection.event, eventResult.value)
+                    : selection.event,
                 activity: activityResult.status === 'fulfilled' ? activityResult.value : selection.activity,
                 loading: false,
             });
@@ -75,7 +85,9 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
         ? activity?.name ?? activity?.activityType ?? t('calendar.workout')
         : isPlannedVsActual
             ? actualWorkout?.activityName ?? event?.name ?? t('calendar.workout')
-            : event?.name ?? t('calendar.workout');
+            : event?.name
+                ?? selection.event?.name
+                ?? t('calendar.workout');
     const showFitDownload = Boolean(event && !isCompleted);
 
     const handleDownloadFit = async () => {
@@ -140,14 +152,52 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
                     {state.loading ? (
                         <p className="text-sm text-slate-400">{t('calendar.loadingWorkoutDetails')}</p>
                     ) : isCompleted ? (
-                        <CompletedWorkoutPanel event={event} activity={activity}/>
+                        <CompletedWorkoutDetailModal event={event} activity={activity}/>
                     ) : event ? (
-                        <PlannedWorkoutPanel event={event}/>
+                        <PlannedWorkoutDetailModal
+                            apiBaseUrl={apiBaseUrl}
+                            event={event}
+                            syncing={syncingToIntervals}
+                            onSyncingChange={setSyncingToIntervals}
+                            onSyncError={setSyncError}
+                            onEventSynced={(syncedEvent) => setState((current) => ({...current, event: syncedEvent}))}
+                        />
                     ) : (
                         <p className="text-sm text-slate-400">{t('calendar.workoutDetailsUnavailable')}</p>
                     )}
+                    {syncError ? (
+                        <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
+                            {syncError}
+                        </div>
+                    ) : null}
                 </div>
             </div>
         </div>
     );
+}
+
+function mergeSelectedEvent(
+    selectedEvent: WorkoutDetailSelection['event'],
+    loadedEvent: IntervalEvent | null,
+): WorkoutDetailSelection['event'] {
+    if (!selectedEvent) {
+        return loadedEvent;
+    }
+
+    if (!loadedEvent) {
+        return selectedEvent;
+    }
+
+    if (selectedEvent.plannedSource !== 'predicted') {
+        return loadedEvent;
+    }
+
+    return {
+        ...loadedEvent,
+        calendarEntryId: selectedEvent.calendarEntryId,
+        plannedSource: selectedEvent.plannedSource,
+        syncStatus: selectedEvent.syncStatus,
+        linkedIntervalsEventId: selectedEvent.linkedIntervalsEventId,
+        projectedWorkout: selectedEvent.projectedWorkout,
+    };
 }

@@ -18,7 +18,7 @@ pub(in crate::adapters::rest) struct ActivityPath {
 }
 
 #[derive(Serialize)]
-pub(super) struct EventDto {
+pub(crate) struct EventDto {
     pub id: i64,
     #[serde(rename = "startDateLocal")]
     pub start_date_local: String,
@@ -34,7 +34,7 @@ pub(super) struct EventDto {
 }
 
 #[derive(Serialize)]
-pub(super) struct EventDefinitionDto {
+pub(crate) struct EventDefinitionDto {
     #[serde(rename = "rawWorkoutDoc")]
     pub raw_workout_doc: Option<String>,
     pub intervals: Vec<IntervalDefinitionDto>,
@@ -43,7 +43,7 @@ pub(super) struct EventDefinitionDto {
 }
 
 #[derive(Serialize)]
-pub(super) struct IntervalDefinitionDto {
+pub(crate) struct IntervalDefinitionDto {
     pub definition: String,
     #[serde(rename = "repeatCount")]
     pub repeat_count: usize,
@@ -56,7 +56,7 @@ pub(super) struct IntervalDefinitionDto {
 }
 
 #[derive(Serialize)]
-pub(super) struct WorkoutSegmentDto {
+pub(crate) struct WorkoutSegmentDto {
     pub order: usize,
     pub label: String,
     #[serde(rename = "durationSeconds")]
@@ -72,7 +72,7 @@ pub(super) struct WorkoutSegmentDto {
 }
 
 #[derive(Serialize)]
-pub(super) struct WorkoutSummaryDto {
+pub(crate) struct WorkoutSummaryDto {
     #[serde(rename = "totalSegments")]
     pub total_segments: usize,
     #[serde(rename = "totalDurationSeconds")]
@@ -88,7 +88,7 @@ pub(super) struct WorkoutSummaryDto {
 }
 
 #[derive(Serialize)]
-pub(super) struct ActualWorkoutDto {
+pub(crate) struct ActualWorkoutDto {
     #[serde(rename = "activityId")]
     pub activity_id: String,
     #[serde(rename = "activityName")]
@@ -118,7 +118,7 @@ pub(super) struct ActualWorkoutDto {
 }
 
 #[derive(Serialize)]
-pub(super) struct MatchedWorkoutIntervalDto {
+pub(crate) struct MatchedWorkoutIntervalDto {
     #[serde(rename = "plannedSegmentOrder")]
     pub planned_segment_order: usize,
     #[serde(rename = "plannedLabel")]

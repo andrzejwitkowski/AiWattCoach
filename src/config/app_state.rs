@@ -3,6 +3,7 @@ use std::sync::Arc;
 use mongodb::Client;
 
 use crate::domain::athlete_summary::AthleteSummaryUseCases;
+use crate::domain::calendar::CalendarUseCases;
 use crate::domain::identity::IdentityUseCases;
 use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
@@ -16,6 +17,7 @@ pub struct AppState {
     pub mongo_client: Client,
     pub client_log_ingestion_enabled: bool,
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
+    pub calendar_service: Option<Arc<dyn CalendarUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
@@ -41,6 +43,7 @@ impl AppState {
             mongo_client,
             client_log_ingestion_enabled: false,
             identity_service: None,
+            calendar_service: None,
             intervals_service: None,
             settings_service: None,
             athlete_summary_service: None,
@@ -76,6 +79,11 @@ impl AppState {
         settings_service: Arc<dyn UserSettingsUseCases>,
     ) -> Self {
         self.settings_service = Some(settings_service);
+        self
+    }
+
+    pub fn with_calendar_service(mut self, calendar_service: Arc<dyn CalendarUseCases>) -> Self {
+        self.calendar_service = Some(calendar_service);
         self
     }
 

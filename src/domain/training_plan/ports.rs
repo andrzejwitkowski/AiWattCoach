@@ -28,6 +28,12 @@ pub trait TrainingPlanProjectionRepository: Send + Sync + 'static {
         operation_key: &str,
     ) -> BoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>>;
 
+    fn find_active_by_user_id_and_operation_key(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+    ) -> BoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>>;
+
     fn replace_window(
         &self,
         snapshot: TrainingPlanSnapshot,

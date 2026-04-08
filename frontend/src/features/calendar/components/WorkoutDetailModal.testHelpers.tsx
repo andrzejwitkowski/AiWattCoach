@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import '../../../i18n';
-import { downloadFit, loadActivity, loadEvent } from '../../intervals/api/intervals';
+import { downloadFit, loadActivity, loadEvent, syncPlannedWorkout } from '../../intervals/api/intervals';
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
 import { makeSelection } from '../testData';
 import type { WorkoutDetailSelection } from '../workoutDetails';
@@ -12,11 +12,13 @@ vi.mock('../../intervals/api/intervals', () => ({
   downloadFit: vi.fn(),
   loadEvent: vi.fn(),
   loadActivity: vi.fn(),
+  syncPlannedWorkout: vi.fn(),
 }));
 
 export const mockedDownloadFit = vi.mocked(downloadFit);
 export const mockedLoadActivity = vi.mocked(loadActivity);
 export const mockedLoadEvent = vi.mocked(loadEvent);
+export const mockedSyncPlannedWorkout = vi.mocked(syncPlannedWorkout);
 
 type RenderWorkoutDetailModalOptions = {
   selection?: WorkoutDetailSelection;

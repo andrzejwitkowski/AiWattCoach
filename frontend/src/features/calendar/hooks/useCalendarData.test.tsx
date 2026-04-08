@@ -8,13 +8,13 @@ import { addDays, getMondayOfWeek, parseDateKey, toDateKey } from '../utils/date
 import { useCalendarData } from './useCalendarData';
 
 vi.mock('../../intervals/api/intervals', () => ({
-  listEvents: vi.fn(),
+  listCalendarEvents: vi.fn(),
   listActivities: vi.fn(),
   loadActivity: vi.fn(),
   loadEvent: vi.fn(),
 }));
 
-import { listActivities, listEvents, loadActivity, loadEvent } from '../../intervals/api/intervals';
+import { listActivities, listCalendarEvents, loadActivity, loadEvent } from '../../intervals/api/intervals';
 
 const originalLocation = window.location;
 
@@ -62,7 +62,7 @@ describe('useCalendarData', () => {
   it('defaults unresolved weeks to idle placeholders', () => {
     const deferredEvents = createDeferred<IntervalEvent[]>();
     const deferredActivities = createDeferred<IntervalActivity[]>();
-    vi.mocked(listEvents).mockReturnValue(deferredEvents.promise);
+    vi.mocked(listCalendarEvents).mockReturnValue(deferredEvents.promise);
     vi.mocked(listActivities).mockReturnValue(deferredActivities.promise);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
@@ -79,7 +79,7 @@ describe('useCalendarData', () => {
   });
 
   it('keeps a fixed five-week window after initial load', async () => {
-    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
@@ -94,7 +94,7 @@ describe('useCalendarData', () => {
   });
 
   it('keeps five rendered weeks after scrolling forward', async () => {
-    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
@@ -118,7 +118,7 @@ describe('useCalendarData', () => {
   });
 
   it('refetches weeks that were pruned from the buffer when scrolling back', async () => {
-    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
@@ -145,13 +145,13 @@ describe('useCalendarData', () => {
     });
 
     await waitFor(() => {
-      expect(hasRangeCall(vi.mocked(listEvents), initialFirstWeek, initialLastDay)).toBe(true);
+      expect(hasRangeCall(vi.mocked(listCalendarEvents), initialFirstWeek, initialLastDay)).toBe(true);
       expect(hasRangeCall(vi.mocked(listActivities), initialFirstWeek, initialLastDay)).toBe(true);
     });
   });
 
   it('coalesces concurrent forward loads into a single request', async () => {
-    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
@@ -166,7 +166,7 @@ describe('useCalendarData', () => {
     const deferredActivities = createDeferred<IntervalActivity[]>();
 
     vi.clearAllMocks();
-    vi.mocked(listEvents).mockReturnValueOnce(deferredEvents.promise);
+    vi.mocked(listCalendarEvents).mockReturnValueOnce(deferredEvents.promise);
     vi.mocked(listActivities).mockReturnValueOnce(deferredActivities.promise);
 
     let firstLoad!: Promise<void>;
@@ -178,7 +178,7 @@ describe('useCalendarData', () => {
       await Promise.resolve();
     });
 
-    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(listCalendarEvents).toHaveBeenCalledTimes(1);
     expect(listActivities).toHaveBeenCalledTimes(1);
 
     deferredEvents.resolve([]);
@@ -190,7 +190,7 @@ describe('useCalendarData', () => {
   });
 
   it('blocks an opposite-direction load while pagination is in flight', async () => {
-    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
@@ -212,7 +212,7 @@ describe('useCalendarData', () => {
     const deferredActivities = createDeferred<IntervalActivity[]>();
 
     vi.clearAllMocks();
-    vi.mocked(listEvents).mockReturnValueOnce(deferredEvents.promise);
+    vi.mocked(listCalendarEvents).mockReturnValueOnce(deferredEvents.promise);
     vi.mocked(listActivities).mockReturnValueOnce(deferredActivities.promise);
 
     let forwardLoad!: Promise<void>;
@@ -224,7 +224,7 @@ describe('useCalendarData', () => {
       await Promise.resolve();
     });
 
-    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(listCalendarEvents).toHaveBeenCalledTimes(1);
     expect(listActivities).toHaveBeenCalledTimes(1);
     expect(result.current.weeks[0]!.weekKey).toBe(expectedFirstWeekAfterForward);
 
@@ -237,7 +237,7 @@ describe('useCalendarData', () => {
   });
 
   it('redirects to the landing page when calendar requests return unauthorized', async () => {
-    vi.mocked(listEvents).mockRejectedValue(new AuthenticationError());
+    vi.mocked(listCalendarEvents).mockRejectedValue(new AuthenticationError());
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
@@ -255,7 +255,7 @@ describe('useCalendarData', () => {
   });
 
   it('retries the same future range after a gateway failure on the next attempt', async () => {
-    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
@@ -272,7 +272,7 @@ describe('useCalendarData', () => {
     const repeatedFailureWeekEnd = toDateKey(addDays(parseDateKey(repeatedFailureWeek), 6));
 
     vi.clearAllMocks();
-    vi.mocked(listEvents).mockRejectedValue(new HttpError(502, 'bad gateway'));
+    vi.mocked(listCalendarEvents).mockRejectedValue(new HttpError(502, 'bad gateway'));
     vi.mocked(listActivities).mockRejectedValue(new HttpError(502, 'bad gateway'));
 
     for (let attempt = 0; attempt < CALENDAR_BUFFER_WEEKS + 2; attempt += 1) {
@@ -281,14 +281,14 @@ describe('useCalendarData', () => {
       });
     }
 
-    expect(countRangeCalls(vi.mocked(listEvents), repeatedFailureWeek, repeatedFailureWeekEnd)).toBeGreaterThan(1);
+    expect(countRangeCalls(vi.mocked(listCalendarEvents), repeatedFailureWeek, repeatedFailureWeekEnd)).toBeGreaterThan(1);
     expect(countRangeCalls(vi.mocked(listActivities), repeatedFailureWeek, repeatedFailureWeekEnd)).toBeGreaterThan(1);
   });
 
   it('keeps workout events in the calendar window on list payloads only', async () => {
     const workoutDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 1));
 
-    vi.mocked(listEvents).mockResolvedValue([
+    vi.mocked(listCalendarEvents).mockResolvedValue([
       {
         id: 55,
         startDateLocal: workoutDateKey,
@@ -332,7 +332,7 @@ describe('useCalendarData', () => {
   it('keeps completed workout activities in the calendar window on list payloads only', async () => {
     const workoutDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 2));
 
-    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([
       {
         id: 'a55',
@@ -403,7 +403,7 @@ describe('useCalendarData', () => {
   });
 
   it('does not hydrate event or activity details during range loading', async () => {
-    vi.mocked(listEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoDetailedEvents();
     mockNoDetailedActivities();

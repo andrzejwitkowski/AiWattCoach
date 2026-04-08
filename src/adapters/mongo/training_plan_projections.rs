@@ -178,6 +178,50 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         })
     }
 
+    fn find_active_by_user_id_and_operation_key(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+    ) -> BoxFuture<Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>> {
+        let collection = self.collection.clone();
+        let snapshot_collection = self.snapshot_repository.collection();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            let documents = collection
+                .find(doc! {
+                    "user_id": &user_id,
+                    "operation_key": &operation_key,
+                    "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                })
+                .sort(doc! { "date": 1 })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+
+            let snapshot = snapshot_collection
+                .find_one(doc! { "user_id": &user_id, "operation_key": &operation_key })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            let Some(snapshot) = snapshot else {
+                return Ok(Vec::new());
+            };
+            let snapshot = MongoTrainingPlanSnapshotRepository::map_document_to_snapshot(snapshot)?;
+
+            documents
+                .into_iter()
+                .map(map_document_to_projected_day)
+                .filter_map(|day| match day {
+                    Ok(day) if day.date > snapshot.start_date => Some(Ok(day)),
+                    Ok(_) => None,
+                    Err(error) => Some(Err(error)),
+                })
+                .collect()
+        })
+    }
+
     fn replace_window(
         &self,
         snapshot: TrainingPlanSnapshot,
