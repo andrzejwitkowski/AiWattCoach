@@ -6,8 +6,8 @@ use std::{
 use aiwattcoach::domain::{
     llm::BoxFuture,
     workout_summary::{
-        CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
-        WorkoutRecap, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
+        CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository, WorkoutRecap,
+        WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
     },
 };
 
@@ -274,9 +274,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aiwattcoach::domain::workout_summary::{
-        CoachReplyClaimResult, CoachReplyOperation,
-    };
+    use aiwattcoach::domain::workout_summary::{CoachReplyClaimResult, CoachReplyOperation};
 
     #[tokio::test]
     async fn claim_pending_reclaims_stale_pending_operations() {

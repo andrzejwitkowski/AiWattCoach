@@ -535,7 +535,9 @@ mod tests {
         map_domain_availability_to_document, AiAgentsDocument, MongoUserSettingsRepository,
         OptionsDocument, SettingsDocument,
     };
-    use crate::domain::settings::{AvailabilityDay, AvailabilitySettings, UserSettingsRepository, Weekday};
+    use crate::domain::settings::{
+        AvailabilityDay, AvailabilitySettings, UserSettingsRepository, Weekday,
+    };
 
     #[test]
     fn settings_document_deserializes_missing_availability_with_full_week_default() {
@@ -803,22 +805,52 @@ mod tests {
 
         let expected_availability = map_domain_availability_to_document(&availability);
 
-        assert_eq!(updated.availability.configured, expected_availability.configured);
-        assert_eq!(updated.availability.days.len(), expected_availability.days.len());
-        assert_eq!(updated.availability.days[0].weekday, expected_availability.days[0].weekday);
-        assert_eq!(updated.availability.days[0].available, expected_availability.days[0].available);
-        assert_eq!(updated.availability.days[0].max_duration_minutes, expected_availability.days[0].max_duration_minutes);
-        assert_eq!(updated.availability.days[2].weekday, expected_availability.days[2].weekday);
-        assert_eq!(updated.availability.days[2].available, expected_availability.days[2].available);
-        assert_eq!(updated.availability.days[2].max_duration_minutes, expected_availability.days[2].max_duration_minutes);
+        assert_eq!(
+            updated.availability.configured,
+            expected_availability.configured
+        );
+        assert_eq!(
+            updated.availability.days.len(),
+            expected_availability.days.len()
+        );
+        assert_eq!(
+            updated.availability.days[0].weekday,
+            expected_availability.days[0].weekday
+        );
+        assert_eq!(
+            updated.availability.days[0].available,
+            expected_availability.days[0].available
+        );
+        assert_eq!(
+            updated.availability.days[0].max_duration_minutes,
+            expected_availability.days[0].max_duration_minutes
+        );
+        assert_eq!(
+            updated.availability.days[2].weekday,
+            expected_availability.days[2].weekday
+        );
+        assert_eq!(
+            updated.availability.days[2].available,
+            expected_availability.days[2].available
+        );
+        assert_eq!(
+            updated.availability.days[2].max_duration_minutes,
+            expected_availability.days[2].max_duration_minutes
+        );
         assert_eq!(updated.updated_at_epoch_seconds, updated_at);
 
         let default_availability = default_availability_document();
 
         assert_eq!(untouched.user_id, user_2_id);
         assert_eq!(untouched.updated_at_epoch_seconds, 20);
-        assert_eq!(untouched.availability.configured, default_availability.configured);
-        assert_eq!(untouched.availability.days.len(), default_availability.days.len());
+        assert_eq!(
+            untouched.availability.configured,
+            default_availability.configured
+        );
+        assert_eq!(
+            untouched.availability.days.len(),
+            default_availability.days.len()
+        );
         assert!(untouched.availability.days.iter().all(|day| !day.available));
         assert_eq!(untouched.availability.days[0].weekday, "mon");
         assert_eq!(untouched.availability.days[6].weekday, "sun");

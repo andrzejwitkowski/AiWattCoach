@@ -6,9 +6,9 @@ use std::{
 use aiwattcoach::domain::{
     llm::BoxFuture,
     workout_summary::{
-        validate_message_content, CoachReply, MessageRole, PersistedUserMessage,
-        SaveSummaryResult, SaveWorkflowResult, SaveWorkflowStatus, SendMessageResult, WorkoutRecap,
-        WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+        validate_message_content, CoachReply, MessageRole, PersistedUserMessage, SaveSummaryResult,
+        SaveWorkflowResult, SaveWorkflowStatus, SendMessageResult, WorkoutRecap, WorkoutSummary,
+        WorkoutSummaryError, WorkoutSummaryUseCases,
     },
 };
 
@@ -282,7 +282,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 ));
             }
 
-            processed_user_messages.lock().unwrap().push(content.clone());
+            processed_user_messages
+                .lock()
+                .unwrap()
+                .push(content.clone());
 
             let next_user_suffix = summary.messages.len() + 1;
             let user_message = aiwattcoach::domain::workout_summary::ConversationMessage {
@@ -345,7 +348,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 ));
             }
 
-            processed_user_messages.lock().unwrap().push(content.clone());
+            processed_user_messages
+                .lock()
+                .unwrap()
+                .push(content.clone());
 
             let next_user_suffix = summary.messages.len() + 1;
             let user_message = aiwattcoach::domain::workout_summary::ConversationMessage {
