@@ -171,6 +171,16 @@ describe('AvailabilityCard', () => {
     expect(screen.getByRole('combobox', { name: /monday max duration/i })).toBeInTheDocument();
   });
 
+  it('renders weekdays as vertical cards with short labels', () => {
+    render(<AvailabilityCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    expect(screen.getByText('MON')).toBeInTheDocument();
+    expect(screen.getByText('TUE')).toBeInTheDocument();
+    expect(screen.getByText('WED')).toBeInTheDocument();
+    expect(screen.getAllByText(/i am available/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/max. duration/i)[0]).toBeInTheDocument();
+  });
+
   it('announces save errors to assistive technology', async () => {
     updateAvailabilityMock.mockRejectedValue(new Error('Failed to save availability'));
 
