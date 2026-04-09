@@ -6,8 +6,8 @@ use crate::domain::{
         PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
     },
     settings::{
-        AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError,
-        UserSettings, UserSettingsUseCases,
+        AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, CyclingSettings,
+        IntervalsConfig, SettingsError, UserSettings, UserSettingsUseCases, Weekday,
     },
     training_plan::{
         TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
@@ -32,6 +32,23 @@ impl Clock for FixedClock {
 pub(super) struct TestSettingsService;
 
 impl UserSettingsUseCases for TestSettingsService {
+    fn find_settings(
+        &self,
+        _user_id: &str,
+    ) -> crate::domain::settings::BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        Box::pin(async move {
+            let mut settings = UserSettings::new_defaults("user-1".to_string(), 1);
+            settings.cycling = CyclingSettings {
+                full_name: Some("Alex".to_string()),
+                ftp_watts: Some(300),
+                athlete_prompt: Some("prefers concise coaching".to_string()),
+                ..CyclingSettings::default()
+            };
+            settings.availability = test_availability();
+            Ok(Some(settings))
+        })
+    }
+
     fn get_settings(
         &self,
         _user_id: &str,
@@ -44,6 +61,7 @@ impl UserSettingsUseCases for TestSettingsService {
                 athlete_prompt: Some("prefers concise coaching".to_string()),
                 ..CyclingSettings::default()
             };
+            settings.availability = test_availability();
             Ok(settings)
         })
     }
@@ -78,6 +96,57 @@ impl UserSettingsUseCases for TestSettingsService {
         _cycling: CyclingSettings,
     ) -> crate::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
         unreachable!()
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: AvailabilitySettings,
+    ) -> crate::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
+        unreachable!()
+    }
+}
+
+fn test_availability() -> AvailabilitySettings {
+    AvailabilitySettings {
+        configured: true,
+        days: vec![
+            AvailabilityDay {
+                weekday: Weekday::Mon,
+                available: true,
+                max_duration_minutes: Some(60),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Tue,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Wed,
+                available: true,
+                max_duration_minutes: Some(90),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Thu,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Fri,
+                available: true,
+                max_duration_minutes: Some(120),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Sat,
+                available: true,
+                max_duration_minutes: Some(180),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Sun,
+                available: false,
+                max_duration_minutes: None,
+            },
+        ],
     }
 }
 

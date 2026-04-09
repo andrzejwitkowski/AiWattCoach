@@ -22,6 +22,18 @@ export const mockSettings: UserSettingsResponse = {
   options: {
     analyzeWithoutHeartRate: true,
   },
+  availability: {
+    configured: true,
+    days: [
+      { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+      { weekday: 'tue', available: false, maxDurationMinutes: null },
+      { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+      { weekday: 'thu', available: false, maxDurationMinutes: null },
+      { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+      { weekday: 'sat', available: true, maxDurationMinutes: 180 },
+      { weekday: 'sun', available: false, maxDurationMinutes: null },
+    ],
+  },
   cycling: {
     fullName: 'Alex Rivier',
     age: 28,

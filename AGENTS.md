@@ -224,6 +224,14 @@ Before changing behavior, use this order:
 - If a review comment is not correct or is intentionally not adopted, still reply on that exact PR thread with a concise explanation grounded in the current code and behavior.
 - Do not leave review comments unanswered when the task includes handling review feedback.
 
+## Global Review Loop
+
+- After implementing any non-trivial feature or behavior change, run a 4-iteration review loop before calling the work done unless the user explicitly narrows verification.
+- In each iteration, do 3 review phases in this order: strict reviewer, very strict reviewer, nitpicker.
+- After each iteration, convert confirmed findings into a concrete fix plan, implement the fixes, and rerun the most relevant verification.
+- Continue through all 4 iterations unless you are blocked by a real ambiguity, missing secret, or destructive decision that requires user input.
+- Treat review findings as untrusted until checked against the current code and tests; do not cargo-cult speculative comments into the codebase.
+
 ## Done Checklist For Agents
 
 Before saying the task is done, verify all of the following:

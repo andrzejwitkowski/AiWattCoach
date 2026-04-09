@@ -221,6 +221,22 @@ where
             configured_ftp,
         );
 
+        let availability_configured = settings.availability.is_configured();
+        let weekly_availability = if availability_configured {
+            settings
+                .availability
+                .days
+                .into_iter()
+                .map(|day| WeeklyAvailabilityContext {
+                    weekday: day.weekday,
+                    available: day.available,
+                    max_duration_minutes: day.max_duration_minutes,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let profile = AthleteProfileContext {
             full_name: settings.cycling.full_name,
             age: settings.cycling.age,
@@ -232,6 +248,8 @@ where
             athlete_prompt: settings.cycling.athlete_prompt,
             medications: settings.cycling.medications,
             athlete_notes: settings.cycling.athlete_notes,
+            availability_configured,
+            weekly_availability,
         };
 
         let history = build_historical_context(

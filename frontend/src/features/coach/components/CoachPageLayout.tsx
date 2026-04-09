@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useSettings } from '../../settings/context/SettingsContext';
+import { isAvailabilityConfigured } from '../../settings/types';
 import { useWorkoutList } from '../hooks/useWorkoutList';
-import { useCoachChat } from '../hooks/useCoachChat';
+import { isAvailabilityRequiredChatError, useCoachChat } from '../hooks/useCoachChat';
 import { ChatWindow } from './ChatWindow';
 import { ConfirmWithoutChatModal } from './ConfirmWithoutChatModal';
 import { EmptyWorkoutState } from './EmptyWorkoutState';
@@ -17,6 +19,7 @@ type CoachPageLayoutProps = {
 
 export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   const { t } = useTranslation();
+  const settingsContext = useSettings();
   const workoutList = useWorkoutList({ apiBaseUrl });
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [showConfirmWithoutChat, setShowConfirmWithoutChat] = useState(false);
@@ -28,10 +31,18 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     [selectedWorkoutId, workoutList.items],
   );
 
+  const availabilityConfigured = useMemo(
+    () => isAvailabilityConfigured(settingsContext.settings?.availability),
+    [settingsContext.settings?.availability],
+  );
   const chat = useCoachChat({
     apiBaseUrl,
     workoutId: selectedItem?.id ?? null,
   });
+  const hasSettingsLoadError = Boolean(settingsContext.error);
+  const chatError = isAvailabilityRequiredChatError(chat.error) ? null : chat.error;
+  const requiresAvailability = (!settingsContext.isLoading && !hasSettingsLoadError && !availabilityConfigured)
+    || isAvailabilityRequiredChatError(chat.error);
 
   useEffect(() => {
     selectedWorkoutIdRef.current = selectedWorkoutId;
@@ -128,8 +139,22 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
                 hasSelectedWorkout
                 isSaved={chat.isSaved}
                 requiresRpe={chat.draftRpe === null}
-                error={chat.error}
-                inputDisabled={chat.isLoading || !isEditing || chat.isSaved || chat.draftRpe === null}
+                requiresAvailability={requiresAvailability}
+                availabilityMessage={
+                  requiresAvailability
+                    ? t('coach.chatAvailabilityRequiredBanner')
+                    : null
+                }
+                error={chatError ?? (hasSettingsLoadError ? settingsContext.error : null)}
+                inputDisabled={
+                  chat.isLoading
+                  || !isEditing
+                  || chat.isSaved
+                  || chat.draftRpe === null
+                  || settingsContext.isLoading
+                  || hasSettingsLoadError
+                  || requiresAvailability
+                }
                 onSendMessage={chat.sendMessage}
               />
               <WorkoutActionButtons

@@ -1,9 +1,10 @@
 use super::*;
+use crate::domain::settings::Weekday;
 use crate::domain::training_context::model::{
     AthleteProfileContext, HistoricalLoadTrendPoint, HistoricalTrainingContext,
     HistoricalWorkoutContext, IntervalsStatusContext, PlannedWorkoutBlockContext,
     PlannedWorkoutReference, ProjectedDayContext, ProjectedWorkoutContext, RecentDayContext,
-    RecentWorkoutContext, TrainingContext,
+    RecentWorkoutContext, TrainingContext, WeeklyAvailabilityContext,
 };
 
 #[test]
@@ -18,6 +19,12 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
         },
         profile: AthleteProfileContext {
             athlete_prompt: Some("Climb-focused athlete".to_string()),
+            availability_configured: true,
+            weekly_availability: vec![WeeklyAvailabilityContext {
+                weekday: Weekday::Mon,
+                available: true,
+                max_duration_minutes: Some(90),
+            }],
             ..AthleteProfileContext::default()
         },
         history: HistoricalTrainingContext {
@@ -99,6 +106,10 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
     assert!(rendered
         .stable_context
         .contains("\"ap\":\"Climb-focused athlete\""));
+    assert!(rendered.stable_context.contains("\"acfg\":true"));
+    assert!(rendered
+        .stable_context
+        .contains("\"av\":[{\"wd\":\"mon\",\"a\":true,\"mdm\":90}]"));
     assert!(rendered
         .stable_context
         .contains("\"lt\":[{\"d\":\"2026-03-31\",\"days\":1,\"tss\":42,\"t7\":37.5,\"t28\":51.3"));
@@ -149,4 +160,29 @@ fn compact_render_omits_nulls_and_empty_lists() {
     assert!(!rendered.volatile_context.contains("\"rd\":[]"));
     assert!(!rendered.volatile_context.contains("\"ud\":[]"));
     assert!(!rendered.volatile_context.contains("\"pd\":[]"));
+}
+
+#[test]
+fn compact_render_omits_weekly_availability_when_not_configured() {
+    let rendered = render_training_context(&TrainingContext {
+        generated_at_epoch_seconds: 1,
+        focus_workout_id: None,
+        focus_kind: "summary".to_string(),
+        intervals_status: IntervalsStatusContext {
+            activities: "ok".to_string(),
+            events: "ok".to_string(),
+        },
+        profile: AthleteProfileContext {
+            availability_configured: false,
+            weekly_availability: Vec::new(),
+            ..AthleteProfileContext::default()
+        },
+        history: HistoricalTrainingContext::default(),
+        recent_days: Vec::new(),
+        upcoming_days: Vec::new(),
+        projected_days: Vec::new(),
+    });
+
+    assert!(rendered.stable_context.contains("\"acfg\":false"));
+    assert!(!rendered.stable_context.contains("\"av\":"));
 }

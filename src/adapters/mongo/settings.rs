@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::llm::LlmProvider;
 use crate::domain::settings::{
-    AiAgentsConfig, AnalysisOptions, BoxFuture, CyclingSettings, IntervalsConfig, SettingsError,
-    UserSettings, UserSettingsRepository,
+    validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, BoxFuture,
+    CyclingSettings, IntervalsConfig, SettingsError, UserSettings, UserSettingsRepository, Weekday,
 };
 
 #[derive(Clone)]
@@ -24,6 +24,8 @@ struct SettingsDocument {
     ai_agents: AiAgentsDocument,
     intervals: IntervalsDocument,
     options: OptionsDocument,
+    #[serde(default = "default_availability_document")]
+    availability: AvailabilityDocument,
     cycling: CyclingDocument,
     created_at_epoch_seconds: i64,
     updated_at_epoch_seconds: i64,
@@ -42,11 +44,13 @@ struct AiAgentsDocument {
 struct IntervalsDocument {
     api_key: Option<String>,
     athlete_id: Option<String>,
+    #[serde(default)]
     connected: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 struct OptionsDocument {
+    #[serde(default)]
     analyze_without_heart_rate: bool,
 }
 
@@ -63,6 +67,39 @@ struct CyclingDocument {
     medications: Option<String>,
     athlete_notes: Option<String>,
     last_zone_update_epoch_seconds: Option<i64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+struct AvailabilityDocument {
+    #[serde(default)]
+    configured: bool,
+    #[serde(default = "default_availability_day_documents")]
+    days: Vec<AvailabilityDayDocument>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct AvailabilityDayDocument {
+    weekday: String,
+    available: bool,
+    max_duration_minutes: Option<u16>,
+}
+
+fn default_availability_document() -> AvailabilityDocument {
+    AvailabilityDocument {
+        configured: false,
+        days: default_availability_day_documents(),
+    }
+}
+
+fn default_availability_day_documents() -> Vec<AvailabilityDayDocument> {
+    ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        .into_iter()
+        .map(|weekday| AvailabilityDayDocument {
+            weekday: weekday.to_string(),
+            available: false,
+            max_duration_minutes: None,
+        })
+        .collect()
 }
 
 impl std::fmt::Debug for CyclingDocument {
@@ -237,6 +274,34 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
         })
     }
 
+    fn update_availability(
+        &self,
+        user_id: &str,
+        availability: AvailabilitySettings,
+        updated_at: i64,
+    ) -> BoxFuture<Result<(), SettingsError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let availability_document = map_domain_availability_to_document(&availability);
+            collection
+                .update_one(
+                    doc! { "user_id": &user_id },
+                    doc! {
+                        "$set": {
+                            "availability.configured": availability_document.configured,
+                            "availability.days": mongodb::bson::to_bson(&availability_document.days)
+                                .map_err(|e| SettingsError::Repository(e.to_string()))?,
+                            "updated_at_epoch_seconds": updated_at,
+                        }
+                    },
+                )
+                .await
+                .map_err(|e| SettingsError::Repository(e.to_string()))?;
+            Ok(())
+        })
+    }
+
     fn update_cycling(
         &self,
         user_id: &str,
@@ -296,6 +361,7 @@ fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
         options: AnalysisOptions {
             analyze_without_heart_rate: doc.options.analyze_without_heart_rate,
         },
+        availability: map_document_availability_to_domain(doc.availability),
         cycling: map_document_cycling_to_domain(doc.cycling),
         created_at_epoch_seconds: doc.created_at_epoch_seconds,
         updated_at_epoch_seconds: doc.updated_at_epoch_seconds,
@@ -325,6 +391,7 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
         options: OptionsDocument {
             analyze_without_heart_rate: settings.options.analyze_without_heart_rate,
         },
+        availability: map_domain_availability_to_document(&settings.availability),
         cycling: map_domain_cycling_to_document(&settings.cycling),
         created_at_epoch_seconds: settings.created_at_epoch_seconds,
         updated_at_epoch_seconds: settings.updated_at_epoch_seconds,
@@ -360,5 +427,502 @@ fn map_domain_cycling_to_document(cycling: &CyclingSettings) -> CyclingDocument 
         medications: cycling.medications.clone(),
         athlete_notes: cycling.athlete_notes.clone(),
         last_zone_update_epoch_seconds: cycling.last_zone_update_epoch_seconds,
+    }
+}
+
+fn map_document_availability_to_domain(document: AvailabilityDocument) -> AvailabilitySettings {
+    let has_complete_explicit_week = has_complete_explicit_week(&document.days);
+    let repaired_days = repair_availability_days(document.days);
+
+    match validation::validate_availability(AvailabilitySettings {
+        configured: document.configured && has_complete_explicit_week,
+        days: repaired_days,
+    }) {
+        Ok(mut availability) => {
+            if !has_complete_explicit_week {
+                availability.configured = false;
+            }
+            availability
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "falling back to default availability after unrecoverable settings document");
+            AvailabilitySettings::default()
+        }
+    }
+}
+
+fn repair_availability_days(days: Vec<AvailabilityDayDocument>) -> Vec<AvailabilityDay> {
+    use std::collections::BTreeMap;
+
+    let mut repaired = BTreeMap::<Weekday, AvailabilityDay>::new();
+
+    for day in days {
+        let weekday = day.weekday.trim().to_lowercase();
+        let Some(weekday) = Weekday::parse(&weekday) else {
+            continue;
+        };
+
+        repaired.insert(
+            weekday,
+            AvailabilityDay {
+                weekday,
+                available: day.available
+                    && day
+                        .max_duration_minutes
+                        .is_some_and(validation::is_allowed_availability_duration),
+                max_duration_minutes: if day.available
+                    && day
+                        .max_duration_minutes
+                        .is_some_and(validation::is_allowed_availability_duration)
+                {
+                    day.max_duration_minutes
+                } else {
+                    None
+                },
+            },
+        );
+    }
+
+    Weekday::ALL
+        .into_iter()
+        .map(|weekday| {
+            repaired.remove(&weekday).unwrap_or(AvailabilityDay {
+                weekday,
+                available: false,
+                max_duration_minutes: None,
+            })
+        })
+        .collect()
+}
+
+fn has_complete_explicit_week(days: &[AvailabilityDayDocument]) -> bool {
+    let normalized_weekdays = days
+        .iter()
+        .map(|day| day.weekday.trim().to_lowercase())
+        .collect::<Vec<_>>();
+    let distinct_valid_weekdays = days
+        .iter()
+        .map(|day| day.weekday.trim().to_lowercase())
+        .filter_map(|weekday| Weekday::parse(&weekday))
+        .collect::<std::collections::BTreeSet<_>>();
+
+    distinct_valid_weekdays.len() == 7 && normalized_weekdays.len() == 7
+}
+
+fn map_domain_availability_to_document(
+    availability: &AvailabilitySettings,
+) -> AvailabilityDocument {
+    AvailabilityDocument {
+        configured: availability.configured,
+        days: availability
+            .days
+            .iter()
+            .map(|day| AvailabilityDayDocument {
+                weekday: day.weekday.as_str().to_string(),
+                available: day.available,
+                max_duration_minutes: day.max_duration_minutes,
+            })
+            .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use mongodb::{
+        bson::{doc, oid::ObjectId},
+        Client,
+    };
+
+    use super::{
+        default_availability_document, map_document_availability_to_domain,
+        map_domain_availability_to_document, AiAgentsDocument, MongoUserSettingsRepository,
+        OptionsDocument, SettingsDocument,
+    };
+    use crate::domain::settings::{
+        AvailabilityDay, AvailabilitySettings, UserSettingsRepository, Weekday,
+    };
+
+    #[test]
+    fn settings_document_deserializes_missing_availability_with_full_week_default() {
+        let document = serde_json::json!({
+            "user_id": "user-1",
+            "ai_agents": {},
+            "intervals": {},
+            "options": {},
+            "cycling": {},
+            "created_at_epoch_seconds": 1,
+            "updated_at_epoch_seconds": 1
+        });
+
+        let parsed: SettingsDocument = serde_json::from_value(document).unwrap();
+
+        assert!(!parsed.availability.configured);
+        assert_eq!(parsed.availability.days.len(), 7);
+        assert!(parsed.availability.days.iter().all(|day| !day.available));
+    }
+
+    #[test]
+    fn map_document_availability_to_domain_falls_back_for_legacy_empty_days() {
+        let availability = map_document_availability_to_domain(super::AvailabilityDocument {
+            configured: false,
+            days: Vec::new(),
+        });
+
+        assert!(!availability.configured);
+        assert_eq!(availability.days.len(), 7);
+        assert!(availability.days.iter().all(|day| !day.available));
+    }
+
+    #[test]
+    fn map_document_availability_to_domain_repairs_case_and_missing_days() {
+        let availability = map_document_availability_to_domain(super::AvailabilityDocument {
+            configured: true,
+            days: vec![
+                super::AvailabilityDayDocument {
+                    weekday: " MON ".to_string(),
+                    available: true,
+                    max_duration_minutes: Some(60),
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Tue.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: Some(90),
+                },
+            ],
+        });
+
+        assert!(!availability.is_configured());
+        assert_eq!(availability.days.len(), 7);
+        assert_eq!(availability.days[0].weekday, Weekday::Mon);
+        assert_eq!(availability.days[0].max_duration_minutes, Some(60));
+        assert_eq!(availability.days[1].weekday, Weekday::Tue);
+        assert_eq!(availability.days[1].max_duration_minutes, None);
+        assert!(availability.days[2..].iter().all(|day| !day.available));
+    }
+
+    #[test]
+    fn map_document_availability_to_domain_sanitizes_invalid_duration_without_resetting_week() {
+        let availability = map_document_availability_to_domain(super::AvailabilityDocument {
+            configured: true,
+            days: vec![
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Mon.as_str().to_string(),
+                    available: true,
+                    max_duration_minutes: Some(45),
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Tue.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Wed.as_str().to_string(),
+                    available: true,
+                    max_duration_minutes: Some(90),
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Thu.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Fri.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Sat.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Sun.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+            ],
+        });
+
+        assert!(availability.is_configured());
+        assert_eq!(availability.days[0].weekday, Weekday::Mon);
+        assert!(!availability.days[0].available);
+        assert_eq!(availability.days[0].max_duration_minutes, None);
+        assert_eq!(availability.days[2].weekday, Weekday::Wed);
+        assert!(availability.days[2].available);
+        assert_eq!(availability.days[2].max_duration_minutes, Some(90));
+    }
+
+    #[test]
+    fn map_document_availability_to_domain_keeps_partial_legacy_week_unconfigured() {
+        let availability = map_document_availability_to_domain(super::AvailabilityDocument {
+            configured: true,
+            days: vec![
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Mon.as_str().to_string(),
+                    available: true,
+                    max_duration_minutes: Some(60),
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Tue.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+            ],
+        });
+
+        assert!(!availability.configured);
+        assert!(!availability.is_configured());
+        assert!(availability.days[0].available);
+        assert_eq!(availability.days[0].max_duration_minutes, Some(60));
+    }
+
+    #[test]
+    fn map_document_availability_to_domain_treats_duplicate_weekdays_as_unconfigured() {
+        let availability = map_document_availability_to_domain(super::AvailabilityDocument {
+            configured: true,
+            days: vec![
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Mon.as_str().to_string(),
+                    available: true,
+                    max_duration_minutes: Some(60),
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Mon.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Tue.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Wed.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Thu.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Fri.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Sat.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                super::AvailabilityDayDocument {
+                    weekday: Weekday::Sun.as_str().to_string(),
+                    available: false,
+                    max_duration_minutes: None,
+                },
+            ],
+        });
+
+        assert!(!availability.configured);
+        assert!(!availability.is_configured());
+    }
+
+    #[tokio::test]
+    async fn update_availability_updates_only_target_user_document() {
+        let Some(client) = test_mongo_client_or_skip().await else {
+            return;
+        };
+        let database_name = unique_test_database_name("user-settings-availability");
+        let repository = MongoUserSettingsRepository::new(client.clone(), &database_name);
+        let collection = client
+            .database(&database_name)
+            .collection::<SettingsDocument>("user_settings");
+
+        let user_1_id = "user-availability-target";
+        let user_2_id = "user-availability-untouched";
+
+        collection
+            .insert_many([
+                build_settings_document(user_1_id, 10),
+                build_settings_document(user_2_id, 20),
+            ])
+            .await
+            .unwrap();
+
+        let availability = AvailabilitySettings {
+            configured: true,
+            days: vec![
+                AvailabilityDay {
+                    weekday: Weekday::Mon,
+                    available: true,
+                    max_duration_minutes: Some(60),
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Tue,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Wed,
+                    available: true,
+                    max_duration_minutes: Some(90),
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Thu,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Fri,
+                    available: true,
+                    max_duration_minutes: Some(120),
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Sat,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Sun,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+            ],
+        };
+        let updated_at = 123_456;
+
+        repository
+            .update_availability(user_1_id, availability.clone(), updated_at)
+            .await
+            .unwrap();
+
+        let updated = collection
+            .find_one(doc! { "user_id": user_1_id })
+            .await
+            .unwrap()
+            .unwrap();
+        let untouched = collection
+            .find_one(doc! { "user_id": user_2_id })
+            .await
+            .unwrap()
+            .unwrap();
+
+        let expected_availability = map_domain_availability_to_document(&availability);
+
+        assert_eq!(
+            updated.availability.configured,
+            expected_availability.configured
+        );
+        assert_eq!(
+            updated.availability.days.len(),
+            expected_availability.days.len()
+        );
+        assert_eq!(
+            updated.availability.days[0].weekday,
+            expected_availability.days[0].weekday
+        );
+        assert_eq!(
+            updated.availability.days[0].available,
+            expected_availability.days[0].available
+        );
+        assert_eq!(
+            updated.availability.days[0].max_duration_minutes,
+            expected_availability.days[0].max_duration_minutes
+        );
+        assert_eq!(
+            updated.availability.days[2].weekday,
+            expected_availability.days[2].weekday
+        );
+        assert_eq!(
+            updated.availability.days[2].available,
+            expected_availability.days[2].available
+        );
+        assert_eq!(
+            updated.availability.days[2].max_duration_minutes,
+            expected_availability.days[2].max_duration_minutes
+        );
+        assert_eq!(updated.updated_at_epoch_seconds, updated_at);
+
+        let default_availability = default_availability_document();
+
+        assert_eq!(untouched.user_id, user_2_id);
+        assert_eq!(untouched.updated_at_epoch_seconds, 20);
+        assert_eq!(
+            untouched.availability.configured,
+            default_availability.configured
+        );
+        assert_eq!(
+            untouched.availability.days.len(),
+            default_availability.days.len()
+        );
+        assert!(untouched.availability.days.iter().all(|day| !day.available));
+        assert_eq!(untouched.availability.days[0].weekday, "mon");
+        assert_eq!(untouched.availability.days[6].weekday, "sun");
+
+        client.database(&database_name).drop().await.unwrap();
+    }
+
+    fn build_settings_document(user_id: &str, updated_at_epoch_seconds: i64) -> SettingsDocument {
+        SettingsDocument {
+            id: Some(ObjectId::new()),
+            user_id: user_id.to_string(),
+            ai_agents: AiAgentsDocument::default(),
+            intervals: super::IntervalsDocument::default(),
+            options: OptionsDocument::default(),
+            availability: default_availability_document(),
+            cycling: super::CyclingDocument::default(),
+            created_at_epoch_seconds: 1,
+            updated_at_epoch_seconds,
+        }
+    }
+
+    async fn test_mongo_client_or_skip() -> Option<Client> {
+        let mongo_uri = "mongodb://localhost:27017";
+        let client = match Client::with_uri_str(mongo_uri).await {
+            Ok(client) => client,
+            Err(error) => {
+                if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
+                    panic!("mongo settings test requires Mongo in CI: {error}");
+                }
+                eprintln!("skipping mongo settings test: failed to create client for {mongo_uri}: {error}");
+                return None;
+            }
+        };
+
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            client.database("admin").run_command(doc! { "ping": 1 }),
+        )
+        .await
+        {
+            Ok(Ok(_)) => Some(client),
+            Ok(Err(error)) => {
+                if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
+                    panic!("mongo settings test requires Mongo in CI: {error}");
+                }
+                eprintln!("skipping mongo settings test: failed to connect to Mongo at {mongo_uri}: {error}");
+                None
+            }
+            Err(_) => {
+                if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
+                    panic!("mongo settings test requires Mongo in CI: timed out connecting to Mongo at {mongo_uri}");
+                }
+                eprintln!(
+                    "skipping mongo settings test: timed out connecting to Mongo at {mongo_uri}"
+                );
+                None
+            }
+        }
+    }
+
+    fn unique_test_database_name(prefix: &str) -> String {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        format!("{prefix}-{unique}")
     }
 }

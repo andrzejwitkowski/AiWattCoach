@@ -26,6 +26,7 @@ pub(super) struct UserSettingsDto {
     pub(super) ai_agents: AiAgentsDto,
     pub(super) intervals: IntervalsDto,
     pub(super) options: OptionsDto,
+    pub(super) availability: AvailabilityDto,
     pub(super) cycling: CyclingDto,
 }
 
@@ -64,6 +65,20 @@ pub(super) struct IntervalsDto {
 pub(super) struct OptionsDto {
     #[serde(rename = "analyzeWithoutHeartRate")]
     pub(super) analyze_without_heart_rate: bool,
+}
+
+#[derive(Serialize)]
+pub(super) struct AvailabilityDto {
+    pub(super) configured: bool,
+    pub(super) days: Vec<AvailabilityDayDto>,
+}
+
+#[derive(Serialize)]
+pub(super) struct AvailabilityDayDto {
+    pub(super) weekday: String,
+    pub(super) available: bool,
+    #[serde(rename = "maxDurationMinutes")]
+    pub(super) max_duration_minutes: Option<u16>,
 }
 
 #[derive(Serialize)]
@@ -116,6 +131,19 @@ pub(crate) struct UpdateIntervalsRequest {
 pub(crate) struct UpdateOptionsRequest {
     #[serde(rename = "analyzeWithoutHeartRate")]
     pub(super) analyze_without_heart_rate: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct UpdateAvailabilityRequest {
+    pub(super) days: Vec<AvailabilityDayRequest>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AvailabilityDayRequest {
+    pub(super) weekday: String,
+    pub(super) available: bool,
+    #[serde(rename = "maxDurationMinutes")]
+    pub(super) max_duration_minutes: Option<u16>,
 }
 
 #[derive(Deserialize)]

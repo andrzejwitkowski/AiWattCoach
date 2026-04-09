@@ -6,9 +6,15 @@ use serde_json::Value;
 use tower::util::ServiceExt;
 
 use crate::shared::{
-    get_json, sample_summary, sample_summary_with_updated_at, session_cookie,
-    workout_summary_test_app, TestIdentityServiceWithSession, TestWorkoutSummaryService,
+    existing_summary, InMemoryCoachReplyOperationRepository, InMemoryWorkoutSummaryRepository,
+    TestAvailabilitySettingsService, TestClock, TestIdGenerator,
 };
+use crate::shared::{
+    get_json, sample_summary, sample_summary_with_updated_at, session_cookie,
+    workout_summary_test_app, workout_summary_test_app_with_settings,
+    TestIdentityServiceWithSession, TestWorkoutSummaryService,
+};
+use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSummaryService};
 
 #[tokio::test]
 async fn get_summary_requires_authentication() {
@@ -374,4 +380,77 @@ async fn send_message_returns_persisted_turn() {
             .unwrap(),
         "coach"
     );
+}
+
+#[tokio::test]
+async fn send_message_rejects_when_availability_is_missing() {
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")])
+            .with_availability_configured(false),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/workout-summaries/workout-1/messages")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"content":"Legs felt heavy today"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn send_message_rejects_when_real_settings_service_reports_missing_availability() {
+    let settings_service = TestAvailabilitySettingsService::unconfigured();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let service = WorkoutSummaryService::new(
+        repository.clone(),
+        InMemoryCoachReplyOperationRepository::default(),
+        TestClock,
+        TestIdGenerator::default(),
+    )
+    .with_settings_service(settings_service.clone());
+
+    let app = workout_summary_test_app_with_settings(
+        TestIdentityServiceWithSession::default(),
+        service,
+        Some(settings_service),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/workout-summaries/workout-1/messages")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"content":"Legs felt heavy today"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("error").and_then(Value::as_str),
+        Some("availability must be configured before chatting with coach")
+    );
+
+    let summary = repository
+        .find_by_user_id_and_workout_id("user-1", "workout-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(summary.messages.is_empty());
 }

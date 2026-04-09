@@ -12,11 +12,14 @@ use aiwattcoach::domain::{
     },
 };
 
+use super::fixtures::sample_summary_for_user;
+
 #[derive(Clone, Default)]
 pub(crate) struct TestWorkoutSummaryService {
     summaries: Arc<Mutex<Vec<WorkoutSummary>>>,
     processed_user_messages: Arc<Mutex<Vec<String>>>,
     coach_reply_delay: Option<Duration>,
+    availability_configured: bool,
 }
 
 impl TestWorkoutSummaryService {
@@ -25,11 +28,17 @@ impl TestWorkoutSummaryService {
             summaries: Arc::new(Mutex::new(summaries)),
             processed_user_messages: Arc::new(Mutex::new(Vec::new())),
             coach_reply_delay: None,
+            availability_configured: true,
         }
     }
 
     pub(crate) fn with_coach_reply_delay(mut self, delay: Duration) -> Self {
         self.coach_reply_delay = Some(delay);
+        self
+    }
+
+    pub(crate) fn with_availability_configured(mut self, configured: bool) -> Self {
+        self.availability_configured = configured;
         self
     }
 
@@ -246,6 +255,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
     ) -> BoxFuture<Result<SendMessageResult, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let processed_user_messages = self.processed_user_messages.clone();
+        let availability_configured = self.availability_configured;
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
@@ -264,6 +274,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             if summary.rpe.is_none() {
                 return Err(WorkoutSummaryError::Validation(
                     "rpe must be set before chatting with coach".to_string(),
+                ));
+            }
+            if !availability_configured {
+                return Err(WorkoutSummaryError::Validation(
+                    "availability must be configured before chatting with coach".to_string(),
                 ));
             }
 
@@ -306,6 +321,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
     ) -> BoxFuture<Result<PersistedUserMessage, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let processed_user_messages = self.processed_user_messages.clone();
+        let availability_configured = self.availability_configured;
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
@@ -324,6 +340,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             if summary.rpe.is_none() {
                 return Err(WorkoutSummaryError::Validation(
                     "rpe must be set before chatting with coach".to_string(),
+                ));
+            }
+            if !availability_configured {
+                return Err(WorkoutSummaryError::Validation(
+                    "availability must be configured before chatting with coach".to_string(),
                 ));
             }
 
@@ -359,6 +380,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let coach_reply_delay = self.coach_reply_delay;
+        let availability_configured = self.availability_configured;
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
@@ -380,6 +402,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             if summary.rpe.is_none() {
                 return Err(WorkoutSummaryError::Validation(
                     "rpe must be set before chatting with coach".to_string(),
+                ));
+            }
+            if !availability_configured {
+                return Err(WorkoutSummaryError::Validation(
+                    "availability must be configured before chatting with coach".to_string(),
                 ));
             }
 
@@ -412,34 +439,4 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             })
         })
     }
-}
-
-pub(crate) fn sample_summary(workout_id: &str) -> WorkoutSummary {
-    sample_summary_for_user("user-1", workout_id)
-}
-
-fn sample_summary_for_user(user_id: &str, workout_id: &str) -> WorkoutSummary {
-    WorkoutSummary {
-        id: format!("summary-{workout_id}"),
-        user_id: user_id.to_string(),
-        workout_id: workout_id.to_string(),
-        rpe: Some(6),
-        messages: Vec::new(),
-        saved_at_epoch_seconds: None,
-        workout_recap_text: None,
-        workout_recap_provider: None,
-        workout_recap_model: None,
-        workout_recap_generated_at_epoch_seconds: None,
-        created_at_epoch_seconds: 1_700_000_000,
-        updated_at_epoch_seconds: 1_700_000_000,
-    }
-}
-
-pub(crate) fn sample_summary_with_updated_at(
-    workout_id: &str,
-    updated_at_epoch_seconds: i64,
-) -> WorkoutSummary {
-    let mut summary = sample_summary(workout_id);
-    summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
-    summary
 }

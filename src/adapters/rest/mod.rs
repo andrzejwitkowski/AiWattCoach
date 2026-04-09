@@ -77,6 +77,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
             post(settings::test_intervals_connection),
         )
         .route("/api/settings/options", patch(settings::update_options))
+        .route(
+            "/api/settings/availability",
+            patch(settings::update_availability),
+        )
         .route("/api/settings/cycling", patch(settings::update_cycling))
         .route(
             "/api/athlete-summary",

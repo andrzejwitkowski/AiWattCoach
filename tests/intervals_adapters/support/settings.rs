@@ -3,8 +3,8 @@ use std::{future::Future, pin::Pin};
 use aiwattcoach::domain::{
     intervals::IntervalsCredentials,
     settings::{
-        AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError,
-        UserSettings, UserSettingsUseCases,
+        AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
+        SettingsError, UserSettings, UserSettingsUseCases,
     },
 };
 
@@ -24,6 +24,14 @@ impl FakeSettingsUseCases {
 }
 
 impl UserSettingsUseCases for FakeSettingsUseCases {
+    fn find_settings(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let settings = self.settings.clone();
+        Box::pin(async move { Ok(Some(settings)) })
+    }
+
     fn get_settings(&self, _user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let settings = self.settings.clone();
         Box::pin(async move { Ok(settings) })
@@ -60,6 +68,15 @@ impl UserSettingsUseCases for FakeSettingsUseCases {
         &self,
         _user_id: &str,
         _cycling: CyclingSettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let settings = self.settings.clone();
+        Box::pin(async move { Ok(settings) })
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: AvailabilitySettings,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let settings = self.settings.clone();
         Box::pin(async move { Ok(settings) })

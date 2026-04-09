@@ -1,9 +1,11 @@
 import { get, patch, post, AuthenticationError } from '../../../lib/httpClient';
 import {
+  type UserSettingsResponse,
   userSettingsResponseSchema,
   updateAiAgentsRequestSchema,
   updateIntervalsRequestSchema,
   updateOptionsRequestSchema,
+  updateAvailabilityRequestSchema,
   updateCyclingRequestSchema,
   testAiAgentsConnectionResponseSchema,
   testIntervalsConnectionResponseSchema,
@@ -187,6 +189,33 @@ export async function testIntervalsConnection(apiBaseUrl: string, data: unknown)
 export async function updateOptions(apiBaseUrl: string, data: unknown) {
   const validated = updateOptionsRequestSchema.parse(data);
   return patch(apiBaseUrl, '/api/settings/options', validated);
+}
+
+export async function updateAvailability(apiBaseUrl: string, data: unknown) {
+  const validated = updateAvailabilityRequestSchema.parse(data);
+
+  try {
+    const parsed = await patch<typeof validated, unknown>(apiBaseUrl, '/api/settings/availability', validated, {
+      allowedErrorStatuses: [400],
+    });
+
+    if (
+      parsed
+      && typeof parsed === 'object'
+      && 'message' in parsed
+      && typeof (parsed as { message?: unknown }).message === 'string'
+    ) {
+      throw new Error((parsed as { message: string }).message);
+    }
+
+    return userSettingsResponseSchema.parse(parsed) as UserSettingsResponse;
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      throw error;
+    }
+
+    throw new Error(`Failed to update availability: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export async function updateCycling(apiBaseUrl: string, data: unknown) {

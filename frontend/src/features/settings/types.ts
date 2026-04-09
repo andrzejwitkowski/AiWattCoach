@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const llmProviderSchema = z.enum(['openai', 'gemini', 'openrouter']);
+const availabilityWeekdaySchema = z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
 const aiAgentsSettingsSchema = z.object({
   openaiApiKey: z.string().nullable(),
@@ -40,6 +41,61 @@ const analysisOptionsSettingsSchema = z.object({
   analyzeWithoutHeartRate: z.boolean(),
 });
 
+export const availabilityDaySchema = z.object({
+  weekday: availabilityWeekdaySchema,
+  available: z.boolean(),
+  maxDurationMinutes: z.number().int().nullable(),
+}).superRefine((value, ctx) => {
+  const allowedMinutes = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300];
+
+  if (value.available && value.maxDurationMinutes === null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Available days require maxDurationMinutes',
+      path: ['maxDurationMinutes'],
+    });
+  }
+
+  if (!value.available && value.maxDurationMinutes !== null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Unavailable days must not define maxDurationMinutes',
+      path: ['maxDurationMinutes'],
+    });
+  }
+
+  if (
+    value.available
+    && value.maxDurationMinutes !== null
+    && !allowedMinutes.includes(value.maxDurationMinutes)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Available days must use a supported duration step',
+      path: ['maxDurationMinutes'],
+    });
+  }
+});
+
+function validateExplicitWeek(days: AvailabilityDay[], ctx: z.RefinementCtx) {
+  const distinctWeekdays = new Set(days.map((day) => day.weekday));
+
+  if (distinctWeekdays.size !== 7) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Availability must include each weekday exactly once',
+      path: ['days'],
+    });
+  }
+}
+
+const availabilitySettingsSchema = z.object({
+  configured: z.boolean(),
+  days: z.array(availabilityDaySchema).length(7),
+}).superRefine((value, ctx) => {
+  validateExplicitWeek(value.days, ctx);
+});
+
 const cyclingSettingsDataSchema = z.object({
   fullName: z.string().nullable(),
   age: z.number().nullable(),
@@ -58,6 +114,7 @@ export const userSettingsResponseSchema = z.object({
   aiAgents: aiAgentsSettingsSchema,
   intervals: intervalsSettingsSchema,
   options: analysisOptionsSettingsSchema,
+  availability: availabilitySettingsSchema,
   cycling: cyclingSettingsDataSchema,
 });
 
@@ -100,6 +157,14 @@ export const updateOptionsRequestSchema = z.object({
 
 export type UpdateOptionsRequest = z.infer<typeof updateOptionsRequestSchema>;
 
+export const updateAvailabilityRequestSchema = z.object({
+  days: z.array(availabilityDaySchema).length(7),
+}).superRefine((value, ctx) => {
+  validateExplicitWeek(value.days, ctx);
+});
+
+export type UpdateAvailabilityRequest = z.infer<typeof updateAvailabilityRequestSchema>;
+
 export const updateCyclingRequestSchema = z.object({
   fullName: z.string().nullable().optional(),
   age: z.number().int().positive().max(120).nullable().optional(),
@@ -116,3 +181,17 @@ export const updateCyclingRequestSchema = z.object({
 export type UpdateCyclingRequest = z.infer<typeof updateCyclingRequestSchema>;
 
 export type CyclingSettingsData = z.infer<typeof cyclingSettingsDataSchema>;
+export type AvailabilitySettingsData = z.infer<typeof availabilitySettingsSchema>;
+export type AvailabilityDay = z.infer<typeof availabilityDaySchema>;
+
+export function hasExplicitAvailabilityWeek(days: AvailabilityDay[]): boolean {
+  return days.length === 7 && new Set(days.map((day) => day.weekday)).size === 7;
+}
+
+export function isAvailabilityConfigured(availability: AvailabilitySettingsData | null | undefined): boolean {
+  if (!availability) {
+    return false;
+  }
+
+  return availability.configured && hasExplicitAvailabilityWeek(availability.days) && availability.days.some((day) => day.available);
+}

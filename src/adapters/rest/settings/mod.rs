@@ -8,5 +8,5 @@ mod mapping;
 
 pub use handlers::{
     admin_get_user_settings, get_settings, test_ai_agents_connection, test_intervals_connection,
-    update_ai_agents, update_cycling, update_intervals, update_options,
+    update_ai_agents, update_availability, update_cycling, update_intervals, update_options,
 };

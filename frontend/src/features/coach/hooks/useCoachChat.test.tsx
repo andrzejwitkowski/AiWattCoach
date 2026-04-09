@@ -9,7 +9,12 @@ import {
   saveWorkoutSummary,
   updateWorkoutSummaryRpe,
 } from '../api/workoutSummary';
-import { buildWorkoutSummaryWebSocketUrl, useCoachChat } from './useCoachChat';
+import {
+  availabilityRequiredChatError,
+  buildWorkoutSummaryWebSocketUrl,
+  isAvailabilityRequiredChatError,
+  useCoachChat,
+} from './useCoachChat';
 
 vi.mock('../api/workoutSummary', () => ({
   createWorkoutSummary: vi.fn(),
@@ -159,6 +164,47 @@ describe('useCoachChat', () => {
 
     expect(createWorkoutSummary).not.toHaveBeenCalled();
     expect(result.current.error).toBeNull();
+  });
+
+  it('shows backend availability errors without appending a temporary user message', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Need feedback');
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'error',
+            error: availabilityRequiredChatError,
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.error).toBe(availabilityRequiredChatError);
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0]?.content).toBe('Need feedback');
+  });
+
+  it('recognizes the backend availability error sentinel', () => {
+    expect(isAvailabilityRequiredChatError(availabilityRequiredChatError)).toBe(true);
+    expect(isAvailabilityRequiredChatError('Availability must be configured before chatting with coach.')).toBe(true);
+    expect(isAvailabilityRequiredChatError('other error')).toBe(false);
+    expect(isAvailabilityRequiredChatError(null)).toBe(false);
   });
 
   it('persists draft rpe before first chat message', async () => {

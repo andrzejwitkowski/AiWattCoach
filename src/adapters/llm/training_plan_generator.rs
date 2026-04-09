@@ -20,7 +20,9 @@ const TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling 
 const TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Generate a 14-day internal cycling plan window using only the backend-supported workout grammar. Use the packed training context and the completed workout recap as the planning basis.";
 const TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Help correct invalid dated workout sections using only the backend-supported workout grammar. Only rewrite the invalid dated sections provided.";
 const TRAINING_PLAN_OUTPUT_GRAMMAR: &str = "Critical rules: Output ONLY the raw workout text. Do not include commentary, greetings, markdown fences, or prose before/after the dated sections. Every actionable workout step MUST begin with a hyphen followed by a space (`- `). Do not invent syntax. Output grammar: One dated section per day. Start each section with a YYYY-MM-DD line. Follow with either `Rest Day` or workout-builder text lines. Block titles and descriptions are allowed on lines that do not start with `- ` and do not end with `x`. Step syntax: `- [Duration] [Target]`. Ramp syntax: `- [Duration] ramp [Start Target]-[End Target]`. Repeat headers must end with `x`, such as `Main Set 4x`. Supported durations: `30s`, `5m`, `45m`. Supported targets: `65%`, `95-105%`, `120-160W`. Example step: `- 45m 65%`. Example output: `2026-04-06\nWarmup\n- 15m ramp 100-270W\n2026-04-07\nRest Day`. Do not use cadence, zone targets, inline text cues, hour units, or distance units because the current backend parser does not accept them. For correction prompts, Only output corrected dated sections for the invalid dates you are fixing.";
-const TRAINING_PLAN_PLANNING_GUIDELINES: &str = "Planning guidelines: Follow a durability-first approach. Road cycling, especially masters racing, is stochastic; prioritize power repeatability and lactate clearance over pure steady-state aerobic work. Treat athlete age 45+, body-weight changes, and medications such as beta-blockers as fixed environmental constraints, not pathologies. Metric hierarchy: RPE over power over TSS/TSB over heart rate. If RPE stays low or moderate despite high fatigue metrics, trust recovery capacity and maintain load. Ignore heart rate for intensity pacing when beta-blockers are present. Never prescribe more than 2 consecutive Rest Day entries unless the athlete explicitly reports illness or injury. During build phases, TSB/Form may sit in the -15 to -25 range without forcing emergency rest. Prevent detraining by preferring Active Recovery over total inactivity when extra recovery is needed. Treat races as Category C by default unless the context explicitly says otherwise. For Category C races, do not taper: treat the race like a high-intensity stochastic interval session, keep normal training load during race week, keep Tuesday and Wednesday interval sessions before a Sunday race when the context supports it, allow at most one light spinning or Rest Day on Friday or Saturday before the race, and schedule recovery or light endurance the day after the race before returning to structured intervals within 48 hours. When race time is materially earlier than normal training time, gradually shift key sessions toward the race start window to support circadian rhythm and heat adaptation.";
+const TRAINING_PLAN_PLANNING_GUIDELINES_BASE: &str = "Planning guidelines: Follow a durability-first approach. Road cycling, especially masters racing, is stochastic; prioritize power repeatability and lactate clearance over pure steady-state aerobic work. Treat athlete age 45+, body-weight changes, and medications such as beta-blockers as fixed environmental constraints, not pathologies. Metric hierarchy: RPE over power over TSS/TSB over heart rate. If RPE stays low or moderate despite high fatigue metrics, trust recovery capacity and maintain load. Ignore heart rate for intensity pacing when beta-blockers are present. Never prescribe more than 2 consecutive Rest Day entries unless the athlete explicitly reports illness or injury. During build phases, TSB/Form may sit in the -15 to -25 range without forcing emergency rest. Prevent detraining by preferring Active Recovery over total inactivity when extra recovery is needed. Treat races as Category C by default unless the context explicitly says otherwise. For Category C races, do not taper: treat the race like a high-intensity stochastic interval session, keep normal training load during race week, keep Tuesday and Wednesday interval sessions before a Sunday race when the context supports it, allow at most one light spinning or Rest Day on Friday or Saturday before the race, and schedule recovery or light endurance the day after the race before returning to structured intervals within 48 hours. When race time is materially earlier than normal training time, gradually shift key sessions toward the race start window to support circadian rhythm and heat adaptation.";
+const TRAINING_PLAN_AVAILABILITY_CONFIGURED_GUIDANCE: &str = "Weekly availability is mandatory and must be respected: only schedule workouts on weekdays marked available, keep unavailable days as Rest Day, and never exceed the configured max duration minutes for each available weekday.";
+const TRAINING_PLAN_AVAILABILITY_UNCONFIGURED_GUIDANCE: &str = "Weekly availability is not configured in this context. Do not infer unavailable days or extra rest constraints from missing availability data. Plan a sensible 14-day cycling window from the training context alone, and avoid claiming that weekly availability is configured.";
 
 #[derive(Clone)]
 pub struct TrainingPlanLlmGenerator<Time>
@@ -165,7 +167,9 @@ where
                     config,
                     LlmChatRequest {
                         user_id,
-                        system_prompt: training_plan_initial_window_system_prompt(),
+                        system_prompt: training_plan_initial_window_system_prompt(
+                            context.context.profile.availability_configured,
+                        ),
                         stable_context,
                         volatile_context,
                         conversation: vec![LlmChatMessage {
@@ -240,7 +244,9 @@ where
                     config,
                     LlmChatRequest {
                         user_id,
-                        system_prompt: training_plan_correction_system_prompt(),
+                        system_prompt: training_plan_correction_system_prompt(
+                            context.context.profile.availability_configured,
+                        ),
                         stable_context,
                         volatile_context,
                         conversation: vec![LlmChatMessage {
@@ -268,16 +274,28 @@ fn training_plan_recap_system_prompt() -> String {
     format!("{TRAINING_PLAN_RECAP_SYSTEM_PROMPT_BASE} {PACKED_TRAINING_CONTEXT_LEGEND}")
 }
 
-fn training_plan_initial_window_system_prompt() -> String {
+fn training_plan_initial_window_system_prompt(availability_configured: bool) -> String {
     format!(
-        "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} {TRAINING_PLAN_PLANNING_GUIDELINES} {TRAINING_PLAN_OUTPUT_GRAMMAR} {PACKED_TRAINING_CONTEXT_LEGEND}"
+        "{TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE} {} {TRAINING_PLAN_OUTPUT_GRAMMAR} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        training_plan_planning_guidelines(availability_configured),
     )
 }
 
-fn training_plan_correction_system_prompt() -> String {
+fn training_plan_correction_system_prompt(availability_configured: bool) -> String {
     format!(
-        "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} {TRAINING_PLAN_PLANNING_GUIDELINES} {TRAINING_PLAN_OUTPUT_GRAMMAR} {PACKED_TRAINING_CONTEXT_LEGEND}"
+        "{TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE} {} {TRAINING_PLAN_OUTPUT_GRAMMAR} {PACKED_TRAINING_CONTEXT_LEGEND}",
+        training_plan_planning_guidelines(availability_configured),
     )
+}
+
+fn training_plan_planning_guidelines(availability_configured: bool) -> String {
+    let availability_guidance = if availability_configured {
+        TRAINING_PLAN_AVAILABILITY_CONFIGURED_GUIDANCE
+    } else {
+        TRAINING_PLAN_AVAILABILITY_UNCONFIGURED_GUIDANCE
+    };
+
+    format!("{TRAINING_PLAN_PLANNING_GUIDELINES_BASE} {availability_guidance}")
 }
 
 #[cfg(test)]
@@ -289,14 +307,26 @@ mod tests {
     #[test]
     fn training_plan_prompts_include_durability_guidelines() {
         for prompt in [
-            training_plan_initial_window_system_prompt(),
-            training_plan_correction_system_prompt(),
+            training_plan_initial_window_system_prompt(true),
+            training_plan_correction_system_prompt(true),
         ] {
             assert!(
                 prompt.contains("Metric hierarchy: RPE over power over TSS/TSB over heart rate.")
             );
             assert!(prompt.contains("Never prescribe more than 2 consecutive Rest Day entries unless the athlete explicitly reports illness or injury."));
             assert!(prompt.contains("Treat races as Category C by default unless the context explicitly says otherwise."));
+            assert!(prompt.contains("Weekly availability is mandatory and must be respected"));
+        }
+    }
+
+    #[test]
+    fn training_plan_prompts_adjust_availability_guidance_when_not_configured() {
+        for prompt in [
+            training_plan_initial_window_system_prompt(false),
+            training_plan_correction_system_prompt(false),
+        ] {
+            assert!(prompt.contains("Weekly availability is not configured in this context."));
+            assert!(!prompt.contains("Weekly availability is mandatory and must be respected"));
         }
     }
 }

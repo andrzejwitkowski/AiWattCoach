@@ -322,6 +322,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             ),
         )
         .with_athlete_summary_service(athlete_summary_service.clone())
+        .with_settings_service(settings_service.clone())
         .with_latest_completed_activity_service(Arc::new(
             LatestCompletedActivityAdapter::new(activity_repository.clone()),
         )),

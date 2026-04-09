@@ -17,6 +17,7 @@ type SettingsOverrides = {
   aiAgents?: Partial<UserSettingsResponse['aiAgents']>;
   intervals?: Partial<UserSettingsResponse['intervals']>;
   options?: Partial<UserSettingsResponse['options']>;
+  availability?: Partial<UserSettingsResponse['availability']>;
   cycling?: Partial<UserSettingsResponse['cycling']>;
 };
 
@@ -43,6 +44,19 @@ function buildSettings(overrides?: SettingsOverrides): UserSettingsResponse {
     options: {
       analyzeWithoutHeartRate: false,
       ...overrides?.options,
+    },
+    availability: {
+      configured: true,
+      days: [
+        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+        { weekday: 'tue', available: false, maxDurationMinutes: null },
+        { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+        { weekday: 'thu', available: false, maxDurationMinutes: null },
+        { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+        { weekday: 'sat', available: false, maxDurationMinutes: null },
+        { weekday: 'sun', available: false, maxDurationMinutes: null },
+      ],
+      ...overrides?.availability,
     },
     cycling: {
       fullName: null,

@@ -1,13 +1,17 @@
 use super::{
-    AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError, UserSettings,
-    UserSettingsRepository,
+    AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
+    SettingsError, UserSettings, UserSettingsRepository,
 };
 use crate::domain::identity::Clock;
 use crate::domain::llm::LlmContextCacheRepository;
-use crate::domain::settings::ports::BoxFuture;
+use crate::domain::settings::{ports::BoxFuture, validation};
 use std::sync::Arc;
 
 pub trait UserSettingsUseCases: Send + Sync {
+    fn find_settings(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>>;
     fn get_settings(&self, user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>>;
     fn update_ai_agents(
         &self,
@@ -23,6 +27,11 @@ pub trait UserSettingsUseCases: Send + Sync {
         &self,
         user_id: &str,
         options: AnalysisOptions,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>>;
+    fn update_availability(
+        &self,
+        user_id: &str,
+        availability: AvailabilitySettings,
     ) -> BoxFuture<Result<UserSettings, SettingsError>>;
     fn update_cycling(
         &self,
@@ -78,6 +87,15 @@ where
     Repo: UserSettingsRepository,
     Time: Clock,
 {
+    fn find_settings(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let repository = self.repository.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { repository.find_by_user_id(&user_id).await })
+    }
+
     fn get_settings(&self, user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let service = self.clone();
         let user_id = user_id.to_string();
@@ -193,6 +211,31 @@ where
                 })
         })
     }
+
+    fn update_availability(
+        &self,
+        user_id: &str,
+        availability: AvailabilitySettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            service.get_or_create(&user_id).await?;
+            let availability = validation::validate_availability(availability)?;
+            let now = service.clock.now_epoch_seconds();
+            service
+                .repository
+                .update_availability(&user_id, availability, now)
+                .await?;
+            service
+                .repository
+                .find_by_user_id(&user_id)
+                .await?
+                .ok_or_else(|| {
+                    SettingsError::Repository("settings disappeared after update".to_string())
+                })
+        })
+    }
 }
 
 fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConfig) -> bool {
@@ -295,6 +338,24 @@ mod tests {
         ) -> BoxFuture<Result<(), SettingsError>> {
             Box::pin(async move { unreachable!("not used in test") })
         }
+
+        fn update_availability(
+            &self,
+            _user_id: &str,
+            availability: AvailabilitySettings,
+            updated_at_epoch_seconds: i64,
+        ) -> BoxFuture<Result<(), SettingsError>> {
+            let settings = self.settings.clone();
+            Box::pin(async move {
+                let mut guard = settings.lock().unwrap();
+                let current = guard
+                    .as_mut()
+                    .ok_or_else(|| SettingsError::Repository("settings not found".to_string()))?;
+                current.availability = availability;
+                current.updated_at_epoch_seconds = updated_at_epoch_seconds;
+                Ok(())
+            })
+        }
     }
 
     #[derive(Clone, Default)]
@@ -336,6 +397,16 @@ mod tests {
                 Ok(())
             })
         }
+    }
+
+    #[tokio::test]
+    async fn find_settings_does_not_create_defaults_when_missing() {
+        let repository = InMemoryUserSettingsRepository::default();
+        let service = UserSettingsService::new(repository, TestClock);
+
+        let found = service.find_settings("user-1").await.unwrap();
+
+        assert!(found.is_none());
     }
 
     #[tokio::test]
@@ -389,5 +460,26 @@ mod tests {
             .unwrap();
 
         assert!(cache_repository.deleted_users().is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_availability_normalizes_inconsistent_configured_flag() {
+        let settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let service = UserSettingsService::new(repository, TestClock);
+
+        let updated = service
+            .update_availability(
+                "user-1",
+                AvailabilitySettings {
+                    configured: true,
+                    days: super::super::model::default_availability_days(),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!updated.availability.configured);
+        assert!(!updated.availability.is_configured());
     }
 }

@@ -43,6 +43,12 @@ type PendingSocketState = {
   promise: Promise<WebSocket>;
 };
 
+export const availabilityRequiredChatError = 'availability must be configured before chatting with coach';
+
+export function isAvailabilityRequiredChatError(error: string | null | undefined): boolean {
+  return /availability\s+must\s+be\s+configured\s+before\s+chatting\s+with\s+coach/i.test(error ?? '');
+}
+
 class StaleWorkoutSelectionError extends Error {
   constructor() {
     super('Workout selection changed before the request completed.');

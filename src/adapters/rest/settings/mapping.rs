@@ -1,11 +1,12 @@
 use crate::domain::settings::{
-    mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig,
-    SettingsError, UserSettings,
+    mask_sensitive, validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay,
+    AvailabilitySettings, CyclingSettings, IntervalsConfig, SettingsError, UserSettings, Weekday,
 };
 
 use super::dto::{
-    AiAgentsDto, CyclingDto, IntervalsDto, OptionsDto, UpdateAiAgentsRequest, UpdateCyclingRequest,
-    UpdateIntervalsRequest, UpdateOptionsRequest, UserSettingsDto,
+    AiAgentsDto, AvailabilityDayDto, AvailabilityDto, CyclingDto, IntervalsDto, OptionsDto,
+    UpdateAiAgentsRequest, UpdateAvailabilityRequest, UpdateCyclingRequest, UpdateIntervalsRequest,
+    UpdateOptionsRequest, UserSettingsDto,
 };
 use super::input::{
     apply_field_update, normalize_string_input, parse_provider_settings_input, FieldUpdate,
@@ -36,6 +37,19 @@ pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
         options: OptionsDto {
             analyze_without_heart_rate: settings.options.analyze_without_heart_rate,
         },
+        availability: AvailabilityDto {
+            configured: settings.availability.configured,
+            days: settings
+                .availability
+                .days
+                .iter()
+                .map(|day| AvailabilityDayDto {
+                    weekday: day.weekday.as_str().to_string(),
+                    available: day.available,
+                    max_duration_minutes: day.max_duration_minutes,
+                })
+                .collect(),
+        },
         cycling: CyclingDto {
             full_name: settings.cycling.full_name.clone(),
             age: settings.cycling.age,
@@ -50,6 +64,34 @@ pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
             last_zone_update_epoch_seconds: settings.cycling.last_zone_update_epoch_seconds,
         },
     }
+}
+
+pub(super) fn map_availability_update(
+    body: UpdateAvailabilityRequest,
+) -> Result<AvailabilitySettings, SettingsError> {
+    let days: Vec<AvailabilityDay> = body
+        .days
+        .into_iter()
+        .map(|day| {
+            let weekday = day.weekday.trim().to_lowercase();
+            let weekday = Weekday::parse(&weekday).ok_or_else(|| {
+                SettingsError::Validation(format!(
+                    "availability weekday '{}' is invalid",
+                    day.weekday
+                ))
+            })?;
+
+            Ok(AvailabilityDay {
+                weekday,
+                available: day.available,
+                max_duration_minutes: day.max_duration_minutes,
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    validation::validate_availability(AvailabilitySettings {
+        configured: true,
+        days,
+    })
 }
 
 pub(super) fn map_ai_agents_update(

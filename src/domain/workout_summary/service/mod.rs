@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::domain::{
     athlete_summary::AthleteSummaryUseCases,
     identity::{Clock, IdGenerator},
+    settings::UserSettingsUseCases,
     training_plan::TrainingPlanUseCases,
 };
 
@@ -143,6 +144,7 @@ where
     ids: Ids,
     coach: Arc<dyn WorkoutCoach>,
     athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
+    settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     training_plan_service: Option<Arc<dyn TrainingPlanUseCases>>,
     latest_completed_activity_service: Option<Arc<dyn LatestCompletedActivityUseCases>>,
 }
@@ -180,6 +182,7 @@ where
             ids,
             coach,
             athlete_summary_service: None,
+            settings_service: None,
             training_plan_service: None,
             latest_completed_activity_service: None,
         }
@@ -190,6 +193,14 @@ where
         athlete_summary_service: Arc<dyn AthleteSummaryUseCases>,
     ) -> Self {
         self.athlete_summary_service = Some(athlete_summary_service);
+        self
+    }
+
+    pub fn with_settings_service(
+        mut self,
+        settings_service: Arc<dyn UserSettingsUseCases>,
+    ) -> Self {
+        self.settings_service = Some(settings_service);
         self
     }
 
@@ -231,6 +242,44 @@ where
             .await
     }
 
+    async fn ensure_availability_configured_for_coach(
+        &self,
+        user_id: &str,
+    ) -> Result<(), WorkoutSummaryError> {
+        let Some(settings_service) = &self.settings_service else {
+            return Ok(());
+        };
+
+        let settings = settings_service
+            .find_settings(user_id)
+            .await
+            .map_err(|error| match error {
+                crate::domain::settings::SettingsError::Repository(message) => {
+                    WorkoutSummaryError::Repository(message)
+                }
+                crate::domain::settings::SettingsError::Unauthenticated => {
+                    WorkoutSummaryError::Validation("authentication is required".to_string())
+                }
+                crate::domain::settings::SettingsError::Validation(message) => {
+                    WorkoutSummaryError::Validation(message)
+                }
+            })?
+            .unwrap_or_else(|| {
+                crate::domain::settings::UserSettings::new_defaults(
+                    user_id.to_string(),
+                    self.clock.now_epoch_seconds(),
+                )
+            });
+
+        if settings.availability.is_configured() {
+            Ok(())
+        } else {
+            Err(WorkoutSummaryError::Validation(
+                "availability must be configured before chatting with coach".to_string(),
+            ))
+        }
+    }
+
     async fn append_message_with_role_and_id(
         &self,
         user_id: &str,
@@ -250,6 +299,10 @@ where
             ));
         }
         let content = validate_message_content(&content)?;
+        if require_open_summary && matches!(role, MessageRole::User) {
+            self.ensure_availability_configured_for_coach(user_id)
+                .await?;
+        }
         let now = self.clock.now_epoch_seconds();
         let message = ConversationMessage {
             id: message_id.unwrap_or_else(|| self.ids.new_id("message")),

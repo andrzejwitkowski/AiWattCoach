@@ -159,7 +159,8 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
                 .with_context_cache_repository(Arc::new(cache_repository)),
             ),
         )
-        .with_athlete_summary_service(Arc::new(athlete_summary_service.clone())),
+        .with_athlete_summary_service(Arc::new(athlete_summary_service.clone()))
+        .with_settings_service(settings_service.clone()),
     );
 
     let app = build_app_with_frontend_dist(

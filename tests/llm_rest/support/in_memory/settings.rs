@@ -1,5 +1,7 @@
 use super::*;
 
+use aiwattcoach::domain::settings::Weekday;
+
 #[derive(Clone, Default)]
 pub(crate) struct InMemoryUserSettingsRepository {
     settings: Arc<Mutex<BTreeMap<String, UserSettings>>>,
@@ -113,10 +115,70 @@ impl UserSettingsRepository for InMemoryUserSettingsRepository {
             Ok(())
         })
     }
+
+    fn update_availability(
+        &self,
+        user_id: &str,
+        availability: AvailabilitySettings,
+        updated_at_epoch_seconds: i64,
+    ) -> SettingsBoxFuture<Result<(), SettingsError>> {
+        let settings = self.settings.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut settings = settings.lock().unwrap();
+            let Some(existing) = settings.get_mut(&user_id) else {
+                return Err(SettingsError::Repository("settings not found".to_string()));
+            };
+            existing.availability = availability;
+            existing.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
 }
 
 pub(crate) fn sample_user_settings() -> UserSettings {
-    UserSettings::new_defaults("user-1".to_string(), 1_700_000_000)
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_700_000_000);
+    settings.availability = AvailabilitySettings {
+        configured: true,
+        days: vec![
+            AvailabilityDay {
+                weekday: Weekday::Mon,
+                available: true,
+                max_duration_minutes: Some(60),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Tue,
+                available: true,
+                max_duration_minutes: Some(60),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Wed,
+                available: true,
+                max_duration_minutes: Some(90),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Thu,
+                available: true,
+                max_duration_minutes: Some(90),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Fri,
+                available: true,
+                max_duration_minutes: Some(120),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Sat,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Sun,
+                available: false,
+                max_duration_minutes: None,
+            },
+        ],
+    };
+    settings
 }
 
 pub(crate) fn ai_config(

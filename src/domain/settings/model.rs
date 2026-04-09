@@ -40,6 +40,74 @@ pub struct AnalysisOptions {
     pub analyze_without_heart_rate: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub enum Weekday {
+    #[default]
+    Mon,
+    Tue,
+    Wed,
+    Thu,
+    Fri,
+    Sat,
+    Sun,
+}
+
+impl Weekday {
+    pub const ALL: [Self; 7] = [
+        Self::Mon,
+        Self::Tue,
+        Self::Wed,
+        Self::Thu,
+        Self::Fri,
+        Self::Sat,
+        Self::Sun,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Mon => "mon",
+            Self::Tue => "tue",
+            Self::Wed => "wed",
+            Self::Thu => "thu",
+            Self::Fri => "fri",
+            Self::Sat => "sat",
+            Self::Sun => "sun",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "mon" => Some(Self::Mon),
+            "tue" => Some(Self::Tue),
+            "wed" => Some(Self::Wed),
+            "thu" => Some(Self::Thu),
+            "fri" => Some(Self::Fri),
+            "sat" => Some(Self::Sat),
+            "sun" => Some(Self::Sun),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for Weekday {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AvailabilityDay {
+    pub weekday: Weekday,
+    pub available: bool,
+    pub max_duration_minutes: Option<u16>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AvailabilitySettings {
+    pub configured: bool,
+    pub days: Vec<AvailabilityDay>,
+}
+
 #[derive(Clone, PartialEq, Default)]
 pub struct CyclingSettings {
     pub full_name: Option<String>,
@@ -96,6 +164,7 @@ pub struct UserSettings {
     pub ai_agents: AiAgentsConfig,
     pub intervals: IntervalsConfig,
     pub options: AnalysisOptions,
+    pub availability: AvailabilitySettings,
     pub cycling: CyclingSettings,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
@@ -108,11 +177,60 @@ impl UserSettings {
             ai_agents: AiAgentsConfig::default(),
             intervals: IntervalsConfig::default(),
             options: AnalysisOptions::default(),
+            availability: AvailabilitySettings::default(),
             cycling: CyclingSettings::default(),
             created_at_epoch_seconds: now_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
         }
     }
+}
+
+impl AvailabilitySettings {
+    pub fn is_configured(&self) -> bool {
+        self.configured && self.days.len() == 7 && self.days.iter().any(|day| day.available)
+    }
+
+    pub fn from_days(days: Vec<AvailabilityDay>) -> Self {
+        let ordered_days = order_availability_days(days);
+        let configured = ordered_days.len() == Weekday::ALL.len()
+            && ordered_days.iter().any(|day| day.available);
+        Self {
+            configured,
+            days: ordered_days,
+        }
+    }
+}
+
+impl Default for AvailabilitySettings {
+    fn default() -> Self {
+        Self {
+            configured: false,
+            days: default_availability_days(),
+        }
+    }
+}
+
+pub fn default_availability_days() -> Vec<AvailabilityDay> {
+    Weekday::ALL
+        .into_iter()
+        .map(|weekday| AvailabilityDay {
+            weekday,
+            available: false,
+            max_duration_minutes: None,
+        })
+        .collect()
+}
+
+fn order_availability_days(days: Vec<AvailabilityDay>) -> Vec<AvailabilityDay> {
+    let mut by_weekday = days
+        .into_iter()
+        .map(|day| (day.weekday, day))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    Weekday::ALL
+        .into_iter()
+        .filter_map(|weekday| by_weekday.remove(&weekday))
+        .collect()
 }
 
 pub fn mask_sensitive(value: &Option<String>) -> Option<String> {
@@ -201,5 +319,87 @@ mod tests {
         assert!(!debug_output.contains("medication details"));
         assert!(!debug_output.contains("note details"));
         assert!(debug_output.contains("<redacted:"));
+    }
+
+    #[test]
+    fn availability_is_not_configured_without_any_available_days() {
+        let settings = AvailabilitySettings {
+            configured: true,
+            days: default_availability_days(),
+        };
+
+        assert!(!settings.is_configured());
+    }
+
+    #[test]
+    fn availability_from_days_derives_configured_state() {
+        let mut days = default_availability_days();
+        days[0].available = true;
+        days[0].max_duration_minutes = Some(60);
+
+        let settings = AvailabilitySettings::from_days(days);
+
+        assert!(settings.configured);
+        assert!(settings.is_configured());
+    }
+
+    #[test]
+    fn availability_from_days_orders_weekdays_canonically() {
+        let settings = AvailabilitySettings::from_days(vec![
+            AvailabilityDay {
+                weekday: Weekday::Sun,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Mon,
+                available: true,
+                max_duration_minutes: Some(60),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Wed,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Tue,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Fri,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Thu,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Sat,
+                available: false,
+                max_duration_minutes: None,
+            },
+        ]);
+
+        assert_eq!(
+            settings
+                .days
+                .iter()
+                .map(|day| day.weekday.as_str())
+                .collect::<Vec<_>>(),
+            vec!["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        );
+    }
+
+    #[test]
+    fn weekday_parse_round_trips_supported_values() {
+        assert_eq!(Weekday::parse("mon"), Some(Weekday::Mon));
+        assert_eq!(Weekday::parse("sun"), Some(Weekday::Sun));
+        assert_eq!(Weekday::Mon.as_str(), "mon");
+        assert_eq!(Weekday::Sun.to_string(), "sun");
+        assert_eq!(Weekday::parse("MON"), None);
+        assert_eq!(Weekday::parse("monday"), None);
     }
 }

@@ -61,6 +61,9 @@ struct CompactProfile<'a> {
     meds: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<&'a str>,
+    acfg: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    av: Vec<CompactAvailabilityDay<'a>>,
 }
 
 impl<'a> CompactProfile<'a> {
@@ -76,6 +79,32 @@ impl<'a> CompactProfile<'a> {
             ap: profile.athlete_prompt.as_deref(),
             meds: profile.medications.as_deref(),
             notes: profile.athlete_notes.as_deref(),
+            acfg: profile.availability_configured,
+            av: profile
+                .weekly_availability
+                .iter()
+                .map(CompactAvailabilityDay::from_day)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CompactAvailabilityDay<'a> {
+    wd: &'a str,
+    a: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mdm: Option<u16>,
+}
+
+impl<'a> CompactAvailabilityDay<'a> {
+    fn from_day(
+        day: &'a crate::domain::training_context::model::WeeklyAvailabilityContext,
+    ) -> Self {
+        Self {
+            wd: day.weekday.as_str(),
+            a: day.available,
+            mdm: day.max_duration_minutes,
         }
     }
 }

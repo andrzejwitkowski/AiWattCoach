@@ -1,14 +1,135 @@
 use aiwattcoach::domain::workout_summary::{
     WorkoutRecap, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryUseCases,
 };
+use std::sync::{Arc, Mutex};
 
 use crate::shared::{
     existing_summary, existing_summary_with_finished_conversation, test_service,
-    test_service_with_training_plan, test_service_with_training_plan_and_latest_activity,
-    InMemoryWorkoutSummaryRepository, PersistCheckingTrainingPlanService,
-    RecordingLatestCompletedActivityService, RecordingTrainingPlanService,
-    RefreshingTrainingPlanService,
+    test_service_with_settings, test_service_with_training_plan,
+    test_service_with_training_plan_and_latest_activity, InMemoryWorkoutSummaryRepository,
+    PersistCheckingTrainingPlanService, RecordingLatestCompletedActivityService,
+    RecordingTrainingPlanService, RefreshingTrainingPlanService, TestAvailabilitySettingsService,
 };
+
+#[derive(Clone, Default)]
+struct RecordingMissingSettingsService {
+    find_calls: Arc<Mutex<Vec<String>>>,
+    get_calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl RecordingMissingSettingsService {
+    fn find_calls(&self) -> Vec<String> {
+        self.find_calls.lock().unwrap().clone()
+    }
+
+    fn get_calls(&self) -> Vec<String> {
+        self.get_calls.lock().unwrap().clone()
+    }
+}
+
+impl aiwattcoach::domain::settings::UserSettingsUseCases for RecordingMissingSettingsService {
+    fn find_settings(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            Option<aiwattcoach::domain::settings::UserSettings>,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        let find_calls = self.find_calls.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            find_calls.lock().unwrap().push(user_id);
+            Ok(None)
+        })
+    }
+
+    fn get_settings(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        let get_calls = self.get_calls.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            get_calls.lock().unwrap().push(user_id);
+            Ok(aiwattcoach::domain::settings::UserSettings::new_defaults(
+                "unexpected".to_string(),
+                1,
+            ))
+        })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: aiwattcoach::domain::settings::AiAgentsConfig,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: aiwattcoach::domain::settings::IntervalsConfig,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: aiwattcoach::domain::settings::AnalysisOptions,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: aiwattcoach::domain::settings::AvailabilitySettings,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: aiwattcoach::domain::settings::CyclingSettings,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+}
 
 #[tokio::test]
 async fn create_summary_is_idempotent_when_summary_already_exists() {
@@ -686,4 +807,87 @@ async fn mark_saved_requires_rpe() {
         )
     );
     assert_eq!(repository.calls(), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn append_user_message_requires_configured_availability_before_chat() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let service = test_service_with_settings(
+        repository.clone(),
+        TestAvailabilitySettingsService::unconfigured(),
+    );
+
+    let error = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        WorkoutSummaryError::Validation(
+            "availability must be configured before chatting with coach".to_string()
+        )
+    );
+    assert_eq!(repository.calls(), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn append_user_message_checks_summary_before_missing_availability() {
+    let repository = InMemoryWorkoutSummaryRepository::default();
+    let settings_service = Arc::new(RecordingMissingSettingsService::default());
+    let service = test_service_with_settings(repository, settings_service.clone());
+
+    let error = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, WorkoutSummaryError::NotFound);
+    assert!(settings_service.find_calls().is_empty());
+    assert!(settings_service.get_calls().is_empty());
+}
+
+#[tokio::test]
+async fn append_user_message_uses_find_settings_without_creating_defaults() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let settings_service = Arc::new(RecordingMissingSettingsService::default());
+    let service = test_service_with_settings(repository.clone(), settings_service.clone());
+
+    let error = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        WorkoutSummaryError::Validation(
+            "availability must be configured before chatting with coach".to_string()
+        )
+    );
+    assert_eq!(settings_service.find_calls(), vec!["user-1".to_string()]);
+    assert!(settings_service.get_calls().is_empty());
+    assert_eq!(repository.calls(), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn append_user_message_allows_chat_when_availability_is_configured() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let service = test_service_with_settings(
+        repository.clone(),
+        TestAvailabilitySettingsService::configured(),
+    );
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        persisted.user_message.role,
+        aiwattcoach::domain::workout_summary::MessageRole::User
+    );
+    assert_eq!(
+        repository.calls(),
+        vec!["append_message:workout-1:user".to_string()]
+    );
 }

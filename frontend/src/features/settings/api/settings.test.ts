@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { testAiAgentsConnection, testIntervalsConnection, updateAiAgents, updateCycling, updateIntervals } from './settings';
+import { userSettingsResponseSchema } from '../types';
+import {
+  testAiAgentsConnection,
+  testIntervalsConnection,
+  updateAiAgents,
+  updateAvailability,
+  updateCycling,
+  updateIntervals,
+} from './settings';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 
 const originalFetch = global.fetch;
@@ -119,6 +127,194 @@ describe('settings api', () => {
         athleteId: null,
       }),
     });
+  });
+
+  it('patches explicit weekly availability payloads', async () => {
+    const responseBody = {
+      aiAgents: {
+        openaiApiKey: null,
+        openaiApiKeySet: false,
+        geminiApiKey: null,
+        geminiApiKeySet: false,
+        openrouterApiKey: null,
+        openrouterApiKeySet: false,
+        selectedProvider: null,
+        selectedModel: null,
+      },
+      intervals: {
+        apiKey: null,
+        apiKeySet: false,
+        athleteId: null,
+        connected: false,
+      },
+      options: {
+        analyzeWithoutHeartRate: false,
+      },
+      availability: {
+        configured: true,
+        days: [
+          { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+          { weekday: 'tue', available: false, maxDurationMinutes: null },
+          { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+          { weekday: 'thu', available: false, maxDurationMinutes: null },
+          { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+          { weekday: 'sat', available: false, maxDurationMinutes: null },
+          { weekday: 'sun', available: false, maxDurationMinutes: null },
+        ],
+      },
+      cycling: {
+        fullName: null,
+        age: null,
+        heightCm: null,
+        weightKg: null,
+        ftpWatts: null,
+        hrMaxBpm: null,
+        vo2Max: null,
+        athletePrompt: null,
+        medications: null,
+        athleteNotes: null,
+        lastZoneUpdateEpochSeconds: null,
+      },
+    };
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(JSON.stringify(responseBody), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await updateAvailability('', {
+      days: [
+        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+        { weekday: 'tue', available: false, maxDurationMinutes: null },
+        { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+        { weekday: 'thu', available: false, maxDurationMinutes: null },
+        { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+        { weekday: 'sat', available: false, maxDurationMinutes: null },
+        { weekday: 'sun', available: false, maxDurationMinutes: null },
+      ],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/availability', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        days: [
+          { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+          { weekday: 'tue', available: false, maxDurationMinutes: null },
+          { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+          { weekday: 'thu', available: false, maxDurationMinutes: null },
+          { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+          { weekday: 'sat', available: false, maxDurationMinutes: null },
+          { weekday: 'sun', available: false, maxDurationMinutes: null },
+        ],
+      }),
+    });
+
+    expect(result).toEqual(responseBody);
+  });
+
+  it('surfaces backend validation messages for availability updates', async () => {
+    global.fetch = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ message: 'availability must contain exactly 7 days' }), {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ) as typeof fetch;
+
+    await expect(
+      updateAvailability('', {
+        days: [
+          { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+          { weekday: 'tue', available: false, maxDurationMinutes: null },
+          { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+          { weekday: 'thu', available: false, maxDurationMinutes: null },
+          { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+          { weekday: 'sat', available: false, maxDurationMinutes: null },
+          { weekday: 'sun', available: false, maxDurationMinutes: null },
+        ],
+      }),
+    ).rejects.toThrow('Failed to update availability: availability must contain exactly 7 days');
+  });
+
+  it('rejects duplicate weekdays in availability payloads before sending', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
+    global.fetch = fetchMock as typeof fetch;
+
+    await expect(updateAvailability('', {
+      days: [
+        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+        { weekday: 'mon', available: false, maxDurationMinutes: null },
+        { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+        { weekday: 'thu', available: false, maxDurationMinutes: null },
+        { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+        { weekday: 'sat', available: false, maxDurationMinutes: null },
+        { weekday: 'sun', available: false, maxDurationMinutes: null },
+      ],
+    })).rejects.toThrow(/each weekday exactly once/i);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate weekdays in settings responses', () => {
+    expect(() => userSettingsResponseSchema.parse({
+      aiAgents: {
+        openaiApiKey: null,
+        openaiApiKeySet: false,
+        geminiApiKey: null,
+        geminiApiKeySet: false,
+        openrouterApiKey: null,
+        openrouterApiKeySet: false,
+        selectedProvider: null,
+        selectedModel: null,
+      },
+      intervals: {
+        apiKey: null,
+        apiKeySet: false,
+        athleteId: null,
+        connected: false,
+      },
+      options: {
+        analyzeWithoutHeartRate: false,
+      },
+      availability: {
+        configured: true,
+        days: [
+          { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+          { weekday: 'mon', available: false, maxDurationMinutes: null },
+          { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+          { weekday: 'thu', available: false, maxDurationMinutes: null },
+          { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+          { weekday: 'sat', available: false, maxDurationMinutes: null },
+          { weekday: 'sun', available: false, maxDurationMinutes: null },
+        ],
+      },
+      cycling: {
+        fullName: null,
+        age: null,
+        heightCm: null,
+        weightKg: null,
+        ftpWatts: null,
+        hrMaxBpm: null,
+        vo2Max: null,
+        athletePrompt: null,
+        medications: null,
+        athleteNotes: null,
+        lastZoneUpdateEpochSeconds: null,
+      },
+    })).toThrow(/each weekday exactly once/i);
   });
 
   it('posts ai test settings and parses a successful response', async () => {

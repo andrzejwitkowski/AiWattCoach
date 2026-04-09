@@ -1,5 +1,6 @@
 import { useSettings } from '../features/settings/context/SettingsContext';
 import { AiAgentsCard } from '../features/settings/components/AiAgentsCard';
+import { AvailabilityCard } from '../features/settings/components/AvailabilityCard';
 import { AthleteSummaryCard } from '../features/settings/components/AthleteSummaryCard';
 import { CyclingSettingsCard } from '../features/settings/components/CyclingSettingsCard';
 import { IntervalsCard } from '../features/settings/components/IntervalsCard';
@@ -10,7 +11,7 @@ type SettingsPageProps = {
 };
 
 export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
-  const { settings, isLoading, error, refreshSettings } = useSettings();
+  const { settings, isLoading, error, refreshSettings, setSettings } = useSettings();
 
   if (isLoading) {
     return (
@@ -20,7 +21,7 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
     );
   }
 
-  if (error) {
+  if (error && !settings) {
     return (
       <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center">
         <p className="text-red-400">Failed to load settings: {error}</p>
@@ -62,6 +63,16 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
         />
       </div>
       <AthleteSummaryCard settings={settings} apiBaseUrl={apiBaseUrl} />
+      <AvailabilityCard
+        settings={settings}
+        apiBaseUrl={apiBaseUrl}
+        onSave={(updatedSettings) => {
+          if (updatedSettings) {
+            setSettings(updatedSettings);
+          }
+          handleSave();
+        }}
+      />
       <OptionsCard
         settings={settings}
         apiBaseUrl={apiBaseUrl}
