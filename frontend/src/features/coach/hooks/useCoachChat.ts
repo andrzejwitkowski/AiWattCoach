@@ -43,10 +43,10 @@ type PendingSocketState = {
   promise: Promise<WebSocket>;
 };
 
-export const AVAILABILITY_REQUIRED_CHAT_ERROR = 'availability must be configured before chatting with coach';
+export const availabilityRequiredChatError = 'availability must be configured before chatting with coach';
 
 export function isAvailabilityRequiredChatError(error: string | null | undefined): boolean {
-  return error === AVAILABILITY_REQUIRED_CHAT_ERROR;
+  return /availability\s+must\s+be\s+configured\s+before\s+chatting\s+with\s+coach/i.test(error ?? '');
 }
 
 class StaleWorkoutSelectionError extends Error {

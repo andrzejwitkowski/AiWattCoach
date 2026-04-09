@@ -68,7 +68,6 @@ pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
 
 pub(super) fn map_availability_update(
     body: UpdateAvailabilityRequest,
-    _current: &UserSettings,
 ) -> Result<AvailabilitySettings, SettingsError> {
     let days: Vec<AvailabilityDay> = body
         .days
@@ -89,9 +88,10 @@ pub(super) fn map_availability_update(
             })
         })
         .collect::<Result<_, _>>()?;
-    let configured = days.iter().any(|day| day.available);
-
-    validation::validate_availability(AvailabilitySettings { configured, days })
+    validation::validate_availability(AvailabilitySettings {
+        configured: true,
+        days,
+    })
 }
 
 pub(super) fn map_ai_agents_update(

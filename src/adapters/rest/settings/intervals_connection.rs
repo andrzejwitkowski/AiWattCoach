@@ -83,4 +83,14 @@ mod tests {
             Some("athlete-123".to_string())
         );
     }
+
+    #[test]
+    fn normalize_optional_input_returns_none_for_whitespace_only_values() {
+        assert_eq!(normalize_optional_input(Some("   ".to_string())), None);
+    }
+
+    #[test]
+    fn normalize_optional_input_preserves_none() {
+        assert_eq!(normalize_optional_input(None), None);
+    }
 }

@@ -44,46 +44,7 @@ impl UserSettingsUseCases for TestSettingsService {
                 athlete_prompt: Some("prefers concise coaching".to_string()),
                 ..CyclingSettings::default()
             };
-            settings.availability = AvailabilitySettings {
-                configured: true,
-                days: vec![
-                    AvailabilityDay {
-                        weekday: Weekday::Mon,
-                        available: true,
-                        max_duration_minutes: Some(60),
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Tue,
-                        available: false,
-                        max_duration_minutes: None,
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Wed,
-                        available: true,
-                        max_duration_minutes: Some(90),
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Thu,
-                        available: false,
-                        max_duration_minutes: None,
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Fri,
-                        available: true,
-                        max_duration_minutes: Some(120),
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Sat,
-                        available: true,
-                        max_duration_minutes: Some(180),
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Sun,
-                        available: false,
-                        max_duration_minutes: None,
-                    },
-                ],
-            };
+            settings.availability = test_availability();
             Ok(Some(settings))
         })
     }
@@ -100,46 +61,7 @@ impl UserSettingsUseCases for TestSettingsService {
                 athlete_prompt: Some("prefers concise coaching".to_string()),
                 ..CyclingSettings::default()
             };
-            settings.availability = AvailabilitySettings {
-                configured: true,
-                days: vec![
-                    AvailabilityDay {
-                        weekday: Weekday::Mon,
-                        available: true,
-                        max_duration_minutes: Some(60),
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Tue,
-                        available: false,
-                        max_duration_minutes: None,
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Wed,
-                        available: true,
-                        max_duration_minutes: Some(90),
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Thu,
-                        available: false,
-                        max_duration_minutes: None,
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Fri,
-                        available: true,
-                        max_duration_minutes: Some(120),
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Sat,
-                        available: true,
-                        max_duration_minutes: Some(180),
-                    },
-                    AvailabilityDay {
-                        weekday: Weekday::Sun,
-                        available: false,
-                        max_duration_minutes: None,
-                    },
-                ],
-            };
+            settings.availability = test_availability();
             Ok(settings)
         })
     }
@@ -182,6 +104,49 @@ impl UserSettingsUseCases for TestSettingsService {
         _availability: AvailabilitySettings,
     ) -> crate::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
         unreachable!()
+    }
+}
+
+fn test_availability() -> AvailabilitySettings {
+    AvailabilitySettings {
+        configured: true,
+        days: vec![
+            AvailabilityDay {
+                weekday: Weekday::Mon,
+                available: true,
+                max_duration_minutes: Some(60),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Tue,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Wed,
+                available: true,
+                max_duration_minutes: Some(90),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Thu,
+                available: false,
+                max_duration_minutes: None,
+            },
+            AvailabilityDay {
+                weekday: Weekday::Fri,
+                available: true,
+                max_duration_minutes: Some(120),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Sat,
+                available: true,
+                max_duration_minutes: Some(180),
+            },
+            AvailabilityDay {
+                weekday: Weekday::Sun,
+                available: false,
+                max_duration_minutes: None,
+            },
+        ],
     }
 }
 

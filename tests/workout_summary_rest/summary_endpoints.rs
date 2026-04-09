@@ -14,7 +14,7 @@ use crate::shared::{
     workout_summary_test_app, workout_summary_test_app_with_settings,
     TestIdentityServiceWithSession, TestWorkoutSummaryService,
 };
-use aiwattcoach::domain::workout_summary::WorkoutSummaryService;
+use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSummaryService};
 
 #[tokio::test]
 async fn get_summary_requires_authentication() {
@@ -410,11 +410,12 @@ async fn send_message_rejects_when_availability_is_missing() {
 #[tokio::test]
 async fn send_message_rejects_when_real_settings_service_reports_missing_availability() {
     let settings_service = TestAvailabilitySettingsService::unconfigured();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let service = WorkoutSummaryService::new(
-        InMemoryWorkoutSummaryRepository::with_summary(existing_summary()),
+        repository.clone(),
         InMemoryCoachReplyOperationRepository::default(),
         TestClock,
-        TestIdGenerator,
+        TestIdGenerator::default(),
     )
     .with_settings_service(settings_service.clone());
 
@@ -439,4 +440,17 @@ async fn send_message_rejects_when_real_settings_service_reports_missing_availab
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("error").and_then(Value::as_str),
+        Some("availability must be configured before chatting with coach")
+    );
+
+    let summary = repository
+        .find_by_user_id_and_workout_id("user-1", "workout-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(summary.messages.is_empty());
 }

@@ -1,3 +1,5 @@
+use crate::domain::settings::Weekday;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RenderedTrainingContext {
     pub stable_context: String,
@@ -201,4 +203,3 @@ pub struct ProjectedWorkoutContext {
     pub raw_workout_doc: Option<String>,
     pub rest_day: bool,
 }
-use crate::domain::settings::Weekday;

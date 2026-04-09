@@ -40,6 +40,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     workoutId: selectedItem?.id ?? null,
   });
   const hasSettingsLoadError = Boolean(settingsContext.error);
+  const chatError = isAvailabilityRequiredChatError(chat.error) ? null : chat.error;
   const requiresAvailability = (!settingsContext.isLoading && !hasSettingsLoadError && !availabilityConfigured)
     || isAvailabilityRequiredChatError(chat.error);
 
@@ -144,7 +145,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
                     ? t('coach.chatAvailabilityRequiredBanner')
                     : null
                 }
-                error={chat.error ?? (hasSettingsLoadError ? settingsContext.error : null)}
+                error={chatError ?? (hasSettingsLoadError ? settingsContext.error : null)}
                 inputDisabled={
                   chat.isLoading
                   || !isEditing

@@ -101,6 +101,14 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
     }
   }
 
+  function weekdayAvailabilityAriaLabel(weekdayLabel: string) {
+    return t('availability.dayAvailabilityAriaLabel', { weekday: weekdayLabel });
+  }
+
+  function weekdayMaxDurationAriaLabel(weekdayLabel: string) {
+    return t('availability.maxDurationAriaLabel', { weekday: weekdayLabel });
+  }
+
   return (
     <div className="rounded-[1.8rem] border border-white/10 bg-[linear-gradient(180deg,rgba(19,24,34,0.96),rgba(14,18,27,0.96))] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 pb-4">
@@ -148,7 +156,7 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
                   type="button"
                   role="switch"
                   aria-checked={day.available}
-                  aria-label={`${weekdayLabel} availability`}
+                  aria-label={weekdayAvailabilityAriaLabel(weekdayLabel)}
                   className={[
                     'group relative flex h-6.5 w-6.5 items-center justify-center rounded-[0.75rem] border transition focus:outline-none focus:ring-2 focus:ring-lime-300/40',
                     day.available
@@ -191,9 +199,9 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
                   </p>
                   <label className="mt-2 flex items-center gap-1.5 text-sm text-slate-300">
                     <Clock3 size={13} className="text-slate-500" />
-                    <span className="sr-only">{`${weekdayLabel} max duration`}</span>
+                    <span className="sr-only">{weekdayMaxDurationAriaLabel(weekdayLabel)}</span>
                     <select
-                      aria-label={`${weekdayLabel} max duration`}
+                      aria-label={weekdayMaxDurationAriaLabel(weekdayLabel)}
                       className="w-full rounded-xl border border-white/8 bg-white/6 px-2.5 py-2 text-sm font-semibold text-white outline-none transition focus:border-emerald-300/40 disabled:cursor-not-allowed disabled:opacity-55"
                       disabled={!day.available}
                       value={day.maxDurationMinutes ?? 60}

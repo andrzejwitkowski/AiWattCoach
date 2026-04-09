@@ -482,6 +482,12 @@ async fn update_availability_rejects_invalid_duration_step() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("message").and_then(Value::as_str),
+        Some("availability duration 45 is invalid; expected one of [30, 60, 90, 120, 150, 180, 210, 240, 270, 300]")
+    );
 }
 
 #[tokio::test]

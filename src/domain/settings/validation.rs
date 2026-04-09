@@ -2,7 +2,11 @@ use crate::domain::settings::{AvailabilityDay, AvailabilitySettings, SettingsErr
 
 use crate::domain::llm::LlmProvider;
 
-const ALLOWED_AVAILABILITY_MINUTES: [u16; 10] = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300];
+pub const ALLOWED_AVAILABILITY_MINUTES: [u16; 10] = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300];
+
+pub fn is_allowed_availability_duration(minutes: u16) -> bool {
+    ALLOWED_AVAILABILITY_MINUTES.contains(&minutes)
+}
 
 pub fn validate_cycling_age(age: Option<u32>) -> Result<Option<u32>, SettingsError> {
     match age {
@@ -138,16 +142,12 @@ pub fn validate_availability(
         ));
     }
 
-    let days = AvailabilitySettings::from_days(availability.days).days;
-    Ok(AvailabilitySettings {
-        configured: availability.configured && days.iter().any(|day| day.available),
-        days,
-    })
+    Ok(AvailabilitySettings::from_days(availability.days))
 }
 
 fn validate_availability_day(day: &AvailabilityDay) -> Result<(), SettingsError> {
     match (day.available, day.max_duration_minutes) {
-        (true, Some(duration)) if ALLOWED_AVAILABILITY_MINUTES.contains(&duration) => Ok(()),
+        (true, Some(duration)) if is_allowed_availability_duration(duration) => Ok(()),
         (true, Some(duration)) => Err(SettingsError::Validation(format!(
             "availability duration {duration} is invalid; expected one of {ALLOWED_AVAILABILITY_MINUTES:?}"
         ))),
@@ -407,5 +407,54 @@ mod tests {
 
         assert!(!validated.configured);
         assert!(!validated.is_configured());
+    }
+
+    #[test]
+    fn validate_availability_ignores_incoming_false_configured_when_days_are_available() {
+        let availability = AvailabilitySettings {
+            configured: false,
+            days: vec![
+                AvailabilityDay {
+                    weekday: Weekday::Mon,
+                    available: true,
+                    max_duration_minutes: Some(60),
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Tue,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Wed,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Thu,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Fri,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Sat,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+                AvailabilityDay {
+                    weekday: Weekday::Sun,
+                    available: false,
+                    max_duration_minutes: None,
+                },
+            ],
+        };
+
+        let validated = validate_availability(availability).unwrap();
+
+        assert!(validated.configured);
+        assert!(validated.is_configured());
     }
 }

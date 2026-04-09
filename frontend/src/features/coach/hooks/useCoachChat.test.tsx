@@ -10,7 +10,7 @@ import {
   updateWorkoutSummaryRpe,
 } from '../api/workoutSummary';
 import {
-  AVAILABILITY_REQUIRED_CHAT_ERROR,
+  availabilityRequiredChatError,
   buildWorkoutSummaryWebSocketUrl,
   isAvailabilityRequiredChatError,
   useCoachChat,
@@ -186,14 +186,14 @@ describe('useCoachChat', () => {
         new MessageEvent('message', {
           data: JSON.stringify({
             type: 'error',
-            error: AVAILABILITY_REQUIRED_CHAT_ERROR,
+            error: availabilityRequiredChatError,
           }),
         }),
       );
     });
 
     await waitFor(() => {
-      expect(result.current.error).toBe(AVAILABILITY_REQUIRED_CHAT_ERROR);
+      expect(result.current.error).toBe(availabilityRequiredChatError);
     });
 
     expect(result.current.messages).toHaveLength(1);
@@ -201,7 +201,8 @@ describe('useCoachChat', () => {
   });
 
   it('recognizes the backend availability error sentinel', () => {
-    expect(isAvailabilityRequiredChatError(AVAILABILITY_REQUIRED_CHAT_ERROR)).toBe(true);
+    expect(isAvailabilityRequiredChatError(availabilityRequiredChatError)).toBe(true);
+    expect(isAvailabilityRequiredChatError('Availability must be configured before chatting with coach.')).toBe(true);
     expect(isAvailabilityRequiredChatError('other error')).toBe(false);
     expect(isAvailabilityRequiredChatError(null)).toBe(false);
   });

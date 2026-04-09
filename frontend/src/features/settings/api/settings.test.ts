@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { updateAvailabilityRequestSchema, userSettingsResponseSchema } from '../types';
+import { userSettingsResponseSchema } from '../types';
 import {
   testAiAgentsConnection,
   testIntervalsConnection,
@@ -248,8 +248,12 @@ describe('settings api', () => {
     ).rejects.toThrow('Failed to update availability: availability must contain exactly 7 days');
   });
 
-  it('rejects duplicate weekdays in availability payloads before sending', () => {
-    expect(() => updateAvailabilityRequestSchema.parse({
+  it('rejects duplicate weekdays in availability payloads before sending', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
+    global.fetch = fetchMock as typeof fetch;
+
+    await expect(updateAvailability('', {
       days: [
         { weekday: 'mon', available: true, maxDurationMinutes: 60 },
         { weekday: 'mon', available: false, maxDurationMinutes: null },
@@ -259,7 +263,9 @@ describe('settings api', () => {
         { weekday: 'sat', available: false, maxDurationMinutes: null },
         { weekday: 'sun', available: false, maxDurationMinutes: null },
       ],
-    })).toThrow(/each weekday exactly once/i);
+    })).rejects.toThrow(/each weekday exactly once/i);
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('rejects duplicate weekdays in settings responses', () => {

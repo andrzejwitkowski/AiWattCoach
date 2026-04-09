@@ -95,6 +95,8 @@
     "shortFri": "FRI",
     "shortSat": "SAT",
     "shortSun": "SUN",
+    "dayAvailabilityAriaLabel": "{{weekday}} availability",
+    "maxDurationAriaLabel": "{{weekday}} max duration",
     "dayAvailable": "Available for training",
     "dayUnavailable": "Blocked for recovery, life, or rest",
     "save": "Save availability",

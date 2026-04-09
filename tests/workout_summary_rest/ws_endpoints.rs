@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use aiwattcoach::domain::workout_summary::WorkoutSummaryService;
+use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSummaryService};
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::{net::TcpListener, time::timeout};
@@ -527,11 +527,12 @@ async fn websocket_rejects_messages_when_availability_is_missing() {
 #[tokio::test]
 async fn websocket_rejects_messages_when_real_settings_service_reports_missing_availability() {
     let settings_service = TestAvailabilitySettingsService::unconfigured();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let service = WorkoutSummaryService::new(
-        InMemoryWorkoutSummaryRepository::with_summary(existing_summary()),
+        repository.clone(),
         InMemoryCoachReplyOperationRepository::default(),
         TestClock,
-        TestIdGenerator,
+        TestIdGenerator::default(),
     )
     .with_settings_service(settings_service.clone());
     let app = workout_summary_test_app_with_settings(
@@ -575,4 +576,11 @@ async fn websocket_rejects_messages_when_real_settings_service_reports_missing_a
         payload.get("error").and_then(Value::as_str),
         Some("availability must be configured before chatting with coach")
     );
+
+    let summary = repository
+        .find_by_user_id_and_workout_id("user-1", "workout-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(summary.messages.is_empty());
 }

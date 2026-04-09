@@ -193,11 +193,7 @@ pub async fn update_availability(
         Some(service) => service,
         None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
-    let current = match load_settings(settings_service, &user_id).await {
-        Ok(settings) => settings,
-        Err(response) => return response,
-    };
-    let availability = match map_availability_update(body, &current) {
+    let availability = match map_availability_update(body) {
         Ok(availability) => availability,
         Err(err) => return map_settings_error(&err),
     };

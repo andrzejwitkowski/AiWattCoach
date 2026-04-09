@@ -1,12 +1,19 @@
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
+use serde::Serialize;
 use tracing::Level;
 
 use crate::domain::workout_summary::WorkoutSummaryError;
 
 use super::super::logging::status_class;
+
+#[derive(Serialize)]
+struct ErrorResponse {
+    error: String,
+}
 
 pub(super) fn map_workout_summary_error(error: &WorkoutSummaryError) -> Response {
     match error {
@@ -16,7 +23,13 @@ pub(super) fn map_workout_summary_error(error: &WorkoutSummaryError) -> Response
         }
         WorkoutSummaryError::Validation(_) => {
             log_workout_summary_error(Level::WARN, StatusCode::BAD_REQUEST, error);
-            StatusCode::BAD_REQUEST.into_response()
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: error.to_string(),
+                }),
+            )
+                .into_response()
         }
         WorkoutSummaryError::Locked => {
             log_workout_summary_error(Level::WARN, StatusCode::CONFLICT, error);

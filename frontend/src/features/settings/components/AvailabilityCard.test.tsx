@@ -181,6 +181,13 @@ describe('AvailabilityCard', () => {
     expect(screen.getAllByText(/max. duration/i)[0]).toBeInTheDocument();
   });
 
+  it('localizes accessibility labels with translated weekday names', () => {
+    render(<AvailabilityCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    expect(screen.getByRole('switch', { name: 'Monday availability' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Monday max duration' })).toBeInTheDocument();
+  });
+
   it('announces save errors to assistive technology', async () => {
     updateAvailabilityMock.mockRejectedValue(new Error('Failed to save availability'));
 
