@@ -42,6 +42,15 @@ pub struct AthleteProfileContext {
     pub athlete_prompt: Option<String>,
     pub medications: Option<String>,
     pub athlete_notes: Option<String>,
+    pub availability_configured: bool,
+    pub weekly_availability: Vec<WeeklyAvailabilityContext>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct WeeklyAvailabilityContext {
+    pub weekday: Weekday,
+    pub available: bool,
+    pub max_duration_minutes: Option<u16>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -192,3 +201,4 @@ pub struct ProjectedWorkoutContext {
     pub raw_workout_doc: Option<String>,
     pub rest_day: bool,
 }
+use crate::domain::settings::Weekday;

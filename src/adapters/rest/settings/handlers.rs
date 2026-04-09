@@ -23,13 +23,14 @@ use super::{
     },
     dto::{
         test_connection_response, TestIntervalsConnectionRequest, UpdateAiAgentsRequest,
-        UpdateCyclingRequest, UpdateIntervalsRequest, UpdateOptionsRequest,
+        UpdateAvailabilityRequest, UpdateCyclingRequest, UpdateIntervalsRequest,
+        UpdateOptionsRequest,
     },
     error::{map_admin_identity_error, map_connection_error_to_response, map_settings_error},
     intervals_connection::merge_connection_credentials,
     mapping::{
-        map_ai_agents_update, map_cycling_update, map_intervals_update, map_options_update,
-        map_settings_to_dto,
+        map_ai_agents_update, map_availability_update, map_cycling_update, map_intervals_update,
+        map_options_update, map_settings_to_dto,
     },
 };
 
@@ -174,6 +175,37 @@ pub async fn update_options(
     let options = map_options_update(body, &current);
 
     match settings_service.update_options(&user_id, options).await {
+        Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
+        Err(err) => map_settings_error(&err),
+    }
+}
+
+pub async fn update_availability(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateAvailabilityRequest>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+    let settings_service = match settings_service(&state) {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+    let current = match load_settings(settings_service, &user_id).await {
+        Ok(settings) => settings,
+        Err(response) => return response,
+    };
+    let availability = match map_availability_update(body, &current) {
+        Ok(availability) => availability,
+        Err(err) => return map_settings_error(&err),
+    };
+
+    match settings_service
+        .update_availability(&user_id, availability)
+        .await
+    {
         Ok(settings) => Json(map_settings_to_dto(&settings)).into_response(),
         Err(err) => map_settings_error(&err),
     }

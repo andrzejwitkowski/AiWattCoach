@@ -19,6 +19,9 @@ use crate::support::{
 #[derive(Clone)]
 struct LargeContextTrainingContextBuilder;
 
+#[derive(Clone)]
+struct UnconfiguredAvailabilityTrainingContextBuilder;
+
 impl TrainingContextBuilder for LargeContextTrainingContextBuilder {
     fn build(
         &self,
@@ -46,6 +49,49 @@ impl TrainingContextBuilder for LargeContextTrainingContextBuilder {
                     stable_context: "s".repeat(4_000_000),
                     volatile_context: "v".repeat(4_000_000),
                     approximate_tokens: 2_000_000,
+                },
+            })
+        })
+    }
+
+    fn build_athlete_summary_context(
+        &self,
+        _user_id: &str,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build("user-1", "athlete-summary")
+    }
+}
+
+impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
+    fn build(
+        &self,
+        _user_id: &str,
+        workout_id: &str,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            Ok(TrainingContextBuildResult {
+                context: TrainingContext {
+                    generated_at_epoch_seconds: 1_700_000_000,
+                    focus_workout_id: Some(workout_id),
+                    focus_kind: "activity".to_string(),
+                    intervals_status: IntervalsStatusContext {
+                        activities: "ok".to_string(),
+                        events: "ok".to_string(),
+                    },
+                    profile: aiwattcoach::domain::training_context::AthleteProfileContext {
+                        availability_configured: false,
+                        ..Default::default()
+                    },
+                    history: Default::default(),
+                    recent_days: Vec::new(),
+                    upcoming_days: Vec::new(),
+                    projected_days: Vec::new(),
+                },
+                rendered: RenderedTrainingContext {
+                    stable_context: "{\"stable\":true}".to_string(),
+                    volatile_context: "{\"volatile\":true}".to_string(),
+                    approximate_tokens: 100,
                 },
             })
         })
@@ -233,6 +279,36 @@ async fn training_plan_generator_builds_initial_window_request_with_recap() {
     assert!(requests[0].conversation[0]
         .content
         .contains("Generate the next 14 dated days"));
+}
+
+#[tokio::test]
+async fn training_plan_generator_uses_unconfigured_availability_guidance_when_needed() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(UnconfiguredAvailabilityTrainingContextBuilder),
+        FixedClock,
+    );
+
+    generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "gemini",
+                "gemini-3.1-pro",
+                1_700_000_000,
+            ),
+        )
+        .await
+        .unwrap();
+
+    let prompt = &chat_port.requests()[0].system_prompt;
+    assert!(prompt.contains("Weekly availability is not configured in this context."));
+    assert!(!prompt.contains("Weekly availability is mandatory and must be respected"));
 }
 
 #[tokio::test]

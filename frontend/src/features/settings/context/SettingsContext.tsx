@@ -8,6 +8,7 @@ type SettingsContextValue = {
   isLoading: boolean;
   error: string | null;
   refreshSettings: () => Promise<void>;
+  setSettings: React.Dispatch<React.SetStateAction<UserSettingsResponse | null>>;
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -45,7 +46,7 @@ export function SettingsProvider({
   }, [refreshSettings]);
 
   return (
-    <SettingsContext.Provider value={{ settings, isLoading, error, refreshSettings }}>
+    <SettingsContext.Provider value={{ settings, isLoading, error, refreshSettings, setSettings }}>
       {children}
     </SettingsContext.Provider>
   );

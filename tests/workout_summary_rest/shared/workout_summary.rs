@@ -1,22 +1,32 @@
 use std::{
+    collections::BTreeMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use aiwattcoach::domain::{
     llm::BoxFuture,
+    settings::{
+        AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, CyclingSettings,
+        IntervalsConfig, SettingsError, UserSettings, UserSettingsUseCases, Weekday,
+    },
     workout_summary::{
-        validate_message_content, CoachReply, MessageRole, PersistedUserMessage, SaveSummaryResult,
+        validate_message_content, CoachReply, CoachReplyClaimResult, CoachReplyOperation,
+        CoachReplyOperationRepository, MessageRole, PersistedUserMessage, SaveSummaryResult,
         SaveWorkflowResult, SaveWorkflowStatus, SendMessageResult, WorkoutRecap, WorkoutSummary,
-        WorkoutSummaryError, WorkoutSummaryUseCases,
+        WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryUseCases,
     },
 };
+
+type CoachReplyOperationKey = (String, String, String);
+type CoachReplyOperationStore = BTreeMap<CoachReplyOperationKey, CoachReplyOperation>;
 
 #[derive(Clone, Default)]
 pub(crate) struct TestWorkoutSummaryService {
     summaries: Arc<Mutex<Vec<WorkoutSummary>>>,
     processed_user_messages: Arc<Mutex<Vec<String>>>,
     coach_reply_delay: Option<Duration>,
+    availability_configured: bool,
 }
 
 impl TestWorkoutSummaryService {
@@ -25,11 +35,17 @@ impl TestWorkoutSummaryService {
             summaries: Arc::new(Mutex::new(summaries)),
             processed_user_messages: Arc::new(Mutex::new(Vec::new())),
             coach_reply_delay: None,
+            availability_configured: true,
         }
     }
 
     pub(crate) fn with_coach_reply_delay(mut self, delay: Duration) -> Self {
         self.coach_reply_delay = Some(delay);
+        self
+    }
+
+    pub(crate) fn with_availability_configured(mut self, configured: bool) -> Self {
+        self.availability_configured = configured;
         self
     }
 
@@ -246,6 +262,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
     ) -> BoxFuture<Result<SendMessageResult, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let processed_user_messages = self.processed_user_messages.clone();
+        let availability_configured = self.availability_configured;
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
@@ -264,6 +281,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             if summary.rpe.is_none() {
                 return Err(WorkoutSummaryError::Validation(
                     "rpe must be set before chatting with coach".to_string(),
+                ));
+            }
+            if !availability_configured {
+                return Err(WorkoutSummaryError::Validation(
+                    "availability must be configured before chatting with coach".to_string(),
                 ));
             }
 
@@ -306,6 +328,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
     ) -> BoxFuture<Result<PersistedUserMessage, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let processed_user_messages = self.processed_user_messages.clone();
+        let availability_configured = self.availability_configured;
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
@@ -324,6 +347,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             if summary.rpe.is_none() {
                 return Err(WorkoutSummaryError::Validation(
                     "rpe must be set before chatting with coach".to_string(),
+                ));
+            }
+            if !availability_configured {
+                return Err(WorkoutSummaryError::Validation(
+                    "availability must be configured before chatting with coach".to_string(),
                 ));
             }
 
@@ -359,6 +387,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
         let coach_reply_delay = self.coach_reply_delay;
+        let availability_configured = self.availability_configured;
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
@@ -380,6 +409,11 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
             if summary.rpe.is_none() {
                 return Err(WorkoutSummaryError::Validation(
                     "rpe must be set before chatting with coach".to_string(),
+                ));
+            }
+            if !availability_configured {
+                return Err(WorkoutSummaryError::Validation(
+                    "availability must be configured before chatting with coach".to_string(),
                 ));
             }
 
@@ -433,6 +467,440 @@ fn sample_summary_for_user(user_id: &str, workout_id: &str) -> WorkoutSummary {
         created_at_epoch_seconds: 1_700_000_000,
         updated_at_epoch_seconds: 1_700_000_000,
     }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct InMemoryWorkoutSummaryRepository {
+    summaries: Arc<Mutex<BTreeMap<(String, String), WorkoutSummary>>>,
+}
+
+impl InMemoryWorkoutSummaryRepository {
+    pub(crate) fn with_summary(summary: WorkoutSummary) -> Self {
+        let mut summaries = BTreeMap::new();
+        summaries.insert(
+            (summary.user_id.clone(), summary.workout_id.clone()),
+            summary,
+        );
+
+        Self {
+            summaries: Arc::new(Mutex::new(summaries)),
+        }
+    }
+}
+
+impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
+    fn find_by_user_id_and_workout_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> BoxFuture<Result<Option<WorkoutSummary>, WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            Ok(summaries
+                .lock()
+                .unwrap()
+                .get(&(user_id, workout_id))
+                .cloned())
+        })
+    }
+
+    fn find_by_user_id_and_workout_ids(
+        &self,
+        user_id: &str,
+        workout_ids: Vec<String>,
+    ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            let summaries = summaries.lock().unwrap();
+            Ok(workout_ids
+                .into_iter()
+                .filter_map(|workout_id| summaries.get(&(user_id.clone(), workout_id)).cloned())
+                .collect())
+        })
+    }
+
+    fn create(
+        &self,
+        summary: WorkoutSummary,
+    ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            let key = (summary.user_id.clone(), summary.workout_id.clone());
+            let mut summaries = summaries.lock().unwrap();
+            if summaries.contains_key(&key) {
+                return Err(WorkoutSummaryError::AlreadyExists);
+            }
+            summaries.insert(key, summary.clone());
+            Ok(summary)
+        })
+    }
+
+    fn update_rpe(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        rpe: u8,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            let mut summaries = summaries.lock().unwrap();
+            let Some(summary) = summaries.get_mut(&(user_id, workout_id)) else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+            summary.rpe = Some(rpe);
+            summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
+
+    fn set_saved_state(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: Option<i64>,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            let mut summaries = summaries.lock().unwrap();
+            let Some(summary) = summaries.get_mut(&(user_id, workout_id)) else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+            summary.saved_at_epoch_seconds = saved_at_epoch_seconds;
+            summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
+
+    fn persist_workout_recap(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        recap: WorkoutRecap,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            let mut summaries = summaries.lock().unwrap();
+            let Some(summary) = summaries.get_mut(&(user_id, workout_id)) else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+            summary.workout_recap_text = Some(recap.text);
+            summary.workout_recap_provider = Some(recap.provider);
+            summary.workout_recap_model = Some(recap.model);
+            summary.workout_recap_generated_at_epoch_seconds =
+                Some(recap.generated_at_epoch_seconds);
+            summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
+
+    fn append_message(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        message: aiwattcoach::domain::workout_summary::ConversationMessage,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            let mut summaries = summaries.lock().unwrap();
+            let Some(summary) = summaries.get_mut(&(user_id, workout_id)) else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+            if summary
+                .messages
+                .iter()
+                .any(|existing| existing.id == message.id)
+            {
+                return Ok(());
+            }
+            summary.messages.push(message);
+            summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
+
+    fn find_message_by_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        message_id: &str,
+    ) -> BoxFuture<
+        Result<
+            Option<aiwattcoach::domain::workout_summary::ConversationMessage>,
+            WorkoutSummaryError,
+        >,
+    > {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let message_id = message_id.to_string();
+        let summaries = self.summaries.clone();
+        Box::pin(async move {
+            Ok(summaries
+                .lock()
+                .unwrap()
+                .get(&(user_id, workout_id))
+                .and_then(|summary| {
+                    summary
+                        .messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.id == message_id)
+                        .cloned()
+                }))
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct InMemoryCoachReplyOperationRepository {
+    operations: Arc<Mutex<CoachReplyOperationStore>>,
+}
+
+impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
+    fn find_by_user_message_id(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        user_message_id: &str,
+    ) -> BoxFuture<Result<Option<CoachReplyOperation>, WorkoutSummaryError>> {
+        let key = (
+            user_id.to_string(),
+            workout_id.to_string(),
+            user_message_id.to_string(),
+        );
+        let operations = self.operations.clone();
+        Box::pin(async move { Ok(operations.lock().unwrap().get(&key).cloned()) })
+    }
+
+    fn claim_pending(
+        &self,
+        operation: CoachReplyOperation,
+        _stale_before_epoch_seconds: i64,
+    ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
+        let key = (
+            operation.user_id.clone(),
+            operation.workout_id.clone(),
+            operation.user_message_id.clone(),
+        );
+        let operations = self.operations.clone();
+        Box::pin(async move {
+            let mut operations = operations.lock().unwrap();
+            if let Some(existing) = operations.get(&key).cloned() {
+                return Ok(CoachReplyClaimResult::Existing(existing));
+            }
+            operations.insert(key, operation.clone());
+            Ok(CoachReplyClaimResult::Claimed(operation))
+        })
+    }
+
+    fn upsert(
+        &self,
+        operation: CoachReplyOperation,
+    ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+        let key = (
+            operation.user_id.clone(),
+            operation.workout_id.clone(),
+            operation.user_message_id.clone(),
+        );
+        let operations = self.operations.clone();
+        Box::pin(async move {
+            operations.lock().unwrap().insert(key, operation.clone());
+            Ok(operation)
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TestAvailabilitySettingsService {
+    configured: bool,
+}
+
+impl TestAvailabilitySettingsService {
+    pub(crate) fn unconfigured() -> Arc<dyn UserSettingsUseCases> {
+        Arc::new(Self { configured: false })
+    }
+}
+
+impl UserSettingsUseCases for TestAvailabilitySettingsService {
+    fn find_settings(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::settings::BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let user_id = user_id.to_string();
+        let configured = self.configured;
+        Box::pin(async move {
+            let mut settings = UserSettings::new_defaults(user_id, 1_700_000_000);
+            if configured {
+                settings.availability = AvailabilitySettings {
+                    configured: true,
+                    days: vec![
+                        AvailabilityDay {
+                            weekday: Weekday::Mon,
+                            available: true,
+                            max_duration_minutes: Some(60),
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Tue,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Wed,
+                            available: true,
+                            max_duration_minutes: Some(90),
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Thu,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Fri,
+                            available: true,
+                            max_duration_minutes: Some(120),
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Sat,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Sun,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                    ],
+                };
+            }
+            Ok(Some(settings))
+        })
+    }
+
+    fn get_settings(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
+        let user_id = user_id.to_string();
+        let configured = self.configured;
+        Box::pin(async move {
+            let mut settings = UserSettings::new_defaults(user_id, 1_700_000_000);
+            if configured {
+                settings.availability = AvailabilitySettings {
+                    configured: true,
+                    days: vec![
+                        AvailabilityDay {
+                            weekday: Weekday::Mon,
+                            available: true,
+                            max_duration_minutes: Some(60),
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Tue,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Wed,
+                            available: true,
+                            max_duration_minutes: Some(90),
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Thu,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Fri,
+                            available: true,
+                            max_duration_minutes: Some(120),
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Sat,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        AvailabilityDay {
+                            weekday: Weekday::Sun,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                    ],
+                };
+            }
+            Ok(settings)
+        })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: AiAgentsConfig,
+    ) -> aiwattcoach::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
+        unreachable!()
+    }
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: IntervalsConfig,
+    ) -> aiwattcoach::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
+        unreachable!()
+    }
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: AnalysisOptions,
+    ) -> aiwattcoach::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
+        unreachable!()
+    }
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: AvailabilitySettings,
+    ) -> aiwattcoach::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
+        unreachable!()
+    }
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: CyclingSettings,
+    ) -> aiwattcoach::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
+        unreachable!()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct TestClock;
+
+impl aiwattcoach::domain::identity::Clock for TestClock {
+    fn now_epoch_seconds(&self) -> i64 {
+        1_700_000_000
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TestIdGenerator;
+
+impl aiwattcoach::domain::identity::IdGenerator for TestIdGenerator {
+    fn new_id(&self, prefix: &str) -> String {
+        format!("{prefix}-1")
+    }
+}
+
+pub(crate) fn existing_summary() -> WorkoutSummary {
+    sample_summary("workout-1")
 }
 
 pub(crate) fn sample_summary_with_updated_at(

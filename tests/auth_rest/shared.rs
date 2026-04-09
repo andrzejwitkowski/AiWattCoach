@@ -16,8 +16,8 @@ use aiwattcoach::{
         IdentityUseCases, Role,
     },
     domain::settings::{
-        AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError,
-        UserSettings, UserSettingsUseCases,
+        AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
+        SettingsError, UserSettings, UserSettingsUseCases,
     },
     Settings,
 };
@@ -125,6 +125,13 @@ pub(crate) async fn auth_test_app_with_settings(
 pub(crate) struct TestSettingsService;
 
 impl UserSettingsUseCases for TestSettingsService {
+    fn find_settings(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        Box::pin(async move { Ok(None) })
+    }
+
     fn get_settings(&self, user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let user_id = user_id.to_string();
         Box::pin(async move { Ok(UserSettings::new_defaults(user_id, 1000)) })
@@ -160,6 +167,14 @@ impl UserSettingsUseCases for TestSettingsService {
         _cycling: CyclingSettings,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         Box::pin(async { unreachable!("update_cycling is not used in auth tests") })
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: AvailabilitySettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        Box::pin(async { unreachable!("update_availability is not used in auth tests") })
     }
 }
 

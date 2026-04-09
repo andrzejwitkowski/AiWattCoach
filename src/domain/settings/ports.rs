@@ -1,7 +1,8 @@
 use std::{future::Future, pin::Pin};
 
 use super::{
-    AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError, UserSettings,
+    AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
+    SettingsError, UserSettings,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -39,6 +40,13 @@ pub trait UserSettingsRepository: Clone + Send + Sync + 'static {
         &self,
         user_id: &str,
         cycling: CyclingSettings,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), SettingsError>>;
+
+    fn update_availability(
+        &self,
+        user_id: &str,
+        availability: AvailabilitySettings,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), SettingsError>>;
 }

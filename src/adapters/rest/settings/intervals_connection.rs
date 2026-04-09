@@ -39,7 +39,14 @@ pub(super) fn merge_connection_credentials(
 }
 
 fn normalize_optional_input(value: Option<String>) -> Option<String> {
-    value.filter(|candidate| !candidate.trim().is_empty())
+    value.and_then(|candidate| {
+        let trimmed = candidate.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
 }
 
 fn merge_credentials(
@@ -62,5 +69,18 @@ fn merge_credentials(
             used_saved_athlete_id,
         }),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_optional_input;
+
+    #[test]
+    fn normalize_optional_input_trims_non_empty_values() {
+        assert_eq!(
+            normalize_optional_input(Some("  athlete-123  ".to_string())),
+            Some("athlete-123".to_string())
+        );
     }
 }

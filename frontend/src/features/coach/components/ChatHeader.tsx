@@ -6,12 +6,21 @@ type ChatHeaderProps = {
   hasSelectedWorkout: boolean;
   isSaved?: boolean;
   requiresRpe?: boolean;
+  requiresAvailability?: boolean;
 };
 
-export function ChatHeader({ isConnected, hasSelectedWorkout, isSaved = false, requiresRpe = false }: ChatHeaderProps) {
+export function ChatHeader({
+  isConnected,
+  hasSelectedWorkout,
+  isSaved = false,
+  requiresRpe = false,
+  requiresAvailability = false,
+}: ChatHeaderProps) {
   const { t } = useTranslation();
   const statusLabel = !hasSelectedWorkout
     ? t('coach.selectWorkoutPrompt')
+    : requiresAvailability
+      ? t('coach.chatRequiresAvailability')
     : requiresRpe
       ? t('coach.chatRequiresRpe')
       : isSaved

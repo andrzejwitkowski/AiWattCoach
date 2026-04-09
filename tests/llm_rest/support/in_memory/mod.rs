@@ -14,8 +14,9 @@ use aiwattcoach::domain::{
     },
     llm::{BoxFuture as LlmBoxFuture, LlmContextCache, LlmContextCacheRepository, LlmError},
     settings::{
-        AiAgentsConfig, AnalysisOptions, BoxFuture as SettingsBoxFuture, CyclingSettings,
-        IntervalsConfig, SettingsError, UserSettings, UserSettingsRepository,
+        AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings,
+        BoxFuture as SettingsBoxFuture, CyclingSettings, IntervalsConfig, SettingsError,
+        UserSettings, UserSettingsRepository,
     },
     workout_summary::{
         BoxFuture as WorkoutBoxFuture, CoachReplyClaimResult, CoachReplyOperation,

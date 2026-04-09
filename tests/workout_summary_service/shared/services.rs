@@ -1,6 +1,210 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use aiwattcoach::domain::settings::Weekday;
+
 use super::*;
+
+#[derive(Clone)]
+pub(crate) struct TestAvailabilitySettingsService {
+    configured: bool,
+}
+
+impl TestAvailabilitySettingsService {
+    pub(crate) fn configured() -> Arc<dyn aiwattcoach::domain::settings::UserSettingsUseCases> {
+        Arc::new(Self { configured: true })
+    }
+
+    pub(crate) fn unconfigured() -> Arc<dyn aiwattcoach::domain::settings::UserSettingsUseCases> {
+        Arc::new(Self { configured: false })
+    }
+}
+
+impl aiwattcoach::domain::settings::UserSettingsUseCases for TestAvailabilitySettingsService {
+    fn find_settings(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            Option<aiwattcoach::domain::settings::UserSettings>,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        let user_id = user_id.to_string();
+        let configured = self.configured;
+        Box::pin(async move {
+            let mut settings =
+                aiwattcoach::domain::settings::UserSettings::new_defaults(user_id, 1_700_000_000);
+            if configured {
+                settings.availability = aiwattcoach::domain::settings::AvailabilitySettings {
+                    configured: true,
+                    days: vec![
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Mon,
+                            available: true,
+                            max_duration_minutes: Some(60),
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Tue,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Wed,
+                            available: true,
+                            max_duration_minutes: Some(90),
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Thu,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Fri,
+                            available: true,
+                            max_duration_minutes: Some(120),
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Sat,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Sun,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                    ],
+                };
+            }
+            Ok(Some(settings))
+        })
+    }
+
+    fn get_settings(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        let user_id = user_id.to_string();
+        let configured = self.configured;
+        Box::pin(async move {
+            let mut settings =
+                aiwattcoach::domain::settings::UserSettings::new_defaults(user_id, 1_700_000_000);
+            if configured {
+                settings.availability = aiwattcoach::domain::settings::AvailabilitySettings {
+                    configured: true,
+                    days: vec![
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Mon,
+                            available: true,
+                            max_duration_minutes: Some(60),
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Tue,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Wed,
+                            available: true,
+                            max_duration_minutes: Some(90),
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Thu,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Fri,
+                            available: true,
+                            max_duration_minutes: Some(120),
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Sat,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                        aiwattcoach::domain::settings::AvailabilityDay {
+                            weekday: Weekday::Sun,
+                            available: false,
+                            max_duration_minutes: None,
+                        },
+                    ],
+                };
+            }
+            Ok(settings)
+        })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: aiwattcoach::domain::settings::AiAgentsConfig,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: aiwattcoach::domain::settings::IntervalsConfig,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: aiwattcoach::domain::settings::AnalysisOptions,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: aiwattcoach::domain::settings::AvailabilitySettings,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: aiwattcoach::domain::settings::CyclingSettings,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<
+            aiwattcoach::domain::settings::UserSettings,
+            aiwattcoach::domain::settings::SettingsError,
+        >,
+    > {
+        unreachable!()
+    }
+}
 
 pub(crate) fn test_service(
     repository: InMemoryWorkoutSummaryRepository,
@@ -56,6 +260,24 @@ pub(crate) fn test_service_with_coach_and_athlete_summary(
         coach,
     )
     .with_athlete_summary_service(athlete_summary_service)
+}
+
+pub(crate) fn test_service_with_settings(
+    repository: InMemoryWorkoutSummaryRepository,
+    settings_service: Arc<dyn aiwattcoach::domain::settings::UserSettingsUseCases>,
+) -> WorkoutSummaryService<
+    InMemoryWorkoutSummaryRepository,
+    InMemoryCoachReplyOperationRepository,
+    TestClock,
+    TestIdGenerator,
+> {
+    WorkoutSummaryService::new(
+        repository,
+        InMemoryCoachReplyOperationRepository::default(),
+        TestClock,
+        TestIdGenerator::default(),
+    )
+    .with_settings_service(settings_service)
 }
 
 pub(crate) fn test_service_with_training_plan(

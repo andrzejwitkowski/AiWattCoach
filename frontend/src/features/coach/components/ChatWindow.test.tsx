@@ -27,6 +27,7 @@ describe('ChatWindow', () => {
         hasSelectedWorkout
         isSaved={false}
         requiresRpe={false}
+        requiresAvailability={false}
         error={null}
         onSendMessage={async () => true}
       />,
@@ -58,6 +59,7 @@ describe('ChatWindow', () => {
         hasSelectedWorkout
         isSaved={false}
         requiresRpe={false}
+        requiresAvailability={false}
         error={null}
         onSendMessage={async () => true}
       />,
@@ -86,6 +88,7 @@ describe('ChatWindow', () => {
         hasSelectedWorkout
         isSaved={false}
         requiresRpe={false}
+        requiresAvailability={false}
         error={null}
         onSendMessage={onSendMessage}
       />,
@@ -110,6 +113,7 @@ describe('ChatWindow', () => {
         hasSelectedWorkout={false}
         isSaved={false}
         requiresRpe={false}
+        requiresAvailability={false}
         error={null}
         onSendMessage={async () => true}
       />,
@@ -127,6 +131,7 @@ describe('ChatWindow', () => {
         hasSelectedWorkout
         isSaved
         requiresRpe={false}
+        requiresAvailability={false}
         error={null}
         inputDisabled
         onSendMessage={async () => true}
@@ -146,6 +151,7 @@ describe('ChatWindow', () => {
         hasSelectedWorkout
         isSaved={false}
         requiresRpe
+        requiresAvailability={false}
         error={null}
         inputDisabled
         onSendMessage={async () => true}
@@ -153,5 +159,27 @@ describe('ChatWindow', () => {
     );
 
     expect(screen.getByText(/choose an rpe first to unlock coaching/i)).toBeInTheDocument();
+  });
+
+  it('shows availability requirement when coach chat is blocked by settings', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isCoachTyping={false}
+        isConnected={false}
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability
+        availabilityMessage="AI Coach stays locked until you configure your weekly availability in Settings."
+        error={null}
+        inputDisabled
+        onSendMessage={async () => true}
+      />,
+    );
+
+    expect(screen.getByText(/set weekly availability before coach chat unlocks/i)).toBeInTheDocument();
+    expect(screen.getByText(/ai coach stays locked until you configure your weekly availability/i)).toBeInTheDocument();
+    expect(screen.getAllByPlaceholderText(/describe your muscle state/i)[0]).toBeDisabled();
   });
 });

@@ -35,6 +35,18 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['aiAgents']>): U
     options: {
       analyzeWithoutHeartRate: false,
     },
+    availability: {
+      configured: true,
+      days: [
+        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+        { weekday: 'tue', available: false, maxDurationMinutes: null },
+        { weekday: 'wed', available: true, maxDurationMinutes: 90 },
+        { weekday: 'thu', available: false, maxDurationMinutes: null },
+        { weekday: 'fri', available: true, maxDurationMinutes: 120 },
+        { weekday: 'sat', available: false, maxDurationMinutes: null },
+        { weekday: 'sun', available: false, maxDurationMinutes: null },
+      ],
+    },
     cycling: {
       fullName: null,
       age: null,

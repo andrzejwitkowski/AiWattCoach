@@ -11,7 +11,10 @@ use std::{
 use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
-    domain::{identity::IdentityUseCases, workout_summary::WorkoutSummaryUseCases},
+    domain::{
+        identity::IdentityUseCases, settings::UserSettingsUseCases,
+        workout_summary::WorkoutSummaryUseCases,
+    },
     Settings,
 };
 use axum::body::to_bytes;
@@ -39,25 +42,36 @@ pub(crate) async fn workout_summary_test_app(
     identity_service: impl IdentityUseCases + 'static,
     workout_summary_service: impl WorkoutSummaryUseCases + 'static,
 ) -> axum::Router {
+    workout_summary_test_app_with_settings(identity_service, workout_summary_service, None).await
+}
+
+pub(crate) async fn workout_summary_test_app_with_settings(
+    identity_service: impl IdentityUseCases + 'static,
+    workout_summary_service: impl WorkoutSummaryUseCases + 'static,
+    settings_service: Option<Arc<dyn UserSettingsUseCases>>,
+) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
 
-    build_app_with_frontend_dist(
-        AppState::new(
-            settings.app_name,
-            settings.mongo.database,
-            test_mongo_client(&settings.mongo.uri).await,
-        )
-        .with_identity_service(
-            Arc::new(identity_service),
-            "aiwattcoach_session",
-            "lax",
-            false,
-            24,
-        )
-        .with_workout_summary_service(Arc::new(workout_summary_service)),
-        fixture.dist_dir(),
+    let mut app_state = AppState::new(
+        settings.app_name,
+        settings.mongo.database,
+        test_mongo_client(&settings.mongo.uri).await,
     )
+    .with_identity_service(
+        Arc::new(identity_service),
+        "aiwattcoach_session",
+        "lax",
+        false,
+        24,
+    )
+    .with_workout_summary_service(Arc::new(workout_summary_service));
+
+    if let Some(settings_service) = settings_service {
+        app_state = app_state.with_settings_service(settings_service);
+    }
+
+    build_app_with_frontend_dist(app_state, fixture.dist_dir())
 }
 
 struct FrontendFixture {

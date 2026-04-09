@@ -73,6 +73,18 @@
     "saving": "Saving...",
     "saved": "Saved!"
   },
+  "availability": {
+    "title": "Availability",
+    "description": "Define every weekday explicitly so training plans and coach guidance respect your real week.",
+    "coachReadiness": "Coach Readiness",
+    "configured": "Availability configured",
+    "unconfigured": "Add at least one available day",
+    "dayAvailable": "Available for training",
+    "dayUnavailable": "Blocked for recovery, life, or rest",
+    "save": "Save availability",
+    "saving": "Saving availability...",
+    "saveError": "Failed to save availability"
+  },
   "common": {
     "saveError": "Failed to save",
     "configured": "Configured",
@@ -170,6 +182,8 @@
     "chatTitle": "AI Performance Coach",
     "chatConnected": "Coach connected and ready.",
     "chatReady": "Chat opens when you send the first message.",
+    "chatRequiresAvailability": "Set weekly availability before coach chat unlocks.",
+    "chatAvailabilityRequiredBanner": "AI Coach stays locked until you configure your weekly availability in Settings.",
     "chatRequiresRpe": "Choose an RPE first to unlock coaching.",
     "chatSavedLocked": "Summary saved. Click Edit to continue coaching.",
     "chatPlaceholder": "Describe your muscle state...",

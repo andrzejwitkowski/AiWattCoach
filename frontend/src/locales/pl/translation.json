@@ -73,6 +73,18 @@
     "saving": "Zapisywanie...",
     "saved": "Zapisano!"
   },
+  "availability": {
+    "title": "Dostępność",
+    "description": "Określ każdy dzień tygodnia jawnie, aby plany treningowe i wskazówki trenera odzwierciedlały Twój prawdziwy tydzień.",
+    "coachReadiness": "Gotowość trenera",
+    "configured": "Dostępność skonfigurowana",
+    "unconfigured": "Dodaj co najmniej jeden dostępny dzień",
+    "dayAvailable": "Dzień dostępny na trening",
+    "dayUnavailable": "Dzień zablokowany na regenerację, życie lub odpoczynek",
+    "save": "Zapisz dostępność",
+    "saving": "Zapisywanie dostępności...",
+    "saveError": "Nie udało się zapisać dostępności"
+  },
   "common": {
     "saveError": "Błąd podczas zapisywania",
     "configured": "Skonfigurowano",
@@ -172,6 +184,8 @@
     "chatTitle": "AI Performance Coach",
     "chatConnected": "Trener połączony i gotowy.",
     "chatReady": "Czat otworzy się, gdy wyślesz pierwszą wiadomość.",
+    "chatRequiresAvailability": "Najpierw ustaw tygodniową dostępność, aby odblokować czat z trenerem.",
+    "chatAvailabilityRequiredBanner": "AI Trener pozostaje zablokowany, dopóki nie skonfigurujesz tygodniowej dostępności w Ustawieniach.",
     "chatRequiresRpe": "Najpierw wybierz RPE, aby odblokować coaching.",
     "chatSavedLocked": "Podsumowanie zapisane. Kliknij Edytuj, aby wznowić coaching.",
     "chatPlaceholder": "Opisz stan swoich mięśni...",

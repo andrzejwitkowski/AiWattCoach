@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use aiwattcoach::domain::workout_summary::WorkoutSummaryService;
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::{net::TcpListener, time::timeout};
@@ -9,8 +10,12 @@ use tokio_tungstenite::{
 };
 
 use crate::shared::{
-    sample_summary, workout_summary_test_app, TestIdentityServiceWithSession,
-    TestWorkoutSummaryService,
+    existing_summary, InMemoryCoachReplyOperationRepository, InMemoryWorkoutSummaryRepository,
+    TestAvailabilitySettingsService, TestClock, TestIdGenerator,
+};
+use crate::shared::{
+    sample_summary, workout_summary_test_app, workout_summary_test_app_with_settings,
+    TestIdentityServiceWithSession, TestWorkoutSummaryService,
 };
 
 #[tokio::test]
@@ -191,7 +196,8 @@ async fn websocket_queues_multiple_user_messages_in_order() {
 
 #[tokio::test]
 async fn websocket_rejects_messages_when_queue_is_full() {
-    let service = TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")]);
+    let service = TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")])
+        .with_coach_reply_delay(Duration::from_millis(250));
     let app = workout_summary_test_app(TestIdentityServiceWithSession::default(), service).await;
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -468,4 +474,105 @@ async fn websocket_rejects_messages_when_rpe_is_missing() {
         .unwrap()
         .messages
         .is_empty());
+}
+
+#[tokio::test]
+async fn websocket_rejects_messages_when_availability_is_missing() {
+    let service = TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")])
+        .with_availability_configured(false);
+    let app =
+        workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    socket
+        .send(Message::Text(
+            r#"{"type":"send_message","content":"Try again"}"#.to_string().into(),
+        ))
+        .await
+        .unwrap();
+
+    let frame = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let text = frame.into_text().unwrap();
+    let payload: Value = serde_json::from_str(text.as_ref()).unwrap();
+
+    assert_eq!(payload.get("type").and_then(Value::as_str), Some("error"));
+    assert_eq!(
+        payload.get("error").and_then(Value::as_str),
+        Some("availability must be configured before chatting with coach")
+    );
+    assert!(service
+        .summary("user-1", "workout-1")
+        .unwrap()
+        .messages
+        .is_empty());
+}
+
+#[tokio::test]
+async fn websocket_rejects_messages_when_real_settings_service_reports_missing_availability() {
+    let settings_service = TestAvailabilitySettingsService::unconfigured();
+    let service = WorkoutSummaryService::new(
+        InMemoryWorkoutSummaryRepository::with_summary(existing_summary()),
+        InMemoryCoachReplyOperationRepository::default(),
+        TestClock,
+        TestIdGenerator,
+    )
+    .with_settings_service(settings_service.clone());
+    let app = workout_summary_test_app_with_settings(
+        TestIdentityServiceWithSession::default(),
+        service,
+        Some(settings_service),
+    )
+    .await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    socket
+        .send(Message::Text(
+            r#"{"type":"send_message","content":"Try again"}"#.to_string().into(),
+        ))
+        .await
+        .unwrap();
+
+    let frame = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let text = frame.into_text().unwrap();
+    let payload: Value = serde_json::from_str(text.as_ref()).unwrap();
+
+    assert_eq!(payload.get("type").and_then(Value::as_str), Some("error"));
+    assert_eq!(
+        payload.get("error").and_then(Value::as_str),
+        Some("availability must be configured before chatting with coach")
+    );
 }

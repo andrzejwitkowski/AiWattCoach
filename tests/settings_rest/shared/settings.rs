@@ -1,8 +1,8 @@
 use std::sync::Mutex;
 
 use aiwattcoach::domain::settings::{
-    AiAgentsConfig, AnalysisOptions, CyclingSettings, IntervalsConfig, SettingsError, UserSettings,
-    UserSettingsUseCases,
+    AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
+    SettingsError, UserSettings, UserSettingsUseCases,
 };
 
 use super::app::BoxFuture;
@@ -46,6 +46,14 @@ impl Default for TestSettingsService {
 }
 
 impl UserSettingsUseCases for TestSettingsService {
+    fn find_settings(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let settings = { self.settings.lock().unwrap().clone() };
+        Box::pin(async move { Ok(settings) })
+    }
+
     fn get_settings(&self, user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let user_id = user_id.to_string();
         let settings = { self.settings.lock().unwrap().clone() };
@@ -101,6 +109,18 @@ impl UserSettingsUseCases for TestSettingsService {
         let result = self.store_updated_settings(settings);
         Box::pin(async move { Ok(result) })
     }
+
+    fn update_availability(
+        &self,
+        user_id: &str,
+        availability: AvailabilitySettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let mut settings = self.take_or_default_settings(user_id);
+        settings.availability = availability;
+        settings.updated_at_epoch_seconds = 2000;
+        let result = self.store_updated_settings(settings);
+        Box::pin(async move { Ok(result) })
+    }
 }
 
 pub(crate) struct RepositoryErrorSettingsService {
@@ -116,6 +136,14 @@ impl RepositoryErrorSettingsService {
 }
 
 impl UserSettingsUseCases for RepositoryErrorSettingsService {
+    fn find_settings(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
     fn get_settings(&self, _user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let message = self.message.clone();
         Box::pin(async move { Err(SettingsError::Repository(message)) })
@@ -152,6 +180,15 @@ impl UserSettingsUseCases for RepositoryErrorSettingsService {
         &self,
         _user_id: &str,
         _cycling: CyclingSettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: AvailabilitySettings,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let message = self.message.clone();
         Box::pin(async move { Err(SettingsError::Repository(message)) })

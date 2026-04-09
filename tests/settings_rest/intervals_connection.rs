@@ -83,6 +83,40 @@ async fn test_intervals_connection_returns_200_on_success() {
 }
 
 #[tokio::test]
+async fn test_intervals_connection_trims_whitespace_padded_credentials() {
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_ok(),
+        )),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"apiKey":"  valid-key  ","athleteId":"  athlete-123  "}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    assert!(body.get("connected").unwrap().as_bool().unwrap());
+    assert!(!body.get("usedSavedApiKey").unwrap().as_bool().unwrap());
+    assert!(!body.get("usedSavedAthleteId").unwrap().as_bool().unwrap());
+}
+
+#[tokio::test]
 async fn test_intervals_connection_returns_400_on_unauthenticated() {
     let app = settings_test_app_with_intervals(
         TestIdentityServiceWithSession::default(),
