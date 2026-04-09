@@ -109,6 +109,10 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
     return t('availability.maxDurationAriaLabel', { weekday: weekdayLabel });
   }
 
+  function blockDraftChangesWhileSaving(): boolean {
+    return isSaving;
+  }
+
   return (
     <div className="rounded-[1.8rem] border border-white/10 bg-[linear-gradient(180deg,rgba(19,24,34,0.96),rgba(14,18,27,0.96))] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 pb-4">
@@ -157,6 +161,7 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
                   role="switch"
                   aria-checked={day.available}
                   aria-label={weekdayAvailabilityAriaLabel(weekdayLabel)}
+                  disabled={isSaving}
                   className={[
                     'group relative flex h-6.5 w-6.5 items-center justify-center rounded-[0.75rem] border transition focus:outline-none focus:ring-2 focus:ring-lime-300/40',
                     day.available
@@ -164,6 +169,10 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
                       : 'border-white/8 bg-white/5 text-transparent hover:border-white/16 hover:bg-white/8',
                   ].join(' ')}
                   onClick={() => {
+                    if (blockDraftChangesWhileSaving()) {
+                      return;
+                    }
+
                     setDays((current) =>
                       current.map((entry) =>
                         entry.weekday === day.weekday
@@ -203,9 +212,13 @@ export function AvailabilityCard({ settings, apiBaseUrl, onSave }: AvailabilityC
                     <select
                       aria-label={weekdayMaxDurationAriaLabel(weekdayLabel)}
                       className="w-full rounded-xl border border-white/8 bg-white/6 px-2.5 py-2 text-sm font-semibold text-white outline-none transition focus:border-emerald-300/40 disabled:cursor-not-allowed disabled:opacity-55"
-                      disabled={!day.available}
+                      disabled={isSaving || !day.available}
                       value={day.maxDurationMinutes ?? 60}
                       onChange={(event) => {
+                        if (blockDraftChangesWhileSaving()) {
+                          return;
+                        }
+
                         const value = Number(event.target.value);
                         setDays((current) =>
                           current.map((entry) =>

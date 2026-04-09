@@ -227,4 +227,51 @@ describe('AvailabilityCard', () => {
       expect(onSave).toHaveBeenCalledWith(updatedSettings);
     });
   });
+
+  it('prevents weekday edits while a save is in flight', async () => {
+    let resolveSave: ((value: UserSettingsResponse) => void) | undefined;
+    updateAvailabilityMock.mockImplementation(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    const settings = buildSettings();
+    settings.availability = {
+      configured: true,
+      days: [
+        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+        { weekday: 'tue', available: false, maxDurationMinutes: null },
+        { weekday: 'wed', available: false, maxDurationMinutes: null },
+        { weekday: 'thu', available: false, maxDurationMinutes: null },
+        { weekday: 'fri', available: false, maxDurationMinutes: null },
+        { weekday: 'sat', available: false, maxDurationMinutes: null },
+        { weekday: 'sun', available: false, maxDurationMinutes: null },
+      ],
+    };
+
+    render(<AvailabilityCard settings={settings} apiBaseUrl="" onSave={() => {}} />);
+
+    const mondaySwitch = screen.getByRole('switch', { name: /monday availability/i });
+    const mondayDuration = screen.getByRole('combobox', { name: /monday max duration/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /save availability/i }));
+
+    await waitFor(() => {
+      expect(updateAvailabilityMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: /saving availability/i })).toBeDisabled();
+    });
+
+    expect(mondaySwitch).toBeDisabled();
+    expect(mondayDuration).toBeDisabled();
+
+    fireEvent.click(mondaySwitch);
+    fireEvent.change(mondayDuration, { target: { value: '90' } });
+
+    expect(mondaySwitch).toHaveAttribute('aria-checked', 'true');
+    expect(mondayDuration).toHaveValue('60');
+
+    resolveSave?.(settings);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save availability/i })).toBeEnabled();
+    });
+  });
 });
