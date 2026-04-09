@@ -108,6 +108,7 @@ pub(in crate::adapters::rest) async fn create_event(
     let event = CreateEvent {
         category,
         start_date_local: body.start_date_local,
+        event_type: body.event_type,
         name: body.name,
         description: body.description,
         indoor: body.indoor,
@@ -158,6 +159,7 @@ pub(in crate::adapters::rest) async fn update_event(
     let event = UpdateEvent {
         category,
         start_date_local: body.start_date_local,
+        event_type: body.event_type,
         name: body.name,
         description: body.description,
         indoor: body.indoor,

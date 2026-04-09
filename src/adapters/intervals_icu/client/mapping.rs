@@ -12,6 +12,7 @@ pub(super) fn map_event_response(response: EventResponse) -> Event {
     Event {
         id: response.id,
         start_date_local: response.start_date_local,
+        event_type: response.event_type,
         name: response.name,
         category: EventCategory::from_api_str(&response.category),
         description: response.description,

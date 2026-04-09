@@ -98,6 +98,7 @@ async fn create_event_passes_event_to_api() {
     let input = CreateEvent {
         category: EventCategory::Workout,
         start_date_local: "2026-04-01".to_string(),
+        event_type: Some("Ride".to_string()),
         name: Some("New Workout".to_string()),
         description: Some("4x8min".to_string()),
         indoor: true,
@@ -129,6 +130,7 @@ async fn update_event_forwards_to_api() {
     let input = UpdateEvent {
         category: Some(EventCategory::Workout),
         start_date_local: None,
+        event_type: Some("Ride".to_string()),
         name: Some("Updated Workout".to_string()),
         description: Some("5x5min".to_string()),
         indoor: Some(false),

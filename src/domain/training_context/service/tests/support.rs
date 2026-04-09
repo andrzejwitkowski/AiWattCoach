@@ -95,6 +95,7 @@ impl IntervalsUseCases for TestIntervalsService {
                 Event {
                     id: 101,
                     start_date_local: "2026-04-03T07:00:00".to_string(),
+                    event_type: Some("Ride".to_string()),
                     name: Some("Sweet Spot".to_string()),
                     category: EventCategory::Workout,
                     description: None,
@@ -105,6 +106,7 @@ impl IntervalsUseCases for TestIntervalsService {
                 Event {
                     id: 202,
                     start_date_local: "2026-04-02T09:00:00".to_string(),
+                    event_type: Some("Ride".to_string()),
                     name: Some("Sick day".to_string()),
                     category: EventCategory::Note,
                     description: Some("Felt unwell with sore throat".to_string()),
@@ -448,6 +450,7 @@ impl IntervalsUseCases for FtpOrderingIntervalsService {
             Ok(vec![Event {
                 id: 101,
                 start_date_local: "2026-04-03T07:00:00".to_string(),
+                event_type: Some("Ride".to_string()),
                 name: Some("Workout match".to_string()),
                 category: EventCategory::Workout,
                 description: None,

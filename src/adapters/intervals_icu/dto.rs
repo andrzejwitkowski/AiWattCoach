@@ -6,6 +6,12 @@ pub struct EventResponse {
     #[serde(deserialize_with = "deserialize_i64_from_string_or_number")]
     pub id: i64,
     pub start_date_local: String,
+    #[serde(
+        rename = "type",
+        default,
+        deserialize_with = "deserialize_lenient_optional_string"
+    )]
+    pub event_type: Option<String>,
     #[serde(default, deserialize_with = "deserialize_lenient_optional_string")]
     pub name: Option<String>,
     pub category: String,
@@ -22,6 +28,8 @@ pub struct EventResponse {
 pub struct CreateEventRequest {
     pub category: String,
     pub start_date_local: String,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,6 +53,8 @@ pub struct UpdateEventRequest {
     pub category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_date_local: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

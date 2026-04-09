@@ -329,6 +329,63 @@ describe('useCalendarData', () => {
     expect(workoutDay?.events[0]?.eventDefinition.segments).toHaveLength(0);
   });
 
+  it('hydrates predicted workouts with positive safe synthetic ids', async () => {
+    vi.mocked(listCalendarEvents).mockResolvedValue([
+      {
+        id: 5906112577594034,
+        calendarEntryId: 'predicted:training-plan:user-1:w1:1775719860:2026-04-11',
+        startDateLocal: '2026-04-11',
+        name: 'Active Recovery',
+        category: 'WORKOUT',
+        description: null,
+        indoor: false,
+        color: null,
+        eventDefinition: {
+          rawWorkoutDoc: 'Active Recovery\n- 45m 50%',
+          intervals: [
+            { definition: 'Active Recovery', repeatCount: 1, durationSeconds: null, targetPercentFtp: null, zoneId: null },
+            { definition: '- 45m 50%', repeatCount: 1, durationSeconds: 2700, targetPercentFtp: 50, zoneId: 1 },
+          ],
+          segments: [
+            { order: 0, label: '45m 50%', durationSeconds: 2700, startOffsetSeconds: 0, endOffsetSeconds: 2700, targetPercentFtp: 50, zoneId: 1 },
+          ],
+          summary: {
+            totalSegments: 1,
+            totalDurationSeconds: 2700,
+            estimatedNormalizedPowerWatts: null,
+            estimatedAveragePowerWatts: null,
+            estimatedIntensityFactor: 0.5,
+            estimatedTrainingStressScore: 19,
+          },
+        },
+        actualWorkout: null,
+        plannedSource: 'predicted',
+        syncStatus: 'unsynced',
+        projectedWorkout: {
+          projectedWorkoutId: 'training-plan:user-1:w1:1775719860:2026-04-11',
+          operationKey: 'training-plan:user-1:w1:1775719860',
+          date: '2026-04-11',
+          sourceWorkoutId: 'w1',
+        },
+      },
+    ] satisfies IntervalEvent[]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoDetailedEvents();
+    mockNoDetailedActivities();
+
+    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    const workoutDay = result.current.weeks.flatMap((week) => week.days).find((day) => day.dateKey === '2026-04-11');
+
+    expect(workoutDay?.events).toHaveLength(1);
+    expect(workoutDay?.events[0]?.id).toBe(5906112577594034);
+    expect(workoutDay?.events[0]?.name).toBe('Active Recovery');
+  });
+
   it('keeps completed workout activities in the calendar window on list payloads only', async () => {
     const workoutDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 2));
 

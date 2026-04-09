@@ -303,6 +303,7 @@ pub enum EventCategory {
 pub struct Event {
     pub id: i64,
     pub start_date_local: String,
+    pub event_type: Option<String>,
     pub name: Option<String>,
     pub category: EventCategory,
     pub description: Option<String>,
@@ -315,6 +316,7 @@ pub struct Event {
 pub struct CreateEvent {
     pub category: EventCategory,
     pub start_date_local: String,
+    pub event_type: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
     pub indoor: bool,
@@ -327,6 +329,7 @@ pub struct CreateEvent {
 pub struct UpdateEvent {
     pub category: Option<EventCategory>,
     pub start_date_local: Option<String>,
+    pub event_type: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
     pub indoor: Option<bool>,

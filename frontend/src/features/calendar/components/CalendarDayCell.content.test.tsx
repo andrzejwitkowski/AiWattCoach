@@ -173,7 +173,7 @@ describe('CalendarDayCell content', () => {
       dateKey: '2026-03-27',
       events: [
         makeEvent({
-          id: -5,
+          id: 905,
           name: 'Coach Build',
           plannedSource: 'predicted',
           syncStatus: 'modified',
@@ -197,6 +197,108 @@ describe('CalendarDayCell content', () => {
     const dayCell = container.firstElementChild as HTMLElement;
 
     expect(within(dayCell).getByText('Modified')).toBeInTheDocument();
+    expect(dayCell.className).toContain('border-[#b9b082]/50');
+    expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Not Synced');
+  });
+
+  it('shows a disconnected sync indicator for unsynced planned workouts', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 11),
+      dateKey: '2026-04-11',
+      events: [
+        makeEvent({
+          id: 906,
+          name: 'Active Recovery',
+          plannedSource: 'predicted',
+          syncStatus: 'unsynced',
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-11',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-04-11',
+            sourceWorkoutId: 'w1',
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 2700,
+              estimatedTrainingStressScore: 19,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(dayCell.className).toContain('border-[#b9b082]/50');
+    expect(within(dayCell).getByText('Not Synced')).toBeInTheDocument();
+    expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Not Synced');
+  });
+
+  it('shows a connected sync indicator for synced planned workouts', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 16),
+      dateKey: '2026-04-16',
+      events: [
+        makeEvent({
+          id: 907,
+          name: 'Priming Session',
+          plannedSource: 'predicted',
+          syncStatus: 'synced',
+          linkedIntervalsEventId: 42,
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-16',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-04-16',
+            sourceWorkoutId: 'w1',
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 1680,
+              estimatedTrainingStressScore: 17,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(dayCell.className).toContain('border-[#80d998]/55');
+    expect(within(dayCell).getByText('Synced')).toBeInTheDocument();
+    expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Synced');
+  });
+
+  it('does not show sync visuals for non-predicted planned workouts', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 16),
+      dateKey: '2026-04-16',
+      events: [
+        makeEvent({
+          id: 908,
+          name: 'Intervals Planned Session',
+          plannedSource: 'intervals',
+          syncStatus: 'synced',
+          linkedIntervalsEventId: 43,
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 2400,
+              estimatedTrainingStressScore: 32,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(dayCell.className).not.toContain('border-[#80d998]/55');
+    expect(dayCell.className).not.toContain('border-[#b9b082]/50');
+    expect(within(dayCell).queryByText('Synced')).not.toBeInTheDocument();
+    expect(within(dayCell).queryByText('Not Synced')).not.toBeInTheDocument();
+    expect(within(dayCell).queryByTestId('planned-sync-status')).not.toBeInTheDocument();
   });
 
   it('does not show the coach planned badge for non-workout events', () => {

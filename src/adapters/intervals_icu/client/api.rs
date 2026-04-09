@@ -176,6 +176,10 @@ impl IntervalsApiPort for IntervalsIcuClient {
         let url = self.athlete_url(&credentials.athlete_id, "/events");
 
         Box::pin(async move {
+            let request_url = url.clone();
+            let start_date_local = event.start_date_local.clone();
+            let event_name = event.name.clone();
+            let workout_doc_preview = event.workout_doc.clone();
             let file_upload = event.file_upload;
             let response = client
                 .post(url)
@@ -183,6 +187,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .json(&CreateEventRequest {
                     category: map_category_to_string(&event.category),
                     start_date_local: event.start_date_local,
+                    event_type: event.event_type,
                     name: event.name,
                     description: event.description,
                     indoor: event.indoor,
@@ -201,7 +206,31 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .await
                 .map_err(map_connection_error)?;
 
-            let response = response.error_for_status().map_err(map_api_error)?;
+            if !response.status().is_success() {
+                let failure = map_error_response(response).await;
+                tracing::warn!(
+                    provider = "intervals_icu",
+                    method = "POST",
+                    url = %request_url,
+                    status = failure.status.map(|status| status.as_u16()).unwrap_or_default(),
+                    start_date_local = %start_date_local,
+                    event_name = event_name.as_deref().unwrap_or_default(),
+                    has_workout_doc = workout_doc_preview.is_some(),
+                    workout_doc_preview = %workout_doc_preview
+                        .as_deref()
+                        .map(truncate_logged_response_body)
+                        .unwrap_or_default(),
+                    error = %failure.error,
+                    response_body = %failure
+                        .response_body
+                        .as_deref()
+                        .map(truncate_logged_response_body)
+                        .unwrap_or_default(),
+                    "intervals create event request failed"
+                );
+                return Err(failure.error);
+            }
+
             let payload: EventResponse = response.json().await.map_err(map_api_error)?;
 
             Ok(map_event_response(payload))
@@ -219,6 +248,10 @@ impl IntervalsApiPort for IntervalsIcuClient {
         let url = self.athlete_url(&credentials.athlete_id, &format!("/events/{event_id}"));
 
         Box::pin(async move {
+            let request_url = url.clone();
+            let start_date_local = event.start_date_local.clone();
+            let event_name = event.name.clone();
+            let workout_doc_preview = event.workout_doc.clone();
             let file_upload = event.file_upload;
             let response = client
                 .put(url)
@@ -226,6 +259,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .json(&UpdateEventRequest {
                     category: event.category.as_ref().map(map_category_to_string),
                     start_date_local: event.start_date_local,
+                    event_type: event.event_type,
                     name: event.name,
                     description: event.description,
                     indoor: event.indoor,
@@ -248,7 +282,32 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 return Err(IntervalsError::NotFound);
             }
 
-            let response = response.error_for_status().map_err(map_api_error)?;
+            if !response.status().is_success() {
+                let failure = map_error_response(response).await;
+                tracing::warn!(
+                    provider = "intervals_icu",
+                    method = "PUT",
+                    url = %request_url,
+                    event_id,
+                    status = failure.status.map(|status| status.as_u16()).unwrap_or_default(),
+                    start_date_local = %start_date_local.as_deref().unwrap_or_default(),
+                    event_name = %event_name.as_deref().unwrap_or_default(),
+                    has_workout_doc = workout_doc_preview.is_some(),
+                    workout_doc_preview = %workout_doc_preview
+                        .as_deref()
+                        .map(truncate_logged_response_body)
+                        .unwrap_or_default(),
+                    error = %failure.error,
+                    response_body = %failure
+                        .response_body
+                        .as_deref()
+                        .map(truncate_logged_response_body)
+                        .unwrap_or_default(),
+                    "intervals update event request failed"
+                );
+                return Err(failure.error);
+            }
+
             let payload: EventResponse = response.json().await.map_err(map_api_error)?;
 
             Ok(map_event_response(payload))

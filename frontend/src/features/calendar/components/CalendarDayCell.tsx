@@ -1,4 +1,4 @@
-import { BedDouble, Bike, Dumbbell, Footprints, Waves } from 'lucide-react';
+import { BedDouble, Bike, Dumbbell, Footprints, Link2, Link2Off, Waves } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { CalendarDay } from '../types';
@@ -13,6 +13,14 @@ type CalendarDayCellProps = {
 };
 
 type Tone = 'primary' | 'secondary' | 'error' | 'anaerobic' | 'muted';
+type PlannedSyncVisual = {
+  borderClass: string;
+  hoverBorderClass: string;
+  icon: typeof Link2;
+  iconClass: string;
+  badgeClass: string;
+  label: string;
+};
 
 export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps) {
   const { t, i18n } = useTranslation();
@@ -23,6 +31,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     ? primaryEvent
     : null;
   const isPlannedOnly = Boolean(!primaryActivity && primaryPlannedWorkoutEvent);
+  const isPredictedPlannedOnly = Boolean(isPlannedOnly && primaryPlannedWorkoutEvent?.plannedSource === 'predicted');
   const plannedSyncStatus = primaryPlannedWorkoutEvent?.syncStatus ?? null;
   const hasTraining = Boolean(primaryActivity || primaryEvent);
   const extraItemCount = Math.max(0, day.activities.length + day.events.length - 1);
@@ -54,19 +63,40 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     ? getIcon(primaryActivity, primaryEvent)
     : BedDouble;
   const isSelectable = hasTraining && Boolean(onSelect);
+  const plannedSyncVisual = isPredictedPlannedOnly ? getPlannedSyncVisual(plannedSyncStatus, t) : null;
 
   const baseClassName = [
     'flex min-h-[160px] w-full flex-col gap-3 rounded-xl border p-3 text-left transition-colors md:min-h-[168px] md:p-3.5',
-    hasTraining ? 'bg-[#1d2024] border-white/5' : 'bg-[#1d2024]/85 border-white/5 opacity-60',
+    hasTraining
+      ? plannedSyncVisual
+        ? `bg-[#1d2024] ${plannedSyncVisual.borderClass}`
+        : 'bg-[#1d2024] border-white/5'
+      : 'bg-[#1d2024]/85 border-white/5 opacity-60',
     isToday ? 'ring-1 ring-[#d2ff9a]/40 shadow-[0_0_0_1px_rgba(210,255,154,0.15)]' : '',
-    isSelectable ? 'cursor-pointer hover:border-[#d2ff9a]/25 hover:bg-[#20242a]' : 'cursor-default',
+    isSelectable
+      ? plannedSyncVisual
+        ? `cursor-pointer hover:bg-[#20242a] ${plannedSyncVisual.hoverBorderClass}`
+        : 'cursor-pointer hover:border-[#d2ff9a]/25 hover:bg-[#20242a]'
+      : 'cursor-default',
   ].join(' ');
 
   const content = (
     <>
       <div className="flex items-start justify-between gap-2">
         <span className="text-[10px] font-bold text-slate-500">{formatDayLabel(day.date, locale)}</span>
-        <Icon className={iconColorClass(tone)} size={14} />
+        <div className="flex items-center gap-2">
+          {plannedSyncVisual ? (
+            <span
+              className={plannedSyncVisual.badgeClass}
+              title={plannedSyncVisual.label}
+              aria-label={plannedSyncVisual.label}
+              data-testid="planned-sync-status"
+            >
+              <plannedSyncVisual.icon className={plannedSyncVisual.iconClass} size={12} />
+            </span>
+          ) : null}
+          <Icon className={iconColorClass(tone)} size={14} />
+        </div>
       </div>
 
       {hasTraining ? (
@@ -77,6 +107,11 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#00e3fd]">
                 {t('calendar.plannedWorkout')}
               </p>
+              {plannedSyncVisual ? (
+                <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${plannedSyncVisual.iconClass}`}>
+                  {plannedSyncVisual.label}
+                </p>
+              ) : null}
               {plannedSyncStatus === 'modified' ? (
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffd7a1]">
                   {t('calendar.modified')}
@@ -322,5 +357,35 @@ function iconColorClass(tone: Tone): string {
     case 'primary':
     default:
       return 'text-[#d2ff9a]';
+  }
+}
+
+function getPlannedSyncVisual(
+  syncStatus: CalendarDay['events'][number]['syncStatus'] | null,
+  t: ReturnType<typeof useTranslation>['t'],
+): PlannedSyncVisual {
+  switch (syncStatus) {
+    case 'synced':
+      return {
+        borderClass: 'border-[#80d998]/55 shadow-[0_0_0_1px_rgba(128,217,152,0.08)]',
+        hoverBorderClass: 'hover:border-[#9af0af]/65',
+        icon: Link2,
+        iconClass: 'text-[#8fe8a4]',
+        badgeClass: 'inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#80d998]/35 bg-[#80d998]/10',
+        label: t('calendar.synced'),
+      };
+    case 'modified':
+    case 'failed':
+    case 'pending':
+    case 'unsynced':
+    default:
+      return {
+        borderClass: 'border-[#b9b082]/50 shadow-[0_0_0_1px_rgba(185,176,130,0.08)]',
+        hoverBorderClass: 'hover:border-[#d0c792]/65',
+        icon: Link2Off,
+        iconClass: 'text-[#d8ce9c]',
+        badgeClass: 'inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#b9b082]/35 bg-[#b9b082]/10',
+        label: t('calendar.notSynced'),
+      };
   }
 }

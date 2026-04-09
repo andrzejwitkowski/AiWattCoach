@@ -154,6 +154,8 @@ pub(in crate::adapters::rest) struct CreateEventDto {
     pub category: String,
     #[serde(rename = "startDateLocal")]
     pub start_date_local: String,
+    #[serde(rename = "type")]
+    pub event_type: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
     #[serde(default)]
@@ -170,6 +172,8 @@ pub(in crate::adapters::rest) struct UpdateEventDto {
     pub category: Option<String>,
     #[serde(rename = "startDateLocal")]
     pub start_date_local: Option<String>,
+    #[serde(rename = "type")]
+    pub event_type: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
     pub indoor: Option<bool>,

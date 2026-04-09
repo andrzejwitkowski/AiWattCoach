@@ -49,6 +49,7 @@ async fn list_calendar_events_returns_intervals_events_for_authenticated_user() 
         TestIntervalsService::with_events(vec![Event {
             id: 11,
             start_date_local: "2026-03-22".to_string(),
+            event_type: Some("Ride".to_string()),
             name: Some("VO2 Session".to_string()),
             category: EventCategory::Workout,
             description: None,
@@ -101,6 +102,45 @@ async fn list_calendar_events_reports_missing_credentials_as_unprocessable_entit
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn list_calendar_events_returns_predicted_events_with_positive_safe_ids() {
+    let app = intervals_test_app_with_projections(
+        TestIdentityServiceWithSession::default(),
+        ScopedIntervalsService::default(),
+        TestTrainingPlanProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1:1775719860",
+            "2026-03-26",
+            "Build Session",
+        )]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    let event = &body.as_array().unwrap()[0];
+    let event_id = event.get("id").and_then(|value| value.as_i64()).unwrap();
+
+    assert!(event_id > 0);
+    assert!(event_id <= 9_007_199_254_740_991);
+    assert_eq!(
+        event.get("plannedSource").unwrap().as_str(),
+        Some("predicted")
+    );
 }
 
 #[tokio::test]
@@ -161,11 +201,10 @@ async fn sync_planned_workout_returns_synced_calendar_event() {
         .await
         .unwrap();
     assert_eq!(created_event.len(), 1);
+    assert_eq!(created_event[0].start_date_local, "2026-03-26T00:00:00");
     assert_eq!(created_event[0].name.as_deref(), Some("Build Session"));
-    assert_eq!(
-        created_event[0].workout_doc.as_deref(),
-        Some(serialize_planned_workout(&build_planned_workout("Build Session")).as_str())
-    );
+    assert_eq!(created_event[0].workout_doc, None);
+    assert_eq!(created_event[0].description.as_deref(), Some("- 60m 70%"));
 }
 
 #[tokio::test]
@@ -175,6 +214,7 @@ async fn sync_planned_workout_preserves_existing_remote_description() {
         vec![Event {
             id: 41,
             start_date_local: "2026-03-26".to_string(),
+            event_type: Some("Ride".to_string()),
             name: Some("Build Session".to_string()),
             category: EventCategory::Workout,
             description: Some("Keep this description".to_string()),
@@ -222,13 +262,31 @@ async fn sync_planned_workout_preserves_existing_remote_description() {
         .await
         .unwrap();
 
-    assert_eq!(updated_events.len(), 1);
-    assert_eq!(updated_events[0].id, 41);
-    assert_eq!(updated_events[0].name.as_deref(), Some("Build Session"));
+    assert_eq!(updated_events.len(), 2);
+    let updated_event = updated_events
+        .iter()
+        .find(|event| event.id == 41)
+        .expect("existing event should be updated in place");
+    assert_eq!(updated_event.start_date_local, "2026-03-26");
+    assert_eq!(updated_event.name.as_deref(), Some("Build Session"));
     assert_eq!(
-        updated_events[0].description.as_deref(),
+        updated_event.description.as_deref(),
         Some("Keep this description")
     );
+    assert!(updated_event.indoor);
+    assert_eq!(updated_event.color.as_deref(), Some("blue"));
+    assert_eq!(
+        updated_event.workout_doc.as_deref(),
+        Some(serialize_planned_workout(&build_planned_workout("Build Session")).as_str())
+    );
+
+    let synced_event = updated_events
+        .iter()
+        .find(|event| event.id != 41)
+        .expect("synced event copy should be created");
+    assert_eq!(synced_event.start_date_local, "2026-03-26T00:00:00");
+    assert_eq!(synced_event.description.as_deref(), Some("- 60m 70%"));
+    assert_eq!(synced_event.workout_doc, None);
 }
 
 #[tokio::test]
