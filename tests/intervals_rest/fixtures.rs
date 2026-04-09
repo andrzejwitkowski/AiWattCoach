@@ -13,6 +13,7 @@ pub(crate) fn sample_event(id: i64, name: &str, workout_doc: Option<String>) -> 
     Event {
         id,
         start_date_local: "2026-03-22".to_string(),
+        event_type: Some("Ride".to_string()),
         name: Some(name.to_string()),
         category: EventCategory::Workout,
         description: Some("structured workout".to_string()),

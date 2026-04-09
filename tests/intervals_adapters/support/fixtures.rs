@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct ResponseEvent {
     id: i64,
     start_date_local: String,
+    #[serde(rename = "type")]
+    event_type: Option<String>,
     name: Option<String>,
     category: String,
     description: Option<String>,
@@ -17,6 +19,7 @@ impl ResponseEvent {
         Self {
             id,
             start_date_local: "2026-03-22".to_string(),
+            event_type: Some("Ride".to_string()),
             name: Some(name.to_string()),
             category: "WORKOUT".to_string(),
             description: Some("structured workout".to_string()),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
-import { createEvent, deleteEvent, downloadFit, listEvents, loadEvent, syncPlannedWorkout, updateEvent } from './intervals';
+import { createEvent, deleteEvent, downloadFit, listCalendarEvents, listEvents, loadEvent, syncPlannedWorkout, updateEvent } from './intervals';
 import { createFetchMock, useFetchMock } from './testHelpers';
 
 describe('intervals api events', () => {
@@ -46,6 +46,61 @@ describe('intervals api events', () => {
     expect(result[0].eventDefinition.intervals[0].definition).toBe('- 10min 55%');
     expect(result[0].eventDefinition.segments[0].durationSeconds).toBe(600);
     expect(result[0].eventDefinition.summary.estimatedIntensityFactor).toBe(0.55);
+  });
+
+  it('loads predicted calendar events with positive safe ids', async () => {
+    useFetchMock(
+      createFetchMock().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              id: 5906112577594034,
+              calendarEntryId: 'predicted:training-plan:user-1:w1:1775719860:2026-04-11',
+              startDateLocal: '2026-04-11',
+              name: 'Active Recovery',
+              category: 'WORKOUT',
+              description: null,
+              indoor: false,
+              color: null,
+              eventDefinition: {
+                rawWorkoutDoc: 'Active Recovery\n- 45m 50%',
+                intervals: [
+                  { definition: 'Active Recovery', repeatCount: 1, durationSeconds: null, targetPercentFtp: null, zoneId: null },
+                  { definition: '- 45m 50%', repeatCount: 1, durationSeconds: 2700, targetPercentFtp: 50, zoneId: 1 },
+                ],
+                segments: [
+                  { order: 0, label: '45m 50%', durationSeconds: 2700, startOffsetSeconds: 0, endOffsetSeconds: 2700, targetPercentFtp: 50, zoneId: 1 },
+                ],
+                summary: {
+                  totalSegments: 1,
+                  totalDurationSeconds: 2700,
+                  estimatedNormalizedPowerWatts: null,
+                  estimatedAveragePowerWatts: null,
+                  estimatedIntensityFactor: 0.5,
+                  estimatedTrainingStressScore: 18.8,
+                },
+              },
+              actualWorkout: null,
+              plannedSource: 'predicted',
+              syncStatus: 'unsynced',
+              projectedWorkout: {
+                projectedWorkoutId: 'training-plan:user-1:w1:1775719860:2026-04-11',
+                operationKey: 'training-plan:user-1:w1:1775719860',
+                date: '2026-04-11',
+                sourceWorkoutId: 'w1',
+              },
+            },
+          ]),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const result = await listCalendarEvents('', { oldest: '2026-04-01', newest: '2026-04-30' });
+
+    expect(result[0]?.id).toBe(5906112577594034);
+    expect(result[0]?.plannedSource).toBe('predicted');
+    expect(result[0]?.projectedWorkout?.date).toBe('2026-04-11');
   });
 
   it('creates, updates, loads and deletes interval events', async () => {

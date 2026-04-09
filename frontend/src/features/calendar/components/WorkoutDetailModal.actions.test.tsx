@@ -114,7 +114,7 @@ describe('WorkoutDetailModal actions', () => {
   it('syncs a planned workout from the modal action', async () => {
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
-        id: -91,
+        id: 901,
         startDateLocal: '2026-03-26',
         name: 'Predicted Build',
         plannedSource: 'predicted',
@@ -159,7 +159,7 @@ describe('WorkoutDetailModal actions', () => {
         selection={makeSelection({
           dateKey: '2026-03-26',
           event: makeEvent({
-            id: -91,
+            id: 901,
             startDateLocal: '2026-03-26',
             name: 'Predicted Build',
             plannedSource: 'predicted',
@@ -187,7 +187,7 @@ describe('WorkoutDetailModal actions', () => {
   it('shows sync failure feedback when the planned workout sync request fails', async () => {
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
-        id: -92,
+        id: 902,
         startDateLocal: '2026-03-27',
         name: 'Predicted Failure',
         plannedSource: 'predicted',
@@ -213,7 +213,7 @@ describe('WorkoutDetailModal actions', () => {
         selection={makeSelection({
           dateKey: '2026-03-27',
           event: makeEvent({
-            id: -92,
+            id: 902,
             startDateLocal: '2026-03-27',
             name: 'Predicted Failure',
             plannedSource: 'predicted',
@@ -246,7 +246,7 @@ describe('WorkoutDetailModal actions', () => {
         selection={makeSelection({
           dateKey: '2026-03-28',
           event: makeEvent({
-            id: -93,
+            id: 903,
             startDateLocal: '2026-03-28',
             name: 'Unsynced Prediction',
             plannedSource: 'predicted',

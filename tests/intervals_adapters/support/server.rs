@@ -31,7 +31,9 @@ pub(super) struct ServerState {
     pub(super) list_activities: Arc<Mutex<Vec<ResponseActivity>>>,
     pub(super) list_activities_raw: Arc<Mutex<Option<serde_json::Value>>>,
     pub(super) created_event: Arc<Mutex<Option<ResponseEvent>>>,
+    pub(super) created_event_failure: Arc<Mutex<Option<(StatusCode, serde_json::Value)>>>,
     pub(super) updated_event: Arc<Mutex<Option<ResponseEvent>>>,
+    pub(super) updated_event_failure: Arc<Mutex<Option<(StatusCode, serde_json::Value)>>>,
     pub(super) activity: Arc<Mutex<Option<ResponseActivity>>>,
     pub(super) activity_with_intervals: Arc<Mutex<Option<ResponseActivity>>>,
     pub(super) activity_intervals: Arc<Mutex<Option<ResponseActivityIntervals>>>,
@@ -55,7 +57,9 @@ impl Default for ServerState {
             list_activities: Arc::new(Mutex::new(Vec::new())),
             list_activities_raw: Arc::new(Mutex::new(None)),
             created_event: Arc::new(Mutex::new(None)),
+            created_event_failure: Arc::new(Mutex::new(None)),
             updated_event: Arc::new(Mutex::new(None)),
+            updated_event_failure: Arc::new(Mutex::new(None)),
             activity: Arc::new(Mutex::new(None)),
             activity_with_intervals: Arc::new(Mutex::new(None)),
             activity_intervals: Arc::new(Mutex::new(None)),
@@ -105,10 +109,20 @@ impl TestIntervalsServer {
 
     pub(crate) fn set_created_event(&self, event: ResponseEvent) {
         *self.state.created_event.lock().unwrap() = Some(event);
+        *self.state.created_event_failure.lock().unwrap() = None;
+    }
+
+    pub(crate) fn set_created_event_failure(&self, status: StatusCode, payload: serde_json::Value) {
+        *self.state.created_event_failure.lock().unwrap() = Some((status, payload));
     }
 
     pub(crate) fn set_updated_event(&self, event: ResponseEvent) {
         *self.state.updated_event.lock().unwrap() = Some(event);
+        *self.state.updated_event_failure.lock().unwrap() = None;
+    }
+
+    pub(crate) fn set_updated_event_failure(&self, status: StatusCode, payload: serde_json::Value) {
+        *self.state.updated_event_failure.lock().unwrap() = Some((status, payload));
     }
 
     pub(crate) fn set_fit_bytes(&self, bytes: Vec<u8>) {

@@ -127,6 +127,7 @@ async fn intervals_client_posts_updates_and_downloads_fit() {
             CreateEvent {
                 category: EventCategory::Workout,
                 start_date_local: "2026-03-22".to_string(),
+                event_type: Some("Ride".to_string()),
                 name: Some("Created".to_string()),
                 description: Some("desc".to_string()),
                 indoor: true,
@@ -144,6 +145,7 @@ async fn intervals_client_posts_updates_and_downloads_fit() {
             UpdateEvent {
                 category: Some(EventCategory::Workout),
                 start_date_local: None,
+                event_type: Some("Ride".to_string()),
                 name: Some("Updated".to_string()),
                 description: None,
                 indoor: Some(false),
@@ -189,6 +191,126 @@ async fn intervals_client_maps_upstream_auth_failures_to_credentials_error() {
     let result = client.get_event(&test_credentials(), 401).await;
 
     assert_eq!(result, Err(IntervalsError::CredentialsNotConfigured));
+}
+
+#[tokio::test]
+async fn intervals_client_surfaces_create_event_upstream_error_body() {
+    let server = TestIntervalsServer::start().await;
+    server.set_created_event_failure(
+        StatusCode::BAD_REQUEST,
+        json!({ "error": "invalid workout_doc syntax near Main Set 3x" }),
+    );
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .create_event(
+            &test_credentials(),
+            CreateEvent {
+                category: EventCategory::Workout,
+                start_date_local: "2026-04-11T00:00:00".to_string(),
+                event_type: Some("Ride".to_string()),
+                name: Some("Priming Session".to_string()),
+                description: None,
+                indoor: false,
+                color: None,
+                workout_doc: Some(
+                    "Priming Session\nWarmup\n- 15m ramp 50-70%\nMain Set 3x\n- 1m 100%\n- 2m 50%\nCooldown\n- 10m 50%"
+                        .to_string(),
+                ),
+                file_upload: None,
+            },
+        )
+        .await;
+
+    match result {
+        Err(IntervalsError::ApiError(message)) => {
+            assert!(message.contains("HTTP 400 Bad Request"));
+            assert!(message.contains("/api/v1/athlete/athlete-7/events"));
+            assert!(message.contains("invalid workout_doc syntax near Main Set 3x"));
+        }
+        other => panic!("expected api error, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn intervals_client_posts_create_event_payload_as_json_object() {
+    let server = TestIntervalsServer::start().await;
+    server.set_created_event(ResponseEvent::sample(203, "Created"));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let _created = client
+        .create_event(
+            &test_credentials(),
+            CreateEvent {
+                category: EventCategory::Workout,
+                start_date_local: "2026-04-11T00:00:00".to_string(),
+                event_type: Some("Ride".to_string()),
+                name: Some("Active Recovery".to_string()),
+                description: Some("- 45m 50%".to_string()),
+                indoor: false,
+                color: None,
+                workout_doc: None,
+                file_upload: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    let body = String::from_utf8(requests[0].body.clone().unwrap()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+    assert_eq!(
+        json.get("start_date_local")
+            .and_then(|value| value.as_str()),
+        Some("2026-04-11T00:00:00")
+    );
+    assert_eq!(
+        json.get("type").and_then(|value| value.as_str()),
+        Some("Ride")
+    );
+    assert_eq!(
+        json.get("description").and_then(|value| value.as_str()),
+        Some("- 45m 50%")
+    );
+    assert!(json.get("workout_doc").is_none());
+}
+
+#[tokio::test]
+async fn intervals_client_surfaces_update_event_upstream_error_body() {
+    let server = TestIntervalsServer::start().await;
+    server.set_updated_event_failure(
+        StatusCode::BAD_REQUEST,
+        json!({ "error": "event update rejected" }),
+    );
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .update_event(
+            &test_credentials(),
+            202,
+            UpdateEvent {
+                category: Some(EventCategory::Workout),
+                start_date_local: Some("2026-04-11".to_string()),
+                event_type: Some("Ride".to_string()),
+                name: Some("Active Recovery".to_string()),
+                description: None,
+                indoor: Some(false),
+                color: None,
+                workout_doc: Some("Active Recovery\n- 45m 50%".to_string()),
+                file_upload: None,
+            },
+        )
+        .await;
+
+    match result {
+        Err(IntervalsError::ApiError(message)) => {
+            assert!(message.contains("HTTP 400 Bad Request"));
+            assert!(message.contains("/api/v1/athlete/athlete-7/events/202"));
+            assert!(message.contains("event update rejected"));
+        }
+        other => panic!("expected api error, got {other:?}"),
+    }
 }
 
 #[tokio::test]

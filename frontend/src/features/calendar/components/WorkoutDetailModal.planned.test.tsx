@@ -262,7 +262,7 @@ describe('WorkoutDetailModal planned mode', () => {
         selection={makeSelection({
           dateKey: '2026-03-26',
           event: makeEvent({
-            id: -91,
+            id: 901,
             startDateLocal: '2026-03-26',
             name: 'Predicted Build',
             plannedSource: 'predicted',

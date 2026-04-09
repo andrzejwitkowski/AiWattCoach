@@ -209,6 +209,7 @@ impl IntervalsUseCases for TestIntervalsService {
             let event = Event {
                 id: 1000,
                 start_date_local: event.start_date_local,
+                event_type: event.event_type,
                 name: event.name,
                 category: event.category,
                 description: event.description,
@@ -244,6 +245,9 @@ impl IntervalsUseCases for TestIntervalsService {
             }
             if let Some(start_date_local) = event.start_date_local {
                 existing.start_date_local = start_date_local;
+            }
+            if let Some(event_type) = event.event_type {
+                existing.event_type = Some(event_type);
             }
             if let Some(name) = event.name {
                 existing.name = Some(name);

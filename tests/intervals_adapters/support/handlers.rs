@@ -165,6 +165,10 @@ async fn create_event_handler(
         Some(body.to_string().into_bytes()),
     );
 
+    if let Some((status, payload)) = state.created_event_failure.lock().unwrap().clone() {
+        return (status, Json(payload)).into_response();
+    }
+
     Json(
         state
             .created_event
@@ -173,6 +177,7 @@ async fn create_event_handler(
             .clone()
             .unwrap_or_else(|| ResponseEvent::sample(1, "Created")),
     )
+    .into_response()
 }
 
 async fn update_event_handler(
@@ -193,6 +198,10 @@ async fn update_event_handler(
         Some(body.to_string().into_bytes()),
     );
 
+    if let Some((status, payload)) = state.updated_event_failure.lock().unwrap().clone() {
+        return (status, Json(payload)).into_response();
+    }
+
     Json(
         state
             .updated_event
@@ -201,6 +210,7 @@ async fn update_event_handler(
             .clone()
             .unwrap_or_else(|| ResponseEvent::sample(path.event_id, "Updated")),
     )
+    .into_response()
 }
 
 async fn delete_event_handler(

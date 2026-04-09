@@ -178,7 +178,7 @@ where
                     .update_event(
                         user_id,
                         existing_remote_event.id,
-                        build_update_event(&projected_day),
+                        build_update_event(&projected_day, &existing_remote_event),
                     )
                     .await
                     .map_err(map_intervals_error)?
@@ -210,6 +210,22 @@ where
                 ))
             }
             Err(error) => {
+                let sync_action = if pending_record.intervals_event_id.is_some() {
+                    "update"
+                } else {
+                    "create"
+                };
+                tracing::warn!(
+                    user_id,
+                    operation_key = %request.operation_key,
+                    date = %request.date,
+                    sync_action,
+                    linked_intervals_event_id = pending_record.intervals_event_id,
+                    payload_hash = %payload_hash,
+                    workout_name = projected_workout_name(&projected_day).as_deref().unwrap_or_default(),
+                    error = %error,
+                    "planned workout sync failed"
+                );
                 let failed_record = pending_record.mark_failed(
                     projected_day.workout_id.clone(),
                     error.to_string(),
@@ -276,6 +292,7 @@ fn build_projected_calendar_event(
         event: Event {
             id: event_id,
             start_date_local: day.date.clone(),
+            event_type: Some("Ride".to_string()),
             name: projected_workout_name(&day),
             category: EventCategory::Workout,
             description: None,
@@ -339,11 +356,14 @@ where
 
     Ok(events.into_iter().find(|event| {
         event.category == EventCategory::Workout
-            && event.start_date_local == projected_day.date
+            && event.start_date_local.starts_with(&projected_day.date)
             && projected_event_payload_hash(
-                &event.start_date_local,
+                &projected_day.date,
                 event.name.as_deref(),
-                event.workout_doc.as_deref(),
+                event
+                    .description
+                    .as_deref()
+                    .or(event.workout_doc.as_deref()),
             ) == payload_hash
     }))
 }
@@ -351,25 +371,33 @@ where
 fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
     CreateEvent {
         category: EventCategory::Workout,
-        start_date_local: day.date.clone(),
+        start_date_local: projected_event_start_date_local(&day.date),
+        event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
-        description: None,
+        description: projected_workout_sync_description(day),
         indoor: false,
         color: None,
-        workout_doc: day.workout.as_ref().map(serialize_projected_workout),
+        workout_doc: None,
         file_upload: None,
     }
 }
 
-fn build_update_event(day: &TrainingPlanProjectedDay) -> UpdateEvent {
+fn build_update_event(day: &TrainingPlanProjectedDay, existing_event: &Event) -> UpdateEvent {
     UpdateEvent {
         category: Some(EventCategory::Workout),
-        start_date_local: Some(day.date.clone()),
+        start_date_local: Some(projected_event_start_date_local(&day.date)),
+        event_type: existing_event
+            .event_type
+            .clone()
+            .or_else(|| Some("Ride".to_string())),
         name: projected_workout_name(day),
-        description: None,
-        indoor: Some(false),
-        color: None,
-        workout_doc: day.workout.as_ref().map(serialize_projected_workout),
+        description: merge_event_description(
+            existing_event.description.as_deref(),
+            projected_workout_sync_description(day).as_deref(),
+        ),
+        indoor: Some(existing_event.indoor),
+        color: existing_event.color.clone(),
+        workout_doc: None,
         file_upload: None,
     }
 }
@@ -387,14 +415,114 @@ fn serialize_projected_workout(workout: &crate::domain::intervals::PlannedWorkou
     crate::domain::intervals::serialize_planned_workout(workout)
 }
 
+fn projected_event_start_date_local(date: &str) -> String {
+    format!("{date}T00:00:00")
+}
+
+fn projected_workout_sync_description(day: &TrainingPlanProjectedDay) -> Option<String> {
+    let workout = day.workout.as_ref()?;
+    let workout_name = projected_workout_name(day);
+
+    let lines = workout
+        .lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let is_title_line = index == 0
+                && line
+                    .text()
+                    .zip(workout_name.as_deref())
+                    .is_some_and(|(text, name)| text == name);
+
+            (!is_title_line).then(|| serialize_projected_workout_line(line))
+        })
+        .collect::<Vec<_>>();
+
+    if lines.is_empty() {
+        workout_name
+    } else {
+        Some(lines.join("\n"))
+    }
+}
+
+fn serialize_projected_workout_line(line: &crate::domain::intervals::PlannedWorkoutLine) -> String {
+    match line {
+        crate::domain::intervals::PlannedWorkoutLine::Text(text) => text.text.clone(),
+        crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => match &repeat.title {
+            Some(title) => format!("{title} {}x", repeat.count),
+            None => format!("{}x", repeat.count),
+        },
+        crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
+            let duration = format_projected_step_duration(step.duration_seconds);
+            let target = format_projected_step_target(&step.target);
+            match step.kind {
+                crate::domain::intervals::PlannedWorkoutStepKind::Steady => {
+                    format!("- {duration} {target}")
+                }
+                crate::domain::intervals::PlannedWorkoutStepKind::Ramp => {
+                    format!("- {duration} ramp {target}")
+                }
+            }
+        }
+    }
+}
+
+fn format_projected_step_duration(duration_seconds: i32) -> String {
+    if duration_seconds % 60 == 0 {
+        format!("{}m", duration_seconds / 60)
+    } else {
+        format!("{duration_seconds}s")
+    }
+}
+
+fn format_projected_step_target(target: &crate::domain::intervals::PlannedWorkoutTarget) -> String {
+    match target {
+        crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max } => {
+            if (min - max).abs() < f64::EPSILON {
+                format!("{}%", trim_decimal(*min))
+            } else {
+                format!("{}-{}%", trim_decimal(*min), trim_decimal(*max))
+            }
+        }
+        crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max } => {
+            if min == max {
+                format!("{min}W")
+            } else {
+                format!("{min}-{max}W")
+            }
+        }
+    }
+}
+
+fn trim_decimal(value: f64) -> String {
+    let rounded = (value * 10.0).round() / 10.0;
+    if (rounded.fract()).abs() < f64::EPSILON {
+        format!("{rounded:.0}")
+    } else {
+        format!("{rounded:.1}")
+    }
+}
+
+fn merge_event_description(existing: Option<&str>, projected: Option<&str>) -> Option<String> {
+    match (
+        existing.map(str::trim).filter(|value| !value.is_empty()),
+        projected,
+    ) {
+        (None, None) => None,
+        (Some(existing), None) => Some(existing.to_string()),
+        (None, Some(projected)) => Some(projected.to_string()),
+        (Some(existing), Some(projected)) if existing.contains(projected) => {
+            Some(existing.to_string())
+        }
+        (Some(existing), Some(projected)) => Some(format!("{existing}\n\n{projected}")),
+    }
+}
+
 fn projected_day_payload_hash(day: &TrainingPlanProjectedDay) -> String {
     projected_event_payload_hash(
         &day.date,
         projected_workout_name(day).as_deref(),
-        day.workout
-            .as_ref()
-            .map(serialize_projected_workout)
-            .as_deref(),
+        projected_workout_sync_description(day).as_deref(),
     )
 }
 
@@ -416,11 +544,13 @@ fn projected_workout_id(operation_key: &str, date: &str) -> String {
 }
 
 fn synthetic_event_id(operation_key: &str, date: &str) -> i64 {
+    const MAX_JS_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
     let digest = Sha256::digest(format!("{operation_key}:{date}"));
     let mut bytes = [0_u8; 8];
     bytes.copy_from_slice(&digest[..8]);
-    let value = i64::from_be_bytes(bytes).saturating_abs();
-    -std::cmp::max(1, value)
+    let value = u64::from_be_bytes(bytes);
+    ((value % MAX_JS_SAFE_INTEGER) + 1) as i64
 }
 
 fn is_date_in_range(date: &str, range: &DateRange) -> bool {
