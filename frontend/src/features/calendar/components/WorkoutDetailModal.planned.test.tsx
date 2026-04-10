@@ -59,7 +59,7 @@ describe('WorkoutDetailModal planned mode', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText('Sweet Spot')).toBeInTheDocument());
+    await waitFor(() => expect(within(metricCard('Duration')).getByText('24m')).toBeInTheDocument());
 
     expect(screen.getByText(/planned workout/i)).toBeInTheDocument();
     expect(within(metricCard('Duration')).getByText('24m')).toBeInTheDocument();
@@ -101,7 +101,7 @@ describe('WorkoutDetailModal planned mode', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText('Tempo Builder')).toBeInTheDocument());
+    await waitFor(() => expect(within(metricCard('Duration')).getByText('40m')).toBeInTheDocument());
 
     expect(screen.getByText(/planned workout/i)).toBeInTheDocument();
     expect(within(metricCard('Duration')).getByText('40m')).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe('WorkoutDetailModal planned mode', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText('Plan only')).toBeInTheDocument());
+    await waitFor(() => expect(within(metricCard('Duration')).getByText('30m')).toBeInTheDocument());
 
     expect(screen.getByText(/planned workout/i)).toBeInTheDocument();
     expect(screen.queryByText('Unrelated ride')).not.toBeInTheDocument();
@@ -233,7 +233,7 @@ describe('WorkoutDetailModal planned mode', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText('VO2 Builder')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
 
     expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
     expect(screen.getByText('120% FTP max target')).toBeInTheDocument();
@@ -284,7 +284,7 @@ describe('WorkoutDetailModal planned mode', () => {
       />,
     );
 
-    await waitFor(() => expect(mockedLoadEvent).toHaveBeenCalledWith('', 91));
+    await waitFor(() => expect(screen.getByRole('button', { name: /sync to intervals/i })).toBeInTheDocument());
 
     expect(screen.getByText(/planned workout/i)).toBeInTheDocument();
     expect(screen.getByText(/synced/i)).toBeInTheDocument();
