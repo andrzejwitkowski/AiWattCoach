@@ -4,9 +4,11 @@ use mongodb::Client;
 
 use crate::domain::athlete_summary::AthleteSummaryUseCases;
 use crate::domain::calendar::CalendarUseCases;
+use crate::domain::calendar_labels::CalendarLabelsUseCases;
 use crate::domain::identity::IdentityUseCases;
 use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
+use crate::domain::races::RaceUseCases;
 use crate::domain::settings::UserSettingsUseCases;
 use crate::domain::workout_summary::WorkoutSummaryUseCases;
 
@@ -18,7 +20,9 @@ pub struct AppState {
     pub client_log_ingestion_enabled: bool,
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub calendar_service: Option<Arc<dyn CalendarUseCases>>,
+    pub calendar_labels_service: Option<Arc<dyn CalendarLabelsUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
+    pub race_service: Option<Arc<dyn RaceUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
     pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
@@ -44,7 +48,9 @@ impl AppState {
             client_log_ingestion_enabled: false,
             identity_service: None,
             calendar_service: None,
+            calendar_labels_service: None,
             intervals_service: None,
+            race_service: None,
             settings_service: None,
             athlete_summary_service: None,
             workout_summary_service: None,
@@ -87,6 +93,14 @@ impl AppState {
         self
     }
 
+    pub fn with_calendar_labels_service(
+        mut self,
+        calendar_labels_service: Arc<dyn CalendarLabelsUseCases>,
+    ) -> Self {
+        self.calendar_labels_service = Some(calendar_labels_service);
+        self
+    }
+
     pub fn with_workout_summary_service(
         mut self,
         workout_summary_service: Arc<dyn WorkoutSummaryUseCases>,
@@ -120,6 +134,11 @@ impl AppState {
 
     pub fn with_intervals_service(mut self, intervals_service: Arc<dyn IntervalsUseCases>) -> Self {
         self.intervals_service = Some(intervals_service);
+        self
+    }
+
+    pub fn with_race_service(mut self, race_service: Arc<dyn RaceUseCases>) -> Self {
+        self.race_service = Some(race_service);
         self
     }
 

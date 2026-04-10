@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use crate::domain::intervals::DateRange;
+use crate::domain::{calendar_labels::CalendarLabelError, intervals::DateRange};
 
 use super::{CalendarError, CalendarEvent, PlannedWorkoutSyncRecord, SyncPlannedWorkout};
 
@@ -38,4 +38,12 @@ pub trait CalendarUseCases: Send + Sync {
         user_id: &str,
         request: SyncPlannedWorkout,
     ) -> BoxFuture<Result<CalendarEvent, CalendarError>>;
+}
+
+pub trait HiddenCalendarEventSource: Send + Sync + 'static {
+    fn list_hidden_intervals_event_ids(
+        &self,
+        user_id: &str,
+        range: &DateRange,
+    ) -> BoxFuture<Result<Vec<i64>, CalendarLabelError>>;
 }

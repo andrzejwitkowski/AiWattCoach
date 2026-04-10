@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use sha2::{Digest, Sha256};
 
 use crate::domain::{
+    calendar_labels::CalendarLabelError,
     identity::Clock,
     intervals::{
         CreateEvent, DateRange, Event, EventCategory, IntervalsError, IntervalsUseCases,
@@ -13,36 +14,47 @@ use crate::domain::{
 
 use super::{
     BoxFuture, CalendarError, CalendarEvent, CalendarEventSource, CalendarProjectedWorkout,
-    CalendarUseCases, PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository,
-    PlannedWorkoutSyncStatus, SyncPlannedWorkout,
+    CalendarUseCases, HiddenCalendarEventSource, PlannedWorkoutSyncRecord,
+    PlannedWorkoutSyncRepository, PlannedWorkoutSyncStatus, SyncPlannedWorkout,
 };
 
 #[derive(Clone)]
-pub struct CalendarService<Intervals, Projections, Syncs, Time>
+pub struct CalendarService<Intervals, Projections, Syncs, Hidden, Time>
 where
     Intervals: IntervalsUseCases + Clone + 'static,
     Projections: TrainingPlanProjectionRepository + Clone + 'static,
     Syncs: PlannedWorkoutSyncRepository + Clone + 'static,
+    Hidden: HiddenCalendarEventSource + Clone + 'static,
     Time: Clock + Clone + 'static,
 {
     intervals: Intervals,
     projections: Projections,
     syncs: Syncs,
+    hidden_event_source: Hidden,
     clock: Time,
 }
 
-impl<Intervals, Projections, Syncs, Time> CalendarService<Intervals, Projections, Syncs, Time>
+impl<Intervals, Projections, Syncs, Hidden, Time>
+    CalendarService<Intervals, Projections, Syncs, Hidden, Time>
 where
     Intervals: IntervalsUseCases + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
     Syncs: PlannedWorkoutSyncRepository + Clone,
+    Hidden: HiddenCalendarEventSource + Clone,
     Time: Clock + Clone,
 {
-    pub fn new(intervals: Intervals, projections: Projections, syncs: Syncs, clock: Time) -> Self {
+    pub fn new(
+        intervals: Intervals,
+        projections: Projections,
+        syncs: Syncs,
+        hidden_event_source: Hidden,
+        clock: Time,
+    ) -> Self {
         Self {
             intervals,
             projections,
             syncs,
+            hidden_event_source,
             clock,
         }
     }
@@ -63,6 +75,11 @@ where
             .await
             .map_err(map_training_plan_error)?;
         let sync_records = self.syncs.list_by_user_id_and_range(user_id, range).await?;
+        let hidden_linked_intervals_event_ids = self
+            .hidden_event_source
+            .list_hidden_intervals_event_ids(user_id, range)
+            .await
+            .map_err(map_calendar_label_error)?;
 
         let syncs_by_projection = sync_records
             .into_iter()
@@ -74,7 +91,9 @@ where
             .map(|event| (event.id, event))
             .collect::<HashMap<_, _>>();
 
-        let mut hidden_intervals_event_ids = HashSet::new();
+        let mut hidden_intervals_event_ids = hidden_linked_intervals_event_ids
+            .into_iter()
+            .collect::<HashSet<_>>();
         let mut merged = projected_days
             .into_iter()
             .filter(|day| is_date_in_range(&day.date, range))
@@ -246,12 +265,13 @@ where
     }
 }
 
-impl<Intervals, Projections, Syncs, Time> CalendarUseCases
-    for CalendarService<Intervals, Projections, Syncs, Time>
+impl<Intervals, Projections, Syncs, Hidden, Time> CalendarUseCases
+    for CalendarService<Intervals, Projections, Syncs, Hidden, Time>
 where
     Intervals: IntervalsUseCases + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
     Syncs: PlannedWorkoutSyncRepository + Clone,
+    Hidden: HiddenCalendarEventSource + Clone,
     Time: Clock + Clone,
 {
     fn list_events(
@@ -273,6 +293,15 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move { service.sync_planned_workout_impl(&user_id, request).await })
+    }
+}
+
+fn map_calendar_label_error(error: CalendarLabelError) -> CalendarError {
+    match error {
+        CalendarLabelError::Unauthenticated => CalendarError::Unauthenticated,
+        CalendarLabelError::Validation(message) => CalendarError::Validation(message),
+        CalendarLabelError::Unavailable(message) => CalendarError::Unavailable(message),
+        CalendarLabelError::Internal(message) => CalendarError::Internal(message),
     }
 }
 
