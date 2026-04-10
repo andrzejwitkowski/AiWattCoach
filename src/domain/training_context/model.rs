@@ -20,10 +20,36 @@ pub struct TrainingContext {
     pub focus_kind: String,
     pub intervals_status: IntervalsStatusContext,
     pub profile: AthleteProfileContext,
+    pub races: Vec<RaceContext>,
+    pub future_events: Vec<FuturePlannedEventContext>,
     pub history: HistoricalTrainingContext,
     pub recent_days: Vec<RecentDayContext>,
     pub upcoming_days: Vec<UpcomingDayContext>,
     pub projected_days: Vec<ProjectedDayContext>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct RaceContext {
+    pub race_id: String,
+    pub date: String,
+    pub name: String,
+    pub distance_meters: i32,
+    pub discipline: String,
+    pub priority: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct FuturePlannedEventContext {
+    pub event_id: i64,
+    pub start_date_local: String,
+    pub category: String,
+    pub event_type: Option<String>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub estimated_duration_seconds: Option<i32>,
+    pub estimated_training_stress_score: Option<f64>,
+    pub estimated_intensity_factor: Option<f64>,
+    pub estimated_normalized_power_watts: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]

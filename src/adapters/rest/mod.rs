@@ -7,6 +7,7 @@ mod health;
 mod intervals;
 mod logging;
 mod logs;
+mod races;
 mod settings;
 mod user_auth;
 mod workout_summary;
@@ -91,9 +92,20 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
             post(athlete_summary::generate_athlete_summary),
         )
         .route("/api/calendar/events", get(calendar::list_events))
+        .route("/api/calendar/labels", get(calendar::list_labels))
         .route(
             "/api/calendar/planned-workouts/{operation_key}/{date}/sync",
             post(calendar::sync_planned_workout),
+        )
+        .route(
+            "/api/races",
+            get(races::list_races).post(races::create_race),
+        )
+        .route(
+            "/api/races/{race_id}",
+            get(races::get_race)
+                .put(races::update_race)
+                .delete(races::delete_race),
         )
         .route(
             "/api/workout-summaries",

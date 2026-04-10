@@ -1,10 +1,11 @@
 use super::*;
 use crate::domain::settings::Weekday;
 use crate::domain::training_context::model::{
-    AthleteProfileContext, HistoricalLoadTrendPoint, HistoricalTrainingContext,
-    HistoricalWorkoutContext, IntervalsStatusContext, PlannedWorkoutBlockContext,
-    PlannedWorkoutReference, ProjectedDayContext, ProjectedWorkoutContext, RecentDayContext,
-    RecentWorkoutContext, TrainingContext, WeeklyAvailabilityContext,
+    AthleteProfileContext, FuturePlannedEventContext, HistoricalLoadTrendPoint,
+    HistoricalTrainingContext, HistoricalWorkoutContext, IntervalsStatusContext,
+    PlannedWorkoutBlockContext, PlannedWorkoutReference, ProjectedDayContext,
+    ProjectedWorkoutContext, RaceContext, RecentDayContext, RecentWorkoutContext, TrainingContext,
+    WeeklyAvailabilityContext,
 };
 
 #[test]
@@ -27,6 +28,26 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
             }],
             ..AthleteProfileContext::default()
         },
+        races: vec![RaceContext {
+            race_id: "race-1".to_string(),
+            date: "2026-05-10".to_string(),
+            name: "Spring Classic".to_string(),
+            distance_meters: 123_000,
+            discipline: "road".to_string(),
+            priority: "A".to_string(),
+        }],
+        future_events: vec![FuturePlannedEventContext {
+            event_id: 303,
+            start_date_local: "2026-04-12T07:00:00".to_string(),
+            category: "WORKOUT".to_string(),
+            event_type: Some("Ride".to_string()),
+            name: Some("Long Tempo".to_string()),
+            description: Some("Endurance with tempo finish".to_string()),
+            estimated_duration_seconds: Some(5400),
+            estimated_training_stress_score: Some(92.5),
+            estimated_intensity_factor: Some(0.81),
+            estimated_normalized_power_watts: Some(243),
+        }],
         history: HistoricalTrainingContext {
             window_start: "2025-10-01".to_string(),
             window_end: "2026-04-01".to_string(),
@@ -116,6 +137,12 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
     assert!(rendered
         .stable_context
         .contains("\"bl\":[{\"dur\":480,\"minp\":90.0,\"maxp\":95.0,\"minw\":270,\"maxw\":285}]"));
+    assert!(rendered
+        .stable_context
+        .contains("\"rc\":[{\"id\":\"race-1\",\"d\":\"2026-05-10\",\"n\":\"Spring Classic\",\"km\":123.0,\"disc\":\"road\",\"pri\":\"A\"}]"));
+    assert!(rendered
+        .stable_context
+        .contains("\"fe\":[{\"id\":303,\"sd\":\"2026-04-12T07:00:00\",\"c\":\"WORKOUT\",\"ty\":\"Ride\",\"n\":\"Long Tempo\",\"desc\":\"Endurance with tempo finish\",\"dur\":5400,\"tss\":92.5,\"ifv\":0.81,\"np\":243}]"));
     assert!(rendered.volatile_context.contains("\"sick\":true"));
     assert!(rendered
         .volatile_context
@@ -149,6 +176,8 @@ fn compact_render_omits_nulls_and_empty_lists() {
             events: "ok".to_string(),
         },
         profile: AthleteProfileContext::default(),
+        races: Vec::new(),
+        future_events: Vec::new(),
         history: HistoricalTrainingContext::default(),
         recent_days: Vec::new(),
         upcoming_days: Vec::new(),
@@ -177,6 +206,8 @@ fn compact_render_omits_weekly_availability_when_not_configured() {
             weekly_availability: Vec::new(),
             ..AthleteProfileContext::default()
         },
+        races: Vec::new(),
+        future_events: Vec::new(),
         history: HistoricalTrainingContext::default(),
         recent_days: Vec::new(),
         upcoming_days: Vec::new(),

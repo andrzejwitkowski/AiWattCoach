@@ -153,6 +153,8 @@ impl TrainingContextBuilder for StubTrainingContextBuilder {
                         events: "ok".to_string(),
                     },
                     profile: Default::default(),
+                    races: Vec::new(),
+                    future_events: Vec::new(),
                     history: Default::default(),
                     recent_days: Vec::new(),
                     upcoming_days: Vec::new(),

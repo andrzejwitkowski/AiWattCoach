@@ -8,9 +8,9 @@ use crate::domain::{
         PlannedWorkout, PlannedWorkoutLine, PlannedWorkoutTarget, WorkoutSegment,
     },
     training_context::model::{
-        HistoricalTrainingContext, HistoricalWorkoutContext, PlannedWorkoutBlockContext,
-        PlannedWorkoutContext, PlannedWorkoutReference, RecentDayContext, RecentWorkoutContext,
-        SpecialDayContext, UpcomingDayContext,
+        FuturePlannedEventContext, HistoricalTrainingContext, HistoricalWorkoutContext,
+        PlannedWorkoutBlockContext, PlannedWorkoutContext, PlannedWorkoutReference,
+        RecentDayContext, RecentWorkoutContext, SpecialDayContext, UpcomingDayContext,
     },
 };
 
@@ -227,6 +227,42 @@ pub(super) fn build_upcoming_day_contexts(
             }
         })
         .collect()
+}
+
+pub(super) fn build_future_planned_event_contexts(
+    events: &[Event],
+    configured_ftp: Option<i32>,
+) -> Vec<FuturePlannedEventContext> {
+    let mut future_events = events
+        .iter()
+        .map(|event| {
+            let parsed = parse_workout_doc(event.workout_doc.as_deref(), configured_ftp);
+            let duration_seconds = (parsed.summary.total_duration_seconds > 0)
+                .then_some(parsed.summary.total_duration_seconds);
+
+            FuturePlannedEventContext {
+                event_id: event.id,
+                start_date_local: event.start_date_local.clone(),
+                category: event.category.as_str().to_string(),
+                event_type: event.event_type.clone(),
+                name: event.name.clone(),
+                description: event.description.clone(),
+                estimated_duration_seconds: duration_seconds,
+                estimated_training_stress_score: parsed.summary.estimated_training_stress_score,
+                estimated_intensity_factor: parsed.summary.estimated_intensity_factor,
+                estimated_normalized_power_watts: parsed.summary.estimated_normalized_power_watts,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    future_events.sort_by(|left, right| {
+        left.start_date_local
+            .cmp(&right.start_date_local)
+            .then_with(|| left.category.cmp(&right.category))
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    future_events
 }
 
 fn build_recent_workout(

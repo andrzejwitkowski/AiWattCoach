@@ -39,3 +39,11 @@ pub trait CalendarUseCases: Send + Sync {
         request: SyncPlannedWorkout,
     ) -> BoxFuture<Result<CalendarEvent, CalendarError>>;
 }
+
+pub trait HiddenCalendarEventSource: Send + Sync + 'static {
+    fn list_hidden_intervals_event_ids(
+        &self,
+        user_id: &str,
+        range: &DateRange,
+    ) -> BoxFuture<Result<Vec<i64>, CalendarError>>;
+}

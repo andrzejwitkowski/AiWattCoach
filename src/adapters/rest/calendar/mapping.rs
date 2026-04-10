@@ -1,9 +1,18 @@
 use crate::{
     adapters::rest::intervals::map_event_to_dto_with_parsed_workout_doc,
-    domain::calendar::CalendarEvent,
+    domain::{
+        calendar::CalendarEvent,
+        calendar_labels::{
+            CalendarLabel, CalendarLabelPayload, CalendarLabelsResponse, CalendarRaceLabel,
+        },
+    },
 };
 
-use super::dto::{CalendarEventDto, ProjectedWorkoutDto};
+use super::dto::{
+    CalendarActivityLabelDto, CalendarCustomLabelDto, CalendarEventDto, CalendarHealthLabelDto,
+    CalendarLabelDto, CalendarLabelPayloadDto, CalendarLabelsResponseDto, CalendarRaceLabelDto,
+    ProjectedWorkoutDto,
+};
 
 pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDto {
     let CalendarEvent {
@@ -37,5 +46,75 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
             date: projected.date,
             source_workout_id: projected.source_workout_id,
         }),
+    }
+}
+
+pub(super) fn map_calendar_labels_to_dto(
+    response: CalendarLabelsResponse,
+) -> CalendarLabelsResponseDto {
+    CalendarLabelsResponseDto {
+        labels_by_date: response
+            .labels_by_date
+            .into_iter()
+            .map(|(date, labels)| {
+                (
+                    date,
+                    labels
+                        .into_iter()
+                        .map(|(key, label)| (key, map_calendar_label_to_dto(label)))
+                        .collect(),
+                )
+            })
+            .collect(),
+    }
+}
+
+fn map_calendar_label_to_dto(label: CalendarLabel) -> CalendarLabelDto {
+    CalendarLabelDto {
+        kind: label.kind().to_string(),
+        title: label.title,
+        subtitle: label.subtitle,
+        payload: map_calendar_label_payload_to_dto(label.payload),
+    }
+}
+
+fn map_calendar_label_payload_to_dto(payload: CalendarLabelPayload) -> CalendarLabelPayloadDto {
+    match payload {
+        CalendarLabelPayload::Race(race) => {
+            CalendarLabelPayloadDto::Race(map_race_label_to_dto(race))
+        }
+        CalendarLabelPayload::Activity(activity) => {
+            CalendarLabelPayloadDto::Activity(CalendarActivityLabelDto {
+                label_id: activity.label_id,
+                activity_kind: activity.activity_kind,
+                note: activity.note,
+            })
+        }
+        CalendarLabelPayload::Health(health) => {
+            CalendarLabelPayloadDto::Health(CalendarHealthLabelDto {
+                label_id: health.label_id,
+                status: health.status,
+                note: health.note,
+            })
+        }
+        CalendarLabelPayload::Custom(custom) => {
+            CalendarLabelPayloadDto::Custom(CalendarCustomLabelDto {
+                label_id: custom.label_id,
+                value: custom.value,
+            })
+        }
+    }
+}
+
+fn map_race_label_to_dto(race: CalendarRaceLabel) -> CalendarRaceLabelDto {
+    CalendarRaceLabelDto {
+        race_id: race.race_id,
+        date: race.date,
+        name: race.name,
+        distance_meters: race.distance_meters,
+        discipline: race.discipline,
+        priority: race.priority,
+        sync_status: race.sync_status,
+        linked_intervals_event_id: race.linked_intervals_event_id,
     }
 }

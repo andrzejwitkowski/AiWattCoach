@@ -14,10 +14,12 @@ use aiwattcoach::{
     domain::{
         calendar::{
             BoxFuture as CalendarBoxFuture, CalendarError, CalendarService,
-            PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository,
+            HiddenCalendarEventSource, PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository,
         },
+        calendar_labels::{CalendarLabelSource, CalendarLabelsService},
         identity::{Clock, IdentityUseCases},
         intervals::{DateRange, IntervalsUseCases},
+        races::RaceUseCases,
         training_plan::{
             BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, TrainingPlanProjectedDay,
             TrainingPlanProjectionRepository, TrainingPlanSnapshot,
@@ -54,8 +56,10 @@ pub(crate) async fn intervals_test_app_with_projections(
         intervals_service.clone(),
         projections,
         InMemoryPlannedWorkoutSyncRepository,
+        EmptyHiddenCalendarEventSource,
         TestClock,
     ));
+    let calendar_labels_service = Arc::new(CalendarLabelsService::new(EmptyCalendarLabelSource));
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -71,6 +75,47 @@ pub(crate) async fn intervals_test_app_with_projections(
             24,
         )
         .with_calendar_service(calendar_service)
+        .with_calendar_labels_service(calendar_labels_service)
+        .with_intervals_service(Arc::new(intervals_service)),
+        fixture.dist_dir(),
+    )
+}
+
+pub(crate) async fn intervals_test_app_with_all_services(
+    identity_service: impl IdentityUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+    projections: impl TrainingPlanProjectionRepository + Clone + 'static,
+    calendar_label_source: impl CalendarLabelSource + Clone + 'static,
+    hidden_calendar_event_source: impl HiddenCalendarEventSource + Clone + 'static,
+    race_service: impl RaceUseCases + 'static,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = frontend_fixture();
+    let calendar_service = Arc::new(CalendarService::new(
+        intervals_service.clone(),
+        projections,
+        InMemoryPlannedWorkoutSyncRepository,
+        hidden_calendar_event_source,
+        TestClock,
+    ));
+    let calendar_labels_service = Arc::new(CalendarLabelsService::new(calendar_label_source));
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_identity_service(
+            Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_calendar_service(calendar_service)
+        .with_calendar_labels_service(calendar_labels_service)
+        .with_race_service(Arc::new(race_service))
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
     )
@@ -86,7 +131,7 @@ impl Clock for TestClock {
 }
 
 #[derive(Clone)]
-struct EmptyTrainingPlanProjectionRepository;
+pub(crate) struct EmptyTrainingPlanProjectionRepository;
 
 impl TrainingPlanProjectionRepository for EmptyTrainingPlanProjectionRepository {
     fn list_active_by_user_id(
@@ -150,6 +195,37 @@ impl PlannedWorkoutSyncRepository for InMemoryPlannedWorkoutSyncRepository {
         record: PlannedWorkoutSyncRecord,
     ) -> CalendarBoxFuture<Result<PlannedWorkoutSyncRecord, CalendarError>> {
         Box::pin(async move { Ok(record) })
+    }
+}
+
+#[derive(Clone, Default)]
+struct EmptyCalendarLabelSource;
+
+impl CalendarLabelSource for EmptyCalendarLabelSource {
+    fn list_labels(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> aiwattcoach::domain::calendar_labels::BoxFuture<
+        Result<
+            Vec<aiwattcoach::domain::calendar_labels::CalendarLabel>,
+            aiwattcoach::domain::calendar_labels::CalendarLabelError,
+        >,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
+#[derive(Clone, Default)]
+struct EmptyHiddenCalendarEventSource;
+
+impl HiddenCalendarEventSource for EmptyHiddenCalendarEventSource {
+    fn list_hidden_intervals_event_ids(
+        &self,
+        _user_id: &str,
+        _range: &DateRange,
+    ) -> CalendarBoxFuture<Result<Vec<i64>, CalendarError>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 }
 

@@ -8,6 +8,7 @@ mod error;
 pub mod llm_context_cache;
 pub mod login_state;
 pub mod planned_workout_syncs;
+pub mod races;
 pub mod sessions;
 pub mod settings;
 mod time;
