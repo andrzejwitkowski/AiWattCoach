@@ -5,6 +5,10 @@ use crate::domain::{
         EventCategory, IntervalsError, IntervalsUseCases, PlannedWorkout, PlannedWorkoutLine,
         PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
     },
+    races::{
+        BoxFuture as RaceBoxFuture, Race, RaceDiscipline, RaceError, RacePriority, RaceRepository,
+        RaceSyncStatus,
+    },
     settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, CyclingSettings,
         IntervalsConfig, SettingsError, UserSettings, UserSettingsUseCases, Weekday,
@@ -218,6 +222,17 @@ impl IntervalsUseCases for TestIntervalsService {
                     color: None,
                     workout_doc: None,
                 },
+                Event {
+                    id: 303,
+                    start_date_local: "2026-04-25T07:00:00".to_string(),
+                    event_type: Some("Ride".to_string()),
+                    name: Some("Long Tempo".to_string()),
+                    category: EventCategory::Workout,
+                    description: Some("Endurance with tempo finish".to_string()),
+                    indoor: false,
+                    color: None,
+                    workout_doc: Some("- 90m 75%".to_string()),
+                },
             ])
         })
     }
@@ -309,6 +324,82 @@ impl IntervalsUseCases for TestIntervalsService {
 
 #[derive(Clone)]
 pub(super) struct TestWorkoutSummaryRepository;
+
+#[derive(Clone)]
+pub(super) struct TestRaceRepository;
+
+impl RaceRepository for TestRaceRepository {
+    fn list_by_user_id(&self, user_id: &str) -> RaceBoxFuture<Result<Vec<Race>, RaceError>> {
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(vec![Race {
+                race_id: "race-1".to_string(),
+                user_id,
+                date: "2026-05-10".to_string(),
+                name: "Spring Classic".to_string(),
+                distance_meters: 123_000,
+                discipline: RaceDiscipline::Road,
+                priority: RacePriority::A,
+                linked_intervals_event_id: Some(999),
+                sync_status: RaceSyncStatus::Synced,
+                synced_payload_hash: Some("hash".to_string()),
+                last_error: None,
+                result: None,
+                created_at_epoch_seconds: 1,
+                updated_at_epoch_seconds: 1,
+                last_synced_at_epoch_seconds: Some(1),
+            }])
+        })
+    }
+
+    fn list_by_user_id_and_range(
+        &self,
+        user_id: &str,
+        range: &DateRange,
+    ) -> RaceBoxFuture<Result<Vec<Race>, RaceError>> {
+        let user_id = user_id.to_string();
+        let oldest = range.oldest.clone();
+        let newest = range.newest.clone();
+        Box::pin(async move {
+            Ok(vec![Race {
+                race_id: "race-1".to_string(),
+                user_id,
+                date: "2026-05-10".to_string(),
+                name: "Spring Classic".to_string(),
+                distance_meters: 123_000,
+                discipline: RaceDiscipline::Road,
+                priority: RacePriority::A,
+                linked_intervals_event_id: Some(999),
+                sync_status: RaceSyncStatus::Synced,
+                synced_payload_hash: Some("hash".to_string()),
+                last_error: None,
+                result: None,
+                created_at_epoch_seconds: 1,
+                updated_at_epoch_seconds: 1,
+                last_synced_at_epoch_seconds: Some(1),
+            }]
+            .into_iter()
+            .filter(|race| race.date >= oldest && race.date <= newest)
+            .collect())
+        })
+    }
+
+    fn find_by_user_id_and_race_id(
+        &self,
+        _user_id: &str,
+        _race_id: &str,
+    ) -> RaceBoxFuture<Result<Option<Race>, RaceError>> {
+        unreachable!()
+    }
+
+    fn upsert(&self, _race: Race) -> RaceBoxFuture<Result<Race, RaceError>> {
+        unreachable!()
+    }
+
+    fn delete(&self, _user_id: &str, _race_id: &str) -> RaceBoxFuture<Result<(), RaceError>> {
+        unreachable!()
+    }
+}
 
 fn summary_for_workout_id(workout_id: &str) -> WorkoutSummary {
     WorkoutSummary {

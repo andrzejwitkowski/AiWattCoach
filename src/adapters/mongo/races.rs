@@ -84,6 +84,26 @@ impl MongoRaceRepository {
 }
 
 impl RaceRepository for MongoRaceRepository {
+    fn list_by_user_id(&self, user_id: &str) -> RaceBoxFuture<Result<Vec<Race>, RaceError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            collection
+                .find(doc! {
+                    "user_id": &user_id,
+                })
+                .sort(doc! { "date": 1, "name": 1 })
+                .await
+                .map_err(|error| RaceError::Internal(error.to_string()))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|error| RaceError::Internal(error.to_string()))?
+                .into_iter()
+                .map(map_document_to_race)
+                .collect()
+        })
+    }
+
     fn list_by_user_id_and_range(
         &self,
         user_id: &str,

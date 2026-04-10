@@ -7,6 +7,8 @@ use super::{CreateRace, Race, RaceError, UpdateRace};
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 pub trait RaceRepository: Send + Sync + 'static {
+    fn list_by_user_id(&self, user_id: &str) -> BoxFuture<Result<Vec<Race>, RaceError>>;
+
     fn list_by_user_id_and_range(
         &self,
         user_id: &str,

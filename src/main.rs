@@ -295,6 +295,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             Arc::new(workout_summary_repository.clone()),
             SystemClock,
         )
+        .with_race_repository(Arc::new(race_repository.clone()))
         .with_training_plan_projection_repository(Arc::new(
             training_plan_projection_repository.clone(),
         )),

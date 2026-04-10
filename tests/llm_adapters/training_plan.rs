@@ -40,6 +40,8 @@ impl TrainingContextBuilder for LargeContextTrainingContextBuilder {
                         events: "ok".to_string(),
                     },
                     profile: Default::default(),
+                    races: Vec::new(),
+                    future_events: Vec::new(),
                     history: Default::default(),
                     recent_days: Vec::new(),
                     upcoming_days: Vec::new(),
@@ -83,6 +85,8 @@ impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
                         availability_configured: false,
                         ..Default::default()
                     },
+                    races: Vec::new(),
+                    future_events: Vec::new(),
                     history: Default::default(),
                     recent_days: Vec::new(),
                     upcoming_days: Vec::new(),
@@ -160,6 +164,8 @@ async fn training_plan_generator_describes_packed_context_legend_in_system_promp
     let prompt = &chat_port.requests()[0].system_prompt;
     assert!(prompt.contains("Packed context legend"));
     assert!(prompt.contains("v=schema version"));
+    assert!(prompt.contains("rc=race calendar"));
+    assert!(prompt.contains("fe=future planned calendar events"));
     assert!(prompt.contains("fx=focus"));
     assert!(prompt.contains("rd=recent days"));
     assert!(prompt.contains("ud=upcoming days"));

@@ -1,8 +1,9 @@
 use serde::Serialize;
 
 use crate::domain::training_context::model::{
-    AthleteProfileContext, HistoricalLoadTrendPoint, HistoricalTrainingContext,
-    HistoricalWorkoutContext, IntervalsStatusContext, PlannedWorkoutBlockContext, TrainingContext,
+    AthleteProfileContext, FuturePlannedEventContext, HistoricalLoadTrendPoint,
+    HistoricalTrainingContext, HistoricalWorkoutContext, IntervalsStatusContext,
+    PlannedWorkoutBlockContext, RaceContext, TrainingContext,
 };
 
 #[derive(Serialize)]
@@ -10,6 +11,10 @@ pub(crate) struct StablePayload<'a> {
     v: u8,
     i: CompactIntervalsStatus<'a>,
     p: CompactProfile<'a>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    rc: Vec<CompactRace<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    fe: Vec<CompactFuturePlannedEvent<'a>>,
     h: CompactHistory<'a>,
 }
 
@@ -19,7 +24,74 @@ impl<'a> StablePayload<'a> {
             v: 1,
             i: CompactIntervalsStatus::from_status(&context.intervals_status),
             p: CompactProfile::from_profile(&context.profile),
+            rc: context.races.iter().map(CompactRace::from_race).collect(),
+            fe: context
+                .future_events
+                .iter()
+                .map(CompactFuturePlannedEvent::from_event)
+                .collect(),
             h: CompactHistory::from_history(&context.history),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CompactRace<'a> {
+    id: &'a str,
+    d: &'a str,
+    n: &'a str,
+    km: f64,
+    disc: &'a str,
+    pri: &'a str,
+}
+
+impl<'a> CompactRace<'a> {
+    fn from_race(race: &'a RaceContext) -> Self {
+        Self {
+            id: &race.race_id,
+            d: &race.date,
+            n: &race.name,
+            km: race.distance_meters as f64 / 1000.0,
+            disc: &race.discipline,
+            pri: &race.priority,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CompactFuturePlannedEvent<'a> {
+    id: i64,
+    sd: &'a str,
+    c: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ty: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    n: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    desc: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dur: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tss: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ifv: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    np: Option<i32>,
+}
+
+impl<'a> CompactFuturePlannedEvent<'a> {
+    fn from_event(event: &'a FuturePlannedEventContext) -> Self {
+        Self {
+            id: event.event_id,
+            sd: &event.start_date_local,
+            c: &event.category,
+            ty: event.event_type.as_deref(),
+            n: event.name.as_deref(),
+            desc: event.description.as_deref(),
+            dur: event.estimated_duration_seconds,
+            tss: event.estimated_training_stress_score,
+            ifv: event.estimated_intensity_factor,
+            np: event.estimated_normalized_power_watts,
         }
     }
 }

@@ -48,6 +48,20 @@ impl InMemoryRaceRepository {
 }
 
 impl RaceRepository for InMemoryRaceRepository {
+    fn list_by_user_id(&self, user_id: &str) -> BoxFuture<Result<Vec<Race>, RaceError>> {
+        let races = self.races.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(races
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|race| race.user_id == user_id)
+                .cloned()
+                .collect())
+        })
+    }
+
     fn list_by_user_id_and_range(
         &self,
         user_id: &str,

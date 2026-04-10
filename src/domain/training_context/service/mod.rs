@@ -10,6 +10,7 @@ use crate::domain::{
     identity::Clock,
     intervals::{Activity, DateRange, Event, IntervalsUseCases},
     llm::LlmError,
+    races::RaceRepository,
     settings::UserSettingsUseCases,
     training_context::{model::*, packing::render_training_context},
     training_plan::TrainingPlanProjectionRepository,
@@ -25,9 +26,10 @@ mod power;
 mod tests;
 
 use context::{
-    build_event_activity_matches, build_historical_context, build_recent_day_contexts,
-    build_upcoming_day_contexts, infer_focus_kind, projected_interval_blocks,
-    projected_raw_workout_doc, projected_workout_name, RecentWorkoutSummaryLookup,
+    build_event_activity_matches, build_future_planned_event_contexts, build_historical_context,
+    build_recent_day_contexts, build_upcoming_day_contexts, infer_focus_kind,
+    projected_interval_blocks, projected_raw_workout_doc, projected_workout_name,
+    RecentWorkoutSummaryLookup,
 };
 use dates::{activity_date, epoch_seconds_to_date, event_date, intervals_status_message};
 use history::build_recent_interval_blocks_by_activity_id;
@@ -49,6 +51,7 @@ pub trait TrainingContextBuilder: Send + Sync {
 const MAX_RECENT_ACTIVITY_FETCHES: usize = 4;
 const STREAM_BUCKET_SIZE: usize = 5;
 const MAX_CHUNKS_PER_WORKOUT: usize = 48;
+const STABLE_FUTURE_EVENT_DAYS: i64 = 120;
 
 #[derive(Clone)]
 pub struct DefaultTrainingContextBuilder<Time>
@@ -58,6 +61,7 @@ where
     settings_service: Arc<dyn UserSettingsUseCases>,
     intervals_service: Arc<dyn IntervalsUseCases>,
     workout_summary_repository: Arc<dyn WorkoutSummaryRepository>,
+    race_repository: Option<Arc<dyn RaceRepository>>,
     training_plan_projection_repository: Option<Arc<dyn TrainingPlanProjectionRepository>>,
     clock: Time,
 }
@@ -76,9 +80,15 @@ where
             settings_service,
             intervals_service,
             workout_summary_repository,
+            race_repository: None,
             training_plan_projection_repository: None,
             clock,
         }
+    }
+
+    pub fn with_race_repository(mut self, race_repository: Arc<dyn RaceRepository>) -> Self {
+        self.race_repository = Some(race_repository);
+        self
     }
 
     pub fn with_training_plan_projection_repository(
@@ -140,6 +150,8 @@ where
             focus_date - Duration::days((history_trend_days + history_warmup_days - 1) as i64);
         let recent_start = focus_date - Duration::days(13);
         let upcoming_end = focus_date + Duration::days(14);
+        let stable_future_events_start = focus_date + Duration::days(1);
+        let stable_future_events_end = focus_date + Duration::days(STABLE_FUTURE_EVENT_DAYS);
 
         let activities_range = DateRange {
             oldest: history_start.format("%Y-%m-%d").to_string(),
@@ -148,6 +160,10 @@ where
         let events_range = DateRange {
             oldest: recent_start.format("%Y-%m-%d").to_string(),
             newest: upcoming_end.format("%Y-%m-%d").to_string(),
+        };
+        let stable_future_events_range = DateRange {
+            oldest: stable_future_events_start.format("%Y-%m-%d").to_string(),
+            newest: stable_future_events_end.format("%Y-%m-%d").to_string(),
         };
 
         let history_activities_result = self
@@ -158,6 +174,10 @@ where
             .intervals_service
             .list_events(user_id, &events_range)
             .await;
+        let stable_future_events_result = self
+            .intervals_service
+            .list_events(user_id, &stable_future_events_range)
+            .await;
 
         let (history_activities, activities_status) = match history_activities_result {
             Ok(activities) => (activities, "ok".to_string()),
@@ -167,6 +187,14 @@ where
             Ok(events) => (events, "ok".to_string()),
             Err(error) => (Vec::new(), intervals_status_message(&error)),
         };
+        let stable_future_events = stable_future_events_result
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|event| {
+                let date = event_date(event);
+                date > focus_date && date <= stable_future_events_end
+            })
+            .collect::<Vec<_>>();
 
         let recent_activity_ids = history_activities
             .iter()
@@ -190,6 +218,8 @@ where
             .load_workout_recaps_by_workout_id(user_id, &historical_activity_ids, &events)
             .await;
         let projected_days = self.load_projected_day_contexts(user_id, focus_date).await;
+        let races = self.load_race_contexts(user_id).await;
+        let future_events = build_future_planned_event_contexts(&stable_future_events);
         let detailed_recent_activities_by_id = detailed_recent_activities
             .iter()
             .cloned()
@@ -293,6 +323,8 @@ where
                 events: events_status,
             },
             profile,
+            races,
+            future_events,
             history,
             recent_days,
             upcoming_days,
@@ -436,6 +468,35 @@ where
             .into_iter()
             .map(|(date, workouts)| ProjectedDayContext { date, workouts })
             .collect()
+    }
+
+    async fn load_race_contexts(&self, user_id: &str) -> Vec<RaceContext> {
+        let Some(repository) = &self.race_repository else {
+            return Vec::new();
+        };
+
+        match repository.list_by_user_id(user_id).await {
+            Ok(races) => {
+                let mut contexts = races
+                    .into_iter()
+                    .map(|race| RaceContext {
+                        race_id: race.race_id,
+                        date: race.date,
+                        name: race.name,
+                        distance_meters: race.distance_meters,
+                        discipline: race.discipline.as_str().to_string(),
+                        priority: race.priority.as_str().to_string(),
+                    })
+                    .collect::<Vec<_>>();
+                contexts.sort_by(|left, right| {
+                    left.date
+                        .cmp(&right.date)
+                        .then_with(|| left.name.cmp(&right.name))
+                });
+                contexts
+            }
+            Err(_) => Vec::new(),
+        }
     }
 
     async fn resolve_focus_date(&self, user_id: &str, workout_id: &str) -> Option<NaiveDate> {

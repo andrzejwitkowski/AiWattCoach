@@ -13,7 +13,8 @@ use super::{
     super::DefaultTrainingContextBuilder,
     support::{
         sample_activity_with_ftp, FixedClock, FtpOrderingIntervalsService, TestIntervalsService,
-        TestSettingsService, TestTrainingPlanProjectionRepository, TestWorkoutSummaryRepository,
+        TestRaceRepository, TestSettingsService, TestTrainingPlanProjectionRepository,
+        TestWorkoutSummaryRepository,
     },
 };
 
@@ -25,6 +26,7 @@ async fn builder_renders_recent_and_historical_context() {
         Arc::new(TestWorkoutSummaryRepository),
         FixedClock,
     )
+    .with_race_repository(Arc::new(TestRaceRepository))
     .with_training_plan_projection_repository(Arc::new(TestTrainingPlanProjectionRepository));
 
     let result = builder.build("user-1", "ride-1").await.unwrap();
@@ -32,6 +34,30 @@ async fn builder_renders_recent_and_historical_context() {
     assert_eq!(result.context.focus_kind, "activity");
     assert_eq!(result.context.intervals_status.activities, "ok");
     assert_eq!(result.context.intervals_status.events, "ok");
+    assert_eq!(result.context.races.len(), 1);
+    assert_eq!(result.context.races[0].date, "2026-05-10");
+    assert_eq!(result.context.races[0].name, "Spring Classic");
+    assert_eq!(result.context.races[0].discipline, "road");
+    assert_eq!(result.context.races[0].priority, "A");
+    assert_eq!(result.context.future_events.len(), 1);
+    assert_eq!(result.context.future_events[0].event_id, 303);
+    assert_eq!(result.context.future_events[0].category, "WORKOUT");
+    assert_eq!(
+        result.context.future_events[0].event_type.as_deref(),
+        Some("Ride")
+    );
+    assert_eq!(
+        result.context.future_events[0].name.as_deref(),
+        Some("Long Tempo")
+    );
+    assert_eq!(
+        result.context.future_events[0].description.as_deref(),
+        Some("Endurance with tempo finish")
+    );
+    assert_eq!(
+        result.context.future_events[0].estimated_duration_seconds,
+        Some(5400)
+    );
     assert_eq!(result.context.recent_days.len(), 14);
     assert_eq!(result.context.history.load_trend.len(), 42);
     assert_eq!(
@@ -170,6 +196,14 @@ async fn builder_renders_recent_and_historical_context() {
         .stable_context
         .contains("prefers concise coaching"));
     assert!(result.rendered.stable_context.contains("\"lt\":["));
+    assert!(result
+        .rendered
+        .stable_context
+        .contains("\"rc\":[{\"id\":\"race-1\",\"d\":\"2026-05-10\",\"n\":\"Spring Classic\",\"km\":123.0,\"disc\":\"road\",\"pri\":\"A\"}]"));
+    assert!(result
+        .rendered
+        .stable_context
+        .contains("\"fe\":[{\"id\":303,\"sd\":\"2026-04-25T07:00:00\",\"c\":\"WORKOUT\",\"ty\":\"Ride\",\"n\":\"Long Tempo\",\"desc\":\"Endurance with tempo finish\",\"dur\":5400"));
     assert!(result.rendered.stable_context.contains("\"days\":1"));
     assert!(result.rendered.stable_context.contains("\"bl\":["));
     assert!(result
