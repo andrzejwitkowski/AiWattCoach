@@ -328,6 +328,38 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByText('Club Race')).toBeInTheDocument();
   });
 
+  it('renders race labels with distinct race-day treatment', () => {
+    const day = makeCalendarDay({
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Gravel Attack',
+          subtitle: '120 km • Kat. A',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-03-29',
+            name: 'Gravel Attack',
+            distanceMeters: 120000,
+            discipline: 'gravel',
+            priority: 'A',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 41,
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Race Day')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Gravel')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Gravel Attack')).toBeInTheDocument();
+    expect(within(dayCell).getByText('120 km • Kat. A')).toBeInTheDocument();
+    expect(within(dayCell).getByText('A')).toBeInTheDocument();
+    expect(dayCell.className).toContain('border-[#cda56b]/30');
+  });
+
   it('does not show the planned workout badge for completed events without loaded activities', () => {
     const day = makeCalendarDay({
       events: [

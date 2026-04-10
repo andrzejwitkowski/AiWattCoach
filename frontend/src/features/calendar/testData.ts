@@ -263,6 +263,7 @@ export function makeCalendarDay(overrides: Partial<CalendarDay> = {}): CalendarD
     dateKey: '2026-03-25',
     events: [],
     activities: [],
+    labels: [],
     ...overrides,
   };
 }

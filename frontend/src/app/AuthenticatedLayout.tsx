@@ -3,6 +3,7 @@ import {
   Bell,
   Bot,
   Calendar,
+  Flag,
   LayoutDashboard,
   Play,
   Settings,
@@ -23,6 +24,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/app': 'Dashboard',
   '/settings': 'Settings',
   '/calendar': 'Calendar',
+  '/races': 'Races',
   '/ai-coach': 'AI Coach',
   '/admin/system-info': 'System Info',
 };
@@ -49,6 +51,7 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
         <nav className="mt-4 flex-1 px-3 space-y-1">
           <NavItem to="/app" icon={LayoutDashboard} label="Dashboard" />
           <NavItem to="/calendar" icon={Calendar} label="Calendar" />
+          <NavItem to="/races" icon={Flag} label="Races" />
           <NavItem to="/ai-coach" icon={Bot} label="AI Coach" />
           <NavItem to="/settings" icon={Settings} label="Settings" />
           {currentUser && currentUser.roles.includes('admin') && (

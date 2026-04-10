@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
+import type { CalendarLabel } from '../types';
 import { CALENDAR_BUFFER_WEEKS, CALENDAR_VISIBLE_WEEKS } from '../constants';
 import { addDays, getMondayOfWeek, parseDateKey, toDateKey } from '../utils/dateUtils';
 import { useCalendarData } from './useCalendarData';
@@ -14,7 +15,12 @@ vi.mock('../../intervals/api/intervals', () => ({
   loadEvent: vi.fn(),
 }));
 
+vi.mock('../api/calendar', () => ({
+  listCalendarLabels: vi.fn(),
+}));
+
 import { listActivities, listCalendarEvents, loadActivity, loadEvent } from '../../intervals/api/intervals';
+import { listCalendarLabels } from '../api/calendar';
 
 const originalLocation = window.location;
 
@@ -58,12 +64,18 @@ function mockNoDetailedActivities() {
   vi.mocked(loadActivity).mockResolvedValue(undefined as never);
 }
 
+function mockNoCalendarLabels() {
+  vi.mocked(listCalendarLabels).mockResolvedValue({ labelsByDate: {} });
+}
+
 describe('useCalendarData', () => {
   it('defaults unresolved weeks to idle placeholders', () => {
     const deferredEvents = createDeferred<IntervalEvent[]>();
     const deferredActivities = createDeferred<IntervalActivity[]>();
+    const deferredLabels = createDeferred<{ labelsByDate: Record<string, Record<string, CalendarLabel>> }>();
     vi.mocked(listCalendarEvents).mockReturnValue(deferredEvents.promise);
     vi.mocked(listActivities).mockReturnValue(deferredActivities.promise);
+    vi.mocked(listCalendarLabels).mockReturnValue(deferredLabels.promise);
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -76,11 +88,13 @@ describe('useCalendarData', () => {
     unmount();
     deferredEvents.resolve([]);
     deferredActivities.resolve([]);
+    deferredLabels.resolve({ labelsByDate: {} });
   });
 
   it('keeps a fixed five-week window after initial load', async () => {
     vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -96,6 +110,7 @@ describe('useCalendarData', () => {
   it('keeps five rendered weeks after scrolling forward', async () => {
     vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -120,6 +135,7 @@ describe('useCalendarData', () => {
   it('refetches weeks that were pruned from the buffer when scrolling back', async () => {
     vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -153,6 +169,7 @@ describe('useCalendarData', () => {
   it('coalesces concurrent forward loads into a single request', async () => {
     vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -164,10 +181,12 @@ describe('useCalendarData', () => {
 
     const deferredEvents = createDeferred<IntervalEvent[]>();
     const deferredActivities = createDeferred<IntervalActivity[]>();
+    const deferredLabels = createDeferred<{ labelsByDate: Record<string, Record<string, CalendarLabel>> }>();
 
     vi.clearAllMocks();
     vi.mocked(listCalendarEvents).mockReturnValueOnce(deferredEvents.promise);
     vi.mocked(listActivities).mockReturnValueOnce(deferredActivities.promise);
+    vi.mocked(listCalendarLabels).mockReturnValueOnce(deferredLabels.promise);
 
     let firstLoad!: Promise<void>;
     let secondLoad!: Promise<void>;
@@ -180,9 +199,11 @@ describe('useCalendarData', () => {
 
     expect(listCalendarEvents).toHaveBeenCalledTimes(1);
     expect(listActivities).toHaveBeenCalledTimes(1);
+    expect(listCalendarLabels).toHaveBeenCalledTimes(1);
 
     deferredEvents.resolve([]);
     deferredActivities.resolve([]);
+    deferredLabels.resolve({ labelsByDate: {} });
 
     await act(async () => {
       await Promise.all([firstLoad, secondLoad]);
@@ -192,6 +213,7 @@ describe('useCalendarData', () => {
   it('blocks an opposite-direction load while pagination is in flight', async () => {
     vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -210,10 +232,12 @@ describe('useCalendarData', () => {
     const expectedFirstWeekAfterForward = result.current.weeks[1]!.weekKey;
     const deferredEvents = createDeferred<IntervalEvent[]>();
     const deferredActivities = createDeferred<IntervalActivity[]>();
+    const deferredLabels = createDeferred<{ labelsByDate: Record<string, Record<string, CalendarLabel>> }>();
 
     vi.clearAllMocks();
     vi.mocked(listCalendarEvents).mockReturnValueOnce(deferredEvents.promise);
     vi.mocked(listActivities).mockReturnValueOnce(deferredActivities.promise);
+    vi.mocked(listCalendarLabels).mockReturnValueOnce(deferredLabels.promise);
 
     let forwardLoad!: Promise<void>;
     let backwardLoad!: Promise<void>;
@@ -226,10 +250,12 @@ describe('useCalendarData', () => {
 
     expect(listCalendarEvents).toHaveBeenCalledTimes(1);
     expect(listActivities).toHaveBeenCalledTimes(1);
+    expect(listCalendarLabels).toHaveBeenCalledTimes(1);
     expect(result.current.weeks[0]!.weekKey).toBe(expectedFirstWeekAfterForward);
 
     deferredEvents.resolve([]);
     deferredActivities.resolve([]);
+    deferredLabels.resolve({ labelsByDate: {} });
 
     await act(async () => {
       await Promise.all([forwardLoad, backwardLoad]);
@@ -239,6 +265,7 @@ describe('useCalendarData', () => {
   it('redirects to the landing page when calendar requests return unauthorized', async () => {
     vi.mocked(listCalendarEvents).mockRejectedValue(new AuthenticationError());
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -257,6 +284,7 @@ describe('useCalendarData', () => {
   it('retries the same future range after a gateway failure on the next attempt', async () => {
     vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -274,6 +302,7 @@ describe('useCalendarData', () => {
     vi.clearAllMocks();
     vi.mocked(listCalendarEvents).mockRejectedValue(new HttpError(502, 'bad gateway'));
     vi.mocked(listActivities).mockRejectedValue(new HttpError(502, 'bad gateway'));
+    vi.mocked(listCalendarLabels).mockRejectedValue(new HttpError(502, 'bad gateway'));
 
     for (let attempt = 0; attempt < CALENDAR_BUFFER_WEEKS + 2; attempt += 1) {
       await act(async () => {
@@ -314,6 +343,7 @@ describe('useCalendarData', () => {
       },
     ] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedActivities();
     mockNoDetailedEvents();
 
@@ -370,6 +400,7 @@ describe('useCalendarData', () => {
       },
     ] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -444,6 +475,7 @@ describe('useCalendarData', () => {
         detailsUnavailableReason: null,
       },
     ] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -462,6 +494,7 @@ describe('useCalendarData', () => {
   it('does not hydrate event or activity details during range loading', async () => {
     vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
@@ -473,6 +506,50 @@ describe('useCalendarData', () => {
 
     expect(loadEvent).not.toHaveBeenCalled();
     expect(loadActivity).not.toHaveBeenCalled();
+  });
+
+  it('hydrates race labels into matching calendar days', async () => {
+    const raceDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 3));
+
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    vi.mocked(listCalendarLabels).mockResolvedValue({
+      labelsByDate: {
+        [raceDateKey]: {
+          'race:race-1': {
+            kind: 'race',
+            title: 'Race Gravel Attack',
+            subtitle: '120 km • Kat. A',
+            payload: {
+              raceId: 'race-1',
+              date: raceDateKey,
+              name: 'Gravel Attack',
+              distanceMeters: 120000,
+              discipline: 'gravel',
+              priority: 'A',
+              syncStatus: 'synced',
+              linkedIntervalsEventId: 41,
+            },
+          },
+        },
+      },
+    });
+    mockNoDetailedEvents();
+    mockNoDetailedActivities();
+
+    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    const raceDay = result.current.weeks.flatMap((week) => week.days).find((day) => day.dateKey === raceDateKey);
+
+    expect(raceDay?.labels).toHaveLength(1);
+    expect(raceDay?.labels[0]?.kind).toBe('race');
+    if (raceDay?.labels[0]?.kind === 'race') {
+      expect(raceDay.labels[0].payload.priority).toBe('A');
+    }
   });
 
 });

@@ -32,6 +32,7 @@ function createWeek(status: CalendarWeek['status']): CalendarWeek {
       dateKey: `2026-03-${String(23 + index).padStart(2, '0')}`,
       events: [],
       activities: [],
+      labels: [],
     })),
     summary: {
       totalTss: 0,

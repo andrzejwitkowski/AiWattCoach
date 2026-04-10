@@ -140,4 +140,36 @@ describe('CalendarDayCell charts', () => {
     expect(firstBar.style.flexGrow).toBe('1200');
     expect(secondBar.style.flexGrow).toBe('300');
   });
+
+  it('renders race mini-chart bars from race labels', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 28),
+      dateKey: '2026-03-28',
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Road Challenge',
+          subtitle: '95 km • Kat. B',
+          payload: {
+            raceId: 'race-2',
+            date: '2026-03-28',
+            name: 'Road Challenge',
+            distanceMeters: 95000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'pending',
+            linkedIntervalsEventId: null,
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const chartBars = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
+
+    expect(chartBars.length).toBe(3);
+    expect(chartBars[0]?.style.backgroundColor).toBe('rgb(240, 211, 155)');
+    expect(chartBars[1]?.style.backgroundColor).toBe('rgb(212, 156, 69)');
+    expect(chartBars[2]?.style.backgroundColor).toBe('rgb(141, 93, 35)');
+  });
 });

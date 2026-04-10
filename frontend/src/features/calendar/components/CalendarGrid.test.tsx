@@ -41,6 +41,7 @@ function buildWeek(weekKey: string): CalendarWeek {
         dateKey: date.toISOString().slice(0, 10),
         events: [],
         activities: [],
+        labels: [],
       };
     }),
   };
