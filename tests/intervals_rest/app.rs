@@ -16,7 +16,7 @@ use aiwattcoach::{
             BoxFuture as CalendarBoxFuture, CalendarError, CalendarService,
             HiddenCalendarEventSource, PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository,
         },
-        calendar_labels::{CalendarLabelError, CalendarLabelSource, CalendarLabelsService},
+        calendar_labels::{CalendarLabelSource, CalendarLabelsService},
         identity::{Clock, IdentityUseCases},
         intervals::{DateRange, IntervalsUseCases},
         races::RaceUseCases,
@@ -207,7 +207,10 @@ impl CalendarLabelSource for EmptyCalendarLabelSource {
         _user_id: &str,
         _range: &DateRange,
     ) -> aiwattcoach::domain::calendar_labels::BoxFuture<
-        Result<Vec<aiwattcoach::domain::calendar_labels::CalendarLabel>, CalendarLabelError>,
+        Result<
+            Vec<aiwattcoach::domain::calendar_labels::CalendarLabel>,
+            aiwattcoach::domain::calendar_labels::CalendarLabelError,
+        >,
     > {
         Box::pin(async { Ok(Vec::new()) })
     }
@@ -221,7 +224,7 @@ impl HiddenCalendarEventSource for EmptyHiddenCalendarEventSource {
         &self,
         _user_id: &str,
         _range: &DateRange,
-    ) -> CalendarBoxFuture<Result<Vec<i64>, CalendarLabelError>> {
+    ) -> CalendarBoxFuture<Result<Vec<i64>, CalendarError>> {
         Box::pin(async { Ok(Vec::new()) })
     }
 }

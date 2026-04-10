@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use aiwattcoach::domain::{
-    calendar::HiddenCalendarEventSource,
+    calendar::{CalendarError, HiddenCalendarEventSource},
     calendar_labels::{CalendarLabelError, CalendarLabelSource},
     intervals::DateRange,
     races::{
@@ -250,6 +250,37 @@ async fn create_race_returns_400_for_invalid_date() {
 }
 
 #[tokio::test]
+async fn create_race_returns_400_for_blank_name() {
+    let race_service = RecordingRaceService::default();
+    let app = intervals_test_app_with_all_services(
+        TestIdentityServiceWithSession::default(),
+        ScopedIntervalsService::default(),
+        EmptyTrainingPlanProjectionRepository,
+        EmptyLabelSource,
+        EmptyHiddenSource,
+        race_service,
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/races")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"date":"2026-09-12","name":"   ","distanceMeters":10000,"discipline":"road","priority":"C"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn create_race_requires_authentication() {
     let race_service = RecordingRaceService::default();
     let app = intervals_test_app_with_all_services(
@@ -306,11 +337,37 @@ async fn list_races_requires_authentication() {
 }
 
 #[tokio::test]
+async fn list_races_rejects_inverted_date_range() {
+    let app = intervals_test_app_with_all_services(
+        TestIdentityServiceWithSession::default(),
+        ScopedIntervalsService::default(),
+        EmptyTrainingPlanProjectionRepository,
+        EmptyLabelSource,
+        EmptyHiddenSource,
+        RecordingRaceService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/races?oldest=2026-09-30&newest=2026-09-01")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn list_races_is_scoped_to_authenticated_user() {
-    // The RecordingRaceService forwards whatever user_id it receives.
-    // We store races for two users; user-2's session should only see their races.
+    // The RecordingRaceService filters by user_id so user-2's session should
+    // only receive races belonging to user-2.
     let race_service = RecordingRaceService::with_races(vec![
-        sample_race(),
+        sample_race(), // user-1
         Race {
             race_id: "race-user2".to_string(),
             user_id: "user-2".to_string(),
@@ -331,8 +388,6 @@ async fn list_races_is_scoped_to_authenticated_user() {
     )
     .await;
 
-    // Request as user-2; the service returns all races but the handler passes user-2's
-    // user_id — this confirms the session drives which user_id is used.
     let response = app
         .oneshot(
             Request::builder()
@@ -345,6 +400,13 @@ async fn list_races_is_scoped_to_authenticated_user() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = get_json(response).await;
+    let races = body.as_array().unwrap();
+    assert_eq!(races.len(), 1);
+    assert_eq!(
+        races[0].get("raceId").and_then(|v| v.as_str()),
+        Some("race-user2")
+    );
 }
 
 #[derive(Clone, Default)]
@@ -370,7 +432,7 @@ impl HiddenCalendarEventSource for EmptyHiddenSource {
         &self,
         _user_id: &str,
         _range: &DateRange,
-    ) -> aiwattcoach::domain::calendar::BoxFuture<Result<Vec<i64>, CalendarLabelError>> {
+    ) -> aiwattcoach::domain::calendar::BoxFuture<Result<Vec<i64>, CalendarError>> {
         Box::pin(async { Ok(Vec::new()) })
     }
 }
@@ -391,11 +453,17 @@ impl RecordingRaceService {
 impl RaceUseCases for RecordingRaceService {
     fn list_races(
         &self,
-        _user_id: &str,
+        user_id: &str,
         _range: &DateRange,
     ) -> RaceBoxFuture<Result<Vec<Race>, RaceError>> {
+        let user_id = user_id.to_string();
         let races = self.races.lock().unwrap().clone();
-        Box::pin(async move { Ok(races) })
+        Box::pin(async move {
+            Ok(races
+                .into_iter()
+                .filter(|race| race.user_id == user_id)
+                .collect())
+        })
     }
 
     fn get_race(&self, _user_id: &str, race_id: &str) -> RaceBoxFuture<Result<Race, RaceError>> {
@@ -429,6 +497,7 @@ impl RaceUseCases for RecordingRaceService {
                 sync_status: RaceSyncStatus::Synced,
                 synced_payload_hash: Some("hash".to_string()),
                 last_error: None,
+                result: None,
                 created_at_epoch_seconds: 1,
                 updated_at_epoch_seconds: 1,
                 last_synced_at_epoch_seconds: Some(1),
@@ -479,6 +548,7 @@ fn sample_race() -> Race {
         sync_status: RaceSyncStatus::Synced,
         synced_payload_hash: Some("hash".to_string()),
         last_error: None,
+        result: None,
         created_at_epoch_seconds: 1,
         updated_at_epoch_seconds: 1,
         last_synced_at_epoch_seconds: Some(1),

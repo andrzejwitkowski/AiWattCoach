@@ -29,6 +29,7 @@ pub enum RaceDiscipline {
     Mtb,
     Gravel,
     Cyclocross,
+    Timetrial,
 }
 
 impl RaceDiscipline {
@@ -38,6 +39,7 @@ impl RaceDiscipline {
             Self::Mtb => "mtb",
             Self::Gravel => "gravel",
             Self::Cyclocross => "cyclocross",
+            Self::Timetrial => "timetrial",
         }
     }
 }
@@ -79,6 +81,23 @@ impl RaceSyncStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RaceResult {
+    Finished,
+    Dnf,
+    Dsq,
+}
+
+impl RaceResult {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Finished => "finished",
+            Self::Dnf => "dnf",
+            Self::Dsq => "dsq",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Race {
     pub race_id: String,
     pub user_id: String,
@@ -91,6 +110,7 @@ pub struct Race {
     pub sync_status: RaceSyncStatus,
     pub synced_payload_hash: Option<String>,
     pub last_error: Option<String>,
+    pub result: Option<RaceResult>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
     pub last_synced_at_epoch_seconds: Option<i64>,
@@ -115,6 +135,7 @@ impl Race {
             sync_status: RaceSyncStatus::Pending,
             synced_payload_hash: None,
             last_error: None,
+            result: None,
             created_at_epoch_seconds: now_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
             last_synced_at_epoch_seconds: None,
@@ -134,6 +155,7 @@ impl Race {
             sync_status: RaceSyncStatus::Pending,
             synced_payload_hash: self.synced_payload_hash.clone(),
             last_error: None,
+            result: self.result.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
             last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
@@ -158,6 +180,7 @@ impl Race {
             sync_status: RaceSyncStatus::Synced,
             synced_payload_hash: Some(synced_payload_hash),
             last_error: None,
+            result: self.result.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
             last_synced_at_epoch_seconds: Some(now_epoch_seconds),
@@ -177,6 +200,7 @@ impl Race {
             sync_status: RaceSyncStatus::Failed,
             synced_payload_hash: self.synced_payload_hash.clone(),
             last_error: Some(error),
+            result: self.result.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
             last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
@@ -196,6 +220,7 @@ impl Race {
             sync_status: RaceSyncStatus::PendingDelete,
             synced_payload_hash: self.synced_payload_hash.clone(),
             last_error: None,
+            result: self.result.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
             last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,

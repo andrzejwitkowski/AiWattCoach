@@ -3,7 +3,7 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    calendar::{BoxFuture as CalendarBoxFuture, HiddenCalendarEventSource},
+    calendar::{BoxFuture as CalendarBoxFuture, CalendarError, HiddenCalendarEventSource},
     calendar_labels::{
         CalendarLabel, CalendarLabelError, CalendarLabelPayload, CalendarLabelSource,
         CalendarRaceLabel,
@@ -11,7 +11,7 @@ use crate::domain::{
     intervals::DateRange,
     races::{
         BoxFuture as RaceBoxFuture, Race, RaceDiscipline, RaceError, RacePriority, RaceRepository,
-        RaceSyncStatus,
+        RaceResult, RaceSyncStatus,
     },
 };
 
@@ -33,6 +33,8 @@ struct RaceDocument {
     sync_status: String,
     synced_payload_hash: Option<String>,
     last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<String>,
     created_at_epoch_seconds: i64,
     updated_at_epoch_seconds: i64,
     last_synced_at_epoch_seconds: Option<i64>,
@@ -203,7 +205,7 @@ impl HiddenCalendarEventSource for MongoRaceRepository {
         &self,
         user_id: &str,
         range: &DateRange,
-    ) -> CalendarBoxFuture<Result<Vec<i64>, CalendarLabelError>> {
+    ) -> CalendarBoxFuture<Result<Vec<i64>, CalendarError>> {
         let repository = self.clone();
         let user_id = user_id.to_string();
         let range = range.clone();
@@ -211,7 +213,7 @@ impl HiddenCalendarEventSource for MongoRaceRepository {
             let races = repository
                 .list_by_user_id_and_range(&user_id, &range)
                 .await
-                .map_err(map_race_error_to_label_error)?;
+                .map_err(map_race_error_to_calendar_error)?;
             Ok(races
                 .into_iter()
                 .filter_map(|race| race.linked_intervals_event_id)
@@ -233,6 +235,7 @@ fn map_race_to_document(race: &Race) -> RaceDocument {
         sync_status: race.sync_status.as_str().to_string(),
         synced_payload_hash: race.synced_payload_hash.clone(),
         last_error: race.last_error.clone(),
+        result: race.result.as_ref().map(|r| r.as_str().to_string()),
         created_at_epoch_seconds: race.created_at_epoch_seconds,
         updated_at_epoch_seconds: race.updated_at_epoch_seconds,
         last_synced_at_epoch_seconds: race.last_synced_at_epoch_seconds,
@@ -252,6 +255,7 @@ fn map_document_to_race(document: RaceDocument) -> Result<Race, RaceError> {
         sync_status: map_sync_status(&document.sync_status)?,
         synced_payload_hash: document.synced_payload_hash,
         last_error: document.last_error,
+        result: document.result.as_deref().map(map_result).transpose()?,
         created_at_epoch_seconds: document.created_at_epoch_seconds,
         updated_at_epoch_seconds: document.updated_at_epoch_seconds,
         last_synced_at_epoch_seconds: document.last_synced_at_epoch_seconds,
@@ -264,6 +268,7 @@ fn map_discipline(value: &str) -> Result<RaceDiscipline, RaceError> {
         "mtb" => Ok(RaceDiscipline::Mtb),
         "gravel" => Ok(RaceDiscipline::Gravel),
         "cyclocross" => Ok(RaceDiscipline::Cyclocross),
+        "timetrial" => Ok(RaceDiscipline::Timetrial),
         other => Err(RaceError::Internal(format!(
             "unknown race discipline: {other}"
         ))),
@@ -293,6 +298,15 @@ fn map_sync_status(value: &str) -> Result<RaceSyncStatus, RaceError> {
     }
 }
 
+fn map_result(value: &str) -> Result<RaceResult, RaceError> {
+    match value {
+        "finished" => Ok(RaceResult::Finished),
+        "dnf" => Ok(RaceResult::Dnf),
+        "dsq" => Ok(RaceResult::Dsq),
+        other => Err(RaceError::Internal(format!("unknown race result: {other}"))),
+    }
+}
+
 fn map_race_error_to_label_error(error: RaceError) -> CalendarLabelError {
     match error {
         RaceError::Unauthenticated => CalendarLabelError::Unauthenticated,
@@ -300,5 +314,15 @@ fn map_race_error_to_label_error(error: RaceError) -> CalendarLabelError {
         RaceError::Unavailable(message) => CalendarLabelError::Unavailable(message),
         RaceError::Internal(message) => CalendarLabelError::Internal(message),
         RaceError::NotFound => CalendarLabelError::Internal("Race not found".to_string()),
+    }
+}
+
+fn map_race_error_to_calendar_error(error: RaceError) -> CalendarError {
+    match error {
+        RaceError::Unauthenticated => CalendarError::Unauthenticated,
+        RaceError::Validation(message) => CalendarError::Validation(message),
+        RaceError::Unavailable(message) => CalendarError::Unavailable(message),
+        RaceError::Internal(message) => CalendarError::Internal(message),
+        RaceError::NotFound => CalendarError::Internal("Race not found".to_string()),
     }
 }

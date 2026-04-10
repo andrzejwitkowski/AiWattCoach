@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use aiwattcoach::domain::{
-    calendar::HiddenCalendarEventSource,
+    calendar::{CalendarError, HiddenCalendarEventSource},
     calendar_labels::{
         CalendarLabel, CalendarLabelError, CalendarLabelPayload, CalendarLabelSource,
         CalendarRaceLabel,
@@ -136,6 +136,32 @@ async fn list_calendar_labels_returns_400_for_invalid_date() {
 }
 
 #[tokio::test]
+async fn list_calendar_labels_rejects_inverted_date_range() {
+    let app = intervals_test_app_with_all_services(
+        TestIdentityServiceWithSession::default(),
+        ScopedIntervalsService::default(),
+        EmptyTrainingPlanProjectionRepository,
+        RaceLabelSource::default(),
+        EmptyHiddenSource,
+        StubRaceService,
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/labels?oldest=2026-03-31&newest=2026-03-01")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn list_calendar_labels_requires_authentication() {
     let app = intervals_test_app_with_all_services(
         TestIdentityServiceWithSession::default(),
@@ -162,9 +188,8 @@ async fn list_calendar_labels_requires_authentication() {
 
 #[tokio::test]
 async fn list_calendar_labels_is_scoped_to_authenticated_user() {
-    // Labels are fetched for whichever user_id the session resolves to.
-    // We wire two sessions and verify that user-2's session receives an
-    // empty list (the source only returns labels for user-1's scope).
+    // The RaceLabelSource scopes results by user_id (labels belong to user-1).
+    // user-2's session must receive an empty labelsByDate map.
     let app = intervals_test_app_with_all_services(
         SessionMappedIdentityService::with_users([
             ("session-user-1", "user-1", "user-1@example.com"),
@@ -178,8 +203,6 @@ async fn list_calendar_labels_is_scoped_to_authenticated_user() {
     )
     .await;
 
-    // user-2's session — the source returns the same labels regardless, but the
-    // test confirms the handler forwards a user_id (authentication is user-scoped).
     let response = app
         .oneshot(
             Request::builder()
@@ -192,17 +215,32 @@ async fn list_calendar_labels_is_scoped_to_authenticated_user() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = get_json(response).await;
+    let labels_by_date = body.get("labelsByDate").unwrap();
+    assert!(
+        labels_by_date
+            .as_object()
+            .map(|m| m.is_empty())
+            .unwrap_or(false),
+        "user-2 should receive no labels"
+    );
 }
 
 #[derive(Clone, Default)]
 struct RaceLabelSource {
-    labels: Arc<Mutex<Vec<CalendarLabel>>>,
+    labels: Arc<Mutex<Vec<(String, CalendarLabel)>>>,
 }
 
 impl RaceLabelSource {
     fn with_labels(labels: Vec<CalendarLabel>) -> Self {
+        // Labels owned by "user-1" by default
         Self {
-            labels: Arc::new(Mutex::new(labels)),
+            labels: Arc::new(Mutex::new(
+                labels
+                    .into_iter()
+                    .map(|l| ("user-1".to_string(), l))
+                    .collect(),
+            )),
         }
     }
 }
@@ -210,13 +248,20 @@ impl RaceLabelSource {
 impl CalendarLabelSource for RaceLabelSource {
     fn list_labels(
         &self,
-        _user_id: &str,
+        user_id: &str,
         _range: &DateRange,
     ) -> aiwattcoach::domain::calendar_labels::BoxFuture<
         Result<Vec<CalendarLabel>, CalendarLabelError>,
     > {
+        let user_id = user_id.to_string();
         let labels = self.labels.lock().unwrap().clone();
-        Box::pin(async move { Ok(labels) })
+        Box::pin(async move {
+            Ok(labels
+                .into_iter()
+                .filter(|(owner, _)| *owner == user_id)
+                .map(|(_, label)| label)
+                .collect())
+        })
     }
 }
 
@@ -238,7 +283,7 @@ impl HiddenCalendarEventSource for HiddenIdsSource {
         &self,
         _user_id: &str,
         _range: &DateRange,
-    ) -> aiwattcoach::domain::calendar::BoxFuture<Result<Vec<i64>, CalendarLabelError>> {
+    ) -> aiwattcoach::domain::calendar::BoxFuture<Result<Vec<i64>, CalendarError>> {
         let ids = self.ids.lock().unwrap().clone();
         Box::pin(async move { Ok(ids) })
     }
@@ -252,7 +297,7 @@ impl HiddenCalendarEventSource for EmptyHiddenSource {
         &self,
         _user_id: &str,
         _range: &DateRange,
-    ) -> aiwattcoach::domain::calendar::BoxFuture<Result<Vec<i64>, CalendarLabelError>> {
+    ) -> aiwattcoach::domain::calendar::BoxFuture<Result<Vec<i64>, CalendarError>> {
         Box::pin(async { Ok(Vec::new()) })
     }
 }

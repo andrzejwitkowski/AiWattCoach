@@ -8,7 +8,11 @@ use axum::{
 use crate::adapters::rest::intervals::is_valid_date;
 use crate::{
     config::AppState,
-    domain::{calendar::SyncPlannedWorkout, intervals::DateRange},
+    domain::{
+        calendar::{CalendarUseCases, SyncPlannedWorkout},
+        calendar_labels::CalendarLabelsUseCases,
+        intervals::DateRange,
+    },
 };
 
 use super::{
@@ -21,19 +25,38 @@ async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String
     super::super::user_auth::resolve_user_id(state, headers).await
 }
 
+async fn auth_and_get_calendar_service<'a>(
+    state: &'a AppState,
+    headers: &HeaderMap,
+) -> Result<(String, &'a dyn CalendarUseCases), Response> {
+    let user_id = resolve_user_id(state, headers).await?;
+    let service = state
+        .calendar_service
+        .as_deref()
+        .ok_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+    Ok((user_id, service))
+}
+
+async fn auth_and_get_calendar_labels_service<'a>(
+    state: &'a AppState,
+    headers: &HeaderMap,
+) -> Result<(String, &'a dyn CalendarLabelsUseCases), Response> {
+    let user_id = resolve_user_id(state, headers).await?;
+    let service = state
+        .calendar_labels_service
+        .as_deref()
+        .ok_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+    Ok((user_id, service))
+}
+
 pub(in crate::adapters::rest) async fn list_events(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<ListCalendarEventsQuery>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
-        Ok(user_id) => user_id,
+    let (user_id, calendar_service) = match auth_and_get_calendar_service(&state, &headers).await {
+        Ok(pair) => pair,
         Err(response) => return response,
-    };
-
-    let calendar_service = match state.calendar_service.as_ref() {
-        Some(service) => service,
-        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
     let range = DateRange {
@@ -41,7 +64,8 @@ pub(in crate::adapters::rest) async fn list_events(
         newest: query.newest,
     };
 
-    if !is_valid_date(&range.oldest) || !is_valid_date(&range.newest) {
+    if !is_valid_date(&range.oldest) || !is_valid_date(&range.newest) || range.oldest > range.newest
+    {
         return StatusCode::BAD_REQUEST.into_response();
     }
 
@@ -62,22 +86,19 @@ pub(in crate::adapters::rest) async fn list_labels(
     headers: HeaderMap,
     Query(query): Query<ListCalendarEventsQuery>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
-        Ok(user_id) => user_id,
-        Err(response) => return response,
-    };
-
-    let calendar_labels_service = match state.calendar_labels_service.as_ref() {
-        Some(service) => service,
-        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
-    };
+    let (user_id, calendar_labels_service) =
+        match auth_and_get_calendar_labels_service(&state, &headers).await {
+            Ok(pair) => pair,
+            Err(response) => return response,
+        };
 
     let range = DateRange {
         oldest: query.oldest,
         newest: query.newest,
     };
 
-    if !is_valid_date(&range.oldest) || !is_valid_date(&range.newest) {
+    if !is_valid_date(&range.oldest) || !is_valid_date(&range.newest) || range.oldest > range.newest
+    {
         return StatusCode::BAD_REQUEST.into_response();
     }
 
@@ -92,14 +113,9 @@ pub(in crate::adapters::rest) async fn sync_planned_workout(
     headers: HeaderMap,
     Path(path): Path<SyncPlannedWorkoutPath>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
-        Ok(user_id) => user_id,
+    let (user_id, calendar_service) = match auth_and_get_calendar_service(&state, &headers).await {
+        Ok(pair) => pair,
         Err(response) => return response,
-    };
-
-    let calendar_service = match state.calendar_service.as_ref() {
-        Some(service) => service,
-        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
     if !is_valid_date(&path.date) {

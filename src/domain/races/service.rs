@@ -253,6 +253,11 @@ pub(super) fn validate_request(
     if date.trim().is_empty() {
         return Err(RaceError::Validation("Race date is required".to_string()));
     }
+    if !is_valid_date_format(date) {
+        return Err(RaceError::Validation(
+            "Race date must be in YYYY-MM-DD format".to_string(),
+        ));
+    }
     if name.trim().is_empty() {
         return Err(RaceError::Validation("Race name is required".to_string()));
     }
@@ -268,6 +273,43 @@ pub(super) fn validate_request(
     }
 
     Ok(())
+}
+
+/// Returns true when `date` is a valid calendar date in YYYY-MM-DD format.
+fn is_valid_date_format(date: &str) -> bool {
+    let mut parts = date.split('-');
+    let (Some(year), Some(month), Some(day), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    if year.len() != 4 || month.len() != 2 || day.len() != 2 {
+        return false;
+    }
+    let (Ok(y), Ok(m), Ok(d)) = (
+        year.parse::<i32>(),
+        month.parse::<u32>(),
+        day.parse::<u32>(),
+    ) else {
+        return false;
+    };
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return false;
+    }
+    let days_in_month = match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+            if leap {
+                29
+            } else {
+                28
+            }
+        }
+        _ => return false,
+    };
+    d <= days_in_month
 }
 
 fn projected_event_start_date_local(date: &str) -> String {
@@ -286,6 +328,7 @@ fn projected_event_type(race: &Race) -> &'static str {
         super::RaceDiscipline::Mtb => "Ride",
         super::RaceDiscipline::Gravel => "Ride",
         super::RaceDiscipline::Cyclocross => "Ride",
+        super::RaceDiscipline::Timetrial => "Ride",
     }
 }
 

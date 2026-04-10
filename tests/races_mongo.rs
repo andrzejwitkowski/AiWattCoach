@@ -205,6 +205,7 @@ fn sample_race(race_id: &str, date: &str, linked_intervals_event_id: Option<i64>
         sync_status: RaceSyncStatus::Synced,
         synced_payload_hash: Some("hash".to_string()),
         last_error: None,
+        result: None,
         created_at_epoch_seconds: 1,
         updated_at_epoch_seconds: 2,
         last_synced_at_epoch_seconds: Some(2),

@@ -3,7 +3,6 @@ use std::collections::{HashMap, HashSet};
 use sha2::{Digest, Sha256};
 
 use crate::domain::{
-    calendar_labels::CalendarLabelError,
     identity::Clock,
     intervals::{
         CreateEvent, DateRange, Event, EventCategory, IntervalsError, IntervalsUseCases,
@@ -78,8 +77,7 @@ where
         let hidden_linked_intervals_event_ids = self
             .hidden_event_source
             .list_hidden_intervals_event_ids(user_id, range)
-            .await
-            .map_err(map_calendar_label_error)?;
+            .await?;
 
         let syncs_by_projection = sync_records
             .into_iter()
@@ -293,15 +291,6 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move { service.sync_planned_workout_impl(&user_id, request).await })
-    }
-}
-
-fn map_calendar_label_error(error: CalendarLabelError) -> CalendarError {
-    match error {
-        CalendarLabelError::Unauthenticated => CalendarError::Unauthenticated,
-        CalendarLabelError::Validation(message) => CalendarError::Validation(message),
-        CalendarLabelError::Unavailable(message) => CalendarError::Unavailable(message),
-        CalendarLabelError::Internal(message) => CalendarError::Internal(message),
     }
 }
 

@@ -13,5 +13,6 @@ pub(super) fn map_race_to_dto(race: Race) -> RaceDto {
         sync_status: race.sync_status.as_str().to_string(),
         linked_intervals_event_id: race.linked_intervals_event_id,
         last_error: race.last_error,
+        result: race.result.as_ref().map(|r| r.as_str().to_string()),
     }
 }

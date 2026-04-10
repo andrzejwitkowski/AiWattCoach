@@ -37,4 +37,6 @@ pub(super) struct RaceDto {
     pub linked_intervals_event_id: Option<i64>,
     #[serde(rename = "lastError")]
     pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<String>,
 }
