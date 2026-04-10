@@ -264,8 +264,49 @@ async fn create_race_persists_and_syncs_to_intervals() {
     assert_eq!(created.race_id, "race-123");
     assert_eq!(created.linked_intervals_event_id, Some(77));
     assert_eq!(created.sync_status, RaceSyncStatus::Synced);
-    assert_eq!(intervals.created_events.lock().unwrap().len(), 1);
+    let created_events = intervals.created_events.lock().unwrap();
+    assert_eq!(created_events.len(), 1);
+    assert_eq!(created_events[0].category, EventCategory::RaceB);
     assert_eq!(repository.stored().len(), 1);
+}
+
+#[tokio::test]
+async fn create_race_maps_priority_to_intervals_race_category() {
+    let repository = InMemoryRaceRepository::default();
+    let intervals = RecordingIntervalsService::default();
+    let service = RaceService::new(repository, intervals.clone(), TestClock, TestIdGenerator);
+
+    service
+        .create_race(
+            "user-1",
+            CreateRace {
+                date: "2026-09-12".to_string(),
+                name: "Peak A Race".to_string(),
+                distance_meters: 140_000,
+                discipline: RaceDiscipline::Road,
+                priority: RacePriority::A,
+            },
+        )
+        .await
+        .unwrap();
+
+    service
+        .create_race(
+            "user-1",
+            CreateRace {
+                date: "2026-09-19".to_string(),
+                name: "Support C Race".to_string(),
+                distance_meters: 80_000,
+                discipline: RaceDiscipline::Road,
+                priority: RacePriority::C,
+            },
+        )
+        .await
+        .unwrap();
+
+    let created_events = intervals.created_events.lock().unwrap();
+    assert_eq!(created_events[0].category, EventCategory::RaceA);
+    assert_eq!(created_events[1].category, EventCategory::RaceC);
 }
 
 #[tokio::test]

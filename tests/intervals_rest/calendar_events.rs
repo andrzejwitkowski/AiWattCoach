@@ -83,6 +83,42 @@ async fn list_calendar_events_returns_intervals_events_for_authenticated_user() 
 }
 
 #[tokio::test]
+async fn list_calendar_events_normalizes_priority_race_categories_for_rest_clients() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_events(vec![Event {
+            id: 11,
+            start_date_local: "2026-03-22".to_string(),
+            event_type: Some("Ride".to_string()),
+            name: Some("Priority Race".to_string()),
+            category: EventCategory::RaceB,
+            description: None,
+            indoor: false,
+            color: None,
+            workout_doc: None,
+        }]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    let event = &body.as_array().unwrap()[0];
+    assert_eq!(event.get("category").unwrap().as_str(), Some("RACE"));
+}
+
+#[tokio::test]
 async fn list_calendar_events_reports_missing_credentials_as_unprocessable_entity() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),

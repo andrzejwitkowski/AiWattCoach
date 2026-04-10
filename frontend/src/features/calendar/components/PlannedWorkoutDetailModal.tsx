@@ -43,7 +43,7 @@ export function PlannedWorkoutDetailModal({
     ? (hoveredIntervalKey ?? selectedIntervalKey)
     : null;
   const activeInterval = chartIntervals.find((interval) => interval.id === highlightedIntervalKey) ?? null;
-  const syncStatus = event.syncStatus ?? 'unsynced';
+  const syncStatus = event.plannedSource === 'predicted' ? (event.syncStatus ?? 'unsynced') : null;
   const canSync = Boolean(event.projectedWorkout);
 
   useEffect(() => {
@@ -85,9 +85,11 @@ export function PlannedWorkoutDetailModal({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
-          {syncBadgeLabel(syncStatus, t)}
-        </span>
+        {syncStatus ? (
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
+            {syncBadgeLabel(syncStatus, t)}
+          </span>
+        ) : null}
         {syncStatus === 'modified' ? (
           <span className="rounded-full border border-[#ffb86a]/25 bg-[#ffb86a]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffd7a1]">
             {t('calendar.scheduleChanged')}

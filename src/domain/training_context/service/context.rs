@@ -236,7 +236,7 @@ pub(super) fn build_future_planned_event_contexts(
     let mut future_events = events
         .iter()
         .map(|event| {
-            let parsed = parse_workout_doc(event.workout_doc.as_deref(), configured_ftp);
+            let parsed = parse_workout_doc(event.structured_workout_text(), configured_ftp);
             let duration_seconds = (parsed.summary.total_duration_seconds > 0)
                 .then_some(parsed.summary.total_duration_seconds);
 
@@ -279,7 +279,7 @@ fn build_recent_workout(
     );
     let cadence_values_5s = extract_and_average_stream(&activity.details.streams, "cadence");
     let planned_workout = matched_event.map(|event| {
-        let parsed = parse_workout_doc(event.workout_doc.as_deref(), resolved_ftp);
+        let parsed = parse_workout_doc(event.structured_workout_text(), resolved_ftp);
 
         PlannedWorkoutReference {
             event_id: event.id,
@@ -410,7 +410,7 @@ fn build_projected_planned_workout(
     completed: bool,
     ftp_watts: Option<i32>,
 ) -> PlannedWorkoutContext {
-    let parsed = parse_workout_doc(event.workout_doc.as_deref(), ftp_watts);
+    let parsed = parse_workout_doc(event.structured_workout_text(), ftp_watts);
     PlannedWorkoutContext {
         event_id: event.id,
         start_date_local: event.start_date_local.clone(),
@@ -519,7 +519,7 @@ pub(super) fn build_event_activity_matches(
 
         for activity in same_day {
             let effective_ftp = activity.metrics.ftp_watts.or(configured_ftp);
-            let parsed = parse_workout_doc(event.workout_doc.as_deref(), effective_ftp);
+            let parsed = parse_workout_doc(event.structured_workout_text(), effective_ftp);
             if let Some(candidate) =
                 find_best_activity_match(&parsed, std::slice::from_ref(activity), effective_ftp)
             {

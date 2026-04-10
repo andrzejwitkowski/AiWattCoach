@@ -188,16 +188,29 @@ function mergeSelectedEvent(
         return selectedEvent;
     }
 
-    if (selectedEvent.plannedSource !== 'predicted') {
-        return loadedEvent;
-    }
-
     return {
         ...loadedEvent,
+        eventDefinition: hasMeaningfulEventDefinition(loadedEvent.eventDefinition)
+            ? loadedEvent.eventDefinition
+            : selectedEvent.eventDefinition,
         calendarEntryId: selectedEvent.calendarEntryId,
         plannedSource: selectedEvent.plannedSource,
         syncStatus: selectedEvent.syncStatus,
-        linkedIntervalsEventId: selectedEvent.linkedIntervalsEventId,
+        linkedIntervalsEventId: selectedEvent.linkedIntervalsEventId ?? loadedEvent.linkedIntervalsEventId,
         projectedWorkout: selectedEvent.projectedWorkout,
     };
+}
+
+function hasMeaningfulEventDefinition(eventDefinition: IntervalEvent['eventDefinition']): boolean {
+    return Boolean(
+        eventDefinition.rawWorkoutDoc?.trim()
+        || eventDefinition.intervals.length > 0
+        || eventDefinition.segments.length > 0
+        || eventDefinition.summary.totalDurationSeconds > 0
+        || eventDefinition.summary.totalSegments > 0
+        || eventDefinition.summary.estimatedNormalizedPowerWatts !== null
+        || eventDefinition.summary.estimatedAveragePowerWatts !== null
+        || eventDefinition.summary.estimatedIntensityFactor !== null
+        || eventDefinition.summary.estimatedTrainingStressScore !== null,
+    );
 }

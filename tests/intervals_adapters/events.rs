@@ -277,6 +277,103 @@ async fn intervals_client_posts_create_event_payload_as_json_object() {
 }
 
 #[tokio::test]
+async fn intervals_client_serializes_priority_race_categories_for_create_event() {
+    let server = TestIntervalsServer::start().await;
+    server.set_created_event(ResponseEvent::sample(203, "Created"));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let _created = client
+        .create_event(
+            &test_credentials(),
+            CreateEvent {
+                category: EventCategory::RaceA,
+                start_date_local: "2026-04-12T00:00:00".to_string(),
+                event_type: Some("Ride".to_string()),
+                name: Some("Race Grojec".to_string()),
+                description: Some("distance_meters=80000".to_string()),
+                indoor: false,
+                color: None,
+                workout_doc: None,
+                file_upload: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    let body = String::from_utf8(requests[0].body.clone().unwrap()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+    assert_eq!(
+        json.get("category").and_then(|value| value.as_str()),
+        Some("RACE_A")
+    );
+}
+
+#[tokio::test]
+async fn intervals_client_serializes_priority_race_categories_for_update_event() {
+    let server = TestIntervalsServer::start().await;
+    server.set_updated_event(ResponseEvent::sample(204, "Updated"));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let _updated = client
+        .update_event(
+            &test_credentials(),
+            204,
+            UpdateEvent {
+                category: Some(EventCategory::RaceC),
+                start_date_local: Some("2026-04-19T00:00:00".to_string()),
+                event_type: Some("Ride".to_string()),
+                name: Some("Updated Race".to_string()),
+                description: Some("distance_meters=50000".to_string()),
+                indoor: Some(false),
+                color: None,
+                workout_doc: None,
+                file_upload: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    let body = String::from_utf8(requests[0].body.clone().unwrap()).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+    assert_eq!(
+        json.get("category").and_then(|value| value.as_str()),
+        Some("RACE_C")
+    );
+}
+
+#[tokio::test]
+async fn intervals_client_maps_priority_race_categories_from_upstream() {
+    let server = TestIntervalsServer::start().await;
+    let mut event = serde_json::to_value(ResponseEvent::sample(101, "Race A")).unwrap();
+    event["category"] = json!("RACE_B");
+    event["indoor"] = json!(false);
+    event["color"] = json!("red");
+    event["workout_doc"] = serde_json::Value::Null;
+    server.set_list_events_raw(json!([event]));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let events = client
+        .list_events(
+            &IntervalsCredentials {
+                api_key: "secret-key".to_string(),
+                athlete_id: "athlete-7".to_string(),
+            },
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-03-31".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(events[0].category, EventCategory::RaceB);
+}
+
+#[tokio::test]
 async fn intervals_client_surfaces_update_event_upstream_error_body() {
     let server = TestIntervalsServer::start().await;
     server.set_updated_event_failure(

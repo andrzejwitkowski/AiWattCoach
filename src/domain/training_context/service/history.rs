@@ -64,7 +64,7 @@ pub(super) fn build_recent_interval_blocks_by_activity_id(
         .filter_map(|activity| {
             matched.activity_to_event.get(&activity.id).map(|event| {
                 let resolved_ftp = activity.metrics.ftp_watts.or(configured_ftp);
-                let parsed = parse_workout_doc(event.workout_doc.as_deref(), resolved_ftp);
+                let parsed = parse_workout_doc(event.structured_workout_text(), resolved_ftp);
                 (
                     activity.id.clone(),
                     event

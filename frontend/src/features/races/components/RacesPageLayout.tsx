@@ -21,12 +21,12 @@ export function RacesPageLayout({ apiBaseUrl }: RacesPageLayoutProps) {
   const [isCreating, setIsCreating] = useState(false);
 
   const activeRace = useMemo(() => (isCreating ? null : editingRace), [editingRace, isCreating]);
+  const isEditorOpen = isCreating || editingRace !== null;
   const nextRace = upcomingRaces[0] ?? null;
 
   return (
     <section className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,0.9fr)]">
-        <div className="space-y-6">
+      <div className="space-y-6">
           <section className="overflow-hidden rounded-[1.9rem] border border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(242,201,142,0.22),transparent_28%),radial-gradient(circle_at_85%_20%,rgba(120,95,64,0.2),transparent_22%),linear-gradient(180deg,rgba(19,16,13,0.98),rgba(12,14,17,0.94))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
             <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
               <div>
@@ -69,19 +69,19 @@ export function RacesPageLayout({ apiBaseUrl }: RacesPageLayoutProps) {
             </div>
           </section>
 
-          {isLoading ? (
-            <StatePanel tone="neutral">{t('races.loading')}</StatePanel>
-          ) : error ? (
-            <StatePanel tone="error">{t('races.loadError', { message: error })}</StatePanel>
-          ) : (
-            <>
-              <RaceSection title={t('races.upcomingTitle')} races={upcomingRaces} onEdit={setEditingRace} emptyLabel={t('races.noUpcoming')} />
-              <RaceSection title={t('races.completedTitle')} races={completedRaces} onEdit={setEditingRace} emptyLabel={t('races.noCompleted')} />
-            </>
-          )}
-        </div>
+        {isLoading ? (
+          <StatePanel tone="neutral">{t('races.loading')}</StatePanel>
+        ) : error ? (
+          <StatePanel tone="error">{t('races.loadError', { message: error })}</StatePanel>
+        ) : (
+          <>
+            <RaceSection title={t('races.upcomingTitle')} races={upcomingRaces} onEdit={setEditingRace} emptyLabel={t('races.noUpcoming')} />
+            <RaceSection title={t('races.completedTitle')} races={completedRaces} onEdit={setEditingRace} emptyLabel={t('races.noCompleted')} />
+          </>
+        )}
+      </div>
 
-        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+      {isEditorOpen ? (
           <RaceForm
             apiBaseUrl={apiBaseUrl}
             race={activeRace}
@@ -95,20 +95,7 @@ export function RacesPageLayout({ apiBaseUrl }: RacesPageLayoutProps) {
               void refresh();
             }}
           />
-          <aside className="rounded-[1.6rem] border border-white/8 bg-[linear-gradient(180deg,rgba(17,20,23,0.96),rgba(12,14,17,0.92))] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#f2c98e]/20 bg-[#f2c98e]/10 text-[#f2c98e]">
-                <Flag size={18} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">{t('races.sidebarEyebrow')}</p>
-                <h3 className="mt-1 text-lg font-black uppercase tracking-tight text-white">{t('races.sidebarTitle')}</h3>
-              </div>
-            </div>
-            <p className="mt-4 text-sm leading-7 text-slate-300">{t('races.sidebarBody')}</p>
-          </aside>
-        </div>
-      </div>
+      ) : null}
     </section>
   );
 }

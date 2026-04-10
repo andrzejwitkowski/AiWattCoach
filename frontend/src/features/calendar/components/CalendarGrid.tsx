@@ -12,8 +12,12 @@ import {
   CALENDAR_WEEK_ROW_GAP,
 } from '../constants';
 import { useCalendarData } from '../hooks/useCalendarData';
+import { selectDayItemDetail, type CalendarDayItemsSelection } from '../dayItems';
+import type { CalendarRaceLabel } from '../types';
 import type { WorkoutDetailSelection } from '../workoutDetails';
 import { CalendarPerformanceCards } from './CalendarPerformanceCards';
+import { DayItemsModal } from './DayItemsModal';
+import { RaceDayDetailModal } from './RaceDayDetailModal';
 import { WorkoutDetailModal } from './WorkoutDetailModal';
 import { CalendarWeekDayHeader } from './CalendarWeekDayHeader';
 import { CalendarWeekSection } from './CalendarWeekSection';
@@ -36,6 +40,8 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
     loadMoreFuture,
   } = useCalendarData({ apiBaseUrl });
   const [selection, setSelection] = useState<WorkoutDetailSelection | null>(null);
+  const [dayItemsSelection, setDayItemsSelection] = useState<CalendarDayItemsSelection | null>(null);
+  const [raceSelection, setRaceSelection] = useState<CalendarRaceLabel | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const appliedAdjustmentVersionRef = useRef(0);
   const initializingScrollRef = useRef(true);
@@ -211,9 +217,14 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
               <CalendarWeekDayHeader />
               <div className="mt-8 space-y-10">
                 {renderedWeeks.length > 0 ? (
-                    renderedWeeks.map((week) => (
+                      renderedWeeks.map((week) => (
                       <div key={week.weekKey} data-week-key={week.weekKey}>
-                      <CalendarWeekSection week={week} onSelectWorkout={setSelection} />
+                      <CalendarWeekSection
+                        week={week}
+                        onSelectWorkout={setSelection}
+                        onSelectDayItems={setDayItemsSelection}
+                        onSelectRace={setRaceSelection}
+                      />
                       </div>
                     ))
                 ) : (
@@ -228,6 +239,23 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       </div>
 
       <CalendarPerformanceCards />
+      <DayItemsModal
+        selection={dayItemsSelection}
+        onClose={() => setDayItemsSelection(null)}
+        onSelectItem={(item) => {
+          setDayItemsSelection(null);
+          if (item.kind === 'race') {
+            setRaceSelection(item.race);
+            return;
+          }
+
+          const nextSelection = selectDayItemDetail(item);
+          if (nextSelection) {
+            setSelection(nextSelection);
+          }
+        }}
+      />
+      <RaceDayDetailModal selection={raceSelection} onClose={() => setRaceSelection(null)} />
       <WorkoutDetailModal apiBaseUrl={apiBaseUrl} selection={selection} onClose={() => setSelection(null)} />
     </section>
   );

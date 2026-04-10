@@ -292,4 +292,97 @@ describe('WorkoutDetailModal planned mode', () => {
     expect(screen.getByRole('button', { name: /download fit/i })).toBeInTheDocument();
     expect(screen.getByText('Predicted Build')).toBeInTheDocument();
   });
+
+  it('preserves calendar event details when intervals event details are empty', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 41,
+        startDateLocal: '2026-04-12',
+        name: 'Opener Grojec',
+        plannedSource: 'intervals',
+        syncStatus: null,
+        eventDefinition: makeEventDefinition(),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-04-12',
+          event: makeEvent({
+            id: 41,
+            startDateLocal: '2026-04-12',
+            name: 'Opener Grojec',
+            plannedSource: 'intervals',
+            syncStatus: null,
+            eventDefinition: makeEventDefinition({
+              rawWorkoutDoc: '- 19min 55%',
+              intervals: [makeIntervalDefinition({ definition: '- 19min 55%', durationSeconds: 1140, targetPercentFtp: 55, zoneId: 1 })],
+              segments: [makeWorkoutSegment({ label: '19min 55%', durationSeconds: 1140, endOffsetSeconds: 1140, targetPercentFtp: 55, zoneId: 1 })],
+              summary: makeWorkoutSummary({
+                totalSegments: 1,
+                totalDurationSeconds: 1140,
+                estimatedIntensityFactor: 0.55,
+                estimatedTrainingStressScore: 16,
+              }),
+            }),
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(within(metricCard('Duration')).getByText('19m')).toBeInTheDocument());
+
+    expect(screen.getByText(/planned workout/i)).toBeInTheDocument();
+    expect(within(metricCard('Duration')).getByText('19m')).toBeInTheDocument();
+    expect(within(metricCard('IF')).getByText('0.55 IF')).toBeInTheDocument();
+    expect(within(metricCard('TSS')).getByText('16 TSS')).toBeInTheDocument();
+    expect(screen.getByText('19min 55% FTP')).toBeInTheDocument();
+  });
+
+  it('does not show a sync badge for intervals-origin planned workouts', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 51,
+        startDateLocal: '2026-04-12',
+        name: 'Opener Grojec',
+        plannedSource: 'intervals',
+        syncStatus: null,
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 19min 55%',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 1140, estimatedTrainingStressScore: 16 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-04-12',
+          event: makeEvent({
+            id: 51,
+            startDateLocal: '2026-04-12',
+            name: 'Opener Grojec',
+            plannedSource: 'intervals',
+            syncStatus: null,
+            eventDefinition: makeEventDefinition({
+              rawWorkoutDoc: '- 19min 55%',
+              summary: makeWorkoutSummary({ totalDurationSeconds: 1140, estimatedTrainingStressScore: 16 }),
+            }),
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(within(metricCard('Duration')).getByText('19m')).toBeInTheDocument());
+
+    expect(screen.queryByText(/not synced/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sync to intervals/i })).not.toBeInTheDocument();
+  });
 });

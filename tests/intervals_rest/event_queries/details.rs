@@ -86,6 +86,61 @@ async fn get_event_returns_single_event() {
 }
 
 #[tokio::test]
+async fn get_event_parses_structured_workout_from_description_when_workout_doc_is_missing() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_events(vec![aiwattcoach::domain::intervals::Event {
+            id: 22,
+            start_date_local: "2026-03-22".to_string(),
+            event_type: Some("Ride".to_string()),
+            name: Some("Opener Grojec".to_string()),
+            category: aiwattcoach::domain::intervals::EventCategory::Workout,
+            description: Some("- 19m 55%".to_string()),
+            indoor: true,
+            color: None,
+            workout_doc: None,
+        }]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events/22")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("eventDefinition")
+            .unwrap()
+            .get("intervals")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .get("definition")
+            .unwrap()
+            .as_str(),
+        Some("- 19m 55%")
+    );
+    assert_eq!(
+        body.get("eventDefinition")
+            .unwrap()
+            .get("summary")
+            .unwrap()
+            .get("totalDurationSeconds")
+            .unwrap()
+            .as_i64(),
+        Some(1140)
+    );
+}
+
+#[tokio::test]
 async fn get_event_includes_actual_workout_when_matching_activity_exists() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),

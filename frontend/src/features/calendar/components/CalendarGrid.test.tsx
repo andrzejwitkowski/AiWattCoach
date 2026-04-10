@@ -1,10 +1,77 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import '../../../i18n';
 import { CALENDAR_PAGINATION_TRIGGER_OFFSET } from '../constants';
 import type { CalendarWeek } from '../types';
+import { makeEvent } from '../testData';
 import { CalendarGrid } from './CalendarGrid';
+
+vi.mock('react-i18next', async () => {
+  const actual = await vi.importActual<typeof import('react-i18next')>('react-i18next');
+
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string, options?: { count?: number; priority?: string; value?: string }) => {
+        switch (key) {
+          case 'calendar.performanceCalendar':
+            return 'Performance Calendar';
+          case 'calendar.baseMonth':
+            return 'Base Month';
+          case 'calendar.visibleWindow':
+            return 'Visible Window';
+          case 'calendar.scrollMode':
+            return 'Scroll Mode';
+          case 'calendar.infinite':
+            return 'Infinite';
+          case 'calendar.noEvents':
+            return 'No events';
+          case 'calendar.dayItems':
+            return 'Day items';
+          case 'calendar.viewItems':
+            return `View ${options?.count ?? 0} items`;
+          case 'calendar.closeDayItems':
+            return 'Close day items';
+          case 'calendar.closeRaceDetails':
+            return 'Close race details';
+          case 'calendar.closeWorkoutDetails':
+            return 'Close workout details';
+          case 'calendar.raceDay':
+            return 'Race Day';
+          case 'calendar.plannedWorkout':
+            return 'Planned Workout';
+          case 'calendar.completedWorkout':
+            return 'Completed Workout';
+          case 'calendar.eventOther':
+            return 'Event';
+          case 'calendar.raceDistance':
+            return 'Distance';
+          case 'calendar.raceDiscipline':
+            return 'Discipline';
+          case 'calendar.racePriority':
+            return 'Priority';
+          case 'calendar.raceSyncStatus':
+            return 'Sync Status';
+          case 'calendar.priorityLabel':
+            return `Cat. ${options?.priority ?? ''}`;
+          case 'calendar.raceDisciplineRoad':
+            return 'Road';
+          case 'races.distanceValue':
+            return `${options?.value ?? ''} km`;
+          case 'races.syncStatus.synced':
+            return 'Synced';
+          default:
+            return key;
+        }
+      },
+      i18n: {
+        resolvedLanguage: 'en',
+        language: 'en',
+      },
+    }),
+  };
+});
 
 vi.mock('../hooks/useCalendarData', () => ({
   useCalendarData: vi.fn(),
@@ -184,5 +251,56 @@ describe('CalendarGrid', () => {
     render(<CalendarGrid apiBaseUrl="" />);
 
     expect(screen.queryByText(/fetching data/i)).not.toBeInTheDocument();
+  });
+
+  it('opens the day-items modal before workout details on multi-item days', async () => {
+    const hookState = buildHookState();
+    const multiItemDay: CalendarWeek['days'][number] = {
+      ...hookState.weeks[0]!.days[0],
+      events: [
+        makeEvent({ id: 1, name: 'Opener', eventDefinition: { summary: { totalDurationSeconds: 1200, estimatedTrainingStressScore: 16 } } }),
+        makeEvent({ id: 99, name: 'Race Event', category: 'RACE', linkedIntervalsEventId: 99 }),
+      ],
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Grojec',
+          subtitle: '52 km • Kat. B',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-03-23',
+            name: 'Grojec',
+            distanceMeters: 52000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 99,
+          },
+        },
+      ],
+    };
+    hookState.weeks[0]!.days[0] = multiItemDay;
+    hookState.renderedWeeks[5]!.days[0] = multiItemDay;
+    vi.mocked(useCalendarData).mockReturnValue(hookState);
+
+    const { container } = render(<CalendarGrid apiBaseUrl="" />);
+
+    const dayButtons = Array.from(container.querySelectorAll('.calendar-grid button')) as HTMLButtonElement[];
+    const raceDayButton = dayButtons.find((button) => button.textContent?.includes('Grojec'));
+
+    expect(raceDayButton).toBeDefined();
+    fireEvent.click(raceDayButton as HTMLButtonElement);
+
+    const pickerDialog = screen.getByRole('dialog');
+
+    expect(pickerDialog).toHaveTextContent(/view 2 items/i);
+    expect(within(pickerDialog).getByText('Opener')).toBeInTheDocument();
+    expect(within(pickerDialog).getByText('Grojec')).toBeInTheDocument();
+
+    fireEvent.click(within(pickerDialog).getByRole('button', { name: /grojec/i }));
+
+    const raceDialog = screen.getByRole('dialog');
+    expect(raceDialog).toHaveTextContent(/grojec/i);
+    expect(raceDialog).toHaveTextContent(/cat. b/i);
   });
 });

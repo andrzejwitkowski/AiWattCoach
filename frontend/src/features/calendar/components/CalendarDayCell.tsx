@@ -1,6 +1,7 @@
 import { BedDouble, Bike, Dumbbell, Flag, Footprints, Link2, Link2Off, Trophy, Waves } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { formatRaceSubtitle, mapRaceDisciplineLabel } from '../racePresentation';
 import type { CalendarDay, CalendarRaceLabel } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
 import { buildCompletedWorkoutPreviewBars, buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
@@ -11,6 +12,8 @@ type CalendarDayCellProps = {
   isToday: boolean;
   onSelect?: (day: CalendarDay) => void;
 };
+
+type CalendarDayEvent = CalendarDay['events'][number];
 
 type Tone = 'primary' | 'secondary' | 'error' | 'anaerobic' | 'muted' | 'race';
 type PlannedSyncVisual = {
@@ -31,16 +34,30 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const raceLabel = day.labels.find((label): label is CalendarRaceLabel => label.kind === 'race') ?? null;
+  const nonRaceEvents = raceLabel?.payload.linkedIntervalsEventId
+    ? day.events.filter((event) => (event.linkedIntervalsEventId ?? event.id) !== raceLabel.payload.linkedIntervalsEventId)
+    : day.events;
   const primaryActivity = day.activities[0] ?? null;
   const primaryEvent = day.events[0] ?? null;
-  const primaryPlannedWorkoutEvent = primaryEvent && !primaryEvent.actualWorkout && isPlannedWorkoutEvent(primaryEvent)
-    ? primaryEvent
-    : null;
-  const isPlannedOnly = Boolean(!primaryActivity && primaryPlannedWorkoutEvent);
+  const primaryPlannedWorkoutEvent = raceLabel
+    ? nonRaceEvents.find((event) => !event.actualWorkout && isPlannedWorkoutEvent(event)) ?? null
+    : primaryEvent && !primaryEvent.actualWorkout && isPlannedWorkoutEvent(primaryEvent)
+      ? primaryEvent
+      : null;
+  const isPlannedOnly = Boolean(!primaryActivity && !raceLabel && primaryPlannedWorkoutEvent);
   const isPredictedPlannedOnly = Boolean(isPlannedOnly && primaryPlannedWorkoutEvent?.plannedSource === 'predicted');
+  const hasCompactRacePrep = Boolean(raceLabel && primaryPlannedWorkoutEvent && !primaryActivity);
   const plannedSyncStatus = primaryPlannedWorkoutEvent?.syncStatus ?? null;
   const hasTraining = Boolean(primaryActivity || primaryEvent || raceLabel);
-  const extraItemCount = Math.max(0, day.activities.length + day.events.length - 1);
+  const visibleItemCount = primaryActivity
+    ? 1
+    : hasCompactRacePrep
+      ? 2
+      : hasTraining
+        ? 1
+        : 0;
+  const totalItemCount = day.activities.length + nonRaceEvents.length + (raceLabel ? 1 : 0);
+  const extraItemCount = Math.max(0, totalItemCount - visibleItemCount);
   const title = raceLabel?.payload.name
     ?? (hasTraining
       ? buildTitle(primaryActivity, primaryEvent, {
@@ -53,7 +70,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       })
       : t('calendar.restDay'));
   const subtitle = raceLabel
-    ? (raceLabel.subtitle ?? buildRaceSubtitle(raceLabel.payload, t))
+    ? formatRaceSubtitle(raceLabel.payload, t)
     : (hasTraining
       ? buildSubtitle(primaryActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
         workout: t('calendar.workout'),
@@ -80,6 +97,15 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const isSelectable = hasTraining && Boolean(onSelect);
   const plannedSyncVisual = isPredictedPlannedOnly ? getPlannedSyncVisual(plannedSyncStatus, t) : null;
   const racePriorityVisual = raceLabel ? getRacePriorityVisual(raceLabel.payload.priority) : null;
+  const compactPrepTitle = hasCompactRacePrep && primaryPlannedWorkoutEvent
+    ? buildCompactPlannedTitle(primaryPlannedWorkoutEvent, t)
+    : null;
+  const compactPrepSubtitle = hasCompactRacePrep && primaryPlannedWorkoutEvent
+    ? buildCompactPlannedSubtitle(primaryPlannedWorkoutEvent, locale)
+    : null;
+  const compactPrepBars = hasCompactRacePrep && primaryPlannedWorkoutEvent
+    ? buildCompactPlannedBars(primaryPlannedWorkoutEvent)
+    : [];
 
   const baseClassName = [
     'flex min-h-[160px] w-full flex-col gap-3 rounded-xl border p-3 text-left transition-colors md:min-h-[168px] md:p-3.5',
@@ -124,6 +150,26 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
 
       {hasTraining ? (
         <div className="mt-auto">
+          {hasCompactRacePrep ? (
+            <div className="mb-3 rounded-xl border border-[#00e3fd]/20 bg-[#0e1820]/80 px-3 py-2.5 shadow-[0_0_0_1px_rgba(0,227,253,0.04)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#00e3fd]">
+                    {t('calendar.prepWorkout')}
+                  </p>
+                  <p className="truncate text-[11px] font-bold text-[#eafcff]">{compactPrepTitle}</p>
+                </div>
+                {compactPrepSubtitle ? (
+                  <p className="shrink-0 text-[10px] font-semibold text-[#9fd8e3]">{compactPrepSubtitle}</p>
+                ) : null}
+              </div>
+              {compactPrepBars.length > 0 ? (
+                <div className="mt-2">
+                  <CalendarMiniChart bars={compactPrepBars} tone="secondary" />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <CalendarMiniChart bars={bars} tone={tone} />
           {raceLabel ? (
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -131,7 +177,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
                 {t('calendar.raceDay')}
               </p>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#d7b37b]">
-                {mapRaceDiscipline(raceLabel.payload.discipline, t)}
+                {mapRaceDisciplineLabel(raceLabel.payload.discipline, t)}
               </p>
             </div>
           ) : isPlannedOnly ? (
@@ -155,7 +201,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
           <p className="text-[10px] text-slate-500">{subtitle}</p>
           {extraItemCount > 0 ? (
             <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-[#00e3fd]">
-              {t('calendar.moreItems', { count: extraItemCount })}
+              {t('calendar.viewItems', { count: totalItemCount })}
             </p>
           ) : null}
         </div>
@@ -367,6 +413,15 @@ function buildRaceBars(raceLabel: CalendarRaceLabel): Array<number | WorkoutBar>
   ];
 }
 
+function buildCompactPlannedBars(dayEvent: CalendarDayEvent): WorkoutBar[] {
+  return buildPlannedWorkoutBars(dayEvent)
+    .slice(0, 4)
+    .map((bar) => ({
+      ...bar,
+      height: Math.max(26, Math.round(bar.height * 0.72)),
+    }));
+}
+
 function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Array<number | WorkoutBar> {
   if (dayActivity) {
     const bars = buildCompletedWorkoutPreviewBars(dayActivity);
@@ -391,29 +446,37 @@ function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEve
   return [35, 55, 75, 55];
 }
 
-function buildRaceSubtitle(
-  race: CalendarRaceLabel['payload'],
+function buildCompactPlannedTitle(
+  dayEvent: CalendarDayEvent,
   t: ReturnType<typeof useTranslation>['t'],
 ): string {
-  return `${Math.round(race.distanceMeters / 1000)} km • ${t('calendar.priorityLabel', { priority: race.priority })}`;
+  return dayEvent.name?.trim() || t('calendar.plannedWorkout');
 }
 
-function mapRaceDiscipline(
-  discipline: CalendarRaceLabel['payload']['discipline'],
-  t: ReturnType<typeof useTranslation>['t'],
-): string {
-  switch (discipline) {
-    case 'road':
-      return t('calendar.raceDisciplineRoad');
-    case 'mtb':
-      return t('calendar.raceDisciplineMtb');
-    case 'gravel':
-      return t('calendar.raceDisciplineGravel');
-    case 'cyclocross':
-      return t('calendar.raceDisciplineCyclocross');
-    case 'timetrial':
-      return t('calendar.raceDisciplineTimetrial');
+function buildCompactPlannedSubtitle(
+  dayEvent: CalendarDayEvent,
+  locale: string,
+): string | null {
+  const summary = dayEvent.eventDefinition.summary;
+  const durationSeconds = summary.totalDurationSeconds;
+  const estimatedTss = summary.estimatedTrainingStressScore;
+  const durationMinutes = durationSeconds > 0
+    ? new Intl.NumberFormat(locale, {
+      style: 'unit',
+      unit: 'minute',
+      unitDisplay: 'short',
+      maximumFractionDigits: 0,
+    }).format(Math.round(durationSeconds / 60))
+    : null;
+  const tss = estimatedTss !== null && estimatedTss !== undefined
+    ? Math.round(estimatedTss)
+    : null;
+
+  if (durationMinutes && tss !== null) {
+    return `${durationMinutes} • ${tss} TSS`;
   }
+
+  return durationMinutes ?? (tss !== null ? `${tss} TSS` : null);
 }
 
 function getRacePriorityVisual(priority: CalendarRaceLabel['payload']['priority']): RacePriorityVisual {

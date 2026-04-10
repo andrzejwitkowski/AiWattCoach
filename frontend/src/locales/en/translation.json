@@ -159,6 +159,11 @@
     "raceDisciplineGravel": "Gravel",
     "raceDisciplineCyclocross": "Cyclocross",
     "raceDisciplineTimetrial": "Time Trial",
+    "raceDistance": "Distance",
+    "raceDiscipline": "Discipline",
+    "racePriority": "Priority",
+    "raceSyncStatus": "Sync Status",
+    "prepWorkout": "Prep",
     "plannedWorkout": "Planned Workout",
     "modified": "Modified",
     "synced": "Synced",
@@ -173,6 +178,8 @@
     "downloadFit": "Download FIT",
     "downloadingFit": "Downloading FIT",
     "closeWorkoutDetails": "Close workout details",
+    "closeDayItems": "Close day items",
+    "closeRaceDetails": "Close race details",
     "loadingWorkoutDetails": "Loading workout details...",
     "workoutDetailsUnavailable": "Workout details are unavailable.",
     "importedWorkoutDetailsUnavailable": "Intervals.icu did not expose detailed data for this imported workout.",
@@ -181,8 +188,9 @@
     "workoutStructure": "Workout Structure",
     "intervalMatches": "Interval Matches",
     "completedIntervals": "Completed Intervals",
-    "moreItems_one": "+{{count}} more item",
-    "moreItems_other": "+{{count}} more items"
+    "dayItems": "Day items",
+    "viewItems_one": "View {{count}} item",
+    "viewItems_other": "View {{count}} items"
   },
   "races": {
     "eyebrow": "Race calendar",
@@ -216,9 +224,6 @@
     "saveRace": "Save Race",
     "saving": "Saving...",
     "saveError": "Failed to save race.",
-    "sidebarEyebrow": "Calendar view",
-    "sidebarTitle": "No details modal",
-    "sidebarBody": "This slice focuses on the calendar race display, the race list, and the add-edit flow. Race-day details can layer on later without reshaping these core components.",
     "discipline": {
       "road": "Road",
       "mtb": "MTB",

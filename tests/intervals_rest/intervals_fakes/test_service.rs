@@ -157,7 +157,7 @@ impl IntervalsUseCases for TestIntervalsService {
                 .iter()
                 .find_map(|activity| activity.metrics.ftp_watts);
             let parsed_workout =
-                parse_workout_doc(event.workout_doc.as_deref(), effective_ftp_watts);
+                parse_workout_doc(event.structured_workout_text(), effective_ftp_watts);
 
             let mut best_match =
                 find_best_activity_match(&parsed_workout, &listed_activities, effective_ftp_watts);

@@ -259,5 +259,10 @@ fn map_activity_stream_to_dto(stream: ActivityStream) -> ActivityStreamDto {
 }
 
 fn category_to_string(category: &EventCategory) -> String {
-    category.as_str().to_string()
+    match category {
+        EventCategory::RaceA | EventCategory::RaceB | EventCategory::RaceC => {
+            EventCategory::Race.as_str().to_string()
+        }
+        _ => category.as_str().to_string(),
+    }
 }

@@ -55,6 +55,7 @@ describe('RacesPageLayout', () => {
     expect(screen.getByText(/completed races/i)).toBeInTheDocument();
     expect(screen.getByText('Gravel Attack')).toBeInTheDocument();
     expect(screen.getByText('Past Challenge')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('creates a race from the form and refreshes the list', async () => {
@@ -71,11 +72,15 @@ describe('RacesPageLayout', () => {
 
     render(<RacesPageLayout apiBaseUrl="" />);
 
-    fireEvent.change(screen.getAllByLabelText(/race name/i)[0]!, { target: { value: 'Tour Test' } });
-    fireEvent.change(screen.getAllByLabelText(/^date$/i)[0]!, { target: { value: '2026-09-18' } });
-    fireEvent.change(screen.getAllByLabelText(/distance \(km\)/i)[0]!, { target: { value: '85' } });
-    fireEvent.change(screen.getAllByLabelText(/discipline/i)[0]!, { target: { value: 'road' } });
-    fireEvent.click(screen.getAllByRole('button', { name: /cat\. a/i })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: /add race/i }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/race name/i), { target: { value: 'Tour Test' } });
+    fireEvent.change(screen.getByLabelText(/^date$/i), { target: { value: '2026-09-18' } });
+    fireEvent.change(screen.getByLabelText(/distance \(km\)/i), { target: { value: '85' } });
+    fireEvent.change(screen.getByLabelText(/discipline/i), { target: { value: 'road' } });
+    fireEvent.click(screen.getByRole('button', { name: /cat\. a/i }));
     fireEvent.click(screen.getAllByRole('button', { name: /add race/i }).at(-1)!);
 
     await waitFor(() => {
@@ -88,6 +93,9 @@ describe('RacesPageLayout', () => {
       });
     });
     expect(refresh).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 
   it('loads an existing race into the editor and updates it', async () => {
@@ -104,9 +112,10 @@ describe('RacesPageLayout', () => {
     render(<RacesPageLayout apiBaseUrl="" />);
 
     fireEvent.click(screen.getAllByRole('button', { name: /edit race/i })[0]!);
-    expect(screen.getAllByLabelText(/race name/i)[0]).toHaveValue('Gravel Attack');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText(/race name/i)).toHaveValue('Gravel Attack');
 
-    fireEvent.change(screen.getAllByLabelText(/race name/i)[0]!, { target: { value: 'Updated Attack' } });
+    fireEvent.change(screen.getByLabelText(/race name/i), { target: { value: 'Updated Attack' } });
     fireEvent.click(screen.getByRole('button', { name: /save race/i }));
 
     await waitFor(() => {
@@ -118,5 +127,72 @@ describe('RacesPageLayout', () => {
         priority: 'A',
       });
     });
+  });
+
+  it('closes the race modal when cancel is clicked', () => {
+    vi.mocked(useRaces).mockReturnValue({
+      races: [],
+      upcomingRaces: [],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /add race/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps the race modal open while save is in flight', async () => {
+    vi.mocked(useRaces).mockReturnValue({
+      races: [],
+      upcomingRaces: [],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    vi.mocked(createRace).mockReturnValue(new Promise(() => {}));
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /add race/i }));
+    fireEvent.change(screen.getByLabelText(/race name/i), { target: { value: 'Tour Test' } });
+    fireEvent.change(screen.getByLabelText(/^date$/i), { target: { value: '2026-09-18' } });
+    fireEvent.change(screen.getByLabelText(/distance \(km\)/i), { target: { value: '85' } });
+    fireEvent.change(screen.getByLabelText(/discipline/i), { target: { value: 'road' } });
+    fireEvent.click(screen.getByRole('button', { name: /cat\. a/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /add race/i }).at(-1)!);
+
+    expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('dialog').parentElement as HTMLElement);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
+  });
+
+  it('marks the selected priority button as pressed', () => {
+    vi.mocked(useRaces).mockReturnValue({
+      races: [],
+      upcomingRaces: [],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /add race/i }));
+
+    expect(screen.getByRole('button', { name: /cat\. b/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /cat\. a/i })).toHaveAttribute('aria-pressed', 'false');
   });
 });
