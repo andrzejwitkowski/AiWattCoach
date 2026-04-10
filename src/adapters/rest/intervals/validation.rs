@@ -74,7 +74,10 @@ pub(super) fn decode_base64(value: &str) -> Result<Vec<u8>, ()> {
 }
 
 pub(super) fn parse_category(category: &str) -> Option<EventCategory> {
-    EventCategory::from_str(category).ok()
+    match category {
+        "RACE_A" | "RACE_B" | "RACE_C" => None,
+        _ => EventCategory::from_str(category).ok(),
+    }
 }
 
 pub(crate) fn is_valid_date(date: &str) -> bool {

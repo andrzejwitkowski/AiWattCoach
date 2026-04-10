@@ -271,7 +271,7 @@ async fn create_race_persists_and_syncs_to_intervals() {
 }
 
 #[tokio::test]
-async fn create_race_maps_priority_to_intervals_race_category() {
+async fn priority_race_creates_matching_intervals_categories() {
     let repository = InMemoryRaceRepository::default();
     let intervals = RecordingIntervalsService::default();
     let service = RaceService::new(repository, intervals.clone(), TestClock, TestIdGenerator);
@@ -305,6 +305,7 @@ async fn create_race_maps_priority_to_intervals_race_category() {
         .unwrap();
 
     let created_events = intervals.created_events.lock().unwrap();
+    assert_eq!(created_events.len(), 2);
     assert_eq!(created_events[0].category, EventCategory::RaceA);
     assert_eq!(created_events[1].category, EventCategory::RaceC);
 }

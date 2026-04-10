@@ -224,6 +224,86 @@ describe('CalendarWeekSection', () => {
     });
   });
 
+  it('does not open workout details for a single generic non-workout event', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [{
+        id: 77,
+        startDateLocal: '2026-03-23',
+        name: 'Travel note',
+        category: 'NOTE',
+        description: 'Bring spare wheels',
+        indoor: false,
+        color: null,
+        eventDefinition: emptyEventDefinition(),
+        actualWorkout: null,
+        plannedSource: 'intervals',
+        syncStatus: null,
+        linkedIntervalsEventId: null,
+        projectedWorkout: null,
+      }],
+      activities: [],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const onSelectDayItems = vi.fn();
+    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />);
+
+    expect(screen.queryByRole('button', { name: /travel note/i })).not.toBeInTheDocument();
+
+    expect(onSelectWorkout).not.toHaveBeenCalled();
+    expect(onSelectDayItems).not.toHaveBeenCalled();
+  });
+
+  it('does not open the day-items picker for multiple generic non-workout events', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [
+        {
+          id: 78,
+          startDateLocal: '2026-03-23',
+          name: 'Travel note',
+          category: 'NOTE',
+          description: 'Bring spare wheels',
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: null,
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+        {
+          id: 79,
+          startDateLocal: '2026-03-23',
+          name: 'Logistics',
+          category: 'NOTE',
+          description: 'Confirm hotel',
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: null,
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+      ],
+      activities: [],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const onSelectDayItems = vi.fn();
+    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />);
+
+    expect(screen.queryByRole('button', { name: /travel note/i })).not.toBeInTheDocument();
+    expect(onSelectWorkout).not.toHaveBeenCalled();
+    expect(onSelectDayItems).not.toHaveBeenCalled();
+  });
+
   it('routes multi-item days to the day-items picker instead of direct workout details', async () => {
     const week = createWeek('loaded');
     week.days[0] = {
@@ -646,10 +726,10 @@ describe('CalendarWeekSection', () => {
     );
 
     const dayButtons = Array.from(container.querySelectorAll('.calendar-grid button')) as HTMLButtonElement[];
-    const morningSpinButton = dayButtons.find((button) => button.textContent?.includes('Morning spin'));
-    expect(morningSpinButton).toBeDefined();
+    const matchedRideButton = dayButtons.find((button) => button.textContent?.includes('Matched ride'));
+    expect(matchedRideButton).toBeDefined();
 
-    await userEvent.click(morningSpinButton as HTMLButtonElement);
+    await userEvent.click(matchedRideButton as HTMLButtonElement);
 
     expect(onSelectWorkout).not.toHaveBeenCalled();
     expect(onSelectDayItems).toHaveBeenCalledTimes(1);
@@ -768,6 +848,125 @@ describe('CalendarWeekSection', () => {
     expect(onSelectWorkout).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
       event: null,
+      activity: week.days[0].activities[0],
+    });
+  });
+
+  it('falls back to a later completed workout event even when a generic note appears first', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [
+        {
+          id: 16,
+          startDateLocal: '2026-03-23',
+          name: 'Travel note',
+          category: 'NOTE',
+          description: 'Bring spare wheels',
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: null,
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+        {
+          id: 17,
+          startDateLocal: '2026-03-23',
+          name: 'Completed workout',
+          category: 'WORKOUT',
+          description: null,
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: {
+            activityId: 'a-other',
+            activityName: 'Morning spin',
+            startDateLocal: '2026-03-23T07:00:00',
+            powerValues: [],
+            cadenceValues: [],
+            heartRateValues: [],
+            speedValues: [],
+            averagePowerWatts: null,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            intensityFactor: null,
+            complianceScore: 0.8,
+            matchedIntervals: [],
+          },
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+      ],
+      activities: [{
+        id: 'a-other',
+        startDateLocal: '2026-03-23T07:00:00',
+        startDate: '2026-03-23T06:00:00Z',
+        name: 'Morning spin',
+        description: null,
+        activityType: 'Ride',
+        source: null,
+        externalId: null,
+        deviceName: null,
+        distanceMeters: null,
+        movingTimeSeconds: null,
+        elapsedTimeSeconds: null,
+        totalElevationGainMeters: null,
+        averageSpeedMps: null,
+        averageHeartRateBpm: null,
+        averageCadenceRpm: null,
+        trainer: false,
+        commute: false,
+        race: false,
+        hasHeartRate: false,
+        streamTypes: [],
+        tags: [],
+        metrics: {
+          trainingStressScore: null,
+          normalizedPowerWatts: null,
+          intensityFactor: null,
+          efficiencyFactor: null,
+          variabilityIndex: null,
+          averagePowerWatts: null,
+          ftpWatts: null,
+          totalWorkJoules: null,
+          calories: null,
+          trimp: null,
+          powerLoad: null,
+          heartRateLoad: null,
+          paceLoad: null,
+          strainScore: null,
+        },
+        details: {
+          intervals: [],
+          intervalGroups: [],
+          streams: [],
+          intervalSummary: [],
+          skylineChart: [],
+          powerZoneTimes: [],
+          heartRateZoneTimes: [],
+          paceZoneTimes: [],
+          gapZoneTimes: [],
+        },
+      }],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+
+    const morningSpinButton = Array.from(container.querySelectorAll('.calendar-grid button'))
+      .find((button) => button.textContent?.includes('Morning spin')) as HTMLButtonElement | undefined;
+    expect(morningSpinButton).toBeDefined();
+
+    await userEvent.click(morningSpinButton as HTMLButtonElement);
+
+    expect(onSelectWorkout).toHaveBeenCalledWith({
+      dateKey: '2026-03-23',
+      event: week.days[0].events[1],
       activity: week.days[0].activities[0],
     });
   });

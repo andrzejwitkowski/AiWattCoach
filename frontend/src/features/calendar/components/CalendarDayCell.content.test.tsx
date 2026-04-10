@@ -446,6 +446,96 @@ describe('CalendarDayCell content', () => {
     const dayCell = container.firstElementChild as HTMLElement;
 
     expect(within(dayCell).getByText('View 3 items')).toBeInTheDocument();
+    expect(within(dayCell).queryByText(/view .* items/i)).not.toHaveTextContent('View 4 items');
+  });
+
+  it('counts multiple race labels in the overflow cue while deduplicating linked race events', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 13),
+      dateKey: '2026-04-13',
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Alpha',
+          subtitle: '52 km • Kat. B',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-04-13',
+            name: 'Alpha',
+            distanceMeters: 52000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 99,
+          },
+        },
+        {
+          kind: 'race',
+          title: 'Race Beta',
+          subtitle: '40 km • Kat. C',
+          payload: {
+            raceId: 'race-2',
+            date: '2026-04-13',
+            name: 'Beta',
+            distanceMeters: 40000,
+            discipline: 'road',
+            priority: 'C',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 100,
+          },
+        },
+      ],
+      events: [
+        makeEvent({ id: 99, linkedIntervalsEventId: 99, name: 'Race Alpha', category: 'RACE' }),
+        makeEvent({ id: 100, linkedIntervalsEventId: 100, name: 'Race Beta', category: 'RACE' }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('View 2 items')).toBeInTheDocument();
+  });
+
+  it('does not show the overflow cue when extra items are not selectable', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 14),
+      dateKey: '2026-04-14',
+      events: [
+        makeEvent({ id: 201, name: 'Travel Note', category: 'NOTE' }),
+        makeEvent({ id: 202, name: 'Logistics', category: 'NOTE' }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).queryByText(/view .* items/i)).not.toBeInTheDocument();
+  });
+
+  it('includes generic day items in the overflow cue when the day opens the picker', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 15),
+      dateKey: '2026-04-15',
+      events: [
+        makeEvent({
+          id: 301,
+          name: 'Opener',
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 1200,
+              estimatedTrainingStressScore: 18,
+            },
+          },
+        }),
+        makeEvent({ id: 302, name: 'Travel Note', category: 'NOTE' }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} onSelect={vi.fn()} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('View 2 items')).toBeInTheDocument();
   });
 
   it('does not count the linked intervals race event as an extra item when the race label is already shown', () => {

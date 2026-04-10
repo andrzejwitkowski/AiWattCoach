@@ -86,7 +86,7 @@ async fn get_event_returns_single_event() {
 }
 
 #[tokio::test]
-async fn get_event_parses_structured_workout_from_description_when_workout_doc_is_missing() {
+async fn get_event_parses_structured_workout_from_description_when_workout_doc_is_blank() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),
         TestIntervalsService::with_events(vec![aiwattcoach::domain::intervals::Event {
@@ -98,7 +98,7 @@ async fn get_event_parses_structured_workout_from_description_when_workout_doc_i
             description: Some("- 19m 55%".to_string()),
             indoor: true,
             color: None,
-            workout_doc: None,
+            workout_doc: Some("   \n\t  ".to_string()),
         }]),
     )
     .await;

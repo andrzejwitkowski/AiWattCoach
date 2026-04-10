@@ -1,6 +1,7 @@
 import { BedDouble, Bike, Dumbbell, Flag, Footprints, Link2, Link2Off, Trophy, Waves } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { buildDayItems, isInteractiveDayItem } from '../dayItems';
 import { formatRaceSubtitle, mapRaceDisciplineLabel } from '../racePresentation';
 import type { CalendarDay, CalendarRaceLabel } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
@@ -34,33 +35,56 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const raceLabel = day.labels.find((label): label is CalendarRaceLabel => label.kind === 'race') ?? null;
-  const nonRaceEvents = raceLabel?.payload.linkedIntervalsEventId
-    ? day.events.filter((event) => (event.linkedIntervalsEventId ?? event.id) !== raceLabel.payload.linkedIntervalsEventId)
+  const raceLabels = day.labels.filter((label): label is CalendarRaceLabel => label.kind === 'race');
+  const linkedRaceEventIds = new Set(
+    raceLabels
+      .map((label) => label.payload.linkedIntervalsEventId)
+      .filter((value): value is number => value !== null),
+  );
+  const nonRaceEvents = linkedRaceEventIds.size > 0
+    ? day.events.filter((event) => !linkedRaceEventIds.has(event.linkedIntervalsEventId ?? event.id))
     : day.events;
+  const dayItems = buildDayItems(day, {
+    locale,
+    labels: {
+      plannedWorkout: t('calendar.plannedWorkout'),
+      workout: t('calendar.workout'),
+    },
+    t,
+  });
+  const interactiveDayItems = dayItems.filter(isInteractiveDayItem);
   const primaryActivity = day.activities[0] ?? null;
-  const primaryEvent = day.events[0] ?? null;
+  const primaryCompletedActivity = interactiveDayItems.find((item): item is Extract<typeof interactiveDayItems[number], { kind: 'completed' }> => item.kind === 'completed')?.activity ?? null;
+  const primaryPlannedItem = interactiveDayItems.find((item): item is Extract<typeof interactiveDayItems[number], { kind: 'planned' }> => item.kind === 'planned') ?? null;
+  const primaryEvent = primaryPlannedItem?.event
+    ?? nonRaceEvents.find((event) => Boolean(event.actualWorkout))
+    ?? day.events[0]
+    ?? null;
+  const visibleActivity = primaryCompletedActivity ?? primaryActivity;
   const primaryPlannedWorkoutEvent = raceLabel
-    ? nonRaceEvents.find((event) => !event.actualWorkout && isPlannedWorkoutEvent(event)) ?? null
-    : primaryEvent && !primaryEvent.actualWorkout && isPlannedWorkoutEvent(primaryEvent)
-      ? primaryEvent
-      : null;
-  const isPlannedOnly = Boolean(!primaryActivity && !raceLabel && primaryPlannedWorkoutEvent);
+    ? primaryPlannedItem?.event ?? null
+    : primaryPlannedItem?.event
+      ? primaryPlannedItem.event
+      : primaryEvent && !primaryEvent.actualWorkout && isPlannedWorkoutEvent(primaryEvent)
+        ? primaryEvent
+        : null;
+  const isPlannedOnly = Boolean(!visibleActivity && !raceLabel && primaryPlannedWorkoutEvent);
   const isPredictedPlannedOnly = Boolean(isPlannedOnly && primaryPlannedWorkoutEvent?.plannedSource === 'predicted');
-  const hasCompactRacePrep = Boolean(raceLabel && primaryPlannedWorkoutEvent && !primaryActivity);
+  const hasCompactRacePrep = Boolean(raceLabel && primaryPlannedWorkoutEvent && !visibleActivity);
   const plannedSyncStatus = primaryPlannedWorkoutEvent?.syncStatus ?? null;
-  const hasTraining = Boolean(primaryActivity || primaryEvent || raceLabel);
-  const visibleItemCount = primaryActivity
+  const hasTraining = Boolean(visibleActivity || primaryEvent || raceLabel);
+  const pickerVisibleItemCount = dayItems.length;
+  const visibleItemCount = visibleActivity
     ? 1
     : hasCompactRacePrep
       ? 2
       : hasTraining
         ? 1
         : 0;
-  const totalItemCount = day.activities.length + nonRaceEvents.length + (raceLabel ? 1 : 0);
-  const extraItemCount = Math.max(0, totalItemCount - visibleItemCount);
+  const extraItemCount = Math.max(0, pickerVisibleItemCount - visibleItemCount);
   const title = raceLabel?.payload.name
     ?? (hasTraining
-      ? buildTitle(primaryActivity, primaryEvent, {
+      ? buildTitle(visibleActivity, primaryEvent, {
         workout: t('calendar.workout'),
         race: t('calendar.eventRace'),
         ride: t('calendar.eventRide'),
@@ -72,7 +96,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const subtitle = raceLabel
     ? formatRaceSubtitle(raceLabel.payload, t)
     : (hasTraining
-      ? buildSubtitle(primaryActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
+      ? buildSubtitle(visibleActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
         workout: t('calendar.workout'),
         race: t('calendar.eventRace'),
         ride: t('calendar.eventRide'),
@@ -84,15 +108,15 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const tone: Tone = raceLabel
     ? 'race'
     : hasTraining
-      ? getTone(primaryActivity, primaryEvent)
+      ? getTone(visibleActivity, primaryEvent)
       : 'muted';
   const bars = raceLabel
     ? buildRaceBars(raceLabel)
-    : buildBars(primaryActivity, primaryPlannedWorkoutEvent);
+    : buildBars(visibleActivity, primaryPlannedWorkoutEvent);
   const Icon = raceLabel
     ? getRaceIcon(raceLabel.payload.discipline)
     : hasTraining
-      ? getIcon(primaryActivity, primaryEvent)
+      ? getIcon(visibleActivity, primaryEvent)
       : BedDouble;
   const isSelectable = hasTraining && Boolean(onSelect);
   const plannedSyncVisual = isPredictedPlannedOnly ? getPlannedSyncVisual(plannedSyncStatus, t) : null;
@@ -199,9 +223,9 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
           ) : null}
           <p className="truncate text-[11px] font-bold text-[#f9f9fd]">{title}</p>
           <p className="text-[10px] text-slate-500">{subtitle}</p>
-          {extraItemCount > 0 ? (
+          {interactiveDayItems.length > 0 && extraItemCount > 0 ? (
             <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-[#00e3fd]">
-              {t('calendar.viewItems', { count: totalItemCount })}
+              {t('calendar.viewItems', { count: pickerVisibleItemCount })}
             </p>
           ) : null}
         </div>

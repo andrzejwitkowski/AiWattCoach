@@ -48,6 +48,24 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
   const pendingAnchorRef = useRef<{ weekKey: string; top: number } | null>(null);
   const edgeLockRef = useRef<{ edge: 'top' | 'bottom'; releaseScrollTop: number } | null>(null);
 
+  const handleSelectWorkout = useCallback((nextSelection: WorkoutDetailSelection) => {
+    setDayItemsSelection(null);
+    setRaceSelection(null);
+    setSelection(nextSelection);
+  }, []);
+
+  const handleSelectDayItems = useCallback((nextSelection: CalendarDayItemsSelection) => {
+    setSelection(null);
+    setRaceSelection(null);
+    setDayItemsSelection(nextSelection);
+  }, []);
+
+  const handleSelectRace = useCallback((nextRace: CalendarRaceLabel) => {
+    setSelection(null);
+    setDayItemsSelection(null);
+    setRaceSelection(nextRace);
+  }, []);
+
   const visibleRangeLabel = useMemo(() => {
     const firstWeek = weeks[0];
     const lastWeek = weeks[weeks.length - 1];
@@ -221,9 +239,9 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
                       <div key={week.weekKey} data-week-key={week.weekKey}>
                       <CalendarWeekSection
                         week={week}
-                        onSelectWorkout={setSelection}
-                        onSelectDayItems={setDayItemsSelection}
-                        onSelectRace={setRaceSelection}
+                        onSelectWorkout={handleSelectWorkout}
+                        onSelectDayItems={handleSelectDayItems}
+                        onSelectRace={handleSelectRace}
                       />
                       </div>
                     ))
@@ -244,14 +262,15 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
         onClose={() => setDayItemsSelection(null)}
         onSelectItem={(item) => {
           setDayItemsSelection(null);
+          setSelection(null);
           if (item.kind === 'race') {
-            setRaceSelection(item.race);
+            handleSelectRace(item.race);
             return;
           }
 
           const nextSelection = selectDayItemDetail(item);
           if (nextSelection) {
-            setSelection(nextSelection);
+            handleSelectWorkout(nextSelection);
           }
         }}
       />

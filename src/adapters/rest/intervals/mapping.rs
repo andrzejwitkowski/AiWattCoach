@@ -19,14 +19,8 @@ pub(crate) fn map_event_to_dto_with_parsed_workout_doc(
     workout_doc: Option<&str>,
     actual_workout: Option<ActualWorkoutDto>,
 ) -> EventDto {
-    map_event_to_dto_with_parsed(
-        Event {
-            workout_doc: workout_doc.map(ToString::to_string),
-            ..event
-        },
-        None,
-        actual_workout,
-    )
+    let parsed = parse_workout_doc(workout_doc, None);
+    map_event_to_dto_with_parsed(event, Some(parsed), actual_workout)
 }
 
 pub(super) fn map_enriched_event_to_dto(enriched_event: EnrichedEvent) -> EventDto {
@@ -42,7 +36,7 @@ fn map_event_to_dto_with_parsed(
     parsed: Option<ParsedWorkoutDoc>,
     actual_workout: Option<ActualWorkoutDto>,
 ) -> EventDto {
-    let parsed = parsed.unwrap_or_else(|| parse_workout_doc(event.workout_doc.as_deref(), None));
+    let parsed = parsed.unwrap_or_else(|| parse_workout_doc(event.structured_workout_text(), None));
 
     EventDto {
         id: event.id,

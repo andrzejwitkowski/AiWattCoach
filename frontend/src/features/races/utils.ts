@@ -17,21 +17,26 @@ export function formatRaceDate(date: string, locale: string): string {
 }
 
 export function formatRaceDistance(distanceMeters: number, locale: string): string {
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(distanceMeters / 1000));
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  }).format(distanceMeters / 1000);
 }
 
-export function mapRaceDisciplineLabel(discipline: RaceDiscipline): string {
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+export function mapRaceDisciplineLabel(discipline: RaceDiscipline, t: Translate): string {
   switch (discipline) {
     case 'road':
-      return 'Road';
+      return t('races.discipline.road');
     case 'mtb':
-      return 'MTB';
+      return t('races.discipline.mtb');
     case 'gravel':
-      return 'Gravel';
+      return t('races.discipline.gravel');
     case 'cyclocross':
-      return 'Cyclocross';
+      return t('races.discipline.cyclocross');
     case 'timetrial':
-      return 'Time Trial';
+      return t('races.discipline.timetrial');
   }
 }
 

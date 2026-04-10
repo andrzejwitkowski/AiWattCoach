@@ -67,11 +67,7 @@ pub(super) fn build_recent_interval_blocks_by_activity_id(
                 let parsed = parse_workout_doc(event.structured_workout_text(), resolved_ftp);
                 (
                     activity.id.clone(),
-                    event
-                        .workout_doc
-                        .as_ref()
-                        .map(|_| build_recent_interval_blocks(&parsed.segments, resolved_ftp))
-                        .unwrap_or_default(),
+                    build_recent_interval_blocks(&parsed.segments, resolved_ftp),
                 )
             })
         })

@@ -332,7 +332,14 @@ pub struct Event {
 
 impl Event {
     pub fn structured_workout_text(&self) -> Option<&str> {
-        self.workout_doc.as_deref().or(self.description.as_deref())
+        self.workout_doc
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                self.description
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+            })
     }
 }
 

@@ -33,7 +33,7 @@ export function RaceCard({ race, onEdit }: RaceCardProps) {
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <StatChip icon={<DisciplineIcon size={14} />} label={mapRaceDisciplineLabel(race.discipline)} />
+        <StatChip icon={<DisciplineIcon size={14} />} label={mapRaceDisciplineLabel(race.discipline, t)} />
         <StatChip icon={<Bike size={14} />} label={t('races.distanceValue', { value: formatRaceDistance(race.distanceMeters, locale) })} />
         <StatChip icon={<Timer size={14} />} label={t(`races.syncStatus.${race.syncStatus}`)} valueClassName={syncTone} />
       </div>

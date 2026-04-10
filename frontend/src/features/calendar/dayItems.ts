@@ -61,23 +61,32 @@ export type CalendarDayItemsSelection = {
   items: CalendarDayItem[];
 };
 
+export function isInteractiveDayItem(item: CalendarDayItem): boolean {
+  return item.kind !== 'event';
+}
+
 export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): CalendarDayItem[] {
   const items: CalendarDayItem[] = [];
-  const linkedRaceEventId = day.labels.find((label): label is CalendarRaceLabel => label.kind === 'race')?.payload.linkedIntervalsEventId ?? null;
+  const linkedRaceEventIds = new Set(
+    day.labels
+      .filter((label): label is CalendarRaceLabel => label.kind === 'race')
+      .map((label) => label.payload.linkedIntervalsEventId)
+      .filter((value): value is number => value !== null),
+  );
 
   for (const label of day.labels) {
     if (label.kind !== 'race') {
       continue;
     }
 
-      items.push({
-        kind: 'race',
-        id: `race:${label.payload.raceId}`,
-        title: label.payload.name,
-        subtitle: formatRaceSubtitle(label.payload, options.t),
-        dateKey: day.dateKey,
-        race: label,
-        priorityRank: 0,
+    items.push({
+      kind: 'race',
+      id: `race:${label.payload.raceId}`,
+      title: label.payload.name,
+      subtitle: formatRaceSubtitle(label.payload, options.t),
+      dateKey: day.dateKey,
+      race: label,
+      priorityRank: 0,
       tss: null,
     });
   }
@@ -86,7 +95,7 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
     const normalizedEventId = event.linkedIntervalsEventId ?? event.id;
     const plannedWorkout = isPlannedWorkoutEvent(event);
 
-    if (linkedRaceEventId !== null && normalizedEventId === linkedRaceEventId) {
+    if (linkedRaceEventIds.has(normalizedEventId)) {
       continue;
     }
 
@@ -146,11 +155,6 @@ export function selectDayItemDetail(item: CalendarDayItem): WorkoutDetailSelecti
         activity: item.activity,
       };
     case 'event':
-      return {
-        dateKey: item.dateKey,
-        event: item.event,
-        activity: null,
-      };
     case 'race':
       return null;
   }

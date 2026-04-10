@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import '../../../i18n';
@@ -298,6 +298,10 @@ describe('CalendarGrid', () => {
     expect(within(pickerDialog).getByText('Grojec')).toBeInTheDocument();
 
     fireEvent.click(within(pickerDialog).getByRole('button', { name: /grojec/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/view 2 items/i)).not.toBeInTheDocument();
+    });
 
     const raceDialog = screen.getByRole('dialog');
     expect(raceDialog).toHaveTextContent(/grojec/i);

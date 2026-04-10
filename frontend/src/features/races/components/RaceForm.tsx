@@ -49,7 +49,7 @@ export function RaceForm({ apiBaseUrl, race, onCancel, onSaved }: RaceFormProps)
     setDraft({
       date: race.date,
       name: race.name,
-      distanceKm: String(Math.round(race.distanceMeters / 1000)),
+      distanceKm: String(race.distanceMeters / 1000),
       discipline: race.discipline,
       priority: race.priority,
     });
@@ -158,8 +158,8 @@ export function RaceForm({ apiBaseUrl, race, onCancel, onSaved }: RaceFormProps)
           <Field label={t('races.distanceLabel')}>
             <input
               type="number"
-              min="1"
-              step="1"
+              min="0.1"
+              step="0.1"
               value={draft.distanceKm}
               onChange={(event) => setDraft((current) => ({ ...current, distanceKm: event.target.value }))}
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-[#f2c98e]/45"

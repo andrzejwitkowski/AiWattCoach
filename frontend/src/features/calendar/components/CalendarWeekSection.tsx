@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
 
 import { CALENDAR_WEEK_ROW_HEIGHT } from '../constants';
-import { buildDayItems, type CalendarDayItemsSelection, selectDayItemDetail } from '../dayItems';
+import { buildDayItems, isInteractiveDayItem, type CalendarDayItemsSelection, selectDayItemDetail } from '../dayItems';
 import type { CalendarRaceLabel, CalendarWeek } from '../types';
 import { isToday } from '../utils/dateUtils';
-import { selectWorkoutDetail, type WorkoutDetailSelection } from '../workoutDetails';
+import { isPlannedWorkoutEvent, selectWorkoutDetail, type WorkoutDetailSelection } from '../workoutDetails';
 import { CalendarErrorRow } from './CalendarErrorRow';
 import { CalendarDayCell } from './CalendarDayCell';
 import { CalendarLoadingRow } from './CalendarLoadingRow';
@@ -44,18 +44,22 @@ export function CalendarWeekSection({
       <CalendarWeekSummary weekNumber={week.weekNumber} summary={week.summary} />
       <div className="calendar-grid gap-3">
         {week.days.map((day) => {
+          const dayItems = buildDayItems(day, {
+            locale,
+            labels: {
+              plannedWorkout: t('calendar.plannedWorkout'),
+              workout: t('calendar.workout'),
+            },
+            t,
+          });
+          const interactiveDayItems = dayItems.filter(isInteractiveDayItem);
+          const hasInteractiveDayItem = interactiveDayItems.length > 0;
+          const hasActualWorkoutEvent = day.events.some((event) => Boolean(event.actualWorkout));
+          const canOpenPicker = dayItems.length > 1 && interactiveDayItems.length > 0 && Boolean(onSelectDayItems);
           const selectionHandler = (onSelectWorkout || onSelectDayItems || onSelectRace)
+            && (hasInteractiveDayItem || day.activities.length > 0 || hasActualWorkoutEvent || canOpenPicker)
             ? () => {
-              const dayItems = buildDayItems(day, {
-                locale,
-                labels: {
-                  plannedWorkout: t('calendar.plannedWorkout'),
-                  workout: t('calendar.workout'),
-                },
-                t,
-              });
-
-              if (dayItems.length > 1 && onSelectDayItems) {
+              if (dayItems.length > 1 && interactiveDayItems.length > 0 && onSelectDayItems) {
                 onSelectDayItems?.({
                   dateKey: day.dateKey,
                   items: dayItems,
@@ -63,9 +67,9 @@ export function CalendarWeekSection({
                 return;
               }
 
-              const itemSelection = dayItems.length === 1 ? selectDayItemDetail(dayItems[0]) : null;
-              if (dayItems.length === 1 && dayItems[0]?.kind === 'race' && onSelectRace) {
-                onSelectRace?.(dayItems[0].race);
+              const itemSelection = interactiveDayItems.length === 1 ? selectDayItemDetail(interactiveDayItems[0]) : null;
+              if (interactiveDayItems.length === 1 && interactiveDayItems[0]?.kind === 'race' && onSelectRace) {
+                onSelectRace?.(interactiveDayItems[0].race);
                 return;
               }
 
@@ -75,7 +79,11 @@ export function CalendarWeekSection({
               }
 
               if (onSelectWorkout) {
-                onSelectWorkout(selectWorkoutDetail(day.dateKey, day.events[0] ?? null, day.activities));
+                const fallbackEvent = day.events.find((event) => event.actualWorkout || isPlannedWorkoutEvent(event)) ?? null;
+                const fallbackSelection = selectWorkoutDetail(day.dateKey, fallbackEvent, day.activities);
+                if (fallbackSelection.event || fallbackSelection.activity) {
+                  onSelectWorkout(fallbackSelection);
+                }
               }
             }
             : undefined;

@@ -30,6 +30,7 @@ export function useRaces({ apiBaseUrl }: UseRacesOptions): UseRacesResult {
   const [races, setRaces] = useState<Race[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [todayKey, setTodayKey] = useState(() => toDateKey(new Date()));
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -53,7 +54,19 @@ export function useRaces({ apiBaseUrl }: UseRacesOptions): UseRacesResult {
     void refresh();
   }, [refresh]);
 
-  const { upcoming, completed } = useMemo(() => splitRacesByDate(races, toDateKey(new Date())), [races]);
+  useEffect(() => {
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+
+    const timeout = window.setTimeout(() => {
+      setTodayKey(toDateKey(new Date()));
+    }, nextMidnight.getTime() - now.getTime());
+
+    return () => window.clearTimeout(timeout);
+  }, [todayKey]);
+
+  const { upcoming, completed } = useMemo(() => splitRacesByDate(races, todayKey), [races, todayKey]);
 
   return {
     races,

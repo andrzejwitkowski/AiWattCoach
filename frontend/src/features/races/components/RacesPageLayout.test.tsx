@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import '../../../i18n';
+import i18n from '../../../i18n';
 import type { Race } from '../types';
 import { RacesPageLayout } from './RacesPageLayout';
 
@@ -16,6 +16,10 @@ vi.mock('../api/races', () => ({
 
 import { useRaces } from '../hooks/useRaces';
 import { createRace, updateRace } from '../api/races';
+
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 afterEach(() => {
   cleanup();
@@ -56,6 +60,40 @@ describe('RacesPageLayout', () => {
     expect(screen.getByText('Gravel Attack')).toBeInTheDocument();
     expect(screen.getByText('Past Challenge')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('renders translated race discipline labels', async () => {
+    await i18n.changeLanguage('pl');
+
+    vi.mocked(useRaces).mockReturnValue({
+      races: [makeRace({ discipline: 'cyclocross' })],
+      upcomingRaces: [makeRace({ discipline: 'cyclocross' })],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    expect(screen.getByText('Przełaj')).toBeInTheDocument();
+    expect(screen.queryByText('Cyclocross')).not.toBeInTheDocument();
+  });
+
+  it('renders fractional race distance without rounding to the next whole kilometer', () => {
+    vi.mocked(useRaces).mockReturnValue({
+      races: [makeRace({ distanceMeters: 42500 })],
+      upcomingRaces: [makeRace({ distanceMeters: 42500 })],
+      completedRaces: [],
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<RacesPageLayout apiBaseUrl="" />);
+
+    expect(screen.getByText('42.5 km')).toBeInTheDocument();
+    expect(screen.queryByText('43 km')).not.toBeInTheDocument();
   });
 
   it('creates a race from the form and refreshes the list', async () => {
@@ -100,8 +138,8 @@ describe('RacesPageLayout', () => {
 
   it('loads an existing race into the editor and updates it', async () => {
     vi.mocked(useRaces).mockReturnValue({
-      races: [makeRace()],
-      upcomingRaces: [makeRace()],
+      races: [makeRace({ distanceMeters: 42500 })],
+      upcomingRaces: [makeRace({ distanceMeters: 42500 })],
       completedRaces: [],
       isLoading: false,
       error: null,
@@ -114,18 +152,19 @@ describe('RacesPageLayout', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /edit race/i })[0]!);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByLabelText(/race name/i)).toHaveValue('Gravel Attack');
+    expect(screen.getByLabelText(/distance \(km\)/i)).toHaveValue(42.5);
 
     fireEvent.change(screen.getByLabelText(/race name/i), { target: { value: 'Updated Attack' } });
     fireEvent.click(screen.getByRole('button', { name: /save race/i }));
 
     await waitFor(() => {
-      expect(updateRace).toHaveBeenCalledWith('', 'race-1', {
-        date: '2026-09-12',
-        name: 'Updated Attack',
-        distanceMeters: 120000,
-        discipline: 'gravel',
-        priority: 'A',
-      });
+        expect(updateRace).toHaveBeenCalledWith('', 'race-1', {
+          date: '2026-09-12',
+          name: 'Updated Attack',
+          distanceMeters: 42500,
+          discipline: 'gravel',
+          priority: 'A',
+        });
     });
   });
 

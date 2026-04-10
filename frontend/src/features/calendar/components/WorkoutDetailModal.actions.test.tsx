@@ -267,4 +267,36 @@ describe('WorkoutDetailModal actions', () => {
 
     expect(mockedLoadEvent).not.toHaveBeenCalled();
   });
+
+  it('hides FIT download for unsynced predicted workouts with synthetic ids', async () => {
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-03-28',
+          event: makeEvent({
+            id: 903,
+            startDateLocal: '2026-03-28',
+            name: 'Unsynced Prediction',
+            plannedSource: 'predicted',
+            syncStatus: 'unsynced',
+            linkedIntervalsEventId: null,
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:3:2026-03-28',
+              operationKey: 'training-plan:user-1:w1:3',
+              date: '2026-03-28',
+              sourceWorkoutId: 'w3',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Unsynced Prediction')).toBeInTheDocument());
+
+    expect(screen.queryByRole('button', { name: /download fit/i })).not.toBeInTheDocument();
+  });
 });

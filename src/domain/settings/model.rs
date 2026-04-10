@@ -40,8 +40,9 @@ pub struct AnalysisOptions {
     pub analyze_without_heart_rate: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum Weekday {
+    #[default]
     Mon,
     Tue,
     Wed,
@@ -91,12 +92,6 @@ impl Weekday {
 impl std::fmt::Display for Weekday {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
-    }
-}
-
-impl Default for Weekday {
-    fn default() -> Self {
-        Self::Mon
     }
 }
 
