@@ -58,6 +58,14 @@ async fn builder_renders_recent_and_historical_context() {
         result.context.future_events[0].estimated_duration_seconds,
         Some(5400)
     );
+    assert_eq!(
+        result.context.future_events[0].estimated_normalized_power_watts,
+        Some(225)
+    );
+    assert_eq!(
+        result.context.future_events[0].estimated_intensity_factor,
+        Some(0.75)
+    );
     assert_eq!(result.context.recent_days.len(), 14);
     assert_eq!(result.context.history.load_trend.len(), 42);
     assert_eq!(
@@ -204,6 +212,8 @@ async fn builder_renders_recent_and_historical_context() {
         .rendered
         .stable_context
         .contains("\"fe\":[{\"id\":303,\"sd\":\"2026-04-25T07:00:00\",\"c\":\"WORKOUT\",\"ty\":\"Ride\",\"n\":\"Long Tempo\",\"desc\":\"Endurance with tempo finish\",\"dur\":5400"));
+    assert!(result.rendered.stable_context.contains("\"ifv\":0.75"));
+    assert!(result.rendered.stable_context.contains("\"np\":225"));
     assert!(result.rendered.stable_context.contains("\"days\":1"));
     assert!(result.rendered.stable_context.contains("\"bl\":["));
     assert!(result
@@ -846,4 +856,127 @@ async fn builder_uses_configured_ftp_when_activity_ftp_is_missing() {
             .and_then(|block| block.max_target_watts),
         Some(285)
     );
+}
+
+#[tokio::test]
+async fn builder_marks_event_status_when_stable_future_fetch_fails() {
+    #[derive(Clone)]
+    struct StableFutureEventsFailingIntervalsService;
+
+    impl IntervalsUseCases for StableFutureEventsFailingIntervalsService {
+        fn list_events(
+            &self,
+            _user_id: &str,
+            range: &DateRange,
+        ) -> crate::domain::intervals::BoxFuture<Result<Vec<Event>, IntervalsError>> {
+            let range = range.clone();
+            let newest = range.newest.clone();
+            Box::pin(async move {
+                if newest == "2026-08-01" {
+                    Err(IntervalsError::ConnectionError(
+                        "stable range unavailable".to_string(),
+                    ))
+                } else {
+                    TestIntervalsService.list_events("user-1", &range).await
+                }
+            })
+        }
+
+        fn get_event(
+            &self,
+            _user_id: &str,
+            _event_id: i64,
+        ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn create_event(
+            &self,
+            _user_id: &str,
+            _event: crate::domain::intervals::CreateEvent,
+        ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn update_event(
+            &self,
+            _user_id: &str,
+            _event_id: i64,
+            _event: crate::domain::intervals::UpdateEvent,
+        ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn delete_event(
+            &self,
+            _user_id: &str,
+            _event_id: i64,
+        ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+            unreachable!()
+        }
+
+        fn download_fit(
+            &self,
+            _user_id: &str,
+            _event_id: i64,
+        ) -> crate::domain::intervals::BoxFuture<Result<Vec<u8>, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn list_activities(
+            &self,
+            _user_id: &str,
+            range: &DateRange,
+        ) -> crate::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+            TestIntervalsService.list_activities("user-1", range)
+        }
+
+        fn get_activity(
+            &self,
+            _user_id: &str,
+            _activity_id: &str,
+        ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+            TestIntervalsService.get_activity("user-1", "ride-1")
+        }
+
+        fn upload_activity(
+            &self,
+            _user_id: &str,
+            _upload: crate::domain::intervals::UploadActivity,
+        ) -> crate::domain::intervals::BoxFuture<
+            Result<crate::domain::intervals::UploadedActivities, IntervalsError>,
+        > {
+            unreachable!()
+        }
+
+        fn update_activity(
+            &self,
+            _user_id: &str,
+            _activity_id: &str,
+            _activity: crate::domain::intervals::UpdateActivity,
+        ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+            unreachable!()
+        }
+
+        fn delete_activity(
+            &self,
+            _user_id: &str,
+            _activity_id: &str,
+        ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+            unreachable!()
+        }
+    }
+
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(StableFutureEventsFailingIntervalsService),
+        Arc::new(TestWorkoutSummaryRepository),
+        FixedClock,
+    );
+
+    let result = builder.build("user-1", "ride-1").await.unwrap();
+
+    assert_eq!(result.context.intervals_status.events, "connection_error");
+    assert_eq!(result.context.upcoming_days.len(), 14);
+    assert!(result.context.future_events.is_empty());
 }

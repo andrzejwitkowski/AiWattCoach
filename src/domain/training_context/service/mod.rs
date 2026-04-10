@@ -183,18 +183,37 @@ where
             Ok(activities) => (activities, "ok".to_string()),
             Err(error) => (Vec::new(), intervals_status_message(&error)),
         };
-        let (events, events_status) = match events_result {
-            Ok(events) => (events, "ok".to_string()),
-            Err(error) => (Vec::new(), intervals_status_message(&error)),
+        let (events, short_range_events_status) = match events_result {
+            Ok(events) => (events, None),
+            Err(error) => (Vec::new(), Some(intervals_status_message(&error))),
         };
-        let stable_future_events = stable_future_events_result
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|event| {
-                let date = event_date(event);
-                date > focus_date && date <= stable_future_events_end
-            })
-            .collect::<Vec<_>>();
+        let (stable_future_events, stable_range_events_status) = match stable_future_events_result {
+            Ok(events) => (
+                events
+                    .into_iter()
+                    .filter(|event| {
+                        let date = event_date(event);
+                        date > focus_date && date <= stable_future_events_end
+                    })
+                    .collect::<Vec<_>>(),
+                None,
+            ),
+            Err(error) => (Vec::new(), Some(intervals_status_message(&error))),
+        };
+        let events_status = match (short_range_events_status, stable_range_events_status) {
+            (None, None) => "ok".to_string(),
+            (Some(status), None) | (None, Some(status)) => status,
+            (Some(short_status), Some(stable_status)) if short_status == stable_status => {
+                short_status
+            }
+            (Some(short_status), Some(stable_status)) => {
+                format!("short_range={short_status}; stable_range={stable_status}")
+            }
+        };
+        let configured_ftp = settings
+            .cycling
+            .ftp_watts
+            .and_then(|value| i32::try_from(value).ok());
 
         let recent_activity_ids = history_activities
             .iter()
@@ -219,7 +238,8 @@ where
             .await;
         let projected_days = self.load_projected_day_contexts(user_id, focus_date).await;
         let races = self.load_race_contexts(user_id).await;
-        let future_events = build_future_planned_event_contexts(&stable_future_events);
+        let future_events =
+            build_future_planned_event_contexts(&stable_future_events, configured_ftp);
         let detailed_recent_activities_by_id = detailed_recent_activities
             .iter()
             .cloned()
@@ -236,10 +256,6 @@ where
             .filter(|event| event_date(event) > focus_date && event_date(event) <= upcoming_end)
             .cloned()
             .collect::<Vec<_>>();
-        let configured_ftp = settings
-            .cycling
-            .ftp_watts
-            .and_then(|value| i32::try_from(value).ok());
         let matched_recent_workouts = build_event_activity_matches(
             &recent_events,
             &detailed_recent_activities,

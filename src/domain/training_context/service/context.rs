@@ -231,11 +231,12 @@ pub(super) fn build_upcoming_day_contexts(
 
 pub(super) fn build_future_planned_event_contexts(
     events: &[Event],
+    configured_ftp: Option<i32>,
 ) -> Vec<FuturePlannedEventContext> {
     let mut future_events = events
         .iter()
         .map(|event| {
-            let parsed = parse_workout_doc(event.workout_doc.as_deref(), None);
+            let parsed = parse_workout_doc(event.workout_doc.as_deref(), configured_ftp);
             let duration_seconds = (parsed.summary.total_duration_seconds > 0)
                 .then_some(parsed.summary.total_duration_seconds);
 
