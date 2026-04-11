@@ -1,8 +1,7 @@
 use std::time::Instant;
 
 use bytes::Bytes;
-use http::{HeaderMap, Method, StatusCode};
-use reqwest::{Request, RequestBuilder};
+use reqwest::{header::HeaderMap, Method, Request, RequestBuilder, StatusCode};
 use sha2::Digest;
 
 use crate::telemetry::is_sensitive_key;
@@ -58,12 +57,18 @@ pub async fn log_request_response(
     log_request(&method, &url, &headers, request_body_preview.as_deref());
 
     let start = Instant::now();
-    let response = client.execute(request).await?;
+    let response = client
+        .execute(request)
+        .await
+        .inspect_err(|error| log_transport_failure(&method, &url, error, "request_send_failed"))?;
     let latency = start.elapsed();
 
     let status = response.status();
     let resp_headers = response.headers().clone();
-    let body = response.bytes().await?;
+    let body = response
+        .bytes()
+        .await
+        .inspect_err(|error| log_transport_failure(&method, &url, error, "response_read_failed"))?;
 
     let response_body_preview = format_response_body(&body, &resp_headers);
 
@@ -90,12 +95,18 @@ pub async fn log_request_response_no_body(
     log_request(&method, &url, &headers, None);
 
     let start = Instant::now();
-    let response = client.execute(request).await?;
+    let response = client
+        .execute(request)
+        .await
+        .inspect_err(|error| log_transport_failure(&method, &url, error, "request_send_failed"))?;
     let latency = start.elapsed();
 
     let status = response.status();
     let resp_headers = response.headers().clone();
-    let body = response.bytes().await?;
+    let body = response
+        .bytes()
+        .await
+        .inspect_err(|error| log_transport_failure(&method, &url, error, "response_read_failed"))?;
 
     log_response(&method, &url, status, latency, None);
 
@@ -308,6 +319,17 @@ fn log_response(
             "outgoing response (no body)"
         );
     }
+}
+
+fn log_transport_failure(method: &Method, url: &reqwest::Url, error: &reqwest::Error, stage: &str) {
+    tracing::error!(
+        provider = CLIENT_NAME,
+        http.method = %method,
+        http.url = %sanitized_url(url),
+        failure.stage = stage,
+        error = %error,
+        "outgoing request failed"
+    );
 }
 
 fn is_sensitive_header(name: &str) -> bool {

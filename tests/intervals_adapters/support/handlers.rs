@@ -269,8 +269,14 @@ async fn list_activities_handler(
         None,
     );
 
+    let status = *state.list_activities_status.lock().unwrap();
+
     if let Some(payload) = state.list_activities_raw.lock().unwrap().clone() {
-        return Json(payload).into_response();
+        return (status, Json(payload)).into_response();
+    }
+
+    if status != StatusCode::OK {
+        return status.into_response();
     }
 
     Json(state.list_activities.lock().unwrap().clone()).into_response()
@@ -408,6 +414,11 @@ async fn upload_activity_handler(
         headers,
         Some(body.to_vec()),
     );
+
+    if let Some((status, payload)) = state.upload_failure.lock().unwrap().clone() {
+        return (status, Json(payload)).into_response();
+    }
+
     let ids = state.upload_ids.lock().unwrap().clone();
     (
         StatusCode::CREATED,
@@ -418,6 +429,7 @@ async fn upload_activity_handler(
                 .collect(),
         }),
     )
+        .into_response()
 }
 
 async fn update_activity_handler(

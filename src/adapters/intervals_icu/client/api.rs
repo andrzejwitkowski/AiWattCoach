@@ -414,10 +414,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             .map_err(map_connection_error)?;
 
             if !response.status.is_success() {
-                return Err(IntervalsError::ApiError(format!(
-                    "HTTP {} for list activities",
-                    response.status
-                )));
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
             }
 
             let payload: Vec<Value> = serde_json::from_slice(&response.body)
@@ -510,10 +507,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             .map_err(map_connection_error)?;
             let created = response.status == StatusCode::CREATED;
             if !response.status.is_success() {
-                return Err(IntervalsError::ApiError(format!(
-                    "HTTP {} for upload activity",
-                    response.status
-                )));
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
             }
             let payload: UploadResponse = serde_json::from_slice(&response.body)
                 .map_err(|error| IntervalsError::ApiError(error.to_string()))?;

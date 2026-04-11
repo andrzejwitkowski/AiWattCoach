@@ -4,6 +4,8 @@ pub mod status_class;
 
 pub use status_class::status_class;
 
+use std::sync::OnceLock;
+
 use axum::{extract::Request, middleware::Next, response::Response};
 use tower::{Layer, Service};
 
@@ -17,7 +19,7 @@ pub struct EndpointLogConfig {
     pub log_request_body: bool,
     /// Whether to log the response body.
     pub log_response_body: bool,
-    /// Maximum body bytes to buffer for logging.
+    /// Maximum characters/bytes to include in body previews written to logs.
     pub max_body_bytes: usize,
 }
 
@@ -58,7 +60,7 @@ impl EndpointLogConfig {
         }
     }
 
-    /// Set custom max body bytes.
+    /// Set custom body preview size for logging.
     pub fn with_max_body_bytes(mut self, bytes: usize) -> Self {
         self.max_body_bytes = bytes;
         self
@@ -104,9 +106,9 @@ impl<S> Layer<S> for InsertLogConfigLayer {
     }
 }
 
-impl<S, B> Service<http::Request<B>> for InsertLogConfigService<S>
+impl<S, B> Service<axum::http::Request<B>> for InsertLogConfigService<S>
 where
-    S: Service<http::Request<B>>,
+    S: Service<axum::http::Request<B>>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -119,7 +121,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, mut req: http::Request<B>) -> Self::Future {
+    fn call(&mut self, mut req: axum::http::Request<B>) -> Self::Future {
         req.extensions_mut().insert(self.config.clone());
         self.inner.call(req)
     }
@@ -134,10 +136,14 @@ pub fn with_log_config(config: EndpointLogConfig) -> InsertLogConfigLayer {
 ///
 /// When `ENABLE_ENDPOINT_BODY_LOGGING=true`, the default config becomes `full()`.
 pub fn body_logging_enabled() -> bool {
-    std::env::var("ENABLE_ENDPOINT_BODY_LOGGING")
-        .ok()
-        .map(|v| v.trim().eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+
+    *ENABLED.get_or_init(|| {
+        std::env::var("ENABLE_ENDPOINT_BODY_LOGGING")
+            .ok()
+            .map(|v| v.trim().eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
 }
 
 #[cfg(test)]

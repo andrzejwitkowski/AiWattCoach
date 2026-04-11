@@ -35,8 +35,6 @@ dependencies = [
  "dotenvy",
  "fitparser",
  "futures",
- "http",
- "http-body-util",
  "mongodb",
  "opentelemetry",
  "opentelemetry-appender-tracing",

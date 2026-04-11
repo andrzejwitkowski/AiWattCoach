@@ -185,7 +185,7 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
 }
 
 /// Middleware that inserts a default `EndpointLogConfig` into request extensions.
-/// When `ENABLE_ENDPOINT_BODY_LOGGING=true`, the default enables body logging.
+/// When `ENABLE_ENDPOINT_BODY_LOGGING=true`, the cached default enables body logging.
 async fn insert_default_log_config(req: Request, next: axum::middleware::Next) -> Response {
     if req.extensions().get::<EndpointLogConfig>().is_some() {
         return next.run(req).await;

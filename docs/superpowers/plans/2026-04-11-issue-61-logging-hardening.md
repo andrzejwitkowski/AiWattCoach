@@ -10,7 +10,7 @@
 
 ---
 
-### Scope
+## Scope
 Keep this plan focused on issue `#61`. Do not expand into generic logging abstractions for every adapter/client in the repo yet.
 
 ### Files Likely To Change

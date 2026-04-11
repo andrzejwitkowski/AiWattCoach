@@ -1,7 +1,8 @@
 use aiwattcoach::{
     adapters::intervals_icu::client::IntervalsIcuClient,
-    domain::intervals::{DateRange, IntervalsApiPort},
+    domain::intervals::{DateRange, IntervalsApiPort, IntervalsError},
 };
+use axum::http::StatusCode;
 
 use crate::support::{test_credentials, ResponseActivity, TestIntervalsServer};
 use crate::tracing_capture::capture_tracing_logs;
@@ -163,4 +164,33 @@ async fn intervals_client_logs_list_activity_requests_without_query_string_leaka
         !logs.contains("oldest=2026-03-01&newest=2026-03-31"),
         "logs should not include raw query string, got: {logs}"
     );
+}
+
+#[tokio::test]
+async fn intervals_client_list_activities_sanitizes_query_string_in_surface_error() {
+    let server = TestIntervalsServer::start().await;
+    server.set_list_activities_raw(serde_json::json!({
+        "error": "bad request"
+    }));
+    server.set_list_activities_status(StatusCode::BAD_REQUEST);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .list_activities(
+            &test_credentials(),
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-03-31".to_string(),
+            },
+        )
+        .await;
+
+    match result {
+        Err(IntervalsError::ApiError(message)) => {
+            assert!(message.contains("/api/v1/athlete/athlete-7/activities"));
+            assert!(!message.contains("oldest=2026-03-01&newest=2026-03-31"));
+            assert!(message.contains("payload bytes="));
+        }
+        other => panic!("expected api error, got {other:?}"),
+    }
 }

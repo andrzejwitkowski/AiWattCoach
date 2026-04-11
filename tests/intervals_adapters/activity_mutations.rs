@@ -1,6 +1,6 @@
 use aiwattcoach::{
     adapters::intervals_icu::client::IntervalsIcuClient,
-    domain::intervals::{IntervalsApiPort, UpdateActivity, UploadActivity},
+    domain::intervals::{IntervalsApiPort, IntervalsError, UpdateActivity, UploadActivity},
 };
 use axum::http::StatusCode;
 
@@ -195,4 +195,31 @@ async fn intervals_client_upload_logging_avoids_raw_binary_body_output() {
         !logs.contains("[0, 159, 146, 150]"),
         "logs should not dump raw upload bytes, got: {logs}"
     );
+}
+
+#[tokio::test]
+async fn intervals_client_upload_maps_upstream_auth_failures_to_credentials_error() {
+    let server = TestIntervalsServer::start().await;
+    server.set_upload_failure(
+        StatusCode::UNAUTHORIZED,
+        serde_json::json!({ "error": "invalid api key" }),
+    );
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .upload_activity(
+            &test_credentials(),
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: None,
+                description: None,
+                device_name: None,
+                external_id: None,
+                paired_event_id: None,
+            },
+        )
+        .await;
+
+    assert_eq!(result, Err(IntervalsError::CredentialsNotConfigured));
 }

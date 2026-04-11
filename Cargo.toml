@@ -7,8 +7,6 @@ edition = "2021"
 axum = { version = "0.8.4", features = ["ws"] }
 base64 = "0.22"
 bytes = "1"
-http = "1"
-http-body-util = "0.1"
 chrono = { version = "0.4", default-features = true }
 dotenvy = "0.15.7"
 fitparser = "0.10"

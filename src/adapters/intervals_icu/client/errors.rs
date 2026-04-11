@@ -11,7 +11,7 @@ pub(super) fn map_connection_error(error: reqwest::Error) -> IntervalsError {
 
 pub(super) fn map_error_response_from_logged_response(response: LoggedResponse) -> ApiFailure {
     let status = response.status;
-    let url = response.url.to_string();
+    let url = sanitize_error_url(&response.url);
     let response_body = std::str::from_utf8(&response.body).ok().and_then(|body| {
         let trimmed = body.trim();
         if trimmed.is_empty() {
@@ -40,6 +40,13 @@ pub(super) fn map_error_response_from_logged_response(response: LoggedResponse) 
         error,
         response_body,
     }
+}
+
+fn sanitize_error_url(url: &reqwest::Url) -> String {
+    let mut sanitized = url.clone();
+    sanitized.set_query(None);
+    sanitized.set_fragment(None);
+    sanitized.to_string()
 }
 
 fn format_status_code(status: StatusCode) -> String {

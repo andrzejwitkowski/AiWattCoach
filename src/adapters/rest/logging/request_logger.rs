@@ -2,9 +2,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use axum::body::Body;
+use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, Response, StatusCode, Uri};
-use http_body_util::BodyExt;
 use tower::{Layer, Service};
 
 use super::redaction::{
@@ -71,12 +70,23 @@ where
 
             let rebuilt_req = if config.log_request_body {
                 let (parts, body) = req.into_parts();
-                let body_bytes = collect_body(body).await;
-                let body_preview = body_bytes.as_ref().map(|bytes| {
-                    format_body_for_logging(&method, &headers, bytes, config.max_body_bytes)
-                });
-                log_request(&method, &uri, &headers, body_preview.as_deref());
-                Request::from_parts(parts, Body::from(body_bytes.unwrap_or_default()))
+                let Ok(body_bytes) = collect_body(body).await else {
+                    tracing::warn!(
+                        http.method = %method,
+                        http.target = %uri.path(),
+                        "skipping request body log because body collection failed"
+                    );
+                    return Ok(simple_error_response(StatusCode::BAD_REQUEST));
+                };
+
+                let body_preview = format_body_for_logging(
+                    &method,
+                    &headers,
+                    body_bytes.as_slice(),
+                    config.max_body_bytes,
+                );
+                log_request(&method, &uri, &headers, Some(&body_preview));
+                Request::from_parts(parts, Body::from(body_bytes))
             } else {
                 req
             };
@@ -88,33 +98,38 @@ where
             }
 
             let (resp_parts, resp_body) = response.into_parts();
-            let resp_body_bytes = collect_body(resp_body).await;
-            let resp_preview = resp_body_bytes.as_ref().map(|bytes| {
-                format_response_body_for_logging(&resp_parts.headers, bytes, config.max_body_bytes)
-            });
+            let Ok(resp_body_bytes) = collect_body(resp_body).await else {
+                tracing::warn!(
+                    http.status_code = resp_parts.status.as_u16(),
+                    "skipping response body log because body collection failed"
+                );
+                return Ok(simple_error_response(StatusCode::BAD_GATEWAY));
+            };
 
-            log_response(resp_parts.status, resp_preview.as_deref());
+            let resp_preview = format_response_body_for_logging(
+                &resp_parts.headers,
+                resp_body_bytes.as_slice(),
+                config.max_body_bytes,
+            );
+
+            log_response(resp_parts.status, Some(&resp_preview));
 
             Ok(Response::from_parts(
                 resp_parts,
-                Body::from(resp_body_bytes.unwrap_or_default()),
+                Body::from(resp_body_bytes),
             ))
         })
     }
 }
 
 /// Collect the full body for logging and response reconstruction.
-async fn collect_body(body: Body) -> Option<Vec<u8>> {
-    let bytes = match body.collect().await {
-        Ok(collected) => collected.to_bytes(),
-        Err(_) => return None,
+async fn collect_body(body: Body) -> Result<Vec<u8>, ()> {
+    let bytes = match to_bytes(body, usize::MAX).await {
+        Err(_) => return Err(()),
+        Ok(bytes) => bytes,
     };
 
-    if bytes.is_empty() {
-        return None;
-    }
-
-    Some(bytes.to_vec())
+    Ok(bytes.to_vec())
 }
 
 /// Format request body for logging with redaction.
@@ -152,10 +167,10 @@ fn format_body_for_logging(
 
     if let Ok(mut json_value) = serde_json::from_str::<serde_json::Value>(body_str) {
         redact_value(&mut json_value);
-        return format_body_preview(&json_value.to_string(), 1024);
+        return format_body_preview(&json_value.to_string(), max_body_bytes);
     }
 
-    format_body_preview(body_str, 512)
+    format_body_preview(body_str, max_body_bytes)
 }
 
 /// Format response body for logging with redaction.
@@ -188,10 +203,17 @@ fn format_response_body_for_logging(
 
     if let Ok(mut json_value) = serde_json::from_str::<serde_json::Value>(body_str) {
         redact_value(&mut json_value);
-        return format_body_preview(&json_value.to_string(), 1024);
+        return format_body_preview(&json_value.to_string(), max_body_bytes);
     }
 
-    format_body_preview(body_str, 512)
+    format_body_preview(body_str, max_body_bytes)
+}
+
+fn simple_error_response(status: StatusCode) -> Response<Body> {
+    Response::builder()
+        .status(status)
+        .body(Body::empty())
+        .expect("building static error response should not fail")
 }
 
 fn summarize_text_body(content_type: &str, bytes: &[u8], max_body_bytes: usize) -> String {
@@ -409,5 +431,38 @@ mod tests {
         assert!(preview.contains("textual("));
         assert!(preview.contains("content_type=text/plain"));
         assert!(!preview.contains("super-secret-response"));
+    }
+
+    #[test]
+    fn request_logging_json_preview_honors_configured_limit() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+
+        let preview = format_body_for_logging(
+            &axum::http::Method::POST,
+            &headers,
+            br#"{"apiKey":"super-secret-key","notes":"abcdefghij"}"#,
+            12,
+        );
+
+        assert!(preview.contains("truncated"));
+        assert!(!preview.contains("super-secret-key"));
+        assert!(!preview.contains("abcdefghij"));
+    }
+
+    #[test]
+    fn response_logging_json_preview_honors_configured_limit() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+
+        let preview = format_response_body_for_logging(
+            &headers,
+            br#"{"token":"super-secret-response","message":"abcdefghij"}"#,
+            12,
+        );
+
+        assert!(preview.contains("truncated"));
+        assert!(!preview.contains("super-secret-response"));
+        assert!(!preview.contains("abcdefghij"));
     }
 }

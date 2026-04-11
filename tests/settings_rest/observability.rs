@@ -270,8 +270,12 @@ async fn test_intervals_connection_logs_request_body_without_exposing_api_key() 
         "expected route-level request body log, got: {logs}"
     );
     assert!(
-        logs.contains("[REDACTED]"),
-        "expected request body redaction, got: {logs}"
+        logs.contains("\"request_body\":"),
+        "expected request_body field in logs, got: {logs}"
+    );
+    assert!(
+        logs.contains("\\\"apiKey\\\":\\\"[REDACTED]\\\""),
+        "expected apiKey redaction in request body log, got: {logs}"
     );
     assert!(
         !logs.contains("super-secret-key"),
