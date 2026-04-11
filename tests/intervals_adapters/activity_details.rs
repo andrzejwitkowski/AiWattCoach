@@ -7,6 +7,7 @@ use crate::support::{
     test_credentials, ResponseActivity, ResponseActivityIntervals, ResponseActivityStream,
     TestIntervalsServer,
 };
+use crate::tracing_capture::capture_tracing_logs;
 
 #[tokio::test]
 async fn intervals_client_gets_activity_with_intervals_and_streams() {
@@ -266,6 +267,34 @@ async fn completed_activity_partial_enrichment_preserves_inline_intervals_when_d
     assert_eq!(activity.details.intervals.len(), 1);
     assert_eq!(activity.details.interval_groups.len(), 1);
     assert_eq!(activity.details.streams.len(), 1);
+}
+
+#[tokio::test]
+async fn completed_activity_detail_parse_failure_logs_payload_summary_without_raw_preview() {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sample("i209", "Loaded Ride"));
+    server.set_activity_intervals_raw(serde_json::json!({
+        "token": "super-secret-token",
+        "icu_intervals": "bad-payload"
+    }));
+    server.set_streams(vec![ResponseActivityStream::sample_watts()]);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let (_activity, logs) = capture_tracing_logs(|| async {
+        client
+            .get_activity(&test_credentials(), "i209")
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(
+        logs.contains("intervals enrichment payload could not be parsed"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("payload bytes="), "logs were: {logs}");
+    assert!(logs.contains("hash="), "logs were: {logs}");
+    assert!(!logs.contains("super-secret-token"), "logs were: {logs}");
 }
 
 #[tokio::test]

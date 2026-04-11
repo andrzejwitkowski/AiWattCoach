@@ -56,7 +56,7 @@ fn format_status_code(status: StatusCode) -> String {
     }
 }
 
-fn summarize_log_body(body: &[u8]) -> String {
+pub(super) fn summarize_log_body(body: &[u8]) -> String {
     let digest = sha2::Sha256::digest(body);
     let hash = format!("{digest:x}");
     format!(

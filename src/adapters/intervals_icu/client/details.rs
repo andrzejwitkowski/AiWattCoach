@@ -3,13 +3,13 @@ use reqwest::{Client, RequestBuilder, StatusCode};
 use crate::domain::intervals::{Activity, IntervalsCredentials, IntervalsError};
 
 use super::{
-    errors::map_connection_error,
+    errors::{map_connection_error, summarize_log_body},
     logging::{execute_request, BodyLoggingMode, LoggedResponse},
     mapping::{
         map_activity_interval, map_activity_interval_group, map_activity_response,
         map_activity_stream, should_persist_stream,
     },
-    truncate_logged_response_body, ApiFailure, IntervalsIcuClient,
+    ApiFailure, IntervalsIcuClient,
 };
 use crate::adapters::intervals_icu::dto::{
     ActivityIntervalsResponse, ActivityResponse, ActivityStreamResponse,
@@ -109,7 +109,6 @@ impl IntervalsIcuClient {
 
         match intervals_result {
             Ok(intervals_response) => {
-                let response_body = String::from_utf8_lossy(&intervals_response.body).to_string();
                 match serde_json::from_slice::<ActivityIntervalsResponse>(&intervals_response.body)
                 {
                     Ok(intervals) => {
@@ -128,7 +127,7 @@ impl IntervalsIcuClient {
                         tracing::warn!(
                             activity_id,
                             %error,
-                            response_body = %truncate_logged_response_body(&response_body),
+                            response_body = %summarize_log_body(&intervals_response.body),
                             "intervals enrichment payload could not be parsed; returning base activity without intervals"
                         );
                     }
