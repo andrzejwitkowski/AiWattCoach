@@ -25,6 +25,10 @@ vi.mock('../api/workoutSummary', () => ({
   listWorkoutSummaries: vi.fn(),
 }));
 
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
 const eventFixture: IntervalEvent = {
   id: 101,
   startDateLocal: '2026-03-24T09:00:00',
@@ -107,18 +111,24 @@ afterEach(() => {
 
 describe('useWorkoutList', () => {
   it('loads up to seven workouts and merges summary status', async () => {
-    vi.mocked(listActivities).mockResolvedValue([]);
-    vi.mocked(listEvents).mockResolvedValue(
-      Array.from({ length: 9 }, (_, index) => ({
-        ...eventFixture,
-        id: 101 + index,
-        startDateLocal: `2026-03-${String(24 - index).padStart(2, '0')}T09:00:00`,
-      })),
-    );
+    const pastEvents = Array.from({ length: 9 }, (_, index) => ({
+      ...eventFixture,
+      id: 101 + index,
+      startDateLocal: `2026-03-${String(24 - index).padStart(2, '0')}T09:00:00`,
+    }));
+    const matchingActivities = pastEvents.map((event) => ({
+      ...activityFixture,
+      id: `activity-${event.id}`,
+      name: event.name,
+      startDateLocal: event.startDateLocal,
+      startDate: event.startDateLocal.replace('T09:00:00', 'T08:00:00Z'),
+    }));
+    vi.mocked(listActivities).mockResolvedValue(matchingActivities);
+    vi.mocked(listEvents).mockResolvedValue(pastEvents);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([
       {
         id: 'summary-1',
-        workoutId: '101',
+        workoutId: 'activity-101',
         rpe: 6,
         messages: [
           {
@@ -145,8 +155,16 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.hasConversation).toBe(true);
   });
 
-  it('keeps unknown intervals event categories in the workout list', async () => {
-    vi.mocked(listActivities).mockResolvedValue([]);
+  it('keeps activities whose matched event has an unknown category', async () => {
+    vi.mocked(listActivities).mockResolvedValue([
+      {
+        ...activityFixture,
+        id: 'activity-301',
+        name: 'March 31 Ride',
+        startDateLocal: '2026-03-31T09:00:00',
+        startDate: '2026-03-31T08:00:00Z',
+      },
+    ]);
     vi.mocked(listEvents).mockResolvedValue([
       {
         ...eventFixture,
@@ -166,19 +184,27 @@ describe('useWorkoutList', () => {
 
     expect(result.current.weekLabel).toBe(formatWeekLabel(new Date(2026, 2, 30), new Date(2026, 3, 5)));
     expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0]?.source).toBe('activity');
+    expect(result.current.items[0]?.activity?.id).toBe('activity-301');
     expect(result.current.items[0]?.event?.id).toBe(301);
   });
 
   it('pages through older workouts from a larger recent history window', async () => {
-    vi.mocked(listActivities).mockResolvedValue([]);
-    vi.mocked(listEvents).mockResolvedValue(
-      Array.from({ length: 10 }, (_, index) => ({
-        ...eventFixture,
-        id: 200 + index,
-        name: `Workout ${index + 1}`,
-        startDateLocal: `2026-03-${String(28 - index).padStart(2, '0')}T09:00:00`,
-      })),
-    );
+    const pastEvents = Array.from({ length: 10 }, (_, index) => ({
+      ...eventFixture,
+      id: 200 + index,
+      name: `Workout ${index + 1}`,
+      startDateLocal: `2026-03-${String(28 - index).padStart(2, '0')}T09:00:00`,
+    }));
+    const matchingActivities = pastEvents.map((event) => ({
+      ...activityFixture,
+      id: `activity-${event.id}`,
+      name: event.name,
+      startDateLocal: event.startDateLocal,
+      startDate: event.startDateLocal.replace('T09:00:00', 'T08:00:00Z'),
+    }));
+    vi.mocked(listActivities).mockResolvedValue(matchingActivities);
+    vi.mocked(listEvents).mockResolvedValue(pastEvents);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
     const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
@@ -234,29 +260,45 @@ describe('useWorkoutList', () => {
   });
 
   it('keeps only the newest refresh result when loads overlap', async () => {
-    let resolveFirstEvents: ((value: IntervalEvent[]) => void) | undefined;
-    let resolveSecondEvents: ((value: IntervalEvent[]) => void) | undefined;
+    let resolveFirst: (() => void) | undefined;
+    let resolveSecond: (() => void) | undefined;
 
-    vi.mocked(listActivities).mockResolvedValue([]);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
-    vi.mocked(listEvents)
-      .mockImplementationOnce(() => new Promise<IntervalEvent[]>((resolve) => {
-        resolveFirstEvents = resolve;
+    vi.mocked(listActivities)
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirst = () => resolve([
+          {
+            ...activityFixture,
+            id: 'activity-901',
+            name: 'Older result',
+            startDateLocal: '2026-04-07T09:00:00',
+            startDate: '2026-04-07T08:00:00Z',
+          },
+        ]);
       }))
-      .mockImplementationOnce(() => new Promise<IntervalEvent[]>((resolve) => {
-        resolveSecondEvents = resolve;
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveSecond = () => resolve([
+          {
+            ...activityFixture,
+            id: 'activity-900',
+            name: 'Newer result',
+            startDateLocal: '2026-04-07T09:00:00',
+            startDate: '2026-04-07T08:00:00Z',
+          },
+        ]);
       }));
+    vi.mocked(listEvents).mockResolvedValue([]);
 
     const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
 
     await act(async () => {
       const secondRefresh = result.current.refresh();
-      resolveSecondEvents?.([{ ...eventFixture, id: 900, name: 'Newer result', startDateLocal: '2026-03-31T09:00:00' }]);
+      resolveSecond?.();
       await secondRefresh;
     });
 
     await act(async () => {
-      resolveFirstEvents?.([{ ...eventFixture, id: 901, name: 'Older result', startDateLocal: '2026-03-24T09:00:00' }]);
+      resolveFirst?.();
       await Promise.resolve();
     });
 
@@ -265,12 +307,20 @@ describe('useWorkoutList', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.items[0]?.event?.name).toBe('Newer result');
+      expect(result.current.items[0]?.activity?.name).toBe('Newer result');
     });
   });
 
   it('updates the matching item when a summary changes', async () => {
-    vi.mocked(listActivities).mockResolvedValue([]);
+    vi.mocked(listActivities).mockResolvedValue([
+      {
+        ...activityFixture,
+        id: 'activity-101',
+        name: 'Wild Snow',
+        startDateLocal: '2026-03-24T09:00:00',
+        startDate: '2026-03-24T08:00:00Z',
+      },
+    ]);
     vi.mocked(listEvents).mockResolvedValue([
       {
         ...eventFixture,
@@ -397,5 +447,76 @@ describe('useWorkoutList', () => {
     await waitFor(() => {
       expect(result.current.state).toBe('credentials-required');
     });
+  });
+
+  it('excludes planned-only event items from the visible list', async () => {
+    vi.mocked(listActivities).mockResolvedValue([]);
+    vi.mocked(listEvents).mockResolvedValue([
+      {
+        ...eventFixture,
+        id: 500,
+        name: 'Future Planned Workout',
+        startDateLocal: '2026-04-01T09:00:00',
+      },
+    ]);
+    vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(result.current.items).toHaveLength(0);
+  });
+
+  it('includes past completed workouts and excludes future-dated ones', async () => {
+    // Pin time to a specific date to make the test deterministic
+    // April 15, 2026 is a Wednesday
+    const pinnedDate = new Date('2026-04-15T12:00:00Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(pinnedDate);
+
+    try {
+      // April 13 is Monday of the current week (past)
+      // April 20 is Monday of next week (future, outside the visible week)
+      vi.mocked(listActivities).mockResolvedValue([
+        {
+          ...activityFixture,
+          id: 'activity-past',
+          name: 'Past Ride',
+          startDateLocal: '2026-04-13T09:00:00',
+          startDate: '2026-04-13T08:00:00Z',
+        },
+        {
+          ...activityFixture,
+          id: 'activity-future',
+          name: 'Future Ride',
+          startDateLocal: '2026-04-20T09:00:00',
+          startDate: '2026-04-20T08:00:00Z',
+        },
+      ]);
+      vi.mocked(listEvents).mockResolvedValue([]);
+      vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+      const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+      // Advance timers to allow async operations to complete
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
+      }, { timeout: 1000 });
+
+      // Only the past activity (April 13) should be visible
+      // The future activity (April 20) is excluded because it's after today (April 15)
+      expect(result.current.items).toHaveLength(1);
+      expect(result.current.items[0]?.activity?.id).toBe('activity-past');
+      expect(result.current.items[0]?.startDateLocal).toBe('2026-04-13T09:00:00');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

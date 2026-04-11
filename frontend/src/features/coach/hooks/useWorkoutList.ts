@@ -325,7 +325,15 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   }, [loadRecentWorkouts]);
 
   useEffect(() => {
-    setItems(allItems.filter((item) => isWithinWeek(item.startDateLocal, visibleWeekStart)));
+    const todayDateKey = toDateKey(new Date());
+    setItems(
+      allItems.filter(
+        (item) =>
+          item.source === 'activity'
+          && extractDateKey(item.startDateLocal) <= todayDateKey
+          && isWithinWeek(item.startDateLocal, visibleWeekStart),
+      ),
+    );
   }, [allItems, visibleWeekStart]);
 
   const weekLabel = useMemo(() => {
