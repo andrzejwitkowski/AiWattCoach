@@ -223,7 +223,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
           ) : null}
           <p className="truncate text-[11px] font-bold text-[#f9f9fd]">{title}</p>
           <p className="text-[10px] text-slate-500">{subtitle}</p>
-          {isSelectable && interactiveDayItems.length > 0 && extraItemCount > 0 ? (
+          {interactiveDayItems.length > 0 && extraItemCount > 0 ? (
             <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-[#00e3fd]">
               {t('calendar.viewItems', { count: pickerVisibleItemCount })}
             </p>

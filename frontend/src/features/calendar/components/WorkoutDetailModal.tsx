@@ -204,9 +204,15 @@ function mergeSelectedEvent(
 }
 
 function hasMeaningfulEventDefinition(eventDefinition: IntervalEvent['eventDefinition']): boolean {
-    return (
+    return Boolean(
         eventDefinition.intervals.length > 0
         || eventDefinition.segments.length > 0
+        || eventDefinition.summary.totalDurationSeconds > 0
+        || eventDefinition.summary.totalSegments > 0
+        || eventDefinition.summary.estimatedNormalizedPowerWatts !== null
+        || eventDefinition.summary.estimatedAveragePowerWatts !== null
+        || eventDefinition.summary.estimatedIntensityFactor !== null
+        || eventDefinition.summary.estimatedTrainingStressScore !== null,
     );
 }
 

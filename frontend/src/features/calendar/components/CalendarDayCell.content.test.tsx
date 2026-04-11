@@ -55,7 +55,7 @@ describe('CalendarDayCell content', () => {
       ],
     });
 
-    render(<CalendarDayCell day={day} isToday={false} onSelect={vi.fn()} />);
+    render(<CalendarDayCell day={day} isToday={false} />);
 
     expect(screen.getByText('View 2 items')).toBeInTheDocument();
   });
@@ -403,9 +403,7 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByText('19 min • 16 TSS')).toBeInTheDocument();
     expect(within(dayCell).getByText('Race Day')).toBeInTheDocument();
     expect(within(dayCell).getByText('Grojec')).toBeInTheDocument();
-    expect(
-      within(dayCell).queryByText(/View \d+ item/),
-    ).not.toBeInTheDocument();
+    expect(within(dayCell).queryByText('+1 more item')).not.toBeInTheDocument();
   });
 
   it('keeps remaining overflow count after showing both prep and race', () => {
@@ -444,7 +442,7 @@ describe('CalendarDayCell content', () => {
       ],
     });
 
-    const { container } = render(<CalendarDayCell day={day} isToday={false} onSelect={vi.fn()} />);
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const dayCell = container.firstElementChild as HTMLElement;
 
     expect(within(dayCell).getByText('View 3 items')).toBeInTheDocument();
@@ -493,7 +491,7 @@ describe('CalendarDayCell content', () => {
       ],
     });
 
-    const { container } = render(<CalendarDayCell day={day} isToday={false} onSelect={vi.fn()} />);
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const dayCell = container.firstElementChild as HTMLElement;
 
     expect(within(dayCell).getByText('View 2 items')).toBeInTheDocument();
@@ -585,9 +583,7 @@ describe('CalendarDayCell content', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const dayCell = container.firstElementChild as HTMLElement;
 
-    expect(
-      within(dayCell).queryByText(/View \d+ item/),
-    ).not.toBeInTheDocument();
+    expect(within(dayCell).queryByText('+1 more item')).not.toBeInTheDocument();
     expect(within(dayCell).getByText('Opener Grojec')).toBeInTheDocument();
     expect(within(dayCell).getByText('Grojec')).toBeInTheDocument();
   });
