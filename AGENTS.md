@@ -192,6 +192,26 @@ Before changing behavior, use this order:
 - Preserve trace propagation code and structured logging behavior.
 - Do not remove telemetry wiring just to satisfy tests; fix imports/config instead.
 
+## Logging Walkthrough
+
+- Read `docs/logging.md` before adding new endpoint or external client logging.
+- For REST endpoints:
+  - keep logging in `src/adapters/rest/logging/**`
+  - add `RequestLogLayer` only when route-level body logging is needed
+  - configure the route with `with_log_config(EndpointLogConfig::...)`
+  - add `DefaultBodyLimit::max(...)` before `RequestLogLayer` when the logger can buffer request bodies
+  - keep preview limits small with `with_max_body_bytes(...)`
+- For outbound clients:
+  - keep logging in the adapter client module, not handlers or domain services
+  - preserve trace propagation before sending the request
+  - default to `execute_and_log_no_body(...)` or an adapter helper like `execute_and_log_with_trace_no_body(...)`
+  - use full body preview logging only for narrowly scoped safe payloads
+  - prefer payload summaries like `payload bytes=... hash=...` for malformed or unsafe upstream bodies
+- For both endpoints and clients:
+  - redact secrets before preview logging
+  - do not log raw large binary payloads
+  - add or update targeted observability tests when logging behavior changes
+
 ## External API / Workflow Safety
 
 - Do not call Intervals or future LLM providers directly from REST handlers.
