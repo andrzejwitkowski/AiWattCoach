@@ -74,7 +74,11 @@ function getDisciplineIcon(discipline: Race['discipline']) {
     case 'gravel':
     case 'cyclocross':
     case 'road':
-    default:
       return Trophy;
+    default: {
+      const exhaustive: never = discipline;
+      void exhaustive;
+      return Trophy;
+    }
   }
 }
