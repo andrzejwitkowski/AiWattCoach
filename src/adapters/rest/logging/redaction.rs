@@ -1,7 +1,3 @@
-use std::collections::HashSet;
-use std::fmt;
-
-use serde::Serialize;
 use sha2::Digest;
 
 use crate::telemetry::is_sensitive_key;
@@ -16,34 +12,6 @@ const SENSITIVE_HEADER_KEYS: &[&str] = &[
     "proxy-authorization",
     "www-authenticate",
 ];
-
-/// Wrapper that serializes a value to JSON, then redacts any sensitive fields
-/// before rendering via `Debug`/`Display`.
-///
-/// Use this in log lines: `tracing::info!(body = %Redacted(&payload), "...")`
-#[cfg_attr(not(test), allow(dead_code))]
-pub struct Redacted<'a, T>(pub &'a T);
-
-impl<T: Serialize> fmt::Display for Redacted<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match serde_json::to_value(self.0) {
-            Ok(mut value) => {
-                redact_value(&mut value);
-                write!(f, "{value}")
-            }
-            Err(_) => {
-                // Fallback: just show a placeholder
-                write!(f, "(non-serializable)")
-            }
-        }
-    }
-}
-
-impl<T: Serialize> fmt::Debug for Redacted<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
 
 /// Redact a raw JSON value in-place by walking the tree and replacing
 /// sensitive leaf values with `"[REDACTED]"`.
@@ -111,55 +79,6 @@ pub fn redact_headers(headers: &axum::http::HeaderMap) -> Vec<(String, String)> 
         .collect()
 }
 
-/// A scanner that collects all unique sensitive key paths found in a serialized value.
-#[cfg_attr(not(test), allow(dead_code))]
-pub struct SensitiveFieldScanner {
-    found: HashSet<String>,
-}
-
-impl SensitiveFieldScanner {
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self {
-            found: HashSet::new(),
-        }
-    }
-
-    /// Scan a JSON value and return the set of sensitive field paths found.
-    #[allow(dead_code)]
-    pub fn scan(value: &serde_json::Value) -> HashSet<String> {
-        let mut scanner = Self::new();
-        scanner.walk(value, String::new());
-        scanner.found
-    }
-
-    #[allow(dead_code)]
-    fn walk(&mut self, value: &serde_json::Value, prefix: String) {
-        match value {
-            serde_json::Value::Object(map) => {
-                for (key, val) in map {
-                    let path = if prefix.is_empty() {
-                        key.clone()
-                    } else {
-                        format!("{prefix}.{key}")
-                    };
-                    if is_sensitive_key(key) {
-                        self.found.insert(path.clone());
-                    }
-                    self.walk(val, path);
-                }
-            }
-            serde_json::Value::Array(items) => {
-                for (index, item) in items.iter().enumerate() {
-                    let path = format!("{prefix}[{index}]");
-                    self.walk(item, path);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
 /// Format a body preview for logging: up to `max_chars` characters, with a hash suffix.
 pub fn format_body_preview(body: &str, max_chars: usize) -> String {
     let chars: Vec<char> = body.chars().collect();
@@ -188,46 +107,6 @@ pub fn format_binary_body_preview(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[derive(Serialize)]
-    struct LoginPayload {
-        username: String,
-        password: String,
-        email: String,
-    }
-
-    #[test]
-    fn redacted_hides_sensitive_fields() {
-        let payload = LoginPayload {
-            username: "alice".to_string(),
-            password: "s3cret".to_string(),
-            email: "alice@example.com".to_string(),
-        };
-
-        let redacted = format!("{}", Redacted(&payload));
-        assert!(redacted.contains("[REDACTED]"));
-        assert!(!redacted.contains("s3cret"));
-        assert!(redacted.contains("alice@example.com"));
-    }
-
-    #[test]
-    fn redacted_leaves_clean_payload() {
-        #[derive(Serialize)]
-        struct CleanPayload {
-            id: i32,
-            name: String,
-        }
-
-        let payload = CleanPayload {
-            id: 42,
-            name: "test".to_string(),
-        };
-
-        let redacted = format!("{}", Redacted(&payload));
-        assert!(redacted.contains("42"));
-        assert!(redacted.contains("test"));
-        assert!(!redacted.contains("REDACTED"));
-    }
 
     #[test]
     fn redact_value_nested() {
@@ -294,23 +173,6 @@ mod tests {
             result.iter().find(|(n, _)| n == "x-request-id").unwrap().1,
             "req-123"
         );
-    }
-
-    #[test]
-    fn scanner_finds_sensitive_fields() {
-        let value = serde_json::json!({
-            "user": {
-                "name": "alice",
-                "password": "secret"
-            },
-            "token": "abc"
-        });
-
-        let found = SensitiveFieldScanner::scan(&value);
-
-        assert!(found.contains("user.password"));
-        assert!(found.contains("token"));
-        assert!(!found.contains("user.name"));
     }
 
     #[test]

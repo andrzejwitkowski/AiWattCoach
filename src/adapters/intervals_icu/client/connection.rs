@@ -2,10 +2,7 @@ use reqwest::StatusCode;
 
 use crate::domain::intervals::{BoxFuture, IntervalsConnectionError, IntervalsConnectionTester};
 
-use super::{
-    logging::{execute_request, BodyLoggingMode},
-    IntervalsIcuClient,
-};
+use super::IntervalsIcuClient;
 
 impl IntervalsConnectionTester for IntervalsIcuClient {
     fn test_connection(
@@ -22,13 +19,9 @@ impl IntervalsConnectionTester for IntervalsIcuClient {
             let url = IntervalsIcuClient::athlete_url_impl(&base_url, &athlete_id, "");
 
             let request = client.get(&url).basic_auth("API_KEY", Some(&api_key));
-            let response = execute_request(
-                &client,
-                IntervalsIcuClient::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(|_| IntervalsConnectionError::Unavailable)?;
+            let response = IntervalsIcuClient::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(|_| IntervalsConnectionError::Unavailable)?;
 
             let status = response.status;
 

@@ -83,6 +83,13 @@ impl IntervalsIcuClient {
         request.headers(headers)
     }
 
+    async fn execute_and_log_with_trace_no_body(
+        client: &Client,
+        request: RequestBuilder,
+    ) -> Result<logging::LoggedResponse, reqwest::Error> {
+        logging::execute_and_log_no_body(client, Self::with_trace_context(request)).await
+    }
+
     fn activity_url(&self, activity_id: &str, path: &str) -> String {
         Self::activity_url_impl(&self.base_url, activity_id, path)
     }

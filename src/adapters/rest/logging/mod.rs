@@ -6,7 +6,6 @@ pub use status_class::status_class;
 
 use std::sync::OnceLock;
 
-use axum::{extract::Request, middleware::Next, response::Response};
 use tower::{Layer, Service};
 
 /// Per-endpoint logging configuration.
@@ -35,7 +34,6 @@ impl Default for EndpointLogConfig {
 
 impl EndpointLogConfig {
     /// Full logging: request + response bodies.
-    #[allow(dead_code)]
     pub fn full() -> Self {
         Self {
             log_request_body: true,
@@ -65,18 +63,6 @@ impl EndpointLogConfig {
         self.max_body_bytes = bytes;
         self
     }
-}
-
-/// Middleware that inserts `EndpointLogConfig` into request extensions.
-///
-/// Use with `axum::middleware::from_fn(insert_log_config)` on the router.
-#[allow(dead_code)]
-pub async fn insert_log_config(req: Request, next: Next) -> Response {
-    let mut req = req;
-    if req.extensions().get::<EndpointLogConfig>().is_none() {
-        req.extensions_mut().insert(EndpointLogConfig::default());
-    }
-    next.run(req).await
 }
 
 #[derive(Clone, Debug)]

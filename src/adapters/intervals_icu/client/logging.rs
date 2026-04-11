@@ -25,7 +25,7 @@ pub enum BodyLoggingMode {
     None,
 }
 
-pub async fn execute_request(
+pub async fn execute_and_log(
     client: &reqwest::Client,
     request: RequestBuilder,
     body_logging: BodyLoggingMode,
@@ -33,15 +33,22 @@ pub async fn execute_request(
     let request = request.build()?;
 
     match body_logging {
-        BodyLoggingMode::Full => log_request_response(client, request).await,
-        BodyLoggingMode::None => log_request_response_no_body(client, request).await,
+        BodyLoggingMode::Full => execute_and_log_with_body(client, request).await,
+        BodyLoggingMode::None => execute_and_log_without_body(client, request).await,
     }
+}
+
+pub async fn execute_and_log_no_body(
+    client: &reqwest::Client,
+    request: RequestBuilder,
+) -> Result<LoggedResponse, reqwest::Error> {
+    execute_and_log(client, request, BodyLoggingMode::None).await
 }
 
 /// Logs an outgoing request and response, consuming the response body.
 ///
 /// The body is consumed for logging and then returned in `LoggedResponse`.
-pub async fn log_request_response(
+async fn execute_and_log_with_body(
     client: &reqwest::Client,
     request: Request,
 ) -> Result<LoggedResponse, reqwest::Error> {
@@ -84,7 +91,7 @@ pub async fn log_request_response(
 
 /// Logs an outgoing request and response, but does NOT log body contents.
 /// Useful for large binary payloads (e.g. .fit files).
-pub async fn log_request_response_no_body(
+async fn execute_and_log_without_body(
     client: &reqwest::Client,
     request: Request,
 ) -> Result<LoggedResponse, reqwest::Error> {
@@ -253,43 +260,70 @@ fn log_response(
     body_preview: Option<&str>,
 ) {
     let url = sanitized_url(url);
-    if let Some(body) = body_preview {
-        if status.is_server_error() {
-            tracing::event!(
-                tracing::Level::ERROR,
-                provider = CLIENT_NAME,
-                http.method = %method,
-                http.url = %url,
-                http.status_code = status.as_u16(),
-                latency_ms = latency.as_millis(),
-                response_body = body,
-                "outgoing response"
-            );
-        } else if status.is_client_error() {
-            tracing::event!(
-                tracing::Level::WARN,
-                provider = CLIENT_NAME,
-                http.method = %method,
-                http.url = %url,
-                http.status_code = status.as_u16(),
-                latency_ms = latency.as_millis(),
-                response_body = body,
-                "outgoing response"
-            );
-        } else {
-            tracing::event!(
-                tracing::Level::INFO,
-                provider = CLIENT_NAME,
-                http.method = %method,
-                http.url = %url,
-                http.status_code = status.as_u16(),
-                latency_ms = latency.as_millis(),
-                response_body = body,
-                "outgoing response"
-            );
-        }
-    } else if status.is_server_error() {
-        tracing::event!(
+    match body_preview {
+        Some(body) => log_response_with_body(method, &url, status, latency, body),
+        None => log_response_without_body(method, &url, status, latency),
+    }
+}
+
+fn response_log_level(status: StatusCode) -> tracing::Level {
+    match status {
+        status if status.is_server_error() => tracing::Level::ERROR,
+        status if status.is_client_error() => tracing::Level::WARN,
+        _ => tracing::Level::INFO,
+    }
+}
+
+fn log_response_with_body(
+    method: &Method,
+    url: &str,
+    status: StatusCode,
+    latency: std::time::Duration,
+    body: &str,
+) {
+    match response_log_level(status) {
+        tracing::Level::ERROR => tracing::event!(
+            tracing::Level::ERROR,
+            provider = CLIENT_NAME,
+            http.method = %method,
+            http.url = %url,
+            http.status_code = status.as_u16(),
+            latency_ms = latency.as_millis(),
+            response_body = body,
+            "outgoing response"
+        ),
+        tracing::Level::WARN => tracing::event!(
+            tracing::Level::WARN,
+            provider = CLIENT_NAME,
+            http.method = %method,
+            http.url = %url,
+            http.status_code = status.as_u16(),
+            latency_ms = latency.as_millis(),
+            response_body = body,
+            "outgoing response"
+        ),
+        tracing::Level::INFO => tracing::event!(
+            tracing::Level::INFO,
+            provider = CLIENT_NAME,
+            http.method = %method,
+            http.url = %url,
+            http.status_code = status.as_u16(),
+            latency_ms = latency.as_millis(),
+            response_body = body,
+            "outgoing response"
+        ),
+        _ => unreachable!(),
+    }
+}
+
+fn log_response_without_body(
+    method: &Method,
+    url: &str,
+    status: StatusCode,
+    latency: std::time::Duration,
+) {
+    match response_log_level(status) {
+        tracing::Level::ERROR => tracing::event!(
             tracing::Level::ERROR,
             provider = CLIENT_NAME,
             http.method = %method,
@@ -297,9 +331,8 @@ fn log_response(
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
             "outgoing response (no body)"
-        );
-    } else if status.is_client_error() {
-        tracing::event!(
+        ),
+        tracing::Level::WARN => tracing::event!(
             tracing::Level::WARN,
             provider = CLIENT_NAME,
             http.method = %method,
@@ -307,9 +340,8 @@ fn log_response(
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
             "outgoing response (no body)"
-        );
-    } else {
-        tracing::event!(
+        ),
+        tracing::Level::INFO => tracing::event!(
             tracing::Level::INFO,
             provider = CLIENT_NAME,
             http.method = %method,
@@ -317,7 +349,8 @@ fn log_response(
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
             "outgoing response (no body)"
-        );
+        ),
+        _ => unreachable!(),
     }
 }
 

@@ -13,7 +13,6 @@ use crate::domain::intervals::{
 
 use super::{
     errors::map_connection_error,
-    logging::{execute_request, BodyLoggingMode},
     mapping::{map_activity_response, map_category_to_string, map_event_response},
     truncate_logged_response_body, IntervalsIcuClient,
 };
@@ -43,23 +42,19 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .get(url.clone())
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .query(&[("oldest", &range.oldest), ("newest", &range.newest)]);
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(|error| {
-                let error = map_connection_error(error);
-                tracing::warn!(
-                    provider = "intervals_icu",
-                    method = "GET",
-                    url = %url,
-                    error = %error,
-                    "intervals events transport failure"
-                );
-                error
-            })?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(|error| {
+                    let error = map_connection_error(error);
+                    tracing::warn!(
+                        provider = "intervals_icu",
+                        method = "GET",
+                        url = %url,
+                        error = %error,
+                        "intervals events transport failure"
+                    );
+                    error
+                })?;
 
             if !response.status.is_success() {
                 let failure = super::errors::map_error_response_from_logged_response(response);
@@ -144,13 +139,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let request = client
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(map_connection_error)?;
 
             if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
@@ -202,13 +193,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
                         .and_then(|file| file.file_contents_base64.clone()),
                     filename: file_upload.as_ref().map(|file| file.filename.clone()),
                 });
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(map_connection_error)?;
 
             if !response.status.is_success() {
                 let failure = super::errors::map_error_response_from_logged_response(response);
@@ -278,13 +265,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
                         .and_then(|file| file.file_contents_base64.clone()),
                     filename: file_upload.as_ref().map(|file| file.filename.clone()),
                 });
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(map_connection_error)?;
 
             if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
@@ -336,13 +319,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let request = client
                 .delete(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(map_connection_error)?;
 
             if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
@@ -371,13 +350,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let request = client
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(map_connection_error)?;
 
             if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
@@ -405,13 +380,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .query(&[("oldest", &range.oldest), ("newest", &range.newest)]);
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(map_connection_error)?;
 
             if !response.status.is_success() {
                 return Err(super::errors::map_error_response_from_logged_response(response).error);
@@ -498,13 +469,10 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 multipart::Part::bytes(upload.file_bytes).file_name(upload.filename),
             );
 
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request.multipart(form)),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response =
+                Self::execute_and_log_with_trace_no_body(&client, request.multipart(form))
+                    .await
+                    .map_err(map_connection_error)?;
             let created = response.status == StatusCode::CREATED;
             if !response.status.is_success() {
                 return Err(super::errors::map_error_response_from_logged_response(response).error);
@@ -560,13 +528,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
                     commute: activity.commute,
                     race: activity.race,
                 });
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(map_connection_error)?;
 
             if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
@@ -595,13 +559,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let request = client
                 .delete(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = execute_request(
-                &client,
-                Self::with_trace_context(request),
-                BodyLoggingMode::None,
-            )
-            .await
-            .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+                .await
+                .map_err(map_connection_error)?;
 
             if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);

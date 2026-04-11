@@ -4,7 +4,7 @@ use crate::domain::intervals::{Activity, IntervalsCredentials, IntervalsError};
 
 use super::{
     errors::{map_connection_error, summarize_log_body},
-    logging::{execute_request, BodyLoggingMode, LoggedResponse},
+    logging::LoggedResponse,
     mapping::{
         map_activity_interval, map_activity_interval_group, map_activity_response,
         map_activity_stream, should_persist_stream,
@@ -63,17 +63,13 @@ impl IntervalsIcuClient {
         client: &Client,
         request: RequestBuilder,
     ) -> Result<LoggedResponse, ApiFailure> {
-        let logged = execute_request(
-            client,
-            Self::with_trace_context(request),
-            BodyLoggingMode::None,
-        )
-        .await
-        .map_err(|error| ApiFailure {
-            status: error.status(),
-            error: map_connection_error(error),
-            response_body: None,
-        })?;
+        let logged = Self::execute_and_log_with_trace_no_body(client, request)
+            .await
+            .map_err(|error| ApiFailure {
+                status: error.status(),
+                error: map_connection_error(error),
+                response_body: None,
+            })?;
 
         if logged.status.is_success() {
             return Ok(logged);
