@@ -52,7 +52,7 @@ pub fn redact_value(value: &mut serde_json::Value) {
         serde_json::Value::Object(map) => {
             for (key, val) in map.iter_mut() {
                 if is_sensitive_key(key) {
-                    *val = serde_json::Value::String("[REDACTED]".to_string());
+                    redact_sensitive_child_value(val);
                 } else {
                     redact_value(val);
                 }
@@ -64,6 +64,27 @@ pub fn redact_value(value: &mut serde_json::Value) {
             }
         }
         _ => {}
+    }
+}
+
+fn redact_sensitive_child_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(_) => redact_value(value),
+        serde_json::Value::Array(items) => {
+            for item in items {
+                match item {
+                    serde_json::Value::Object(_) | serde_json::Value::Array(_) => {
+                        redact_sensitive_child_value(item);
+                    }
+                    _ => {
+                        *item = serde_json::Value::String("[REDACTED]".to_string());
+                    }
+                }
+            }
+        }
+        _ => {
+            *value = serde_json::Value::String("[REDACTED]".to_string());
+        }
     }
 }
 
@@ -227,6 +248,19 @@ mod tests {
         assert_eq!(value["user"]["token"], "[REDACTED]");
         assert_eq!(value["data"][0]["api_key"], "[REDACTED]");
         assert_eq!(value["data"][1]["api_key"], "[REDACTED]");
+    }
+
+    #[test]
+    fn redact_value_redacts_scalar_items_under_sensitive_array_key() {
+        let mut value: serde_json::Value = serde_json::json!({
+            "user": ["alice", "bob", {"token": "abc123"}]
+        });
+
+        redact_value(&mut value);
+
+        assert_eq!(value["user"][0], "[REDACTED]");
+        assert_eq!(value["user"][1], "[REDACTED]");
+        assert_eq!(value["user"][2]["token"], "[REDACTED]");
     }
 
     #[test]
