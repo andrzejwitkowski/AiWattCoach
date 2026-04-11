@@ -264,7 +264,13 @@ impl EventCategory {
     }
 
     pub fn from_api_str(value: &str) -> Self {
-        Self::from_str(value).unwrap_or(Self::Other)
+        // Reject upstream-only categories (RACE_A/B/C) that are not part of
+        // the public REST contract. Map unknown values to Other rather than
+        // silently accepting internal-only categories.
+        match value {
+            "RACE_A" | "RACE_B" | "RACE_C" => Self::Other,
+            _ => Self::from_str(value).unwrap_or(Self::Other),
+        }
     }
 
     pub fn from_upstream_str(value: &str) -> Self {
