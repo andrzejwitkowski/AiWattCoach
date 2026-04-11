@@ -25,6 +25,10 @@ vi.mock('../api/workoutSummary', () => ({
   listWorkoutSummaries: vi.fn(),
 }));
 
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
 const eventFixture: IntervalEvent = {
   id: 101,
   startDateLocal: '2026-03-24T09:00:00',
@@ -467,33 +471,52 @@ describe('useWorkoutList', () => {
   });
 
   it('includes past completed workouts and excludes future-dated ones', async () => {
-    vi.mocked(listActivities).mockResolvedValue([
-      {
-        ...activityFixture,
-        id: 'activity-past',
-        name: 'Past Ride',
-        startDateLocal: '2026-04-07T09:00:00',
-        startDate: '2026-04-07T08:00:00Z',
-      },
-      {
-        ...activityFixture,
-        id: 'activity-future',
-        name: 'Future Ride',
-        startDateLocal: '2026-05-01T09:00:00',
-        startDate: '2026-05-01T08:00:00Z',
-      },
-    ]);
-    vi.mocked(listEvents).mockResolvedValue([]);
-    vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+    // Pin time to a specific date to make the test deterministic
+    // April 15, 2026 is a Wednesday
+    const pinnedDate = new Date('2026-04-15T12:00:00Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(pinnedDate);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    try {
+      // April 13 is Monday of the current week (past)
+      // April 20 is Monday of next week (future, outside the visible week)
+      vi.mocked(listActivities).mockResolvedValue([
+        {
+          ...activityFixture,
+          id: 'activity-past',
+          name: 'Past Ride',
+          startDateLocal: '2026-04-13T09:00:00',
+          startDate: '2026-04-13T08:00:00Z',
+        },
+        {
+          ...activityFixture,
+          id: 'activity-future',
+          name: 'Future Ride',
+          startDateLocal: '2026-04-20T09:00:00',
+          startDate: '2026-04-20T08:00:00Z',
+        },
+      ]);
+      vi.mocked(listEvents).mockResolvedValue([]);
+      vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
-    await waitFor(() => {
-      expect(result.current.state).toBe('ready');
-    });
+      const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
 
-    expect(result.current.items).toHaveLength(1);
-    expect(result.current.items[0]?.activity?.id).toBe('activity-past');
-    expect(result.current.items[0]?.startDateLocal).toBe('2026-04-07T09:00:00');
+      // Advance timers to allow async operations to complete
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
+      }, { timeout: 1000 });
+
+      // Only the past activity (April 13) should be visible
+      // The future activity (April 20) is excluded because it's after today (April 15)
+      expect(result.current.items).toHaveLength(1);
+      expect(result.current.items[0]?.activity?.id).toBe('activity-past');
+      expect(result.current.items[0]?.startDateLocal).toBe('2026-04-13T09:00:00');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
