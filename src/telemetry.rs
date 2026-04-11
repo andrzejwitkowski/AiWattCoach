@@ -192,7 +192,7 @@ fn build_log_bridge_layer(
     OpenTelemetryTracingBridge::new(logger_provider)
 }
 
-fn is_sensitive_key(key: &str) -> bool {
+pub fn is_sensitive_key(key: &str) -> bool {
     let lowercase = key.to_ascii_lowercase();
 
     lowercase.contains("password")

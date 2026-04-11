@@ -2,6 +2,7 @@ mod api;
 mod connection;
 mod details;
 mod errors;
+pub mod logging;
 mod mapping;
 
 use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _};
@@ -80,6 +81,13 @@ impl IntervalsIcuClient {
         TraceContextPropagator::new().inject_context(&context, &mut HeaderInjector(&mut headers));
 
         request.headers(headers)
+    }
+
+    async fn execute_and_log_with_trace_no_body(
+        client: &Client,
+        request: RequestBuilder,
+    ) -> Result<logging::LoggedResponse, reqwest::Error> {
+        logging::execute_and_log_no_body(client, Self::with_trace_context(request)).await
     }
 
     fn activity_url(&self, activity_id: &str, path: &str) -> String {

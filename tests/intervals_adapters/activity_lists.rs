@@ -1,9 +1,11 @@
 use aiwattcoach::{
     adapters::intervals_icu::client::IntervalsIcuClient,
-    domain::intervals::{DateRange, IntervalsApiPort},
+    domain::intervals::{DateRange, IntervalsApiPort, IntervalsError},
 };
+use axum::http::StatusCode;
 
 use crate::support::{test_credentials, ResponseActivity, TestIntervalsServer};
+use crate::tracing_capture::capture_tracing_logs;
 
 #[tokio::test]
 async fn intervals_client_lists_activities_and_normalizes_metrics() {
@@ -130,4 +132,73 @@ async fn intervals_client_accepts_single_string_skyline_chart_bytes_in_activity_
         vec!["CAcSAtJFGgFAIgECKAE="]
     );
     assert_eq!(activities[0].stream_types, vec!["temp"]);
+}
+
+#[tokio::test]
+async fn intervals_client_logs_list_activity_requests_without_query_string_leakage() {
+    let server = TestIntervalsServer::start().await;
+    server.push_activity(ResponseActivity::sample("i101", "Tempo Ride"));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let (_activities, logs) = capture_tracing_logs(|| async {
+        client
+            .list_activities(
+                &test_credentials(),
+                &DateRange {
+                    oldest: "2026-03-01".to_string(),
+                    newest: "2026-03-31".to_string(),
+                },
+            )
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(logs.contains("outgoing request"), "logs were: {logs}");
+    assert!(logs.contains("intervals_icu"), "logs were: {logs}");
+    assert!(
+        logs.contains("/api/v1/athlete/athlete-7/activities"),
+        "logs were: {logs}"
+    );
+    assert!(
+        !logs.contains("request_body"),
+        "normal list activity calls should not log request body previews, got: {logs}"
+    );
+    assert!(
+        !logs.contains("response_body"),
+        "normal list activity calls should not log response body previews, got: {logs}"
+    );
+    assert!(
+        !logs.contains("oldest=2026-03-01&newest=2026-03-31"),
+        "logs should not include raw query string, got: {logs}"
+    );
+}
+
+#[tokio::test]
+async fn intervals_client_list_activities_sanitizes_query_string_in_surface_error() {
+    let server = TestIntervalsServer::start().await;
+    server.set_list_activities_raw(serde_json::json!({
+        "error": "bad request"
+    }));
+    server.set_list_activities_status(StatusCode::BAD_REQUEST);
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .list_activities(
+            &test_credentials(),
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-03-31".to_string(),
+            },
+        )
+        .await;
+
+    match result {
+        Err(IntervalsError::ApiError(message)) => {
+            assert!(message.contains("/api/v1/athlete/athlete-7/activities"));
+            assert!(!message.contains("oldest=2026-03-01&newest=2026-03-31"));
+            assert!(message.contains("payload bytes="));
+        }
+        other => panic!("expected api error, got {other:?}"),
+    }
 }

@@ -30,6 +30,7 @@ pub(super) struct ServerState {
     pub(super) list_events_raw: Arc<Mutex<Option<serde_json::Value>>>,
     pub(super) list_activities: Arc<Mutex<Vec<ResponseActivity>>>,
     pub(super) list_activities_raw: Arc<Mutex<Option<serde_json::Value>>>,
+    pub(super) list_activities_status: Arc<Mutex<StatusCode>>,
     pub(super) created_event: Arc<Mutex<Option<ResponseEvent>>>,
     pub(super) created_event_failure: Arc<Mutex<Option<(StatusCode, serde_json::Value)>>>,
     pub(super) updated_event: Arc<Mutex<Option<ResponseEvent>>>,
@@ -41,6 +42,7 @@ pub(super) struct ServerState {
     pub(super) activity_intervals_status: Arc<Mutex<StatusCode>>,
     pub(super) updated_activity: Arc<Mutex<Option<ResponseActivity>>>,
     pub(super) upload_ids: Arc<Mutex<Vec<String>>>,
+    pub(super) upload_failure: Arc<Mutex<Option<(StatusCode, serde_json::Value)>>>,
     pub(super) streams: Arc<Mutex<Vec<ResponseActivityStream>>>,
     pub(super) streams_raw: Arc<Mutex<Option<serde_json::Value>>>,
     pub(super) streams_status: Arc<Mutex<StatusCode>>,
@@ -56,6 +58,7 @@ impl Default for ServerState {
             list_events_raw: Arc::new(Mutex::new(None)),
             list_activities: Arc::new(Mutex::new(Vec::new())),
             list_activities_raw: Arc::new(Mutex::new(None)),
+            list_activities_status: Arc::new(Mutex::new(StatusCode::OK)),
             created_event: Arc::new(Mutex::new(None)),
             created_event_failure: Arc::new(Mutex::new(None)),
             updated_event: Arc::new(Mutex::new(None)),
@@ -67,6 +70,7 @@ impl Default for ServerState {
             activity_intervals_status: Arc::new(Mutex::new(StatusCode::OK)),
             updated_activity: Arc::new(Mutex::new(None)),
             upload_ids: Arc::new(Mutex::new(Vec::new())),
+            upload_failure: Arc::new(Mutex::new(None)),
             streams: Arc::new(Mutex::new(Vec::new())),
             streams_raw: Arc::new(Mutex::new(None)),
             streams_status: Arc::new(Mutex::new(StatusCode::OK)),
@@ -157,12 +161,21 @@ impl TestIntervalsServer {
         *self.state.list_activities_raw.lock().unwrap() = Some(payload);
     }
 
+    pub(crate) fn set_list_activities_status(&self, status: StatusCode) {
+        *self.state.list_activities_status.lock().unwrap() = status;
+    }
+
     pub(crate) fn set_updated_activity(&self, activity: ResponseActivity) {
         *self.state.updated_activity.lock().unwrap() = Some(activity);
     }
 
     pub(crate) fn set_upload_ids(&self, ids: Vec<String>) {
         *self.state.upload_ids.lock().unwrap() = ids;
+        *self.state.upload_failure.lock().unwrap() = None;
+    }
+
+    pub(crate) fn set_upload_failure(&self, status: StatusCode, payload: serde_json::Value) {
+        *self.state.upload_failure.lock().unwrap() = Some((status, payload));
     }
 
     pub(crate) fn set_streams(&self, streams: Vec<ResponseActivityStream>) {

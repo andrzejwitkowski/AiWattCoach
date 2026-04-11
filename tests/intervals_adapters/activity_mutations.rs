@@ -1,12 +1,13 @@
 use aiwattcoach::{
     adapters::intervals_icu::client::IntervalsIcuClient,
-    domain::intervals::{IntervalsApiPort, UpdateActivity, UploadActivity},
+    domain::intervals::{IntervalsApiPort, IntervalsError, UpdateActivity, UploadActivity},
 };
 use axum::http::StatusCode;
 
 use crate::support::{
     test_credentials, ResponseActivity, ResponseActivityStream, TestIntervalsServer,
 };
+use crate::tracing_capture::capture_tracing_logs;
 
 #[tokio::test]
 async fn intervals_client_uploads_activity_and_fetches_uploaded_details() {
@@ -159,4 +160,66 @@ async fn intervals_client_updates_and_deletes_activity() {
     assert_eq!(requests[3].path, "/api/v1/activity/i404/streams");
     assert_eq!(requests[4].method, "DELETE");
     assert_eq!(requests[4].path, "/api/v1/activity/i404");
+}
+
+#[tokio::test]
+async fn intervals_client_upload_logging_avoids_raw_binary_body_output() {
+    let server = TestIntervalsServer::start().await;
+    server.set_upload_ids(vec!["i303".to_string()]);
+    server.set_activity(ResponseActivity::sample("i303", "Uploaded Ride"));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+    let credentials = test_credentials();
+
+    let (_result, logs) = capture_tracing_logs(|| async {
+        client
+            .upload_activity(
+                &credentials,
+                UploadActivity {
+                    filename: "ride.fit".to_string(),
+                    file_bytes: vec![0, 159, 146, 150],
+                    name: Some("Uploaded Ride".to_string()),
+                    description: Some("desc".to_string()),
+                    device_name: Some("Garmin".to_string()),
+                    external_id: Some("ext-303".to_string()),
+                    paired_event_id: Some(9),
+                },
+            )
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(logs.contains("outgoing request"), "logs were: {logs}");
+    assert!(logs.contains("intervals_icu"), "logs were: {logs}");
+    assert!(
+        !logs.contains("[0, 159, 146, 150]"),
+        "logs should not dump raw upload bytes, got: {logs}"
+    );
+}
+
+#[tokio::test]
+async fn intervals_client_upload_maps_upstream_auth_failures_to_credentials_error() {
+    let server = TestIntervalsServer::start().await;
+    server.set_upload_failure(
+        StatusCode::UNAUTHORIZED,
+        serde_json::json!({ "error": "invalid api key" }),
+    );
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .upload_activity(
+            &test_credentials(),
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: None,
+                description: None,
+                device_name: None,
+                external_id: None,
+                paired_event_id: None,
+            },
+        )
+        .await;
+
+    assert_eq!(result, Err(IntervalsError::CredentialsNotConfigured));
 }

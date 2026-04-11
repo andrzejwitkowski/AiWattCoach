@@ -12,7 +12,7 @@ use crate::domain::intervals::{
 };
 
 use super::{
-    errors::{map_api_error, map_connection_error, map_error_response},
+    errors::map_connection_error,
     mapping::{map_activity_response, map_category_to_string, map_event_response},
     truncate_logged_response_body, IntervalsIcuClient,
 };
@@ -38,12 +38,11 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 "sending intervals events request"
             );
 
-            let response = client
+            let request = client
                 .get(url.clone())
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .query(&[("oldest", &range.oldest), ("newest", &range.newest)]);
-            let response = Self::with_trace_context(response)
-                .send()
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(|error| {
                     let error = map_connection_error(error);
@@ -57,8 +56,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
                     error
                 })?;
 
-            if !response.status().is_success() {
-                let failure = map_error_response(response).await;
+            if !response.status.is_success() {
+                let failure = super::errors::map_error_response_from_logged_response(response);
                 tracing::warn!(
                     provider = "intervals_icu",
                     method = "GET",
@@ -75,17 +74,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 return Err(failure.error);
             }
 
-            let response_body = response.text().await.map_err(|error| {
-                let message = error.without_url().to_string();
-                tracing::warn!(
-                    provider = "intervals_icu",
-                    method = "GET",
-                    url = %url,
-                    error = %message,
-                    "intervals events response body read failed"
-                );
-                IntervalsError::ApiError(message)
-            })?;
+            let response_body = String::from_utf8_lossy(&response.body).to_string();
 
             let payload: Vec<Value> = serde_json::from_str(&response_body).map_err(|error| {
                 let message = error.to_string();
@@ -147,20 +136,23 @@ impl IntervalsApiPort for IntervalsIcuClient {
         let url = self.athlete_url(&credentials.athlete_id, &format!("/events/{event_id}"));
 
         Box::pin(async move {
-            let response = client
+            let request = client
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = Self::with_trace_context(response)
-                .send()
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
-            if response.status() == StatusCode::NOT_FOUND {
+            if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
             }
 
-            let response = response.error_for_status().map_err(map_api_error)?;
-            let payload: EventResponse = response.json().await.map_err(map_api_error)?;
+            if !response.status.is_success() {
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
+            }
+
+            let payload: EventResponse = serde_json::from_slice(&response.body)
+                .map_err(|error| IntervalsError::ApiError(error.to_string()))?;
 
             Ok(map_event_response(payload))
         })
@@ -181,7 +173,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let event_name = event.name.clone();
             let workout_doc_preview = event.workout_doc.clone();
             let file_upload = event.file_upload;
-            let response = client
+            let request = client
                 .post(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .json(&CreateEventRequest {
@@ -201,13 +193,12 @@ impl IntervalsApiPort for IntervalsIcuClient {
                         .and_then(|file| file.file_contents_base64.clone()),
                     filename: file_upload.as_ref().map(|file| file.filename.clone()),
                 });
-            let response = Self::with_trace_context(response)
-                .send()
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
-            if !response.status().is_success() {
-                let failure = map_error_response(response).await;
+            if !response.status.is_success() {
+                let failure = super::errors::map_error_response_from_logged_response(response);
                 tracing::warn!(
                     provider = "intervals_icu",
                     method = "POST",
@@ -231,7 +222,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 return Err(failure.error);
             }
 
-            let payload: EventResponse = response.json().await.map_err(map_api_error)?;
+            let payload: EventResponse = serde_json::from_slice(&response.body)
+                .map_err(|error| IntervalsError::ApiError(error.to_string()))?;
 
             Ok(map_event_response(payload))
         })
@@ -253,7 +245,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let event_name = event.name.clone();
             let workout_doc_preview = event.workout_doc.clone();
             let file_upload = event.file_upload;
-            let response = client
+            let request = client
                 .put(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .json(&UpdateEventRequest {
@@ -273,17 +265,16 @@ impl IntervalsApiPort for IntervalsIcuClient {
                         .and_then(|file| file.file_contents_base64.clone()),
                     filename: file_upload.as_ref().map(|file| file.filename.clone()),
                 });
-            let response = Self::with_trace_context(response)
-                .send()
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
-            if response.status() == StatusCode::NOT_FOUND {
+            if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
             }
 
-            if !response.status().is_success() {
-                let failure = map_error_response(response).await;
+            if !response.status.is_success() {
+                let failure = super::errors::map_error_response_from_logged_response(response);
                 tracing::warn!(
                     provider = "intervals_icu",
                     method = "PUT",
@@ -308,7 +299,8 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 return Err(failure.error);
             }
 
-            let payload: EventResponse = response.json().await.map_err(map_api_error)?;
+            let payload: EventResponse = serde_json::from_slice(&response.body)
+                .map_err(|error| IntervalsError::ApiError(error.to_string()))?;
 
             Ok(map_event_response(payload))
         })
@@ -324,19 +316,20 @@ impl IntervalsApiPort for IntervalsIcuClient {
         let url = self.athlete_url(&credentials.athlete_id, &format!("/events/{event_id}"));
 
         Box::pin(async move {
-            let response = client
+            let request = client
                 .delete(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = Self::with_trace_context(response)
-                .send()
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
-            if response.status() == StatusCode::NOT_FOUND {
+            if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
             }
 
-            response.error_for_status().map_err(map_api_error)?;
+            if !response.status.is_success() {
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
+            }
             Ok(())
         })
     }
@@ -354,21 +347,21 @@ impl IntervalsApiPort for IntervalsIcuClient {
         );
 
         Box::pin(async move {
-            let response = client
+            let request = client
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = Self::with_trace_context(response)
-                .send()
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
-            if response.status() == StatusCode::NOT_FOUND {
+            if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
             }
 
-            let response = response.error_for_status().map_err(map_api_error)?;
-            let bytes = response.bytes().await.map_err(map_connection_error)?;
-            Ok(bytes.to_vec())
+            if !response.status.is_success() {
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
+            }
+            Ok(response.body.to_vec())
         })
     }
 
@@ -383,16 +376,20 @@ impl IntervalsApiPort for IntervalsIcuClient {
         let url = self.athlete_url(&credentials.athlete_id, "/activities");
 
         Box::pin(async move {
-            let response = client
+            let request = client
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key))
-                .query(&[("oldest", &range.oldest), ("newest", &range.newest)])
-                .send()
+                .query(&[("oldest", &range.oldest), ("newest", &range.newest)]);
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
-            let response = response.error_for_status().map_err(map_api_error)?;
-            let payload: Vec<Value> = response.json().await.map_err(map_api_error)?;
+            if !response.status.is_success() {
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
+            }
+
+            let payload: Vec<Value> = serde_json::from_slice(&response.body)
+                .map_err(|error| IntervalsError::ApiError(error.to_string()))?;
 
             Ok(payload
                 .into_iter()
@@ -472,14 +469,16 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 multipart::Part::bytes(upload.file_bytes).file_name(upload.filename),
             );
 
-            let response = request
-                .multipart(form)
-                .send()
-                .await
-                .map_err(map_connection_error)?;
-            let created = response.status() == StatusCode::CREATED;
-            let response = response.error_for_status().map_err(map_api_error)?;
-            let payload: UploadResponse = response.json().await.map_err(map_api_error)?;
+            let response =
+                Self::execute_and_log_with_trace_no_body(&client, request.multipart(form))
+                    .await
+                    .map_err(map_connection_error)?;
+            let created = response.status == StatusCode::CREATED;
+            if !response.status.is_success() {
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
+            }
+            let payload: UploadResponse = serde_json::from_slice(&response.body)
+                .map_err(|error| IntervalsError::ApiError(error.to_string()))?;
             let activity_ids: Vec<String> = payload
                 .activities
                 .unwrap_or_default()
@@ -518,7 +517,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
         let url = self.activity_url(&activity_id, "");
 
         Box::pin(async move {
-            let response = client
+            let request = client
                 .put(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .json(&UpdateActivityRequest {
@@ -528,17 +527,20 @@ impl IntervalsApiPort for IntervalsIcuClient {
                     trainer: activity.trainer,
                     commute: activity.commute,
                     race: activity.race,
-                })
-                .send()
+                });
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
-            if response.status() == StatusCode::NOT_FOUND {
+            if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
             }
 
-            let response = response.error_for_status().map_err(map_api_error)?;
-            let _: ActivityResponse = response.json().await.map_err(map_api_error)?;
+            if !response.status.is_success() {
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
+            }
+            let _: ActivityResponse = serde_json::from_slice(&response.body)
+                .map_err(|error| IntervalsError::ApiError(error.to_string()))?;
             Self::fetch_activity_details(client, base_url, credentials, activity_id).await
         })
     }
@@ -554,18 +556,20 @@ impl IntervalsApiPort for IntervalsIcuClient {
         let url = self.activity_url(&activity_id, "");
 
         Box::pin(async move {
-            let response = client
+            let request = client
                 .delete(url)
-                .basic_auth("API_KEY", Some(&credentials.api_key))
-                .send()
+                .basic_auth("API_KEY", Some(&credentials.api_key));
+            let response = Self::execute_and_log_with_trace_no_body(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
-            if response.status() == StatusCode::NOT_FOUND {
+            if response.status == StatusCode::NOT_FOUND {
                 return Err(IntervalsError::NotFound);
             }
 
-            response.error_for_status().map_err(map_api_error)?;
+            if !response.status.is_success() {
+                return Err(super::errors::map_error_response_from_logged_response(response).error);
+            }
             Ok(())
         })
     }

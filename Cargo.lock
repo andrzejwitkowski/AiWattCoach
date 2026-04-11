@@ -30,6 +30,7 @@ version = "0.1.0"
 dependencies = [
  "axum 0.8.8",
  "base64",
+ "bytes",
  "chrono",
  "dotenvy",
  "fitparser",
