@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { listCalendarLabels } from '../api/calendar';
 import { listActivities, listCalendarEvents } from '../../intervals/api/intervals';
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
@@ -12,6 +13,7 @@ import {
 } from '../constants';
 import type {
   CalendarDataState,
+  CalendarLabel,
   CalendarDay,
   CalendarScrollAdjustment,
   CalendarWeek,
@@ -86,24 +88,33 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
   const loadRange = useCallback(async (startMonday: Date, count: number) => {
     const range = formatDateRange(startMonday, count);
-    const [events, activities] = await Promise.all([
+    const [events, activities, labels] = await Promise.all([
       listCalendarEvents(apiBaseUrl, range),
       listActivities(apiBaseUrl, range),
+      listCalendarLabels(apiBaseUrl, range),
     ]);
 
-    return { events, activities };
+    return { events, activities, labels };
   }, [apiBaseUrl]);
 
-  const hydrateWeeks = useCallback((startMonday: Date, count: number, events: IntervalEvent[], activities: IntervalActivity[], status: CalendarWeekStatus) => {
+  const hydrateWeeks = useCallback((
+    startMonday: Date,
+    count: number,
+    events: IntervalEvent[],
+    activities: IntervalActivity[],
+    labels: Record<string, Record<string, CalendarLabel>>,
+    status: CalendarWeekStatus,
+  ) => {
     const retainedWeekKeys = createRetainedWeekKeySet(windowStartRef.current);
     const eventsByDateKey = groupItemsByDateKey(events, (event) => extractDateKey(event.startDateLocal));
     const activitiesByDateKey = groupItemsByDateKey(activities, (activity) => extractDateKey(activity.startDateLocal));
+    const labelsByDateKey = groupLabelsByDateKey(labels);
 
     setStore((current) => {
       const next = new Map(current);
       for (let index = 0; index < count; index += 1) {
         const mondayDate = addWeeks(startMonday, index);
-        const week = buildCalendarWeek(mondayDate, eventsByDateKey, activitiesByDateKey, status);
+        const week = buildCalendarWeek(mondayDate, eventsByDateKey, activitiesByDateKey, labelsByDateKey, status);
         if (retainedWeekKeys.has(week.weekKey)) {
           next.set(week.weekKey, week);
           loadedWeekKeysRef.current.add(week.weekKey);
@@ -151,8 +162,8 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
       markWeeks(batchStart, batchCount, placeholderStatus);
 
       try {
-        const { events, activities } = await loadRange(batchStart, batchCount);
-        hydrateWeeks(batchStart, batchCount, events, activities, 'loaded');
+        const { events, activities, labels } = await loadRange(batchStart, batchCount);
+        hydrateWeeks(batchStart, batchCount, events, activities, labels.labelsByDate, 'loaded');
         setState('ready');
       } catch (error) {
         setStore((current) => {
@@ -305,12 +316,13 @@ function buildCalendarWeek(
   mondayDate: Date,
   eventsByDateKey: Map<string, IntervalEvent[]>,
   activitiesByDateKey: Map<string, IntervalActivity[]>,
+  labelsByDateKey: Map<string, CalendarLabel[]>,
   status: CalendarWeekStatus,
 ): CalendarWeek {
   const weekDates = generateWeekDates(mondayDate);
   const weekDateKeys = weekDates.map(toDateKey);
   const weekActivities = weekDateKeys.flatMap((dateKey) => activitiesByDateKey.get(dateKey) ?? []);
-  const days = weekDates.map((date) => buildCalendarDay(date, eventsByDateKey, activitiesByDateKey));
+  const days = weekDates.map((date) => buildCalendarDay(date, eventsByDateKey, activitiesByDateKey, labelsByDateKey));
 
   return {
     weekNumber: getWeekNumber(mondayDate),
@@ -333,6 +345,7 @@ function buildCalendarDay(
   date: Date,
   eventsByDateKey: Map<string, IntervalEvent[]>,
   activitiesByDateKey: Map<string, IntervalActivity[]>,
+  labelsByDateKey: Map<string, CalendarLabel[]>,
 ): CalendarDay {
   const dateKey = toDateKey(date);
 
@@ -341,7 +354,18 @@ function buildCalendarDay(
     dateKey,
     events: eventsByDateKey.get(dateKey) ?? [],
     activities: activitiesByDateKey.get(dateKey) ?? [],
+    labels: labelsByDateKey.get(dateKey) ?? [],
   };
+}
+
+function groupLabelsByDateKey(labelsByDate: Record<string, Record<string, CalendarLabel>>): Map<string, CalendarLabel[]> {
+  const grouped = new Map<string, CalendarLabel[]>();
+
+  for (const [dateKey, labels] of Object.entries(labelsByDate)) {
+    grouped.set(dateKey, Object.values(labels));
+  }
+
+  return grouped;
 }
 
 function groupItemsByDateKey<T>(items: T[], getDateKey: (item: T) => string): Map<string, T[]> {
@@ -370,6 +394,7 @@ function createPlaceholderWeek(mondayDate: Date, status: CalendarWeekStatus): Ca
       dateKey: toDateKey(date),
       events: [],
       activities: [],
+      labels: [],
     })),
     summary: {
       totalTss: 0,

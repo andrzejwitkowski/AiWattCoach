@@ -87,6 +87,63 @@ async fn list_events_returns_events_for_authenticated_user() {
 }
 
 #[tokio::test]
+async fn list_events_parse_event_definition_from_description_when_workout_doc_is_blank() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_events(vec![aiwattcoach::domain::intervals::Event {
+            id: 12,
+            start_date_local: "2026-03-22".to_string(),
+            event_type: Some("Ride".to_string()),
+            name: Some("Fallback Workout".to_string()),
+            category: aiwattcoach::domain::intervals::EventCategory::Workout,
+            description: Some("- 12min 60%".to_string()),
+            indoor: true,
+            color: None,
+            workout_doc: Some("  \n\t ".to_string()),
+        }]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/intervals/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    let event = &body.as_array().unwrap()[0];
+    assert_eq!(
+        event
+            .get("eventDefinition")
+            .unwrap()
+            .get("intervals")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .get("definition")
+            .unwrap()
+            .as_str(),
+        Some("- 12min 60%")
+    );
+    assert_eq!(
+        event
+            .get("eventDefinition")
+            .unwrap()
+            .get("rawWorkoutDoc")
+            .unwrap()
+            .as_str(),
+        Some("  \n\t ")
+    );
+}
+
+#[tokio::test]
 async fn list_events_returns_422_when_credentials_not_configured() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),

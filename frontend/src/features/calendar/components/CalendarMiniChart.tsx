@@ -6,7 +6,7 @@ type ChartBar = {
 
 type CalendarMiniChartProps = {
   bars: Array<number | ChartBar>;
-  tone: 'primary' | 'secondary' | 'error' | 'anaerobic' | 'muted';
+  tone: 'primary' | 'secondary' | 'error' | 'anaerobic' | 'muted' | 'race';
 };
 
 const TONE_CLASS: Record<CalendarMiniChartProps['tone'], string> = {
@@ -15,6 +15,7 @@ const TONE_CLASS: Record<CalendarMiniChartProps['tone'], string> = {
   error: 'bg-[#ff7351]',
   anaerobic: 'bg-[#800020]',
   muted: 'bg-slate-700',
+  race: 'bg-[#d49c45]',
 };
 
 export function CalendarMiniChart({ bars, tone }: CalendarMiniChartProps) {

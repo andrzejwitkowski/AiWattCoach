@@ -88,7 +88,8 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
             : event?.name
                 ?? selection.event?.name
                 ?? t('calendar.workout');
-    const showFitDownload = Boolean(event && !isCompleted);
+    const hasIntervalsEventId = Boolean(event && event.id > 0 && (event.plannedSource !== 'predicted' || event.linkedIntervalsEventId));
+    const showFitDownload = Boolean(event && !isCompleted && hasIntervalsEventId);
 
     const handleDownloadFit = async () => {
         if (!event || downloadingFit) {
@@ -97,13 +98,14 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
 
         try {
             setDownloadingFit(true);
-            const fitBytes = await downloadFit(apiBaseUrl, event.id);
+            const downloadEventId = event.linkedIntervalsEventId ?? event.id;
+            const fitBytes = await downloadFit(apiBaseUrl, downloadEventId);
             const fitFileBytes = Uint8Array.from(fitBytes);
             const blob = new Blob([fitFileBytes], {type: 'application/octet-stream'});
             const objectUrl = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = objectUrl;
-            link.download = `event-${event.id}.fit`;
+            link.download = `event-${downloadEventId}.fit`;
             link.click();
             window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
         } catch (error: unknown) {
@@ -188,16 +190,35 @@ function mergeSelectedEvent(
         return selectedEvent;
     }
 
-    if (selectedEvent.plannedSource !== 'predicted') {
-        return loadedEvent;
-    }
-
     return {
         ...loadedEvent,
+        eventDefinition: hasMeaningfulEventDefinition(loadedEvent.eventDefinition)
+            ? loadedEvent.eventDefinition
+            : mergeEventDefinitions(selectedEvent.eventDefinition, loadedEvent.eventDefinition),
         calendarEntryId: selectedEvent.calendarEntryId,
         plannedSource: selectedEvent.plannedSource,
         syncStatus: selectedEvent.syncStatus,
-        linkedIntervalsEventId: selectedEvent.linkedIntervalsEventId,
+        linkedIntervalsEventId: selectedEvent.linkedIntervalsEventId ?? loadedEvent.linkedIntervalsEventId,
         projectedWorkout: selectedEvent.projectedWorkout,
+    };
+}
+
+function hasMeaningfulEventDefinition(eventDefinition: IntervalEvent['eventDefinition']): boolean {
+    return (
+        eventDefinition.intervals.length > 0
+        || eventDefinition.segments.length > 0
+    );
+}
+
+function mergeEventDefinitions(
+    selectedDefinition: IntervalEvent['eventDefinition'],
+    loadedDefinition: IntervalEvent['eventDefinition'],
+): IntervalEvent['eventDefinition'] {
+    return {
+        ...loadedDefinition,
+        rawWorkoutDoc: loadedDefinition.rawWorkoutDoc ?? selectedDefinition.rawWorkoutDoc,
+        intervals: selectedDefinition.intervals,
+        segments: selectedDefinition.segments,
+        summary: selectedDefinition.summary,
     };
 }

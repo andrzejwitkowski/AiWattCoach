@@ -253,6 +253,9 @@ impl EventCategory {
         match self {
             Self::Workout => "WORKOUT",
             Self::Race => "RACE",
+            Self::RaceA => "RACE_A",
+            Self::RaceB => "RACE_B",
+            Self::RaceC => "RACE_C",
             Self::Note => "NOTE",
             Self::Target => "TARGET",
             Self::Season => "SEASON",
@@ -261,7 +264,22 @@ impl EventCategory {
     }
 
     pub fn from_api_str(value: &str) -> Self {
-        Self::from_str(value).unwrap_or(Self::Other)
+        // Reject upstream-only categories (RACE_A/B/C) that are not part of
+        // the public REST contract. Map unknown values to Other rather than
+        // silently accepting internal-only categories.
+        match value {
+            "RACE_A" | "RACE_B" | "RACE_C" => Self::Other,
+            _ => Self::from_str(value).unwrap_or(Self::Other),
+        }
+    }
+
+    pub fn from_upstream_str(value: &str) -> Self {
+        match value {
+            "RACE_A" => Self::RaceA,
+            "RACE_B" => Self::RaceB,
+            "RACE_C" => Self::RaceC,
+            other => Self::from_api_str(other),
+        }
     }
 }
 
@@ -272,6 +290,9 @@ impl FromStr for EventCategory {
         match value {
             "WORKOUT" => Ok(Self::Workout),
             "RACE" => Ok(Self::Race),
+            "RACE_A" => Ok(Self::RaceA),
+            "RACE_B" => Ok(Self::RaceB),
+            "RACE_C" => Ok(Self::RaceC),
             "NOTE" => Ok(Self::Note),
             "TARGET" => Ok(Self::Target),
             "SEASON" => Ok(Self::Season),
@@ -292,6 +313,9 @@ pub struct IntervalsCredentials {
 pub enum EventCategory {
     Workout,
     Race,
+    RaceA,
+    RaceB,
+    RaceC,
     Note,
     Target,
     Season,
@@ -310,6 +334,19 @@ pub struct Event {
     pub indoor: bool,
     pub color: Option<String>,
     pub workout_doc: Option<String>,
+}
+
+impl Event {
+    pub fn structured_workout_text(&self) -> Option<&str> {
+        self.workout_doc
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                self.description
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+            })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

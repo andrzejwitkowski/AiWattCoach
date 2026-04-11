@@ -1,8 +1,6 @@
 use crate::domain::{
     identity::{Clock, IdGenerator},
-    intervals::{
-        CreateEvent, DateRange, EventCategory, IntervalsError, IntervalsUseCases, UpdateEvent,
-    },
+    intervals::{CreateEvent, DateRange, IntervalsError, IntervalsUseCases, UpdateEvent},
 };
 
 use super::{BoxFuture, CreateRace, Race, RaceError, RaceRepository, RaceUseCases, UpdateRace};
@@ -127,7 +125,7 @@ where
                         &pending.user_id,
                         event_id,
                         UpdateEvent {
-                            category: Some(EventCategory::Race),
+                            category: Some(projected_event_category(&pending)),
                             start_date_local: Some(projected_event_start_date_local(&pending.date)),
                             event_type: Some(projected_event_type(&pending).to_string()),
                             name: Some(projected_event_name(&pending)),
@@ -145,7 +143,7 @@ where
                     .create_event(
                         &pending.user_id,
                         CreateEvent {
-                            category: EventCategory::Race,
+                            category: projected_event_category(&pending),
                             start_date_local: projected_event_start_date_local(&pending.date),
                             event_type: Some(projected_event_type(&pending).to_string()),
                             name: Some(projected_event_name(&pending)),
@@ -329,6 +327,14 @@ fn projected_event_type(race: &Race) -> &'static str {
         super::RaceDiscipline::Gravel => "Ride",
         super::RaceDiscipline::Cyclocross => "Ride",
         super::RaceDiscipline::Timetrial => "Ride",
+    }
+}
+
+fn projected_event_category(race: &Race) -> crate::domain::intervals::EventCategory {
+    match race.priority {
+        super::RacePriority::A => crate::domain::intervals::EventCategory::RaceA,
+        super::RacePriority::B => crate::domain::intervals::EventCategory::RaceB,
+        super::RacePriority::C => crate::domain::intervals::EventCategory::RaceC,
     }
 }
 

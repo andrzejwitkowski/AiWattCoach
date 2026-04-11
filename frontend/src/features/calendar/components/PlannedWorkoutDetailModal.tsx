@@ -34,6 +34,7 @@ export function PlannedWorkoutDetailModal({
   const {t} = useTranslation();
   const bars = buildPlannedWorkoutBars(event);
   const structureItems = buildPlannedWorkoutStructureItems(event);
+  const rawWorkoutNoteLines = buildRawWorkoutNoteLines(event.eventDefinition.rawWorkoutDoc);
   const summary = event.eventDefinition.summary;
   const powerSeries = buildPlannedWorkoutPowerSeries(event);
   const chartIntervals = buildPlannedWorkoutChartIntervals(event);
@@ -43,7 +44,7 @@ export function PlannedWorkoutDetailModal({
     ? (hoveredIntervalKey ?? selectedIntervalKey)
     : null;
   const activeInterval = chartIntervals.find((interval) => interval.id === highlightedIntervalKey) ?? null;
-  const syncStatus = event.syncStatus ?? 'unsynced';
+  const syncStatus = event.plannedSource === 'predicted' ? (event.syncStatus ?? 'unsynced') : null;
   const canSync = Boolean(event.projectedWorkout);
 
   useEffect(() => {
@@ -85,9 +86,11 @@ export function PlannedWorkoutDetailModal({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
-          {syncBadgeLabel(syncStatus, t)}
-        </span>
+        {syncStatus ? (
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
+            {syncBadgeLabel(syncStatus, t)}
+          </span>
+        ) : null}
         {syncStatus === 'modified' ? (
           <span className="rounded-full border border-[#ffb86a]/25 bg-[#ffb86a]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffd7a1]">
             {t('calendar.scheduleChanged')}
@@ -165,6 +168,16 @@ export function PlannedWorkoutDetailModal({
           </div>
         </div>
       ) : null}
+      {rawWorkoutNoteLines.length > 0 ? (
+        <div className="rounded-2xl border border-white/6 bg-[#171a1d] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">{t('calendar.workoutNotes')}</p>
+          <div className="mt-4 space-y-2">
+            {rawWorkoutNoteLines.map((line, index) => (
+              <p key={`${index}-${line}`} className="text-sm text-slate-300">{line}</p>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {syncStatus === 'failed' ? (
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
           {t('calendar.syncFailedMessage')}
@@ -172,6 +185,16 @@ export function PlannedWorkoutDetailModal({
       ) : null}
     </div>
   );
+}
+
+function buildRawWorkoutNoteLines(rawWorkoutDoc: string | null): string[] {
+  const lines = (rawWorkoutDoc ?? '')
+    .split('\n')
+    .map((line) => line.replace(/^[-*]\s*/, '').trim())
+    .filter(Boolean)
+    .filter((line) => !/^\d+\s*x\b/i.test(line) && !/%\s*ftp\b/i.test(line));
+
+  return lines.length > 1 ? lines : [];
 }
 
 function syncBadgeLabel(syncStatus: NonNullable<IntervalEvent['syncStatus']>, t: ReturnType<typeof useTranslation>['t']) {

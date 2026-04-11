@@ -14,6 +14,7 @@ import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { AICoachPage } from './pages/AICoachPage';
 import { LandingPage } from './pages/LandingPage';
+import { RacesPage } from './pages/RacesPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 import { loadBackendStatus, type BackendStatus } from './lib/api/system';
@@ -89,6 +90,7 @@ export function App() {
               <Route element={<AppHomePage />} path="/app" />
               <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
               <Route element={<CalendarPage apiBaseUrl={API_BASE_URL} />} path="/calendar" />
+              <Route element={<RacesPage apiBaseUrl={API_BASE_URL} />} path="/races" />
               <Route element={<AICoachPage apiBaseUrl={API_BASE_URL} />} path="/ai-coach" />
               <Route element={<RequireRole role="admin" />}>
                 <Route

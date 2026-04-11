@@ -140,4 +140,83 @@ describe('CalendarDayCell charts', () => {
     expect(firstBar.style.flexGrow).toBe('1200');
     expect(secondBar.style.flexGrow).toBe('300');
   });
+
+  it('renders race mini-chart bars from race labels', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 28),
+      dateKey: '2026-03-28',
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Road Challenge',
+          subtitle: '95 km • Kat. B',
+          payload: {
+            raceId: 'race-2',
+            date: '2026-03-28',
+            name: 'Road Challenge',
+            distanceMeters: 95000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'pending',
+            linkedIntervalsEventId: null,
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const chartBars = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
+
+    expect(chartBars.length).toBe(3);
+    expect(chartBars[0]?.style.backgroundColor).toBe('rgb(240, 211, 155)');
+    expect(chartBars[1]?.style.backgroundColor).toBe('rgb(212, 156, 69)');
+    expect(chartBars[2]?.style.backgroundColor).toBe('rgb(141, 93, 35)');
+  });
+
+  it('renders both compact prep bars and race bars on a race day with opener workout', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 12),
+      dateKey: '2026-04-12',
+      events: [
+        makeEvent({
+          id: 51,
+          name: 'Opener Grojec',
+          eventDefinition: makeEventDefinition({
+            segments: [
+              makeWorkoutSegment({ order: 1, label: 'Warmup', durationSeconds: 600, endOffsetSeconds: 600, targetPercentFtp: 70, zoneId: 2 }),
+              makeWorkoutSegment({ order: 2, label: 'Openers', durationSeconds: 300, startOffsetSeconds: 600, endOffsetSeconds: 900, targetPercentFtp: 100, zoneId: 4 }),
+              makeWorkoutSegment({ order: 3, label: 'Primers', durationSeconds: 240, startOffsetSeconds: 900, endOffsetSeconds: 1140, targetPercentFtp: 120, zoneId: 5 }),
+            ],
+            summary: makeWorkoutSummary({ totalSegments: 3, totalDurationSeconds: 1140, estimatedTrainingStressScore: 16 }),
+          }),
+        }),
+      ],
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Grojec',
+          subtitle: '52 km • Kat. B',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-04-12',
+            name: 'Grojec',
+            distanceMeters: 52000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 99,
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const chartBars = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
+    const backgroundColors = chartBars.map((bar) => bar.style.backgroundColor).filter(Boolean);
+
+    expect(chartBars.length).toBe(6);
+    expect(backgroundColors).toContain('rgb(0, 227, 253)');
+    expect(backgroundColors).toContain('rgb(240, 211, 155)');
+    expect(backgroundColors).toContain('rgb(212, 156, 69)');
+  });
 });

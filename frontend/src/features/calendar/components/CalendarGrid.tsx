@@ -12,8 +12,12 @@ import {
   CALENDAR_WEEK_ROW_GAP,
 } from '../constants';
 import { useCalendarData } from '../hooks/useCalendarData';
+import { selectDayItemDetail, type CalendarDayItemsSelection } from '../dayItems';
+import type { CalendarRaceLabel } from '../types';
 import type { WorkoutDetailSelection } from '../workoutDetails';
 import { CalendarPerformanceCards } from './CalendarPerformanceCards';
+import { DayItemsModal } from './DayItemsModal';
+import { RaceDayDetailModal } from './RaceDayDetailModal';
 import { WorkoutDetailModal } from './WorkoutDetailModal';
 import { CalendarWeekDayHeader } from './CalendarWeekDayHeader';
 import { CalendarWeekSection } from './CalendarWeekSection';
@@ -36,11 +40,31 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
     loadMoreFuture,
   } = useCalendarData({ apiBaseUrl });
   const [selection, setSelection] = useState<WorkoutDetailSelection | null>(null);
+  const [dayItemsSelection, setDayItemsSelection] = useState<CalendarDayItemsSelection | null>(null);
+  const [raceSelection, setRaceSelection] = useState<CalendarRaceLabel | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const appliedAdjustmentVersionRef = useRef(0);
   const initializingScrollRef = useRef(true);
   const pendingAnchorRef = useRef<{ weekKey: string; top: number } | null>(null);
   const edgeLockRef = useRef<{ edge: 'top' | 'bottom'; releaseScrollTop: number } | null>(null);
+
+  const handleSelectWorkout = useCallback((nextSelection: WorkoutDetailSelection) => {
+    setDayItemsSelection(null);
+    setRaceSelection(null);
+    setSelection(nextSelection);
+  }, []);
+
+  const handleSelectDayItems = useCallback((nextSelection: CalendarDayItemsSelection) => {
+    setSelection(null);
+    setRaceSelection(null);
+    setDayItemsSelection(nextSelection);
+  }, []);
+
+  const handleSelectRace = useCallback((nextRace: CalendarRaceLabel) => {
+    setSelection(null);
+    setDayItemsSelection(null);
+    setRaceSelection(nextRace);
+  }, []);
 
   const visibleRangeLabel = useMemo(() => {
     const firstWeek = weeks[0];
@@ -211,9 +235,14 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
               <CalendarWeekDayHeader />
               <div className="mt-8 space-y-10">
                 {renderedWeeks.length > 0 ? (
-                    renderedWeeks.map((week) => (
+                      renderedWeeks.map((week) => (
                       <div key={week.weekKey} data-week-key={week.weekKey}>
-                      <CalendarWeekSection week={week} onSelectWorkout={setSelection} />
+                      <CalendarWeekSection
+                        week={week}
+                        onSelectWorkout={handleSelectWorkout}
+                        onSelectDayItems={handleSelectDayItems}
+                        onSelectRace={handleSelectRace}
+                      />
                       </div>
                     ))
                 ) : (
@@ -228,6 +257,24 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       </div>
 
       <CalendarPerformanceCards />
+      <DayItemsModal
+        selection={dayItemsSelection}
+        onClose={() => setDayItemsSelection(null)}
+        onSelectItem={(item) => {
+          setDayItemsSelection(null);
+          setSelection(null);
+          if (item.kind === 'race') {
+            handleSelectRace(item.race);
+            return;
+          }
+
+          const nextSelection = selectDayItemDetail(item);
+          if (nextSelection) {
+            handleSelectWorkout(nextSelection);
+          }
+        }}
+      />
+      <RaceDayDetailModal selection={raceSelection} onClose={() => setRaceSelection(null)} />
       <WorkoutDetailModal apiBaseUrl={apiBaseUrl} selection={selection} onClose={() => setSelection(null)} />
     </section>
   );

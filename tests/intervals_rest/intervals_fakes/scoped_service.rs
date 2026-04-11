@@ -73,7 +73,7 @@ impl IntervalsUseCases for ScopedIntervalsService {
         let user_id = user_id.to_string();
         Box::pin(async move {
             let event = service.get_event(&user_id, event_id).await?;
-            let parsed_workout = parse_workout_doc(event.workout_doc.as_deref(), None);
+            let parsed_workout = parse_workout_doc(event.structured_workout_text(), None);
             Ok(EnrichedEvent {
                 event,
                 parsed_workout,

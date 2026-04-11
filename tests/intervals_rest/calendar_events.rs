@@ -83,6 +83,130 @@ async fn list_calendar_events_returns_intervals_events_for_authenticated_user() 
 }
 
 #[tokio::test]
+async fn list_calendar_events_parse_event_definition_from_description_when_workout_doc_is_blank() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_events(vec![Event {
+            id: 12,
+            start_date_local: "2026-03-22".to_string(),
+            event_type: Some("Ride".to_string()),
+            name: Some("Fallback Workout".to_string()),
+            category: EventCategory::Workout,
+            description: Some("- 12min 60%".to_string()),
+            indoor: true,
+            color: None,
+            workout_doc: Some("  \n\t ".to_string()),
+        }]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    let event = &body.as_array().unwrap()[0];
+    assert_eq!(
+        event
+            .get("eventDefinition")
+            .unwrap()
+            .get("intervals")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .get("definition")
+            .unwrap()
+            .as_str(),
+        Some("- 12min 60%")
+    );
+    assert_eq!(
+        event
+            .get("eventDefinition")
+            .unwrap()
+            .get("rawWorkoutDoc")
+            .unwrap()
+            .as_str(),
+        Some("  \n\t ")
+    );
+}
+
+#[tokio::test]
+async fn list_calendar_events_normalizes_priority_race_categories_for_rest_clients() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::with_events(vec![Event {
+            id: 11,
+            start_date_local: "2026-03-22".to_string(),
+            event_type: Some("Ride".to_string()),
+            name: Some("Priority Race".to_string()),
+            category: EventCategory::RaceB,
+            description: None,
+            indoor: false,
+            color: None,
+            workout_doc: None,
+        }]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    let event = &body.as_array().unwrap()[0];
+    assert_eq!(event.get("category").unwrap().as_str(), Some("RACE"));
+}
+
+#[tokio::test]
+async fn create_event_rejects_priority_race_categories_for_rest_clients() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let request_body = serde_json::json!({
+        "category": "RACE_B",
+        "startDateLocal": "2026-03-25",
+        "name": "Priority Race",
+        "indoor": false
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/intervals/events")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn list_calendar_events_reports_missing_credentials_as_unprocessable_entity() {
     let app = intervals_test_app(
         TestIdentityServiceWithSession::default(),

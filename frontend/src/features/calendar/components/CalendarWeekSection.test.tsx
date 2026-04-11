@@ -6,6 +6,32 @@ import '../../../i18n';
 import type { CalendarWeek } from '../types';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
+vi.mock('react-i18next', async () => {
+  const actual = await vi.importActual<typeof import('react-i18next')>('react-i18next');
+
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => {
+        switch (key) {
+          case 'calendar.fetchingData':
+            return 'Fetching data';
+          case 'calendar.plannedWorkout':
+            return 'Planned Workout';
+          case 'calendar.workout':
+            return 'Workout';
+          default:
+            return key;
+        }
+      },
+      i18n: {
+        resolvedLanguage: 'en',
+        language: 'en',
+      },
+    }),
+  };
+});
+
 function emptyEventDefinition() {
   return {
     rawWorkoutDoc: null,
@@ -32,6 +58,7 @@ function createWeek(status: CalendarWeek['status']): CalendarWeek {
       dateKey: `2026-03-${String(23 + index).padStart(2, '0')}`,
       events: [],
       activities: [],
+      labels: [],
     })),
     summary: {
       totalTss: 0,
@@ -139,14 +166,19 @@ describe('CalendarWeekSection', () => {
     };
 
     const onSelectWorkout = vi.fn();
-    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+    const onSelectDayItems = vi.fn();
+    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />);
 
     await userEvent.click(screen.getByRole('button', { name: /unrelated ride/i }));
 
-    expect(onSelectWorkout).toHaveBeenCalledWith({
+    expect(onSelectWorkout).not.toHaveBeenCalled();
+    expect(onSelectDayItems).toHaveBeenCalledTimes(1);
+    expect(onSelectDayItems).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
-      event: week.days[0].events[0],
-      activity: week.days[0].activities[0],
+      items: expect.arrayContaining([
+        expect.objectContaining({ kind: 'planned', title: 'Planned workout' }),
+        expect.objectContaining({ kind: 'completed', title: 'Unrelated ride' }),
+      ]),
     });
   });
 
@@ -189,6 +221,248 @@ describe('CalendarWeekSection', () => {
       dateKey: '2026-03-23',
       event: week.days[0].events[0],
       activity: null,
+    });
+  });
+
+  it('does not open workout details for a single generic non-workout event', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [{
+        id: 77,
+        startDateLocal: '2026-03-23',
+        name: 'Travel note',
+        category: 'NOTE',
+        description: 'Bring spare wheels',
+        indoor: false,
+        color: null,
+        eventDefinition: emptyEventDefinition(),
+        actualWorkout: null,
+        plannedSource: 'intervals',
+        syncStatus: null,
+        linkedIntervalsEventId: null,
+        projectedWorkout: null,
+      }],
+      activities: [],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const onSelectDayItems = vi.fn();
+    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />);
+
+    expect(screen.queryByRole('button', { name: /travel note/i })).not.toBeInTheDocument();
+
+    expect(onSelectWorkout).not.toHaveBeenCalled();
+    expect(onSelectDayItems).not.toHaveBeenCalled();
+  });
+
+  it('does not open the day-items picker for multiple generic non-workout events', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [
+        {
+          id: 78,
+          startDateLocal: '2026-03-23',
+          name: 'Travel note',
+          category: 'NOTE',
+          description: 'Bring spare wheels',
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: null,
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+        {
+          id: 79,
+          startDateLocal: '2026-03-23',
+          name: 'Logistics',
+          category: 'NOTE',
+          description: 'Confirm hotel',
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: null,
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+      ],
+      activities: [],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const onSelectDayItems = vi.fn();
+    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />);
+
+    expect(screen.queryByRole('button', { name: /travel note/i })).not.toBeInTheDocument();
+    expect(onSelectWorkout).not.toHaveBeenCalled();
+    expect(onSelectDayItems).not.toHaveBeenCalled();
+  });
+
+  it('routes multi-item days to the day-items picker instead of direct workout details', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [
+        {
+          id: 99,
+          startDateLocal: '2026-03-23',
+          name: 'Race day',
+          category: 'RACE',
+          description: null,
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: null,
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: 99,
+          projectedWorkout: null,
+        },
+        {
+          id: 12,
+          startDateLocal: '2026-03-23',
+          name: 'Opener',
+          category: 'WORKOUT',
+          description: null,
+          indoor: false,
+          color: null,
+          eventDefinition: {
+            rawWorkoutDoc: '- 20min 70%',
+            intervals: [],
+            segments: [],
+            summary: {
+              totalSegments: 1,
+              totalDurationSeconds: 1200,
+              estimatedNormalizedPowerWatts: null,
+              estimatedAveragePowerWatts: null,
+              estimatedIntensityFactor: 0.7,
+              estimatedTrainingStressScore: 16,
+            },
+          },
+          actualWorkout: null,
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+      ],
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race day',
+          subtitle: '52 km • Kat. B',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-03-23',
+            name: 'Grojec',
+            distanceMeters: 52000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 99,
+          },
+        },
+      ],
+      activities: [],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const onSelectDayItems = vi.fn();
+    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /grojec/i }));
+
+    expect(onSelectWorkout).not.toHaveBeenCalled();
+    expect(onSelectDayItems).toHaveBeenCalledTimes(1);
+    expect(onSelectDayItems.mock.calls[0]?.[0].items).toHaveLength(2);
+  });
+
+  it('falls back to direct workout selection on multi-item days when no picker handler is provided', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [{
+        id: 11,
+        startDateLocal: '2026-03-23',
+        name: 'Planned workout',
+        category: 'WORKOUT',
+        description: null,
+        indoor: false,
+        color: null,
+        eventDefinition: emptyEventDefinition(),
+        actualWorkout: null,
+      }],
+      activities: [{
+        id: 'a-unrelated',
+        startDateLocal: '2026-03-23T08:00:00',
+        startDate: '2026-03-23T07:00:00Z',
+        name: 'Unrelated ride',
+        description: null,
+        activityType: 'Ride',
+        source: null,
+        externalId: null,
+        deviceName: null,
+        distanceMeters: null,
+        movingTimeSeconds: null,
+        elapsedTimeSeconds: null,
+        totalElevationGainMeters: null,
+        averageSpeedMps: null,
+        averageHeartRateBpm: null,
+        averageCadenceRpm: null,
+        trainer: false,
+        commute: false,
+        race: false,
+        hasHeartRate: false,
+        streamTypes: [],
+        tags: [],
+        metrics: {
+          trainingStressScore: null,
+          normalizedPowerWatts: null,
+          intensityFactor: null,
+          efficiencyFactor: null,
+          variabilityIndex: null,
+          averagePowerWatts: null,
+          ftpWatts: null,
+          totalWorkJoules: null,
+          calories: null,
+          trimp: null,
+          powerLoad: null,
+          heartRateLoad: null,
+          paceLoad: null,
+          strainScore: null,
+        },
+        details: {
+          intervals: [],
+          intervalGroups: [],
+          streams: [],
+          intervalSummary: [],
+          skylineChart: [],
+          powerZoneTimes: [],
+          heartRateZoneTimes: [],
+          paceZoneTimes: [],
+          gapZoneTimes: [],
+        },
+      }],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+    const dayButtons = Array.from(container.querySelectorAll('.calendar-grid button')) as HTMLButtonElement[];
+    const unrelatedRideButton = dayButtons.find((button) => button.textContent?.includes('Unrelated ride'));
+
+    expect(unrelatedRideButton).toBeDefined();
+    await userEvent.click(unrelatedRideButton as HTMLButtonElement);
+
+    expect(onSelectWorkout).toHaveBeenCalledWith({
+      dateKey: '2026-03-23',
+      event: null,
+      activity: week.days[0].activities[0],
     });
   });
 
@@ -446,18 +720,25 @@ describe('CalendarWeekSection', () => {
     };
 
     const onSelectWorkout = vi.fn();
-    const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+    const onSelectDayItems = vi.fn();
+    const { container } = render(
+      <CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />,
+    );
 
     const dayButtons = Array.from(container.querySelectorAll('.calendar-grid button')) as HTMLButtonElement[];
-    const morningSpinButton = dayButtons.find((button) => button.textContent?.includes('Morning spin'));
-    expect(morningSpinButton).toBeDefined();
+    const matchedRideButton = dayButtons.find((button) => button.textContent?.includes('Matched ride'));
+    expect(matchedRideButton).toBeDefined();
 
-    await userEvent.click(morningSpinButton as HTMLButtonElement);
+    await userEvent.click(matchedRideButton as HTMLButtonElement);
 
-    expect(onSelectWorkout).toHaveBeenCalledWith({
+    expect(onSelectWorkout).not.toHaveBeenCalled();
+    expect(onSelectDayItems).toHaveBeenCalledTimes(1);
+    expect(onSelectDayItems).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
-      event: week.days[0].events[0],
-      activity: week.days[0].activities[1],
+      items: expect.arrayContaining([
+        expect.objectContaining({ kind: 'completed', title: 'Matched ride' }),
+        expect.objectContaining({ kind: 'completed', title: 'Morning spin' }),
+      ]),
     });
   });
 
@@ -567,6 +848,125 @@ describe('CalendarWeekSection', () => {
     expect(onSelectWorkout).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
       event: null,
+      activity: week.days[0].activities[0],
+    });
+  });
+
+  it('falls back to a later completed workout event even when a generic note appears first', async () => {
+    const week = createWeek('loaded');
+    week.days[0] = {
+      ...week.days[0],
+      events: [
+        {
+          id: 16,
+          startDateLocal: '2026-03-23',
+          name: 'Travel note',
+          category: 'NOTE',
+          description: 'Bring spare wheels',
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: null,
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+        {
+          id: 17,
+          startDateLocal: '2026-03-23',
+          name: 'Completed workout',
+          category: 'WORKOUT',
+          description: null,
+          indoor: false,
+          color: null,
+          eventDefinition: emptyEventDefinition(),
+          actualWorkout: {
+            activityId: 'a-other',
+            activityName: 'Morning spin',
+            startDateLocal: '2026-03-23T07:00:00',
+            powerValues: [],
+            cadenceValues: [],
+            heartRateValues: [],
+            speedValues: [],
+            averagePowerWatts: null,
+            normalizedPowerWatts: null,
+            trainingStressScore: null,
+            intensityFactor: null,
+            complianceScore: 0.8,
+            matchedIntervals: [],
+          },
+          plannedSource: 'intervals',
+          syncStatus: null,
+          linkedIntervalsEventId: null,
+          projectedWorkout: null,
+        },
+      ],
+      activities: [{
+        id: 'a-other',
+        startDateLocal: '2026-03-23T07:00:00',
+        startDate: '2026-03-23T06:00:00Z',
+        name: 'Morning spin',
+        description: null,
+        activityType: 'Ride',
+        source: null,
+        externalId: null,
+        deviceName: null,
+        distanceMeters: null,
+        movingTimeSeconds: null,
+        elapsedTimeSeconds: null,
+        totalElevationGainMeters: null,
+        averageSpeedMps: null,
+        averageHeartRateBpm: null,
+        averageCadenceRpm: null,
+        trainer: false,
+        commute: false,
+        race: false,
+        hasHeartRate: false,
+        streamTypes: [],
+        tags: [],
+        metrics: {
+          trainingStressScore: null,
+          normalizedPowerWatts: null,
+          intensityFactor: null,
+          efficiencyFactor: null,
+          variabilityIndex: null,
+          averagePowerWatts: null,
+          ftpWatts: null,
+          totalWorkJoules: null,
+          calories: null,
+          trimp: null,
+          powerLoad: null,
+          heartRateLoad: null,
+          paceLoad: null,
+          strainScore: null,
+        },
+        details: {
+          intervals: [],
+          intervalGroups: [],
+          streams: [],
+          intervalSummary: [],
+          skylineChart: [],
+          powerZoneTimes: [],
+          heartRateZoneTimes: [],
+          paceZoneTimes: [],
+          gapZoneTimes: [],
+        },
+      }],
+    };
+
+    const onSelectWorkout = vi.fn();
+    const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+
+    const morningSpinButton = Array.from(container.querySelectorAll('.calendar-grid button'))
+      .find((button) => button.textContent?.includes('Morning spin')) as HTMLButtonElement | undefined;
+    expect(morningSpinButton).toBeDefined();
+
+    await userEvent.click(morningSpinButton as HTMLButtonElement);
+
+    expect(onSelectWorkout).toHaveBeenCalledWith({
+      dateKey: '2026-03-23',
+      event: week.days[0].events[1],
       activity: week.days[0].activities[0],
     });
   });

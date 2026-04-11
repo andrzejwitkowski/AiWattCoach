@@ -55,9 +55,9 @@ describe('CalendarDayCell content', () => {
       ],
     });
 
-    render(<CalendarDayCell day={day} isToday={false} />);
+    render(<CalendarDayCell day={day} isToday={false} onSelect={vi.fn()} />);
 
-    expect(screen.getByText('+1 more item')).toBeInTheDocument();
+    expect(screen.getByText('View 2 items')).toBeInTheDocument();
   });
 
   it('does not label unnamed training activity as a rest day', () => {
@@ -326,6 +326,270 @@ describe('CalendarDayCell content', () => {
 
     expect(within(dayCell).queryByText('Planned Workout')).not.toBeInTheDocument();
     expect(within(dayCell).getByText('Club Race')).toBeInTheDocument();
+  });
+
+  it('renders race labels with distinct race-day treatment', () => {
+    const day = makeCalendarDay({
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Gravel Attack',
+          subtitle: '120 km • Kat. A',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-03-29',
+            name: 'Gravel Attack',
+            distanceMeters: 120000,
+            discipline: 'gravel',
+            priority: 'A',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 41,
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Race Day')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Gravel')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Gravel Attack')).toBeInTheDocument();
+    expect(within(dayCell).getByText('120 km • Cat. A')).toBeInTheDocument();
+    expect(within(dayCell).getByText('A')).toBeInTheDocument();
+    expect(dayCell.className).toContain('border-[#cda56b]/30');
+  });
+
+  it('shows a compact prep strip above the race details when a race day also has a planned workout', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 12),
+      dateKey: '2026-04-12',
+      events: [
+        makeEvent({
+          id: 41,
+          name: 'Opener Grojec',
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 1140,
+              estimatedTrainingStressScore: 16,
+            },
+          },
+        }),
+      ],
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Grojec',
+          subtitle: '52 km • Kat. B',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-04-12',
+            name: 'Grojec',
+            distanceMeters: 52000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 99,
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Prep')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Opener Grojec')).toBeInTheDocument();
+    expect(within(dayCell).getByText('19 min • 16 TSS')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Race Day')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Grojec')).toBeInTheDocument();
+    expect(
+      within(dayCell).queryByText(/View \d+ item/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps remaining overflow count after showing both prep and race', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 12),
+      dateKey: '2026-04-12',
+      events: [
+        makeEvent({
+          id: 41,
+          name: 'Opener Grojec',
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 1140,
+              estimatedTrainingStressScore: 16,
+            },
+          },
+        }),
+        makeEvent({ id: 42, name: 'Travel Note', category: 'NOTE' }),
+      ],
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Grojec',
+          subtitle: '52 km • Kat. B',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-04-12',
+            name: 'Grojec',
+            distanceMeters: 52000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 99,
+          },
+        },
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} onSelect={vi.fn()} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('View 3 items')).toBeInTheDocument();
+    expect(within(dayCell).queryByText(/view .* items/i)).not.toHaveTextContent('View 4 items');
+  });
+
+  it('counts multiple race labels in the overflow cue while deduplicating linked race events', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 13),
+      dateKey: '2026-04-13',
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Alpha',
+          subtitle: '52 km • Kat. B',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-04-13',
+            name: 'Alpha',
+            distanceMeters: 52000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 99,
+          },
+        },
+        {
+          kind: 'race',
+          title: 'Race Beta',
+          subtitle: '40 km • Kat. C',
+          payload: {
+            raceId: 'race-2',
+            date: '2026-04-13',
+            name: 'Beta',
+            distanceMeters: 40000,
+            discipline: 'road',
+            priority: 'C',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 100,
+          },
+        },
+      ],
+      events: [
+        makeEvent({ id: 99, linkedIntervalsEventId: 99, name: 'Race Alpha', category: 'RACE' }),
+        makeEvent({ id: 100, linkedIntervalsEventId: 100, name: 'Race Beta', category: 'RACE' }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} onSelect={vi.fn()} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('View 2 items')).toBeInTheDocument();
+  });
+
+  it('does not show the overflow cue when extra items are not selectable', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 14),
+      dateKey: '2026-04-14',
+      events: [
+        makeEvent({ id: 201, name: 'Travel Note', category: 'NOTE' }),
+        makeEvent({ id: 202, name: 'Logistics', category: 'NOTE' }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).queryByText(/view .* items/i)).not.toBeInTheDocument();
+  });
+
+  it('includes generic day items in the overflow cue when the day opens the picker', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 15),
+      dateKey: '2026-04-15',
+      events: [
+        makeEvent({
+          id: 301,
+          name: 'Opener',
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 1200,
+              estimatedTrainingStressScore: 18,
+            },
+          },
+        }),
+        makeEvent({ id: 302, name: 'Travel Note', category: 'NOTE' }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} onSelect={vi.fn()} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('View 2 items')).toBeInTheDocument();
+  });
+
+  it('does not count the linked intervals race event as an extra item when the race label is already shown', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 12),
+      dateKey: '2026-04-12',
+      labels: [
+        {
+          kind: 'race',
+          title: 'Race Grojec',
+          subtitle: '52 km • Kat. B',
+          payload: {
+            raceId: 'race-1',
+            date: '2026-04-12',
+            name: 'Grojec',
+            distanceMeters: 52000,
+            discipline: 'road',
+            priority: 'B',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: 99,
+          },
+        },
+      ],
+      events: [
+        makeEvent({
+          id: 41,
+          name: 'Opener Grojec',
+          linkedIntervalsEventId: null,
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 1140,
+              estimatedTrainingStressScore: 16,
+            },
+          },
+        }),
+        makeEvent({
+          id: 99,
+          linkedIntervalsEventId: 99,
+          name: 'Race Grojec',
+          category: 'RACE',
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(
+      within(dayCell).queryByText(/View \d+ item/),
+    ).not.toBeInTheDocument();
+    expect(within(dayCell).getByText('Opener Grojec')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Grojec')).toBeInTheDocument();
   });
 
   it('does not show the planned workout badge for completed events without loaded activities', () => {

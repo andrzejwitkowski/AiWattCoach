@@ -23,8 +23,9 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
         sync_status,
         linked_intervals_event_id,
     } = event;
-    let workout_doc = event.workout_doc.clone();
-    let event_dto = map_event_to_dto_with_parsed_workout_doc(event, workout_doc.as_deref(), None);
+    let structured_workout_text = event.structured_workout_text().map(ToString::to_string);
+    let event_dto =
+        map_event_to_dto_with_parsed_workout_doc(event, structured_workout_text.as_deref(), None);
 
     CalendarEventDto {
         id: event_dto.id,
