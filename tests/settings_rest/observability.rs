@@ -198,6 +198,96 @@ async fn get_settings_returns_503_and_logs_error_kind_on_repository_error() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn get_settings_logs_redacted_response_body_for_route_with_response_logging() {
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+    )
+    .await;
+
+    let (_response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert!(
+        logs.contains("\"message\":\"outgoing response\""),
+        "expected route-level response body log, got: {logs}"
+    );
+    assert!(
+        logs.contains("\"response_body\":"),
+        "expected response body field in logs, got: {logs}"
+    );
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"message\":\"outgoing response\"",
+            "\"http.route\":\"/api/settings\"",
+            "\"trace_id\":\"",
+        ],
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_intervals_connection_logs_request_body_without_exposing_api_key() {
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_err(IntervalsConnectionError::Unavailable),
+        )),
+    )
+    .await;
+
+    let (response, logs) = capture_tracing_logs(|| async move {
+        app.oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"apiKey":"super-secret-key","athleteId":"athlete-123"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(
+        logs.contains("\"message\":\"incoming request\""),
+        "expected route-level request body log, got: {logs}"
+    );
+    assert!(
+        logs.contains("[REDACTED]"),
+        "expected request body redaction, got: {logs}"
+    );
+    assert!(
+        !logs.contains("super-secret-key"),
+        "request body log leaked secret, got: {logs}"
+    );
+    assert_log_entry_contains(
+        &logs,
+        &[
+            "\"message\":\"incoming request\"",
+            "\"http.route\":\"/api/settings/intervals/test\"",
+            "\"trace_id\":\"",
+        ],
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn update_cycling_returns_400_and_logs_warn_on_validation_error() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),

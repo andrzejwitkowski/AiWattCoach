@@ -1,22 +1,23 @@
 use reqwest::StatusCode;
+use sha2::Digest;
 
 use crate::domain::intervals::IntervalsError;
 
-use super::ApiFailure;
+use super::{logging::LoggedResponse, ApiFailure};
 
 pub(super) fn map_connection_error(error: reqwest::Error) -> IntervalsError {
     IntervalsError::ConnectionError(error.to_string())
 }
 
-pub(super) async fn map_error_response(response: reqwest::Response) -> ApiFailure {
-    let status = response.status();
-    let url = response.url().to_string();
-    let response_body = response.text().await.ok().and_then(|body| {
+pub(super) fn map_error_response_from_logged_response(response: LoggedResponse) -> ApiFailure {
+    let status = response.status;
+    let url = response.url.to_string();
+    let response_body = std::str::from_utf8(&response.body).ok().and_then(|body| {
         let trimmed = body.trim();
         if trimmed.is_empty() {
             None
         } else {
-            Some(truncate_log_body(trimmed))
+            Some(summarize_log_body(trimmed.as_bytes()))
         }
     });
 
@@ -41,20 +42,6 @@ pub(super) async fn map_error_response(response: reqwest::Response) -> ApiFailur
     }
 }
 
-pub(super) fn map_api_error(error: reqwest::Error) -> IntervalsError {
-    let message = error.to_string();
-
-    match error.status() {
-        Some(StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => {
-            IntervalsError::CredentialsNotConfigured
-        }
-        None if error.is_connect() || error.is_timeout() => {
-            IntervalsError::ConnectionError(message)
-        }
-        _ => IntervalsError::ApiError(message),
-    }
-}
-
 fn format_status_code(status: StatusCode) -> String {
     match status.canonical_reason() {
         Some(reason) => format!("{} {}", status.as_u16(), reason),
@@ -62,13 +49,12 @@ fn format_status_code(status: StatusCode) -> String {
     }
 }
 
-fn truncate_log_body(body: &str) -> String {
-    const MAX_LEN: usize = 512;
-
-    if body.chars().count() <= MAX_LEN {
-        return body.to_string();
-    }
-
-    let truncated: String = body.chars().take(MAX_LEN).collect();
-    format!("{truncated}...")
+fn summarize_log_body(body: &[u8]) -> String {
+    let digest = sha2::Sha256::digest(body);
+    let hash = format!("{digest:x}");
+    format!(
+        "payload bytes={} hash={}",
+        body.len(),
+        &hash[..12.min(hash.len())]
+    )
 }

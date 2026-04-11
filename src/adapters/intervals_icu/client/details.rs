@@ -3,7 +3,8 @@ use reqwest::{Client, RequestBuilder, StatusCode};
 use crate::domain::intervals::{Activity, IntervalsCredentials, IntervalsError};
 
 use super::{
-    errors::{map_api_error, map_connection_error},
+    errors::map_connection_error,
+    logging::{execute_request, BodyLoggingMode, LoggedResponse},
     mapping::{
         map_activity_interval, map_activity_interval_group, map_activity_response,
         map_activity_stream, should_persist_stream,
@@ -21,7 +22,7 @@ impl IntervalsIcuClient {
         credentials: &IntervalsCredentials,
         activity_id: &str,
         include_intervals: bool,
-    ) -> Result<reqwest::Response, ApiFailure> {
+    ) -> Result<LoggedResponse, ApiFailure> {
         let url = Self::activity_url_impl(base_url, activity_id, "");
         let mut request = client
             .get(url)
@@ -31,7 +32,7 @@ impl IntervalsIcuClient {
             request = request.query(&[("intervals", "true")]);
         }
 
-        Self::send_request(request).await
+        Self::send_request(client, request).await
     }
 
     pub(super) async fn fetch_base_activity(
@@ -53,27 +54,34 @@ impl IntervalsIcuClient {
             Some(StatusCode::NOT_FOUND) => IntervalsError::NotFound,
             _ => failure.error,
         })?;
-        let payload: ActivityResponse = response.json().await.map_err(map_api_error)?;
+        let payload: ActivityResponse = serde_json::from_slice(&response.body)
+            .map_err(|error| IntervalsError::ApiError(error.to_string()))?;
         Ok(map_activity_response(payload))
     }
 
     pub(super) async fn send_request(
+        client: &Client,
         request: RequestBuilder,
-    ) -> Result<reqwest::Response, ApiFailure> {
-        let response = Self::with_trace_context(request)
-            .send()
-            .await
-            .map_err(|error| ApiFailure {
-                status: error.status(),
-                error: map_connection_error(error),
-                response_body: None,
-            })?;
+    ) -> Result<LoggedResponse, ApiFailure> {
+        let logged = execute_request(
+            client,
+            Self::with_trace_context(request),
+            BodyLoggingMode::Full,
+        )
+        .await
+        .map_err(|error| ApiFailure {
+            status: error.status(),
+            error: map_connection_error(error),
+            response_body: None,
+        })?;
 
-        if response.status().is_success() {
-            return Ok(response);
+        if logged.status.is_success() {
+            return Ok(logged);
         }
 
-        Err(super::errors::map_error_response(response).await)
+        Err(super::errors::map_error_response_from_logged_response(
+            logged,
+        ))
     }
 
     pub(super) async fn fetch_activity_details(
@@ -92,6 +100,7 @@ impl IntervalsIcuClient {
         let mut streams_definitively_unavailable = false;
 
         let intervals_result = Self::send_request(
+            &client,
             client
                 .get(intervals_url)
                 .basic_auth("API_KEY", Some(&credentials.api_key)),
@@ -99,45 +108,37 @@ impl IntervalsIcuClient {
         .await;
 
         match intervals_result {
-            Ok(intervals_response) => match intervals_response.text().await {
-                Ok(response_body) => {
-                    match serde_json::from_str::<ActivityIntervalsResponse>(&response_body) {
-                        Ok(intervals) => {
-                            activity.details.intervals = intervals
-                                .icu_intervals
-                                .into_iter()
-                                .map(map_activity_interval)
-                                .collect();
-                            activity.details.interval_groups = intervals
-                                .icu_groups
-                                .into_iter()
-                                .map(map_activity_interval_group)
-                                .collect();
-                        }
-                        Err(error) => {
-                            tracing::warn!(
-                                activity_id,
-                                %error,
-                                response_body = %truncate_logged_response_body(&response_body),
-                                "intervals enrichment payload could not be parsed; returning base activity without intervals"
-                            );
-                        }
+            Ok(intervals_response) => {
+                let response_body = String::from_utf8_lossy(&intervals_response.body).to_string();
+                match serde_json::from_slice::<ActivityIntervalsResponse>(&intervals_response.body)
+                {
+                    Ok(intervals) => {
+                        activity.details.intervals = intervals
+                            .icu_intervals
+                            .into_iter()
+                            .map(map_activity_interval)
+                            .collect();
+                        activity.details.interval_groups = intervals
+                            .icu_groups
+                            .into_iter()
+                            .map(map_activity_interval_group)
+                            .collect();
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            activity_id,
+                            %error,
+                            response_body = %truncate_logged_response_body(&response_body),
+                            "intervals enrichment payload could not be parsed; returning base activity without intervals"
+                        );
                     }
                 }
-                Err(error) => {
-                    let error = map_api_error(error);
-                    tracing::warn!(
-                        activity_id,
-                        %error,
-                        "intervals enrichment response body could not be read; returning base activity without intervals"
-                    );
-                }
-            },
+            }
             Err(failure) => {
                 tracing::warn!(
                     activity_id,
                     %failure.error,
-                    response_body = failure.response_body.as_deref().unwrap_or(""),
+                    response_body = failure.response_body.as_deref().unwrap_or_default(),
                     "intervals enrichment failed; returning base activity without intervals"
                 );
 
@@ -175,6 +176,7 @@ impl IntervalsIcuClient {
 
         let streams_result = if activity.stream_types.is_empty() {
             Self::send_request(
+                &client,
                 client
                     .get(streams_url)
                     .basic_auth("API_KEY", Some(&credentials.api_key))
@@ -189,6 +191,7 @@ impl IntervalsIcuClient {
             query_params.push(("includeDefaults", "true".to_string()));
 
             Self::send_request(
+                &client,
                 client
                     .get(streams_url)
                     .basic_auth("API_KEY", Some(&credentials.api_key))
@@ -199,7 +202,8 @@ impl IntervalsIcuClient {
 
         match streams_result {
             Ok(streams_response) => {
-                match streams_response.json::<Vec<ActivityStreamResponse>>().await {
+                match serde_json::from_slice::<Vec<ActivityStreamResponse>>(&streams_response.body)
+                {
                     Ok(streams) => {
                         activity.details.streams = streams
                             .into_iter()
@@ -208,7 +212,6 @@ impl IntervalsIcuClient {
                             .collect();
                     }
                     Err(error) => {
-                        let error = map_api_error(error);
                         tracing::warn!(
                             activity_id,
                             %error,
@@ -221,7 +224,7 @@ impl IntervalsIcuClient {
                 tracing::warn!(
                     activity_id,
                     %failure.error,
-                    response_body = failure.response_body.as_deref().unwrap_or(""),
+                    response_body = failure.response_body.as_deref().unwrap_or_default(),
                     "streams enrichment failed; returning base activity without streams"
                 );
 

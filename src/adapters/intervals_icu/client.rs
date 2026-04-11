@@ -2,6 +2,7 @@ mod api;
 mod connection;
 mod details;
 mod errors;
+pub mod logging;
 mod mapping;
 
 use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _};

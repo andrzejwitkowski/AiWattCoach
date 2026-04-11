@@ -226,7 +226,44 @@ async fn intervals_client_surfaces_create_event_upstream_error_body() {
         Err(IntervalsError::ApiError(message)) => {
             assert!(message.contains("HTTP 400 Bad Request"));
             assert!(message.contains("/api/v1/athlete/athlete-7/events"));
-            assert!(message.contains("invalid workout_doc syntax near Main Set 3x"));
+            assert!(message.contains("payload bytes="));
+            assert!(!message.contains("invalid workout_doc syntax near Main Set 3x"));
+        }
+        other => panic!("expected api error, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn intervals_client_redacts_upstream_error_body_secrets_in_surface_message() {
+    let server = TestIntervalsServer::start().await;
+    server.set_created_event_failure(
+        StatusCode::BAD_REQUEST,
+        json!({ "token": "super-secret-token", "error": "invalid payload" }),
+    );
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let result = client
+        .create_event(
+            &test_credentials(),
+            CreateEvent {
+                category: EventCategory::Workout,
+                start_date_local: "2026-04-11T00:00:00".to_string(),
+                event_type: Some("Ride".to_string()),
+                name: Some("Priming Session".to_string()),
+                description: None,
+                indoor: false,
+                color: None,
+                workout_doc: Some("- 30m 60%".to_string()),
+                file_upload: None,
+            },
+        )
+        .await;
+
+    match result {
+        Err(IntervalsError::ApiError(message)) => {
+            assert!(message.contains("HTTP 400 Bad Request"));
+            assert!(message.contains("payload bytes="));
+            assert!(!message.contains("super-secret-token"));
         }
         other => panic!("expected api error, got {other:?}"),
     }
@@ -404,7 +441,8 @@ async fn intervals_client_surfaces_update_event_upstream_error_body() {
         Err(IntervalsError::ApiError(message)) => {
             assert!(message.contains("HTTP 400 Bad Request"));
             assert!(message.contains("/api/v1/athlete/athlete-7/events/202"));
-            assert!(message.contains("event update rejected"));
+            assert!(message.contains("payload bytes="));
+            assert!(!message.contains("event update rejected"));
         }
         other => panic!("expected api error, got {other:?}"),
     }

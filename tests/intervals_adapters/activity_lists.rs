@@ -4,6 +4,7 @@ use aiwattcoach::{
 };
 
 use crate::support::{test_credentials, ResponseActivity, TestIntervalsServer};
+use crate::tracing_capture::capture_tracing_logs;
 
 #[tokio::test]
 async fn intervals_client_lists_activities_and_normalizes_metrics() {
@@ -130,4 +131,36 @@ async fn intervals_client_accepts_single_string_skyline_chart_bytes_in_activity_
         vec!["CAcSAtJFGgFAIgECKAE="]
     );
     assert_eq!(activities[0].stream_types, vec!["temp"]);
+}
+
+#[tokio::test]
+async fn intervals_client_logs_list_activity_requests_without_query_string_leakage() {
+    let server = TestIntervalsServer::start().await;
+    server.push_activity(ResponseActivity::sample("i101", "Tempo Ride"));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let (_activities, logs) = capture_tracing_logs(|| async {
+        client
+            .list_activities(
+                &test_credentials(),
+                &DateRange {
+                    oldest: "2026-03-01".to_string(),
+                    newest: "2026-03-31".to_string(),
+                },
+            )
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(logs.contains("outgoing request"), "logs were: {logs}");
+    assert!(logs.contains("intervals_icu"), "logs were: {logs}");
+    assert!(
+        logs.contains("/api/v1/athlete/athlete-7/activities"),
+        "logs were: {logs}"
+    );
+    assert!(
+        !logs.contains("oldest=2026-03-01&newest=2026-03-31"),
+        "logs should not include raw query string, got: {logs}"
+    );
 }

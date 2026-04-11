@@ -227,6 +227,34 @@ async fn oversized_request_body_is_rejected_before_json_parsing() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn log_ingestion_does_not_emit_request_body_log() {
+    let app = logs_test_app().await;
+
+    let (_response, logs) = capture_tracing_logs(|| async {
+        app.clone()
+            .oneshot(
+                logs_request()
+                    .body(Body::from(
+                        json!({
+                            "level": "info",
+                            "message": "body logging should stay off",
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(
+        !logs.contains("\"message\":\"incoming request\""),
+        "did not expect request body log for /api/logs, got: {logs}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn log_ingestion_rejects_requests_without_origin() {
     let app = logs_test_app().await;
 

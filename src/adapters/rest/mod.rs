@@ -37,7 +37,8 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::AppState;
 
-use self::logging::status_class;
+use self::logging::request_logger::RequestLogLayer;
+use self::logging::{body_logging_enabled, status_class, with_log_config, EndpointLogConfig};
 
 pub fn router(state: AppState) -> Router {
     router_with_frontend_dist(
@@ -57,25 +58,39 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/auth/google/callback", get(auth::finish_google_login))
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
-        .route(
+        .merge(Router::new().route(
             "/api/logs",
             post(logs::ingest_logs).layer(DefaultBodyLimit::max(logs::MAX_REQUEST_BODY_BYTES)),
-        )
+        ))
         .route("/api/admin/system-info", get(admin::system_info))
         .route(
             "/api/admin/settings/{user_id}",
             get(settings::admin_get_user_settings),
         )
-        .route("/api/settings", get(settings::get_settings))
+        .merge(
+            Router::new()
+                .route("/api/settings", get(settings::get_settings))
+                .layer(RequestLogLayer::new())
+                .route_layer(with_log_config(
+                    EndpointLogConfig::response_only().with_max_body_bytes(2048),
+                )),
+        )
         .route("/api/settings/ai-agents", patch(settings::update_ai_agents))
         .route(
             "/api/settings/ai-agents/test",
             post(settings::test_ai_agents_connection),
         )
         .route("/api/settings/intervals", patch(settings::update_intervals))
-        .route(
-            "/api/settings/intervals/test",
-            post(settings::test_intervals_connection),
+        .merge(
+            Router::new()
+                .route(
+                    "/api/settings/intervals/test",
+                    post(settings::test_intervals_connection),
+                )
+                .layer(RequestLogLayer::new())
+                .route_layer(with_log_config(
+                    EndpointLogConfig::request_only().with_max_body_bytes(1024),
+                )),
         )
         .route("/api/settings/options", patch(settings::update_options))
         .route(
@@ -165,7 +180,26 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                 .make_span_with(make_request_span)
                 .on_response(log_response_event),
         )
+        .layer(axum::middleware::from_fn(insert_default_log_config))
         .with_state(state)
+}
+
+/// Middleware that inserts a default `EndpointLogConfig` into request extensions.
+/// When `ENABLE_ENDPOINT_BODY_LOGGING=true`, the default enables body logging.
+async fn insert_default_log_config(req: Request, next: axum::middleware::Next) -> Response {
+    if req.extensions().get::<EndpointLogConfig>().is_some() {
+        return next.run(req).await;
+    }
+
+    let config = if body_logging_enabled() {
+        EndpointLogConfig::full()
+    } else {
+        EndpointLogConfig::default()
+    };
+
+    let mut req = req;
+    req.extensions_mut().insert(config);
+    next.run(req).await
 }
 
 fn make_request_span(request: &Request) -> Span {

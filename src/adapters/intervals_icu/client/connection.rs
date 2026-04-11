@@ -2,7 +2,10 @@ use reqwest::StatusCode;
 
 use crate::domain::intervals::{BoxFuture, IntervalsConnectionError, IntervalsConnectionTester};
 
-use super::IntervalsIcuClient;
+use super::{
+    logging::{execute_request, BodyLoggingMode},
+    IntervalsIcuClient,
+};
 
 impl IntervalsConnectionTester for IntervalsIcuClient {
     fn test_connection(
@@ -18,13 +21,16 @@ impl IntervalsConnectionTester for IntervalsIcuClient {
         Box::pin(async move {
             let url = IntervalsIcuClient::athlete_url_impl(&base_url, &athlete_id, "");
 
-            let response = client.get(&url).basic_auth("API_KEY", Some(&api_key));
-            let response = IntervalsIcuClient::with_trace_context(response)
-                .send()
-                .await
-                .map_err(|_| IntervalsConnectionError::Unavailable)?;
+            let request = client.get(&url).basic_auth("API_KEY", Some(&api_key));
+            let response = execute_request(
+                &client,
+                IntervalsIcuClient::with_trace_context(request),
+                BodyLoggingMode::None,
+            )
+            .await
+            .map_err(|_| IntervalsConnectionError::Unavailable)?;
 
-            let status = response.status();
+            let status = response.status;
 
             if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
                 return Err(IntervalsConnectionError::Unauthenticated);
