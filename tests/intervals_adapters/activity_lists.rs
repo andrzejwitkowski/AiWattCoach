@@ -161,6 +161,14 @@ async fn intervals_client_logs_list_activity_requests_without_query_string_leaka
         "logs were: {logs}"
     );
     assert!(
+        !logs.contains("request_body"),
+        "normal list activity calls should not log request body previews, got: {logs}"
+    );
+    assert!(
+        !logs.contains("response_body"),
+        "normal list activity calls should not log response body previews, got: {logs}"
+    );
+    assert!(
         !logs.contains("oldest=2026-03-01&newest=2026-03-31"),
         "logs should not include raw query string, got: {logs}"
     );

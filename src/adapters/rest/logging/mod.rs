@@ -72,9 +72,10 @@ impl EndpointLogConfig {
 /// Use with `axum::middleware::from_fn(insert_log_config)` on the router.
 #[allow(dead_code)]
 pub async fn insert_log_config(req: Request, next: Next) -> Response {
-    let config = EndpointLogConfig::default();
     let mut req = req;
-    req.extensions_mut().insert(config);
+    if req.extensions().get::<EndpointLogConfig>().is_none() {
+        req.extensions_mut().insert(EndpointLogConfig::default());
+    }
     next.run(req).await
 }
 
@@ -148,6 +149,9 @@ pub fn body_logging_enabled() -> bool {
 
 #[cfg(test)]
 mod tests {
+    use axum::{body::Body, http::Request};
+    use tower::{service_fn, ServiceExt};
+
     use super::*;
 
     #[test]
@@ -189,5 +193,32 @@ mod tests {
     fn body_logging_flag_default_false() {
         // This tests the env var when not set
         assert!(!body_logging_enabled());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn insert_log_config_service_overrides_existing_config() {
+        let mut service = with_log_config(EndpointLogConfig::default()).layer(service_fn(
+            |req: Request<Body>| async move {
+                let config = req
+                    .extensions()
+                    .get::<EndpointLogConfig>()
+                    .cloned()
+                    .unwrap();
+                Ok::<_, std::convert::Infallible>(config)
+            },
+        ));
+
+        let mut req = Request::builder().uri("/").body(Body::empty()).unwrap();
+        req.extensions_mut().insert(EndpointLogConfig {
+            log_request_body: true,
+            log_response_body: false,
+            max_body_bytes: 123,
+        });
+
+        let config = service.ready().await.unwrap().call(req).await.unwrap();
+
+        assert!(!config.log_request_body);
+        assert!(!config.log_response_body);
+        assert_eq!(config.max_body_bytes, 4096);
     }
 }

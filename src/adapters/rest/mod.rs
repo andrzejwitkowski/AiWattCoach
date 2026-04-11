@@ -85,7 +85,8 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
             Router::new()
                 .route(
                     "/api/settings/intervals/test",
-                    post(settings::test_intervals_connection),
+                    post(settings::test_intervals_connection)
+                        .layer(DefaultBodyLimit::max(8 * 1024)),
                 )
                 .layer(RequestLogLayer::new())
                 .route_layer(with_log_config(

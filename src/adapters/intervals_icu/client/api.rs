@@ -46,7 +46,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let response = execute_request(
                 &client,
                 Self::with_trace_context(request),
-                BodyLoggingMode::Full,
+                BodyLoggingMode::None,
             )
             .await
             .map_err(|error| {
@@ -147,7 +147,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let response = execute_request(
                 &client,
                 Self::with_trace_context(request),
-                BodyLoggingMode::Full,
+                BodyLoggingMode::None,
             )
             .await
             .map_err(map_connection_error)?;
@@ -205,7 +205,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let response = execute_request(
                 &client,
                 Self::with_trace_context(request),
-                BodyLoggingMode::Full,
+                BodyLoggingMode::None,
             )
             .await
             .map_err(map_connection_error)?;
@@ -281,7 +281,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let response = execute_request(
                 &client,
                 Self::with_trace_context(request),
-                BodyLoggingMode::Full,
+                BodyLoggingMode::None,
             )
             .await
             .map_err(map_connection_error)?;
@@ -408,7 +408,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let response = execute_request(
                 &client,
                 Self::with_trace_context(request),
-                BodyLoggingMode::Full,
+                BodyLoggingMode::None,
             )
             .await
             .map_err(map_connection_error)?;
@@ -563,7 +563,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let response = execute_request(
                 &client,
                 Self::with_trace_context(request),
-                BodyLoggingMode::Full,
+                BodyLoggingMode::None,
             )
             .await
             .map_err(map_connection_error)?;

@@ -17,6 +17,7 @@ use tracing_subscriber::{layer::SubscriberExt, Registry};
 use crate::support::{
     assert_valid_traceparent, test_credentials, ResponseEvent, TestIntervalsServer,
 };
+use crate::tracing_capture::capture_tracing_logs;
 
 #[tokio::test]
 async fn intervals_client_uses_basic_auth_and_maps_event_payloads() {
@@ -311,6 +312,45 @@ async fn intervals_client_posts_create_event_payload_as_json_object() {
         Some("- 45m 50%")
     );
     assert!(json.get("workout_doc").is_none());
+}
+
+#[tokio::test]
+async fn intervals_client_create_event_logs_without_body_previews_on_normal_success_path() {
+    let server = TestIntervalsServer::start().await;
+    server.set_created_event(ResponseEvent::sample(203, "Created"));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let (_event, logs) = capture_tracing_logs(|| async {
+        client
+            .create_event(
+                &test_credentials(),
+                CreateEvent {
+                    category: EventCategory::Workout,
+                    start_date_local: "2026-04-11T00:00:00".to_string(),
+                    event_type: Some("Ride".to_string()),
+                    name: Some("Priming Session".to_string()),
+                    description: None,
+                    indoor: false,
+                    color: None,
+                    workout_doc: Some("- 30m 60%".to_string()),
+                    file_upload: None,
+                },
+            )
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(logs.contains("outgoing request"), "logs were: {logs}");
+    assert!(logs.contains("intervals_icu"), "logs were: {logs}");
+    assert!(
+        !logs.contains("request_body"),
+        "normal create event calls should not log request body previews, got: {logs}"
+    );
+    assert!(
+        !logs.contains("response_body"),
+        "normal create event calls should not log response body previews, got: {logs}"
+    );
 }
 
 #[tokio::test]

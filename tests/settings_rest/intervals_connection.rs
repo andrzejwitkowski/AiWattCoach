@@ -326,3 +326,35 @@ async fn admin_settings_repository_error_still_returns_503() {
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
+
+#[tokio::test]
+async fn test_intervals_connection_rejects_oversized_request_body_before_logging() {
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_ok(),
+        )),
+    )
+    .await;
+
+    let oversized_body = format!(
+        r#"{{"apiKey":"{}","athleteId":"athlete-123"}}"#,
+        "a".repeat(20_000)
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(oversized_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}

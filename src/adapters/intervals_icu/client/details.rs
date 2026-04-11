@@ -66,7 +66,7 @@ impl IntervalsIcuClient {
         let logged = execute_request(
             client,
             Self::with_trace_context(request),
-            BodyLoggingMode::Full,
+            BodyLoggingMode::None,
         )
         .await
         .map_err(|error| ApiFailure {
