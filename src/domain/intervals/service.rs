@@ -9,9 +9,14 @@ use super::{
     ports::{ActivityFileIdentityExtractorPort, BoxFuture},
     Activity, ActivityRepositoryPort, ActivityUploadOperation, ActivityUploadOperationClaimResult,
     ActivityUploadOperationRepositoryPort, ActivityUploadOperationStatus, CreateEvent, DateRange,
-    EnrichedEvent, Event, IntervalsApiPort, IntervalsError, IntervalsSettingsPort, UpdateActivity,
+    EnrichedEvent, Event, IntervalsApiPort, IntervalsError, IntervalsSettingsPort,
+    NoopPestParserPocRepository, PestParserPocDirection, PestParserPocOperation,
+    PestParserPocRepositoryPort, PestParserPocSource, PestParserPocWorkoutRecord, UpdateActivity,
     UpdateEvent, UploadActivity, UploadedActivities,
 };
+use crate::domain::identity::Clock;
+use crate::domain::intervals::workout::parse_workout_ast;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -152,23 +157,42 @@ pub trait IntervalsUseCases: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
-where
+pub struct IntervalsService<
+    Api,
+    Settings,
+    Activities,
+    UploadOperations,
+    Extractor,
+    PocRepo = NoopPestParserPocRepository,
+    Time = LiveClock,
+> where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
     UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
+    PocRepo: PestParserPocRepositoryPort,
+    Time: Clock,
 {
     api: Api,
     settings: Settings,
     activities: Activities,
     upload_operations: UploadOperations,
     identity_extractor: Extractor,
+    pest_parser_poc_repository: Option<PocRepo>,
+    clock: Time,
 }
 
 impl<Api, Settings, Activities, UploadOperations, Extractor>
-    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
+    IntervalsService<
+        Api,
+        Settings,
+        Activities,
+        UploadOperations,
+        Extractor,
+        NoopPestParserPocRepository,
+        LiveClock,
+    >
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
@@ -189,18 +213,134 @@ where
             activities,
             upload_operations,
             identity_extractor,
+            pest_parser_poc_repository: None,
+            clock: LiveClock,
         }
     }
 }
 
-impl<Api, Settings, Activities, UploadOperations, Extractor> IntervalsUseCases
-    for IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
+impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
+    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
     UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
+    PocRepo: PestParserPocRepositoryPort,
+    Time: Clock,
+{
+    pub fn with_pest_parser_poc_repository<Repo>(
+        self,
+        repository: Repo,
+    ) -> IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, Repo, Time>
+    where
+        Repo: PestParserPocRepositoryPort,
+    {
+        IntervalsService {
+            api: self.api,
+            settings: self.settings,
+            activities: self.activities,
+            upload_operations: self.upload_operations,
+            identity_extractor: self.identity_extractor,
+            pest_parser_poc_repository: Some(repository),
+            clock: self.clock,
+        }
+    }
+
+    pub fn with_clock<NewTime>(
+        self,
+        clock: NewTime,
+    ) -> IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, NewTime>
+    where
+        NewTime: Clock,
+    {
+        IntervalsService {
+            api: self.api,
+            settings: self.settings,
+            activities: self.activities,
+            upload_operations: self.upload_operations,
+            identity_extractor: self.identity_extractor,
+            pest_parser_poc_repository: self.pest_parser_poc_repository,
+            clock,
+        }
+    }
+
+    pub(super) async fn observe_workout_text(
+        &self,
+        user_id: &str,
+        source: PestParserPocSource,
+        source_ref: Option<String>,
+        workout_text: Option<&str>,
+    ) {
+        let Some(repository) = &self.pest_parser_poc_repository else {
+            return;
+        };
+        let Some(workout_text) = workout_text.filter(|value| !value.trim().is_empty()) else {
+            return;
+        };
+
+        let parsed_at_epoch_seconds = self.clock.now_epoch_seconds();
+        let parser_version = "pest-parser-poc-v1".to_string();
+        let source_text = workout_text.trim().to_string();
+        let legacy_projection = parse_workout_doc(Some(&source_text), None);
+        let context = super::PestParserPocRecordContext {
+            user_id: user_id.to_string(),
+            source,
+            source_ref,
+            source_text: source_text.clone(),
+            parser_version,
+            parsed_at_epoch_seconds,
+        };
+        let record = match parse_workout_ast(&source_text) {
+            Ok(_) => PestParserPocWorkoutRecord::parsed(
+                context,
+                normalize_workout_text(&source_text),
+                legacy_projection,
+            ),
+            Err(error) => {
+                PestParserPocWorkoutRecord::failed(context, error.to_string(), "syntax".to_string())
+            }
+        };
+
+        if let Err(error) = repository.insert(record).await {
+            tracing::error!(%user_id, %error, "failed to persist pest parser poc workout record");
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct LiveClock;
+
+impl Clock for LiveClock {
+    fn now_epoch_seconds(&self) -> i64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64
+    }
+}
+
+fn normalize_workout_text(input: &str) -> String {
+    input
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| line.trim_start_matches('-').trim())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time> IntervalsUseCases
+    for IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
+where
+    Api: IntervalsApiPort,
+    Settings: IntervalsSettingsPort,
+    Activities: ActivityRepositoryPort,
+    UploadOperations: ActivityUploadOperationRepositoryPort,
+    Extractor: ActivityFileIdentityExtractorPort,
+    PocRepo: PestParserPocRepositoryPort,
+    Time: Clock,
 {
     fn list_events(
         &self,

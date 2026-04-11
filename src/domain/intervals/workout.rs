@@ -1,10 +1,12 @@
 mod matching;
 mod parser;
+mod pest_parser;
 
 use serde::{Deserialize, Serialize};
 
 pub use matching::find_best_activity_match;
 pub use parser::parse_workout_doc;
+pub(crate) use pest_parser::parse_workout_ast;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ParsedWorkoutDoc {
@@ -87,4 +89,128 @@ pub struct MatchedWorkoutInterval {
 fn round_to(value: f64, decimals: u32) -> f64 {
     let factor = 10_f64.powi(decimals as i32);
     (value * factor).round() / factor
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pest_parser::{parse_workout_ast, ParserTarget, StepAmount, StepKind, WorkoutItem};
+
+    #[test]
+    fn pest_parser_parses_simple_ftp_workout() {
+        let parsed = parse_workout_ast("- 10m 95%").expect("parse should succeed");
+
+        assert_eq!(parsed.items.len(), 1);
+    }
+
+    #[test]
+    fn pest_parser_parses_minute_suffix_variant() {
+        let parsed = parse_workout_ast("- 5min 55%").expect("parse should succeed");
+
+        let WorkoutItem::Step(step) = &parsed.items[0] else {
+            panic!("expected step item");
+        };
+
+        assert_eq!(step.amount, StepAmount::DurationMinutes(5));
+        assert_eq!(
+            step.target,
+            Some(ParserTarget::PercentFtp {
+                min: 55.0,
+                max: 55.0,
+            })
+        );
+    }
+
+    #[test]
+    fn pest_parser_parses_repeat_block() {
+        let parsed =
+            parse_workout_ast("Main Set 4x\n- 2m 95%\n- 2m 55%").expect("parse should succeed");
+
+        assert_eq!(parsed.items.len(), 1);
+    }
+
+    #[test]
+    fn pest_parser_rejects_malformed_input_without_panicking() {
+        let error = parse_workout_ast("- 10m ???").expect_err("parse should fail");
+
+        assert!(!error.to_string().is_empty());
+    }
+
+    #[test]
+    fn pest_parser_parses_pace_step() {
+        let parsed = parse_workout_ast("- 5km 5:00/km Pace").expect("parse should succeed");
+
+        let WorkoutItem::Step(step) = &parsed.items[0] else {
+            panic!("expected step item");
+        };
+
+        assert_eq!(step.amount, StepAmount::DistanceKilometers(5.0));
+        assert_eq!(
+            step.target,
+            Some(ParserTarget::Pace {
+                value: "5:00/km".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn pest_parser_parses_hr_and_lthr_targets() {
+        let hr = parse_workout_ast("- 20m 75-80% HR").expect("hr parse");
+        let lthr = parse_workout_ast("- 20m 90-95% LTHR").expect("lthr parse");
+
+        let WorkoutItem::Step(hr_step) = &hr.items[0] else {
+            panic!("expected hr step item");
+        };
+        let WorkoutItem::Step(lthr_step) = &lthr.items[0] else {
+            panic!("expected lthr step item");
+        };
+
+        assert_eq!(
+            hr_step.target,
+            Some(ParserTarget::PercentHr {
+                min: 75.0,
+                max: 80.0,
+            })
+        );
+        assert_eq!(
+            lthr_step.target,
+            Some(ParserTarget::PercentLthr {
+                min: 90.0,
+                max: 95.0,
+            })
+        );
+    }
+
+    #[test]
+    fn pest_parser_parses_ramp_cadence_and_text_metadata() {
+        let parsed = parse_workout_ast("- Warmup 10m ramp 50-70% 90rpm text=\"Relax shoulders\"")
+            .expect("parse should succeed");
+
+        let WorkoutItem::Step(step) = &parsed.items[0] else {
+            panic!("expected step item");
+        };
+
+        assert_eq!(step.cue.as_deref(), Some("Warmup"));
+        assert_eq!(step.kind, StepKind::Ramp);
+        assert_eq!(
+            step.target,
+            Some(ParserTarget::PercentFtp {
+                min: 50.0,
+                max: 70.0,
+            })
+        );
+        assert_eq!(step.cadence_rpm, Some((90, 90)));
+        assert_eq!(step.text.as_deref(), Some("Relax shoulders"));
+    }
+
+    #[test]
+    fn pest_parser_parses_escaped_quotes_in_text_metadata() {
+        let parsed = parse_workout_ast("- Warmup 10m text=\"Relax \\\"now\\\"\"")
+            .expect("parse should succeed");
+
+        let WorkoutItem::Step(step) = &parsed.items[0] else {
+            panic!("expected step item");
+        };
+
+        assert_eq!(step.text.as_deref(), Some("Relax \"now\""));
+    }
 }
