@@ -165,6 +165,14 @@ async fn pest_parser_poc_repository_creates_expected_indexes() {
             == Some("pest_parser_poc_workout_status_time")
             && index.keys == doc! { "status": 1, "parsed_at_epoch_seconds": -1 }
     }));
+    assert!(indexes.iter().any(|index| {
+        index
+            .options
+            .as_ref()
+            .and_then(|options| options.name.as_deref())
+            == Some("pest_parser_poc_workout_operation_source_time")
+            && index.keys == doc! { "operation": 1, "source_ref": 1, "parsed_at_epoch_seconds": -1 }
+    }));
 
     fixture.cleanup().await;
 }

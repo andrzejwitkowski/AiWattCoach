@@ -44,7 +44,6 @@ Parser internals live under the workout domain area:
 - `src/domain/intervals/workout/pest_parser/ast.rs`
 - `src/domain/intervals/workout/pest_parser/error.rs`
 - `src/domain/intervals/workout/pest_parser/parser.rs`
-- `src/domain/intervals/workout/pest_parser/mapping.rs`
 
 PoC record types and repository port:
 - `src/domain/intervals/pest_parser_poc.rs`
@@ -134,7 +133,7 @@ The AST-to-`ParsedWorkoutDoc` mapping is intentionally lossy where the public mo
 
 Preserve where possible:
 - repeat counts
-n- duration seconds for time-based steps
+- duration seconds for time-based steps
 - zone IDs
 - FTP percent min/max values
 - canonical normalized step definitions
@@ -183,19 +182,19 @@ Field semantics:
 Recommended indexes:
 - `{ user_id: 1, parsed_at_epoch_seconds: -1 }`
 - `{ status: 1, parsed_at_epoch_seconds: -1 }`
-- `{ source_type: 1, source_ref: 1, parsed_at_epoch_seconds: -1 }`
+- `{ operation: 1, source_ref: 1, parsed_at_epoch_seconds: -1 }`
 
 ## Integration Points
 
 Persistence should happen only at the Intervals adapter boundary, not inside the public parser function itself.
 
 Inbound reads:
-- `list_events(...)` in `src/adapters/intervals_icu/client/api.rs`
+- `list_events(...)` in `src/domain/intervals/service/events.rs`
 - optionally `get_event(...)` as the single-event inbound path
 
 Outbound pushes:
-- `create_event(...)` in `src/adapters/intervals_icu/client/api.rs`
-- `update_event(...)` in `src/adapters/intervals_icu/client/api.rs`
+- `create_event(...)` in `src/domain/intervals/service/events.rs`
+- `update_event(...)` in `src/domain/intervals/service/events.rs`
 
 Reasoning:
 - this matches the requested trigger semantics exactly

@@ -19,8 +19,8 @@ ramp = { ^"ramp" }
 freeride = { ^"freeride" }
 
 amount = { time_amount | distance_amount }
-time_amount = @{ ASCII_DIGIT+ ~ ("hrs" | "hr" | "h" | "mins" | "min" | "m" | "secs" | "sec" | "s") }
-distance_amount = @{ ASCII_DIGIT+ ~ ("km" | "mtr" | "mi") }
+time_amount = @{ ASCII_DIGIT+ ~ ("hrs" | "hr" | "h" | "mins" | "min" | "m" | "secs" | "sec" | "s") ~ !ASCII_ALPHA }
+distance_amount = @{ ASCII_DIGIT+ ~ ("km" | "mtr" | "mi") ~ !ASCII_ALPHA }
 
 target = { hr_target | lthr_target | pace_target | ftp_target }
 ftp_target = @{ number ~ ("-" ~ number)? ~ "%" }
@@ -31,7 +31,7 @@ pace_value = @{ ASCII_DIGIT+ ~ ":" ~ ASCII_DIGIT+ ~ "/" ~ ("km" | "mi" | "100m" 
 
 cadence = @{ ASCII_DIGIT+ ~ ("-" ~ ASCII_DIGIT+)? ~ ^"rpm" }
 text_metadata = { ^"text" ~ "=" ~ quoted_string }
-quoted_string = @{ "\"" ~ ( "\\\"" | !("\"") ~ ANY )* ~ "\"" }
+quoted_string = @{ "\"" ~ ( "\\\"" | !NEWLINE ~ !("\"") ~ ANY )* ~ "\"" }
 
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 line_end = _{ NEWLINE | EOI }

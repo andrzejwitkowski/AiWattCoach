@@ -272,3 +272,38 @@ async fn create_event_stores_poc_record_for_outbound_push() {
     assert_eq!(stored[0].operation, PestParserPocOperation::CreateEvent);
     assert_eq!(stored[0].status, PestParserPocStatus::Parsed);
 }
+
+#[tokio::test]
+async fn create_event_stores_failed_poc_record_for_malformed_workout() {
+    let created = sample_event(11, "Broken Workout");
+    let api = FakeIntervalsApi::with_created_event(created);
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let poc_repository = FakePestParserPocRepository::default();
+    let records = poc_repository.records.clone();
+    let service = test_service(api, settings)
+        .with_pest_parser_poc_repository(poc_repository)
+        .with_clock(FixedClock);
+
+    service
+        .create_event(
+            "user-1",
+            CreateEvent {
+                category: EventCategory::Workout,
+                start_date_local: "2026-04-01".to_string(),
+                event_type: Some("Ride".to_string()),
+                name: Some("Broken Workout".to_string()),
+                description: Some("fallback description".to_string()),
+                indoor: true,
+                color: Some("blue".to_string()),
+                workout_doc: Some("- 10m ???".to_string()),
+                file_upload: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let stored = records.lock().unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].operation, PestParserPocOperation::CreateEvent);
+    assert_eq!(stored[0].status, PestParserPocStatus::Failed);
+}

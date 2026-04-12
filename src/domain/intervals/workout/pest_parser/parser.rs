@@ -4,7 +4,8 @@ use pest_derive::Parser;
 
 use super::{
     ast::{
-        ParserTarget, RepeatBlockAst, StepAmount, StepKind, WorkoutAst, WorkoutItem, WorkoutStepAst,
+        CadenceRange, ParserTarget, RepeatBlockAst, StepAmount, StepKind, WorkoutAst, WorkoutItem,
+        WorkoutStepAst,
     },
     error::WorkoutPestParseError,
 };
@@ -79,13 +80,15 @@ fn parse_repeat_header(
                 }
             }
             Rule::repeat_count => {
-                count = Some(
-                    pair.as_str()
-                        .trim_end_matches('x')
-                        .parse::<usize>()
-                        .map_err(|_| WorkoutPestParseError::new("invalid repeat count"))?
-                        .max(1),
-                );
+                let parsed = pair
+                    .as_str()
+                    .trim_end_matches('x')
+                    .parse::<usize>()
+                    .map_err(|_| WorkoutPestParseError::new("invalid repeat count"))?;
+                if parsed == 0 {
+                    return Err(WorkoutPestParseError::new("invalid repeat count"));
+                }
+                count = Some(parsed);
             }
             _ => {}
         }
@@ -156,23 +159,71 @@ fn parse_step_body(
 }
 
 fn parse_time_amount(value: &str) -> Result<StepAmount, WorkoutPestParseError> {
-    let minutes = value
-        .strip_suffix("mins")
-        .or_else(|| value.strip_suffix("min"))
-        .or_else(|| value.strip_suffix('m'))
-        .ok_or_else(|| WorkoutPestParseError::new("unsupported time unit"))?
+    let lower = value.to_ascii_lowercase();
+    let (raw_amount, unit) = if let Some(amount) = lower.strip_suffix("mins") {
+        (amount, "mins")
+    } else if let Some(amount) = lower.strip_suffix("min") {
+        (amount, "min")
+    } else if let Some(amount) = lower.strip_suffix('m') {
+        (amount, "m")
+    } else if let Some(amount) = lower.strip_suffix("hrs") {
+        (amount, "hrs")
+    } else if let Some(amount) = lower.strip_suffix("hr") {
+        (amount, "hr")
+    } else if let Some(amount) = lower.strip_suffix('h') {
+        (amount, "h")
+    } else if let Some(amount) = lower.strip_suffix("secs") {
+        (amount, "secs")
+    } else if let Some(amount) = lower.strip_suffix("sec") {
+        (amount, "sec")
+    } else if let Some(amount) = lower.strip_suffix('s') {
+        (amount, "s")
+    } else {
+        return Err(WorkoutPestParseError::new("unsupported time unit"));
+    };
+
+    let amount = raw_amount
         .parse::<i32>()
         .map_err(|_| WorkoutPestParseError::new("invalid time amount"))?;
+
+    let minutes = match unit {
+        "mins" | "min" | "m" => amount,
+        "hrs" | "hr" | "h" => amount
+            .checked_mul(60)
+            .ok_or_else(|| WorkoutPestParseError::new("invalid time amount"))?,
+        "secs" | "sec" | "s" => {
+            if amount <= 0 || amount % 30 != 0 {
+                return Err(WorkoutPestParseError::new(
+                    "time amount in seconds must be a positive multiple of 30",
+                ));
+            }
+            ((amount + 30) / 60).max(1)
+        }
+        _ => return Err(WorkoutPestParseError::new("unsupported time unit")),
+    };
 
     Ok(StepAmount::DurationMinutes(minutes))
 }
 
 fn parse_distance_amount(value: &str) -> Result<StepAmount, WorkoutPestParseError> {
-    let kilometers = value
-        .strip_suffix("km")
-        .ok_or_else(|| WorkoutPestParseError::new("unsupported distance unit"))?
-        .parse::<f64>()
-        .map_err(|_| WorkoutPestParseError::new("invalid distance amount"))?;
+    let lower = value.to_ascii_lowercase();
+    let kilometers = if let Some(amount) = lower.strip_suffix("km") {
+        amount
+            .parse::<f64>()
+            .map_err(|_| WorkoutPestParseError::new("invalid distance amount"))?
+    } else if let Some(amount) = lower.strip_suffix("mtr") {
+        amount
+            .parse::<f64>()
+            .map_err(|_| WorkoutPestParseError::new("invalid distance amount"))?
+            / 1000.0
+    } else if let Some(amount) = lower.strip_suffix("mi") {
+        amount
+            .parse::<f64>()
+            .map_err(|_| WorkoutPestParseError::new("invalid distance amount"))?
+            * 1.609_344
+    } else {
+        return Err(WorkoutPestParseError::new("unsupported distance unit"));
+    };
 
     Ok(StepAmount::DistanceKilometers(kilometers))
 }
@@ -205,11 +256,11 @@ fn parse_target_pair(pair: Pair<'_, Rule>) -> Result<ParserTarget, WorkoutPestPa
     }
 }
 
-fn parse_cadence_pair(pair: Pair<'_, Rule>) -> Result<(i32, i32), WorkoutPestParseError> {
-    let raw = pair
-        .as_str()
-        .trim_end_matches("rpm")
-        .trim_end_matches("RPM");
+fn parse_cadence_pair(pair: Pair<'_, Rule>) -> Result<CadenceRange, WorkoutPestParseError> {
+    let lower = pair.as_str().to_ascii_lowercase();
+    let raw = lower
+        .strip_suffix("rpm")
+        .ok_or_else(|| WorkoutPestParseError::new("invalid cadence value"))?;
     if let Some((start, end)) = raw.split_once('-') {
         let start = start
             .parse::<i32>()
@@ -217,13 +268,19 @@ fn parse_cadence_pair(pair: Pair<'_, Rule>) -> Result<(i32, i32), WorkoutPestPar
         let end = end
             .parse::<i32>()
             .map_err(|_| WorkoutPestParseError::new("invalid cadence value"))?;
-        return Ok((start.min(end), start.max(end)));
+        return Ok(CadenceRange {
+            min_rpm: start.min(end),
+            max_rpm: start.max(end),
+        });
     }
 
     let cadence = raw
         .parse::<i32>()
         .map_err(|_| WorkoutPestParseError::new("invalid cadence value"))?;
-    Ok((cadence, cadence))
+    Ok(CadenceRange {
+        min_rpm: cadence,
+        max_rpm: cadence,
+    })
 }
 
 fn parse_text_metadata_pair(pair: Pair<'_, Rule>) -> Result<String, WorkoutPestParseError> {
@@ -250,10 +307,11 @@ fn parse_percent_target(
     value: &str,
     kind: PercentTargetKind,
 ) -> Result<ParserTarget, WorkoutPestParseError> {
-    let raw = value
+    let lower = value.to_ascii_lowercase();
+    let raw = lower
         .trim()
-        .trim_end_matches("LTHR")
-        .trim_end_matches("HR")
+        .trim_end_matches("lthr")
+        .trim_end_matches("hr")
         .trim()
         .trim_end_matches('%');
     let (min, max) = if let Some((start, end)) = raw.split_once('-') {

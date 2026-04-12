@@ -18,7 +18,6 @@
 - `src/domain/intervals/workout/pest_parser/ast.rs`
 - `src/domain/intervals/workout/pest_parser/error.rs`
 - `src/domain/intervals/workout/pest_parser/parser.rs`
-- `src/domain/intervals/workout/pest_parser/mapping.rs`
 - `src/domain/intervals/pest_parser_poc.rs`
 - `src/adapters/mongo/pest_parser_poc_workouts.rs`
 - `tests/intervals_pest_parser_poc.rs`

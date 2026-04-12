@@ -93,7 +93,9 @@ fn round_to(value: f64, decimals: u32) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::pest_parser::{parse_workout_ast, ParserTarget, StepAmount, StepKind, WorkoutItem};
+    use super::pest_parser::{
+        parse_workout_ast, CadenceRange, ParserTarget, StepAmount, StepKind, WorkoutItem,
+    };
 
     #[test]
     fn pest_parser_parses_simple_ftp_workout() {
@@ -121,6 +123,38 @@ mod tests {
     }
 
     #[test]
+    fn pest_parser_supports_hour_and_second_units() {
+        let hour = parse_workout_ast("- 1h 95%").expect("hour parse should succeed");
+        let seconds = parse_workout_ast("- 30s 55%").expect("seconds parse should succeed");
+
+        let WorkoutItem::Step(hour_step) = &hour.items[0] else {
+            panic!("expected hour step item");
+        };
+        let WorkoutItem::Step(seconds_step) = &seconds.items[0] else {
+            panic!("expected seconds step item");
+        };
+
+        assert_eq!(hour_step.amount, StepAmount::DurationMinutes(60));
+        assert_eq!(seconds_step.amount, StepAmount::DurationMinutes(1));
+    }
+
+    #[test]
+    fn pest_parser_supports_meter_and_mile_distances() {
+        let meters = parse_workout_ast("- 400mtr 55%").expect("meters parse");
+        let miles = parse_workout_ast("- 1mi 8:00/mi Pace").expect("miles parse");
+
+        let WorkoutItem::Step(meter_step) = &meters.items[0] else {
+            panic!("expected meter step item");
+        };
+        let WorkoutItem::Step(mile_step) = &miles.items[0] else {
+            panic!("expected mile step item");
+        };
+
+        assert_eq!(meter_step.amount, StepAmount::DistanceKilometers(0.4));
+        assert_eq!(mile_step.amount, StepAmount::DistanceKilometers(1.609_344));
+    }
+
+    #[test]
     fn pest_parser_parses_repeat_block() {
         let parsed =
             parse_workout_ast("Main Set 4x\n- 2m 95%\n- 2m 55%").expect("parse should succeed");
@@ -133,6 +167,13 @@ mod tests {
         let error = parse_workout_ast("- 10m ???").expect_err("parse should fail");
 
         assert!(!error.to_string().is_empty());
+    }
+
+    #[test]
+    fn pest_parser_rejects_zero_repeat_count() {
+        let error = parse_workout_ast("Main Set 0x\n- 2m 95%").expect_err("parse should fail");
+
+        assert!(error.to_string().contains("repeat count"));
     }
 
     #[test]
@@ -154,8 +195,8 @@ mod tests {
 
     #[test]
     fn pest_parser_parses_hr_and_lthr_targets() {
-        let hr = parse_workout_ast("- 20m 75-80% HR").expect("hr parse");
-        let lthr = parse_workout_ast("- 20m 90-95% LTHR").expect("lthr parse");
+        let hr = parse_workout_ast("- 20m 75-80% Hr").expect("hr parse");
+        let lthr = parse_workout_ast("- 20m 90-95% lThR").expect("lthr parse");
 
         let WorkoutItem::Step(hr_step) = &hr.items[0] else {
             panic!("expected hr step item");
@@ -182,7 +223,7 @@ mod tests {
 
     #[test]
     fn pest_parser_parses_ramp_cadence_and_text_metadata() {
-        let parsed = parse_workout_ast("- Warmup 10m ramp 50-70% 90rpm text=\"Relax shoulders\"")
+        let parsed = parse_workout_ast("- Warmup 10m ramp 50-70% 90RpM text=\"Relax shoulders\"")
             .expect("parse should succeed");
 
         let WorkoutItem::Step(step) = &parsed.items[0] else {
@@ -198,7 +239,13 @@ mod tests {
                 max: 70.0,
             })
         );
-        assert_eq!(step.cadence_rpm, Some((90, 90)));
+        assert_eq!(
+            step.cadence_rpm,
+            Some(CadenceRange {
+                min_rpm: 90,
+                max_rpm: 90,
+            })
+        );
         assert_eq!(step.text.as_deref(), Some("Relax shoulders"));
     }
 
@@ -212,5 +259,13 @@ mod tests {
         };
 
         assert_eq!(step.text.as_deref(), Some("Relax \"now\""));
+    }
+
+    #[test]
+    fn pest_parser_rejects_multiline_text_metadata() {
+        let error = parse_workout_ast("- Warmup 10m text=\"line one\nline two\"")
+            .expect_err("parse should fail");
+
+        assert!(!error.to_string().is_empty());
     }
 }

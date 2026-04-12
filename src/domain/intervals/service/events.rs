@@ -69,6 +69,7 @@ where
             event
                 .workout_doc
                 .as_deref()
+                .filter(|text| !text.trim().is_empty())
                 .or(event.description.as_deref()),
         )
         .await;
@@ -92,6 +93,7 @@ where
             event
                 .workout_doc
                 .as_deref()
+                .filter(|text| !text.trim().is_empty())
                 .or(event.description.as_deref()),
         )
         .await;

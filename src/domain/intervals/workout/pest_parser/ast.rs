@@ -16,6 +16,12 @@ pub enum StepKind {
     FreeRide,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CadenceRange {
+    pub min_rpm: i32,
+    pub max_rpm: i32,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParserTarget {
     PercentFtp { min: f64, max: f64 },
@@ -43,7 +49,7 @@ pub struct WorkoutStepAst {
     pub amount: StepAmount,
     pub kind: StepKind,
     pub target: Option<ParserTarget>,
-    pub cadence_rpm: Option<(i32, i32)>,
+    pub cadence_rpm: Option<CadenceRange>,
     pub text: Option<String>,
     pub raw: String,
 }
