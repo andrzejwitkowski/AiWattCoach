@@ -166,6 +166,40 @@ mod tests {
     }
 
     #[test]
+    fn pest_parser_rejects_non_positive_time_amounts() {
+        let zero_minutes = parse_workout_ast("- 0m 55%").expect_err("0m should fail");
+        let zero_hours = parse_workout_ast("- 0h 55%").expect_err("0h should fail");
+        let zero_seconds = parse_workout_ast("- 0s 55%").expect_err("0s should fail");
+
+        assert!(zero_minutes
+            .to_string()
+            .contains("time amount must be positive"));
+        assert!(zero_hours
+            .to_string()
+            .contains("time amount must be positive"));
+        assert!(zero_seconds
+            .to_string()
+            .contains("time amount must be positive"));
+    }
+
+    #[test]
+    fn pest_parser_rejects_non_positive_distance_amounts() {
+        let zero_km = parse_workout_ast("- 0km 55%").expect_err("0km should fail");
+        let zero_meters = parse_workout_ast("- 0mtr 55%").expect_err("0mtr should fail");
+        let zero_miles = parse_workout_ast("- 0mi 8:00/mi Pace").expect_err("0mi should fail");
+
+        assert!(zero_km
+            .to_string()
+            .contains("distance amount must be positive"));
+        assert!(zero_meters
+            .to_string()
+            .contains("distance amount must be positive"));
+        assert!(zero_miles
+            .to_string()
+            .contains("distance amount must be positive"));
+    }
+
+    #[test]
     fn pest_parser_parses_repeat_block() {
         let parsed =
             parse_workout_ast("Main Set 4x\n- 2m 95%\n- 2m 55%").expect("parse should succeed");

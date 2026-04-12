@@ -201,15 +201,19 @@ fn parse_time_amount(value: &str) -> Result<StepAmount, WorkoutPestParseError> {
         .map_err(|_| WorkoutPestParseError::new("invalid time amount"))?;
 
     let minutes = match unit {
-        "mins" | "min" | "m" => amount,
+        "mins" | "min" | "m" => {
+            if amount <= 0 {
+                return Err(WorkoutPestParseError::new("time amount must be positive"));
+            }
+            amount
+        }
         "hrs" | "hr" | "h" => amount
             .checked_mul(60)
-            .ok_or_else(|| WorkoutPestParseError::new("invalid time amount"))?,
+            .filter(|minutes| *minutes > 0)
+            .ok_or_else(|| WorkoutPestParseError::new("time amount must be positive"))?,
         "secs" | "sec" | "s" => {
             if amount <= 0 {
-                return Err(WorkoutPestParseError::new(
-                    "time amount in seconds must be positive",
-                ));
+                return Err(WorkoutPestParseError::new("time amount must be positive"));
             }
             ((amount - 1) / 60) + 1
         }
@@ -238,6 +242,12 @@ fn parse_distance_amount(value: &str) -> Result<StepAmount, WorkoutPestParseErro
     } else {
         return Err(WorkoutPestParseError::new("unsupported distance unit"));
     };
+
+    if kilometers <= 0.0 {
+        return Err(WorkoutPestParseError::new(
+            "distance amount must be positive",
+        ));
+    }
 
     Ok(StepAmount::DistanceKilometers(kilometers))
 }
