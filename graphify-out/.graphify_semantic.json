@@ -1,0 +1,3114 @@
+{
+  "nodes": [
+    {
+      "id": "agents_hexagonal_architecture",
+      "label": "Hexagonal Architecture Rules",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "agents_persist_before_side_effects",
+      "label": "Persist Local State Before Side Effects",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "readme_single_container_api_spa",
+      "label": "Single Container API And SPA Deployment",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "readme_operational_endpoints",
+      "label": "Operational Health And Readiness Endpoints",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_coach_reply_state_machine_coach_reply_operation",
+      "label": "Coach Reply Operation",
+      "file_type": "document",
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_coach_reply_state_machine_pending_state",
+      "label": "Pending Durable Coach Reply State",
+      "file_type": "document",
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_coach_reply_state_machine_recovery_rules",
+      "label": "Coach Reply Recovery Rules",
+      "file_type": "document",
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_coach_reply_state_machine_local_write_retries",
+      "label": "Same Request Local Write Retries",
+      "file_type": "document",
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_coach_reply_state_machine_compare_and_swap_reclaim",
+      "label": "Compare And Swap Pending Operation Reclaim",
+      "file_type": "document",
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "overview_bootstrap_architecture",
+      "label": "Bootstrap Architecture",
+      "file_type": "document",
+      "source_file": "docs/architecture/overview.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "overview_rest_adapter",
+      "label": "REST Adapter",
+      "file_type": "document",
+      "source_file": "docs/architecture/overview.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "overview_mongo_adapter",
+      "label": "Mongo Adapter",
+      "file_type": "document",
+      "source_file": "docs/architecture/overview.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "overview_planned_collections",
+      "label": "Planned Mongo Collections",
+      "file_type": "document",
+      "source_file": "docs/architecture/overview.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "backend_setup_design_backend_bootstrap",
+      "label": "Backend Bootstrap Foundation",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-20-backend-setup-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "backend_setup_design_obsidian_handbook",
+      "label": "Project Obsidian Handbook",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-20-backend-setup-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docker_ci_coolify_design_manual_release_flow",
+      "label": "Manual Tag Based Release Flow",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-20-docker-ci-coolify-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docker_ci_coolify_design_manual_coolify_deployment",
+      "label": "Manual Coolify Deployment Path",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-20-docker-ci-coolify-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "react_shell_design_frontend_shell",
+      "label": "Frontend Application Shell",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-20-react-shell-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "react_shell_design_backend_connectivity",
+      "label": "Frontend Backend Connectivity",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-20-react-shell-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "google_auth_rbac_design_identity_domain",
+      "label": "Identity Domain",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "google_auth_rbac_design_google_oauth_login_flow",
+      "label": "Google OAuth Login Flow",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "google_auth_rbac_design_server_side_sessions",
+      "label": "Server Side Sessions",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "google_auth_rbac_design_rbac_policy",
+      "label": "RBAC Policy",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "intervals_settings_test_button_draft_driven_intervals_settings",
+      "label": "Draft Driven Intervals Settings Actions",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-23-intervals-settings-test-button.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pr45_late_review_followups_synthetic_trace_parent",
+      "label": "Synthetic Trace Parent Fix",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-24-pr45-late-review-followups.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pr45_late_review_followups_atomic_tracing_capture",
+      "label": "Atomic Tracing Capture Writes",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-24-pr45-late-review-followups.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "calendar_mini_chart_colors_design_structured_mini_chart_bars",
+      "label": "Structured Mini Chart Bars",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-calendar-mini-chart-colors-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "completed_workout_enrichment_design_completed_activity_enrichment",
+      "label": "Completed Activity Enrichment",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-completed-workout-enrichment-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "completed_workout_enrichment_design_partial_enrichment_fail_open",
+      "label": "Partial Enrichment Fail Open",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-completed-workout-enrichment-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_details_handoff_workout_detail_modal",
+      "label": "Workout Detail Modal Flow",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-workout-details-handoff.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_fit_download_design_event_fit_download",
+      "label": "Event FIT Download Action",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-workout-fit-download-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_review_fixes_design_intervals_service_enrichment",
+      "label": "Intervals Service Enrichment Placement",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_review_fixes_design_partial_modal_resilience",
+      "label": "Partial Modal Resilience",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_review_fixes_intervals_service_enrichment",
+      "label": "Intervals Service Workout Enrichment",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_review_fixes_partial_detail_resilience",
+      "label": "Partial Workout Detail Failure Resilience",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_review_fixes_completed_mode_cleanup",
+      "label": "Completed Workout Mode UI Cleanup",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_detail_auto_scroll_removal_design_remove_scroll_side_effect",
+      "label": "Remove Workout Detail Auto Scroll Side Effect",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-30-workout-detail-auto-scroll-removal-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_detail_auto_scroll_removal_design_selection_sync",
+      "label": "Preserve Workout Detail Selection Synchronization",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-30-workout-detail-auto-scroll-removal-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_detail_auto_scroll_removal_remove_scroll_side_effect",
+      "label": "Workout Detail ScrollIntoView Removal",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-30-workout-detail-auto-scroll-removal.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_detail_auto_scroll_removal_interaction_test_updates",
+      "label": "Workout Detail Interaction Test Updates",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-03-30-workout-detail-auto-scroll-removal.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_phase_2_durable_coach_replies",
+      "label": "Durable Recoverable Coach Replies",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_phase_2_cache_invalidation",
+      "label": "LLM Context Cache Invalidation",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_phase_2_provider_observability",
+      "label": "Provider Observability And Cost Tracing",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "llm_phase_2_ai_settings_ux",
+      "label": "AI Settings UX Hardening",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "durable_coach_reply_finalization_coach_reply_operation",
+      "label": "Coach Reply Operation As Durable Workflow Record",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-durable-coach-reply-finalization.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "durable_coach_reply_finalization_idempotent_finalization",
+      "label": "Idempotent Coach Reply Finalization",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-durable-coach-reply-finalization.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "durable_coach_reply_finalization_followup_partial_persistence_recovery",
+      "label": "Partial Persistence Failure Recovery For Finalization",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-durable-coach-reply-finalization-followup.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "durable_coach_reply_finalization_followup_state_machine_update",
+      "label": "Coach Reply State Machine Documentation Update",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-durable-coach-reply-finalization-followup.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "health_check_log_noise_design_debug_success_responses",
+      "label": "Debug Level Successful Health Logs",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-health-check-log-noise-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "health_check_log_noise_design_preserve_failure_visibility",
+      "label": "Preserve Health Failure Visibility",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-health-check-log-noise-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "health_check_log_noise_debug_success_responses",
+      "label": "Reduce Health Endpoint Success Log Noise",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-health-check-log-noise.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "model_suggestion_refresh_design_curated_model_refresh",
+      "label": "Curated Provider Model Suggestion Refresh",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-model-suggestion-refresh-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "model_suggestion_refresh_design_preserve_freeform_model",
+      "label": "Preserve Freeform Model Input",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-model-suggestion-refresh-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "model_suggestion_refresh_curated_model_refresh",
+      "label": "Refresh AI Agent Model Suggestions",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-model-suggestion-refresh.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongo_log_noise_design_quiet_local_mongo_logging",
+      "label": "Lower Mongo Local Development Verbosity",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-mongo-log-noise-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "mongo_log_noise_quiet_local_mongo_logging",
+      "label": "Quiet Docker Compose Mongo Startup Logs",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-mongo-log-noise.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "openrouter_logging_design_safe_structured_diagnostics",
+      "label": "Safe Structured OpenRouter Diagnostics",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-openrouter-logging-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "openrouter_logging_design_redacted_request_logging",
+      "label": "Redacted Provider Request Metadata Logging",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-openrouter-logging-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "openrouter_logging_safe_structured_diagnostics",
+      "label": "OpenRouter Transport And Response Diagnostics",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-openrouter-logging.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "provider_logging_rollout_design_multi_provider_diagnostics",
+      "label": "Multi Provider Logging Pattern Rollout",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-provider-logging-rollout-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "provider_logging_rollout_openai_and_gemini_diagnostics",
+      "label": "OpenAI And Gemini Diagnostic Logging",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-02-provider-logging-rollout.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "athlete_summary_feature_persisted_summary_state",
+      "label": "Persisted Athlete Summary Feature",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "athlete_summary_feature_prompt_integration",
+      "label": "Athlete Summary Prompt Context Integration",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "athlete_summary_feature_websocket_system_message",
+      "label": "Athlete Summary Generation System Message",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "openrouter_prompt_caching_stable_prefix_only",
+      "label": "OpenRouter Stable Prefix Prompt Caching",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-03-openrouter-prompt-caching-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "openrouter_prompt_caching_uncached_conversation_tail",
+      "label": "Uncached Conversation Tail",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-03-openrouter-prompt-caching-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "websocket_disconnect_queue_handling_single_control_loop",
+      "label": "Single WebSocket Control Loop",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-03-websocket-disconnect-queue-handling.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "websocket_disconnect_queue_handling_drop_queued_messages",
+      "label": "Drop Queued Messages After Disconnect",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-03-websocket-disconnect-queue-handling.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "workout_summary_full_request_logging_builder_request_log",
+      "label": "Full Workout Summary Builder Request Logging",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-03-workout-summary-full-request-logging-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "athlete_summary_durable_generation_operation_record",
+      "label": "Athlete Summary Durable Generation Operation",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "athlete_summary_durable_generation_reclaim_stale_work",
+      "label": "Athlete Summary Stale Work Reclaim",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "athlete_summary_durable_generation_system_message_rendering",
+      "label": "Distinct Athlete Summary System Message Rendering",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "power_compression_llm_raw_power_segments",
+      "label": "Compressed Raw Power Segments",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-04-power-compression-llm-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "power_compression_llm_compact_training_context_field",
+      "label": "Compact Training Context Power Field",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-04-power-compression-llm-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "power_compression_llm_prompt_encoding_legend",
+      "label": "Power Compression Prompt Encoding Legend",
+      "file_type": "document",
+      "source_file": "docs/plans/2026-04-04-power-compression-llm-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "doc_power_compression_plan",
+      "label": "2026-04-04-power-compression-llm.md",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "power_compression_goal",
+      "label": "Replace LLM workout power arrays with compressed raw-power segments",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "power_compression_architecture",
+      "label": "Keep compression in domain/training_context and keep the LLM adapter limited to prompt assembly",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L5"
+    },
+    {
+      "id": "recent_workout_compressed_power_levels",
+      "label": "RecentWorkoutContext.compressed_power_levels: Vec<String>",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L25"
+    },
+    {
+      "id": "power_compression_task_service",
+      "label": "Add power compression tests and implementation in training_context service",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L32"
+    },
+    {
+      "id": "power_compression_task_packing",
+      "label": "Pack pc instead of p5",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L74"
+    },
+    {
+      "id": "power_compression_task_prompt",
+      "label": "Update the workout coach prompt with power-compression semantics",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L107"
+    },
+    {
+      "id": "power_compression_task_flow_assertions",
+      "label": "Update LLM flow assertions to expect pc in live requests",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L146"
+    },
+    {
+      "id": "power_compression_verification",
+      "label": "Run full formatting, lint, Rust tests, and repo verification",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L179"
+    },
+    {
+      "id": "src_domain_training_context_model_rs",
+      "label": "src/domain/training_context/model.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L14"
+    },
+    {
+      "id": "src_domain_training_context_service_rs",
+      "label": "src/domain/training_context/service.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L35"
+    },
+    {
+      "id": "src_domain_training_context_packing_rs",
+      "label": "src/domain/training_context/packing.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L77"
+    },
+    {
+      "id": "src_adapters_llm_workout_summary_coach_rs",
+      "label": "src/adapters/llm/workout_summary_coach.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L110"
+    },
+    {
+      "id": "tests_llm_adapters_rs",
+      "label": "tests/llm_adapters.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L111"
+    },
+    {
+      "id": "tests_llm_rest_workout_summary_flow_rs",
+      "label": "tests/llm_rest/workout_summary_flow.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L149"
+    },
+    {
+      "id": "doc_backend_slice_refactor_design",
+      "label": "2026-04-06-backend-slice-size-refactor-design.md",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "backend_slice_refactor_goal",
+      "label": "Reduce the training-plan and workout-summary backend slice by splitting oversized files without changing behavior",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "backend_slice_refactor_invariants",
+      "label": "Keep behavior, public APIs, durable workflow ordering, idempotency behavior, and adapter boundaries unchanged",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L7"
+    },
+    {
+      "id": "backend_slice_training_context_split",
+      "label": "Split training_context service into focused service/ siblings",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "backend_slice_workout_summary_split",
+      "label": "Split workout_summary service into focused service/ siblings",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L16"
+    },
+    {
+      "id": "backend_slice_packing_split",
+      "label": "Split training_context packing into focused packing/ siblings",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "backend_slice_mongo_adapter_split",
+      "label": "Split Mongo workout-summary adapter tests first and helper concerns only if still oversized",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L18"
+    },
+    {
+      "id": "backend_slice_test_suite_split",
+      "label": "Split bulky current-slice shared helpers and integration suites into directory-based test modules",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L19"
+    },
+    {
+      "id": "doc_backend_slice_refactor_plan",
+      "label": "2026-04-06-backend-slice-size-refactor.md",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "backend_slice_task_training_context",
+      "label": "Split training_context service into focused directory modules",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L13"
+    },
+    {
+      "id": "backend_slice_task_workout_summary",
+      "label": "Split workout_summary service while keeping WorkoutSummaryService as the entrypoint",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L42"
+    },
+    {
+      "id": "backend_slice_task_packing",
+      "label": "Split training_context packing into focused payload and rendering modules",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L68"
+    },
+    {
+      "id": "backend_slice_task_mongo_adapter",
+      "label": "Split the Mongo workout-summary adapter by moving tests first and helpers only if needed",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L91"
+    },
+    {
+      "id": "backend_slice_task_test_suites",
+      "label": "Split bulky workout-summary shared helpers and remaining oversized current-slice tests",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L113"
+    },
+    {
+      "id": "backend_slice_task_broader_verification",
+      "label": "Run broader backend verification after the refactor",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L138"
+    },
+    {
+      "id": "src_domain_workout_summary_service_rs",
+      "label": "src/domain/workout_summary/service.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L46"
+    },
+    {
+      "id": "src_adapters_mongo_workout_summary_rs",
+      "label": "src/adapters/mongo/workout_summary.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L95"
+    },
+    {
+      "id": "tests_workout_summary_service_shared_rs",
+      "label": "tests/workout_summary_service/shared.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L116"
+    },
+    {
+      "id": "tests_llm_rest_support_in_memory_rs",
+      "label": "tests/llm_rest/support/in_memory.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L120"
+    },
+    {
+      "id": "doc_review_followups_plan",
+      "label": "2026-04-06-review-followups.md",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "review_followup_goal",
+      "label": "Close final-review findings around projection replay healing, workout-summary legacy identifiers, correction retry budget, and test/doc nits",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "review_followup_projection_replay",
+      "label": "Make projection replay heal partial same-operation inserts",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L13"
+    },
+    {
+      "id": "review_followup_workout_summary_fallback",
+      "label": "Make workout-summary legacy fallback deterministic",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L40"
+    },
+    {
+      "id": "review_followup_correction_retry_budget",
+      "label": "Preserve correction retry budget across reclaim",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L71"
+    },
+    {
+      "id": "review_followup_test_and_doc_nits",
+      "label": "Close low-level test and docs nits",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L97"
+    },
+    {
+      "id": "review_followup_final_verification",
+      "label": "Run targeted tests, fmt, and clippy for the follow-up batch",
+      "file_type": "document",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L121"
+    },
+    {
+      "id": "src_adapters_mongo_training_plan_projections_rs",
+      "label": "src/adapters/mongo/training_plan_projections.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L16"
+    },
+    {
+      "id": "tests_training_plan_mongo_rs",
+      "label": "tests/training_plan_mongo.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "tests_training_plan_service_main_rs",
+      "label": "tests/training_plan_service/main.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L18"
+    },
+    {
+      "id": "tests_workout_summary_mongo_rs",
+      "label": "tests/workout_summary_mongo.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L44"
+    },
+    {
+      "id": "tests_workout_summary_service_create_and_get_rs",
+      "label": "tests/workout_summary_service/create_and_get.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L45"
+    },
+    {
+      "id": "src_domain_training_plan_service_rs",
+      "label": "src/domain/training_plan/service.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L74"
+    },
+    {
+      "id": "src_main_tests_rs",
+      "label": "src/main_tests.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L100"
+    },
+    {
+      "id": "tests_workout_summary_rest_shared_workout_summary_rs",
+      "label": "tests/workout_summary_rest/shared/workout_summary.rs",
+      "file_type": "code",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L101"
+    },
+    {
+      "id": "frontend_public_images_cyclist_bg_jpg",
+      "label": "cyclist-bg.jpg",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "cyclist_athlete",
+      "label": "Cyclist athlete",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "endurance_cycling_performance",
+      "label": "Endurance cycling performance",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "hero_background_imagery",
+      "label": "Hero background imagery",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "performance_coaching_brand_tone",
+      "label": "Performance coaching brand tone",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "outdoor_road_training_context",
+      "label": "Outdoor road training context",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    }
+  ],
+  "edges": [
+    {
+      "source": "agents_hexagonal_architecture",
+      "target": "overview_bootstrap_architecture",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.94,
+      "source_file": "AGENTS.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "agents_hexagonal_architecture",
+      "target": "google_auth_rbac_design_identity_domain",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.91,
+      "source_file": "AGENTS.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "agents_persist_before_side_effects",
+      "target": "llm_coach_reply_state_machine_recovery_rules",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.97,
+      "source_file": "AGENTS.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "agents_persist_before_side_effects",
+      "target": "google_auth_rbac_design_google_oauth_login_flow",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "AGENTS.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_single_container_api_spa",
+      "target": "react_shell_design_frontend_shell",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_single_container_api_spa",
+      "target": "docker_ci_coolify_design_manual_coolify_deployment",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_operational_endpoints",
+      "target": "overview_rest_adapter",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.93,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_operational_endpoints",
+      "target": "react_shell_design_backend_connectivity",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.89,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "llm_coach_reply_state_machine_coach_reply_operation",
+      "target": "llm_coach_reply_state_machine_pending_state",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.97,
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "llm_coach_reply_state_machine_pending_state",
+      "target": "llm_coach_reply_state_machine_recovery_rules",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.98,
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "llm_coach_reply_state_machine_recovery_rules",
+      "target": "llm_coach_reply_state_machine_local_write_retries",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.93,
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "llm_coach_reply_state_machine_pending_state",
+      "target": "llm_coach_reply_state_machine_compare_and_swap_reclaim",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "overview_bootstrap_architecture",
+      "target": "overview_rest_adapter",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/architecture/overview.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "overview_bootstrap_architecture",
+      "target": "overview_mongo_adapter",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/architecture/overview.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "overview_bootstrap_architecture",
+      "target": "overview_planned_collections",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.74,
+      "source_file": "docs/architecture/overview.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "backend_setup_design_backend_bootstrap",
+      "target": "overview_bootstrap_architecture",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.93,
+      "source_file": "docs/plans/2026-03-20-backend-setup-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "backend_setup_design_obsidian_handbook",
+      "target": "agents_hexagonal_architecture",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.87,
+      "source_file": "docs/plans/2026-03-20-backend-setup-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docker_ci_coolify_design_manual_release_flow",
+      "target": "docker_ci_coolify_design_manual_coolify_deployment",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.89,
+      "source_file": "docs/plans/2026-03-20-docker-ci-coolify-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docker_ci_coolify_design_manual_coolify_deployment",
+      "target": "readme_single_container_api_spa",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.84,
+      "source_file": "docs/plans/2026-03-20-docker-ci-coolify-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "react_shell_design_frontend_shell",
+      "target": "react_shell_design_backend_connectivity",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "docs/plans/2026-03-20-react-shell-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "react_shell_design_backend_connectivity",
+      "target": "overview_rest_adapter",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.86,
+      "source_file": "docs/plans/2026-03-20-react-shell-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "react_shell_design_frontend_shell",
+      "target": "google_auth_rbac_design_google_oauth_login_flow",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.82,
+      "source_file": "docs/plans/2026-03-20-react-shell-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "google_auth_rbac_design_identity_domain",
+      "target": "google_auth_rbac_design_google_oauth_login_flow",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "google_auth_rbac_design_identity_domain",
+      "target": "google_auth_rbac_design_server_side_sessions",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "google_auth_rbac_design_identity_domain",
+      "target": "google_auth_rbac_design_rbac_policy",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "google_auth_rbac_design_google_oauth_login_flow",
+      "target": "google_auth_rbac_design_server_side_sessions",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "google_auth_rbac_design_rbac_policy",
+      "target": "google_auth_rbac_design_server_side_sessions",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.88,
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "intervals_settings_test_button_draft_driven_intervals_settings",
+      "target": "react_shell_design_backend_connectivity",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.78,
+      "source_file": "docs/plans/2026-03-23-intervals-settings-test-button.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pr45_late_review_followups_synthetic_trace_parent",
+      "target": "pr45_late_review_followups_atomic_tracing_capture",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.91,
+      "source_file": "docs/plans/2026-03-24-pr45-late-review-followups.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "calendar_mini_chart_colors_design_structured_mini_chart_bars",
+      "target": "workout_details_handoff_workout_detail_modal",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.83,
+      "source_file": "docs/plans/2026-03-29-calendar-mini-chart-colors-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "completed_workout_enrichment_design_completed_activity_enrichment",
+      "target": "workout_details_handoff_workout_detail_modal",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/plans/2026-03-29-completed-workout-enrichment-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "completed_workout_enrichment_design_partial_enrichment_fail_open",
+      "target": "completed_workout_enrichment_design_completed_activity_enrichment",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-03-29-completed-workout-enrichment-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "workout_fit_download_design_event_fit_download",
+      "target": "workout_details_handoff_workout_detail_modal",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.92,
+      "source_file": "docs/plans/2026-03-29-workout-fit-download-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "workout_review_fixes_design_intervals_service_enrichment",
+      "target": "completed_workout_enrichment_design_completed_activity_enrichment",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.94,
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "workout_review_fixes_design_partial_modal_resilience",
+      "target": "workout_details_handoff_workout_detail_modal",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.93,
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "workout_review_fixes_design_partial_modal_resilience",
+      "target": "completed_workout_enrichment_design_partial_enrichment_fail_open",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.79,
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "workout_review_fixes_design_intervals_service_enrichment",
+      "target": "agents_hexagonal_architecture",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.86,
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes-design.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "workout_review_fixes_intervals_service_enrichment",
+      "target": "workout_review_fixes_partial_detail_resilience",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "workout_review_fixes_partial_detail_resilience",
+      "target": "workout_review_fixes_completed_mode_cleanup",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.8,
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "workout_detail_auto_scroll_removal_design_remove_scroll_side_effect",
+      "target": "workout_detail_auto_scroll_removal_remove_scroll_side_effect",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.98,
+      "source_file": "docs/plans/2026-03-30-workout-detail-auto-scroll-removal-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "workout_detail_auto_scroll_removal_design_selection_sync",
+      "target": "workout_detail_auto_scroll_removal_interaction_test_updates",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.91,
+      "source_file": "docs/plans/2026-03-30-workout-detail-auto-scroll-removal-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "workout_detail_auto_scroll_removal_remove_scroll_side_effect",
+      "target": "workout_detail_auto_scroll_removal_interaction_test_updates",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "docs/plans/2026-03-30-workout-detail-auto-scroll-removal.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "llm_phase_2_durable_coach_replies",
+      "target": "durable_coach_reply_finalization_coach_reply_operation",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.94,
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "llm_phase_2_cache_invalidation",
+      "target": "openrouter_prompt_caching_stable_prefix_only",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.86,
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "llm_phase_2_provider_observability",
+      "target": "openrouter_logging_safe_structured_diagnostics",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "llm_phase_2_provider_observability",
+      "target": "provider_logging_rollout_openai_and_gemini_diagnostics",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.91,
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "llm_phase_2_ai_settings_ux",
+      "target": "model_suggestion_refresh_curated_model_refresh",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/plans/2026-04-01-llm-phase-2.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "durable_coach_reply_finalization_coach_reply_operation",
+      "target": "durable_coach_reply_finalization_idempotent_finalization",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-04-02-durable-coach-reply-finalization.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "durable_coach_reply_finalization_idempotent_finalization",
+      "target": "durable_coach_reply_finalization_followup_partial_persistence_recovery",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.93,
+      "source_file": "docs/plans/2026-04-02-durable-coach-reply-finalization.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "durable_coach_reply_finalization_followup_partial_persistence_recovery",
+      "target": "durable_coach_reply_finalization_followup_state_machine_update",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.84,
+      "source_file": "docs/plans/2026-04-02-durable-coach-reply-finalization-followup.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "durable_coach_reply_finalization_coach_reply_operation",
+      "target": "athlete_summary_durable_generation_operation_record",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "docs/plans/2026-04-02-durable-coach-reply-finalization.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "health_check_log_noise_design_debug_success_responses",
+      "target": "health_check_log_noise_debug_success_responses",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.98,
+      "source_file": "docs/plans/2026-04-02-health-check-log-noise-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "health_check_log_noise_design_preserve_failure_visibility",
+      "target": "health_check_log_noise_debug_success_responses",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.92,
+      "source_file": "docs/plans/2026-04-02-health-check-log-noise-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "model_suggestion_refresh_design_curated_model_refresh",
+      "target": "model_suggestion_refresh_curated_model_refresh",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.98,
+      "source_file": "docs/plans/2026-04-02-model-suggestion-refresh-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "model_suggestion_refresh_design_preserve_freeform_model",
+      "target": "model_suggestion_refresh_curated_model_refresh",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "docs/plans/2026-04-02-model-suggestion-refresh-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "mongo_log_noise_design_quiet_local_mongo_logging",
+      "target": "mongo_log_noise_quiet_local_mongo_logging",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.98,
+      "source_file": "docs/plans/2026-04-02-mongo-log-noise-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "openrouter_logging_design_safe_structured_diagnostics",
+      "target": "openrouter_logging_safe_structured_diagnostics",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.98,
+      "source_file": "docs/plans/2026-04-02-openrouter-logging-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "openrouter_logging_design_redacted_request_logging",
+      "target": "openrouter_logging_safe_structured_diagnostics",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.94,
+      "source_file": "docs/plans/2026-04-02-openrouter-logging-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "provider_logging_rollout_design_multi_provider_diagnostics",
+      "target": "provider_logging_rollout_openai_and_gemini_diagnostics",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.98,
+      "source_file": "docs/plans/2026-04-02-provider-logging-rollout-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "openrouter_logging_safe_structured_diagnostics",
+      "target": "provider_logging_rollout_openai_and_gemini_diagnostics",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/plans/2026-04-02-openrouter-logging.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_feature_persisted_summary_state",
+      "target": "athlete_summary_feature_prompt_integration",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_feature_persisted_summary_state",
+      "target": "athlete_summary_feature_websocket_system_message",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.88,
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_feature_persisted_summary_state",
+      "target": "athlete_summary_durable_generation_operation_record",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.94,
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_feature_prompt_integration",
+      "target": "power_compression_llm_compact_training_context_field",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.78,
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_feature_websocket_system_message",
+      "target": "websocket_disconnect_queue_handling_drop_queued_messages",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.74,
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "openrouter_prompt_caching_stable_prefix_only",
+      "target": "openrouter_prompt_caching_uncached_conversation_tail",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.97,
+      "source_file": "docs/plans/2026-04-03-openrouter-prompt-caching-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "openrouter_prompt_caching_stable_prefix_only",
+      "target": "llm_phase_2_cache_invalidation",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.84,
+      "source_file": "docs/plans/2026-04-03-openrouter-prompt-caching-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "websocket_disconnect_queue_handling_single_control_loop",
+      "target": "websocket_disconnect_queue_handling_drop_queued_messages",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-04-03-websocket-disconnect-queue-handling.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "websocket_disconnect_queue_handling_drop_queued_messages",
+      "target": "llm_phase_2_durable_coach_replies",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/plans/2026-04-03-websocket-disconnect-queue-handling.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "workout_summary_full_request_logging_builder_request_log",
+      "target": "openrouter_logging_design_redacted_request_logging",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.83,
+      "source_file": "docs/plans/2026-04-03-workout-summary-full-request-logging-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "workout_summary_full_request_logging_builder_request_log",
+      "target": "llm_phase_2_provider_observability",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.87,
+      "source_file": "docs/plans/2026-04-03-workout-summary-full-request-logging-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_durable_generation_operation_record",
+      "target": "athlete_summary_durable_generation_reclaim_stale_work",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.97,
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_durable_generation_operation_record",
+      "target": "athlete_summary_durable_generation_system_message_rendering",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.83,
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_durable_generation_reclaim_stale_work",
+      "target": "durable_coach_reply_finalization_followup_partial_persistence_recovery",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_durable_generation_system_message_rendering",
+      "target": "athlete_summary_feature_websocket_system_message",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "power_compression_llm_raw_power_segments",
+      "target": "power_compression_llm_compact_training_context_field",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-04-04-power-compression-llm-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "power_compression_llm_compact_training_context_field",
+      "target": "power_compression_llm_prompt_encoding_legend",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-04-04-power-compression-llm-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "power_compression_llm_raw_power_segments",
+      "target": "openrouter_prompt_caching_stable_prefix_only",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.73,
+      "source_file": "docs/plans/2026-04-04-power-compression-llm-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "power_compression_llm_prompt_encoding_legend",
+      "target": "workout_summary_full_request_logging_builder_request_log",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "docs/plans/2026-04-04-power-compression-llm-design.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "workout_review_fixes_intervals_service_enrichment",
+      "target": "llm_phase_2_durable_coach_replies",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.68,
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "workout_review_fixes_partial_detail_resilience",
+      "target": "websocket_disconnect_queue_handling_drop_queued_messages",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.62,
+      "source_file": "docs/plans/2026-03-29-workout-review-fixes.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "health_check_log_noise_debug_success_responses",
+      "target": "mongo_log_noise_quiet_local_mongo_logging",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.79,
+      "source_file": "docs/plans/2026-04-02-health-check-log-noise.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "openrouter_logging_safe_structured_diagnostics",
+      "target": "workout_summary_full_request_logging_builder_request_log",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.81,
+      "source_file": "docs/plans/2026-04-02-openrouter-logging.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "provider_logging_rollout_openai_and_gemini_diagnostics",
+      "target": "model_suggestion_refresh_curated_model_refresh",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.61,
+      "source_file": "docs/plans/2026-04-02-provider-logging-rollout.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_feature_prompt_integration",
+      "target": "openrouter_prompt_caching_stable_prefix_only",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.72,
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_feature_prompt_integration",
+      "target": "power_compression_llm_prompt_encoding_legend",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.76,
+      "source_file": "docs/plans/2026-04-03-athlete-summary-feature-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_durable_generation_operation_record",
+      "target": "durable_coach_reply_finalization_coach_reply_operation",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.96,
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "athlete_summary_durable_generation_reclaim_stale_work",
+      "target": "websocket_disconnect_queue_handling_single_control_loop",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.63,
+      "source_file": "docs/plans/2026-04-04-athlete-summary-durable-generation-implementation-plan.md",
+      "source_location": null,
+      "weight": 1
+    },
+    {
+      "source": "doc_power_compression_plan",
+      "target": "power_compression_goal",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_power_compression_plan",
+      "target": "power_compression_architecture",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_power_compression_plan",
+      "target": "recent_workout_compressed_power_levels",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_power_compression_plan",
+      "target": "power_compression_task_service",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_power_compression_plan",
+      "target": "power_compression_task_packing",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L74",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_power_compression_plan",
+      "target": "power_compression_task_prompt",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L107",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_power_compression_plan",
+      "target": "power_compression_task_flow_assertions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L146",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_power_compression_plan",
+      "target": "power_compression_verification",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L179",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_goal",
+      "target": "recent_workout_compressed_power_levels",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_architecture",
+      "target": "src_domain_training_context_service_rs",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_architecture",
+      "target": "src_adapters_llm_workout_summary_coach_rs",
+      "relation": "constrains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "recent_workout_compressed_power_levels",
+      "target": "src_domain_training_context_model_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_task_service",
+      "target": "src_domain_training_context_service_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_task_service",
+      "target": "recent_workout_compressed_power_levels",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_task_packing",
+      "target": "src_domain_training_context_packing_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L77",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_task_packing",
+      "target": "recent_workout_compressed_power_levels",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L95",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_task_prompt",
+      "target": "src_adapters_llm_workout_summary_coach_rs",
+      "relation": "updates",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L110",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_task_prompt",
+      "target": "tests_llm_adapters_rs",
+      "relation": "tests",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L111",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_task_flow_assertions",
+      "target": "tests_llm_rest_workout_summary_flow_rs",
+      "relation": "tests",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L149",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_task_flow_assertions",
+      "target": "power_compression_task_prompt",
+      "relation": "depends_on",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L153",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_verification",
+      "target": "power_compression_task_service",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L184",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_verification",
+      "target": "power_compression_task_packing",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L190",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_verification",
+      "target": "power_compression_task_prompt",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L196",
+      "weight": 1.0
+    },
+    {
+      "source": "power_compression_verification",
+      "target": "power_compression_task_flow_assertions",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-04-power-compression-llm.md",
+      "source_location": "L202",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_design",
+      "target": "backend_slice_refactor_goal",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_design",
+      "target": "backend_slice_refactor_invariants",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_design",
+      "target": "backend_slice_training_context_split",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_design",
+      "target": "backend_slice_workout_summary_split",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_design",
+      "target": "backend_slice_packing_split",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_design",
+      "target": "backend_slice_mongo_adapter_split",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_design",
+      "target": "backend_slice_test_suite_split",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_goal",
+      "target": "backend_slice_training_context_split",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_goal",
+      "target": "backend_slice_workout_summary_split",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_goal",
+      "target": "backend_slice_packing_split",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_goal",
+      "target": "backend_slice_mongo_adapter_split",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_goal",
+      "target": "backend_slice_test_suite_split",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_invariants",
+      "target": "backend_slice_training_context_split",
+      "relation": "constrains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_invariants",
+      "target": "backend_slice_workout_summary_split",
+      "relation": "constrains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_invariants",
+      "target": "backend_slice_packing_split",
+      "relation": "constrains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_invariants",
+      "target": "backend_slice_mongo_adapter_split",
+      "relation": "constrains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_refactor_invariants",
+      "target": "backend_slice_test_suite_split",
+      "relation": "constrains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_training_context_split",
+      "target": "src_domain_training_context_service_rs",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_workout_summary_split",
+      "target": "src_domain_workout_summary_service_rs",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_packing_split",
+      "target": "src_domain_training_context_packing_rs",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_mongo_adapter_split",
+      "target": "src_adapters_mongo_workout_summary_rs",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_test_suite_split",
+      "target": "tests_workout_summary_service_shared_rs",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_test_suite_split",
+      "target": "tests_llm_adapters_rs",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_test_suite_split",
+      "target": "tests_llm_rest_support_in_memory_rs",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor-design.md",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_plan",
+      "target": "backend_slice_task_training_context",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_plan",
+      "target": "backend_slice_task_workout_summary",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_plan",
+      "target": "backend_slice_task_packing",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L68",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_plan",
+      "target": "backend_slice_task_mongo_adapter",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_plan",
+      "target": "backend_slice_task_test_suites",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L113",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_plan",
+      "target": "backend_slice_task_broader_verification",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L138",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_backend_slice_refactor_plan",
+      "target": "doc_backend_slice_refactor_design",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_training_context",
+      "target": "backend_slice_training_context_split",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_training_context",
+      "target": "src_domain_training_context_service_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_workout_summary",
+      "target": "backend_slice_workout_summary_split",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L54",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_workout_summary",
+      "target": "src_domain_workout_summary_service_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_packing",
+      "target": "backend_slice_packing_split",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_packing",
+      "target": "src_domain_training_context_packing_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L71",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_mongo_adapter",
+      "target": "backend_slice_mongo_adapter_split",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_mongo_adapter",
+      "target": "src_adapters_mongo_workout_summary_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L95",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_test_suites",
+      "target": "backend_slice_test_suite_split",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L122",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_test_suites",
+      "target": "tests_workout_summary_service_shared_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L116",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_test_suites",
+      "target": "tests_llm_adapters_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L119",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_test_suites",
+      "target": "tests_llm_rest_support_in_memory_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L120",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_broader_verification",
+      "target": "backend_slice_task_training_context",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L143",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_broader_verification",
+      "target": "backend_slice_task_workout_summary",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L143",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_broader_verification",
+      "target": "backend_slice_task_packing",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L143",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_broader_verification",
+      "target": "backend_slice_task_mongo_adapter",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L143",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_slice_task_broader_verification",
+      "target": "backend_slice_task_test_suites",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-backend-slice-size-refactor.md",
+      "source_location": "L143",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_review_followups_plan",
+      "target": "review_followup_goal",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_review_followups_plan",
+      "target": "review_followup_projection_replay",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_review_followups_plan",
+      "target": "review_followup_workout_summary_fallback",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_review_followups_plan",
+      "target": "review_followup_correction_retry_budget",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L71",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_review_followups_plan",
+      "target": "review_followup_test_and_doc_nits",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L97",
+      "weight": 1.0
+    },
+    {
+      "source": "doc_review_followups_plan",
+      "target": "review_followup_final_verification",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L121",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_goal",
+      "target": "review_followup_projection_replay",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_goal",
+      "target": "review_followup_workout_summary_fallback",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_goal",
+      "target": "review_followup_correction_retry_budget",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_goal",
+      "target": "review_followup_test_and_doc_nits",
+      "relation": "targets",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_projection_replay",
+      "target": "src_adapters_mongo_training_plan_projections_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_projection_replay",
+      "target": "tests_training_plan_mongo_rs",
+      "relation": "tests",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_projection_replay",
+      "target": "tests_training_plan_service_main_rs",
+      "relation": "tests",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_workout_summary_fallback",
+      "target": "src_adapters_mongo_workout_summary_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_workout_summary_fallback",
+      "target": "tests_workout_summary_mongo_rs",
+      "relation": "tests",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_workout_summary_fallback",
+      "target": "tests_workout_summary_service_create_and_get_rs",
+      "relation": "tests",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_correction_retry_budget",
+      "target": "src_domain_training_plan_service_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L74",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_correction_retry_budget",
+      "target": "tests_training_plan_service_main_rs",
+      "relation": "tests",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_test_and_doc_nits",
+      "target": "src_main_tests_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L100",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_test_and_doc_nits",
+      "target": "tests_workout_summary_rest_shared_workout_summary_rs",
+      "relation": "modifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L101",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_test_and_doc_nits",
+      "target": "doc_backend_slice_refactor_plan",
+      "relation": "updates",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_final_verification",
+      "target": "review_followup_projection_replay",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L126",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_final_verification",
+      "target": "review_followup_workout_summary_fallback",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L126",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_final_verification",
+      "target": "review_followup_correction_retry_budget",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L126",
+      "weight": 1.0
+    },
+    {
+      "source": "review_followup_final_verification",
+      "target": "review_followup_test_and_doc_nits",
+      "relation": "verifies",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\plans\\2026-04-06-review-followups.md",
+      "source_location": "L126",
+      "weight": 1.0
+    },
+    {
+      "source": "frontend_public_images_cyclist_bg_jpg",
+      "target": "cyclist_athlete",
+      "relation": "depicts",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.98
+    },
+    {
+      "source": "frontend_public_images_cyclist_bg_jpg",
+      "target": "endurance_cycling_performance",
+      "relation": "conveys",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.94
+    },
+    {
+      "source": "frontend_public_images_cyclist_bg_jpg",
+      "target": "hero_background_imagery",
+      "relation": "serves_as",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.96
+    },
+    {
+      "source": "frontend_public_images_cyclist_bg_jpg",
+      "target": "outdoor_road_training_context",
+      "relation": "sets_context_for",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.91
+    },
+    {
+      "source": "hero_background_imagery",
+      "target": "performance_coaching_brand_tone",
+      "relation": "supports",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.9
+    },
+    {
+      "source": "cyclist_athlete",
+      "target": "endurance_cycling_performance",
+      "relation": "embodies",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.9
+    },
+    {
+      "source": "outdoor_road_training_context",
+      "target": "endurance_cycling_performance",
+      "relation": "reinforces",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.86
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "durable_coach_reply_workflow",
+      "label": "Durable Coach Reply Workflow",
+      "nodes": [
+        "agents_persist_before_side_effects",
+        "llm_coach_reply_state_machine_coach_reply_operation",
+        "llm_coach_reply_state_machine_pending_state",
+        "llm_coach_reply_state_machine_recovery_rules",
+        "llm_coach_reply_state_machine_local_write_retries",
+        "llm_coach_reply_state_machine_compare_and_swap_reclaim"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "docs/architecture/llm-coach-reply-state-machine.md"
+    },
+    {
+      "id": "backend_bootstrap_and_deployment",
+      "label": "Backend Bootstrap And Deployment Foundation",
+      "nodes": [
+        "backend_setup_design_backend_bootstrap",
+        "overview_bootstrap_architecture",
+        "overview_rest_adapter",
+        "overview_mongo_adapter",
+        "readme_single_container_api_spa",
+        "docker_ci_coolify_design_manual_coolify_deployment"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.86,
+      "source_file": "docs/architecture/overview.md"
+    },
+    {
+      "id": "auth_and_access_control",
+      "label": "Google Auth And Access Control Stack",
+      "nodes": [
+        "react_shell_design_frontend_shell",
+        "google_auth_rbac_design_identity_domain",
+        "google_auth_rbac_design_google_oauth_login_flow",
+        "google_auth_rbac_design_server_side_sessions",
+        "google_auth_rbac_design_rbac_policy"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "docs/plans/2026-03-21-google-auth-rbac-design.md"
+    },
+    {
+      "id": "workout_detail_user_experience",
+      "label": "Workout Detail User Experience",
+      "nodes": [
+        "calendar_mini_chart_colors_design_structured_mini_chart_bars",
+        "completed_workout_enrichment_design_completed_activity_enrichment",
+        "completed_workout_enrichment_design_partial_enrichment_fail_open",
+        "workout_details_handoff_workout_detail_modal",
+        "workout_fit_download_design_event_fit_download",
+        "workout_review_fixes_design_intervals_service_enrichment",
+        "workout_review_fixes_design_partial_modal_resilience"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.89,
+      "source_file": "docs/plans/2026-03-29-workout-details-handoff.md"
+    },
+    {
+      "id": "cyclist_bg_visual_theme",
+      "nodes": [
+        "frontend_public_images_cyclist_bg_jpg",
+        "cyclist_athlete",
+        "endurance_cycling_performance",
+        "hero_background_imagery",
+        "performance_coaching_brand_tone",
+        "outdoor_road_training_context"
+      ],
+      "relation": "visual_theme",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
