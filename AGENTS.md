@@ -55,6 +55,31 @@ Before changing behavior, use this order:
 4. integration and recovery path if external APIs are involved
 5. only then propose or implement the change
 
+## Karpathy Guardrails for Agents
+
+Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this repo.
+
+- Think before changing:
+  - State assumptions when they matter.
+  - If multiple valid interpretations exist, surface them instead of silently picking one.
+  - If a simpler approach works, prefer it and say so.
+  - If something important is unclear, stop and ask instead of guessing.
+- Simplicity first:
+  - Write the minimum code that solves the requested problem.
+  - Do not add speculative abstractions, flexibility, or configurability that were not requested.
+  - Avoid handling impossible scenarios just to look complete.
+  - If a solution feels overbuilt, reduce it before shipping it.
+- Surgical changes:
+  - Touch only what is needed for the request.
+  - Do not refactor unrelated code, formatting, or comments while making a focused change.
+  - Match existing local style unless the task explicitly includes a broader cleanup.
+  - Remove only the imports, variables, or helpers that your change made unnecessary.
+- Goal-driven verification:
+  - Turn requests into verifiable outcomes before editing.
+  - Prefer checks that prove the requested behavior, not generic confidence.
+  - For multi-step work, keep a short plan with a concrete verification step for each part.
+  - Do not call the work done until the relevant commands or checks were actually run and their output was read.
+
 ## Important Directories
 
 - `src/domain/` - domain models, ports, services.
