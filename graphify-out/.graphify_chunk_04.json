@@ -1,0 +1,129 @@
+{
+  "nodes": [
+    {
+      "id": "frontend_public_images_cyclist_bg_jpg",
+      "label": "cyclist-bg.jpg",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "cyclist_athlete",
+      "label": "Cyclist athlete",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "endurance_cycling_performance",
+      "label": "Endurance cycling performance",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "hero_background_imagery",
+      "label": "Hero background imagery",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "performance_coaching_brand_tone",
+      "label": "Performance coaching brand tone",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    },
+    {
+      "id": "outdoor_road_training_context",
+      "label": "Outdoor road training context",
+      "file_type": "image",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image"
+    }
+  ],
+  "edges": [
+    {
+      "source": "frontend_public_images_cyclist_bg_jpg",
+      "target": "cyclist_athlete",
+      "relation": "depicts",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.98
+    },
+    {
+      "source": "frontend_public_images_cyclist_bg_jpg",
+      "target": "endurance_cycling_performance",
+      "relation": "conveys",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.94
+    },
+    {
+      "source": "frontend_public_images_cyclist_bg_jpg",
+      "target": "hero_background_imagery",
+      "relation": "serves_as",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.96
+    },
+    {
+      "source": "frontend_public_images_cyclist_bg_jpg",
+      "target": "outdoor_road_training_context",
+      "relation": "sets_context_for",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.91
+    },
+    {
+      "source": "hero_background_imagery",
+      "target": "performance_coaching_brand_tone",
+      "relation": "supports",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.9
+    },
+    {
+      "source": "cyclist_athlete",
+      "target": "endurance_cycling_performance",
+      "relation": "embodies",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.9
+    },
+    {
+      "source": "outdoor_road_training_context",
+      "target": "endurance_cycling_performance",
+      "relation": "reinforces",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg",
+      "source_location": "image",
+      "weight": 0.86
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "cyclist_bg_visual_theme",
+      "nodes": [
+        "frontend_public_images_cyclist_bg_jpg",
+        "cyclist_athlete",
+        "endurance_cycling_performance",
+        "hero_background_imagery",
+        "performance_coaching_brand_tone",
+        "outdoor_road_training_context"
+      ],
+      "relation": "visual_theme",
+      "confidence": "INFERRED",
+      "source_file": "frontend\\public\\images\\cyclist-bg.jpg"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
