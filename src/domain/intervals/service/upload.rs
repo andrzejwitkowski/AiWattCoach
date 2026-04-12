@@ -1,13 +1,15 @@
 use super::*;
 
-impl<Api, Settings, Activities, UploadOperations, Extractor>
-    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor>
+impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
+    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     Activities: ActivityRepositoryPort,
     UploadOperations: ActivityUploadOperationRepositoryPort,
     Extractor: ActivityFileIdentityExtractorPort,
+    PocRepo: PestParserPocRepositoryPort,
+    Time: Clock,
 {
     pub(super) async fn recover_uploaded_operation(
         &self,

@@ -1,0 +1,37 @@
+WHITESPACE = _{ " " | "\t" }
+NEWLINE = _{ "\r\n" | "\n" }
+
+workout = { SOI ~ line* ~ EOI }
+line = _{ blank_line | repeat_header_line | step_line | text_line }
+
+blank_line = { WHITESPACE* ~ NEWLINE }
+repeat_header_line = { WHITESPACE* ~ repeat_title? ~ repeat_count ~ WHITESPACE* ~ line_end }
+step_line = { WHITESPACE* ~ "-" ~ WHITESPACE* ~ step_body ~ WHITESPACE* ~ line_end }
+text_line = { WHITESPACE* ~ !"-" ~ (!NEWLINE ~ ANY)+ ~ line_end }
+
+repeat_title = { (!(repeat_count ~ WHITESPACE* ~ NEWLINE?) ~ !NEWLINE ~ ANY)+ }
+repeat_count = @{ ASCII_DIGIT+ ~ "x" }
+
+step_body = { cue_prefix? ~ amount ~ modifier? ~ target? ~ cadence? ~ text_metadata? }
+cue_prefix = { (!(amount) ~ !NEWLINE ~ ANY)+ }
+modifier = { ramp | freeride }
+ramp = { ^"ramp" }
+freeride = { ^"freeride" }
+
+amount = { time_amount | distance_amount }
+time_amount = @{ ASCII_DIGIT+ ~ ("hrs" | "hr" | "h" | "mins" | "min" | "m" | "secs" | "sec" | "s") ~ !ASCII_ALPHA }
+distance_amount = @{ ASCII_DIGIT+ ~ ("km" | "mtr" | "mi") ~ !ASCII_ALPHA }
+
+target = { hr_target | lthr_target | pace_target | ftp_target }
+ftp_target = @{ number ~ ("-" ~ number)? ~ "%" }
+hr_target = { number ~ ("-" ~ number)? ~ "%" ~ ^"HR" }
+lthr_target = { number ~ ("-" ~ number)? ~ "%" ~ ^"LTHR" }
+pace_target = { pace_value ~ ^"Pace" }
+pace_value = @{ ASCII_DIGIT+ ~ ":" ~ ASCII_DIGIT+ ~ "/" ~ ("km" | "mi" | "100m" | "400m") }
+
+cadence = @{ ASCII_DIGIT+ ~ ("-" ~ ASCII_DIGIT+)? ~ ^"rpm" }
+text_metadata = { ^"text" ~ "=" ~ quoted_string }
+quoted_string = @{ "\"" ~ ( "\\\"" | !NEWLINE ~ !("\"") ~ ANY )* ~ "\"" }
+
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+line_end = _{ NEWLINE | EOI }

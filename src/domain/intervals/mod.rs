@@ -1,4 +1,5 @@
 mod model;
+mod pest_parser_poc;
 mod planned_workout;
 mod ports;
 mod service;
@@ -12,6 +13,11 @@ pub use model::{
     ActivityUploadOperationStatus, ActivityZoneTime, CreateEvent, DateRange, Event, EventCategory,
     EventFileUpload, IntervalsCredentials, IntervalsError, UpdateActivity, UpdateEvent,
     UploadActivity, UploadedActivities,
+};
+pub use pest_parser_poc::{
+    NoopPestParserPocRepository, PestParserPocDirection, PestParserPocOperation,
+    PestParserPocParsedPayload, PestParserPocRecordContext, PestParserPocRepositoryPort,
+    PestParserPocSource, PestParserPocStatus, PestParserPocWorkoutRecord, PestParserPocWriter,
 };
 pub use planned_workout::{
     parse_planned_workout, parse_planned_workout_days, serialize_planned_workout, PlannedWorkout,
