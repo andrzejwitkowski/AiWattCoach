@@ -1,0 +1,50 @@
+# Adapters Mongo Workout Summary
+
+> 28 nodes · cohesion 0.12
+
+## Key Concepts
+
+- **workout_summary.rs** (20 connections) — `src\adapters\mongo\workout_summary.rs`
+- **MongoWorkoutSummaryRepository** (11 connections) — `src\adapters\mongo\workout_summary.rs`
+- **find_preferred_document()** (8 connections) — `src\adapters\mongo\workout_summary.rs`
+- **document_identity_filter()** (5 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.append_message()** (5 connections) — `src\adapters\mongo\workout_summary.rs`
+- **find_preferred_message_lookup_document()** (4 connections) — `src\adapters\mongo\workout_summary.rs`
+- **current_workout_id_filter()** (3 connections) — `src\adapters\mongo\workout_summary.rs`
+- **editable_document_identity_filter()** (3 connections) — `src\adapters\mongo\workout_summary.rs`
+- **find_preferred_documents()** (3 connections) — `src\adapters\mongo\workout_summary.rs`
+- **legacy_event_id_filter()** (3 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.persist_workout_recap()** (3 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.set_saved_state()** (3 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.update_rpe()** (3 connections) — `src\adapters\mongo\workout_summary.rs`
+- **map_domain_to_document()** (2 connections) — `src\adapters\mongo\workout_summary.rs`
+- **map_message_to_document()** (2 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.create()** (2 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.find_by_user_id_and_workout_id()** (2 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.find_by_user_id_and_workout_ids()** (2 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.find_message_by_id()** (2 connections) — `src\adapters\mongo\workout_summary.rs`
+- **.new()** (2 connections) — `src\adapters\mongo\workout_summary.rs`
+- **with_message_append_filter()** (2 connections) — `src\adapters\mongo\workout_summary.rs`
+- **ConversationMessageDocument** (1 connections) — `src\adapters\mongo\workout_summary.rs`
+- **map_document_to_domain()** (1 connections) — `src\adapters\mongo\workout_summary.rs`
+- **map_message_to_domain()** (1 connections) — `src\adapters\mongo\workout_summary.rs`
+- **map_rpe_to_domain()** (1 connections) — `src\adapters\mongo\workout_summary.rs`
+- *... and 3 more nodes in this community*
+
+## Relationships
+
+- No strong cross-community connections detected
+
+## Source Files
+
+- `src\adapters\mongo\workout_summary.rs`
+
+## Audit Trail
+
+- EXTRACTED: 97 (100%)
+- INFERRED: 0 (0%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [[index]] to navigate.*

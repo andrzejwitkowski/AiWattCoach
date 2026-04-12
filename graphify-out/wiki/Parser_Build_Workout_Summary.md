@@ -1,0 +1,51 @@
+# Parser Build Workout Summary
+
+> 29 nodes · cohesion 0.13
+
+## Key Concepts
+
+- **parser.rs** (16 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parser.rs** (12 connections) — `src\domain\intervals\workout\parser.rs`
+- **parse_workout_line()** (7 connections) — `src\domain\intervals\workout\parser.rs`
+- **parse_planned_workout()** (5 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parse_step()** (5 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **normalize_spaces()** (4 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parse_duration_token()** (4 connections) — `src\domain\intervals\workout\parser.rs`
+- **parse_target()** (4 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parse_workout_doc()** (4 connections) — `src\domain\intervals\workout\parser.rs`
+- **build_workout_summary()** (3 connections) — `src\domain\intervals\workout\parser.rs`
+- **mean_target_percent_from_bounds()** (3 connections) — `src\domain\intervals\workout\parser.rs`
+- **normalize_definition()** (3 connections) — `src\domain\intervals\workout\parser.rs`
+- **parse_day()** (3 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parse_planned_workout_days()** (3 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parse_repeat()** (3 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parse_repeat_and_duration()** (3 connections) — `src\domain\intervals\workout\parser.rs`
+- **serialize_line()** (3 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **serialize_target()** (3 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **format_number()** (2 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **is_exact_date()** (2 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **mean_target_percent()** (2 connections) — `src\domain\intervals\workout\parser.rs`
+- **parse_percent_target()** (2 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parse_target_percent_range()** (2 connections) — `src\domain\intervals\workout\parser.rs`
+- **parse_watts_target()** (2 connections) — `src\domain\intervals\planned_workout\parser.rs`
+- **parse_zone_token()** (2 connections) — `src\domain\intervals\workout\parser.rs`
+- *... and 4 more nodes in this community*
+
+## Relationships
+
+- No strong cross-community connections detected
+
+## Source Files
+
+- `src\domain\intervals\planned_workout\parser.rs`
+- `src\domain\intervals\workout\parser.rs`
+
+## Audit Trail
+
+- EXTRACTED: 108 (100%)
+- INFERRED: 0 (0%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [[index]] to navigate.*
