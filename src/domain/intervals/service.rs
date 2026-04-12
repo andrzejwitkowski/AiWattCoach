@@ -298,9 +298,12 @@ where
                 normalize_workout_text(&source_text),
                 legacy_projection,
             ),
-            Err(error) => {
-                PestParserPocWorkoutRecord::failed(context, error.to_string(), "syntax".to_string())
-            }
+            Err(error) => PestParserPocWorkoutRecord::failed(
+                context,
+                error.to_string(),
+                "syntax".to_string(),
+                legacy_projection,
+            ),
         };
 
         if let Err(error) = repository.insert(record).await {

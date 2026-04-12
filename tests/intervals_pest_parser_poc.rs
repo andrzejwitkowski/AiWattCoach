@@ -37,10 +37,12 @@ fn builds_failed_poc_record() {
         },
         "invalid target".to_string(),
         "syntax".to_string(),
+        parse_workout_doc(Some("- 10m ???"), None),
     );
 
     assert_eq!(record.status, PestParserPocStatus::Failed);
     assert_eq!(record.error_kind.as_deref(), Some("syntax"));
+    assert!(record.legacy_projection.is_some());
 }
 
 #[test]
@@ -85,6 +87,7 @@ fn noop_poc_repository_accepts_records() {
             },
             "err".to_string(),
             "syntax".to_string(),
+            parse_workout_doc(Some("bad"), None),
         )));
 
     assert_eq!(result, Ok(()));
@@ -114,6 +117,7 @@ async fn pest_parser_poc_repository_inserts_failed_record_document() {
             },
             "invalid syntax".to_string(),
             "syntax".to_string(),
+            parse_workout_doc(Some("- 10m ???"), None),
         ))
         .await
         .unwrap();

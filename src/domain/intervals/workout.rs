@@ -139,6 +139,17 @@ mod tests {
     }
 
     #[test]
+    fn pest_parser_normalizes_arbitrary_second_granularity() {
+        let parsed = parse_workout_ast("- 45s 55%").expect("parse should succeed");
+
+        let WorkoutItem::Step(step) = &parsed.items[0] else {
+            panic!("expected step item");
+        };
+
+        assert_eq!(step.amount, StepAmount::DurationMinutes(1));
+    }
+
+    #[test]
     fn pest_parser_supports_meter_and_mile_distances() {
         let meters = parse_workout_ast("- 400mtr 55%").expect("meters parse");
         let miles = parse_workout_ast("- 1mi 8:00/mi Pace").expect("miles parse");
@@ -160,6 +171,31 @@ mod tests {
             parse_workout_ast("Main Set 4x\n- 2m 95%\n- 2m 55%").expect("parse should succeed");
 
         assert_eq!(parsed.items.len(), 1);
+    }
+
+    #[test]
+    fn pest_parser_ends_repeat_block_at_blank_line() {
+        let parsed = parse_workout_ast("Main Set 2x\n- 2m 95%\n- 2m 55%\n\n- 10m 60%")
+            .expect("parse should succeed");
+
+        assert_eq!(parsed.items.len(), 2);
+
+        let WorkoutItem::RepeatBlock(repeat) = &parsed.items[0] else {
+            panic!("expected repeat block item");
+        };
+        let WorkoutItem::Step(step) = &parsed.items[1] else {
+            panic!("expected trailing step item");
+        };
+
+        assert_eq!(repeat.steps.len(), 2);
+        assert_eq!(step.amount, StepAmount::DurationMinutes(10));
+    }
+
+    #[test]
+    fn pest_parser_rejects_repeat_block_without_steps() {
+        let error = parse_workout_ast("Main Set 4x").expect_err("parse should fail");
+
+        assert!(error.to_string().contains("repeat block"));
     }
 
     #[test]

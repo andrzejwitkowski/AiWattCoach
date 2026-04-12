@@ -91,6 +91,7 @@ impl PestParserPocWorkoutRecord {
         context: PestParserPocRecordContext,
         error_message: String,
         error_kind: String,
+        legacy_projection: ParsedWorkoutDoc,
     ) -> Self {
         Self {
             user_id: context.user_id,
@@ -103,7 +104,7 @@ impl PestParserPocWorkoutRecord {
             status: PestParserPocStatus::Failed,
             normalized_workout: None,
             parsed_payload: None,
-            legacy_projection: None,
+            legacy_projection: Some(legacy_projection),
             error_message: Some(error_message),
             error_kind: Some(error_kind),
             intervals_event_id: None,

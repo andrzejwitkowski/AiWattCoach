@@ -25,7 +25,9 @@ pub fn parse_workout_ast(input: &str) -> Result<WorkoutAst, WorkoutPestParseErro
 
     for pair in workout.into_inner() {
         match pair.as_rule() {
-            Rule::blank_line => {}
+            Rule::blank_line => {
+                push_pending_repeat(&mut items, &mut pending_repeat)?;
+            }
             Rule::step_line => {
                 let step = parse_step_line(pair)?;
                 if let Some(repeat) = pending_repeat.as_mut() {
@@ -35,25 +37,37 @@ pub fn parse_workout_ast(input: &str) -> Result<WorkoutAst, WorkoutPestParseErro
                 }
             }
             Rule::repeat_header_line => {
-                if let Some(repeat) = pending_repeat.take() {
-                    items.push(WorkoutItem::RepeatBlock(repeat));
-                }
+                push_pending_repeat(&mut items, &mut pending_repeat)?;
                 pending_repeat = Some(parse_repeat_header(pair)?);
             }
             Rule::text_line => {
-                if let Some(repeat) = pending_repeat.take() {
-                    items.push(WorkoutItem::RepeatBlock(repeat));
-                }
+                push_pending_repeat(&mut items, &mut pending_repeat)?;
             }
             _ => {}
         }
     }
 
-    if let Some(repeat) = pending_repeat {
-        items.push(WorkoutItem::RepeatBlock(repeat));
-    }
+    push_pending_repeat(&mut items, &mut pending_repeat)?;
 
     Ok(WorkoutAst { items })
+}
+
+fn push_pending_repeat(
+    items: &mut Vec<WorkoutItem>,
+    pending_repeat: &mut Option<RepeatBlockAst>,
+) -> Result<(), WorkoutPestParseError> {
+    let Some(repeat) = pending_repeat.take() else {
+        return Ok(());
+    };
+
+    if repeat.steps.is_empty() {
+        return Err(WorkoutPestParseError::new(
+            "repeat block must include at least one step",
+        ));
+    }
+
+    items.push(WorkoutItem::RepeatBlock(repeat));
+    Ok(())
 }
 
 fn parse_step_line(step_line: Pair<'_, Rule>) -> Result<WorkoutStepAst, WorkoutPestParseError> {
@@ -192,12 +206,12 @@ fn parse_time_amount(value: &str) -> Result<StepAmount, WorkoutPestParseError> {
             .checked_mul(60)
             .ok_or_else(|| WorkoutPestParseError::new("invalid time amount"))?,
         "secs" | "sec" | "s" => {
-            if amount <= 0 || amount % 30 != 0 {
+            if amount <= 0 {
                 return Err(WorkoutPestParseError::new(
-                    "time amount in seconds must be a positive multiple of 30",
+                    "time amount in seconds must be positive",
                 ));
             }
-            ((amount + 30) / 60).max(1)
+            ((amount - 1) / 60) + 1
         }
         _ => return Err(WorkoutPestParseError::new("unsupported time unit")),
     };

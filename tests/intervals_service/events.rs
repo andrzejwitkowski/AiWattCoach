@@ -306,4 +306,5 @@ async fn create_event_stores_failed_poc_record_for_malformed_workout() {
     assert_eq!(stored.len(), 1);
     assert_eq!(stored[0].operation, PestParserPocOperation::CreateEvent);
     assert_eq!(stored[0].status, PestParserPocStatus::Failed);
+    assert!(stored[0].legacy_projection.is_some());
 }
