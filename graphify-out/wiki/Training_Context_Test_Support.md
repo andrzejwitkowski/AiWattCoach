@@ -1,0 +1,51 @@
+# Training Context Test Support
+
+> 83 nodes · cohesion 0.03
+
+## Key Concepts
+
+- **support.rs** (20 connections) — `tests\llm_adapters\support.rs`
+- **FtpOrderingIntervalsService** (12 connections) — `src\domain\training_context\service\tests\support.rs`
+- **TestIntervalsService** (12 connections) — `src\domain\training_context\service\tests\support.rs`
+- **support.rs** (10 connections) — `src\domain\training_context\service\tests\support.rs`
+- **TestWorkoutSummaryRepository** (9 connections) — `src\domain\training_context\service\tests\support.rs`
+- **TestSettingsService** (8 connections) — `src\domain\training_context\service\tests\support.rs`
+- **capture_request()** (6 connections) — `tests\llm_adapters\support.rs`
+- **TestTrainingPlanProjectionRepository** (5 connections) — `src\domain\training_context\service\tests\support.rs`
+- **FailingReusableCacheRepository** (4 connections) — `tests\llm_adapters\support.rs`
+- **CapturingChatPort** (3 connections) — `tests\llm_adapters\support.rs`
+- **FixedClock** (3 connections) — `tests\llm_adapters\support.rs`
+- **MockServer** (3 connections) — `tests\llm_adapters\support.rs`
+- **sample_activity_on_date_with_ftp()** (3 connections) — `src\domain\training_context\service\tests\support.rs`
+- **sample_activity_with_ftp()** (3 connections) — `src\domain\training_context\service\tests\support.rs`
+- **StubTrainingContextBuilder** (3 connections) — `tests\llm_adapters\support.rs`
+- **test_availability()** (3 connections) — `src\domain\training_context\service\tests\support.rs`
+- **FixedGeminiConfigProvider** (2 connections) — `tests\llm_adapters\support.rs`
+- **.get_activity()** (2 connections) — `src\domain\training_context\service\tests\support.rs`
+- **gemini_cache_handler()** (2 connections) — `tests\llm_adapters\support.rs`
+- **gemini_generate_handler()** (2 connections) — `tests\llm_adapters\support.rs`
+- **openai_forbidden_handler()** (2 connections) — `tests\llm_adapters\support.rs`
+- **openai_handler()** (2 connections) — `tests\llm_adapters\support.rs`
+- **openrouter_handler()** (2 connections) — `tests\llm_adapters\support.rs`
+- **.build()** (2 connections) — `tests\llm_adapters\support.rs`
+- **.build_athlete_summary_context()** (2 connections) — `tests\llm_adapters\support.rs`
+- *... and 58 more nodes in this community*
+
+## Relationships
+
+- No strong cross-community connections detected
+
+## Source Files
+
+- `src\domain\training_context\service\tests\support.rs`
+- `tests\llm_adapters\support.rs`
+
+## Audit Trail
+
+- EXTRACTED: 188 (100%)
+- INFERRED: 0 (0%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [[index]] to navigate.*
