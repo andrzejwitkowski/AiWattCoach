@@ -7,7 +7,6 @@ use crate::domain::{
     },
     races::{
         BoxFuture as RaceBoxFuture, Race, RaceDiscipline, RaceError, RacePriority, RaceRepository,
-        RaceSyncStatus,
     },
     settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, CyclingSettings,
@@ -305,14 +304,9 @@ impl RaceRepository for TestRaceRepository {
                 distance_meters: 123_000,
                 discipline: RaceDiscipline::Road,
                 priority: RacePriority::A,
-                linked_intervals_event_id: Some(999),
-                sync_status: RaceSyncStatus::Synced,
-                synced_payload_hash: Some("hash".to_string()),
-                last_error: None,
                 result: None,
                 created_at_epoch_seconds: 1,
                 updated_at_epoch_seconds: 1,
-                last_synced_at_epoch_seconds: Some(1),
             }])
         })
     }
@@ -334,14 +328,9 @@ impl RaceRepository for TestRaceRepository {
                 distance_meters: 123_000,
                 discipline: RaceDiscipline::Road,
                 priority: RacePriority::A,
-                linked_intervals_event_id: Some(999),
-                sync_status: RaceSyncStatus::Synced,
-                synced_payload_hash: Some("hash".to_string()),
-                last_error: None,
                 result: None,
                 created_at_epoch_seconds: 1,
                 updated_at_epoch_seconds: 1,
-                last_synced_at_epoch_seconds: Some(1),
             }]
             .into_iter()
             .filter(|race| race.date >= oldest && race.date <= newest)

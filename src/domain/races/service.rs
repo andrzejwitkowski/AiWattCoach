@@ -1,4 +1,8 @@
 use crate::domain::{
+    external_sync::{
+        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState,
+        ExternalSyncStateRepository,
+    },
     identity::{Clock, IdGenerator},
     intervals::{CreateEvent, DateRange, IntervalsError, IntervalsUseCases, UpdateEvent},
 };
@@ -6,30 +10,41 @@ use crate::domain::{
 use super::{BoxFuture, CreateRace, Race, RaceError, RaceRepository, RaceUseCases, UpdateRace};
 
 #[derive(Clone)]
-pub struct RaceService<Repository, Intervals, Time, Ids>
+pub struct RaceService<Repository, Intervals, SyncStates, Time, Ids>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
+    SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
 {
     repository: Repository,
     intervals: Intervals,
+    sync_states: SyncStates,
     clock: Time,
     ids: Ids,
 }
 
-impl<Repository, Intervals, Time, Ids> RaceService<Repository, Intervals, Time, Ids>
+impl<Repository, Intervals, SyncStates, Time, Ids>
+    RaceService<Repository, Intervals, SyncStates, Time, Ids>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
+    SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
 {
-    pub fn new(repository: Repository, intervals: Intervals, clock: Time, ids: Ids) -> Self {
+    pub fn new(
+        repository: Repository,
+        intervals: Intervals,
+        sync_states: SyncStates,
+        clock: Time,
+        ids: Ids,
+    ) -> Self {
         Self {
             repository,
             intervals,
+            sync_states,
             clock,
             ids,
         }
@@ -92,34 +107,78 @@ where
             .await?
             .ok_or(RaceError::NotFound)?;
 
-        if let Some(linked_intervals_event_id) = existing.linked_intervals_event_id {
-            let pending = existing.mark_pending_delete(self.clock.now_epoch_seconds());
-            let pending = self.repository.upsert(pending).await?;
-            let delete_result = self
-                .intervals
-                .delete_event(user_id, linked_intervals_event_id)
-                .await
-                .map_err(map_intervals_error);
-            if let Err(error) = delete_result {
-                let failed = pending.mark_failed(error.to_string(), self.clock.now_epoch_seconds());
-                if let Err(persist_error) = self.repository.upsert(failed).await {
-                    tracing::error!(
-                        user_id = %pending.user_id,
-                        race_id = %pending.race_id,
-                        error = %persist_error,
-                        "failed to persist race delete failure state"
-                    );
+        let race_ref = race_entity_ref(&existing.race_id);
+        let existing_sync_state = self
+            .sync_states
+            .find_by_provider_and_canonical_entity(user_id, ExternalProvider::Intervals, &race_ref)
+            .await
+            .unwrap_or_else(infallible);
+
+        if let Some(sync_state) = existing_sync_state {
+            if let Some(linked_intervals_event_id) =
+                parse_intervals_event_id(sync_state.external_id.as_deref(), &existing.race_id)?
+            {
+                let pending_sync_state = self
+                    .sync_states
+                    .upsert(sync_state.mark_pending_delete())
+                    .await
+                    .unwrap_or_else(infallible);
+                let delete_result = self
+                    .intervals
+                    .delete_event(user_id, linked_intervals_event_id)
+                    .await
+                    .map_err(map_intervals_error);
+                if let Err(error) = delete_result {
+                    let _ = self
+                        .sync_states
+                        .upsert(pending_sync_state.mark_failed(error.to_string()))
+                        .await
+                        .unwrap_or_else(infallible);
+                    return Err(error);
                 }
-                return Err(error);
             }
+
+            self.sync_states
+                .delete_by_provider_and_canonical_entity(
+                    user_id,
+                    ExternalProvider::Intervals,
+                    &race_ref,
+                )
+                .await
+                .unwrap_or_else(infallible);
         }
 
         self.repository.delete(user_id, race_id).await
     }
 
     async fn sync_pending_race(&self, pending: Race) -> Result<Race, RaceError> {
+        let race_ref = race_entity_ref(&pending.race_id);
+        let existing_sync_state = self
+            .sync_states
+            .find_by_provider_and_canonical_entity(
+                &pending.user_id,
+                ExternalProvider::Intervals,
+                &race_ref,
+            )
+            .await
+            .unwrap_or_else(infallible)
+            .unwrap_or_else(|| {
+                ExternalSyncState::new(
+                    pending.user_id.clone(),
+                    ExternalProvider::Intervals,
+                    race_ref.clone(),
+                )
+            });
+        let pending_sync_state = self
+            .sync_states
+            .upsert(existing_sync_state.mark_pending_push())
+            .await
+            .unwrap_or_else(infallible);
         let sync_result: Result<i64, RaceError> = async {
-            let remote_event = if let Some(event_id) = pending.linked_intervals_event_id {
+            let remote_event = if let Some(event_id) = parse_intervals_event_id(
+                pending_sync_state.external_id.as_deref(),
+                &pending.race_id,
+            )? {
                 self.intervals
                     .update_event(
                         &pending.user_id,
@@ -164,34 +223,35 @@ where
 
         match sync_result {
             Ok(remote_event_id) => {
-                let synced = pending.mark_synced(
-                    remote_event_id,
-                    pending.payload_hash(),
-                    self.clock.now_epoch_seconds(),
-                );
-                self.repository.upsert(synced).await
+                let _ = self
+                    .sync_states
+                    .upsert(pending_sync_state.mark_synced(
+                        remote_event_id.to_string(),
+                        pending.payload_hash(),
+                        self.clock.now_epoch_seconds(),
+                    ))
+                    .await
+                    .unwrap_or_else(infallible);
+                Ok(pending)
             }
             Err(error) => {
-                let failed = pending.mark_failed(error.to_string(), self.clock.now_epoch_seconds());
-                if let Err(persist_error) = self.repository.upsert(failed).await {
-                    tracing::error!(
-                        user_id = %pending.user_id,
-                        race_id = %pending.race_id,
-                        error = %persist_error,
-                        "failed to persist race sync failure state"
-                    );
-                }
+                let _ = self
+                    .sync_states
+                    .upsert(pending_sync_state.mark_failed(error.to_string()))
+                    .await
+                    .unwrap_or_else(infallible);
                 Err(error)
             }
         }
     }
 }
 
-impl<Repository, Intervals, Time, Ids> RaceUseCases
-    for RaceService<Repository, Intervals, Time, Ids>
+impl<Repository, Intervals, SyncStates, Time, Ids> RaceUseCases
+    for RaceService<Repository, Intervals, SyncStates, Time, Ids>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
+    SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
 {
@@ -358,4 +418,26 @@ fn map_intervals_error(error: IntervalsError) -> RaceError {
         | IntervalsError::ConnectionError(message)
         | IntervalsError::Internal(message) => RaceError::Unavailable(message),
     }
+}
+
+fn race_entity_ref(race_id: &str) -> CanonicalEntityRef {
+    CanonicalEntityRef::new(CanonicalEntityKind::Race, race_id.to_string())
+}
+
+fn parse_intervals_event_id(
+    external_id: Option<&str>,
+    race_id: &str,
+) -> Result<Option<i64>, RaceError> {
+    match external_id {
+        None => Ok(None),
+        Some(value) => value.parse::<i64>().map(Some).map_err(|_| {
+            RaceError::Internal(format!(
+                "invalid stored intervals event id for race {race_id}: {value}"
+            ))
+        }),
+    }
+}
+
+fn infallible<T>(error: std::convert::Infallible) -> T {
+    match error {}
 }

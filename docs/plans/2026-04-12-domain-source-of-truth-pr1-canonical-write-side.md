@@ -4,9 +4,33 @@
 
 **Goal:** Introduce canonical domain write models and provider-agnostic sync metadata without changing current calendar or training-context read paths.
 
-**Architecture:** Add provider-agnostic write-side roots for planned workouts, completed workouts, races, and special days, plus external observation and polling state records. Keep existing readers intact for this PR; this PR only creates the new source-of-truth foundation and removes provider-specific sync data from domain roots such as `Race`.
+**Architecture:** Add provider-agnostic write-side roots for planned workouts, completed workouts, races, and special days, plus external observation and polling state records. Canonical write models must own full business data, including workout structure, intervals, streams, metrics, TSS, IF, VI, and other details required by UI, training context, and LLM consumers. Keep existing readers intact for this PR; this PR only creates the new source-of-truth foundation and removes provider-specific sync data from domain roots such as `Race`.
 
 **Tech Stack:** Rust 2021, MongoDB, Axum app wiring in `src/main.rs`, existing hexagonal ports/adapters, existing Intervals activity persistence reused as the starting backing model for completed workouts.
+
+## Current-To-Target Mapping
+
+| Current shape | Target shape | Notes |
+| --- | --- | --- |
+| `domain::intervals::Activity` plus `MongoActivityRepository` | `CompletedWorkout` canonical model | Reuse current activity persistence as the initial canonical completed-workout backing store; migrate the full activity payload shape, including metrics and details, into the canonical completed-workout model rather than introducing a thin summary-only root. |
+| `TrainingPlanSnapshot` plus `TrainingPlanProjectedDay` | source for `PlannedWorkout` migration | Current training-plan types stay in place for now; new planned-workout root must own full structured workout content such as lines, repeats, steps, and targets rather than only date-level summary fields. |
+| `domain::races::Race` | `Race` canonical root | Keep race as a business root but remove provider-specific sync fields from the root itself. |
+| Intervals special calendar events | `SpecialDay` root | Normalize illness, travel, blocked-day, note-like special events into a provider-agnostic special-day model. |
+
+## Anti-Goals For PR1
+
+- No migration of `calendar` read paths.
+- No migration of `training_context` read paths.
+- No inline provider fetch in any read path.
+- No second completed-workout store beside current activities persistence.
+- No attempt to remove legacy Intervals event readers yet.
+- No provider-sourced metrics, streams, intervals, or workout definitions being read directly into view models without first being persisted canonically in domain storage.
+
+## Boundary Rule
+
+- Canonical domain modules must not import provider-specific domain types, even if an existing provider model looks structurally similar.
+- `src/domain/completed_workouts/**`, `src/domain/planned_workouts/**`, `src/domain/special_days/**`, and later canonical roots must define their own value objects instead of reusing types from `src/domain/intervals/**` or future provider-specific slices.
+- Provider adapters may map into canonical types, but canonical types may not depend back on provider slices.
 
 ---
 
@@ -63,13 +87,13 @@ Add tests that require:
 - no provider-specific ID fields on roots
 - root models compile and expose minimal constructors
 
-**Step 2: Define minimal write-side models**
+**Step 2: Define canonical write-side models**
 Add:
 - `PlannedWorkout`
 - `CompletedWorkout`
 - `SpecialDay`
 - shared error enums only if needed
-Keep them minimal and provider-agnostic.
+Keep them provider-agnostic, but not summary-only. `CompletedWorkout` must carry canonical metrics and details, and `PlannedWorkout` must carry canonical structured workout content such as interval blocks and targets.
 
 **Step 3: Define repository ports**
 Add ports for:

@@ -4,9 +4,17 @@
 
 **Goal:** Build a persisted calendar read model that becomes the future single source for UI, training context, and LLM inputs.
 
-**Architecture:** Add `CalendarEntryView` as a read model projected from canonical write-side roots. Support fast date-range reads, typed calendar rendering, projection rebuild, and integrity checks against the canonical write side. Do not migrate existing readers yet.
+**Architecture:** Add `CalendarEntryView` as a read model projected from canonical write-side roots. Support fast date-range reads, typed calendar rendering, projection rebuild, and integrity checks against the canonical write side. The view must be built only from locally persisted canonical data; provider payloads must never be treated as an on-demand source for metrics, streams, interval details, TSS, IF, VI, or workout structure. Do not migrate existing readers yet.
+
+**Required cleanup carried from PR1:** Remove the temporary compatibility adapter `src/adapters/mongo/race_calendar.rs` and stop wiring `MongoRaceCalendarSource` from `main.rs`. That adapter exists only to keep the pre-PR2 calendar read path alive after moving provider sync state out of `Race`; it must not survive the persisted visible-calendar read model.
 
 **Tech Stack:** Rust 2021, MongoDB, domain projection services, existing write-side roots from PR1.
+
+## Boundary Rule
+
+- `CalendarEntryView` and its projectors may depend only on canonical domain roots and canonical value objects.
+- Read-side code may not import provider-specific domain types from `src/domain/intervals/**` or future provider slices to fill gaps in canonical models.
+- If a view needs data that currently exists only in a provider-shaped model, first add that data to the canonical domain and then project it.
 
 ---
 
@@ -37,7 +45,9 @@ Include fields such as:
 - `description`
 - `planned_workout_id`
 - `completed_workout_id`
-- source or provider summary fields if needed for read side only
+- locally projected summaries for metrics and structure when needed by consumers
+
+Do not design the view to lazy-read metrics, streams, interval blocks, or workout details from providers. Any view field must come from canonical local state.
 
 **Step 3: Add read-model repository port**
 Add query methods by:
@@ -110,6 +120,8 @@ Cover:
 
 **Step 2: Implement projector helpers**
 Create deterministic mapping helpers for each root.
+
+These projectors must derive all rendered metrics and summaries from canonical local write models, not from raw provider payloads fetched on demand.
 
 **Step 3: Make view semantics explicit**
 Ensure:
@@ -208,6 +220,12 @@ Update view in the same write flow where practical.
 
 **Step 3: Avoid async queue complexity**
 Keep projection updates simple in this PR.
+
+**Step 3a: Remove temporary race compatibility read adapter**
+Delete:
+- `src/adapters/mongo/race_calendar.rs`
+
+Replace any remaining `MongoRaceCalendarSource` wiring with reads from the persisted `CalendarEntryView` path or other PR2 read-model adapters built on top of that persisted view. Do not keep the temporary race-plus-sync Mongo join once the visible calendar view exists.
 
 **Step 4: Run tests**
 ```bash

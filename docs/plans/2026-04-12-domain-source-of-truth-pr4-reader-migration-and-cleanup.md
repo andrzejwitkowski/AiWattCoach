@@ -4,9 +4,15 @@
 
 **Goal:** Migrate application readers to the persisted domain-backed read model and remove the old Intervals-first event flow from business reads.
 
-**Architecture:** Switch calendar, labels, training context, and related consumer flows to read only from local canonical state and `CalendarEntryView`. Remove or drastically shrink the old `domain::intervals::Event` read path and expose canonical local IDs through APIs where needed.
+**Architecture:** Switch calendar, labels, training context, and related consumer flows to read only from local canonical state and `CalendarEntryView`. Remove or drastically shrink the old `domain::intervals::Event` read path and expose canonical local IDs through APIs where needed. No consumer in this PR may read metrics, streams, intervals, TSS, IF, VI, or workout definitions directly from provider APIs once those fields are persisted canonically in local domain storage.
 
 **Tech Stack:** Rust 2021, Axum REST handlers, persisted Mongo read model, existing training-context module, existing calendar and labels services.
+
+## Boundary Rule
+
+- Reader migrations may depend only on canonical domain roots, canonical value objects, and persisted read models.
+- During cleanup, remove any remaining dependency where business read paths import provider-specific domain types from `src/domain/intervals/**` only to avoid modeling the data canonically.
+- If a read path still needs provider-shaped data, treat that as a modeling gap in canonical domain storage and fix the model rather than reusing provider types.
 
 ---
 
@@ -60,6 +66,8 @@ Cover:
 
 **Step 2: Update DTOs and mappings**
 Keep provider refs as metadata only if needed.
+
+Do not make REST responses dependent on provider fetches for detailed workout data. If detailed metrics or structure are exposed, they must come from canonical local storage.
 
 **Step 3: Update handlers**
 Ensure handlers only call local calendar read use cases.
@@ -127,8 +135,8 @@ Remove dependence on:
 - `get_event`
 for business reads.
 
-**Step 3: Keep execution metrics from completed-workout backing data**
-Reuse current activity details path where still useful.
+**Step 3: Keep execution metrics from canonical completed-workout data**
+Migrate current activity metrics and details into canonical completed-workout reads where still useful, but do not treat provider fetches as the source for those fields.
 
 **Step 4: Rework plan-completion matching**
 Use canonical relations where available, fallback heuristics only where necessary.
@@ -157,6 +165,8 @@ Cover:
 
 **Step 2: Replace upstream event dependencies**
 Use local read model or canonical roots only.
+
+If LLM inputs need stream-derived or metric-derived details, source them from canonical persisted domain models rather than provider APIs.
 
 **Step 3: Run tests**
 ```bash

@@ -353,8 +353,8 @@ fn race_label(race_id: &str, date: &str, name: &str) -> CalendarLabel {
             distance_meters: 120_000,
             discipline: "road".to_string(),
             priority: "A".to_string(),
-            sync_status: "synced".to_string(),
-            linked_intervals_event_id: Some(41),
+            sync_status: "pending".to_string(),
+            linked_intervals_event_id: None,
         }),
     }
 }

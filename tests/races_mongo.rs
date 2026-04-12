@@ -4,11 +4,11 @@ use std::{
 };
 
 use aiwattcoach::{
-    adapters::mongo::races::MongoRaceRepository,
+    adapters::mongo::{race_calendar::MongoRaceCalendarSource, races::MongoRaceRepository},
     domain::{
         calendar_labels::CalendarLabelSource,
         intervals::DateRange,
-        races::{Race, RaceDiscipline, RacePriority, RaceRepository, RaceSyncStatus},
+        races::{Race, RaceDiscipline, RacePriority, RaceRepository},
     },
     Settings,
 };
@@ -26,11 +26,11 @@ async fn race_repository_round_trips_race_and_lists_by_date_range() {
     repository.ensure_indexes().await.unwrap();
 
     repository
-        .upsert(sample_race("race-1", "2026-09-12", Some(44)))
+        .upsert(sample_race("race-1", "2026-09-12"))
         .await
         .unwrap();
     repository
-        .upsert(sample_race("race-2", "2026-10-01", None))
+        .upsert(sample_race("race-2", "2026-10-01"))
         .await
         .unwrap();
 
@@ -40,7 +40,6 @@ async fn race_repository_round_trips_race_and_lists_by_date_range() {
         .unwrap()
         .expect("expected race");
     assert_eq!(found.name, "Gravel Attack");
-    assert_eq!(found.linked_intervals_event_id, Some(44));
 
     let listed = repository
         .list_by_user_id_and_range(
@@ -85,36 +84,28 @@ async fn race_repository_creates_expected_indexes() {
             == Some("races_user_race_unique")
             && index.keys == doc! { "user_id": 1, "race_id": 1 }
     }));
-    assert!(indexes.iter().any(|index| {
-        index
-            .options
-            .as_ref()
-            .and_then(|options| options.name.as_deref())
-            == Some("races_user_linked_intervals_event")
-            && index.keys == doc! { "user_id": 1, "linked_intervals_event_id": 1 }
-    }));
-
     fixture.cleanup().await;
 }
 
 #[tokio::test]
-async fn race_repository_exposes_races_as_calendar_labels_and_hidden_event_ids() {
+async fn race_repository_exposes_races_as_calendar_labels() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
     };
     let repository = MongoRaceRepository::new(fixture.client.clone(), &fixture.database);
+    let calendar_source = MongoRaceCalendarSource::new(fixture.client.clone(), &fixture.database);
     repository.ensure_indexes().await.unwrap();
 
     repository
-        .upsert(sample_race("race-1", "2026-09-12", Some(44)))
+        .upsert(sample_race("race-1", "2026-09-12"))
         .await
         .unwrap();
     repository
-        .upsert(sample_race("race-2", "2026-09-13", None))
+        .upsert(sample_race("race-2", "2026-09-13"))
         .await
         .unwrap();
 
-    let labels = repository
+    let labels = calendar_source
         .list_labels(
             "user-1",
             &DateRange {
@@ -127,19 +118,6 @@ async fn race_repository_exposes_races_as_calendar_labels_and_hidden_event_ids()
     assert_eq!(labels.len(), 2);
     assert_eq!(labels[0].label_key, "race:race-1");
     assert_eq!(labels[0].title, "Race Gravel Attack");
-
-    let hidden_event_ids =
-        aiwattcoach::domain::calendar::HiddenCalendarEventSource::list_hidden_intervals_event_ids(
-            &repository,
-            "user-1",
-            &DateRange {
-                oldest: "2026-09-01".to_string(),
-                newest: "2026-09-30".to_string(),
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(hidden_event_ids, vec![44]);
 
     fixture.cleanup().await;
 }
@@ -192,7 +170,7 @@ impl MongoFixture {
     }
 }
 
-fn sample_race(race_id: &str, date: &str, linked_intervals_event_id: Option<i64>) -> Race {
+fn sample_race(race_id: &str, date: &str) -> Race {
     Race {
         race_id: race_id.to_string(),
         user_id: "user-1".to_string(),
@@ -201,13 +179,8 @@ fn sample_race(race_id: &str, date: &str, linked_intervals_event_id: Option<i64>
         distance_meters: 120_000,
         discipline: RaceDiscipline::Gravel,
         priority: RacePriority::B,
-        linked_intervals_event_id,
-        sync_status: RaceSyncStatus::Synced,
-        synced_payload_hash: Some("hash".to_string()),
-        last_error: None,
         result: None,
         created_at_epoch_seconds: 1,
         updated_at_epoch_seconds: 2,
-        last_synced_at_epoch_seconds: Some(2),
     }
 }

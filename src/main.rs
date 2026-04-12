@@ -29,9 +29,13 @@ use aiwattcoach::{
             athlete_summary_generation_operations::MongoAthleteSummaryGenerationOperationRepository,
             client::{create_client, ensure_database_exists, verify_connection},
             coach_reply_operations::MongoCoachReplyOperationRepository,
+            external_observations::MongoExternalObservationRepository,
+            external_sync_states::MongoExternalSyncStateRepository,
             llm_context_cache::MongoLlmContextCacheRepository,
             login_state::MongoLoginStateRepository,
             planned_workout_syncs::MongoPlannedWorkoutSyncRepository,
+            provider_poll_states::MongoProviderPollStateRepository,
+            race_calendar::MongoRaceCalendarSource,
             races::MongoRaceRepository,
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
@@ -253,6 +257,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let planned_workout_sync_repository =
         MongoPlannedWorkoutSyncRepository::new(mongo_client.clone(), &mongo_database);
     planned_workout_sync_repository.ensure_indexes().await?;
+    let external_observation_repository =
+        MongoExternalObservationRepository::new(mongo_client.clone(), &mongo_database);
+    external_observation_repository.ensure_indexes().await?;
+    let external_sync_state_repository =
+        MongoExternalSyncStateRepository::new(mongo_client.clone(), &mongo_database);
+    external_sync_state_repository.ensure_indexes().await?;
+    let provider_poll_state_repository =
+        MongoProviderPollStateRepository::new(mongo_client.clone(), &mongo_database);
+    provider_poll_state_repository.ensure_indexes().await?;
     let race_repository = MongoRaceRepository::new(mongo_client.clone(), &mongo_database);
     race_repository.ensure_indexes().await?;
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
@@ -349,15 +362,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let race_service = Arc::new(RaceService::new(
         race_repository.clone(),
         (*intervals_service).clone(),
+        external_sync_state_repository.clone(),
         SystemClock,
         UuidIdGenerator,
     ));
-    let calendar_labels_service = Arc::new(CalendarLabelsService::new(race_repository.clone()));
+    let race_calendar_source = MongoRaceCalendarSource::new(mongo_client.clone(), &mongo_database);
+    let calendar_labels_service =
+        Arc::new(CalendarLabelsService::new(race_calendar_source.clone()));
     let calendar_service = Arc::new(CalendarService::new(
         (*intervals_service).clone(),
         training_plan_projection_repository.clone(),
         planned_workout_sync_repository,
-        race_repository,
+        race_calendar_source,
         SystemClock,
     ));
     let workout_summary_service = Arc::new(

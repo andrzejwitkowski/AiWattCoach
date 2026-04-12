@@ -1,0 +1,65 @@
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlannedWorkoutContent {
+    pub lines: Vec<PlannedWorkoutLine>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PlannedWorkoutLine {
+    Text(PlannedWorkoutText),
+    Repeat(PlannedWorkoutRepeat),
+    Step(PlannedWorkoutStep),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlannedWorkoutText {
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlannedWorkoutRepeat {
+    pub title: Option<String>,
+    pub count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlannedWorkoutStep {
+    pub duration_seconds: i32,
+    pub kind: PlannedWorkoutStepKind,
+    pub target: PlannedWorkoutTarget,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlannedWorkoutStepKind {
+    Steady,
+    Ramp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PlannedWorkoutTarget {
+    PercentFtp { min: f64, max: f64 },
+    WattsRange { min: i32, max: i32 },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlannedWorkout {
+    pub planned_workout_id: String,
+    pub user_id: String,
+    pub date: String,
+    pub workout: PlannedWorkoutContent,
+}
+
+impl PlannedWorkout {
+    pub fn new(
+        planned_workout_id: String,
+        user_id: String,
+        date: String,
+        workout: PlannedWorkoutContent,
+    ) -> Self {
+        Self {
+            planned_workout_id,
+            user_id,
+            date,
+            workout,
+        }
+    }
+}

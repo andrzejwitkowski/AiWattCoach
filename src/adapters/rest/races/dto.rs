@@ -31,12 +31,6 @@ pub(super) struct RaceDto {
     pub distance_meters: i32,
     pub discipline: String,
     pub priority: String,
-    #[serde(rename = "syncStatus")]
-    pub sync_status: String,
-    #[serde(rename = "linkedIntervalsEventId")]
-    pub linked_intervals_event_id: Option<i64>,
-    #[serde(rename = "lastError")]
-    pub last_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<String>,
 }

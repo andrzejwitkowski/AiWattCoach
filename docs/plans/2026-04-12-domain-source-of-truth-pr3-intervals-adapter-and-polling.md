@@ -4,9 +4,15 @@
 
 **Goal:** Convert Intervals from a read-source domain model into a pure provider adapter that imports into canonical write models and updates the persisted read side through simple polling.
 
-**Architecture:** Keep Intervals-specific DTOs and HTTP logic inside the adapter, normalize remote payloads into provider-agnostic import commands, persist external observations and sync state, and run incremental provider polling with persisted cursors. Do not migrate calendar or training-context readers in this PR.
+**Architecture:** Keep Intervals-specific DTOs and HTTP logic inside the adapter, normalize remote payloads into provider-agnostic import commands, persist external observations and sync state, and run incremental provider polling with persisted cursors. Imported payloads must be transformed into canonical domain data before any consumer can use them; metrics, streams, intervals, TSS, IF, VI, and workout definitions must never be sourced directly from provider reads once canonical persistence exists. Do not migrate calendar or training-context readers in this PR.
 
 **Tech Stack:** Rust 2021, reqwest-based Intervals adapter, MongoDB poll-state persistence, `tokio::time::interval` for simple in-process polling.
+
+## Boundary Rule
+
+- Provider adapters may translate provider DTOs into canonical commands and canonical value objects only at the adapter boundary.
+- Do not reuse `src/domain/intervals/**` business types as canonical domain types for completed workouts, planned workouts, races, or special days.
+- If a provider exposes a rich model that looks useful, copy the semantics into canonical types and map across explicitly; do not couple canonical domain modules back to provider-specific slices.
 
 ---
 
@@ -35,6 +41,8 @@ Flow:
 - update canonical root
 - update `ExternalSyncState`
 - trigger `CalendarEntryView` update
+
+When updating canonical roots, persist the full useful payload, including workout structure for planned workouts and metrics or details for completed workouts, rather than only provider references or summary fields.
 
 **Step 4: Run tests**
 ```bash
@@ -106,6 +114,8 @@ Use:
 Reference:
 - `src/domain/intervals/model.rs`
 - `src/adapters/mongo/activities.rs`
+
+Preserve the rich completed-workout payload during dedup. Dedup may choose the canonical entity, but it must not collapse the entity into a summary-only shape.
 
 **Step 4: Run tests**
 ```bash
