@@ -254,15 +254,11 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
             } else {
                 doc! {
                     "user_id": &user_id,
-                    "$or": [
-                        {
-                            "date": {
-                                "$gte": &oldest,
-                                "$lte": &newest,
-                            },
-                            "entry_id": { "$nin": &incoming_entry_ids },
-                        },
-                    ],
+                    "date": {
+                        "$gte": &oldest,
+                        "$lte": &newest,
+                    },
+                    "entry_id": { "$nin": &incoming_entry_ids },
                 }
             };
 

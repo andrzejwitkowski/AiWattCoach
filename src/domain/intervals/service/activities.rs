@@ -1,4 +1,5 @@
 use super::*;
+use crate::domain::intervals::ports::activity_date;
 
 impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
     IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
@@ -143,8 +144,4 @@ where
         }
         Ok(())
     }
-}
-
-fn activity_date(start_date_local: &str) -> &str {
-    start_date_local.get(..10).unwrap_or(start_date_local)
 }

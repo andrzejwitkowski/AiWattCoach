@@ -200,14 +200,19 @@ where
         }
 
         if existing_sync_state.is_some() {
-            self.sync_states
+            if let Err(error) = self
+                .sync_states
                 .delete_by_provider_and_canonical_entity(
                     user_id,
                     ExternalProvider::Intervals,
                     &race_ref,
                 )
                 .await
-                .map_err(map_sync_repository_error)?;
+            {
+                self.refresh_race_date(&existing.user_id, &existing.date)
+                    .await;
+                return Err(map_sync_repository_error(error));
+            }
         }
 
         self.refresh_race_date(&existing.user_id, &existing.date)

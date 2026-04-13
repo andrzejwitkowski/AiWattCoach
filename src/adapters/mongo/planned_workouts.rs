@@ -3,7 +3,7 @@ use mongodb::{
     bson::{doc, Bson},
     Collection,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::domain::planned_workouts::{
@@ -17,7 +17,7 @@ use super::training_plan_shared::{map_document_to_planned_workout, PlannedWorkou
 #[derive(Clone)]
 pub struct MongoPlannedWorkoutRepository {
     collection: Collection<TrainingPlanProjectedDayDocument>,
-    snapshot_collection: Collection<super::training_plan_snapshots::TrainingPlanSnapshotDocument>,
+    snapshot_collection: Collection<TrainingPlanSnapshotLookupDocument>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -26,6 +26,12 @@ struct TrainingPlanProjectedDayDocument {
     operation_key: String,
     date: String,
     workout: Option<PlannedWorkoutDocument>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct TrainingPlanSnapshotLookupDocument {
+    operation_key: String,
+    start_date: String,
 }
 
 impl MongoPlannedWorkoutRepository {
@@ -65,8 +71,13 @@ impl PlannedWorkoutRepository for MongoPlannedWorkoutRepository {
                 .into_iter()
                 .collect::<Vec<_>>();
 
+            let operation_keys = documents
+                .iter()
+                .map(|document| document.operation_key.as_str())
+                .collect::<Vec<_>>();
             let snapshot_start_dates =
-                load_snapshot_start_dates(&snapshot_collection, Some(&user_id)).await?;
+                load_snapshot_start_dates(&snapshot_collection, Some(&user_id), &operation_keys)
+                    .await?;
 
             documents
                 .into_iter()
@@ -112,8 +123,13 @@ impl PlannedWorkoutRepository for MongoPlannedWorkoutRepository {
                 .into_iter()
                 .collect::<Vec<_>>();
 
+            let operation_keys = documents
+                .iter()
+                .map(|document| document.operation_key.as_str())
+                .collect::<Vec<_>>();
             let snapshot_start_dates =
-                load_snapshot_start_dates(&snapshot_collection, Some(&user_id)).await?;
+                load_snapshot_start_dates(&snapshot_collection, Some(&user_id), &operation_keys)
+                    .await?;
 
             documents
                 .into_iter()
@@ -142,12 +158,17 @@ impl PlannedWorkoutRepository for MongoPlannedWorkoutRepository {
 }
 
 async fn load_snapshot_start_dates(
-    snapshot_collection: &Collection<super::training_plan_snapshots::TrainingPlanSnapshotDocument>,
+    snapshot_collection: &Collection<TrainingPlanSnapshotLookupDocument>,
     user_id: Option<&str>,
+    operation_keys: &[&str],
 ) -> Result<HashMap<String, String>, PlannedWorkoutError> {
+    if operation_keys.is_empty() {
+        return Ok(HashMap::new());
+    }
+
     let filter = user_id
-        .map(|user_id| doc! { "user_id": user_id })
-        .unwrap_or_else(|| doc! {});
+        .map(|user_id| doc! { "user_id": user_id, "operation_key": { "$in": operation_keys } })
+        .unwrap_or_else(|| doc! { "operation_key": { "$in": operation_keys } });
 
     snapshot_collection
         .find(filter)
@@ -157,11 +178,7 @@ async fn load_snapshot_start_dates(
         .await
         .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?
         .into_iter()
-        .map(|snapshot| {
-            super::training_plan_snapshots::MongoTrainingPlanSnapshotRepository::map_document_to_snapshot(snapshot)
-                .map(|snapshot| (snapshot.operation_key, snapshot.start_date))
-                .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))
-        })
+        .map(|snapshot| Ok((snapshot.operation_key, snapshot.start_date)))
         .collect()
 }
 
