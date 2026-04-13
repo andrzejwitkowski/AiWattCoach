@@ -14,6 +14,33 @@
 - Do not reuse `src/domain/intervals/**` business types as canonical domain types for completed workouts, planned workouts, races, or special days.
 - If a provider exposes a rich model that looks useful, copy the semantics into canonical types and map across explicitly; do not couple canonical domain modules back to provider-specific slices.
 
+## Implementation Notes From PR2
+
+- PR2 intentionally introduced bridge adapters over existing local persistence:
+  - `src/adapters/mongo/completed_workouts.rs` currently reads from `intervals_activities`
+    and maps `domain::intervals::Activity*` shapes into canonical
+    `domain::completed_workouts::*` values.
+  - `src/adapters/mongo/planned_workouts.rs` currently reads from
+    `training_plan_projected_days` and reconstructs canonical planned workouts from
+    projection rows.
+- These bridge adapters are acceptable as a PR2 stepping stone, but PR3 should treat
+  them as temporary compatibility layers to replace or shrink. In particular, the
+  completed-workout bridge still depends on provider-shaped persisted payloads in the
+  adapter layer, which is exactly the coupling PR3 is meant to remove.
+- PR2 also established current read semantics that PR3 should preserve unless there is
+  an explicit decision to change them:
+  - planned-workout reads exclude `snapshot.start_date` and only expose dates after the
+    training-plan snapshot start date, even if the first day contains a workout payload;
+  - planned-workout sync metadata is currently attached to persisted calendar entries by
+    joining `planned_workout_id` to the bridge-generated format
+    `"{operation_key}:{date}"`;
+  - `CalendarEntryView` refresh is best-effort after durable writes in most flows, so PR3
+    should either preserve that contract or explicitly redefine it.
+- PR2 also accepted one temporary migration gap that should stay explicit in PR3:
+  existing users may have local canonical/bridge data without corresponding
+  `calendar_entry_views` rows. That backfill/bootstrap gap is intentionally deferred and
+  should be handled by PR3 import/backfill work rather than assumed away.
+
 ---
 
 ### Task 1: Add provider-agnostic import service
@@ -43,6 +70,11 @@ Flow:
 - trigger `CalendarEntryView` update
 
 When updating canonical roots, persist the full useful payload, including workout structure for planned workouts and metrics or details for completed workouts, rather than only provider references or summary fields.
+
+While doing this, remove or isolate the current completed-workout bridge dependency on
+`domain::intervals::Activity*` in `src/adapters/mongo/completed_workouts.rs`. The goal
+for PR3 is that Intervals payloads become adapter input only, not the long-term persisted
+schema that canonical completed-workout reads depend on.
 
 **Step 4: Run tests**
 ```bash
@@ -190,6 +222,10 @@ Prefer:
 - recent history
 - near future
 - avoid huge full-history fetch by default
+
+Backfill must also heal the PR2 migration gap where legacy local rows can exist without
+corresponding `calendar_entry_views` rows. Do not assume the persisted calendar view is
+already complete for pre-PR3 users.
 
 **Step 4: Implement incremental polling**
 Advance cursor only after successful import.

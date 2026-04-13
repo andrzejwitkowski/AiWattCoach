@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use sha2::{Digest, Sha256};
 
 use crate::domain::{
+    calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
     identity::Clock,
     intervals::{
         CreateEvent, DateRange, Event, EventCategory, IntervalsError, IntervalsUseCases,
@@ -18,19 +19,27 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct CalendarService<Intervals, Projections, Syncs, Hidden, Time>
-where
+pub struct CalendarService<
+    Intervals,
+    Projections,
+    Syncs,
+    Hidden,
+    Time,
+    Refresh = NoopCalendarEntryViewRefresh,
+> where
     Intervals: IntervalsUseCases + Clone + 'static,
     Projections: TrainingPlanProjectionRepository + Clone + 'static,
     Syncs: PlannedWorkoutSyncRepository + Clone + 'static,
     Hidden: HiddenCalendarEventSource + Clone + 'static,
     Time: Clock + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     intervals: Intervals,
     projections: Projections,
     syncs: Syncs,
     hidden_event_source: Hidden,
     clock: Time,
+    refresh: Refresh,
 }
 
 impl<Intervals, Projections, Syncs, Hidden, Time>
@@ -55,6 +64,35 @@ where
             syncs,
             hidden_event_source,
             clock,
+            refresh: NoopCalendarEntryViewRefresh,
+        }
+    }
+}
+
+impl<Intervals, Projections, Syncs, Hidden, Time, Refresh>
+    CalendarService<Intervals, Projections, Syncs, Hidden, Time, Refresh>
+where
+    Intervals: IntervalsUseCases + Clone,
+    Projections: TrainingPlanProjectionRepository + Clone,
+    Syncs: PlannedWorkoutSyncRepository + Clone,
+    Hidden: HiddenCalendarEventSource + Clone,
+    Time: Clock + Clone,
+    Refresh: CalendarEntryViewRefreshPort + Clone,
+{
+    pub fn with_calendar_view_refresh<NewRefresh>(
+        self,
+        refresh: NewRefresh,
+    ) -> CalendarService<Intervals, Projections, Syncs, Hidden, Time, NewRefresh>
+    where
+        NewRefresh: CalendarEntryViewRefreshPort + Clone,
+    {
+        CalendarService {
+            intervals: self.intervals,
+            projections: self.projections,
+            syncs: self.syncs,
+            hidden_event_source: self.hidden_event_source,
+            clock: self.clock,
+            refresh,
         }
     }
 
@@ -221,6 +259,19 @@ where
                         self.clock.now_epoch_seconds(),
                     ))
                     .await?;
+                if let Err(error) = self
+                    .refresh
+                    .refresh_range_for_user(user_id, &request.date, &request.date)
+                    .await
+                {
+                    tracing::warn!(
+                        %user_id,
+                        operation_key = %request.operation_key,
+                        date = %request.date,
+                        %error,
+                        "planned workout sync succeeded but calendar view refresh failed"
+                    );
+                }
                 Ok(build_projected_calendar_event(
                     projected_day,
                     Some(&synced_record),
@@ -256,6 +307,18 @@ where
                         error = %persist_error,
                         "failed to persist planned workout sync failure state"
                     );
+                } else if let Err(refresh_error) = self
+                    .refresh
+                    .refresh_range_for_user(user_id, &request.date, &request.date)
+                    .await
+                {
+                    tracing::warn!(
+                        %user_id,
+                        operation_key = %request.operation_key,
+                        date = %request.date,
+                        %refresh_error,
+                        "planned workout sync failure state persisted but calendar view refresh failed"
+                    );
                 }
                 Err(error)
             }
@@ -263,14 +326,15 @@ where
     }
 }
 
-impl<Intervals, Projections, Syncs, Hidden, Time> CalendarUseCases
-    for CalendarService<Intervals, Projections, Syncs, Hidden, Time>
+impl<Intervals, Projections, Syncs, Hidden, Time, Refresh> CalendarUseCases
+    for CalendarService<Intervals, Projections, Syncs, Hidden, Time, Refresh>
 where
     Intervals: IntervalsUseCases + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
     Syncs: PlannedWorkoutSyncRepository + Clone,
     Hidden: HiddenCalendarEventSource + Clone,
     Time: Clock + Clone,
+    Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     fn list_events(
         &self,

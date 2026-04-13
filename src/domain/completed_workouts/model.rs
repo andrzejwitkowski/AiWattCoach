@@ -100,6 +100,21 @@ pub struct CompletedWorkout {
     pub details: CompletedWorkoutDetails,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CompletedWorkoutError {
+    Repository(String),
+}
+
+impl std::fmt::Display for CompletedWorkoutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Repository(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for CompletedWorkoutError {}
+
 impl CompletedWorkout {
     pub fn new(
         completed_workout_id: String,

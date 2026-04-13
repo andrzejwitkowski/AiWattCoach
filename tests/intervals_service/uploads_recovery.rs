@@ -9,6 +9,7 @@ use crate::{
         FakeActivityRepository, FakeActivityUploadOperationRepository, FakeIntervalsApi,
         FakeSettingsPort, UploadOperationRepoCall,
     },
+    refresh_support::RecordingCalendarRefresh,
 };
 
 #[tokio::test]
@@ -334,4 +335,52 @@ async fn upload_activity_recovers_uploaded_operation_after_previous_persistence_
     assert_eq!(result.activity_ids, vec![recovered.id.clone()]);
     assert_eq!(result.activities, vec![recovered]);
     assert!(api_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn upload_activity_recovery_refreshes_calendar_view_when_it_restores_missing_activity() {
+    let recovered = sample_activity("i94", "Recovered Upload");
+    let refresh = RecordingCalendarRefresh::default();
+    let service = IntervalsService::new(
+        FakeIntervalsApi::with_get_activity(recovered),
+        FakeSettingsPort::with_credentials(valid_credentials()),
+        FakeActivityRepository::default(),
+        FakeActivityUploadOperationRepository::with_existing(
+            "user-1",
+            ActivityUploadOperation {
+                operation_key: "external_id:external-i94".to_string(),
+                normalized_external_id: Some("external-i94".to_string()),
+                fallback_identity: None,
+                uploaded_activity_ids: vec!["i94".to_string()],
+                status: ActivityUploadOperationStatus::Uploaded,
+            },
+        ),
+        NoopActivityFileIdentityExtractor,
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Recovered Upload".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("external-i94".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-03-22".to_string(),
+            "2026-03-22".to_string(),
+        )]
+    );
 }

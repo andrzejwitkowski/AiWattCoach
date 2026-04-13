@@ -1,4 +1,5 @@
 use crate::domain::{
+    calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
         ExternalSyncState, ExternalSyncStateRepository,
@@ -6,23 +7,32 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     intervals::{CreateEvent, DateRange, IntervalsError, IntervalsUseCases, UpdateEvent},
 };
+use tracing::warn;
 
 use super::{BoxFuture, CreateRace, Race, RaceError, RaceRepository, RaceUseCases, UpdateRace};
 
 #[derive(Clone)]
-pub struct RaceService<Repository, Intervals, SyncStates, Time, Ids>
-where
+pub struct RaceService<
+    Repository,
+    Intervals,
+    SyncStates,
+    Time,
+    Ids,
+    Refresh = NoopCalendarEntryViewRefresh,
+> where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     repository: Repository,
     intervals: Intervals,
     sync_states: SyncStates,
     clock: Time,
     ids: Ids,
+    refresh: Refresh,
 }
 
 impl<Repository, Intervals, SyncStates, Time, Ids>
@@ -47,6 +57,45 @@ where
             sync_states,
             clock,
             ids,
+            refresh: NoopCalendarEntryViewRefresh,
+        }
+    }
+}
+
+impl<Repository, Intervals, SyncStates, Time, Ids, Refresh>
+    RaceService<Repository, Intervals, SyncStates, Time, Ids, Refresh>
+where
+    Repository: RaceRepository + Clone + 'static,
+    Intervals: IntervalsUseCases + Clone + 'static,
+    SyncStates: ExternalSyncStateRepository + Clone + 'static,
+    Time: Clock + Clone + 'static,
+    Ids: IdGenerator + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
+{
+    pub fn with_calendar_view_refresh<NewRefresh>(
+        self,
+        refresh: NewRefresh,
+    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, NewRefresh>
+    where
+        NewRefresh: CalendarEntryViewRefreshPort + Clone + 'static,
+    {
+        RaceService {
+            repository: self.repository,
+            intervals: self.intervals,
+            sync_states: self.sync_states,
+            clock: self.clock,
+            ids: self.ids,
+            refresh,
+        }
+    }
+
+    async fn refresh_race_date(&self, user_id: &str, date: &str) {
+        if let Err(error) = self
+            .refresh
+            .refresh_range_for_user(user_id, date, date)
+            .await
+        {
+            warn!(%user_id, %date, %error, "race write succeeded but calendar view refresh failed");
         }
     }
 
@@ -77,7 +126,10 @@ where
         let now = self.clock.now_epoch_seconds();
         let pending = Race::pending_new(self.ids.new_id("race"), user_id.to_string(), request, now);
         let pending = self.repository.upsert(pending).await?;
-        self.sync_pending_race(pending).await
+        let result = self.sync_pending_race(pending.clone()).await;
+        self.refresh_race_date(&pending.user_id, &pending.date)
+            .await;
+        result
     }
 
     async fn update_race_impl(
@@ -97,7 +149,10 @@ where
             .repository
             .upsert(existing.mark_pending_update(request, self.clock.now_epoch_seconds()))
             .await?;
-        self.sync_pending_race(pending).await
+        let result = self.sync_pending_race(pending.clone()).await;
+        self.refresh_race_date(&pending.user_id, &pending.date)
+            .await;
+        result
     }
 
     async fn delete_race_impl(&self, user_id: &str, race_id: &str) -> Result<(), RaceError> {
@@ -138,18 +193,30 @@ where
             }
         }
 
-        self.repository.delete(user_id, race_id).await?;
+        if let Err(error) = self.repository.delete(user_id, race_id).await {
+            self.refresh_race_date(&existing.user_id, &existing.date)
+                .await;
+            return Err(error);
+        }
 
         if existing_sync_state.is_some() {
-            self.sync_states
+            if let Err(error) = self
+                .sync_states
                 .delete_by_provider_and_canonical_entity(
                     user_id,
                     ExternalProvider::Intervals,
                     &race_ref,
                 )
                 .await
-                .map_err(map_sync_repository_error)?;
+            {
+                self.refresh_race_date(&existing.user_id, &existing.date)
+                    .await;
+                return Err(map_sync_repository_error(error));
+            }
         }
+
+        self.refresh_race_date(&existing.user_id, &existing.date)
+            .await;
 
         Ok(())
     }
@@ -259,14 +326,15 @@ where
     }
 }
 
-impl<Repository, Intervals, SyncStates, Time, Ids> RaceUseCases
-    for RaceService<Repository, Intervals, SyncStates, Time, Ids>
+impl<Repository, Intervals, SyncStates, Time, Ids, Refresh> RaceUseCases
+    for RaceService<Repository, Intervals, SyncStates, Time, Ids, Refresh>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     fn list_races(
         &self,

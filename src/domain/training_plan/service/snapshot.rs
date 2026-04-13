@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::domain::identity::Clock;
+use crate::domain::{calendar_view::CalendarEntryViewRefreshPort, identity::Clock};
 
 use super::TrainingPlanGenerationService;
 use crate::domain::training_plan::{
@@ -11,7 +11,7 @@ use crate::domain::training_plan::{
     TrainingPlanSnapshot, TrainingPlanSnapshotRepository, TrainingPlanWorkoutSummaryPort,
 };
 
-impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time>
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
     TrainingPlanGenerationService<
         Snapshots,
         Projections,
@@ -19,6 +19,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time>
         Generator,
         WorkoutSummary,
         Time,
+        Refresh,
     >
 where
     Snapshots: TrainingPlanSnapshotRepository + Clone,
@@ -27,6 +28,7 @@ where
     Generator: TrainingPlanGenerator + Clone,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
     Time: Clock + Clone,
+    Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     fn days_are_contiguous(days: &[TrainingPlanDay]) -> bool {
         days.windows(2).all(|window| {

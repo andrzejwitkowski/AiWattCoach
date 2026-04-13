@@ -434,7 +434,7 @@ impl ActivityFileIdentityExtractorPort for NoopActivityFileIdentityExtractor {
     }
 }
 
-fn activity_date(start_date_local: &str) -> &str {
+pub(crate) fn activity_date(start_date_local: &str) -> &str {
     start_date_local.get(..10).unwrap_or(start_date_local)
 }
 

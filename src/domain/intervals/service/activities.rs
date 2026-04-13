@@ -1,7 +1,8 @@
 use super::*;
+use crate::domain::intervals::ports::activity_date;
 
-impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
-    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
+impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
+    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
@@ -10,6 +11,7 @@ where
     Extractor: ActivityFileIdentityExtractorPort,
     PocRepo: PestParserPocRepositoryPort,
     Time: Clock,
+    Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort,
 {
     pub(super) async fn list_activities_impl(
         &self,
@@ -28,6 +30,18 @@ where
                 %user_id,
                 "activity list refresh succeeded but local persistence failed"
             );
+        } else if let Err(error) = self
+            .refresh
+            .refresh_range_for_user(user_id, &range.oldest, &range.newest)
+            .await
+        {
+            warn!(
+                ?error,
+                %user_id,
+                oldest = %range.oldest,
+                newest = %range.newest,
+                "activity list refresh succeeded but calendar view refresh failed"
+            );
         }
         Ok(activities)
     }
@@ -39,7 +53,21 @@ where
     ) -> Result<Activity, IntervalsError> {
         let credentials = self.settings.get_credentials(user_id).await?;
         let activity = self.api.get_activity(&credentials, activity_id).await?;
-        self.activities.upsert(user_id, activity.clone()).await?;
+        let activity = self.activities.upsert(user_id, activity).await?;
+        let activity_date = activity_date(&activity.start_date_local).to_string();
+        if let Err(error) = self
+            .refresh
+            .refresh_range_for_user(user_id, &activity_date, &activity_date)
+            .await
+        {
+            warn!(
+                ?error,
+                %user_id,
+                activity_id,
+                date = %activity_date,
+                "activity get succeeded but calendar view refresh failed"
+            );
+        }
         Ok(activity)
     }
 
@@ -54,12 +82,25 @@ where
             .api
             .update_activity(&credentials, activity_id, activity)
             .await?;
+        let updated_date = activity_date(&updated.start_date_local).to_string();
         if let Err(error) = self.activities.upsert(user_id, updated.clone()).await {
             warn!(
                 ?error,
                 %user_id,
                 activity_id,
                 "activity update succeeded upstream but local persistence failed"
+            );
+        } else if let Err(error) = self
+            .refresh
+            .refresh_range_for_user(user_id, &updated_date, &updated_date)
+            .await
+        {
+            warn!(
+                ?error,
+                %user_id,
+                activity_id,
+                date = %updated_date,
+                "activity update succeeded but calendar view refresh failed"
             );
         }
         Ok(updated)
@@ -70,6 +111,13 @@ where
         user_id: &str,
         activity_id: &str,
     ) -> Result<(), IntervalsError> {
+        let existing = self
+            .activities
+            .find_by_user_id_and_activity_id(user_id, activity_id)
+            .await?;
+        let existing_date = existing
+            .as_ref()
+            .map(|activity| activity_date(&activity.start_date_local).to_string());
         let credentials = self.settings.get_credentials(user_id).await?;
         self.api.delete_activity(&credentials, activity_id).await?;
         if let Err(error) = self.activities.delete(user_id, activity_id).await {
@@ -79,6 +127,20 @@ where
                 activity_id,
                 "activity delete succeeded upstream but local deletion failed"
             );
+        } else if let Some(existing_date) = existing_date.as_ref() {
+            if let Err(error) = self
+                .refresh
+                .refresh_range_for_user(user_id, existing_date, existing_date)
+                .await
+            {
+                warn!(
+                    ?error,
+                    %user_id,
+                    activity_id,
+                    date = %existing_date,
+                    "activity delete succeeded but calendar view refresh failed"
+                );
+            }
         }
         Ok(())
     }
