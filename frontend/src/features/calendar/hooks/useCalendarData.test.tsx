@@ -360,11 +360,13 @@ describe('useCalendarData', () => {
   });
 
   it('hydrates predicted workouts with positive safe synthetic ids', async () => {
+    const workoutDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 1));
+
     vi.mocked(listCalendarEvents).mockResolvedValue([
       {
         id: 5906112577594034,
         calendarEntryId: 'predicted:training-plan:user-1:w1:1775719860:2026-04-11',
-        startDateLocal: '2026-04-11',
+        startDateLocal: workoutDateKey,
         name: 'Active Recovery',
         category: 'WORKOUT',
         description: null,
@@ -394,7 +396,7 @@ describe('useCalendarData', () => {
         projectedWorkout: {
           projectedWorkoutId: 'training-plan:user-1:w1:1775719860:2026-04-11',
           operationKey: 'training-plan:user-1:w1:1775719860',
-          date: '2026-04-11',
+          date: workoutDateKey,
           sourceWorkoutId: 'w1',
         },
       },
@@ -410,7 +412,7 @@ describe('useCalendarData', () => {
       expect(result.current.state).toBe('ready');
     });
 
-    const workoutDay = result.current.weeks.flatMap((week) => week.days).find((day) => day.dateKey === '2026-04-11');
+    const workoutDay = result.current.weeks.flatMap((week) => week.days).find((day) => day.dateKey === workoutDateKey);
 
     expect(workoutDay?.events).toHaveLength(1);
     expect(workoutDay?.events[0]?.id).toBe(5906112577594034);
