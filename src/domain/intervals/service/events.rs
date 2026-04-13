@@ -1,7 +1,7 @@
 use super::*;
 
-impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
-    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
+impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
+    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
@@ -10,6 +10,7 @@ where
     Extractor: ActivityFileIdentityExtractorPort,
     PocRepo: PestParserPocRepositoryPort,
     Time: Clock,
+    Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort,
 {
     pub(super) async fn list_events_impl(
         &self,

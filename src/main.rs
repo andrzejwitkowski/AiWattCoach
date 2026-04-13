@@ -27,18 +27,22 @@ use aiwattcoach::{
             activity_upload_operations::MongoActivityUploadOperationRepository,
             athlete_summary::MongoAthleteSummaryRepository,
             athlete_summary_generation_operations::MongoAthleteSummaryGenerationOperationRepository,
+            calendar_entry_view_calendar::MongoCalendarEntryViewCalendarSource,
+            calendar_entry_views::MongoCalendarEntryViewRepository,
             client::{create_client, ensure_database_exists, verify_connection},
             coach_reply_operations::MongoCoachReplyOperationRepository,
+            completed_workouts::MongoCompletedWorkoutRepository,
             external_observations::MongoExternalObservationRepository,
             external_sync_states::MongoExternalSyncStateRepository,
             llm_context_cache::MongoLlmContextCacheRepository,
             login_state::MongoLoginStateRepository,
             planned_workout_syncs::MongoPlannedWorkoutSyncRepository,
+            planned_workouts::MongoPlannedWorkoutRepository,
             provider_poll_states::MongoProviderPollStateRepository,
-            race_calendar::MongoRaceCalendarSource,
             races::MongoRaceRepository,
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
+            special_days::MongoSpecialDayRepository,
             training_plan_generation_operations::MongoTrainingPlanGenerationOperationRepository,
             training_plan_projections::MongoTrainingPlanProjectionRepository,
             training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
@@ -53,6 +57,7 @@ use aiwattcoach::{
     domain::athlete_summary::AthleteSummaryService,
     domain::calendar::CalendarService,
     domain::calendar_labels::CalendarLabelsService,
+    domain::calendar_view::CalendarEntryViewRefreshService,
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
     },
@@ -270,6 +275,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     provider_poll_state_repository.ensure_indexes().await?;
     let race_repository = MongoRaceRepository::new(mongo_client.clone(), &mongo_database);
     race_repository.ensure_indexes().await?;
+    let planned_workout_repository =
+        MongoPlannedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
+    let completed_workout_repository =
+        MongoCompletedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
+    let special_day_repository =
+        MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);
+    special_day_repository.ensure_indexes().await?;
+    let calendar_entry_view_repository =
+        MongoCalendarEntryViewRepository::new(mongo_client.clone(), &mongo_database);
+    calendar_entry_view_repository.ensure_indexes().await?;
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
     if legacy_time_stream_cleanup_enabled {
@@ -284,6 +299,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let upload_operation_repository =
         MongoActivityUploadOperationRepository::new(mongo_client.clone(), &mongo_database);
     upload_operation_repository.ensure_indexes().await?;
+    let calendar_entry_view_refresh_service = CalendarEntryViewRefreshService::new(
+        calendar_entry_view_repository.clone(),
+        planned_workout_repository,
+        planned_workout_sync_repository.clone(),
+        completed_workout_repository,
+        race_repository.clone(),
+        special_day_repository.clone(),
+        external_sync_state_repository.clone(),
+    );
     let intervals_api_client = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
     } else {
@@ -295,13 +319,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         IntervalsSettingsAdapter::Live(SettingsIntervalsProvider::new(settings_service.clone()))
     };
     let activity_identity_extractor = ActivityFileIdentityExtractor;
-    let intervals_service = Arc::new(IntervalsService::new(
-        intervals_api_client,
-        intervals_settings_provider,
-        activity_repository.clone(),
-        upload_operation_repository,
-        activity_identity_extractor,
-    ));
+    let intervals_service = Arc::new(
+        IntervalsService::new(
+            intervals_api_client,
+            intervals_settings_provider,
+            activity_repository.clone(),
+            upload_operation_repository,
+            activity_identity_extractor,
+        )
+        .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+    );
 
     let training_context_builder = Arc::new(
         DefaultTrainingContextBuilder::new(
@@ -348,36 +375,46 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             LatestCompletedActivityAdapter::new(activity_repository.clone()),
         )),
     );
-    let training_plan_service = Arc::new(TrainingPlanGenerationService::new(
-        training_plan_snapshot_repository,
-        training_plan_projection_repository.clone(),
-        training_plan_generation_operation_repository,
-        TrainingPlanLlmGenerator::new(
-            llm_adapter.clone(),
-            llm_config_provider.clone(),
-            training_context_builder.clone(),
+    let training_plan_service = Arc::new(
+        TrainingPlanGenerationService::new(
+            training_plan_snapshot_repository,
+            training_plan_projection_repository.clone(),
+            training_plan_generation_operation_repository,
+            TrainingPlanLlmGenerator::new(
+                llm_adapter.clone(),
+                llm_config_provider.clone(),
+                training_context_builder.clone(),
+                SystemClock,
+            ),
+            TrainingPlanWorkoutSummaryAdapter::new(workout_summary_service.clone()),
             SystemClock,
-        ),
-        TrainingPlanWorkoutSummaryAdapter::new(workout_summary_service.clone()),
-        SystemClock,
-    ));
-    let race_service = Arc::new(RaceService::new(
-        race_repository.clone(),
-        (*intervals_service).clone(),
-        external_sync_state_repository.clone(),
-        SystemClock,
-        UuidIdGenerator,
-    ));
-    let race_calendar_source = MongoRaceCalendarSource::new(mongo_client.clone(), &mongo_database);
+        )
+        .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+    );
+    let race_service = Arc::new(
+        RaceService::new(
+            race_repository.clone(),
+            (*intervals_service).clone(),
+            external_sync_state_repository.clone(),
+            SystemClock,
+            UuidIdGenerator,
+        )
+        .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+    );
+    let race_calendar_source =
+        MongoCalendarEntryViewCalendarSource::new(mongo_client.clone(), &mongo_database);
     let calendar_labels_service =
         Arc::new(CalendarLabelsService::new(race_calendar_source.clone()));
-    let calendar_service = Arc::new(CalendarService::new(
-        (*intervals_service).clone(),
-        training_plan_projection_repository.clone(),
-        planned_workout_sync_repository,
-        race_calendar_source,
-        SystemClock,
-    ));
+    let calendar_service = Arc::new(
+        CalendarService::new(
+            (*intervals_service).clone(),
+            training_plan_projection_repository.clone(),
+            planned_workout_sync_repository,
+            race_calendar_source,
+            SystemClock,
+        )
+        .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+    );
     let workout_summary_service = Arc::new(
         (*workout_summary_service)
             .clone()

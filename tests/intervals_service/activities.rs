@@ -10,6 +10,7 @@ use aiwattcoach::domain::intervals::{
 use crate::{
     common::{sample_activity, valid_credentials},
     fakes::{ApiCall, FakeActivityRepository, FakeIntervalsApi, FakeSettingsPort, RepoCall},
+    refresh_support::RecordingCalendarRefresh,
 };
 
 #[tokio::test]
@@ -129,13 +130,15 @@ async fn get_activity_persists_fetched_activity() {
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
     let repository = FakeActivityRepository::default();
     let repository_calls = repository.call_log.clone();
+    let refresh = RecordingCalendarRefresh::default();
     let service = IntervalsService::new(
         api,
         settings,
         repository,
         NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
-    );
+    )
+    .with_calendar_view_refresh(refresh.clone());
 
     let fetched = service.get_activity("user-1", "i77").await.unwrap();
 
@@ -143,6 +146,14 @@ async fn get_activity_persists_fetched_activity() {
     assert_eq!(
         repository_calls.lock().unwrap().as_slice(),
         &[RepoCall::Upsert("i77".to_string())]
+    );
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-03-22".to_string(),
+            "2026-03-22".to_string()
+        )]
     );
 }
 
@@ -356,13 +367,19 @@ async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds(
     let sequence = Arc::new(Mutex::new(Vec::new()));
     let repository = FakeActivityRepository::with_sequence(sequence.clone());
     let api = api.with_sequence(sequence.clone());
+    repository
+        .upsert("user-1", sample_activity("i11", "Delete Ride"))
+        .await
+        .unwrap();
+    let refresh = RecordingCalendarRefresh::default();
     let service = IntervalsService::new(
         api,
         settings,
         repository,
         NoopActivityUploadOperationRepository::default(),
         NoopActivityFileIdentityExtractor,
-    );
+    )
+    .with_calendar_view_refresh(refresh.clone());
 
     let result = service.delete_activity("user-1", "i11").await;
 
@@ -370,6 +387,14 @@ async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds(
     assert_eq!(
         sequence.lock().unwrap().as_slice(),
         &["api_delete:i11".to_string(), "repo_delete:i11".to_string()]
+    );
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-03-22".to_string(),
+            "2026-03-22".to_string()
+        )]
     );
 }
 

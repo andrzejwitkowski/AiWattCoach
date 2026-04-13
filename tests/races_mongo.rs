@@ -5,12 +5,14 @@ use std::{
 
 use aiwattcoach::{
     adapters::mongo::{
-        external_sync_states::MongoExternalSyncStateRepository,
-        race_calendar::MongoRaceCalendarSource, races::MongoRaceRepository,
+        calendar_entry_view_calendar::MongoCalendarEntryViewCalendarSource,
+        calendar_entry_views::MongoCalendarEntryViewRepository,
+        external_sync_states::MongoExternalSyncStateRepository, races::MongoRaceRepository,
     },
     domain::{
         calendar::HiddenCalendarEventSource,
         calendar_labels::CalendarLabelSource,
+        calendar_view::{project_race_entry, CalendarEntryViewRepository},
         external_sync::{
             CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState,
             ExternalSyncStateRepository,
@@ -96,20 +98,28 @@ async fn race_repository_creates_expected_indexes() {
 }
 
 #[tokio::test]
-async fn race_repository_exposes_races_as_calendar_labels() {
+async fn calendar_entry_view_calendar_source_reads_race_labels_from_persisted_view() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
     };
     let repository = MongoRaceRepository::new(fixture.client.clone(), &fixture.database);
-    let calendar_source = MongoRaceCalendarSource::new(fixture.client.clone(), &fixture.database);
+    let view_repository =
+        MongoCalendarEntryViewRepository::new(fixture.client.clone(), &fixture.database);
+    let calendar_source =
+        MongoCalendarEntryViewCalendarSource::new(fixture.client.clone(), &fixture.database);
     repository.ensure_indexes().await.unwrap();
+    view_repository.ensure_indexes().await.unwrap();
 
-    repository
-        .upsert(sample_race("race-1", "2026-09-12"))
+    let race_1 = sample_race("race-1", "2026-09-12");
+    let race_2 = sample_race("race-2", "2026-09-13");
+    repository.upsert(race_1.clone()).await.unwrap();
+    repository.upsert(race_2.clone()).await.unwrap();
+    view_repository
+        .upsert(project_race_entry(&race_1, None))
         .await
         .unwrap();
-    repository
-        .upsert(sample_race("race-2", "2026-09-13"))
+    view_repository
+        .upsert(project_race_entry(&race_2, None))
         .await
         .unwrap();
 
@@ -138,19 +148,19 @@ async fn race_calendar_hides_only_intervals_events_linked_to_races_in_requested_
     let repository = MongoRaceRepository::new(fixture.client.clone(), &fixture.database);
     let sync_repository =
         MongoExternalSyncStateRepository::new(fixture.client.clone(), &fixture.database);
-    let calendar_source = MongoRaceCalendarSource::new(fixture.client.clone(), &fixture.database);
+    let view_repository =
+        MongoCalendarEntryViewRepository::new(fixture.client.clone(), &fixture.database);
+    let calendar_source =
+        MongoCalendarEntryViewCalendarSource::new(fixture.client.clone(), &fixture.database);
     repository.ensure_indexes().await.unwrap();
     sync_repository.ensure_indexes().await.unwrap();
+    view_repository.ensure_indexes().await.unwrap();
 
-    repository
-        .upsert(sample_race("race-1", "2026-09-12"))
-        .await
-        .unwrap();
-    repository
-        .upsert(sample_race("race-2", "2026-10-12"))
-        .await
-        .unwrap();
-    sync_repository
+    let race_1 = sample_race("race-1", "2026-09-12");
+    let race_2 = sample_race("race-2", "2026-10-12");
+    repository.upsert(race_1.clone()).await.unwrap();
+    repository.upsert(race_2.clone()).await.unwrap();
+    let sync_1 = sync_repository
         .upsert(
             ExternalSyncState::new(
                 "user-1".to_string(),
@@ -161,7 +171,7 @@ async fn race_calendar_hides_only_intervals_events_linked_to_races_in_requested_
         )
         .await
         .unwrap();
-    sync_repository
+    let sync_2 = sync_repository
         .upsert(
             ExternalSyncState::new(
                 "user-1".to_string(),
@@ -170,6 +180,14 @@ async fn race_calendar_hides_only_intervals_events_linked_to_races_in_requested_
             )
             .mark_synced("99".to_string(), "hash-2".to_string(), 1_700_000_100),
         )
+        .await
+        .unwrap();
+    view_repository
+        .upsert(project_race_entry(&race_1, Some(&sync_1)))
+        .await
+        .unwrap();
+    view_repository
+        .upsert(project_race_entry(&race_2, Some(&sync_2)))
         .await
         .unwrap();
 

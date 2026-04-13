@@ -1,5 +1,6 @@
 use super::service::{validate_request, RaceService};
 use crate::domain::{
+    calendar_view::{CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRefreshPort},
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
         ExternalSyncState, ExternalSyncStateRepository, ExternalSyncStatus,
@@ -251,6 +252,37 @@ struct RecordingIntervalsService {
     fail_updates: bool,
 }
 
+#[derive(Clone, Default)]
+struct RecordingCalendarRefresh {
+    calls: Arc<Mutex<Vec<(String, String, String)>>>,
+}
+
+impl RecordingCalendarRefresh {
+    fn stored(&self) -> Vec<(String, String, String)> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
+    fn refresh_range_for_user(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> crate::domain::calendar_view::BoxFuture<
+        Result<Vec<CalendarEntryView>, CalendarEntryViewError>,
+    > {
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            calls.lock().unwrap().push((user_id, oldest, newest));
+            Ok(Vec::new())
+        })
+    }
+}
+
 impl RecordingIntervalsService {
     fn with_failed_updates() -> Self {
         Self {
@@ -357,13 +389,15 @@ async fn create_race_persists_and_syncs_to_intervals() {
     let repository = InMemoryRaceRepository::default();
     let sync_states = InMemoryExternalSyncStateRepository::default();
     let intervals = RecordingIntervalsService::default();
+    let refresh = RecordingCalendarRefresh::default();
     let service = RaceService::new(
         repository.clone(),
         intervals.clone(),
         sync_states.clone(),
         TestClock,
         TestIdGenerator::default(),
-    );
+    )
+    .with_calendar_view_refresh(refresh.clone());
 
     let created = service
         .create_race(
@@ -387,6 +421,14 @@ async fn create_race_persists_and_syncs_to_intervals() {
     let sync_state = sync_states.stored().pop().expect("expected sync state");
     assert_eq!(sync_state.external_id.as_deref(), Some("77"));
     assert_eq!(sync_state.sync_status, ExternalSyncStatus::Synced);
+    assert_eq!(
+        refresh.stored(),
+        vec![(
+            "user-1".to_string(),
+            "2026-09-12".to_string(),
+            "2026-09-12".to_string()
+        )]
+    );
 }
 
 #[tokio::test]
@@ -522,19 +564,29 @@ async fn delete_race_deletes_remote_event_before_local_remove() {
         .await
         .expect("infallible sync state upsert");
     let intervals = RecordingIntervalsService::default();
+    let refresh = RecordingCalendarRefresh::default();
     let service = RaceService::new(
         repository.clone(),
         intervals.clone(),
         sync_states.clone(),
         TestClock,
         TestIdGenerator::default(),
-    );
+    )
+    .with_calendar_view_refresh(refresh.clone());
 
     service.delete_race("user-1", "race-1").await.unwrap();
 
     assert!(repository.stored().is_empty());
     assert_eq!(*intervals.deleted_event_ids.lock().unwrap(), vec![88]);
     assert!(sync_states.stored().is_empty());
+    assert_eq!(
+        refresh.stored(),
+        vec![(
+            "user-1".to_string(),
+            "2026-09-12".to_string(),
+            "2026-09-12".to_string()
+        )]
+    );
 }
 
 #[tokio::test]
@@ -613,13 +665,15 @@ async fn delete_race_keeps_sync_state_when_local_delete_fails() {
         .await
         .expect("infallible sync state upsert");
     let intervals = RecordingIntervalsService::default();
+    let refresh = RecordingCalendarRefresh::default();
     let service = RaceService::new(
         repository,
         intervals.clone(),
         sync_states.clone(),
         TestClock,
         TestIdGenerator::default(),
-    );
+    )
+    .with_calendar_view_refresh(refresh.clone());
 
     let error = service.delete_race("user-1", "race-1").await.unwrap_err();
 
@@ -633,6 +687,14 @@ async fn delete_race_keeps_sync_state_when_local_delete_fails() {
     );
     assert_eq!(stored_states[0].external_id.as_deref(), Some("88"));
     assert_eq!(stored_states[0].canonical_entity, race_ref);
+    assert_eq!(
+        refresh.stored(),
+        vec![(
+            "user-1".to_string(),
+            "2026-09-12".to_string(),
+            "2026-09-12".to_string()
+        )]
+    );
 }
 
 #[test]

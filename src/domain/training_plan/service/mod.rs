@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::domain::{
     ai_workflow::{ValidationIssue, WorkflowPhase, WorkflowStatus},
+    calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
     identity::Clock,
     workout_summary::WorkoutRecap,
 };
@@ -44,6 +45,7 @@ pub struct TrainingPlanGenerationService<
     Generator,
     WorkoutSummary,
     Time,
+    Refresh = NoopCalendarEntryViewRefresh,
 > where
     Snapshots: TrainingPlanSnapshotRepository + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
@@ -51,6 +53,7 @@ pub struct TrainingPlanGenerationService<
     Generator: TrainingPlanGenerator + Clone,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
     Time: Clock + Clone,
+    Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     snapshots: Snapshots,
     projections: Projections,
@@ -58,6 +61,7 @@ pub struct TrainingPlanGenerationService<
     generator: Generator,
     workout_summary: WorkoutSummary,
     clock: Time,
+    refresh: Refresh,
 }
 
 pub(super) struct ParsedPlanWindow {
@@ -83,10 +87,6 @@ where
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
     Time: Clock + Clone,
 {
-    const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
-    const SNAPSHOT_DAY_COUNT: usize = 14;
-    const MAX_CORRECTION_ATTEMPTS: usize = 2;
-
     pub fn new(
         snapshots: Snapshots,
         projections: Projections,
@@ -102,8 +102,59 @@ where
             generator,
             workout_summary,
             clock,
+            refresh: NoopCalendarEntryViewRefresh,
         }
     }
+
+    pub fn with_calendar_view_refresh<NewRefresh>(
+        self,
+        refresh: NewRefresh,
+    ) -> TrainingPlanGenerationService<
+        Snapshots,
+        Projections,
+        Operations,
+        Generator,
+        WorkoutSummary,
+        Time,
+        NewRefresh,
+    >
+    where
+        NewRefresh: CalendarEntryViewRefreshPort + Clone,
+    {
+        TrainingPlanGenerationService {
+            snapshots: self.snapshots,
+            projections: self.projections,
+            operations: self.operations,
+            generator: self.generator,
+            workout_summary: self.workout_summary,
+            clock: self.clock,
+            refresh,
+        }
+    }
+}
+
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
+    TrainingPlanGenerationService<
+        Snapshots,
+        Projections,
+        Operations,
+        Generator,
+        WorkoutSummary,
+        Time,
+        Refresh,
+    >
+where
+    Snapshots: TrainingPlanSnapshotRepository + Clone,
+    Projections: TrainingPlanProjectionRepository + Clone,
+    Operations: TrainingPlanGenerationOperationRepository + Clone,
+    Generator: TrainingPlanGenerator + Clone,
+    WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
+    Time: Clock + Clone,
+    Refresh: CalendarEntryViewRefreshPort + Clone,
+{
+    const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
+    const SNAPSHOT_DAY_COUNT: usize = 14;
+    const MAX_CORRECTION_ATTEMPTS: usize = 2;
 
     fn operation_key(
         &self,
@@ -253,6 +304,19 @@ where
         }
         let completed = operation.mark_completed(self.clock.now_epoch_seconds());
         self.operations.upsert(completed).await?;
+        if let Err(error) = self
+            .refresh
+            .refresh_range_for_user(&snapshot.user_id, &snapshot.start_date, &snapshot.end_date)
+            .await
+        {
+            tracing::warn!(
+                user_id = %snapshot.user_id,
+                start_date = %snapshot.start_date,
+                end_date = %snapshot.end_date,
+                %error,
+                "training plan generation succeeded but calendar view refresh failed"
+            );
+        }
 
         Ok(GeneratedTrainingPlan {
             snapshot,
@@ -262,7 +326,8 @@ where
     }
 }
 
-impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time> TrainingPlanUseCases
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
+    TrainingPlanUseCases
     for TrainingPlanGenerationService<
         Snapshots,
         Projections,
@@ -270,6 +335,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time> Traini
         Generator,
         WorkoutSummary,
         Time,
+        Refresh,
     >
 where
     Snapshots: TrainingPlanSnapshotRepository + Clone + 'static,
@@ -278,6 +344,7 @@ where
     Generator: TrainingPlanGenerator + Clone + 'static,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone + 'static,
     Time: Clock + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     fn generate_recap_for_saved_workout(
         &self,

@@ -48,6 +48,21 @@ pub struct PlannedWorkout {
     pub workout: PlannedWorkoutContent,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlannedWorkoutError {
+    Repository(String),
+}
+
+impl std::fmt::Display for PlannedWorkoutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Repository(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for PlannedWorkoutError {}
+
 impl PlannedWorkout {
     pub fn new(
         planned_workout_id: String,

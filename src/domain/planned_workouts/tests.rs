@@ -38,3 +38,52 @@ fn assert_planned_workout_repository<T: PlannedWorkoutRepository>() {}
 fn planned_workout_repository_trait_is_usable() {
     assert_planned_workout_repository::<super::ports::NoopPlannedWorkoutRepository>();
 }
+
+#[tokio::test]
+async fn planned_workout_repository_lists_by_user_and_date_range() {
+    let repository = super::ports::NoopPlannedWorkoutRepository::default();
+    repository
+        .upsert(sample_workout("planned-2", "user-1", "2026-05-02"))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_workout("planned-1", "user-1", "2026-05-01"))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_workout("planned-3", "user-2", "2026-05-01"))
+        .await
+        .unwrap();
+
+    let workouts = repository
+        .list_by_user_id_and_date_range("user-1", "2026-05-01", "2026-05-31")
+        .await
+        .unwrap();
+
+    assert_eq!(workouts.len(), 2);
+    assert_eq!(workouts[0].planned_workout_id, "planned-1");
+    assert_eq!(workouts[1].planned_workout_id, "planned-2");
+}
+
+fn sample_workout(planned_workout_id: &str, user_id: &str, date: &str) -> PlannedWorkout {
+    PlannedWorkout::new(
+        planned_workout_id.to_string(),
+        user_id.to_string(),
+        date.to_string(),
+        PlannedWorkoutContent {
+            lines: vec![
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Warmup".to_string(),
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 600,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 55.0,
+                        max: 55.0,
+                    },
+                }),
+            ],
+        },
+    )
+}

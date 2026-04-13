@@ -2,6 +2,7 @@ pub mod ai_workflow;
 pub mod athlete_summary;
 pub mod calendar;
 pub mod calendar_labels;
+pub mod calendar_view;
 pub mod completed_workouts;
 pub mod external_sync;
 pub mod identity;

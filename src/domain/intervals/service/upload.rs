@@ -1,7 +1,7 @@
 use super::*;
 
-impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
-    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
+impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
+    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
@@ -10,6 +10,7 @@ where
     Extractor: ActivityFileIdentityExtractorPort,
     PocRepo: PestParserPocRepositoryPort,
     Time: Clock,
+    Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort,
 {
     pub(super) async fn recover_uploaded_operation(
         &self,
@@ -57,6 +58,23 @@ where
                         )
                         .await?
                 };
+
+                for activity in &activities {
+                    let activity_date = activity_date(&activity.start_date_local).to_string();
+                    if let Err(error) = self
+                        .refresh
+                        .refresh_range_for_user(user_id, &activity_date, &activity_date)
+                        .await
+                    {
+                        warn!(
+                            ?error,
+                            %user_id,
+                            activity_id = %activity.id,
+                            date = %activity_date,
+                            "activity upload recovery succeeded but calendar view refresh failed"
+                        );
+                    }
+                }
 
                 Ok(Some(UploadedActivities {
                     created: false,
@@ -201,6 +219,22 @@ where
                 ),
             )
             .await?;
+        for activity in &stored_activities {
+            let activity_date = activity_date(&activity.start_date_local).to_string();
+            if let Err(error) = self
+                .refresh
+                .refresh_range_for_user(user_id, &activity_date, &activity_date)
+                .await
+            {
+                warn!(
+                    ?error,
+                    %user_id,
+                    activity_id = %activity.id,
+                    date = %activity_date,
+                    "activity upload succeeded but calendar view refresh failed"
+                );
+            }
+        }
         Ok(UploadedActivities {
             created: uploaded.created,
             activity_ids: stored_activities
@@ -210,4 +244,8 @@ where
             activities: stored_activities,
         })
     }
+}
+
+fn activity_date(start_date_local: &str) -> &str {
+    start_date_local.get(..10).unwrap_or(start_date_local)
 }

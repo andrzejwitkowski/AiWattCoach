@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::domain::{
     ai_workflow::ValidationIssue,
+    calendar_view::CalendarEntryViewRefreshPort,
     identity::Clock,
     intervals::{parse_planned_workout_days, PlannedWorkoutDay},
 };
@@ -13,7 +14,7 @@ use crate::domain::training_plan::{
     TrainingPlanWorkoutSummaryPort,
 };
 
-impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time>
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
     TrainingPlanGenerationService<
         Snapshots,
         Projections,
@@ -21,6 +22,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time>
         Generator,
         WorkoutSummary,
         Time,
+        Refresh,
     >
 where
     Snapshots: TrainingPlanSnapshotRepository + Clone,
@@ -29,6 +31,7 @@ where
     Generator: TrainingPlanGenerator + Clone,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
     Time: Clock + Clone,
+    Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     fn map_parsed_day(day: PlannedWorkoutDay) -> TrainingPlanDay {
         let date = day.date.clone();

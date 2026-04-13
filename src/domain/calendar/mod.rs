@@ -1,6 +1,8 @@
 mod model;
 mod ports;
 mod service;
+#[cfg(test)]
+mod tests;
 
 pub use model::{
     CalendarError, CalendarEvent, CalendarEventSource, CalendarProjectedWorkout,
