@@ -76,6 +76,33 @@ This Vite server setup is for local development only. In Docker and Coolify, Bun
 
 If you set `VITE_API_BASE_URL`, point it at an origin the browser can reach directly, or expose the backend through the same public origin via a reverse proxy.
 
+## Graphify
+
+This repo includes checked-in graph artifacts in `graphify-out/` for agent navigation.
+
+Primary entry points:
+
+- `graphify-out/GRAPH_REPORT.md`
+- `graphify-out/wiki/index.md`
+
+To refresh the graph locally, install graphify first. The PyPI package name is `graphifyy`, while the CLI command is `graphify`.
+
+```bash
+pipx install graphifyy
+graphify install --platform opencode
+graphify hook install
+```
+
+Then regenerate or query from the repo root:
+
+```bash
+graphify . --no-viz --update
+graphify query "show the calendar and races flow"
+graphify explain "CalendarService"
+```
+
+`.graphifyignore` excludes generated outputs and build directories so the graph does not index its own artifacts.
+
 The first integrated UI path uses the real backend endpoints:
 
 - `GET /health`
