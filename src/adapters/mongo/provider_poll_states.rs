@@ -3,7 +3,8 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::external_sync::{
-    BoxFuture, ExternalProvider, ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
+    BoxFuture, ExternalProvider, ExternalSyncRepositoryError, ProviderPollState,
+    ProviderPollStateRepository, ProviderPollStream,
 };
 
 #[derive(Clone)]
@@ -29,9 +30,8 @@ impl MongoProviderPollStateRepository {
         }
     }
 
-    pub async fn ensure_indexes(&self) -> Result<(), std::convert::Infallible> {
-        let _ = self
-            .collection
+    pub async fn ensure_indexes(&self) -> Result<(), ExternalSyncRepositoryError> {
+        self.collection
             .create_indexes([
                 IndexModel::builder()
                     .keys(doc! { "user_id": 1, "provider": 1, "stream": 1 })
@@ -51,7 +51,8 @@ impl MongoProviderPollStateRepository {
                     )
                     .build(),
             ])
-            .await;
+            .await
+            .map_err(storage_error)?;
         Ok(())
     }
 }
@@ -60,11 +61,11 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
     fn upsert(
         &self,
         state: ProviderPollState,
-    ) -> BoxFuture<Result<ProviderPollState, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<ProviderPollState, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let document = map_poll_state_to_document(&state);
         Box::pin(async move {
-            let _ = collection
+            collection
                 .replace_one(
                     doc! {
                         "user_id": &document.user_id,
@@ -74,7 +75,8 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
                     &document,
                 )
                 .upsert(true)
-                .await;
+                .await
+                .map_err(storage_error)?;
             Ok(state)
         })
     }
@@ -82,22 +84,22 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
     fn list_due(
         &self,
         now_epoch_seconds: i64,
-    ) -> BoxFuture<Result<Vec<ProviderPollState>, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         Box::pin(async move {
-            let documents = match collection
+            let documents = collection
                 .find(doc! { "next_due_at_epoch_seconds": { "$lte": now_epoch_seconds } })
                 .sort(doc! { "next_due_at_epoch_seconds": 1, "user_id": 1, "provider": 1, "stream": 1 })
                 .await
-            {
-                Ok(cursor) => cursor.try_collect::<Vec<_>>().await.unwrap_or_default(),
-                Err(_) => Vec::new(),
-            };
+                .map_err(storage_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(storage_error)?;
 
-            Ok(documents
+            documents
                 .into_iter()
                 .map(map_document_to_poll_state)
-                .collect())
+                .collect::<Result<Vec<_>, _>>()
         })
     }
 
@@ -106,7 +108,7 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
         user_id: &str,
         provider: ExternalProvider,
         stream: ProviderPollStream,
-    ) -> BoxFuture<Result<Option<ProviderPollState>, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<Option<ProviderPollState>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         let provider = provider_as_str(&provider).to_string();
@@ -119,10 +121,9 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
                     "stream": &stream,
                 })
                 .await
-                .ok()
-                .flatten();
+                .map_err(storage_error)?;
 
-            Ok(document.map(map_document_to_poll_state))
+            document.map(map_document_to_poll_state).transpose()
         })
     }
 }
@@ -137,14 +138,16 @@ fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDoc
     }
 }
 
-fn map_document_to_poll_state(document: ProviderPollStateDocument) -> ProviderPollState {
-    ProviderPollState {
+fn map_document_to_poll_state(
+    document: ProviderPollStateDocument,
+) -> Result<ProviderPollState, ExternalSyncRepositoryError> {
+    Ok(ProviderPollState {
         user_id: document.user_id,
         provider: map_provider(&document.provider),
-        stream: map_stream(&document.stream),
+        stream: map_stream(&document.stream)?,
         cursor: document.cursor,
         next_due_at_epoch_seconds: document.next_due_at_epoch_seconds,
-    }
+    })
 }
 
 fn provider_as_str(provider: &ExternalProvider) -> &'static str {
@@ -172,18 +175,27 @@ fn map_provider(value: &str) -> ExternalProvider {
     }
 }
 
-fn map_stream(value: &str) -> ProviderPollStream {
+fn map_stream(value: &str) -> Result<ProviderPollStream, ExternalSyncRepositoryError> {
     match value {
-        "calendar" => ProviderPollStream::Calendar,
-        _ => ProviderPollStream::CompletedWorkouts,
+        "calendar" => Ok(ProviderPollStream::Calendar),
+        "completed_workouts" => Ok(ProviderPollStream::CompletedWorkouts),
+        other => Err(ExternalSyncRepositoryError::CorruptData(format!(
+            "unknown provider poll stream: {other}"
+        ))),
     }
+}
+
+fn storage_error(error: mongodb::error::Error) -> ExternalSyncRepositoryError {
+    ExternalSyncRepositoryError::Storage(error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use crate::domain::external_sync::{ExternalProvider, ProviderPollState, ProviderPollStream};
 
-    use super::{map_document_to_poll_state, map_poll_state_to_document};
+    use super::{
+        map_document_to_poll_state, map_poll_state_to_document, ProviderPollStateDocument,
+    };
 
     #[test]
     fn poll_state_document_round_trip_preserves_fields() {
@@ -195,8 +207,25 @@ mod tests {
             next_due_at_epoch_seconds: 1_700_000_000,
         };
 
-        let mapped = map_document_to_poll_state(map_poll_state_to_document(&state));
+        let mapped = map_document_to_poll_state(map_poll_state_to_document(&state)).unwrap();
 
         assert_eq!(mapped, state);
+    }
+
+    #[test]
+    fn poll_state_document_rejects_unknown_stream() {
+        let error = map_document_to_poll_state(ProviderPollStateDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            stream: "mystery".to_string(),
+            cursor: None,
+            next_due_at_epoch_seconds: 1_700_000_000,
+        })
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::domain::external_sync::ExternalSyncRepositoryError::CorruptData(_)
+        ));
     }
 }

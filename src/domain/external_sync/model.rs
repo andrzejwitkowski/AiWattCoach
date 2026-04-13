@@ -7,6 +7,22 @@ pub enum ExternalProvider {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExternalSyncRepositoryError {
+    Storage(String),
+    CorruptData(String),
+}
+
+impl std::fmt::Display for ExternalSyncRepositoryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Storage(message) | Self::CorruptData(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for ExternalSyncRepositoryError {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExternalObjectKind {
     PlannedWorkout,
     CompletedWorkout,
@@ -164,9 +180,17 @@ impl ExternalSyncState {
         self
     }
 
+    pub fn mark_remote_created(mut self, external_id: String) -> Self {
+        self.external_id = Some(external_id);
+        self.sync_status = ExternalSyncStatus::Pending;
+        self.last_error = None;
+        self
+    }
+
     pub fn mark_failed(mut self, error: String) -> Self {
         self.sync_status = ExternalSyncStatus::Failed;
         self.last_error = Some(error);
+        self.conflict_status = ConflictStatus::Unknown;
         self
     }
 

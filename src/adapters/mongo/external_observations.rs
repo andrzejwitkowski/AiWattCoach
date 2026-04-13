@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::external_sync::{
     BoxFuture, CanonicalEntityKind, CanonicalEntityRef, ExternalObjectKind, ExternalObservation,
-    ExternalObservationRepository, ExternalProvider,
+    ExternalObservationRepository, ExternalProvider, ExternalSyncRepositoryError,
 };
 
 #[derive(Clone)]
@@ -32,9 +32,8 @@ impl MongoExternalObservationRepository {
         }
     }
 
-    pub async fn ensure_indexes(&self) -> Result<(), std::convert::Infallible> {
-        let _ = self
-            .collection
+    pub async fn ensure_indexes(&self) -> Result<(), ExternalSyncRepositoryError> {
+        self.collection
             .create_indexes([
                 IndexModel::builder()
                     .keys(doc! { "user_id": 1, "provider": 1, "external_id": 1 })
@@ -56,7 +55,8 @@ impl MongoExternalObservationRepository {
                     )
                     .build(),
             ])
-            .await;
+            .await
+            .map_err(storage_error)?;
         Ok(())
     }
 }
@@ -65,11 +65,11 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
     fn upsert(
         &self,
         observation: ExternalObservation,
-    ) -> BoxFuture<Result<ExternalObservation, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<ExternalObservation, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let document = map_observation_to_document(&observation);
         Box::pin(async move {
-            let _ = collection
+            collection
                 .replace_one(
                     doc! {
                         "user_id": &document.user_id,
@@ -79,7 +79,8 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
                     &document,
                 )
                 .upsert(true)
-                .await;
+                .await
+                .map_err(storage_error)?;
             Ok(observation)
         })
     }
@@ -89,7 +90,7 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
         user_id: &str,
         provider: ExternalProvider,
         external_id: &str,
-    ) -> BoxFuture<Result<Option<ExternalObservation>, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<Option<ExternalObservation>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         let provider = provider_as_str(&provider).to_string();
@@ -102,12 +103,15 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
                     "external_id": &external_id,
                 })
                 .await
-                .ok()
-                .flatten();
+                .map_err(storage_error)?;
 
             Ok(document.map(map_document_to_observation))
         })
     }
+}
+
+fn storage_error(error: mongodb::error::Error) -> ExternalSyncRepositoryError {
+    ExternalSyncRepositoryError::Storage(error.to_string())
 }
 
 fn map_observation_to_document(observation: &ExternalObservation) -> ExternalObservationDocument {

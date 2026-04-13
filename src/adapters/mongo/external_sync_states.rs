@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::external_sync::{
     BoxFuture, CanonicalEntityKind, CanonicalEntityRef, ConflictStatus, ExternalProvider,
-    ExternalSyncState, ExternalSyncStateRepository, ExternalSyncStatus,
+    ExternalSyncRepositoryError, ExternalSyncState, ExternalSyncStateRepository,
+    ExternalSyncStatus,
 };
 
 #[derive(Clone)]
@@ -36,9 +37,8 @@ impl MongoExternalSyncStateRepository {
         }
     }
 
-    pub async fn ensure_indexes(&self) -> Result<(), std::convert::Infallible> {
-        let _ = self
-            .collection
+    pub async fn ensure_indexes(&self) -> Result<(), ExternalSyncRepositoryError> {
+        self.collection
             .create_indexes([
                 IndexModel::builder()
                     .keys(doc! { "user_id": 1, "provider": 1, "canonical_entity_kind": 1, "canonical_entity_id": 1 })
@@ -50,7 +50,8 @@ impl MongoExternalSyncStateRepository {
                     )
                     .build(),
             ])
-            .await;
+            .await
+            .map_err(storage_error)?;
         Ok(())
     }
 }
@@ -59,11 +60,11 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
     fn upsert(
         &self,
         state: ExternalSyncState,
-    ) -> BoxFuture<Result<ExternalSyncState, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<ExternalSyncState, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let document = map_sync_state_to_document(&state);
         Box::pin(async move {
-            let _ = collection
+            collection
                 .replace_one(
                     doc! {
                         "user_id": &document.user_id,
@@ -74,7 +75,8 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
                     &document,
                 )
                 .upsert(true)
-                .await;
+                .await
+                .map_err(storage_error)?;
             Ok(state)
         })
     }
@@ -84,7 +86,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
         user_id: &str,
         provider: ExternalProvider,
         canonical_entity: &CanonicalEntityRef,
-    ) -> BoxFuture<Result<Option<ExternalSyncState>, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         let provider = provider_as_str(&provider).to_string();
@@ -100,8 +102,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
                     "canonical_entity_id": &canonical_entity_id,
                 })
                 .await
-                .ok()
-                .flatten();
+                .map_err(storage_error)?;
 
             Ok(document.map(map_document_to_sync_state))
         })
@@ -112,7 +113,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
         user_id: &str,
         provider: ExternalProvider,
         canonical_entity: &CanonicalEntityRef,
-    ) -> BoxFuture<Result<(), std::convert::Infallible>> {
+    ) -> BoxFuture<Result<(), ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
         let provider = provider_as_str(&provider).to_string();
@@ -120,17 +121,22 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
             canonical_entity_kind_as_str(&canonical_entity.entity_kind).to_string();
         let canonical_entity_id = canonical_entity.entity_id.clone();
         Box::pin(async move {
-            let _ = collection
+            collection
                 .delete_one(doc! {
                     "user_id": &user_id,
                     "provider": &provider,
                     "canonical_entity_kind": &canonical_entity_kind,
                     "canonical_entity_id": &canonical_entity_id,
                 })
-                .await;
+                .await
+                .map_err(storage_error)?;
             Ok(())
         })
     }
+}
+
+fn storage_error(error: mongodb::error::Error) -> ExternalSyncRepositoryError {
+    ExternalSyncRepositoryError::Storage(error.to_string())
 }
 
 fn map_sync_state_to_document(state: &ExternalSyncState) -> ExternalSyncStateDocument {

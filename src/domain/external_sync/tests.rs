@@ -85,6 +85,21 @@ fn sync_state_mark_failed_preserves_external_link() {
     assert_eq!(state.last_error.as_deref(), Some("boom"));
 }
 
+#[test]
+fn sync_state_mark_failed_clears_stale_conflict_status() {
+    let state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+    )
+    .record_local_push("hash-1".to_string(), 1_700_000_000)
+    .observe_remote("hash-2".to_string(), 1_700_000_100)
+    .mark_failed("boom".to_string());
+
+    assert_eq!(state.sync_status, ExternalSyncStatus::Failed);
+    assert_eq!(state.conflict_status, ConflictStatus::Unknown);
+}
+
 fn assert_provider_poll_repository<T: ProviderPollStateRepository>() {}
 
 #[test]

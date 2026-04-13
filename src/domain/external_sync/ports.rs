@@ -1,8 +1,8 @@
 use std::{future::Future, pin::Pin};
 
 use super::{
-    CanonicalEntityRef, ExternalObservation, ExternalProvider, ExternalSyncState,
-    ProviderPollState, ProviderPollStream,
+    CanonicalEntityRef, ExternalObservation, ExternalProvider, ExternalSyncRepositoryError,
+    ExternalSyncState, ProviderPollState, ProviderPollStream,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -11,54 +11,54 @@ pub trait ExternalObservationRepository: Clone + Send + Sync + 'static {
     fn upsert(
         &self,
         observation: ExternalObservation,
-    ) -> BoxFuture<Result<ExternalObservation, std::convert::Infallible>>;
+    ) -> BoxFuture<Result<ExternalObservation, ExternalSyncRepositoryError>>;
 
     fn find_by_provider_and_external_id(
         &self,
         user_id: &str,
         provider: ExternalProvider,
         external_id: &str,
-    ) -> BoxFuture<Result<Option<ExternalObservation>, std::convert::Infallible>>;
+    ) -> BoxFuture<Result<Option<ExternalObservation>, ExternalSyncRepositoryError>>;
 }
 
 pub trait ExternalSyncStateRepository: Clone + Send + Sync + 'static {
     fn upsert(
         &self,
         state: ExternalSyncState,
-    ) -> BoxFuture<Result<ExternalSyncState, std::convert::Infallible>>;
+    ) -> BoxFuture<Result<ExternalSyncState, ExternalSyncRepositoryError>>;
 
     fn find_by_provider_and_canonical_entity(
         &self,
         user_id: &str,
         provider: ExternalProvider,
         canonical_entity: &CanonicalEntityRef,
-    ) -> BoxFuture<Result<Option<ExternalSyncState>, std::convert::Infallible>>;
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>>;
 
     fn delete_by_provider_and_canonical_entity(
         &self,
         user_id: &str,
         provider: ExternalProvider,
         canonical_entity: &CanonicalEntityRef,
-    ) -> BoxFuture<Result<(), std::convert::Infallible>>;
+    ) -> BoxFuture<Result<(), ExternalSyncRepositoryError>>;
 }
 
 pub trait ProviderPollStateRepository: Clone + Send + Sync + 'static {
     fn upsert(
         &self,
         state: ProviderPollState,
-    ) -> BoxFuture<Result<ProviderPollState, std::convert::Infallible>>;
+    ) -> BoxFuture<Result<ProviderPollState, ExternalSyncRepositoryError>>;
 
     fn list_due(
         &self,
         now_epoch_seconds: i64,
-    ) -> BoxFuture<Result<Vec<ProviderPollState>, std::convert::Infallible>>;
+    ) -> BoxFuture<Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>>;
 
     fn find_by_provider_and_stream(
         &self,
         user_id: &str,
         provider: ExternalProvider,
         stream: ProviderPollStream,
-    ) -> BoxFuture<Result<Option<ProviderPollState>, std::convert::Infallible>>;
+    ) -> BoxFuture<Result<Option<ProviderPollState>, ExternalSyncRepositoryError>>;
 }
 
 #[cfg(test)]
@@ -71,7 +71,7 @@ impl ExternalObservationRepository for NoopExternalObservationRepository {
     fn upsert(
         &self,
         observation: ExternalObservation,
-    ) -> BoxFuture<Result<ExternalObservation, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<ExternalObservation, ExternalSyncRepositoryError>> {
         Box::pin(async move { Ok(observation) })
     }
 
@@ -80,7 +80,7 @@ impl ExternalObservationRepository for NoopExternalObservationRepository {
         _user_id: &str,
         _provider: ExternalProvider,
         _external_id: &str,
-    ) -> BoxFuture<Result<Option<ExternalObservation>, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<Option<ExternalObservation>, ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(None) })
     }
 }
@@ -95,7 +95,7 @@ impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
     fn upsert(
         &self,
         state: ExternalSyncState,
-    ) -> BoxFuture<Result<ExternalSyncState, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<ExternalSyncState, ExternalSyncRepositoryError>> {
         Box::pin(async move { Ok(state) })
     }
 
@@ -104,7 +104,7 @@ impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
         _user_id: &str,
         _provider: ExternalProvider,
         _canonical_entity: &CanonicalEntityRef,
-    ) -> BoxFuture<Result<Option<ExternalSyncState>, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(None) })
     }
 
@@ -113,7 +113,7 @@ impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
         _user_id: &str,
         _provider: ExternalProvider,
         _canonical_entity: &CanonicalEntityRef,
-    ) -> BoxFuture<Result<(), std::convert::Infallible>> {
+    ) -> BoxFuture<Result<(), ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(()) })
     }
 }
@@ -127,14 +127,14 @@ impl ProviderPollStateRepository for NoopProviderPollStateRepository {
     fn upsert(
         &self,
         state: ProviderPollState,
-    ) -> BoxFuture<Result<ProviderPollState, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<ProviderPollState, ExternalSyncRepositoryError>> {
         Box::pin(async move { Ok(state) })
     }
 
     fn list_due(
         &self,
         _now_epoch_seconds: i64,
-    ) -> BoxFuture<Result<Vec<ProviderPollState>, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(Vec::new()) })
     }
 
@@ -143,7 +143,7 @@ impl ProviderPollStateRepository for NoopProviderPollStateRepository {
         _user_id: &str,
         _provider: ExternalProvider,
         _stream: ProviderPollStream,
-    ) -> BoxFuture<Result<Option<ProviderPollState>, std::convert::Infallible>> {
+    ) -> BoxFuture<Result<Option<ProviderPollState>, ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(None) })
     }
 }

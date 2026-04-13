@@ -1,6 +1,7 @@
 use futures::TryStreamExt;
 use mongodb::{bson::doc, Collection};
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use crate::domain::{
     calendar::{BoxFuture as CalendarBoxFuture, CalendarError, HiddenCalendarEventSource},
@@ -64,14 +65,13 @@ impl CalendarLabelSource for MongoRaceCalendarSource {
                 .list_races(&user_id, &range)
                 .await
                 .map_err(map_race_error)?;
-            let sync_states = source.list_race_sync_states(&user_id).await?;
+            let sync_states_by_race_id =
+                sync_states_by_race_id(source.list_race_sync_states(&user_id).await?);
 
             Ok(races
                 .into_iter()
                 .map(|race| {
-                    let sync_state = sync_states
-                        .iter()
-                        .find(|state| state.canonical_entity_id == race.race_id);
+                    let sync_state = sync_states_by_race_id.get(&race.race_id);
                     CalendarLabel {
                         label_key: format!("race:{}", race.race_id),
                         date: race.date.clone(),
@@ -106,21 +106,48 @@ impl HiddenCalendarEventSource for MongoRaceCalendarSource {
     fn list_hidden_intervals_event_ids(
         &self,
         user_id: &str,
-        _range: &DateRange,
+        range: &DateRange,
     ) -> CalendarBoxFuture<Result<Vec<i64>, CalendarError>> {
         let source = self.clone();
         let user_id = user_id.to_string();
+        let range = range.clone();
         Box::pin(async move {
-            let sync_states = source
-                .list_race_sync_states(&user_id)
+            let races = source
+                .list_races(&user_id, &range)
                 .await
-                .map_err(map_calendar_error)?;
-            Ok(sync_states
+                .map_err(map_calendar_from_race_error)?;
+            let sync_states_by_race_id = sync_states_by_race_id(
+                source
+                    .list_race_sync_states(&user_id)
+                    .await
+                    .map_err(map_calendar_error)?,
+            );
+            Ok(races
                 .into_iter()
-                .filter_map(|state| state.external_id)
+                .filter_map(|race| sync_states_by_race_id.get(&race.race_id))
+                .filter_map(|state| state.external_id.clone())
                 .filter_map(|value| value.parse::<i64>().ok())
                 .collect())
         })
+    }
+}
+
+fn sync_states_by_race_id(
+    sync_states: Vec<ExternalSyncStateDocument>,
+) -> HashMap<String, ExternalSyncStateDocument> {
+    sync_states
+        .into_iter()
+        .map(|state| (state.canonical_entity_id.clone(), state))
+        .collect()
+}
+
+fn map_calendar_from_race_error(error: RaceError) -> CalendarError {
+    match error {
+        RaceError::Unauthenticated => CalendarError::Unauthenticated,
+        RaceError::Validation(message) => CalendarError::Validation(message),
+        RaceError::Unavailable(message) => CalendarError::Unavailable(message),
+        RaceError::Internal(message) => CalendarError::Internal(message),
+        RaceError::NotFound => CalendarError::Internal("Race not found".to_string()),
     }
 }
 

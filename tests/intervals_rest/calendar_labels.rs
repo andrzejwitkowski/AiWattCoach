@@ -64,6 +64,22 @@ async fn list_calendar_labels_returns_race_labels_grouped_by_date() {
             .and_then(|value| value.as_str()),
         Some("Race Tatra Road Race")
     );
+    assert_eq!(
+        body.get("labelsByDate")
+            .and_then(|value| value.get("2026-03-22"))
+            .and_then(|value| value.get("race:race-1"))
+            .and_then(|value| value.get("payload"))
+            .and_then(|value| value.get("syncStatus"))
+            .and_then(|value| value.as_str()),
+        Some("pending")
+    );
+    assert!(body
+        .get("labelsByDate")
+        .and_then(|value| value.get("2026-03-22"))
+        .and_then(|value| value.get("race:race-1"))
+        .and_then(|value| value.get("payload"))
+        .and_then(|value| value.get("linkedIntervalsEventId"))
+        .is_some_and(|value| value.is_null()));
 }
 
 #[tokio::test]

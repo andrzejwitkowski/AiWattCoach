@@ -1,8 +1,8 @@
 use super::service::{validate_request, RaceService};
 use crate::domain::{
     external_sync::{
-        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState,
-        ExternalSyncStateRepository, ExternalSyncStatus,
+        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
+        ExternalSyncState, ExternalSyncStateRepository, ExternalSyncStatus,
     },
     identity::{Clock, IdGenerator},
     intervals::{
@@ -29,26 +29,41 @@ impl Clock for TestClock {
 }
 
 #[derive(Clone)]
-struct TestIdGenerator;
+struct TestIdGenerator {
+    counter: Arc<AtomicUsize>,
+}
 
-static TEST_ID_COUNTER: AtomicUsize = AtomicUsize::new(123);
+impl Default for TestIdGenerator {
+    fn default() -> Self {
+        Self {
+            counter: Arc::new(AtomicUsize::new(123)),
+        }
+    }
+}
 
 impl IdGenerator for TestIdGenerator {
     fn new_id(&self, _prefix: &str) -> String {
-        format!("race-{}", TEST_ID_COUNTER.fetch_add(1, Ordering::Relaxed))
+        format!("race-{}", self.counter.fetch_add(1, Ordering::Relaxed))
     }
 }
 
 #[derive(Clone, Default)]
 struct InMemoryRaceRepository {
     races: Arc<Mutex<Vec<Race>>>,
+    delete_error: Option<RaceError>,
 }
 
 impl InMemoryRaceRepository {
     fn with_races(races: Vec<Race>) -> Self {
         Self {
             races: Arc::new(Mutex::new(races)),
+            delete_error: None,
         }
+    }
+
+    fn with_delete_error(mut self, error: RaceError) -> Self {
+        self.delete_error = Some(error);
+        self
     }
 
     fn stored(&self) -> Vec<Race> {
@@ -59,9 +74,17 @@ impl InMemoryRaceRepository {
 #[derive(Clone, Default)]
 struct InMemoryExternalSyncStateRepository {
     states: Arc<Mutex<Vec<ExternalSyncState>>>,
+    drop_synced_writes: bool,
 }
 
 impl InMemoryExternalSyncStateRepository {
+    fn with_dropped_synced_writes() -> Self {
+        Self {
+            states: Arc::new(Mutex::new(Vec::new())),
+            drop_synced_writes: true,
+        }
+    }
+
     fn stored(&self) -> Vec<ExternalSyncState> {
         self.states.lock().unwrap().clone()
     }
@@ -71,10 +94,15 @@ impl ExternalSyncStateRepository for InMemoryExternalSyncStateRepository {
     fn upsert(
         &self,
         state: ExternalSyncState,
-    ) -> crate::domain::external_sync::BoxFuture<Result<ExternalSyncState, std::convert::Infallible>>
-    {
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<ExternalSyncState, ExternalSyncRepositoryError>,
+    > {
         let states = self.states.clone();
+        let drop_synced_writes = self.drop_synced_writes;
         Box::pin(async move {
+            if drop_synced_writes && state.sync_status == ExternalSyncStatus::Synced {
+                return Ok(state);
+            }
             let mut states = states.lock().unwrap();
             states.retain(|existing| {
                 !(existing.user_id == state.user_id
@@ -92,7 +120,7 @@ impl ExternalSyncStateRepository for InMemoryExternalSyncStateRepository {
         provider: ExternalProvider,
         canonical_entity: &CanonicalEntityRef,
     ) -> crate::domain::external_sync::BoxFuture<
-        Result<Option<ExternalSyncState>, std::convert::Infallible>,
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
     > {
         let states = self.states.clone();
         let user_id = user_id.to_string();
@@ -116,7 +144,7 @@ impl ExternalSyncStateRepository for InMemoryExternalSyncStateRepository {
         user_id: &str,
         provider: ExternalProvider,
         canonical_entity: &CanonicalEntityRef,
-    ) -> crate::domain::external_sync::BoxFuture<Result<(), std::convert::Infallible>> {
+    ) -> crate::domain::external_sync::BoxFuture<Result<(), ExternalSyncRepositoryError>> {
         let states = self.states.clone();
         let user_id = user_id.to_string();
         let canonical_entity = canonical_entity.clone();
@@ -199,9 +227,13 @@ impl RaceRepository for InMemoryRaceRepository {
 
     fn delete(&self, user_id: &str, race_id: &str) -> BoxFuture<Result<(), RaceError>> {
         let races = self.races.clone();
+        let delete_error = self.delete_error.clone();
         let user_id = user_id.to_string();
         let race_id = race_id.to_string();
         Box::pin(async move {
+            if let Some(error) = delete_error {
+                return Err(error);
+            }
             races
                 .lock()
                 .unwrap()
@@ -330,7 +362,7 @@ async fn create_race_persists_and_syncs_to_intervals() {
         intervals.clone(),
         sync_states.clone(),
         TestClock,
-        TestIdGenerator,
+        TestIdGenerator::default(),
     );
 
     let created = service
@@ -367,7 +399,7 @@ async fn priority_race_creates_matching_intervals_categories() {
         intervals.clone(),
         sync_states,
         TestClock,
-        TestIdGenerator,
+        TestIdGenerator::default(),
     );
 
     service
@@ -437,7 +469,7 @@ async fn update_race_marks_failure_when_intervals_update_fails() {
         intervals,
         sync_states.clone(),
         TestClock,
-        TestIdGenerator,
+        TestIdGenerator::default(),
     );
 
     let error = service
@@ -495,7 +527,7 @@ async fn delete_race_deletes_remote_event_before_local_remove() {
         intervals.clone(),
         sync_states.clone(),
         TestClock,
-        TestIdGenerator,
+        TestIdGenerator::default(),
     );
 
     service.delete_race("user-1", "race-1").await.unwrap();
@@ -503,6 +535,104 @@ async fn delete_race_deletes_remote_event_before_local_remove() {
     assert!(repository.stored().is_empty());
     assert_eq!(*intervals.deleted_event_ids.lock().unwrap(), vec![88]);
     assert!(sync_states.stored().is_empty());
+}
+
+#[tokio::test]
+async fn create_race_retry_after_lost_final_sync_write_updates_existing_remote_event() {
+    let repository = InMemoryRaceRepository::default();
+    let sync_states = InMemoryExternalSyncStateRepository::with_dropped_synced_writes();
+    let intervals = RecordingIntervalsService::default();
+    let service = RaceService::new(
+        repository,
+        intervals.clone(),
+        sync_states,
+        TestClock,
+        TestIdGenerator::default(),
+    );
+
+    let created = service
+        .create_race(
+            "user-1",
+            CreateRace {
+                date: "2026-09-12".to_string(),
+                name: "Gravel Attack".to_string(),
+                distance_meters: 120_000,
+                discipline: RaceDiscipline::Gravel,
+                priority: RacePriority::B,
+            },
+        )
+        .await
+        .unwrap();
+
+    service
+        .update_race(
+            "user-1",
+            &created.race_id,
+            UpdateRace {
+                date: "2026-09-13".to_string(),
+                name: "Updated Attack".to_string(),
+                distance_meters: 121_000,
+                discipline: RaceDiscipline::Road,
+                priority: RacePriority::A,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(intervals.created_events.lock().unwrap().len(), 1);
+    assert_eq!(intervals.updated_events.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn delete_race_keeps_sync_state_when_local_delete_fails() {
+    let existing = Race {
+        race_id: "race-1".to_string(),
+        user_id: "user-1".to_string(),
+        date: "2026-09-12".to_string(),
+        name: "Delete Me".to_string(),
+        distance_meters: 90_000,
+        discipline: RaceDiscipline::Road,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 2,
+    };
+    let repository = InMemoryRaceRepository::with_races(vec![existing])
+        .with_delete_error(RaceError::Internal("db boom".to_string()));
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    let race_ref = CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string());
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                race_ref.clone(),
+            )
+            .mark_synced("88".to_string(), "hash".to_string(), 2),
+        )
+        .await
+        .expect("infallible sync state upsert");
+    let intervals = RecordingIntervalsService::default();
+    let service = RaceService::new(
+        repository,
+        intervals.clone(),
+        sync_states.clone(),
+        TestClock,
+        TestIdGenerator::default(),
+    );
+
+    let error = service.delete_race("user-1", "race-1").await.unwrap_err();
+
+    assert_eq!(error, RaceError::Internal("db boom".to_string()));
+    assert_eq!(*intervals.deleted_event_ids.lock().unwrap(), vec![88]);
+    let stored_states = sync_states.stored();
+    assert_eq!(stored_states.len(), 1);
+    assert_eq!(
+        stored_states[0].sync_status,
+        ExternalSyncStatus::PendingDelete
+    );
+    assert_eq!(stored_states[0].external_id.as_deref(), Some("88"));
+    assert_eq!(stored_states[0].canonical_entity, race_ref);
 }
 
 #[test]

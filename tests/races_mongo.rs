@@ -4,9 +4,17 @@ use std::{
 };
 
 use aiwattcoach::{
-    adapters::mongo::{race_calendar::MongoRaceCalendarSource, races::MongoRaceRepository},
+    adapters::mongo::{
+        external_sync_states::MongoExternalSyncStateRepository,
+        race_calendar::MongoRaceCalendarSource, races::MongoRaceRepository,
+    },
     domain::{
+        calendar::HiddenCalendarEventSource,
         calendar_labels::CalendarLabelSource,
+        external_sync::{
+            CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState,
+            ExternalSyncStateRepository,
+        },
         intervals::DateRange,
         races::{Race, RaceDiscipline, RacePriority, RaceRepository},
     },
@@ -118,6 +126,65 @@ async fn race_repository_exposes_races_as_calendar_labels() {
     assert_eq!(labels.len(), 2);
     assert_eq!(labels[0].label_key, "race:race-1");
     assert_eq!(labels[0].title, "Race Gravel Attack");
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn race_calendar_hides_only_intervals_events_linked_to_races_in_requested_range() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoRaceRepository::new(fixture.client.clone(), &fixture.database);
+    let sync_repository =
+        MongoExternalSyncStateRepository::new(fixture.client.clone(), &fixture.database);
+    let calendar_source = MongoRaceCalendarSource::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+    sync_repository.ensure_indexes().await.unwrap();
+
+    repository
+        .upsert(sample_race("race-1", "2026-09-12"))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_race("race-2", "2026-10-12"))
+        .await
+        .unwrap();
+    sync_repository
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+            )
+            .mark_synced("41".to_string(), "hash-1".to_string(), 1_700_000_000),
+        )
+        .await
+        .unwrap();
+    sync_repository
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-2".to_string()),
+            )
+            .mark_synced("99".to_string(), "hash-2".to_string(), 1_700_000_100),
+        )
+        .await
+        .unwrap();
+
+    let hidden_ids = calendar_source
+        .list_hidden_intervals_event_ids(
+            "user-1",
+            &DateRange {
+                oldest: "2026-09-01".to_string(),
+                newest: "2026-09-30".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(hidden_ids, vec![41]);
 
     fixture.cleanup().await;
 }

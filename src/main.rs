@@ -257,6 +257,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let planned_workout_sync_repository =
         MongoPlannedWorkoutSyncRepository::new(mongo_client.clone(), &mongo_database);
     planned_workout_sync_repository.ensure_indexes().await?;
+    // These repositories are bootstrapped at startup so their durable collections
+    // have indexes in place before background sync workflows start using them.
     let external_observation_repository =
         MongoExternalObservationRepository::new(mongo_client.clone(), &mongo_database);
     external_observation_repository.ensure_indexes().await?;

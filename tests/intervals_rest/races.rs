@@ -56,6 +56,8 @@ async fn create_race_returns_created_race_payload() {
         body.get("name").and_then(|value| value.as_str()),
         Some("Gravel Attack")
     );
+    assert!(body.get("linkedIntervalsEventId").is_none());
+    assert!(body.get("syncStatus").is_none());
 }
 
 #[tokio::test]

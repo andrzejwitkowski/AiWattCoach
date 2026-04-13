@@ -1,7 +1,7 @@
 use crate::domain::{
     external_sync::{
-        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState,
-        ExternalSyncStateRepository,
+        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
+        ExternalSyncState, ExternalSyncStateRepository,
     },
     identity::{Clock, IdGenerator},
     intervals::{CreateEvent, DateRange, IntervalsError, IntervalsUseCases, UpdateEvent},
@@ -112,32 +112,35 @@ where
             .sync_states
             .find_by_provider_and_canonical_entity(user_id, ExternalProvider::Intervals, &race_ref)
             .await
-            .unwrap_or_else(infallible);
+            .map_err(map_sync_repository_error)?;
 
-        if let Some(sync_state) = existing_sync_state {
+        if let Some(sync_state) = existing_sync_state.as_ref() {
             if let Some(linked_intervals_event_id) =
                 parse_intervals_event_id(sync_state.external_id.as_deref(), &existing.race_id)?
             {
                 let pending_sync_state = self
                     .sync_states
-                    .upsert(sync_state.mark_pending_delete())
+                    .upsert(sync_state.clone().mark_pending_delete())
                     .await
-                    .unwrap_or_else(infallible);
+                    .map_err(map_sync_repository_error)?;
                 let delete_result = self
                     .intervals
                     .delete_event(user_id, linked_intervals_event_id)
                     .await
                     .map_err(map_intervals_error);
                 if let Err(error) = delete_result {
-                    let _ = self
-                        .sync_states
+                    self.sync_states
                         .upsert(pending_sync_state.mark_failed(error.to_string()))
                         .await
-                        .unwrap_or_else(infallible);
+                        .map_err(map_sync_repository_error)?;
                     return Err(error);
                 }
             }
+        }
 
+        self.repository.delete(user_id, race_id).await?;
+
+        if existing_sync_state.is_some() {
             self.sync_states
                 .delete_by_provider_and_canonical_entity(
                     user_id,
@@ -145,10 +148,10 @@ where
                     &race_ref,
                 )
                 .await
-                .unwrap_or_else(infallible);
+                .map_err(map_sync_repository_error)?;
         }
 
-        self.repository.delete(user_id, race_id).await
+        Ok(())
     }
 
     async fn sync_pending_race(&self, pending: Race) -> Result<Race, RaceError> {
@@ -161,7 +164,7 @@ where
                 &race_ref,
             )
             .await
-            .unwrap_or_else(infallible)
+            .map_err(map_sync_repository_error)?
             .unwrap_or_else(|| {
                 ExternalSyncState::new(
                     pending.user_id.clone(),
@@ -173,7 +176,7 @@ where
             .sync_states
             .upsert(existing_sync_state.mark_pending_push())
             .await
-            .unwrap_or_else(infallible);
+            .map_err(map_sync_repository_error)?;
         let sync_result: Result<i64, RaceError> = async {
             let remote_event = if let Some(event_id) = parse_intervals_event_id(
                 pending_sync_state.external_id.as_deref(),
@@ -198,7 +201,8 @@ where
                     .await
                     .map_err(map_intervals_error)?
             } else {
-                self.intervals
+                let remote_event = self
+                    .intervals
                     .create_event(
                         &pending.user_id,
                         CreateEvent {
@@ -214,7 +218,18 @@ where
                         },
                     )
                     .await
-                    .map_err(map_intervals_error)?
+                    .map_err(map_intervals_error)?;
+
+                self.sync_states
+                    .upsert(
+                        pending_sync_state
+                            .clone()
+                            .mark_remote_created(remote_event.id.to_string()),
+                    )
+                    .await
+                    .map_err(map_sync_repository_error)?;
+
+                remote_event
             };
 
             Ok(remote_event.id)
@@ -223,23 +238,21 @@ where
 
         match sync_result {
             Ok(remote_event_id) => {
-                let _ = self
-                    .sync_states
+                self.sync_states
                     .upsert(pending_sync_state.mark_synced(
                         remote_event_id.to_string(),
                         pending.payload_hash(),
                         self.clock.now_epoch_seconds(),
                     ))
                     .await
-                    .unwrap_or_else(infallible);
+                    .map_err(map_sync_repository_error)?;
                 Ok(pending)
             }
             Err(error) => {
-                let _ = self
-                    .sync_states
+                self.sync_states
                     .upsert(pending_sync_state.mark_failed(error.to_string()))
                     .await
-                    .unwrap_or_else(infallible);
+                    .map_err(map_sync_repository_error)?;
                 Err(error)
             }
         }
@@ -420,6 +433,13 @@ fn map_intervals_error(error: IntervalsError) -> RaceError {
     }
 }
 
+fn map_sync_repository_error(error: ExternalSyncRepositoryError) -> RaceError {
+    match error {
+        ExternalSyncRepositoryError::Storage(message)
+        | ExternalSyncRepositoryError::CorruptData(message) => RaceError::Internal(message),
+    }
+}
+
 fn race_entity_ref(race_id: &str) -> CanonicalEntityRef {
     CanonicalEntityRef::new(CanonicalEntityKind::Race, race_id.to_string())
 }
@@ -436,8 +456,4 @@ fn parse_intervals_event_id(
             ))
         }),
     }
-}
-
-fn infallible<T>(error: std::convert::Infallible) -> T {
-    match error {}
 }
