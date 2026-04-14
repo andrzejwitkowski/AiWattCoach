@@ -29,6 +29,7 @@ pub(crate) struct FakeActivityRepository {
     pub(crate) stored: Arc<Mutex<HashMap<String, Vec<Activity>>>>,
     pub(crate) call_log: Arc<Mutex<Vec<RepoCall>>>,
     delete_error: Option<IntervalsError>,
+    find_by_id_error: Option<IntervalsError>,
     sequence: Option<Arc<Mutex<Vec<String>>>>,
     upsert_error: Option<IntervalsError>,
 }
@@ -53,6 +54,13 @@ impl FakeActivityRepository {
     pub(crate) fn with_upsert_error(error: IntervalsError) -> Self {
         Self {
             upsert_error: Some(error),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn with_find_by_id_error(error: IntervalsError) -> Self {
+        Self {
+            find_by_id_error: Some(error),
             ..Self::default()
         }
     }
@@ -289,9 +297,13 @@ impl ActivityRepositoryPort for FakeActivityRepository {
         activity_id: &str,
     ) -> BoxFuture<Result<Option<Activity>, IntervalsError>> {
         let store = self.stored.clone();
+        let error = self.find_by_id_error.clone();
         let user_id = user_id.to_string();
         let activity_id = activity_id.to_string();
         Box::pin(async move {
+            if let Some(error) = error {
+                return Err(error);
+            }
             let activities = store
                 .lock()
                 .unwrap()

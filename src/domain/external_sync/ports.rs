@@ -85,12 +85,9 @@ impl ExternalObservationRepository for NoopExternalObservationRepository {
     }
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 #[derive(Clone, Default)]
 pub struct NoopExternalSyncStateRepository;
 
-#[cfg(test)]
 impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
     fn upsert(
         &self,

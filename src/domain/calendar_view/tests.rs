@@ -173,6 +173,67 @@ async fn rebuild_for_user_preserves_existing_sync_metadata() {
 }
 
 #[tokio::test]
+async fn rebuild_for_user_uses_authoritative_sync_when_view_store_is_empty() {
+    let repository = InMemoryCalendarEntryViewRepository::default();
+    let planned_syncs =
+        TestPlannedWorkoutSyncRepository::with_records(vec![PlannedWorkoutSyncRecord {
+            user_id: "user-1".to_string(),
+            operation_key: "plan-op-1".to_string(),
+            date: "2026-05-10".to_string(),
+            source_workout_id: "source-1".to_string(),
+            intervals_event_id: Some(88),
+            status: PlannedWorkoutSyncStatus::Synced,
+            synced_payload_hash: Some("hash-1".to_string()),
+            last_error: None,
+            created_at_epoch_seconds: 1,
+            updated_at_epoch_seconds: 2,
+            last_synced_at_epoch_seconds: Some(2),
+        }]);
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+    )
+    .mark_synced("42".to_string(), "hash-2".to_string(), 3)]);
+    let service =
+        CalendarEntryViewService::new(repository).with_sync_sources(planned_syncs, sync_states);
+
+    let rebuilt = service
+        .rebuild_for_user(
+            "user-1",
+            &[sample_bridged_planned_workout("plan-op-1", "2026-05-10")],
+            &[sample_completed_workout()],
+            &[sample_race()],
+            &[sample_special_day()],
+        )
+        .await
+        .unwrap();
+
+    let planned = rebuilt
+        .iter()
+        .find(|entry| entry.entry_id == "planned:plan-op-1:2026-05-10")
+        .expect("planned entry after authoritative rebuild");
+    let race = rebuilt
+        .iter()
+        .find(|entry| entry.entry_id == "race:race-1")
+        .expect("race entry after authoritative rebuild");
+
+    assert_eq!(
+        planned
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        Some(88)
+    );
+    assert_eq!(
+        race.sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        Some(42)
+    );
+}
+
+#[tokio::test]
 async fn replace_range_for_user_replaces_only_target_range_and_handles_date_moves() {
     let repository = InMemoryCalendarEntryViewRepository::default();
 
@@ -275,7 +336,7 @@ async fn refresh_range_for_user_rebuilds_only_requested_dates() {
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
-    let sync_states = TestExternalSyncStateRepository;
+    let sync_states = TestExternalSyncStateRepository::default();
     let planned_syncs = TestPlannedWorkoutSyncRepository::default();
 
     planned.upsert(sample_planned_workout()).await.unwrap();
@@ -322,7 +383,7 @@ async fn refresh_range_for_user_uses_planned_workout_sync_records_for_planned_en
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
-    let sync_states = TestExternalSyncStateRepository;
+    let sync_states = TestExternalSyncStateRepository::default();
 
     planned
         .upsert(sample_bridged_planned_workout("plan-op-1", "2026-05-10"))
@@ -453,6 +514,14 @@ struct TestCompletedWorkoutRepository {
 #[derive(Clone, Default)]
 struct TestPlannedWorkoutSyncRepository {
     stored: std::sync::Arc<std::sync::Mutex<Vec<PlannedWorkoutSyncRecord>>>,
+}
+
+impl TestPlannedWorkoutSyncRepository {
+    fn with_records(records: Vec<PlannedWorkoutSyncRecord>) -> Self {
+        Self {
+            stored: std::sync::Arc::new(std::sync::Mutex::new(records)),
+        }
+    }
 }
 
 impl PlannedWorkoutSyncRepository for TestPlannedWorkoutSyncRepository {
@@ -755,7 +824,17 @@ impl SpecialDayRepository for TestSpecialDayRepository {
 }
 
 #[derive(Clone, Default)]
-struct TestExternalSyncStateRepository;
+struct TestExternalSyncStateRepository {
+    states: std::sync::Arc<std::sync::Mutex<Vec<ExternalSyncState>>>,
+}
+
+impl TestExternalSyncStateRepository {
+    fn with_states(states: Vec<ExternalSyncState>) -> Self {
+        Self {
+            states: std::sync::Arc::new(std::sync::Mutex::new(states)),
+        }
+    }
+}
 
 impl ExternalSyncStateRepository for TestExternalSyncStateRepository {
     fn upsert(
@@ -769,13 +848,27 @@ impl ExternalSyncStateRepository for TestExternalSyncStateRepository {
 
     fn find_by_provider_and_canonical_entity(
         &self,
-        _user_id: &str,
-        _provider: ExternalProvider,
-        _canonical_entity: &CanonicalEntityRef,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entity: &CanonicalEntityRef,
     ) -> crate::domain::external_sync::BoxFuture<
         Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
     > {
-        Box::pin(async { Ok(None) })
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        let canonical_entity = canonical_entity.clone();
+        Box::pin(async move {
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == provider
+                        && state.canonical_entity == canonical_entity
+                })
+                .cloned())
+        })
     }
 
     fn delete_by_provider_and_canonical_entity(

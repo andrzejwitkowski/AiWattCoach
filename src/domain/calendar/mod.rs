@@ -9,6 +9,7 @@ pub use model::{
     PlannedWorkoutSyncRecord, PlannedWorkoutSyncStatus, SyncPlannedWorkout,
 };
 pub use ports::{
-    BoxFuture, CalendarUseCases, HiddenCalendarEventSource, PlannedWorkoutSyncRepository,
+    BoxFuture, CalendarUseCases, HiddenCalendarEventSource, NoopPlannedWorkoutSyncRepository,
+    PlannedWorkoutSyncRepository,
 };
 pub use service::CalendarService;

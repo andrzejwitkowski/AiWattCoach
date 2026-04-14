@@ -78,9 +78,8 @@ where
         activity: UpdateActivity,
     ) -> Result<Activity, IntervalsError> {
         let existing = self
-            .activities
-            .find_by_user_id_and_activity_id(user_id, activity_id)
-            .await?;
+            .best_effort_existing_activity(user_id, activity_id)
+            .await;
         let old_date = existing
             .as_ref()
             .map(|activity| activity_date(&activity.start_date_local).to_string());
@@ -130,9 +129,8 @@ where
         activity_id: &str,
     ) -> Result<(), IntervalsError> {
         let existing = self
-            .activities
-            .find_by_user_id_and_activity_id(user_id, activity_id)
-            .await?;
+            .best_effort_existing_activity(user_id, activity_id)
+            .await;
         let existing_date = existing
             .as_ref()
             .map(|activity| activity_date(&activity.start_date_local).to_string());
@@ -161,5 +159,28 @@ where
             }
         }
         Ok(())
+    }
+
+    async fn best_effort_existing_activity(
+        &self,
+        user_id: &str,
+        activity_id: &str,
+    ) -> Option<Activity> {
+        match self
+            .activities
+            .find_by_user_id_and_activity_id(user_id, activity_id)
+            .await
+        {
+            Ok(activity) => activity,
+            Err(error) => {
+                warn!(
+                    ?error,
+                    %user_id,
+                    activity_id,
+                    "activity pre-read failed; continuing without existing local state"
+                );
+                None
+            }
+        }
     }
 }

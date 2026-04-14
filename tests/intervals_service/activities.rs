@@ -405,6 +405,51 @@ async fn update_activity_refreshes_old_and_new_dates_when_activity_moves() {
 }
 
 #[tokio::test]
+async fn update_activity_continues_when_pre_read_fails() {
+    let updated_activity = sample_activity("i58", "Updated Ride");
+    let api = FakeIntervalsApi::with_updated_activity(updated_activity.clone());
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_find_by_id_error(IntervalsError::Internal(
+        "pre-read failed".to_string(),
+    ));
+    let refresh = RecordingCalendarRefresh::default();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    let result = service
+        .update_activity(
+            "user-1",
+            "i58",
+            UpdateActivity {
+                name: Some("Updated Ride".to_string()),
+                description: None,
+                activity_type: None,
+                trainer: Some(false),
+                commute: Some(false),
+                race: Some(false),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result.id, "i58");
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-03-22".to_string(),
+            "2026-03-22".to_string()
+        )]
+    );
+}
+
+#[tokio::test]
 async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds() {
     let api = FakeIntervalsApi::default();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());
@@ -440,6 +485,29 @@ async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds(
             "2026-03-22".to_string()
         )]
     );
+}
+
+#[tokio::test]
+async fn delete_activity_continues_when_pre_read_fails() {
+    let api = FakeIntervalsApi::default();
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_find_by_id_error(IntervalsError::Internal(
+        "pre-read failed".to_string(),
+    ));
+    let refresh = RecordingCalendarRefresh::default();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    let result = service.delete_activity("user-1", "i12").await;
+
+    assert_eq!(result, Ok(()));
+    assert!(refresh.calls().is_empty());
 }
 
 #[tokio::test]

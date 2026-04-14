@@ -10,5 +10,5 @@ pub use model::{
 };
 pub use ports::{
     BoxFuture, ExternalObservationRepository, ExternalSyncStateRepository,
-    ProviderPollStateRepository,
+    NoopExternalSyncStateRepository, ProviderPollStateRepository,
 };
