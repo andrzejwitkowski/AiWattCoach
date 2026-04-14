@@ -2,7 +2,8 @@ use crate::domain::{
     calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
-        ExternalSyncState, ExternalSyncStateRepository,
+        ExternalSyncState, ExternalSyncStateRepository, NoopProviderPollStateRepository,
+        ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
     },
     identity::{Clock, IdGenerator},
     intervals::{CreateEvent, DateRange, IntervalsError, IntervalsUseCases, UpdateEvent},
@@ -18,6 +19,7 @@ pub struct RaceService<
     SyncStates,
     Time,
     Ids,
+    PollStates = NoopProviderPollStateRepository,
     Refresh = NoopCalendarEntryViewRefresh,
 > where
     Repository: RaceRepository + Clone + 'static,
@@ -25,6 +27,7 @@ pub struct RaceService<
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
+    PollStates: ProviderPollStateRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     repository: Repository,
@@ -32,6 +35,7 @@ pub struct RaceService<
     sync_states: SyncStates,
     clock: Time,
     ids: Ids,
+    poll_states: PollStates,
     refresh: Refresh,
 }
 
@@ -57,25 +61,45 @@ where
             sync_states,
             clock,
             ids,
+            poll_states: NoopProviderPollStateRepository,
             refresh: NoopCalendarEntryViewRefresh,
         }
     }
 }
 
-impl<Repository, Intervals, SyncStates, Time, Ids, Refresh>
-    RaceService<Repository, Intervals, SyncStates, Time, Ids, Refresh>
+impl<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
+    RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
+    PollStates: ProviderPollStateRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
+    pub fn with_provider_poll_states<NewPollStates>(
+        self,
+        poll_states: NewPollStates,
+    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, NewPollStates, Refresh>
+    where
+        NewPollStates: ProviderPollStateRepository + Clone + 'static,
+    {
+        RaceService {
+            repository: self.repository,
+            intervals: self.intervals,
+            sync_states: self.sync_states,
+            clock: self.clock,
+            ids: self.ids,
+            poll_states,
+            refresh: self.refresh,
+        }
+    }
+
     pub fn with_calendar_view_refresh<NewRefresh>(
         self,
         refresh: NewRefresh,
-    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, NewRefresh>
+    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, NewRefresh>
     where
         NewRefresh: CalendarEntryViewRefreshPort + Clone + 'static,
     {
@@ -85,7 +109,40 @@ where
             sync_states: self.sync_states,
             clock: self.clock,
             ids: self.ids,
+            poll_states: self.poll_states,
             refresh,
+        }
+    }
+
+    async fn mark_calendar_poll_due_soon(&self, user_id: &str) {
+        let now = self.clock.now_epoch_seconds();
+        let existing_state = match self
+            .poll_states
+            .find_by_provider_and_stream(
+                user_id,
+                ExternalProvider::Intervals,
+                ProviderPollStream::Calendar,
+            )
+            .await
+        {
+            Ok(state) => state,
+            Err(error) => {
+                warn!(%user_id, %error, "race sync succeeded but failed to load provider poll state");
+                return;
+            }
+        };
+
+        let state = existing_state.unwrap_or_else(|| {
+            ProviderPollState::new(
+                user_id.to_string(),
+                ExternalProvider::Intervals,
+                ProviderPollStream::Calendar,
+                now,
+            )
+        });
+
+        if let Err(error) = self.poll_states.upsert(state.mark_due_soon(now)).await {
+            warn!(%user_id, %error, "race sync succeeded but failed to mark calendar poll due soon");
         }
     }
 
@@ -313,6 +370,7 @@ where
                     ))
                     .await
                     .map_err(map_sync_repository_error)?;
+                self.mark_calendar_poll_due_soon(&pending.user_id).await;
                 Ok(pending)
             }
             Err(error) => {
@@ -326,14 +384,15 @@ where
     }
 }
 
-impl<Repository, Intervals, SyncStates, Time, Ids, Refresh> RaceUseCases
-    for RaceService<Repository, Intervals, SyncStates, Time, Ids, Refresh>
+impl<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh> RaceUseCases
+    for RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
+    PollStates: ProviderPollStateRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     fn list_races(

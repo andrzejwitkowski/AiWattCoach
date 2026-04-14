@@ -53,11 +53,12 @@ use aiwattcoach::{
         workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
     build_app,
-    config::Settings,
+    config::{spawn_provider_polling_loop, ProviderPollingService, Settings},
     domain::athlete_summary::AthleteSummaryService,
     domain::calendar::CalendarService,
     domain::calendar_labels::CalendarLabelsService,
     domain::calendar_view::CalendarEntryViewRefreshService,
+    domain::external_sync::{ExternalImportService, ProviderPollStateRepository},
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
     },
@@ -149,6 +150,90 @@ fn map_workout_summary_error(
     }
 }
 
+async fn reconcile_intervals_poll_states(
+    settings_repository: &MongoUserSettingsRepository,
+    poll_states: &MongoProviderPollStateRepository,
+    clock: &impl Clock,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let now_epoch_seconds = clock.now_epoch_seconds();
+    let existing_intervals_user_ids = poll_states
+        .list_user_ids_for_provider(aiwattcoach::domain::external_sync::ExternalProvider::Intervals)
+        .await?;
+
+    for user in settings_repository
+        .list_intervals_poll_bootstrap_users(&existing_intervals_user_ids)
+        .await?
+    {
+        for stream in [
+            aiwattcoach::domain::external_sync::ProviderPollStream::Calendar,
+            aiwattcoach::domain::external_sync::ProviderPollStream::CompletedWorkouts,
+        ] {
+            let existing = poll_states
+                .find_by_provider_and_stream(
+                    &user.user_id,
+                    aiwattcoach::domain::external_sync::ExternalProvider::Intervals,
+                    stream.clone(),
+                )
+                .await?;
+
+            if !user.desired_active {
+                if let Some(state) = existing {
+                    poll_states
+                        .upsert(aiwattcoach::domain::external_sync::ProviderPollState {
+                            next_due_at_epoch_seconds: i64::MAX,
+                            cursor: None,
+                            backoff_until_epoch_seconds: None,
+                            last_error: None,
+                            ..state
+                        })
+                        .await?;
+                }
+                continue;
+            }
+
+            if should_reset_poll_state(existing.as_ref(), user.intervals_updated_at_epoch_seconds) {
+                poll_states
+                    .upsert(aiwattcoach::domain::external_sync::ProviderPollState::new(
+                        user.user_id.clone(),
+                        aiwattcoach::domain::external_sync::ExternalProvider::Intervals,
+                        stream,
+                        now_epoch_seconds,
+                    ))
+                    .await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn should_reset_poll_state(
+    existing: Option<&aiwattcoach::domain::external_sync::ProviderPollState>,
+    intervals_updated_at_epoch_seconds: Option<i64>,
+) -> bool {
+    match existing {
+        None => true,
+        Some(state) => {
+            let Some(intervals_updated_at_epoch_seconds) = intervals_updated_at_epoch_seconds
+            else {
+                return false;
+            };
+            let poll_touched_at_epoch_seconds = state
+                .last_successful_at_epoch_seconds
+                .into_iter()
+                .chain(state.last_attempted_at_epoch_seconds)
+                .max()
+                .unwrap_or(i64::MIN);
+
+            intervals_updated_at_epoch_seconds > poll_touched_at_epoch_seconds
+                && (state.next_due_at_epoch_seconds == i64::MAX
+                    || state.cursor.is_some()
+                    || state.backoff_until_epoch_seconds.is_some()
+                    || state.last_error.is_some())
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let settings = Settings::from_env()?;
@@ -214,11 +299,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let llm_context_cache_repository =
         MongoLlmContextCacheRepository::new(mongo_client.clone(), &mongo_database);
     llm_context_cache_repository.ensure_indexes().await?;
-    let settings_service = Arc::new(
-        UserSettingsService::new(settings_repository, SystemClock)
-            .with_llm_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
-    );
-    let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let llm_http_client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .build()?;
@@ -273,12 +353,26 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let provider_poll_state_repository =
         MongoProviderPollStateRepository::new(mongo_client.clone(), &mongo_database);
     provider_poll_state_repository.ensure_indexes().await?;
+    reconcile_intervals_poll_states(
+        &settings_repository,
+        &provider_poll_state_repository,
+        &SystemClock,
+    )
+    .await?;
+    let settings_service = Arc::new(
+        UserSettingsService::new(settings_repository, SystemClock)
+            .with_provider_poll_states(provider_poll_state_repository.clone())
+            .with_llm_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
+    );
+    let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let race_repository = MongoRaceRepository::new(mongo_client.clone(), &mongo_database);
     race_repository.ensure_indexes().await?;
     let planned_workout_repository =
         MongoPlannedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
+    planned_workout_repository.ensure_indexes().await?;
     let completed_workout_repository =
         MongoCompletedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
+    completed_workout_repository.ensure_indexes().await?;
     let special_day_repository =
         MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);
     special_day_repository.ensure_indexes().await?;
@@ -301,9 +395,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     upload_operation_repository.ensure_indexes().await?;
     let calendar_entry_view_refresh_service = CalendarEntryViewRefreshService::new(
         calendar_entry_view_repository.clone(),
-        planned_workout_repository,
+        planned_workout_repository.clone(),
         planned_workout_sync_repository.clone(),
-        completed_workout_repository,
+        completed_workout_repository.clone(),
         race_repository.clone(),
         special_day_repository.clone(),
         external_sync_state_repository.clone(),
@@ -318,6 +412,25 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     } else {
         IntervalsSettingsAdapter::Live(SettingsIntervalsProvider::new(settings_service.clone()))
     };
+    let external_import_service = ExternalImportService::new(
+        planned_workout_repository.clone(),
+        completed_workout_repository.clone(),
+        race_repository.clone(),
+        special_day_repository.clone(),
+        external_observation_repository.clone(),
+        external_sync_state_repository.clone(),
+        SystemClock,
+    )
+    .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone());
+    let provider_polling_service = ProviderPollingService::new(
+        intervals_api_client.clone(),
+        intervals_settings_provider.clone(),
+        provider_poll_state_repository.clone(),
+        external_import_service,
+        SystemClock,
+        UuidIdGenerator,
+    )
+    .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone());
     let activity_identity_extractor = ActivityFileIdentityExtractor;
     let intervals_service = Arc::new(
         IntervalsService::new(
@@ -399,6 +512,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             SystemClock,
             UuidIdGenerator,
         )
+        .with_provider_poll_states(provider_poll_state_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
     let race_calendar_source =
@@ -413,6 +527,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             race_calendar_source,
             SystemClock,
         )
+        .with_provider_poll_states(provider_poll_state_repository)
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
     let workout_summary_service = Arc::new(
@@ -448,6 +563,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .with_intervals_connection_tester(Arc::new(intervals_connection_tester)),
     );
     let listener = TcpListener::bind(address).await?;
+    spawn_provider_polling_loop(provider_polling_service);
 
     let serve_result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

@@ -80,7 +80,10 @@ impl UserSettingsUseCases for TestSettingsService {
         intervals: IntervalsConfig,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let mut settings = self.take_or_default_settings(user_id);
-        settings.intervals = intervals;
+        settings.intervals = IntervalsConfig {
+            connected: intervals.api_key.is_some() && intervals.athlete_id.is_some(),
+            ..intervals
+        };
         settings.updated_at_epoch_seconds = 2000;
         let result = self.store_updated_settings(settings);
         Box::pin(async move { Ok(result) })

@@ -280,7 +280,7 @@ async fn update_intervals_preserves_saved_credentials_when_fields_are_missing() 
 }
 
 #[tokio::test]
-async fn update_intervals_resets_connected_when_credentials_change() {
+async fn update_intervals_keeps_connection_active_when_complete_credentials_are_saved() {
     let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
     settings.intervals.api_key = Some("saved-api-key".to_string());
     settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
@@ -314,7 +314,7 @@ async fn update_intervals_resets_connected_when_credentials_change() {
     let response_body: Value = get_json(response).await;
     let intervals = response_body.get("intervals").unwrap();
 
-    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
+    assert!(intervals.get("connected").unwrap().as_bool().unwrap());
     assert_eq!(
         intervals.get("athleteId").unwrap().as_str().unwrap(),
         "saved-athlete-id"

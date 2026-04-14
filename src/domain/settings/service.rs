@@ -2,9 +2,15 @@ use super::{
     AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
     SettingsError, UserSettings, UserSettingsRepository,
 };
-use crate::domain::identity::Clock;
 use crate::domain::llm::LlmContextCacheRepository;
 use crate::domain::settings::{ports::BoxFuture, validation};
+use crate::domain::{
+    external_sync::{
+        ExternalProvider, NoopProviderPollStateRepository, ProviderPollState,
+        ProviderPollStateRepository, ProviderPollStream,
+    },
+    identity::Clock,
+};
 use std::sync::Arc;
 
 pub trait UserSettingsUseCases: Send + Sync {
@@ -41,13 +47,15 @@ pub trait UserSettingsUseCases: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct UserSettingsService<Repo, Time>
+pub struct UserSettingsService<Repo, Time, PollStates = NoopProviderPollStateRepository>
 where
     Repo: UserSettingsRepository,
     Time: Clock,
+    PollStates: ProviderPollStateRepository,
 {
     repository: Repo,
     clock: Time,
+    poll_states: PollStates,
     llm_context_cache_repository: Option<Arc<dyn LlmContextCacheRepository>>,
 }
 
@@ -60,7 +68,30 @@ where
         Self {
             repository,
             clock,
+            poll_states: NoopProviderPollStateRepository,
             llm_context_cache_repository: None,
+        }
+    }
+}
+
+impl<Repo, Time, PollStates> UserSettingsService<Repo, Time, PollStates>
+where
+    Repo: UserSettingsRepository,
+    Time: Clock,
+    PollStates: ProviderPollStateRepository,
+{
+    pub fn with_provider_poll_states<NextPollStates>(
+        self,
+        poll_states: NextPollStates,
+    ) -> UserSettingsService<Repo, Time, NextPollStates>
+    where
+        NextPollStates: ProviderPollStateRepository,
+    {
+        UserSettingsService {
+            repository: self.repository,
+            clock: self.clock,
+            poll_states,
+            llm_context_cache_repository: self.llm_context_cache_repository,
         }
     }
 
@@ -82,10 +113,11 @@ where
     }
 }
 
-impl<Repo, Time> UserSettingsUseCases for UserSettingsService<Repo, Time>
+impl<Repo, Time, PollStates> UserSettingsUseCases for UserSettingsService<Repo, Time, PollStates>
 where
     Repo: UserSettingsRepository,
     Time: Clock,
+    PollStates: ProviderPollStateRepository,
 {
     fn find_settings(
         &self,
@@ -148,12 +180,28 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            service.get_or_create(&user_id).await?;
+            let previous = service.get_or_create(&user_id).await?;
             let now = service.clock.now_epoch_seconds();
+            let intervals = normalize_intervals_config(intervals);
             service
                 .repository
-                .update_intervals(&user_id, intervals, now)
+                .update_intervals(&user_id, intervals.clone(), now)
                 .await?;
+            if let Err(error) = sync_poll_states_after_intervals_update(
+                &service.poll_states,
+                &user_id,
+                &previous.intervals,
+                &intervals,
+                now,
+            )
+            .await
+            {
+                tracing::warn!(
+                    user_id = %user_id,
+                    error = %error,
+                    "interval settings were saved but provider poll state sync failed"
+                );
+            }
             service
                 .repository
                 .find_by_user_id(&user_id)
@@ -238,6 +286,105 @@ where
     }
 }
 
+fn normalize_intervals_config(mut intervals: IntervalsConfig) -> IntervalsConfig {
+    intervals.api_key = normalize_optional_non_empty(intervals.api_key);
+    intervals.athlete_id = normalize_optional_non_empty(intervals.athlete_id);
+    intervals.connected = intervals.api_key.is_some() && intervals.athlete_id.is_some();
+    intervals
+}
+
+async fn sync_poll_states_after_intervals_update<PollStates>(
+    poll_states: &PollStates,
+    user_id: &str,
+    previous: &IntervalsConfig,
+    intervals: &IntervalsConfig,
+    now_epoch_seconds: i64,
+) -> Result<(), SettingsError>
+where
+    PollStates: ProviderPollStateRepository,
+{
+    let credentials_changed = previous.api_key != intervals.api_key
+        || previous.athlete_id != intervals.athlete_id
+        || previous.connected != intervals.connected;
+
+    for stream in [
+        ProviderPollStream::Calendar,
+        ProviderPollStream::CompletedWorkouts,
+    ] {
+        let existing = poll_states
+            .find_by_provider_and_stream(user_id, ExternalProvider::Intervals, stream.clone())
+            .await
+            .map_err(map_poll_state_error)?;
+
+        let state = match existing {
+            Some(state) => {
+                if !intervals.connected {
+                    ProviderPollState {
+                        next_due_at_epoch_seconds: i64::MAX,
+                        cursor: None,
+                        backoff_until_epoch_seconds: None,
+                        last_error: None,
+                        ..state
+                    }
+                } else if credentials_changed {
+                    ProviderPollState {
+                        next_due_at_epoch_seconds: now_epoch_seconds,
+                        cursor: None,
+                        backoff_until_epoch_seconds: None,
+                        last_error: None,
+                        last_attempted_at_epoch_seconds: None,
+                        last_successful_at_epoch_seconds: None,
+                        ..state
+                    }
+                } else if state.next_due_at_epoch_seconds <= now_epoch_seconds
+                    && state.backoff_until_epoch_seconds.is_none()
+                {
+                    state
+                } else {
+                    ProviderPollState {
+                        next_due_at_epoch_seconds: now_epoch_seconds,
+                        backoff_until_epoch_seconds: None,
+                        last_error: None,
+                        ..state
+                    }
+                }
+            }
+            None => ProviderPollState::new(
+                user_id.to_string(),
+                ExternalProvider::Intervals,
+                stream,
+                if intervals.connected {
+                    now_epoch_seconds
+                } else {
+                    i64::MAX
+                },
+            ),
+        };
+
+        poll_states
+            .upsert(state)
+            .await
+            .map_err(map_poll_state_error)?;
+    }
+
+    Ok(())
+}
+
+fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
+    let normalized = value?.trim().to_string();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+fn map_poll_state_error(
+    error: crate::domain::external_sync::ExternalSyncRepositoryError,
+) -> SettingsError {
+    SettingsError::Repository(error.to_string())
+}
+
 fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConfig) -> bool {
     previous.selected_provider != updated.selected_provider
         || previous.selected_model != updated.selected_model
@@ -250,6 +397,10 @@ fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConf
 mod tests {
     use super::*;
     use crate::domain::{
+        external_sync::{
+            BoxFuture as SyncBoxFuture, ExternalProvider, ExternalSyncRepositoryError,
+            ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
+        },
         identity::Clock,
         llm::{BoxFuture as LlmBoxFuture, LlmContextCache, LlmContextCacheRepository, LlmError},
     };
@@ -315,10 +466,19 @@ mod tests {
         fn update_intervals(
             &self,
             _user_id: &str,
-            _intervals: IntervalsConfig,
-            _updated_at_epoch_seconds: i64,
+            intervals: IntervalsConfig,
+            updated_at_epoch_seconds: i64,
         ) -> BoxFuture<Result<(), SettingsError>> {
-            Box::pin(async move { unreachable!("not used in test") })
+            let settings = self.settings.clone();
+            Box::pin(async move {
+                let mut guard = settings.lock().unwrap();
+                let current = guard
+                    .as_mut()
+                    .ok_or_else(|| SettingsError::Repository("settings not found".to_string()))?;
+                current.intervals = intervals;
+                current.updated_at_epoch_seconds = updated_at_epoch_seconds;
+                Ok(())
+            })
         }
 
         fn update_options(
@@ -361,6 +521,74 @@ mod tests {
     #[derive(Clone, Default)]
     struct RecordingCacheRepository {
         deleted_users: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[derive(Clone, Default)]
+    struct InMemoryProviderPollStateRepository {
+        states: Arc<Mutex<Vec<ProviderPollState>>>,
+    }
+
+    impl InMemoryProviderPollStateRepository {
+        fn stored(&self) -> Vec<ProviderPollState> {
+            self.states.lock().unwrap().clone()
+        }
+    }
+
+    impl ProviderPollStateRepository for InMemoryProviderPollStateRepository {
+        fn upsert(
+            &self,
+            state: ProviderPollState,
+        ) -> SyncBoxFuture<Result<ProviderPollState, ExternalSyncRepositoryError>> {
+            let states = self.states.clone();
+            Box::pin(async move {
+                let mut states = states.lock().unwrap();
+                states.retain(|existing| {
+                    !(existing.user_id == state.user_id
+                        && existing.provider == state.provider
+                        && existing.stream == state.stream)
+                });
+                states.push(state.clone());
+                Ok(state)
+            })
+        }
+
+        fn list_due(
+            &self,
+            now_epoch_seconds: i64,
+        ) -> SyncBoxFuture<Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>> {
+            let states = self.states.clone();
+            Box::pin(async move {
+                Ok(states
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|state| state.is_due(now_epoch_seconds))
+                    .cloned()
+                    .collect())
+            })
+        }
+
+        fn find_by_provider_and_stream(
+            &self,
+            user_id: &str,
+            provider: ExternalProvider,
+            stream: ProviderPollStream,
+        ) -> SyncBoxFuture<Result<Option<ProviderPollState>, ExternalSyncRepositoryError>> {
+            let states = self.states.clone();
+            let user_id = user_id.to_string();
+            Box::pin(async move {
+                Ok(states
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .find(|state| {
+                        state.user_id == user_id
+                            && state.provider == provider
+                            && state.stream == stream
+                    })
+                    .cloned())
+            })
+        }
     }
 
     impl RecordingCacheRepository {
@@ -481,5 +709,180 @@ mod tests {
 
         assert!(!updated.availability.configured);
         assert!(!updated.availability.is_configured());
+    }
+
+    #[tokio::test]
+    async fn update_intervals_marks_connection_active_and_seeds_due_poll_states() {
+        let settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let poll_states = InMemoryProviderPollStateRepository::default();
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_provider_poll_states(poll_states.clone());
+
+        let updated = service
+            .update_intervals(
+                "user-1",
+                IntervalsConfig {
+                    api_key: Some("api-key".to_string()),
+                    athlete_id: Some("athlete-1".to_string()),
+                    connected: false,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(updated.intervals.connected);
+        assert_eq!(updated.intervals.api_key.as_deref(), Some("api-key"));
+        assert_eq!(updated.intervals.athlete_id.as_deref(), Some("athlete-1"));
+
+        let stored = poll_states.stored();
+        assert_eq!(stored.len(), 2);
+        assert!(stored.iter().any(|state| {
+            state.provider == ExternalProvider::Intervals
+                && state.stream == ProviderPollStream::Calendar
+                && state.next_due_at_epoch_seconds == 1_700_000_000
+        }));
+        assert!(stored.iter().any(|state| {
+            state.provider == ExternalProvider::Intervals
+                && state.stream == ProviderPollStream::CompletedWorkouts
+                && state.next_due_at_epoch_seconds == 1_700_000_000
+        }));
+    }
+
+    #[tokio::test]
+    async fn update_intervals_trims_credentials_and_keeps_empty_values_disconnected() {
+        let settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let poll_states = InMemoryProviderPollStateRepository::default();
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_provider_poll_states(poll_states.clone());
+
+        let updated = service
+            .update_intervals(
+                "user-1",
+                IntervalsConfig {
+                    api_key: Some("  ".to_string()),
+                    athlete_id: Some(" athlete-1 ".to_string()),
+                    connected: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!updated.intervals.connected);
+        assert_eq!(updated.intervals.api_key, None);
+        assert_eq!(updated.intervals.athlete_id.as_deref(), Some("athlete-1"));
+        assert!(poll_states
+            .stored()
+            .iter()
+            .all(|state| state.next_due_at_epoch_seconds == i64::MAX));
+    }
+
+    #[tokio::test]
+    async fn update_intervals_disconnect_disables_existing_poll_states() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
+        settings.intervals = IntervalsConfig {
+            api_key: Some("old-key".to_string()),
+            athlete_id: Some("old-athlete".to_string()),
+            connected: true,
+        };
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let poll_states = InMemoryProviderPollStateRepository::default();
+        poll_states
+            .upsert(ProviderPollState {
+                user_id: "user-1".to_string(),
+                provider: ExternalProvider::Intervals,
+                stream: ProviderPollStream::Calendar,
+                cursor: Some("2026-05-01".to_string()),
+                next_due_at_epoch_seconds: 1_700_000_000,
+                last_attempted_at_epoch_seconds: Some(1_699_999_000),
+                last_successful_at_epoch_seconds: Some(1_699_999_100),
+                last_error: Some("bad auth".to_string()),
+                backoff_until_epoch_seconds: Some(1_700_000_300),
+            })
+            .await
+            .unwrap();
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_provider_poll_states(poll_states.clone());
+
+        let updated = service
+            .update_intervals(
+                "user-1",
+                IntervalsConfig {
+                    api_key: None,
+                    athlete_id: None,
+                    connected: false,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!updated.intervals.connected);
+        let stored = poll_states.stored();
+        assert_eq!(stored.len(), 2);
+        assert!(stored
+            .iter()
+            .all(|state| state.next_due_at_epoch_seconds == i64::MAX));
+        assert!(stored.iter().all(|state| state.cursor.is_none()));
+        assert!(stored
+            .iter()
+            .all(|state| state.backoff_until_epoch_seconds.is_none()));
+        assert!(stored.iter().all(|state| state.last_error.is_none()));
+    }
+
+    #[tokio::test]
+    async fn update_intervals_credential_change_resets_cursor_for_fresh_backfill() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
+        settings.intervals = IntervalsConfig {
+            api_key: Some("old-key".to_string()),
+            athlete_id: Some("old-athlete".to_string()),
+            connected: true,
+        };
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let poll_states = InMemoryProviderPollStateRepository::default();
+        poll_states
+            .upsert(ProviderPollState {
+                user_id: "user-1".to_string(),
+                provider: ExternalProvider::Intervals,
+                stream: ProviderPollStream::Calendar,
+                cursor: Some("2099-01-01".to_string()),
+                next_due_at_epoch_seconds: 1_700_099_999,
+                last_attempted_at_epoch_seconds: Some(1_699_999_000),
+                last_successful_at_epoch_seconds: Some(1_699_999_100),
+                last_error: Some("stale".to_string()),
+                backoff_until_epoch_seconds: Some(1_700_000_300),
+            })
+            .await
+            .unwrap();
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_provider_poll_states(poll_states.clone());
+
+        service
+            .update_intervals(
+                "user-1",
+                IntervalsConfig {
+                    api_key: Some("new-key".to_string()),
+                    athlete_id: Some("new-athlete".to_string()),
+                    connected: false,
+                },
+            )
+            .await
+            .unwrap();
+
+        let stored = poll_states.stored();
+        assert!(stored
+            .iter()
+            .all(|state| state.next_due_at_epoch_seconds == 1_700_000_000));
+        assert!(stored.iter().all(|state| state.cursor.is_none()));
+        assert!(stored
+            .iter()
+            .all(|state| state.backoff_until_epoch_seconds.is_none()));
+        assert!(stored.iter().all(|state| state.last_error.is_none()));
+        assert!(stored
+            .iter()
+            .all(|state| state.last_attempted_at_epoch_seconds.is_none()));
+        assert!(stored
+            .iter()
+            .all(|state| state.last_successful_at_epoch_seconds.is_none()));
     }
 }

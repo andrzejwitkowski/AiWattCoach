@@ -11,9 +11,9 @@ use aiwattcoach::{
     },
     domain::external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalObjectKind, ExternalObservation,
-        ExternalObservationRepository, ExternalProvider, ExternalSyncState,
-        ExternalSyncStateRepository, ProviderPollState, ProviderPollStateRepository,
-        ProviderPollStream,
+        ExternalObservationParams, ExternalObservationRepository, ExternalProvider,
+        ExternalSyncState, ExternalSyncStateRepository, ProviderPollState,
+        ProviderPollStateRepository, ProviderPollStream,
     },
     Settings,
 };
@@ -31,18 +31,19 @@ async fn external_observation_repository_round_trips_by_provider_and_external_id
         MongoExternalObservationRepository::new(fixture.client.clone(), &fixture.database);
     repository.ensure_indexes().await.unwrap();
 
-    let observation = ExternalObservation::new(
-        "user-1".to_string(),
-        ExternalProvider::Intervals,
-        ExternalObjectKind::CompletedWorkout,
-        "remote-1".to_string(),
-        CanonicalEntityRef::new(
+    let observation = ExternalObservation::new(ExternalObservationParams {
+        user_id: "user-1".to_string(),
+        provider: ExternalProvider::Intervals,
+        external_object_kind: ExternalObjectKind::CompletedWorkout,
+        external_id: "remote-1".to_string(),
+        canonical_entity: CanonicalEntityRef::new(
             CanonicalEntityKind::CompletedWorkout,
             "completed-1".to_string(),
         ),
-        Some("hash-1".to_string()),
-        1_700_000_000,
-    );
+        normalized_payload_hash: Some("hash-1".to_string()),
+        dedup_key: Some("dedup-1".to_string()),
+        observed_at_epoch_seconds: 1_700_000_000,
+    });
     repository.upsert(observation.clone()).await.unwrap();
 
     let found = repository
@@ -114,8 +115,20 @@ async fn provider_poll_state_repository_lists_due_items_and_round_trips_by_strea
         ProviderPollStream::CompletedWorkouts,
         1_700_000_100,
     );
+    let blocked_by_backoff = ProviderPollState {
+        user_id: "user-2".to_string(),
+        provider: ExternalProvider::Intervals,
+        stream: ProviderPollStream::Calendar,
+        cursor: None,
+        next_due_at_epoch_seconds: 1_700_000_000,
+        last_attempted_at_epoch_seconds: Some(1_699_999_900),
+        last_successful_at_epoch_seconds: None,
+        last_error: Some("temporary upstream error".to_string()),
+        backoff_until_epoch_seconds: Some(1_700_000_300),
+    };
     repository.upsert(due.clone()).await.unwrap();
     repository.upsert(future).await.unwrap();
+    repository.upsert(blocked_by_backoff).await.unwrap();
 
     let listed = repository.list_due(1_700_000_000).await.unwrap();
     assert_eq!(listed, vec![due.clone()]);

@@ -61,27 +61,33 @@ pub struct ExternalObservation {
     pub external_id: String,
     pub canonical_entity: CanonicalEntityRef,
     pub normalized_payload_hash: Option<String>,
+    pub dedup_key: Option<String>,
+    pub observed_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternalObservationParams {
+    pub user_id: String,
+    pub provider: ExternalProvider,
+    pub external_object_kind: ExternalObjectKind,
+    pub external_id: String,
+    pub canonical_entity: CanonicalEntityRef,
+    pub normalized_payload_hash: Option<String>,
+    pub dedup_key: Option<String>,
     pub observed_at_epoch_seconds: i64,
 }
 
 impl ExternalObservation {
-    pub fn new(
-        user_id: String,
-        provider: ExternalProvider,
-        external_object_kind: ExternalObjectKind,
-        external_id: String,
-        canonical_entity: CanonicalEntityRef,
-        normalized_payload_hash: Option<String>,
-        observed_at_epoch_seconds: i64,
-    ) -> Self {
+    pub fn new(params: ExternalObservationParams) -> Self {
         Self {
-            user_id,
-            provider,
-            external_object_kind,
-            external_id,
-            canonical_entity,
-            normalized_payload_hash,
-            observed_at_epoch_seconds,
+            user_id: params.user_id,
+            provider: params.provider,
+            external_object_kind: params.external_object_kind,
+            external_id: params.external_id,
+            canonical_entity: params.canonical_entity,
+            normalized_payload_hash: params.normalized_payload_hash,
+            dedup_key: params.dedup_key,
+            observed_at_epoch_seconds: params.observed_at_epoch_seconds,
         }
     }
 }
@@ -225,6 +231,10 @@ pub struct ProviderPollState {
     pub stream: ProviderPollStream,
     pub cursor: Option<String>,
     pub next_due_at_epoch_seconds: i64,
+    pub last_attempted_at_epoch_seconds: Option<i64>,
+    pub last_successful_at_epoch_seconds: Option<i64>,
+    pub last_error: Option<String>,
+    pub backoff_until_epoch_seconds: Option<i64>,
 }
 
 impl ProviderPollState {
@@ -240,10 +250,59 @@ impl ProviderPollState {
             stream,
             cursor: None,
             next_due_at_epoch_seconds,
+            last_attempted_at_epoch_seconds: None,
+            last_successful_at_epoch_seconds: None,
+            last_error: None,
+            backoff_until_epoch_seconds: None,
         }
     }
 
     pub fn is_due(&self, now_epoch_seconds: i64) -> bool {
         now_epoch_seconds >= self.next_due_at_epoch_seconds
+            && self
+                .backoff_until_epoch_seconds
+                .map(|backoff_until| now_epoch_seconds >= backoff_until)
+                .unwrap_or(true)
+    }
+
+    pub fn mark_attempted(mut self, attempted_at_epoch_seconds: i64) -> Self {
+        self.last_attempted_at_epoch_seconds = Some(attempted_at_epoch_seconds);
+        self.last_error = None;
+        self
+    }
+
+    pub fn mark_succeeded(
+        mut self,
+        cursor: Option<String>,
+        successful_at_epoch_seconds: i64,
+        next_due_at_epoch_seconds: i64,
+    ) -> Self {
+        self.cursor = cursor;
+        self.next_due_at_epoch_seconds = next_due_at_epoch_seconds;
+        self.last_attempted_at_epoch_seconds = Some(successful_at_epoch_seconds);
+        self.last_successful_at_epoch_seconds = Some(successful_at_epoch_seconds);
+        self.last_error = None;
+        self.backoff_until_epoch_seconds = None;
+        self
+    }
+
+    pub fn mark_failed(
+        mut self,
+        error: String,
+        attempted_at_epoch_seconds: i64,
+        next_due_at_epoch_seconds: i64,
+        backoff_until_epoch_seconds: Option<i64>,
+    ) -> Self {
+        self.last_attempted_at_epoch_seconds = Some(attempted_at_epoch_seconds);
+        self.last_error = Some(error);
+        self.next_due_at_epoch_seconds = next_due_at_epoch_seconds;
+        self.backoff_until_epoch_seconds = backoff_until_epoch_seconds;
+        self
+    }
+
+    pub fn mark_due_soon(mut self, now_epoch_seconds: i64) -> Self {
+        self.next_due_at_epoch_seconds = now_epoch_seconds;
+        self.backoff_until_epoch_seconds = None;
+        self
     }
 }

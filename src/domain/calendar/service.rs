@@ -4,6 +4,10 @@ use sha2::{Digest, Sha256};
 
 use crate::domain::{
     calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
+    external_sync::{
+        ExternalProvider, NoopProviderPollStateRepository, ProviderPollState,
+        ProviderPollStateRepository, ProviderPollStream,
+    },
     identity::Clock,
     intervals::{
         CreateEvent, DateRange, Event, EventCategory, IntervalsError, IntervalsUseCases,
@@ -25,6 +29,7 @@ pub struct CalendarService<
     Syncs,
     Hidden,
     Time,
+    PollStates = NoopProviderPollStateRepository,
     Refresh = NoopCalendarEntryViewRefresh,
 > where
     Intervals: IntervalsUseCases + Clone + 'static,
@@ -32,6 +37,7 @@ pub struct CalendarService<
     Syncs: PlannedWorkoutSyncRepository + Clone + 'static,
     Hidden: HiddenCalendarEventSource + Clone + 'static,
     Time: Clock + Clone + 'static,
+    PollStates: ProviderPollStateRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     intervals: Intervals,
@@ -39,6 +45,7 @@ pub struct CalendarService<
     syncs: Syncs,
     hidden_event_source: Hidden,
     clock: Time,
+    poll_states: PollStates,
     refresh: Refresh,
 }
 
@@ -64,25 +71,45 @@ where
             syncs,
             hidden_event_source,
             clock,
+            poll_states: NoopProviderPollStateRepository,
             refresh: NoopCalendarEntryViewRefresh,
         }
     }
 }
 
-impl<Intervals, Projections, Syncs, Hidden, Time, Refresh>
-    CalendarService<Intervals, Projections, Syncs, Hidden, Time, Refresh>
+impl<Intervals, Projections, Syncs, Hidden, Time, PollStates, Refresh>
+    CalendarService<Intervals, Projections, Syncs, Hidden, Time, PollStates, Refresh>
 where
     Intervals: IntervalsUseCases + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
     Syncs: PlannedWorkoutSyncRepository + Clone,
     Hidden: HiddenCalendarEventSource + Clone,
     Time: Clock + Clone,
+    PollStates: ProviderPollStateRepository + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
+    pub fn with_provider_poll_states<NewPollStates>(
+        self,
+        poll_states: NewPollStates,
+    ) -> CalendarService<Intervals, Projections, Syncs, Hidden, Time, NewPollStates, Refresh>
+    where
+        NewPollStates: ProviderPollStateRepository + Clone,
+    {
+        CalendarService {
+            intervals: self.intervals,
+            projections: self.projections,
+            syncs: self.syncs,
+            hidden_event_source: self.hidden_event_source,
+            clock: self.clock,
+            poll_states,
+            refresh: self.refresh,
+        }
+    }
+
     pub fn with_calendar_view_refresh<NewRefresh>(
         self,
         refresh: NewRefresh,
-    ) -> CalendarService<Intervals, Projections, Syncs, Hidden, Time, NewRefresh>
+    ) -> CalendarService<Intervals, Projections, Syncs, Hidden, Time, PollStates, NewRefresh>
     where
         NewRefresh: CalendarEntryViewRefreshPort + Clone,
     {
@@ -92,7 +119,40 @@ where
             syncs: self.syncs,
             hidden_event_source: self.hidden_event_source,
             clock: self.clock,
+            poll_states: self.poll_states,
             refresh,
+        }
+    }
+
+    async fn mark_calendar_poll_due_soon(&self, user_id: &str) {
+        let now = self.clock.now_epoch_seconds();
+        let existing_state = match self
+            .poll_states
+            .find_by_provider_and_stream(
+                user_id,
+                ExternalProvider::Intervals,
+                ProviderPollStream::Calendar,
+            )
+            .await
+        {
+            Ok(state) => state,
+            Err(error) => {
+                tracing::warn!(%user_id, %error, "planned workout sync succeeded but failed to load provider poll state");
+                return;
+            }
+        };
+
+        let state = existing_state.unwrap_or_else(|| {
+            ProviderPollState::new(
+                user_id.to_string(),
+                ExternalProvider::Intervals,
+                ProviderPollStream::Calendar,
+                now,
+            )
+        });
+
+        if let Err(error) = self.poll_states.upsert(state.mark_due_soon(now)).await {
+            tracing::warn!(%user_id, %error, "planned workout sync succeeded but failed to mark calendar poll due soon");
         }
     }
 
@@ -259,6 +319,7 @@ where
                         self.clock.now_epoch_seconds(),
                     ))
                     .await?;
+                self.mark_calendar_poll_due_soon(user_id).await;
                 if let Err(error) = self
                     .refresh
                     .refresh_range_for_user(user_id, &request.date, &request.date)
@@ -326,14 +387,15 @@ where
     }
 }
 
-impl<Intervals, Projections, Syncs, Hidden, Time, Refresh> CalendarUseCases
-    for CalendarService<Intervals, Projections, Syncs, Hidden, Time, Refresh>
+impl<Intervals, Projections, Syncs, Hidden, Time, PollStates, Refresh> CalendarUseCases
+    for CalendarService<Intervals, Projections, Syncs, Hidden, Time, PollStates, Refresh>
 where
     Intervals: IntervalsUseCases + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
     Syncs: PlannedWorkoutSyncRepository + Clone,
     Hidden: HiddenCalendarEventSource + Clone,
     Time: Clock + Clone,
+    PollStates: ProviderPollStateRepository + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     fn list_events(

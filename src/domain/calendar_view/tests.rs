@@ -438,6 +438,66 @@ async fn refresh_range_for_user_uses_planned_workout_sync_records_for_planned_en
     );
 }
 
+#[tokio::test]
+async fn refresh_range_for_user_uses_external_sync_state_for_imported_planned_workouts() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(
+            CanonicalEntityKind::PlannedWorkout,
+            "imported-planned-1".to_string(),
+        ),
+    )
+    .mark_synced("144".to_string(), "hash-1".to_string(), 2)]);
+
+    planned
+        .upsert(PlannedWorkout::new(
+            "imported-planned-1".to_string(),
+            "user-1".to_string(),
+            "2026-05-10".to_string(),
+            sample_planned_workout().workout,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        planned_syncs,
+        completed,
+        races,
+        special_days,
+        sync_states,
+    );
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(
+        refreshed[0]
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        Some(144)
+    );
+    assert_eq!(
+        refreshed[0]
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("synced")
+    );
+}
+
 #[derive(Clone, Default)]
 struct TestPlannedWorkoutRepository {
     stored: std::sync::Arc<std::sync::Mutex<Vec<PlannedWorkout>>>,

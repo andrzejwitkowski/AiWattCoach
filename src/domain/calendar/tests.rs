@@ -6,6 +6,10 @@ use crate::domain::{
         PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository, SyncPlannedWorkout,
     },
     calendar_view::{CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRefreshPort},
+    external_sync::{
+        ExternalProvider, ExternalSyncRepositoryError, ProviderPollState,
+        ProviderPollStateRepository, ProviderPollStream,
+    },
     identity::Clock,
     intervals::{
         parse_planned_workout, BoxFuture as IntervalsBoxFuture, CreateEvent, DateRange, Event,
@@ -20,6 +24,7 @@ use crate::domain::{
 #[tokio::test]
 async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
     let refresh = RecordingCalendarRefresh::default();
+    let poll_states = InMemoryProviderPollStateRepository::default();
     let service = CalendarService::new(
         FakeIntervalsService::with_created_event(Event {
             id: 77,
@@ -42,6 +47,7 @@ async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
         EmptyHiddenCalendarEventSource,
         FixedClock,
     )
+    .with_provider_poll_states(poll_states.clone())
     .with_calendar_view_refresh(refresh.clone());
 
     let result = service
@@ -56,6 +62,16 @@ async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
         .unwrap();
 
     assert_eq!(result.linked_intervals_event_id, Some(77));
+    let poll_state = poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Intervals,
+            ProviderPollStream::Calendar,
+        )
+        .await
+        .unwrap()
+        .expect("expected poll state");
+    assert_eq!(poll_state.next_due_at_epoch_seconds, 1_700_000_000);
     assert_eq!(
         refresh.calls(),
         vec![(
@@ -69,6 +85,7 @@ async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
 #[tokio::test]
 async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persisting_failure() {
     let refresh = RecordingCalendarRefresh::default();
+    let poll_states = InMemoryProviderPollStateRepository::default();
     let service = CalendarService::new(
         FakeIntervalsService::with_create_error(IntervalsError::ConnectionError(
             "intervals unavailable".to_string(),
@@ -83,6 +100,7 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
         EmptyHiddenCalendarEventSource,
         FixedClock,
     )
+    .with_provider_poll_states(poll_states.clone())
     .with_calendar_view_refresh(refresh.clone());
 
     let error = service
@@ -100,6 +118,15 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
         error,
         CalendarError::Unavailable("intervals unavailable".to_string())
     );
+    assert!(poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Intervals,
+            ProviderPollStream::Calendar
+        )
+        .await
+        .unwrap()
+        .is_none());
     assert_eq!(
         refresh.calls(),
         vec![(
@@ -299,6 +326,72 @@ impl PlannedWorkoutSyncRepository for InMemoryPlannedWorkoutSyncRepository {
             });
             stored.push(record.clone());
             Ok(record)
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+struct InMemoryProviderPollStateRepository {
+    stored: Arc<Mutex<Vec<ProviderPollState>>>,
+}
+
+impl ProviderPollStateRepository for InMemoryProviderPollStateRepository {
+    fn upsert(
+        &self,
+        state: ProviderPollState,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<ProviderPollState, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                !(existing.user_id == state.user_id
+                    && existing.provider == state.provider
+                    && existing.stream == state.stream)
+            });
+            stored.push(state.clone());
+            Ok(state)
+        })
+    }
+
+    fn list_due(
+        &self,
+        now_epoch_seconds: i64,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|state| state.is_due(now_epoch_seconds))
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn find_by_provider_and_stream(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        stream: ProviderPollStream,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ProviderPollState>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id && state.provider == provider && state.stream == stream
+                })
+                .cloned())
         })
     }
 }
