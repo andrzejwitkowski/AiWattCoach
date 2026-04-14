@@ -361,6 +361,50 @@ async fn update_activity_persists_updated_activity() {
 }
 
 #[tokio::test]
+async fn update_activity_refreshes_old_and_new_dates_when_activity_moves() {
+    let mut existing_activity = sample_activity("i57", "Moved Ride");
+    existing_activity.start_date_local = "2026-03-20T08:00:00".to_string();
+    let mut updated_activity = existing_activity.clone();
+    updated_activity.start_date_local = "2026-03-22T08:00:00".to_string();
+    let api = FakeIntervalsApi::with_updated_activity(updated_activity.clone());
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_existing("user-1", existing_activity);
+    let refresh = RecordingCalendarRefresh::default();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    let update = UpdateActivity {
+        name: Some("Moved Ride".to_string()),
+        description: None,
+        activity_type: None,
+        trainer: Some(false),
+        commute: Some(false),
+        race: Some(false),
+    };
+
+    let result = service
+        .update_activity("user-1", "i57", update)
+        .await
+        .unwrap();
+
+    assert_eq!(result.start_date_local, "2026-03-22T08:00:00");
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-03-20".to_string(),
+            "2026-03-22".to_string()
+        )]
+    );
+}
+
+#[tokio::test]
 async fn delete_activity_removes_local_copy_only_after_upstream_delete_succeeds() {
     let api = FakeIntervalsApi::default();
     let settings = FakeSettingsPort::with_credentials(valid_credentials());

@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
@@ -16,6 +18,7 @@ pub struct MongoCalendarEntryViewRepository {
 struct CalendarEntryViewDocument {
     user_id: String,
     entry_id: String,
+    rewrite_gen: String,
     entry_kind: String,
     date: String,
     start_date_local: Option<String>,
@@ -125,7 +128,7 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
         entry: CalendarEntryView,
     ) -> CalendarEntryViewBoxFuture<Result<CalendarEntryView, CalendarEntryViewError>> {
         let collection = self.collection.clone();
-        let document = map_entry_to_document(&entry);
+        let document = map_entry_to_document(&entry, &new_rewrite_generation());
         Box::pin(async move {
             collection
                 .replace_one(
@@ -149,6 +152,7 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
     ) -> CalendarEntryViewBoxFuture<Result<Vec<CalendarEntryView>, CalendarEntryViewError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
+        let rewrite_gen = new_rewrite_generation();
         let documents = entries
             .iter()
             .map(|entry| {
@@ -158,7 +162,7 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
                         entry.user_id
                     )));
                 }
-                Ok(map_entry_to_document(entry))
+                Ok(map_entry_to_document(entry, &rewrite_gen))
             })
             .collect::<Result<Vec<_>, _>>();
         Box::pin(async move {
@@ -183,11 +187,12 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
                 .collect::<Vec<_>>();
 
             let delete_filter = if retained_entry_ids.is_empty() {
-                doc! { "user_id": &user_id }
+                doc! { "user_id": &user_id, "rewrite_gen": { "$ne": &rewrite_gen } }
             } else {
                 doc! {
                     "user_id": &user_id,
                     "entry_id": { "$nin": retained_entry_ids },
+                    "rewrite_gen": { "$ne": &rewrite_gen },
                 }
             };
             collection
@@ -210,6 +215,7 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
         let user_id = user_id.to_string();
         let oldest = oldest.to_string();
         let newest = newest.to_string();
+        let rewrite_gen = new_rewrite_generation();
         let documents = entries
             .iter()
             .map(|entry| {
@@ -219,7 +225,7 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
                         entry.user_id
                     )));
                 }
-                Ok(map_entry_to_document(entry))
+                Ok(map_entry_to_document(entry, &rewrite_gen))
             })
             .collect::<Result<Vec<_>, _>>();
         Box::pin(async move {
@@ -250,6 +256,7 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
                         "$gte": &oldest,
                         "$lte": &newest,
                     },
+                    "rewrite_gen": { "$ne": &rewrite_gen },
                 }
             } else {
                 doc! {
@@ -259,6 +266,7 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
                         "$lte": &newest,
                     },
                     "entry_id": { "$nin": &incoming_entry_ids },
+                    "rewrite_gen": { "$ne": &rewrite_gen },
                 }
             };
 
@@ -272,10 +280,14 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
     }
 }
 
-fn map_entry_to_document(entry: &CalendarEntryView) -> CalendarEntryViewDocument {
+fn map_entry_to_document(
+    entry: &CalendarEntryView,
+    rewrite_gen: &str,
+) -> CalendarEntryViewDocument {
     CalendarEntryViewDocument {
         user_id: entry.user_id.clone(),
         entry_id: entry.entry_id.clone(),
+        rewrite_gen: rewrite_gen.to_string(),
         entry_kind: entry.entry_kind.as_str().to_string(),
         date: entry.date.clone(),
         start_date_local: entry.start_date_local.clone(),
@@ -327,6 +339,13 @@ fn map_document_to_entry(
             sync_status: sync.sync_status,
         }),
     })
+}
+
+fn new_rewrite_generation() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos().to_string())
+        .unwrap_or_else(|_| "0".to_string())
 }
 
 fn map_kind_from_str(value: &str) -> Result<CalendarEntryKind, CalendarEntryViewError> {

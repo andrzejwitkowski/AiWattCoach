@@ -77,6 +77,13 @@ where
         activity_id: &str,
         activity: UpdateActivity,
     ) -> Result<Activity, IntervalsError> {
+        let existing = self
+            .activities
+            .find_by_user_id_and_activity_id(user_id, activity_id)
+            .await?;
+        let old_date = existing
+            .as_ref()
+            .map(|activity| activity_date(&activity.start_date_local).to_string());
         let credentials = self.settings.get_credentials(user_id).await?;
         let updated = self
             .api
@@ -92,14 +99,25 @@ where
             );
         } else if let Err(error) = self
             .refresh
-            .refresh_range_for_user(user_id, &updated_date, &updated_date)
+            .refresh_range_for_user(
+                user_id,
+                old_date
+                    .as_deref()
+                    .map(|date| date.min(updated_date.as_str()))
+                    .unwrap_or(updated_date.as_str()),
+                old_date
+                    .as_deref()
+                    .map(|date| date.max(updated_date.as_str()))
+                    .unwrap_or(updated_date.as_str()),
+            )
             .await
         {
             warn!(
                 ?error,
                 %user_id,
                 activity_id,
-                date = %updated_date,
+                old_date = old_date.as_deref().unwrap_or("<missing>"),
+                updated_date = %updated_date,
                 "activity update succeeded but calendar view refresh failed"
             );
         }

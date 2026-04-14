@@ -309,7 +309,7 @@ async fn generation_refreshes_calendar_view_for_generated_window() {
 }
 
 #[tokio::test]
-async fn generation_keeps_success_after_projection_persistence_when_refresh_fails() {
+async fn generation_fails_when_refresh_fails_after_projection_persistence() {
     let call_log = new_call_log();
     let snapshots = InMemoryTrainingPlanSnapshotRepository::new();
     let projected_days =
@@ -337,10 +337,12 @@ async fn generation_keeps_success_after_projection_persistence_when_refresh_fail
     let result = service
         .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
         .await
-        .unwrap();
+        .unwrap_err();
 
-    assert!(result.was_generated);
-    assert_eq!(result.snapshot.user_id, USER_ID);
+    assert_eq!(
+        result,
+        TrainingPlanError::Repository("refresh unavailable".to_string())
+    );
 }
 
 #[derive(Clone, Default)]

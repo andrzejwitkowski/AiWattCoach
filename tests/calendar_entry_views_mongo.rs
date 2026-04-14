@@ -138,6 +138,55 @@ async fn calendar_entry_view_repository_replaces_all_entries_for_user() {
 }
 
 #[tokio::test]
+async fn calendar_entry_view_repository_replace_all_overwrites_stale_user_rows() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoCalendarEntryViewRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .upsert(sample_entry(
+            "planned:1",
+            CalendarEntryKind::PlannedWorkout,
+            "2026-05-10",
+        ))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_entry(
+            "race:1",
+            CalendarEntryKind::Race,
+            "2026-05-12",
+        ))
+        .await
+        .unwrap();
+
+    repository
+        .replace_all_for_user(
+            "user-1",
+            vec![sample_entry(
+                "special:1",
+                CalendarEntryKind::SpecialDay,
+                "2026-05-13",
+            )],
+        )
+        .await
+        .unwrap();
+
+    let user_entries = repository
+        .list_by_user_id_and_date_range("user-1", "2026-05-01", "2026-05-31")
+        .await
+        .unwrap();
+
+    assert_eq!(user_entries.len(), 1);
+    assert_eq!(user_entries[0].entry_id, "special:1");
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
 async fn calendar_entry_view_repository_replaces_only_target_range_and_handles_date_moves() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;

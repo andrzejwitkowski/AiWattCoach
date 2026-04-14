@@ -302,21 +302,12 @@ where
                 "training plan projection persistence incomplete after replace_window".to_string(),
             ));
         }
-        let completed = operation.mark_completed(self.clock.now_epoch_seconds());
-        self.operations.upsert(completed).await?;
-        if let Err(error) = self
-            .refresh
+        self.refresh
             .refresh_range_for_user(&snapshot.user_id, &snapshot.start_date, &snapshot.end_date)
             .await
-        {
-            tracing::warn!(
-                user_id = %snapshot.user_id,
-                start_date = %snapshot.start_date,
-                end_date = %snapshot.end_date,
-                %error,
-                "training plan generation succeeded but calendar view refresh failed"
-            );
-        }
+            .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+        let completed = operation.mark_completed(self.clock.now_epoch_seconds());
+        self.operations.upsert(completed).await?;
 
         Ok(GeneratedTrainingPlan {
             snapshot,

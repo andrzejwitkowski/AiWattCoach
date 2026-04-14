@@ -111,6 +111,68 @@ async fn rebuild_for_user_replaces_stale_entries_and_stays_idempotent() {
 }
 
 #[tokio::test]
+async fn rebuild_for_user_preserves_existing_sync_metadata() {
+    let repository = InMemoryCalendarEntryViewRepository::default();
+    let service = CalendarEntryViewService::new(repository.clone());
+
+    repository
+        .upsert(project_planned_workout_entry(
+            &sample_planned_workout(),
+            Some(&sample_planned_sync_state()),
+        ))
+        .await
+        .unwrap();
+    repository
+        .upsert(project_race_entry(
+            &sample_race(),
+            Some(&sample_race_sync_state()),
+        ))
+        .await
+        .unwrap();
+
+    let rebuilt = service
+        .rebuild_for_user(
+            "user-1",
+            &[sample_planned_workout()],
+            &[sample_completed_workout()],
+            &[sample_race()],
+            &[sample_special_day()],
+        )
+        .await
+        .unwrap();
+
+    let planned = rebuilt
+        .iter()
+        .find(|entry| entry.entry_id == "planned:planned-1")
+        .expect("planned entry after rebuild");
+    let race = rebuilt
+        .iter()
+        .find(|entry| entry.entry_id == "race:race-1")
+        .expect("race entry after rebuild");
+
+    assert_eq!(
+        planned
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        Some(77)
+    );
+    assert_eq!(
+        planned
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("synced")
+    );
+    assert_eq!(
+        race.sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        Some(41)
+    );
+}
+
+#[tokio::test]
 async fn replace_range_for_user_replaces_only_target_range_and_handles_date_moves() {
     let repository = InMemoryCalendarEntryViewRepository::default();
 
@@ -156,6 +218,54 @@ async fn replace_range_for_user_replaces_only_target_range_and_handles_date_move
         .iter()
         .any(|entry| entry.entry_id == "special:special-stale"));
     assert!(!entries.iter().any(|entry| entry.entry_id == "race:race-1"));
+}
+
+#[tokio::test]
+async fn replace_all_for_user_rejects_mismatched_user_entries() {
+    let repository = InMemoryCalendarEntryViewRepository::default();
+
+    let error = repository
+        .replace_all_for_user(
+            "user-1",
+            vec![project_special_day_entry(&sample_special_day_for_user(
+                "user-2",
+            ))],
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        super::CalendarEntryViewError::Repository(
+            "calendar entry user mismatch for replace_all_for_user: expected user-1, got user-2"
+                .to_string()
+        )
+    );
+}
+
+#[tokio::test]
+async fn replace_range_for_user_rejects_mismatched_user_entries() {
+    let repository = InMemoryCalendarEntryViewRepository::default();
+
+    let error = repository
+        .replace_range_for_user(
+            "user-1",
+            "2026-05-10",
+            "2026-05-10",
+            vec![project_special_day_entry(&sample_special_day_for_user(
+                "user-2",
+            ))],
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        super::CalendarEntryViewError::Repository(
+            "calendar entry user mismatch for replace_range_for_user: expected user-1, got user-2"
+                .to_string()
+        )
+    );
 }
 
 #[tokio::test]
@@ -884,6 +994,15 @@ fn sample_race_sync_state() -> ExternalSyncState {
     .mark_synced("41".to_string(), "hash-1".to_string(), 1_700_000_000)
 }
 
+fn sample_planned_sync_state() -> ExternalSyncState {
+    ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::PlannedWorkout, "planned-1".to_string()),
+    )
+    .mark_synced("77".to_string(), "hash-2".to_string(), 1_700_000_001)
+}
+
 fn sample_special_day() -> SpecialDay {
     SpecialDay::new(
         "special-1".to_string(),
@@ -898,6 +1017,15 @@ fn sample_other_special_day() -> SpecialDay {
         "special-stale".to_string(),
         "user-1".to_string(),
         "2026-05-09".to_string(),
+        SpecialDayKind::Other,
+    )
+}
+
+fn sample_special_day_for_user(user_id: &str) -> SpecialDay {
+    SpecialDay::new(
+        "special-other-user".to_string(),
+        user_id.to_string(),
+        "2026-05-13".to_string(),
         SpecialDayKind::Other,
     )
 }

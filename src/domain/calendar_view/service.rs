@@ -9,6 +9,9 @@ use super::{
     CalendarEntryViewError, CalendarEntryViewRepository,
 };
 
+const CALENDAR_REBUILD_RANGE_START: &str = "0000-01-01";
+const CALENDAR_REBUILD_RANGE_END: &str = "9999-12-31";
+
 #[derive(Clone)]
 pub struct CalendarEntryViewService<Repository>
 where
@@ -90,8 +93,26 @@ where
     ) -> BoxFuture<Result<Vec<CalendarEntryView>, CalendarEntryViewError>> {
         let repository = self.repository.clone();
         let user_id = user_id.to_string();
-        let entries =
+        let mut entries =
             rebuild_calendar_entries(planned_workouts, completed_workouts, races, special_days);
-        Box::pin(async move { repository.replace_all_for_user(&user_id, entries).await })
+        Box::pin(async move {
+            let existing_entries = repository
+                .list_by_user_id_and_date_range(
+                    &user_id,
+                    CALENDAR_REBUILD_RANGE_START,
+                    CALENDAR_REBUILD_RANGE_END,
+                )
+                .await?;
+            let sync_by_entry_id = existing_entries
+                .into_iter()
+                .filter_map(|entry| entry.sync.map(|sync| (entry.entry_id, sync)))
+                .collect::<std::collections::HashMap<_, _>>();
+            for entry in &mut entries {
+                if let Some(sync) = sync_by_entry_id.get(&entry.entry_id) {
+                    entry.sync = Some(sync.clone());
+                }
+            }
+            repository.replace_all_for_user(&user_id, entries).await
+        })
     }
 }

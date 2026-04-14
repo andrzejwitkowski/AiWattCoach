@@ -93,6 +93,13 @@ impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
     ) -> BoxFuture<Result<Vec<CalendarEntryView>, CalendarEntryViewError>> {
         let stored = self.stored.clone();
         let user_id = user_id.to_string();
+        if let Some(entry) = entries.iter().find(|entry| entry.user_id != user_id) {
+            let message = format!(
+                "calendar entry user mismatch for replace_all_for_user: expected {user_id}, got {}",
+                entry.user_id
+            );
+            return Box::pin(async move { Err(CalendarEntryViewError::Repository(message)) });
+        }
         Box::pin(async move {
             let mut stored = stored.lock().expect("calendar view repo mutex poisoned");
             stored.retain(|existing| existing.user_id != user_id);
@@ -112,6 +119,13 @@ impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
         let user_id = user_id.to_string();
         let oldest = oldest.to_string();
         let newest = newest.to_string();
+        if let Some(entry) = entries.iter().find(|entry| entry.user_id != user_id) {
+            let message = format!(
+                "calendar entry user mismatch for replace_range_for_user: expected {user_id}, got {}",
+                entry.user_id
+            );
+            return Box::pin(async move { Err(CalendarEntryViewError::Repository(message)) });
+        }
         let incoming_entry_ids = entries
             .iter()
             .map(|entry| entry.entry_id.clone())

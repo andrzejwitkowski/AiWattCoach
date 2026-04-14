@@ -117,7 +117,7 @@ fn map_race_label(
         sync,
     } = document;
     let race_id = race_id.ok_or_else(|| {
-        CalendarLabelError::Internal(format!("calendar entry {} missing race_id", entry_id))
+        CalendarLabelError::Internal(format!("calendar entry {entry_id} missing race_id"))
     })?;
     let sync = sync.unwrap_or(CalendarEntrySyncDocument {
         linked_intervals_event_id: None,
