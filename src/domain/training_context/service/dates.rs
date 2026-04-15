@@ -1,17 +1,6 @@
 use chrono::{Duration, NaiveDate};
 
-use crate::domain::intervals::{Activity, Event, IntervalsError};
-
-pub(super) fn intervals_status_message(error: &IntervalsError) -> String {
-    match error {
-        IntervalsError::CredentialsNotConfigured => "credentials_not_configured".to_string(),
-        IntervalsError::Unauthenticated => "unauthenticated".to_string(),
-        IntervalsError::ApiError(_) => "api_error".to_string(),
-        IntervalsError::ConnectionError(_) => "connection_error".to_string(),
-        IntervalsError::NotFound => "not_found".to_string(),
-        IntervalsError::Internal(_) => "internal_error".to_string(),
-    }
-}
+use crate::domain::intervals::{Activity, Event};
 
 pub(super) fn date_range_inclusive(start: NaiveDate, end: NaiveDate) -> Vec<NaiveDate> {
     let mut dates = Vec::new();

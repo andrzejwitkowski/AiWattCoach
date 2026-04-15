@@ -8,6 +8,7 @@ use crate::domain::{
         BoxFuture as CalendarLabelsBoxFuture, CalendarLabel, CalendarLabelError,
         CalendarLabelPayload, CalendarLabelSource, CalendarRaceLabel,
     },
+    calendar_view::CalendarEntryRace,
     external_sync::ExternalSyncStatus,
     intervals::DateRange,
 };
@@ -25,7 +26,15 @@ struct CalendarEntryViewDocument {
     subtitle: Option<String>,
     race_id: Option<String>,
     description: Option<String>,
+    race: Option<CalendarEntryRaceDocument>,
     sync: Option<CalendarEntrySyncDocument>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct CalendarEntryRaceDocument {
+    distance_meters: i32,
+    discipline: String,
+    priority: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -114,6 +123,7 @@ fn map_race_label(
         subtitle,
         race_id,
         description,
+        race,
         sync,
     } = document;
     let race_id = race_id.ok_or_else(|| {
@@ -123,7 +133,14 @@ fn map_race_label(
         linked_intervals_event_id: None,
         sync_status: None,
     });
-    let (distance_meters, discipline, priority) = parse_race_description(description.as_deref())?;
+    let race = race
+        .map(map_race_document)
+        .or_else(|| parse_race_description(description.as_deref()).ok())
+        .ok_or_else(|| {
+            CalendarLabelError::Internal(format!(
+                "calendar entry {entry_id} missing structured race metadata"
+            ))
+        })?;
     let race_name = strip_race_title_prefix(&title).to_string();
 
     Ok(CalendarLabel {
@@ -135,9 +152,9 @@ fn map_race_label(
             race_id,
             date,
             name: race_name,
-            distance_meters,
-            discipline,
-            priority,
+            distance_meters: race.distance_meters,
+            discipline: race.discipline,
+            priority: race.priority,
             sync_status: sync
                 .sync_status
                 .unwrap_or_else(|| ExternalSyncStatus::Pending.as_str().to_string()),
@@ -148,7 +165,7 @@ fn map_race_label(
 
 fn parse_race_description(
     description: Option<&str>,
-) -> Result<(i32, String, String), CalendarLabelError> {
+) -> Result<CalendarEntryRace, CalendarLabelError> {
     let mut distance_meters = None;
     let mut discipline = None;
     let mut priority = None;
@@ -167,21 +184,25 @@ fn parse_race_description(
         }
     }
 
-    Ok((
-        distance_meters.ok_or_else(|| {
+    Ok(CalendarEntryRace {
+        distance_meters: distance_meters.ok_or_else(|| {
             CalendarLabelError::Internal("race calendar entry missing distance_meters".to_string())
         })?,
-        discipline.ok_or_else(|| {
+        discipline: discipline.ok_or_else(|| {
             CalendarLabelError::Internal("race calendar entry missing discipline".to_string())
         })?,
-        priority.ok_or_else(|| {
+        priority: priority.ok_or_else(|| {
             CalendarLabelError::Internal("race calendar entry missing priority".to_string())
         })?,
-    ))
+    })
 }
 
-fn strip_race_title_prefix(title: &str) -> &str {
-    title.strip_prefix("Race ").unwrap_or(title)
+fn map_race_document(document: CalendarEntryRaceDocument) -> CalendarEntryRace {
+    CalendarEntryRace {
+        distance_meters: document.distance_meters,
+        discipline: document.discipline,
+        priority: document.priority,
+    }
 }
 
 fn map_calendar_error(error: CalendarLabelError) -> CalendarError {
@@ -191,4 +212,8 @@ fn map_calendar_error(error: CalendarLabelError) -> CalendarError {
         CalendarLabelError::Unavailable(message) => CalendarError::Unavailable(message),
         CalendarLabelError::Internal(message) => CalendarError::Internal(message),
     }
+}
+
+fn strip_race_title_prefix(title: &str) -> &str {
+    title.strip_prefix("Race ").unwrap_or(title)
 }

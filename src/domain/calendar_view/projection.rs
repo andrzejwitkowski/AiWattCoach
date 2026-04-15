@@ -6,7 +6,10 @@ use crate::domain::{
     special_days::{SpecialDay, SpecialDayKind},
 };
 
-use super::{CalendarEntryKind, CalendarEntrySummary, CalendarEntrySync, CalendarEntryView};
+use super::{
+    CalendarEntryKind, CalendarEntryRace, CalendarEntrySummary, CalendarEntrySync,
+    CalendarEntryView,
+};
 
 pub fn project_planned_workout_entry(
     workout: &PlannedWorkout,
@@ -18,13 +21,19 @@ pub fn project_planned_workout_entry(
         entry_kind: CalendarEntryKind::PlannedWorkout,
         date: workout.date.clone(),
         start_date_local: Some(format!("{}T00:00:00", workout.date)),
-        title: planned_workout_title(workout),
+        title: workout
+            .name
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| planned_workout_title(workout)),
         subtitle: Some(format!("{} lines", workout.workout.lines.len())),
-        description: None,
+        description: workout.description.clone(),
+        raw_workout_doc: Some(serialize_planned_workout(workout)),
         planned_workout_id: Some(workout.planned_workout_id.clone()),
         completed_workout_id: None,
         race_id: None,
         special_day_id: None,
+        race: None,
         summary: None,
         sync: map_sync_state(sync_state),
     }
@@ -37,16 +46,24 @@ pub fn project_completed_workout_entry(workout: &CompletedWorkout) -> CalendarEn
         entry_kind: CalendarEntryKind::CompletedWorkout,
         date: date_prefix(&workout.start_date_local).to_string(),
         start_date_local: Some(workout.start_date_local.clone()),
-        title: "Completed workout".to_string(),
+        title: workout
+            .name
+            .clone()
+            .unwrap_or_else(|| "Completed workout".to_string()),
         subtitle: workout
             .metrics
             .training_stress_score
             .map(|tss| format!("TSS {tss}")),
-        description: workout.details.interval_summary.first().cloned(),
-        planned_workout_id: None,
+        description: workout
+            .description
+            .clone()
+            .or_else(|| workout.details.interval_summary.first().cloned()),
+        raw_workout_doc: None,
+        planned_workout_id: workout.planned_workout_id.clone(),
         completed_workout_id: Some(workout.completed_workout_id.clone()),
         race_id: None,
         special_day_id: None,
+        race: None,
         summary: Some(CalendarEntrySummary {
             training_stress_score: workout.metrics.training_stress_score,
             intensity_factor: workout.metrics.intensity_factor,
@@ -68,16 +85,17 @@ pub fn project_race_entry(
         start_date_local: Some(format!("{}T00:00:00", race.date)),
         title: race.label_title(),
         subtitle: Some(race.label_subtitle()),
-        description: Some(format!(
-            "distance_meters={}\ndiscipline={}\npriority={}",
-            race.distance_meters,
-            race.discipline.as_str(),
-            race.priority.as_str()
-        )),
+        description: None,
+        raw_workout_doc: None,
         planned_workout_id: None,
         completed_workout_id: None,
         race_id: Some(race.race_id.clone()),
         special_day_id: None,
+        race: Some(CalendarEntryRace {
+            distance_meters: race.distance_meters,
+            discipline: race.discipline.as_str().to_string(),
+            priority: race.priority.as_str().to_string(),
+        }),
         summary: None,
         sync: map_sync_state(sync_state),
     }
@@ -90,13 +108,18 @@ pub fn project_special_day_entry(special_day: &SpecialDay) -> CalendarEntryView 
         entry_kind: CalendarEntryKind::SpecialDay,
         date: special_day.date.clone(),
         start_date_local: Some(format!("{}T00:00:00", special_day.date)),
-        title: special_day_title(&special_day.kind),
+        title: special_day
+            .title
+            .clone()
+            .unwrap_or_else(|| special_day_title(&special_day.kind)),
         subtitle: None,
-        description: None,
+        description: special_day.description.clone(),
+        raw_workout_doc: None,
         planned_workout_id: None,
         completed_workout_id: None,
         race_id: None,
         special_day_id: Some(special_day.special_day_id.clone()),
+        race: None,
         summary: None,
         sync: None,
     }
@@ -114,6 +137,69 @@ fn planned_workout_title(workout: &PlannedWorkout) -> String {
             _ => None,
         })
         .unwrap_or_else(|| "Planned workout".to_string())
+}
+
+fn serialize_planned_workout(workout: &PlannedWorkout) -> String {
+    let structured = crate::domain::intervals::PlannedWorkout {
+        lines: workout
+            .workout
+            .lines
+            .iter()
+            .cloned()
+            .map(map_canonical_line_to_intervals_line)
+            .collect(),
+    };
+
+    crate::domain::intervals::serialize_planned_workout(&structured)
+}
+
+fn map_canonical_line_to_intervals_line(
+    line: crate::domain::planned_workouts::PlannedWorkoutLine,
+) -> crate::domain::intervals::PlannedWorkoutLine {
+    match line {
+        crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => {
+            crate::domain::intervals::PlannedWorkoutLine::Text(
+                crate::domain::intervals::PlannedWorkoutText { text: text.text },
+            )
+        }
+        crate::domain::planned_workouts::PlannedWorkoutLine::Repeat(repeat) => {
+            crate::domain::intervals::PlannedWorkoutLine::Repeat(
+                crate::domain::intervals::PlannedWorkoutRepeat {
+                    title: repeat.title,
+                    count: repeat.count,
+                },
+            )
+        }
+        crate::domain::planned_workouts::PlannedWorkoutLine::Step(step) => {
+            crate::domain::intervals::PlannedWorkoutLine::Step(
+                crate::domain::intervals::PlannedWorkoutStep {
+                    duration_seconds: step.duration_seconds,
+                    kind: match step.kind {
+                        crate::domain::planned_workouts::PlannedWorkoutStepKind::Steady => {
+                            crate::domain::intervals::PlannedWorkoutStepKind::Steady
+                        }
+                        crate::domain::planned_workouts::PlannedWorkoutStepKind::Ramp => {
+                            crate::domain::intervals::PlannedWorkoutStepKind::Ramp
+                        }
+                    },
+                    target: match step.target {
+                        crate::domain::planned_workouts::PlannedWorkoutTarget::PercentFtp {
+                            min,
+                            max,
+                        } => {
+                            crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max }
+                        }
+                        crate::domain::planned_workouts::PlannedWorkoutTarget::WattsRange {
+                            min,
+                            max,
+                        } => {
+                            crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max }
+                        }
+                    },
+                },
+            )
+        }
+    }
 }
 
 fn special_day_title(kind: &SpecialDayKind) -> String {

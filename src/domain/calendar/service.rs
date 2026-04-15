@@ -1,9 +1,10 @@
-use std::collections::{HashMap, HashSet};
-
 use sha2::{Digest, Sha256};
 
 use crate::domain::{
-    calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
+    calendar_view::{
+        CalendarEntryKind, CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRefreshPort,
+        CalendarEntryViewRepository, NoopCalendarEntryViewRefresh,
+    },
     external_sync::{
         ExternalProvider, NoopProviderPollStateRepository, ProviderPollState,
         ProviderPollStateRepository, ProviderPollStream,
@@ -17,59 +18,59 @@ use crate::domain::{
 };
 
 use super::{
-    BoxFuture, CalendarError, CalendarEvent, CalendarEventSource, CalendarProjectedWorkout,
-    CalendarUseCases, HiddenCalendarEventSource, PlannedWorkoutSyncRecord,
+    BoxFuture, CalendarError, CalendarEvent, CalendarEventCategory, CalendarEventSource,
+    CalendarProjectedWorkout, CalendarUseCases, PlannedWorkoutSyncRecord,
     PlannedWorkoutSyncRepository, PlannedWorkoutSyncStatus, SyncPlannedWorkout,
 };
 
 #[derive(Clone)]
 pub struct CalendarService<
     Intervals,
+    Entries,
     Projections,
     Syncs,
-    Hidden,
     Time,
     PollStates = NoopProviderPollStateRepository,
     Refresh = NoopCalendarEntryViewRefresh,
 > where
     Intervals: IntervalsUseCases + Clone + 'static,
+    Entries: CalendarEntryViewRepository + Clone + 'static,
     Projections: TrainingPlanProjectionRepository + Clone + 'static,
     Syncs: PlannedWorkoutSyncRepository + Clone + 'static,
-    Hidden: HiddenCalendarEventSource + Clone + 'static,
     Time: Clock + Clone + 'static,
     PollStates: ProviderPollStateRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     intervals: Intervals,
+    entries: Entries,
     projections: Projections,
     syncs: Syncs,
-    hidden_event_source: Hidden,
     clock: Time,
     poll_states: PollStates,
     refresh: Refresh,
 }
 
-impl<Intervals, Projections, Syncs, Hidden, Time>
-    CalendarService<Intervals, Projections, Syncs, Hidden, Time>
+impl<Intervals, Entries, Projections, Syncs, Time>
+    CalendarService<Intervals, Entries, Projections, Syncs, Time>
 where
     Intervals: IntervalsUseCases + Clone,
+    Entries: CalendarEntryViewRepository + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
     Syncs: PlannedWorkoutSyncRepository + Clone,
-    Hidden: HiddenCalendarEventSource + Clone,
     Time: Clock + Clone,
 {
     pub fn new(
         intervals: Intervals,
+        entries: Entries,
         projections: Projections,
         syncs: Syncs,
-        hidden_event_source: Hidden,
         clock: Time,
     ) -> Self {
         Self {
             intervals,
+            entries,
             projections,
             syncs,
-            hidden_event_source,
             clock,
             poll_states: NoopProviderPollStateRepository,
             refresh: NoopCalendarEntryViewRefresh,
@@ -77,13 +78,13 @@ where
     }
 }
 
-impl<Intervals, Projections, Syncs, Hidden, Time, PollStates, Refresh>
-    CalendarService<Intervals, Projections, Syncs, Hidden, Time, PollStates, Refresh>
+impl<Intervals, Entries, Projections, Syncs, Time, PollStates, Refresh>
+    CalendarService<Intervals, Entries, Projections, Syncs, Time, PollStates, Refresh>
 where
     Intervals: IntervalsUseCases + Clone,
+    Entries: CalendarEntryViewRepository + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
     Syncs: PlannedWorkoutSyncRepository + Clone,
-    Hidden: HiddenCalendarEventSource + Clone,
     Time: Clock + Clone,
     PollStates: ProviderPollStateRepository + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
@@ -91,15 +92,15 @@ where
     pub fn with_provider_poll_states<NewPollStates>(
         self,
         poll_states: NewPollStates,
-    ) -> CalendarService<Intervals, Projections, Syncs, Hidden, Time, NewPollStates, Refresh>
+    ) -> CalendarService<Intervals, Entries, Projections, Syncs, Time, NewPollStates, Refresh>
     where
         NewPollStates: ProviderPollStateRepository + Clone,
     {
         CalendarService {
             intervals: self.intervals,
+            entries: self.entries,
             projections: self.projections,
             syncs: self.syncs,
-            hidden_event_source: self.hidden_event_source,
             clock: self.clock,
             poll_states,
             refresh: self.refresh,
@@ -109,15 +110,15 @@ where
     pub fn with_calendar_view_refresh<NewRefresh>(
         self,
         refresh: NewRefresh,
-    ) -> CalendarService<Intervals, Projections, Syncs, Hidden, Time, PollStates, NewRefresh>
+    ) -> CalendarService<Intervals, Entries, Projections, Syncs, Time, PollStates, NewRefresh>
     where
         NewRefresh: CalendarEntryViewRefreshPort + Clone,
     {
         CalendarService {
             intervals: self.intervals,
+            entries: self.entries,
             projections: self.projections,
             syncs: self.syncs,
-            hidden_event_source: self.hidden_event_source,
             clock: self.clock,
             poll_states: self.poll_states,
             refresh,
@@ -161,76 +162,23 @@ where
         user_id: &str,
         range: &DateRange,
     ) -> Result<Vec<CalendarEvent>, CalendarError> {
-        let intervals_events = self
-            .intervals
-            .list_events(user_id, range)
+        let entries = self
+            .entries
+            .list_by_user_id_and_date_range(user_id, &range.oldest, &range.newest)
             .await
-            .map_err(map_intervals_error)?;
-        let projected_days = self
-            .projections
-            .list_active_by_user_id(user_id)
-            .await
-            .map_err(map_training_plan_error)?;
-        let sync_records = self.syncs.list_by_user_id_and_range(user_id, range).await?;
-        let hidden_linked_intervals_event_ids = self
-            .hidden_event_source
-            .list_hidden_intervals_event_ids(user_id, range)
-            .await?;
-
-        let syncs_by_projection = sync_records
+            .map_err(map_calendar_entry_view_error)?;
+        let mut events = entries
             .into_iter()
-            .map(|record| ((record.operation_key.clone(), record.date.clone()), record))
-            .collect::<HashMap<_, _>>();
-        let intervals_events_by_id = intervals_events
-            .iter()
-            .cloned()
-            .map(|event| (event.id, event))
-            .collect::<HashMap<_, _>>();
-
-        let mut hidden_intervals_event_ids = hidden_linked_intervals_event_ids
-            .into_iter()
-            .collect::<HashSet<_>>();
-        let mut merged = projected_days
-            .into_iter()
-            .filter(|day| is_date_in_range(&day.date, range))
-            .filter(|day| !day.rest_day && day.workout.is_some())
-            .map(|day| {
-                let key = (day.operation_key.clone(), day.date.clone());
-                let sync_record = syncs_by_projection.get(&key);
-                if let Some(intervals_event_id) =
-                    sync_record.and_then(|record| record.intervals_event_id)
-                {
-                    if intervals_events_by_id.contains_key(&intervals_event_id) {
-                        hidden_intervals_event_ids.insert(intervals_event_id);
-                    }
-                }
-
-                build_projected_calendar_event(day, sync_record)
-            })
+            .filter_map(map_calendar_entry_to_event)
             .collect::<Vec<_>>();
 
-        merged.extend(
-            intervals_events
-                .into_iter()
-                .filter(|event| !hidden_intervals_event_ids.contains(&event.id))
-                .map(|event| CalendarEvent {
-                    calendar_entry_id: format!("intervals:{}", event.id),
-                    event,
-                    source: CalendarEventSource::Intervals,
-                    projected_workout: None,
-                    sync_status: None,
-                    linked_intervals_event_id: None,
-                }),
-        );
-
-        merged.sort_by(|left, right| {
-            left.event
-                .start_date_local
-                .cmp(&right.event.start_date_local)
-                .then_with(|| left.event.id.cmp(&right.event.id))
+        events.sort_by(|left, right| {
+            left.start_date_local
+                .cmp(&right.start_date_local)
+                .then_with(|| left.id.cmp(&right.id))
         });
 
-        Ok(merged)
+        Ok(events)
     }
 
     async fn sync_planned_workout_impl(
@@ -387,13 +335,13 @@ where
     }
 }
 
-impl<Intervals, Projections, Syncs, Hidden, Time, PollStates, Refresh> CalendarUseCases
-    for CalendarService<Intervals, Projections, Syncs, Hidden, Time, PollStates, Refresh>
+impl<Intervals, Entries, Projections, Syncs, Time, PollStates, Refresh> CalendarUseCases
+    for CalendarService<Intervals, Entries, Projections, Syncs, Time, PollStates, Refresh>
 where
     Intervals: IntervalsUseCases + Clone,
+    Entries: CalendarEntryViewRepository + Clone,
     Projections: TrainingPlanProjectionRepository + Clone,
     Syncs: PlannedWorkoutSyncRepository + Clone,
-    Hidden: HiddenCalendarEventSource + Clone,
     Time: Clock + Clone,
     PollStates: ProviderPollStateRepository + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
@@ -432,18 +380,15 @@ fn build_projected_calendar_event(
     let projected_workout_id = projected_workout_id(&day.operation_key, &day.date);
 
     CalendarEvent {
+        id: event_id,
         calendar_entry_id: format!("predicted:{projected_workout_id}"),
-        event: Event {
-            id: event_id,
-            start_date_local: day.date.clone(),
-            event_type: Some("Ride".to_string()),
-            name: projected_workout_name(&day),
-            category: EventCategory::Workout,
-            description: None,
-            indoor: false,
-            color: None,
-            workout_doc: day.workout.as_ref().map(serialize_projected_workout),
-        },
+        start_date_local: day.date.clone(),
+        name: projected_workout_name(&day),
+        category: CalendarEventCategory::Workout,
+        description: None,
+        indoor: false,
+        color: None,
+        raw_workout_doc: day.workout.as_ref().map(serialize_projected_workout),
         source: CalendarEventSource::Predicted,
         projected_workout: Some(CalendarProjectedWorkout {
             projected_workout_id,
@@ -454,6 +399,101 @@ fn build_projected_calendar_event(
         sync_status: Some(status),
         linked_intervals_event_id,
     }
+}
+
+fn map_calendar_entry_to_event(entry: CalendarEntryView) -> Option<CalendarEvent> {
+    let category = match entry.entry_kind {
+        CalendarEntryKind::CompletedWorkout => return None,
+        CalendarEntryKind::PlannedWorkout => CalendarEventCategory::Workout,
+        CalendarEntryKind::Race => CalendarEventCategory::Race,
+        CalendarEntryKind::SpecialDay => CalendarEventCategory::Note,
+    };
+    let id = entry
+        .sync
+        .as_ref()
+        .and_then(|sync| sync.linked_intervals_event_id)
+        .unwrap_or_else(|| synthetic_event_id(&entry.entry_id, &entry.date));
+    let name = Some(entry.title.clone()).filter(|value| !value.trim().is_empty());
+    let start_date_local = match entry.entry_kind {
+        CalendarEntryKind::CompletedWorkout => entry
+            .start_date_local
+            .clone()
+            .unwrap_or_else(|| entry.date.clone()),
+        CalendarEntryKind::PlannedWorkout
+        | CalendarEntryKind::Race
+        | CalendarEntryKind::SpecialDay => entry.date.clone(),
+    };
+    let projected_workout = match entry.entry_kind {
+        CalendarEntryKind::PlannedWorkout => {
+            entry
+                .planned_workout_id
+                .as_ref()
+                .and_then(|planned_workout_id| {
+                    parse_projected_workout(planned_workout_id, &entry.date)
+                })
+        }
+        _ => None,
+    };
+    let source = if projected_workout.is_some() {
+        CalendarEventSource::Predicted
+    } else {
+        CalendarEventSource::Intervals
+    };
+    let sync_status = match entry.entry_kind {
+        CalendarEntryKind::PlannedWorkout => entry
+            .sync
+            .as_ref()
+            .and_then(|sync| map_calendar_sync_status(sync.sync_status.as_deref())),
+        _ => None,
+    };
+    let raw_workout_doc = match entry.entry_kind {
+        CalendarEntryKind::PlannedWorkout => entry.raw_workout_doc.clone(),
+        _ => None,
+    };
+
+    Some(CalendarEvent {
+        id,
+        calendar_entry_id: entry.entry_id,
+        start_date_local,
+        name,
+        category,
+        description: entry.description,
+        indoor: false,
+        color: None,
+        raw_workout_doc,
+        source,
+        projected_workout,
+        sync_status,
+        linked_intervals_event_id: entry.sync.and_then(|sync| sync.linked_intervals_event_id),
+    })
+}
+
+fn map_calendar_sync_status(value: Option<&str>) -> Option<PlannedWorkoutSyncStatus> {
+    match value? {
+        "unsynced" => Some(PlannedWorkoutSyncStatus::Unsynced),
+        "pending" => Some(PlannedWorkoutSyncStatus::Pending),
+        "synced" => Some(PlannedWorkoutSyncStatus::Synced),
+        "modified" => Some(PlannedWorkoutSyncStatus::Modified),
+        "failed" => Some(PlannedWorkoutSyncStatus::Failed),
+        _ => None,
+    }
+}
+
+fn parse_projected_workout(
+    planned_workout_id: &str,
+    date: &str,
+) -> Option<CalendarProjectedWorkout> {
+    let (operation_key, projected_date) = planned_workout_id.rsplit_once(':')?;
+    if projected_date != date {
+        return None;
+    }
+
+    Some(CalendarProjectedWorkout {
+        projected_workout_id: planned_workout_id.to_string(),
+        operation_key: operation_key.to_string(),
+        date: projected_date.to_string(),
+        source_workout_id: planned_workout_id.to_string(),
+    })
 }
 
 fn projected_day_sync_status(
@@ -697,10 +737,6 @@ fn synthetic_event_id(operation_key: &str, date: &str) -> i64 {
     ((value % MAX_JS_SAFE_INTEGER) + 1) as i64
 }
 
-fn is_date_in_range(date: &str, range: &DateRange) -> bool {
-    date >= range.oldest.as_str() && date <= range.newest.as_str()
-}
-
 fn map_intervals_error(error: IntervalsError) -> CalendarError {
     match error {
         IntervalsError::NotFound => CalendarError::NotFound,
@@ -725,5 +761,11 @@ fn map_training_plan_error(
         crate::domain::training_plan::TrainingPlanError::Repository(message) => {
             CalendarError::Internal(message)
         }
+    }
+}
+
+fn map_calendar_entry_view_error(error: CalendarEntryViewError) -> CalendarError {
+    match error {
+        CalendarEntryViewError::Repository(message) => CalendarError::Internal(message),
     }
 }

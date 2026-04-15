@@ -153,6 +153,8 @@ async fn import_special_day_persists_canonical_state_and_refreshes_day() {
                     "user-1".to_string(),
                     "2026-06-01".to_string(),
                     SpecialDayKind::Note,
+                    Some("Recovery Note".to_string()),
+                    Some("Keep easy".to_string()),
                 ),
             },
         ))

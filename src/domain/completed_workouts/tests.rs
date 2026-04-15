@@ -9,6 +9,12 @@ fn completed_workout_uses_local_canonical_id() {
         "completed-1".to_string(),
         "user-1".to_string(),
         "2026-05-01T08:00:00".to_string(),
+        Some("planned-1".to_string()),
+        Some("Threshold Ride".to_string()),
+        Some("Strong day".to_string()),
+        Some("Ride".to_string()),
+        Some(3600),
+        Some(35_000.0),
         CompletedWorkoutMetrics {
             training_stress_score: Some(78),
             normalized_power_watts: Some(245),
@@ -52,6 +58,12 @@ fn completed_workout_uses_local_canonical_id() {
     assert_eq!(workout.completed_workout_id, "completed-1");
     assert_eq!(workout.user_id, "user-1");
     assert_eq!(workout.start_date_local, "2026-05-01T08:00:00");
+    assert_eq!(workout.planned_workout_id.as_deref(), Some("planned-1"));
+    assert_eq!(workout.name.as_deref(), Some("Threshold Ride"));
+    assert_eq!(workout.description.as_deref(), Some("Strong day"));
+    assert_eq!(workout.activity_type.as_deref(), Some("Ride"));
+    assert_eq!(workout.duration_seconds, Some(3600));
+    assert_eq!(workout.distance_meters, Some(35_000.0));
     assert_eq!(workout.metrics.training_stress_score, Some(78));
     assert_eq!(workout.details.streams.len(), 1);
 }
@@ -110,6 +122,12 @@ fn sample_workout(
         completed_workout_id.to_string(),
         user_id.to_string(),
         start_date_local.to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
         CompletedWorkoutMetrics {
             training_stress_score: Some(78),
             normalized_power_watts: Some(245),

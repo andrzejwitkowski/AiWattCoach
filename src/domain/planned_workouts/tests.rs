@@ -29,7 +29,29 @@ fn planned_workout_uses_local_canonical_id() {
     assert_eq!(workout.planned_workout_id, "planned-1");
     assert_eq!(workout.user_id, "user-1");
     assert_eq!(workout.date, "2026-05-01");
+    assert_eq!(workout.name, None);
+    assert_eq!(workout.description, None);
+    assert_eq!(workout.event_type, None);
     assert_eq!(workout.workout.lines.len(), 2);
+}
+
+#[test]
+fn planned_workout_can_store_reader_metadata() {
+    let workout = PlannedWorkout::new(
+        "planned-1".to_string(),
+        "user-1".to_string(),
+        "2026-05-01".to_string(),
+        PlannedWorkoutContent { lines: Vec::new() },
+    )
+    .with_event_metadata(
+        Some("Threshold builder".to_string()),
+        Some("Strong over-unders".to_string()),
+        Some("Ride".to_string()),
+    );
+
+    assert_eq!(workout.name.as_deref(), Some("Threshold builder"));
+    assert_eq!(workout.description.as_deref(), Some("Strong over-unders"));
+    assert_eq!(workout.event_type.as_deref(), Some("Ride"));
 }
 
 fn assert_planned_workout_repository<T: PlannedWorkoutRepository>() {}

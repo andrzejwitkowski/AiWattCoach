@@ -12,12 +12,16 @@ fn special_day_uses_local_canonical_id_and_kind() {
         "user-1".to_string(),
         "2026-05-02".to_string(),
         SpecialDayKind::Illness,
+        Some("Sick day".to_string()),
+        Some("Fever and sore throat".to_string()),
     );
 
     assert_eq!(day.special_day_id, "special-1");
     assert_eq!(day.user_id, "user-1");
     assert_eq!(day.date, "2026-05-02");
     assert_eq!(day.kind, SpecialDayKind::Illness);
+    assert_eq!(day.title.as_deref(), Some("Sick day"));
+    assert_eq!(day.description.as_deref(), Some("Fever and sore throat"));
 }
 
 fn assert_special_day_repository<T: SpecialDayRepository>() {}
@@ -152,5 +156,7 @@ fn sample_day(special_day_id: &str, user_id: &str, date: &str) -> SpecialDay {
         user_id.to_string(),
         date.to_string(),
         SpecialDayKind::Illness,
+        Some("Illness".to_string()),
+        Some("Recovery day".to_string()),
     )
 }

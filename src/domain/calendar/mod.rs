@@ -5,8 +5,9 @@ mod service;
 mod tests;
 
 pub use model::{
-    CalendarError, CalendarEvent, CalendarEventSource, CalendarProjectedWorkout,
-    PlannedWorkoutSyncRecord, PlannedWorkoutSyncStatus, SyncPlannedWorkout,
+    CalendarError, CalendarEvent, CalendarEventCategory, CalendarEventSource,
+    CalendarProjectedWorkout, PlannedWorkoutSyncRecord, PlannedWorkoutSyncStatus,
+    SyncPlannedWorkout,
 };
 pub use ports::{
     BoxFuture, CalendarUseCases, HiddenCalendarEventSource, NoopPlannedWorkoutSyncRepository,

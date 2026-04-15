@@ -435,6 +435,12 @@ fn sample_completed_workout(
         completed_workout_id.to_string(),
         user_id.to_string(),
         start_date_local.to_string(),
+        None,
+        Some("Threshold Ride".to_string()),
+        Some("Strong day".to_string()),
+        Some("Ride".to_string()),
+        Some(3600),
+        Some(35_000.0),
         CompletedWorkoutMetrics {
             training_stress_score: Some(78),
             normalized_power_watts: Some(245),
@@ -482,5 +488,7 @@ fn sample_special_day(special_day_id: &str, user_id: &str, date: &str) -> Specia
         user_id.to_string(),
         date.to_string(),
         SpecialDayKind::Illness,
+        Some("Illness".to_string()),
+        Some("Recovery day".to_string()),
     )
 }

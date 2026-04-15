@@ -18,6 +18,8 @@ struct SpecialDayDocument {
     special_day_id: String,
     date: String,
     kind: String,
+    title: Option<String>,
+    description: Option<String>,
 }
 
 impl MongoSpecialDayRepository {
@@ -139,6 +141,8 @@ fn map_special_day_to_document(special_day: &SpecialDay) -> SpecialDayDocument {
         special_day_id: special_day.special_day_id.clone(),
         date: special_day.date.clone(),
         kind: map_kind_to_str(&special_day.kind).to_string(),
+        title: special_day.title.clone(),
+        description: special_day.description.clone(),
     }
 }
 
@@ -150,6 +154,8 @@ fn map_document_to_special_day(
         document.user_id,
         document.date,
         map_kind_from_str(&document.kind)?,
+        document.title,
+        document.description,
     ))
 }
 
