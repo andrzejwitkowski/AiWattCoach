@@ -1,8 +1,8 @@
 mod completed_workout_dedup;
+mod date_keys;
+mod import_outcome;
 #[cfg(test)]
 mod tests;
-
-use tracing::warn;
 
 use crate::domain::{
     calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
@@ -14,10 +14,14 @@ use crate::domain::{
 };
 
 use self::completed_workout_dedup::{completed_workout_dedup_key, merge_completed_workout};
+use self::{
+    date_keys::date_key,
+    import_outcome::{finalize_import, map_repository_error, sync_metadata_input},
+};
 use super::{
     BoxFuture, CanonicalEntityKind, CanonicalEntityRef, ExternalObjectKind, ExternalObservation,
-    ExternalObservationParams, ExternalObservationRepository, ExternalProvider,
-    ExternalSyncRepositoryError, ExternalSyncState, ExternalSyncStateRepository,
+    ExternalObservationParams, ExternalObservationRepository, ExternalProvider, ExternalSyncState,
+    ExternalSyncStateRepository,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -269,26 +273,25 @@ where
             CanonicalEntityKind::PlannedWorkout,
             workout.planned_workout_id.clone(),
         );
-        self.persist_sync_metadata(
-            &workout.user_id,
-            SyncMetadataInput {
-                provider: command.provider.clone(),
-                external_object_kind: ExternalObjectKind::PlannedWorkout,
-                external_id: command.external_id.clone(),
-                canonical_entity: canonical_entity.clone(),
-                normalized_payload_hash: command.normalized_payload_hash.clone(),
-                dedup_key: None,
-            },
-        )
-        .await?;
-        self.refresh_imported_range(&workout.user_id, &workout.date, &workout.date)
-            .await;
+        let metadata = sync_metadata_input(
+            command.provider.clone(),
+            ExternalObjectKind::PlannedWorkout,
+            command.external_id.clone(),
+            canonical_entity.clone(),
+            command.normalized_payload_hash,
+            None,
+        );
 
-        Ok(ExternalImportOutcome {
+        finalize_import(
+            &self.refresh,
+            self.persist_sync_metadata(&workout.user_id, metadata),
+            &workout.user_id,
+            &workout.date,
+            command.provider,
+            command.external_id,
             canonical_entity,
-            provider: command.provider,
-            external_id: command.external_id,
-        })
+        )
+        .await
     }
 
     async fn import_completed_workout(
@@ -308,31 +311,25 @@ where
             CanonicalEntityKind::CompletedWorkout,
             workout.completed_workout_id.clone(),
         );
-        self.persist_sync_metadata(
+        let metadata = sync_metadata_input(
+            command.provider.clone(),
+            ExternalObjectKind::CompletedWorkout,
+            command.external_id.clone(),
+            canonical_entity.clone(),
+            command.normalized_payload_hash,
+            dedup_key,
+        );
+
+        finalize_import(
+            &self.refresh,
+            self.persist_sync_metadata(&workout.user_id, metadata),
             &workout.user_id,
-            SyncMetadataInput {
-                provider: command.provider.clone(),
-                external_object_kind: ExternalObjectKind::CompletedWorkout,
-                external_id: command.external_id.clone(),
-                canonical_entity: canonical_entity.clone(),
-                normalized_payload_hash: command.normalized_payload_hash.clone(),
-                dedup_key,
-            },
-        )
-        .await?;
-
-        let date = workout
-            .start_date_local
-            .get(..10)
-            .unwrap_or(&workout.start_date_local);
-        self.refresh_imported_range(&workout.user_id, date, date)
-            .await;
-
-        Ok(ExternalImportOutcome {
+            date_key(&workout.start_date_local),
+            command.provider,
+            command.external_id,
             canonical_entity,
-            provider: command.provider,
-            external_id: command.external_id,
-        })
+        )
+        .await
     }
 
     async fn import_race(
@@ -346,26 +343,25 @@ where
             .map_err(map_race_error)?;
         let canonical_entity =
             CanonicalEntityRef::new(CanonicalEntityKind::Race, race.race_id.clone());
-        self.persist_sync_metadata(
-            &race.user_id,
-            SyncMetadataInput {
-                provider: command.provider.clone(),
-                external_object_kind: ExternalObjectKind::Race,
-                external_id: command.external_id.clone(),
-                canonical_entity: canonical_entity.clone(),
-                normalized_payload_hash: command.normalized_payload_hash.clone(),
-                dedup_key: None,
-            },
-        )
-        .await?;
-        self.refresh_imported_range(&race.user_id, &race.date, &race.date)
-            .await;
+        let metadata = sync_metadata_input(
+            command.provider.clone(),
+            ExternalObjectKind::Race,
+            command.external_id.clone(),
+            canonical_entity.clone(),
+            command.normalized_payload_hash,
+            None,
+        );
 
-        Ok(ExternalImportOutcome {
+        finalize_import(
+            &self.refresh,
+            self.persist_sync_metadata(&race.user_id, metadata),
+            &race.user_id,
+            &race.date,
+            command.provider,
+            command.external_id,
             canonical_entity,
-            provider: command.provider,
-            external_id: command.external_id,
-        })
+        )
+        .await
     }
 
     async fn import_special_day(
@@ -381,26 +377,25 @@ where
             CanonicalEntityKind::SpecialDay,
             special_day.special_day_id.clone(),
         );
-        self.persist_sync_metadata(
-            &special_day.user_id,
-            SyncMetadataInput {
-                provider: command.provider.clone(),
-                external_object_kind: ExternalObjectKind::SpecialDay,
-                external_id: command.external_id.clone(),
-                canonical_entity: canonical_entity.clone(),
-                normalized_payload_hash: command.normalized_payload_hash.clone(),
-                dedup_key: None,
-            },
-        )
-        .await?;
-        self.refresh_imported_range(&special_day.user_id, &special_day.date, &special_day.date)
-            .await;
+        let metadata = sync_metadata_input(
+            command.provider.clone(),
+            ExternalObjectKind::SpecialDay,
+            command.external_id.clone(),
+            canonical_entity.clone(),
+            command.normalized_payload_hash,
+            None,
+        );
 
-        Ok(ExternalImportOutcome {
+        finalize_import(
+            &self.refresh,
+            self.persist_sync_metadata(&special_day.user_id, metadata),
+            &special_day.user_id,
+            &special_day.date,
+            command.provider,
+            command.external_id,
             canonical_entity,
-            provider: command.provider,
-            external_id: command.external_id,
-        })
+        )
+        .await
     }
 
     async fn persist_sync_metadata(
@@ -451,23 +446,6 @@ where
 
         Ok(())
     }
-
-    async fn refresh_imported_range(&self, user_id: &str, oldest: &str, newest: &str) {
-        if let Err(error) = self
-            .refresh
-            .refresh_range_for_user(user_id, oldest, newest)
-            .await
-        {
-            warn!(
-                %user_id,
-                %oldest,
-                %newest,
-                %error,
-                "external import succeeded but calendar view refresh failed"
-            );
-        }
-    }
-
     async fn resolve_completed_workout_target(
         &self,
         incoming: CompletedWorkout,
@@ -597,14 +575,5 @@ fn map_race_error(error: RaceError) -> ExternalImportError {
 fn map_special_day_error(error: SpecialDayError) -> ExternalImportError {
     match error {
         SpecialDayError::Repository(message) => ExternalImportError::SpecialDay(message),
-    }
-}
-
-fn map_repository_error(error: ExternalSyncRepositoryError) -> ExternalImportError {
-    match error {
-        ExternalSyncRepositoryError::Storage(message)
-        | ExternalSyncRepositoryError::CorruptData(message) => {
-            ExternalImportError::Repository(message)
-        }
     }
 }

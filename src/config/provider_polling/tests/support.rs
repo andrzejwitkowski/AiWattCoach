@@ -13,330 +13,13 @@ use crate::domain::{
     },
     identity::{Clock, IdGenerator},
     intervals::{
-        Activity, ActivityDetails, ActivityMetrics, DateRange, Event, EventCategory,
-        IntervalsApiPort, IntervalsCredentials, IntervalsError, IntervalsSettingsPort,
+        Activity, ActivityDetails, ActivityMetrics, DateRange, Event, IntervalsApiPort,
+        IntervalsCredentials, IntervalsError, IntervalsSettingsPort,
     },
 };
 
-use super::ProviderPollingService;
-
-#[tokio::test]
-async fn poll_due_once_imports_calendar_events_and_marks_success() {
-    let poll_states =
-        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
-            "user-1".to_string(),
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-            1_699_999_900,
-        )]);
-    let imports = RecordingImportService::default();
-    let service = ProviderPollingService::new(
-        FakeIntervalsApi::with_events(vec![Event {
-            id: 144,
-            start_date_local: "2026-05-10T00:00:00".to_string(),
-            event_type: Some("Ride".to_string()),
-            name: Some("Threshold Builder".to_string()),
-            category: EventCategory::Workout,
-            description: Some("Threshold Builder\n- 10m 90-95%".to_string()),
-            indoor: false,
-            color: None,
-            workout_doc: None,
-        }]),
-        FakeIntervalsSettings,
-        poll_states.clone(),
-        imports.clone(),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_timing(300, 120)
-    .with_windows(7, 14, 7);
-
-    let processed = service.poll_due_once().await.unwrap();
-
-    assert_eq!(processed, 1);
-    assert_eq!(imports.commands().len(), 1);
-    let stored = poll_states
-        .find_by_provider_and_stream(
-            "user-1",
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-        )
-        .await
-        .unwrap()
-        .expect("expected stored poll state");
-    assert_eq!(stored.last_attempted_at_epoch_seconds, Some(1_700_000_000));
-    assert_eq!(stored.last_successful_at_epoch_seconds, Some(1_700_000_000));
-    assert_eq!(stored.last_error, None);
-    assert_eq!(stored.backoff_until_epoch_seconds, None);
-    assert_eq!(stored.cursor.as_deref(), Some("2026-05-10"));
-    assert_eq!(stored.next_due_at_epoch_seconds, 1_700_000_300);
-}
-
-#[tokio::test]
-async fn first_calendar_sync_uses_backfill_window_and_refreshes_full_range() {
-    let poll_states =
-        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
-            "user-1".to_string(),
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-            1_699_999_900,
-        )]);
-    let refresh = RecordingCalendarRefresh::default();
-    let api = RecordingIntervalsApi::default();
-    let service = ProviderPollingService::new(
-        api.clone(),
-        FakeIntervalsSettings,
-        poll_states,
-        RecordingImportService::default(),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_windows(7, 14, 7)
-    .with_calendar_view_refresh(refresh.clone());
-
-    service.poll_due_once().await.unwrap();
-
-    assert_eq!(
-        api.event_ranges(),
-        vec![("2023-11-07".to_string(), "2023-11-28".to_string())]
-    );
-    assert_eq!(
-        refresh.ranges(),
-        vec![(
-            "user-1".to_string(),
-            "2023-11-07".to_string(),
-            "2023-11-28".to_string(),
-        )]
-    );
-}
-
-#[tokio::test]
-async fn later_calendar_sync_uses_cursor_and_skips_full_range_refresh() {
-    let mut state = ProviderPollState::new(
-        "user-1".to_string(),
-        ExternalProvider::Intervals,
-        ProviderPollStream::Calendar,
-        1_699_999_900,
-    );
-    state.cursor = Some("2023-11-20".to_string());
-    let api = RecordingIntervalsApi::default();
-    let refresh = RecordingCalendarRefresh::default();
-    let service = ProviderPollingService::new(
-        api.clone(),
-        FakeIntervalsSettings,
-        RecordingProviderPollStateRepository::with_states(vec![state]),
-        RecordingImportService::default(),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_windows(7, 14, 7)
-    .with_incremental_lookback(2)
-    .with_calendar_view_refresh(refresh.clone());
-
-    service.poll_due_once().await.unwrap();
-
-    assert_eq!(
-        api.event_ranges(),
-        vec![("2023-11-18".to_string(), "2023-11-28".to_string())]
-    );
-    assert!(refresh.ranges().is_empty());
-}
-
-#[tokio::test]
-async fn poll_due_once_keeps_cursor_when_provider_returns_no_new_events() {
-    let mut state = ProviderPollState::new(
-        "user-1".to_string(),
-        ExternalProvider::Intervals,
-        ProviderPollStream::Calendar,
-        1_699_999_900,
-    );
-    state.cursor = Some("2026-05-10".to_string());
-    let poll_states = RecordingProviderPollStateRepository::with_states(vec![state]);
-    let service = ProviderPollingService::new(
-        RecordingIntervalsApi::default(),
-        FakeIntervalsSettings,
-        poll_states.clone(),
-        RecordingImportService::default(),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_windows(7, 14, 7)
-    .with_incremental_lookback(2);
-
-    service.poll_due_once().await.unwrap();
-
-    let stored = poll_states
-        .find_by_provider_and_stream(
-            "user-1",
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(stored.cursor.as_deref(), Some("2026-05-10"));
-}
-
-#[tokio::test]
-async fn first_calendar_sync_without_events_advances_cursor_to_window_end() {
-    let poll_states =
-        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
-            "user-1".to_string(),
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-            1_699_999_900,
-        )]);
-    let service = ProviderPollingService::new(
-        RecordingIntervalsApi::default(),
-        FakeIntervalsSettings,
-        poll_states.clone(),
-        RecordingImportService::default(),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_windows(7, 14, 7);
-
-    service.poll_due_once().await.unwrap();
-
-    let stored = poll_states
-        .find_by_provider_and_stream(
-            "user-1",
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(stored.cursor.as_deref(), Some("2023-11-28"));
-}
-
-#[tokio::test]
-async fn first_completed_sync_without_activities_advances_cursor_to_window_end() {
-    let poll_states =
-        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
-            "user-1".to_string(),
-            ExternalProvider::Intervals,
-            ProviderPollStream::CompletedWorkouts,
-            1_699_999_900,
-        )]);
-    let service = ProviderPollingService::new(
-        RecordingIntervalsApi::default(),
-        FakeIntervalsSettings,
-        poll_states.clone(),
-        RecordingImportService::default(),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_windows(7, 14, 7);
-
-    service.poll_due_once().await.unwrap();
-
-    let stored = poll_states
-        .find_by_provider_and_stream(
-            "user-1",
-            ExternalProvider::Intervals,
-            ProviderPollStream::CompletedWorkouts,
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(stored.cursor.as_deref(), Some("2023-11-14"));
-}
-
-#[tokio::test]
-async fn completed_stream_uses_independent_cursor() {
-    let mut state = ProviderPollState::new(
-        "user-1".to_string(),
-        ExternalProvider::Intervals,
-        ProviderPollStream::CompletedWorkouts,
-        1_699_999_900,
-    );
-    state.cursor = Some("2023-11-10".to_string());
-    let api = RecordingIntervalsApi::default();
-    let service = ProviderPollingService::new(
-        api.clone(),
-        FakeIntervalsSettings,
-        RecordingProviderPollStateRepository::with_states(vec![state]),
-        RecordingImportService::default(),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_windows(7, 14, 7)
-    .with_incremental_lookback(1);
-
-    service.poll_due_once().await.unwrap();
-
-    assert_eq!(
-        api.activity_ranges(),
-        vec![("2023-11-09".to_string(), "2023-11-14".to_string())]
-    );
-}
-
-#[tokio::test]
-async fn poll_due_once_marks_failure_and_backoff_when_import_fails() {
-    let poll_states =
-        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
-            "user-1".to_string(),
-            ExternalProvider::Intervals,
-            ProviderPollStream::CompletedWorkouts,
-            1_699_999_900,
-        )]);
-    let service = ProviderPollingService::new(
-        FakeIntervalsApi::with_activities(vec![sample_activity("activity-1")]),
-        FakeIntervalsSettings,
-        poll_states.clone(),
-        RecordingImportService::failing("import exploded"),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_timing(300, 120)
-    .with_windows(7, 14, 7);
-
-    let processed = service.poll_due_once().await.unwrap();
-
-    assert_eq!(processed, 1);
-    let stored = poll_states
-        .find_by_provider_and_stream(
-            "user-1",
-            ExternalProvider::Intervals,
-            ProviderPollStream::CompletedWorkouts,
-        )
-        .await
-        .unwrap()
-        .expect("expected stored poll state");
-    assert_eq!(stored.last_attempted_at_epoch_seconds, Some(1_700_000_000));
-    assert_eq!(stored.last_successful_at_epoch_seconds, None);
-    assert_eq!(stored.last_error.as_deref(), Some("import exploded"));
-    assert_eq!(stored.backoff_until_epoch_seconds, Some(1_700_000_120));
-    assert_eq!(stored.next_due_at_epoch_seconds, 1_700_000_120);
-}
-
-#[tokio::test]
-async fn poll_due_once_persists_attempt_before_calling_intervals() {
-    let shared_states = Arc::new(Mutex::new(vec![ProviderPollState::new(
-        "user-1".to_string(),
-        ExternalProvider::Intervals,
-        ProviderPollStream::Calendar,
-        1_699_999_900,
-    )]));
-    let poll_states = RecordingProviderPollStateRepository {
-        states: shared_states.clone(),
-    };
-    let service = ProviderPollingService::new(
-        AssertingIntervalsApi::new(shared_states),
-        FakeIntervalsSettings,
-        poll_states,
-        RecordingImportService::default(),
-        FixedClock,
-        FixedIdGenerator,
-    )
-    .with_windows(7, 14, 7);
-
-    service.poll_due_once().await.unwrap();
-}
-
 #[derive(Clone)]
-struct FixedClock;
+pub(super) struct FixedClock;
 
 impl Clock for FixedClock {
     fn now_epoch_seconds(&self) -> i64 {
@@ -345,7 +28,7 @@ impl Clock for FixedClock {
 }
 
 #[derive(Clone)]
-struct FixedIdGenerator;
+pub(super) struct FixedIdGenerator;
 
 impl IdGenerator for FixedIdGenerator {
     fn new_id(&self, prefix: &str) -> String {
@@ -354,20 +37,20 @@ impl IdGenerator for FixedIdGenerator {
 }
 
 #[derive(Clone, Default)]
-struct RecordingImportService {
+pub(super) struct RecordingImportService {
     commands: Arc<Mutex<Vec<ExternalImportCommand>>>,
     failure: Option<String>,
 }
 
 impl RecordingImportService {
-    fn failing(message: &str) -> Self {
+    pub(super) fn failing(message: &str) -> Self {
         Self {
             commands: Arc::new(Mutex::new(Vec::new())),
             failure: Some(message.to_string()),
         }
     }
 
-    fn commands(&self) -> Vec<ExternalImportCommand> {
+    pub(super) fn commands(&self) -> Vec<ExternalImportCommand> {
         self.commands.lock().unwrap().clone()
     }
 }
@@ -430,7 +113,7 @@ impl ExternalImportUseCases for RecordingImportService {
 }
 
 #[derive(Clone)]
-struct FakeIntervalsSettings;
+pub(super) struct FakeIntervalsSettings;
 
 impl IntervalsSettingsPort for FakeIntervalsSettings {
     fn get_credentials(
@@ -447,26 +130,26 @@ impl IntervalsSettingsPort for FakeIntervalsSettings {
 }
 
 #[derive(Clone, Default)]
-struct FakeIntervalsApi {
+pub(super) struct FakeIntervalsApi {
     events: Vec<Event>,
     activities: Vec<Activity>,
 }
 
 #[derive(Clone, Default)]
-struct RecordingIntervalsApi {
+pub(super) struct RecordingIntervalsApi {
     event_ranges: Arc<Mutex<Vec<(String, String)>>>,
     activity_ranges: Arc<Mutex<Vec<(String, String)>>>,
 }
 
 impl FakeIntervalsApi {
-    fn with_events(events: Vec<Event>) -> Self {
+    pub(super) fn with_events(events: Vec<Event>) -> Self {
         Self {
             events,
             activities: Vec::new(),
         }
     }
 
-    fn with_activities(activities: Vec<Activity>) -> Self {
+    pub(super) fn with_activities(activities: Vec<Activity>) -> Self {
         Self {
             events: Vec::new(),
             activities,
@@ -475,11 +158,11 @@ impl FakeIntervalsApi {
 }
 
 impl RecordingIntervalsApi {
-    fn event_ranges(&self) -> Vec<(String, String)> {
+    pub(super) fn event_ranges(&self) -> Vec<(String, String)> {
         self.event_ranges.lock().unwrap().clone()
     }
 
-    fn activity_ranges(&self) -> Vec<(String, String)> {
+    pub(super) fn activity_ranges(&self) -> Vec<(String, String)> {
         self.activity_ranges.lock().unwrap().clone()
     }
 }
@@ -621,12 +304,12 @@ impl IntervalsApiPort for RecordingIntervalsApi {
 }
 
 #[derive(Clone)]
-struct AssertingIntervalsApi {
+pub(super) struct AssertingIntervalsApi {
     states: Arc<Mutex<Vec<ProviderPollState>>>,
 }
 
 impl AssertingIntervalsApi {
-    fn new(states: Arc<Mutex<Vec<ProviderPollState>>>) -> Self {
+    pub(super) fn new(states: Arc<Mutex<Vec<ProviderPollState>>>) -> Self {
         Self { states }
     }
 }
@@ -693,12 +376,12 @@ impl IntervalsApiPort for AssertingIntervalsApi {
 }
 
 #[derive(Clone)]
-struct RecordingProviderPollStateRepository {
-    states: Arc<Mutex<Vec<ProviderPollState>>>,
+pub(super) struct RecordingProviderPollStateRepository {
+    pub(super) states: Arc<Mutex<Vec<ProviderPollState>>>,
 }
 
 impl RecordingProviderPollStateRepository {
-    fn with_states(states: Vec<ProviderPollState>) -> Self {
+    pub(super) fn with_states(states: Vec<ProviderPollState>) -> Self {
         Self {
             states: Arc::new(Mutex::new(states)),
         }
@@ -761,12 +444,12 @@ impl ProviderPollStateRepository for RecordingProviderPollStateRepository {
 }
 
 #[derive(Clone, Default)]
-struct RecordingCalendarRefresh {
+pub(super) struct RecordingCalendarRefresh {
     ranges: Arc<Mutex<Vec<(String, String, String)>>>,
 }
 
 impl RecordingCalendarRefresh {
-    fn ranges(&self) -> Vec<(String, String, String)> {
+    pub(super) fn ranges(&self) -> Vec<(String, String, String)> {
         self.ranges.lock().unwrap().clone()
     }
 }
@@ -789,7 +472,7 @@ impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
     }
 }
 
-fn sample_activity(activity_id: &str) -> Activity {
+pub(super) fn sample_activity(activity_id: &str) -> Activity {
     Activity {
         id: activity_id.to_string(),
         athlete_id: None,

@@ -10,482 +10,24 @@ use crate::domain::{
         CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics, CompletedWorkoutRepository,
         CompletedWorkoutStream, CompletedWorkoutZoneTime,
     },
+    external_sync::{
+        CanonicalEntityRef, ExternalObservation, ExternalObservationRepository, ExternalProvider,
+        ExternalSyncRepositoryError, ExternalSyncState, ExternalSyncStateRepository,
+    },
     identity::Clock,
     planned_workouts::{
         PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
         PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
         PlannedWorkoutText,
     },
-    races::{Race, RaceDiscipline, RaceError, RacePriority, RaceRepository},
-    special_days::{SpecialDay, SpecialDayError, SpecialDayKind, SpecialDayRepository},
+    races::{Race, RaceError, RaceRepository},
+    special_days::{SpecialDay, SpecialDayError, SpecialDayRepository},
 };
 
-use super::{
-    completed_workout_dedup::completed_workout_dedup_key, ExternalCompletedWorkoutImport,
-    ExternalImportCommand, ExternalImportError, ExternalImportService,
-    ExternalPlannedWorkoutImport, ExternalRaceImport, ExternalSpecialDayImport,
-};
-use crate::domain::external_sync::{
-    CanonicalEntityKind, CanonicalEntityRef, ExternalObjectKind, ExternalObservation,
-    ExternalObservationParams, ExternalObservationRepository, ExternalProvider,
-    ExternalSyncRepositoryError, ExternalSyncState, ExternalSyncStateRepository,
-};
-
-#[tokio::test]
-async fn import_planned_workout_persists_canonical_state_and_refreshes_day() {
-    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
-    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
-    let races = InMemoryRaceRepository::default();
-    let special_days = InMemorySpecialDayRepository::default();
-    let observations = InMemoryObservationRepository::default();
-    let sync_states = InMemorySyncStateRepository::default();
-    let refresh = RecordingRefresh::default();
-    let service = ExternalImportService::new(
-        planned_workouts.clone(),
-        completed_workouts,
-        races,
-        special_days,
-        observations.clone(),
-        sync_states.clone(),
-        FixedClock,
-    )
-    .with_calendar_view_refresh(refresh.clone());
-
-    let outcome = service
-        .import(ExternalImportCommand::UpsertPlannedWorkout(
-            ExternalPlannedWorkoutImport {
-                provider: ExternalProvider::Intervals,
-                external_id: "intervals-event-144".to_string(),
-                normalized_payload_hash: "hash-planned-1".to_string(),
-                workout: sample_planned_workout(),
-            },
-        ))
-        .await
-        .unwrap();
-
-    let stored = planned_workouts
-        .list_by_user_id_and_date_range("user-1", "2026-05-10", "2026-05-10")
-        .await
-        .unwrap();
-    assert_eq!(stored.len(), 1);
-    assert_eq!(stored[0].planned_workout_id, "planned-imported-1");
-    assert_eq!(observations.stored().len(), 1);
-    assert_eq!(sync_states.stored().len(), 1);
-    assert_eq!(
-        outcome.canonical_entity,
-        CanonicalEntityRef::new(
-            CanonicalEntityKind::PlannedWorkout,
-            "planned-imported-1".to_string(),
-        )
-    );
-    assert_eq!(
-        refresh.calls(),
-        vec![(
-            "user-1".to_string(),
-            "2026-05-10".to_string(),
-            "2026-05-10".to_string(),
-        )]
-    );
-}
-
-#[tokio::test]
-async fn import_completed_workout_persists_canonical_state_and_refreshes_start_day() {
-    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
-    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
-    let races = InMemoryRaceRepository::default();
-    let special_days = InMemorySpecialDayRepository::default();
-    let observations = InMemoryObservationRepository::default();
-    let sync_states = InMemorySyncStateRepository::default();
-    let refresh = RecordingRefresh::default();
-    let service = ExternalImportService::new(
-        planned_workouts,
-        completed_workouts.clone(),
-        races,
-        special_days,
-        observations.clone(),
-        sync_states.clone(),
-        FixedClock,
-    )
-    .with_calendar_view_refresh(refresh.clone());
-
-    let outcome = service
-        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
-            ExternalCompletedWorkoutImport {
-                provider: ExternalProvider::Intervals,
-                external_id: "intervals-activity-77".to_string(),
-                normalized_payload_hash: "hash-completed-1".to_string(),
-                workout: sample_completed_workout(),
-            },
-        )))
-        .await
-        .unwrap();
-
-    let stored = completed_workouts
-        .list_by_user_id_and_date_range("user-1", "2026-05-11", "2026-05-11")
-        .await
-        .unwrap();
-    assert_eq!(stored.len(), 1);
-    assert_eq!(stored[0].completed_workout_id, "completed-imported-1");
-    assert_eq!(observations.stored().len(), 1);
-    assert_eq!(sync_states.stored().len(), 1);
-    assert_eq!(
-        outcome.canonical_entity,
-        CanonicalEntityRef::new(
-            CanonicalEntityKind::CompletedWorkout,
-            "completed-imported-1".to_string(),
-        )
-    );
-    assert_eq!(
-        refresh.calls(),
-        vec![(
-            "user-1".to_string(),
-            "2026-05-11".to_string(),
-            "2026-05-11".to_string(),
-        )]
-    );
-}
-
-#[tokio::test]
-async fn import_completed_workout_reuses_existing_canonical_workout_for_matching_dedup_key() {
-    let observations = InMemoryObservationRepository::default();
-    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
-    let existing = sample_completed_workout();
-    completed_workouts.upsert(existing.clone()).await.unwrap();
-    observations
-        .upsert(ExternalObservation::new(ExternalObservationParams {
-            user_id: "user-1".to_string(),
-            provider: ExternalProvider::Intervals,
-            external_object_kind: ExternalObjectKind::CompletedWorkout,
-            external_id: "intervals-activity-77".to_string(),
-            canonical_entity: CanonicalEntityRef::new(
-                CanonicalEntityKind::CompletedWorkout,
-                existing.completed_workout_id.clone(),
-            ),
-            normalized_payload_hash: Some("hash-existing".to_string()),
-            dedup_key: completed_workout_dedup_key(&existing),
-            observed_at_epoch_seconds: 1_699_999_000,
-        }))
-        .await
-        .unwrap();
-    let service = ExternalImportService::new(
-        InMemoryPlannedWorkoutRepository::default(),
-        completed_workouts.clone(),
-        InMemoryRaceRepository::default(),
-        InMemorySpecialDayRepository::default(),
-        observations.clone(),
-        InMemorySyncStateRepository::default(),
-        FixedClock,
-    );
-
-    let incoming = sample_completed_workout_for_provider(
-        ExternalProvider::Wahoo,
-        "wahoo-activity-1",
-        Some(serde_json::json!([180, 240, 310, 330])),
-    );
-    let outcome = service
-        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
-            ExternalCompletedWorkoutImport {
-                provider: ExternalProvider::Wahoo,
-                external_id: "wahoo-activity-1".to_string(),
-                normalized_payload_hash: "hash-wahoo-1".to_string(),
-                workout: incoming,
-            },
-        )))
-        .await
-        .unwrap();
-
-    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
-    assert_eq!(stored.len(), 1);
-    assert_eq!(
-        stored[0].completed_workout_id,
-        existing.completed_workout_id
-    );
-    assert_eq!(
-        outcome.canonical_entity.entity_id,
-        existing.completed_workout_id
-    );
-    assert_eq!(observations.stored().len(), 2);
-}
-
-#[tokio::test]
-async fn import_completed_workout_matches_even_when_other_provider_arrives_first() {
-    let service = ExternalImportService::new(
-        InMemoryPlannedWorkoutRepository::default(),
-        InMemoryCompletedWorkoutRepository::default(),
-        InMemoryRaceRepository::default(),
-        InMemorySpecialDayRepository::default(),
-        InMemoryObservationRepository::default(),
-        InMemorySyncStateRepository::default(),
-        FixedClock,
-    );
-
-    let first = service
-        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
-            ExternalCompletedWorkoutImport {
-                provider: ExternalProvider::Wahoo,
-                external_id: "wahoo-activity-1".to_string(),
-                normalized_payload_hash: "hash-wahoo-1".to_string(),
-                workout: sample_completed_workout_for_provider(
-                    ExternalProvider::Wahoo,
-                    "wahoo-activity-1",
-                    None,
-                ),
-            },
-        )))
-        .await
-        .unwrap();
-    let second = service
-        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
-            ExternalCompletedWorkoutImport {
-                provider: ExternalProvider::Intervals,
-                external_id: "intervals-activity-77".to_string(),
-                normalized_payload_hash: "hash-intervals-1".to_string(),
-                workout: sample_completed_workout(),
-            },
-        )))
-        .await
-        .unwrap();
-
-    assert_eq!(
-        first.canonical_entity.entity_id,
-        second.canonical_entity.entity_id
-    );
-}
-
-#[tokio::test]
-async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help() {
-    let service = ExternalImportService::new(
-        InMemoryPlannedWorkoutRepository::default(),
-        InMemoryCompletedWorkoutRepository::default(),
-        InMemoryRaceRepository::default(),
-        InMemorySpecialDayRepository::default(),
-        InMemoryObservationRepository::default(),
-        InMemorySyncStateRepository::default(),
-        FixedClock,
-    );
-
-    let first = service
-        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
-            ExternalCompletedWorkoutImport {
-                provider: ExternalProvider::Intervals,
-                external_id: "intervals-activity-77".to_string(),
-                normalized_payload_hash: "hash-intervals-1".to_string(),
-                workout: sample_completed_workout(),
-            },
-        )))
-        .await
-        .unwrap();
-    let second = service
-        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
-            ExternalCompletedWorkoutImport {
-                provider: ExternalProvider::Other,
-                external_id: "provider-b-77".to_string(),
-                normalized_payload_hash: "hash-provider-b-1".to_string(),
-                workout: sample_completed_workout_for_provider(
-                    ExternalProvider::Other,
-                    "provider-b-77",
-                    None,
-                ),
-            },
-        )))
-        .await
-        .unwrap();
-
-    assert_eq!(
-        first.canonical_entity.entity_id,
-        second.canonical_entity.entity_id
-    );
-}
-
-#[tokio::test]
-async fn import_completed_workout_rejects_ambiguous_fingerprint_match() {
-    let observations = InMemoryObservationRepository::default();
-    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
-    let first = sample_completed_workout_with_id("completed-a");
-    let second = sample_completed_workout_with_id("completed-b");
-    let dedup_key = completed_workout_dedup_key(&first).unwrap();
-    completed_workouts.upsert(first.clone()).await.unwrap();
-    completed_workouts.upsert(second.clone()).await.unwrap();
-    for (provider, external_id, canonical_id) in [
-        (
-            ExternalProvider::Intervals,
-            "intervals-a",
-            first.completed_workout_id.clone(),
-        ),
-        (
-            ExternalProvider::Wahoo,
-            "wahoo-b",
-            second.completed_workout_id.clone(),
-        ),
-    ] {
-        observations
-            .upsert(ExternalObservation::new(ExternalObservationParams {
-                user_id: "user-1".to_string(),
-                provider,
-                external_object_kind: ExternalObjectKind::CompletedWorkout,
-                external_id: external_id.to_string(),
-                canonical_entity: CanonicalEntityRef::new(
-                    CanonicalEntityKind::CompletedWorkout,
-                    canonical_id,
-                ),
-                normalized_payload_hash: Some("hash-existing".to_string()),
-                dedup_key: Some(dedup_key.clone()),
-                observed_at_epoch_seconds: 1_699_999_000,
-            }))
-            .await
-            .unwrap();
-    }
-    let service = ExternalImportService::new(
-        InMemoryPlannedWorkoutRepository::default(),
-        completed_workouts,
-        InMemoryRaceRepository::default(),
-        InMemorySpecialDayRepository::default(),
-        observations,
-        InMemorySyncStateRepository::default(),
-        FixedClock,
-    );
-
-    let error = service
-        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
-            ExternalCompletedWorkoutImport {
-                provider: ExternalProvider::Other,
-                external_id: "provider-c-1".to_string(),
-                normalized_payload_hash: "hash-provider-c-1".to_string(),
-                workout: sample_completed_workout_for_provider(
-                    ExternalProvider::Other,
-                    "provider-c-1",
-                    None,
-                ),
-            },
-        )))
-        .await
-        .unwrap_err();
-
-    assert!(
-        matches!(error, ExternalImportError::CompletedWorkout(message) if message.contains("ambiguous"))
-    );
-}
-
-#[tokio::test]
-async fn import_race_persists_canonical_state_and_refreshes_day() {
-    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
-    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
-    let races = InMemoryRaceRepository::default();
-    let special_days = InMemorySpecialDayRepository::default();
-    let observations = InMemoryObservationRepository::default();
-    let sync_states = InMemorySyncStateRepository::default();
-    let refresh = RecordingRefresh::default();
-    let service = ExternalImportService::new(
-        planned_workouts,
-        completed_workouts,
-        races.clone(),
-        special_days,
-        observations.clone(),
-        sync_states.clone(),
-        FixedClock,
-    )
-    .with_calendar_view_refresh(refresh.clone());
-
-    let outcome = service
-        .import(ExternalImportCommand::UpsertRace(ExternalRaceImport {
-            provider: ExternalProvider::Intervals,
-            external_id: "race-44".to_string(),
-            normalized_payload_hash: "hash-race-1".to_string(),
-            race: Race {
-                race_id: "race-imported-1".to_string(),
-                user_id: "user-1".to_string(),
-                date: "2026-09-12".to_string(),
-                name: "Imported Race".to_string(),
-                distance_meters: 120_000,
-                discipline: RaceDiscipline::Gravel,
-                priority: RacePriority::B,
-                result: None,
-                created_at_epoch_seconds: 0,
-                updated_at_epoch_seconds: 0,
-            },
-        }))
-        .await
-        .unwrap();
-
-    assert_eq!(races.list_by_user_id("user-1").await.unwrap().len(), 1);
-    assert_eq!(observations.stored().len(), 1);
-    assert_eq!(sync_states.stored().len(), 1);
-    assert_eq!(
-        outcome.canonical_entity,
-        CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-imported-1".to_string())
-    );
-    assert_eq!(
-        refresh.calls(),
-        vec![(
-            "user-1".to_string(),
-            "2026-09-12".to_string(),
-            "2026-09-12".to_string(),
-        )]
-    );
-}
-
-#[tokio::test]
-async fn import_special_day_persists_canonical_state_and_refreshes_day() {
-    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
-    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
-    let races = InMemoryRaceRepository::default();
-    let special_days = InMemorySpecialDayRepository::default();
-    let observations = InMemoryObservationRepository::default();
-    let sync_states = InMemorySyncStateRepository::default();
-    let refresh = RecordingRefresh::default();
-    let service = ExternalImportService::new(
-        planned_workouts,
-        completed_workouts,
-        races,
-        special_days.clone(),
-        observations.clone(),
-        sync_states.clone(),
-        FixedClock,
-    )
-    .with_calendar_view_refresh(refresh.clone());
-
-    let outcome = service
-        .import(ExternalImportCommand::UpsertSpecialDay(
-            ExternalSpecialDayImport {
-                provider: ExternalProvider::Intervals,
-                external_id: "special-55".to_string(),
-                normalized_payload_hash: "hash-special-1".to_string(),
-                special_day: SpecialDay::new(
-                    "special-imported-1".to_string(),
-                    "user-1".to_string(),
-                    "2026-06-01".to_string(),
-                    SpecialDayKind::Note,
-                ),
-            },
-        ))
-        .await
-        .unwrap();
-
-    assert_eq!(
-        special_days.list_by_user_id("user-1").await.unwrap().len(),
-        1
-    );
-    assert_eq!(observations.stored().len(), 1);
-    assert_eq!(sync_states.stored().len(), 1);
-    assert_eq!(
-        outcome.canonical_entity,
-        CanonicalEntityRef::new(
-            CanonicalEntityKind::SpecialDay,
-            "special-imported-1".to_string(),
-        )
-    );
-    assert_eq!(
-        refresh.calls(),
-        vec![(
-            "user-1".to_string(),
-            "2026-06-01".to_string(),
-            "2026-06-01".to_string(),
-        )]
-    );
-}
+use super::super::ExternalImportService;
 
 #[derive(Clone)]
-struct FixedClock;
+pub(super) struct FixedClock;
 
 impl Clock for FixedClock {
     fn now_epoch_seconds(&self) -> i64 {
@@ -494,12 +36,12 @@ impl Clock for FixedClock {
 }
 
 #[derive(Clone, Default)]
-struct InMemoryObservationRepository {
+pub(super) struct InMemoryObservationRepository {
     stored: Arc<Mutex<Vec<ExternalObservation>>>,
 }
 
 #[derive(Clone, Default)]
-struct InMemoryPlannedWorkoutRepository {
+pub(super) struct InMemoryPlannedWorkoutRepository {
     stored: Arc<Mutex<Vec<PlannedWorkout>>>,
 }
 
@@ -564,12 +106,12 @@ impl PlannedWorkoutRepository for InMemoryPlannedWorkoutRepository {
 }
 
 #[derive(Clone, Default)]
-struct InMemoryCompletedWorkoutRepository {
+pub(super) struct InMemoryCompletedWorkoutRepository {
     stored: Arc<Mutex<Vec<CompletedWorkout>>>,
 }
 
 #[derive(Clone, Default)]
-struct InMemoryRaceRepository {
+pub(super) struct InMemoryRaceRepository {
     stored: Arc<Mutex<Vec<Race>>>,
 }
 
@@ -661,7 +203,7 @@ impl RaceRepository for InMemoryRaceRepository {
 }
 
 #[derive(Clone, Default)]
-struct InMemorySpecialDayRepository {
+pub(super) struct InMemorySpecialDayRepository {
     stored: Arc<Mutex<Vec<SpecialDay>>>,
 }
 
@@ -788,7 +330,7 @@ impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
 }
 
 impl InMemoryObservationRepository {
-    fn stored(&self) -> Vec<ExternalObservation> {
+    pub(super) fn stored(&self) -> Vec<ExternalObservation> {
         self.stored.lock().unwrap().clone()
     }
 }
@@ -841,7 +383,7 @@ impl ExternalObservationRepository for InMemoryObservationRepository {
     fn find_by_dedup_key(
         &self,
         user_id: &str,
-        external_object_kind: ExternalObjectKind,
+        external_object_kind: crate::domain::external_sync::ExternalObjectKind,
         dedup_key: &str,
     ) -> crate::domain::external_sync::BoxFuture<
         Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>,
@@ -866,12 +408,12 @@ impl ExternalObservationRepository for InMemoryObservationRepository {
 }
 
 #[derive(Clone, Default)]
-struct InMemorySyncStateRepository {
+pub(super) struct InMemorySyncStateRepository {
     stored: Arc<Mutex<Vec<ExternalSyncState>>>,
 }
 
 impl InMemorySyncStateRepository {
-    fn stored(&self) -> Vec<ExternalSyncState> {
+    pub(super) fn stored(&self) -> Vec<ExternalSyncState> {
         self.stored.lock().unwrap().clone()
     }
 }
@@ -942,12 +484,12 @@ impl ExternalSyncStateRepository for InMemorySyncStateRepository {
 }
 
 #[derive(Clone, Default)]
-struct RecordingRefresh {
+pub(super) struct RecordingRefresh {
     calls: Arc<Mutex<Vec<(String, String, String)>>>,
 }
 
 impl RecordingRefresh {
-    fn calls(&self) -> Vec<(String, String, String)> {
+    pub(super) fn calls(&self) -> Vec<(String, String, String)> {
         self.calls.lock().unwrap().clone()
     }
 }
@@ -970,7 +512,64 @@ impl CalendarEntryViewRefreshPort for RecordingRefresh {
     }
 }
 
-fn sample_planned_workout() -> PlannedWorkout {
+pub(super) fn external_import_service(
+    planned_workouts: InMemoryPlannedWorkoutRepository,
+    completed_workouts: InMemoryCompletedWorkoutRepository,
+    races: InMemoryRaceRepository,
+    special_days: InMemorySpecialDayRepository,
+    observations: InMemoryObservationRepository,
+    sync_states: InMemorySyncStateRepository,
+    refresh: RecordingRefresh,
+) -> ExternalImportService<
+    InMemoryPlannedWorkoutRepository,
+    InMemoryCompletedWorkoutRepository,
+    InMemoryRaceRepository,
+    InMemorySpecialDayRepository,
+    InMemoryObservationRepository,
+    InMemorySyncStateRepository,
+    FixedClock,
+    RecordingRefresh,
+> {
+    ExternalImportService::new(
+        planned_workouts,
+        completed_workouts,
+        races,
+        special_days,
+        observations,
+        sync_states,
+        FixedClock,
+    )
+    .with_calendar_view_refresh(refresh)
+}
+
+pub(super) fn external_import_service_without_refresh(
+    planned_workouts: InMemoryPlannedWorkoutRepository,
+    completed_workouts: InMemoryCompletedWorkoutRepository,
+    races: InMemoryRaceRepository,
+    special_days: InMemorySpecialDayRepository,
+    observations: InMemoryObservationRepository,
+    sync_states: InMemorySyncStateRepository,
+) -> ExternalImportService<
+    InMemoryPlannedWorkoutRepository,
+    InMemoryCompletedWorkoutRepository,
+    InMemoryRaceRepository,
+    InMemorySpecialDayRepository,
+    InMemoryObservationRepository,
+    InMemorySyncStateRepository,
+    FixedClock,
+> {
+    ExternalImportService::new(
+        planned_workouts,
+        completed_workouts,
+        races,
+        special_days,
+        observations,
+        sync_states,
+        FixedClock,
+    )
+}
+
+pub(super) fn sample_planned_workout() -> PlannedWorkout {
     PlannedWorkout::new(
         "planned-imported-1".to_string(),
         "user-1".to_string(),
@@ -993,11 +592,11 @@ fn sample_planned_workout() -> PlannedWorkout {
     )
 }
 
-fn sample_completed_workout() -> CompletedWorkout {
+pub(super) fn sample_completed_workout() -> CompletedWorkout {
     sample_completed_workout_with_id("completed-imported-1")
 }
 
-fn sample_completed_workout_with_id(completed_workout_id: &str) -> CompletedWorkout {
+pub(super) fn sample_completed_workout_with_id(completed_workout_id: &str) -> CompletedWorkout {
     sample_completed_workout_for_provider(
         ExternalProvider::Intervals,
         completed_workout_id,
@@ -1005,7 +604,7 @@ fn sample_completed_workout_with_id(completed_workout_id: &str) -> CompletedWork
     )
 }
 
-fn sample_completed_workout_for_provider(
+pub(super) fn sample_completed_workout_for_provider(
     _provider: ExternalProvider,
     completed_workout_id: &str,
     primary_series: Option<serde_json::Value>,

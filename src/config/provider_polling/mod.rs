@@ -272,65 +272,92 @@ where
 
         match state.stream {
             ProviderPollStream::Calendar => {
-                let range = self.calendar_poll_range(state, now_epoch_seconds)?;
-                let events = self
-                    .intervals_api
-                    .list_events(&credentials, &range)
+                self.poll_intervals_calendar_stream(state, &credentials, now_epoch_seconds)
                     .await
-                    .map_err(|error| error.to_string())?;
-                for event in &events {
-                    match map_event_to_import_command(&state.user_id, event, &self.ids) {
-                        Ok(Some(command)) => {
-                            self.imports
-                                .import(command)
-                                .await
-                                .map_err(|error| error.to_string())?;
-                        }
-                        Ok(None) => {}
-                        Err(error) => warn!(
-                            user_id = %state.user_id,
-                            event_id = event.id,
-                            error = %error,
-                            "skipping intervals event that could not be normalized for import"
-                        ),
-                    }
-                }
-                let cursor = advance_calendar_cursor(state, &events, &range);
-
-                if state.cursor.is_none() {
-                    self.refresh
-                        .refresh_range_for_user(&state.user_id, &range.oldest, &range.newest)
-                        .await
-                        .map_err(|error| error.to_string())?;
-                }
-
-                Ok(cursor)
             }
             ProviderPollStream::CompletedWorkouts => {
-                let range = self.completed_workout_poll_range(state, now_epoch_seconds)?;
-                let activities = self
-                    .intervals_api
-                    .list_activities(&credentials, &range)
-                    .await
-                    .map_err(|error| error.to_string())?;
-                for activity in &activities {
-                    self.imports
-                        .import(map_activity_to_import_command(&state.user_id, activity))
-                        .await
-                        .map_err(|error| error.to_string())?;
-                }
-                let cursor = advance_completed_workout_cursor(state, &activities, &range);
-
-                if state.cursor.is_none() {
-                    self.refresh
-                        .refresh_range_for_user(&state.user_id, &range.oldest, &range.newest)
-                        .await
-                        .map_err(|error| error.to_string())?;
-                }
-
-                Ok(cursor)
+                self.poll_intervals_completed_workouts_stream(
+                    state,
+                    &credentials,
+                    now_epoch_seconds,
+                )
+                .await
             }
         }
+    }
+
+    async fn poll_intervals_calendar_stream(
+        &self,
+        state: &ProviderPollState,
+        credentials: &crate::domain::intervals::IntervalsCredentials,
+        now_epoch_seconds: i64,
+    ) -> Result<Option<String>, String> {
+        let range = self.calendar_poll_range(state, now_epoch_seconds)?;
+        let events = self
+            .intervals_api
+            .list_events(credentials, &range)
+            .await
+            .map_err(|error| error.to_string())?;
+        for event in &events {
+            match map_event_to_import_command(&state.user_id, event, &self.ids) {
+                Ok(Some(command)) => {
+                    self.imports
+                        .import(command)
+                        .await
+                        .map_err(|error| error.to_string())?;
+                }
+                Ok(None) => {}
+                Err(error) => warn!(
+                    user_id = %state.user_id,
+                    event_id = event.id,
+                    error = %error,
+                    "skipping intervals event that could not be normalized for import"
+                ),
+            }
+        }
+        let cursor = advance_calendar_cursor(state, &events, &range);
+        self.refresh_full_range_on_initial_sync(state, &range)
+            .await?;
+        Ok(cursor)
+    }
+
+    async fn poll_intervals_completed_workouts_stream(
+        &self,
+        state: &ProviderPollState,
+        credentials: &crate::domain::intervals::IntervalsCredentials,
+        now_epoch_seconds: i64,
+    ) -> Result<Option<String>, String> {
+        let range = self.completed_workout_poll_range(state, now_epoch_seconds)?;
+        let activities = self
+            .intervals_api
+            .list_activities(credentials, &range)
+            .await
+            .map_err(|error| error.to_string())?;
+        for activity in &activities {
+            self.imports
+                .import(map_activity_to_import_command(&state.user_id, activity))
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+        let cursor = advance_completed_workout_cursor(state, &activities, &range);
+        self.refresh_full_range_on_initial_sync(state, &range)
+            .await?;
+        Ok(cursor)
+    }
+
+    async fn refresh_full_range_on_initial_sync(
+        &self,
+        state: &ProviderPollState,
+        range: &DateRange,
+    ) -> Result<(), String> {
+        if state.cursor.is_none() {
+            self.refresh
+                .refresh_range_for_user(&state.user_id, &range.oldest, &range.newest)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+
+        Ok(())
     }
 
     fn calendar_poll_range(

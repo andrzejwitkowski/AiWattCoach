@@ -1,3 +1,5 @@
+use super::date_keys::start_minute_bucket;
+
 use crate::domain::{
     completed_workouts::{
         CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutStream,
@@ -6,7 +8,7 @@ use crate::domain::{
 };
 
 pub(super) fn completed_workout_dedup_key(workout: &CompletedWorkout) -> Option<String> {
-    let start_bucket = workout.start_date_local.get(..16)?.to_string();
+    let start_bucket = start_minute_bucket(&workout.start_date_local)?;
     let duration_seconds = completed_workout_duration_seconds(workout)?;
     let distance_bucket_meters = completed_workout_distance_bucket(workout);
     let stream_bucket = completed_workout_stream_bucket(workout);

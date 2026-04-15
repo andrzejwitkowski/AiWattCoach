@@ -22,61 +22,72 @@ pub fn map_event_to_import_command(
     _ids: &impl IdGenerator,
 ) -> Result<Option<ExternalImportCommand>, intervals::PlannedWorkoutParseError> {
     match event.category {
-        EventCategory::Workout => Ok(Some(ExternalImportCommand::UpsertPlannedWorkout(
-            ExternalPlannedWorkoutImport {
-                provider: ExternalProvider::Intervals,
-                external_id: event.id.to_string(),
-                normalized_payload_hash: hash_event(event),
-                workout: PlannedWorkout::new(
-                    format!("intervals-event:{}", event.id),
-                    user_id.to_string(),
-                    event_date(&event.start_date_local).to_string(),
-                    map_event_to_planned_workout_payload(event)?,
-                ),
-            },
-        ))),
+        EventCategory::Workout => map_workout_event_import(user_id, event).map(Some),
         EventCategory::Race
         | EventCategory::RaceA
         | EventCategory::RaceB
-        | EventCategory::RaceC => Ok(Some(ExternalImportCommand::UpsertRace(
-            ExternalRaceImport {
-                provider: ExternalProvider::Intervals,
-                external_id: event.id.to_string(),
-                normalized_payload_hash: hash_event(event),
-                race: Race {
-                    race_id: format!("intervals-race:{}", event.id),
-                    user_id: user_id.to_string(),
-                    date: event_date(&event.start_date_local).to_string(),
-                    name: event
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| "Intervals race".to_string()),
-                    distance_meters: infer_race_distance_meters(event.description.as_deref()),
-                    discipline: infer_race_discipline(event.event_type.as_deref()),
-                    priority: map_race_priority(&event.category),
-                    result: None,
-                    created_at_epoch_seconds: 0,
-                    updated_at_epoch_seconds: 0,
-                },
-            },
-        ))),
+        | EventCategory::RaceC => Ok(Some(map_race_event_import(user_id, event))),
         EventCategory::Note
         | EventCategory::Target
         | EventCategory::Season
-        | EventCategory::Other => Ok(Some(ExternalImportCommand::UpsertSpecialDay(
-            ExternalSpecialDayImport {
-                provider: ExternalProvider::Intervals,
-                external_id: event.id.to_string(),
-                normalized_payload_hash: hash_event(event),
-                special_day: SpecialDay::new(
-                    format!("intervals-special-day:{}", event.id),
-                    user_id.to_string(),
-                    event_date(&event.start_date_local).to_string(),
-                    map_special_day_kind(&event.category),
-                ),
-            },
-        ))),
+        | EventCategory::Other => Ok(Some(map_special_day_event_import(user_id, event))),
     }
+}
+
+fn map_workout_event_import(
+    user_id: &str,
+    event: &Event,
+) -> Result<ExternalImportCommand, intervals::PlannedWorkoutParseError> {
+    Ok(ExternalImportCommand::UpsertPlannedWorkout(
+        ExternalPlannedWorkoutImport {
+            provider: ExternalProvider::Intervals,
+            external_id: event.id.to_string(),
+            normalized_payload_hash: hash_event(event),
+            workout: PlannedWorkout::new(
+                format!("intervals-event:{}", event.id),
+                user_id.to_string(),
+                event_date(&event.start_date_local).to_string(),
+                map_event_to_planned_workout_payload(event)?,
+            ),
+        },
+    ))
+}
+
+fn map_race_event_import(user_id: &str, event: &Event) -> ExternalImportCommand {
+    ExternalImportCommand::UpsertRace(ExternalRaceImport {
+        provider: ExternalProvider::Intervals,
+        external_id: event.id.to_string(),
+        normalized_payload_hash: hash_event(event),
+        race: Race {
+            race_id: format!("intervals-race:{}", event.id),
+            user_id: user_id.to_string(),
+            date: event_date(&event.start_date_local).to_string(),
+            name: event
+                .name
+                .clone()
+                .unwrap_or_else(|| "Intervals race".to_string()),
+            distance_meters: infer_race_distance_meters(event.description.as_deref()),
+            discipline: infer_race_discipline(event.event_type.as_deref()),
+            priority: map_race_priority(&event.category),
+            result: None,
+            created_at_epoch_seconds: 0,
+            updated_at_epoch_seconds: 0,
+        },
+    })
+}
+
+fn map_special_day_event_import(user_id: &str, event: &Event) -> ExternalImportCommand {
+    ExternalImportCommand::UpsertSpecialDay(ExternalSpecialDayImport {
+        provider: ExternalProvider::Intervals,
+        external_id: event.id.to_string(),
+        normalized_payload_hash: hash_event(event),
+        special_day: SpecialDay::new(
+            format!("intervals-special-day:{}", event.id),
+            user_id.to_string(),
+            event_date(&event.start_date_local).to_string(),
+            map_special_day_kind(&event.category),
+        ),
+    })
 }
 
 pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> ExternalImportCommand {

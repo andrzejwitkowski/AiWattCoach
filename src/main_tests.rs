@@ -6,11 +6,9 @@ use std::{
 };
 
 #[cfg(unix)]
-use crate::wait_for_sigterm;
-use crate::{
-    finish_server_shutdown, reconcile_intervals_poll_states, should_reset_poll_state,
-    wait_for_ctrl_c,
-};
+use crate::main_support::wait_for_sigterm;
+use crate::main_support::{should_reset_poll_state, wait_for_ctrl_c};
+use crate::{finish_server_shutdown, reconcile_intervals_poll_states};
 use aiwattcoach::{
     adapters::mongo::{
         provider_poll_states::MongoProviderPollStateRepository,
@@ -144,7 +142,46 @@ fn finish_server_shutdown_combines_server_and_telemetry_errors() {
 }
 
 #[test]
-fn should_reset_poll_state_only_when_intervals_timestamp_is_newer() {
+fn should_reset_poll_state_when_existing_state_is_missing() {
+    assert!(should_reset_poll_state(None, None));
+}
+
+#[test]
+fn should_not_reset_poll_state_without_intervals_update_timestamp() {
+    let state = ProviderPollState {
+        user_id: "user-1".to_string(),
+        provider: ExternalProvider::Intervals,
+        stream: ProviderPollStream::Calendar,
+        cursor: Some("2026-05-01".to_string()),
+        next_due_at_epoch_seconds: i64::MAX,
+        last_attempted_at_epoch_seconds: Some(100),
+        last_successful_at_epoch_seconds: Some(100),
+        last_error: None,
+        backoff_until_epoch_seconds: None,
+    };
+
+    assert!(!should_reset_poll_state(Some(&state), None));
+}
+
+#[test]
+fn should_not_reset_poll_state_when_intervals_timestamp_matches_latest_touch() {
+    let state = ProviderPollState {
+        user_id: "user-1".to_string(),
+        provider: ExternalProvider::Intervals,
+        stream: ProviderPollStream::Calendar,
+        cursor: Some("2026-05-01".to_string()),
+        next_due_at_epoch_seconds: i64::MAX,
+        last_attempted_at_epoch_seconds: Some(100),
+        last_successful_at_epoch_seconds: Some(100),
+        last_error: None,
+        backoff_until_epoch_seconds: None,
+    };
+
+    assert!(!should_reset_poll_state(Some(&state), Some(100)));
+}
+
+#[test]
+fn should_reset_poll_state_when_intervals_timestamp_is_newer_than_latest_touch() {
     let state = ProviderPollState {
         user_id: "user-1".to_string(),
         provider: ExternalProvider::Intervals,
@@ -158,14 +195,10 @@ fn should_reset_poll_state_only_when_intervals_timestamp_is_newer() {
     };
 
     assert!(should_reset_poll_state(Some(&state), Some(101)));
-    assert!(!should_reset_poll_state(Some(&state), Some(100)));
-    assert!(!should_reset_poll_state(Some(&state), Some(99)));
-    assert!(!should_reset_poll_state(Some(&state), None));
-    assert!(should_reset_poll_state(None, None));
 }
 
 #[test]
-fn should_reset_poll_state_uses_latest_poll_touch_timestamp() {
+fn should_reset_poll_state_compares_against_latest_poll_touch_timestamp() {
     let state = ProviderPollState {
         user_id: "user-1".to_string(),
         provider: ExternalProvider::Intervals,
