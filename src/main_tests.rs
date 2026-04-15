@@ -67,7 +67,7 @@ impl Clock for FixedClock {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn ctrl_c_registration_error_logs_and_does_not_finish_shutdown_future() {
+async fn ctrl_c_registration_error_logs_and_finishes_shutdown_future() {
     let logs = SharedLogBuffer::default();
     let subscriber = tracing_subscriber::fmt()
         .with_ansi(false)
@@ -86,7 +86,7 @@ async fn ctrl_c_registration_error_logs_and_does_not_finish_shutdown_future() {
     )
     .await;
 
-    assert!(result.is_err());
+    assert!(result.is_ok());
     let output = logs.contents();
     assert!(output
         .lines()
@@ -95,7 +95,7 @@ async fn ctrl_c_registration_error_logs_and_does_not_finish_shutdown_future() {
 
 #[cfg(unix)]
 #[tokio::test(flavor = "current_thread")]
-async fn sigterm_registration_error_logs_and_does_not_finish_shutdown_future() {
+async fn sigterm_registration_error_logs_and_finishes_shutdown_future() {
     let logs = SharedLogBuffer::default();
     let subscriber = tracing_subscriber::fmt()
         .with_ansi(false)
@@ -111,7 +111,7 @@ async fn sigterm_registration_error_logs_and_does_not_finish_shutdown_future() {
     )
     .await;
 
-    assert!(result.is_err());
+    assert!(result.is_ok());
     let output = logs.contents();
     assert!(output
         .lines()
@@ -402,8 +402,8 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
 }
 
 async fn test_mongo_client_or_skip() -> Option<Client> {
-    let mongo_uri = "mongodb://localhost:27017";
-    let client = match Client::with_uri_str(mongo_uri).await {
+    let mongo_uri = test_mongo_uri();
+    let client = match Client::with_uri_str(&mongo_uri).await {
         Ok(client) => client,
         Err(error) => {
             if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
@@ -440,6 +440,14 @@ async fn test_mongo_client_or_skip() -> Option<Client> {
             None
         }
     }
+}
+
+fn test_mongo_uri() -> String {
+    std::env::var("MONGODB_URI")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "mongodb://localhost:27017".to_string())
 }
 
 fn unique_test_database_name(prefix: &str) -> String {

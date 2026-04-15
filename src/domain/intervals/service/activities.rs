@@ -53,9 +53,16 @@ where
     ) -> Result<Activity, IntervalsError> {
         let credentials = self.settings.get_credentials(user_id).await?;
         let activity = self.api.get_activity(&credentials, activity_id).await?;
-        let activity = self.activities.upsert(user_id, activity).await?;
         let activity_date = activity_date(&activity.start_date_local).to_string();
-        if let Err(error) = self
+        if let Err(error) = self.activities.upsert(user_id, activity.clone()).await {
+            warn!(
+                ?error,
+                %user_id,
+                activity_id,
+                date = %activity_date,
+                "activity get succeeded upstream but local persistence failed"
+            );
+        } else if let Err(error) = self
             .refresh
             .refresh_range_for_user(user_id, &activity_date, &activity_date)
             .await

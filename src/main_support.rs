@@ -213,10 +213,7 @@ where
 {
     match ctrl_c.await {
         Ok(()) => shutdown.notify_waiters(),
-        Err(error) => {
-            tracing::error!(%error, "Failed to listen for Ctrl+C");
-            shutdown.notified().await;
-        }
+        Err(error) => tracing::error!(%error, "Failed to listen for Ctrl+C"),
     }
 }
 
@@ -230,9 +227,6 @@ pub(crate) async fn wait_for_sigterm(
             signal.recv().await;
             shutdown.notify_waiters();
         }
-        Err(error) => {
-            tracing::error!(%error, "Failed to listen for SIGTERM");
-            shutdown.notified().await;
-        }
+        Err(error) => tracing::error!(%error, "Failed to listen for SIGTERM"),
     }
 }

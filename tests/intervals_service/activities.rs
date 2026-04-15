@@ -158,6 +158,35 @@ async fn get_activity_persists_fetched_activity() {
 }
 
 #[tokio::test]
+async fn get_activity_returns_upstream_result_when_local_persistence_fails() {
+    let activity = sample_activity("i77", "Threshold Ride");
+    let api = FakeIntervalsApi::with_get_activity(activity.clone());
+    let settings = FakeSettingsPort::with_credentials(valid_credentials());
+    let repository = FakeActivityRepository::with_upsert_error(IntervalsError::Internal(
+        "mongo unavailable".to_string(),
+    ));
+    let repository_calls = repository.call_log.clone();
+    let refresh = RecordingCalendarRefresh::default();
+    let service = IntervalsService::new(
+        api,
+        settings,
+        repository,
+        NoopActivityUploadOperationRepository::default(),
+        NoopActivityFileIdentityExtractor,
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    let fetched = service.get_activity("user-1", "i77").await.unwrap();
+
+    assert_eq!(fetched, activity);
+    assert_eq!(
+        repository_calls.lock().unwrap().as_slice(),
+        &[RepoCall::Upsert("i77".to_string())]
+    );
+    assert!(refresh.calls().is_empty());
+}
+
+#[tokio::test]
 async fn list_activities_does_not_clobber_existing_enriched_completed_activity() {
     let mut enriched = sample_activity("i79", "Completed Workout");
     enriched.details.intervals = vec![ActivityInterval {

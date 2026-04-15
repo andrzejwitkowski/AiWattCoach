@@ -226,7 +226,7 @@ async fn load_projected_workouts(
         .map(|document| document.operation_key.as_str())
         .collect::<Vec<_>>();
     let snapshot_start_dates =
-        load_snapshot_start_dates(snapshot_collection, Some(user_id), &operation_keys).await?;
+        load_snapshot_start_dates(snapshot_collection, user_id, &operation_keys).await?;
 
     documents
         .into_iter()
@@ -271,16 +271,14 @@ async fn load_imported_workouts(
 
 async fn load_snapshot_start_dates(
     snapshot_collection: &Collection<TrainingPlanSnapshotLookupDocument>,
-    user_id: Option<&str>,
+    user_id: &str,
     operation_keys: &[&str],
 ) -> Result<HashMap<String, String>, PlannedWorkoutError> {
     if operation_keys.is_empty() {
         return Ok(HashMap::new());
     }
 
-    let filter = user_id
-        .map(|user_id| doc! { "user_id": user_id, "operation_key": { "$in": operation_keys } })
-        .unwrap_or_else(|| doc! { "operation_key": { "$in": operation_keys } });
+    let filter = doc! { "user_id": user_id, "operation_key": { "$in": operation_keys } };
 
     snapshot_collection
         .find(filter)

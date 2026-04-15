@@ -60,7 +60,7 @@ pub struct IntervalsPollBootstrapUser {
 #[derive(Clone, Debug, Deserialize)]
 struct IntervalsPollBootstrapUserDocument {
     user_id: String,
-    created_at_epoch_seconds: Option<i64>,
+    updated_at_epoch_seconds: Option<i64>,
     intervals: Option<IntervalsPollBootstrapIntervalsDocument>,
 }
 
@@ -204,7 +204,7 @@ impl MongoUserSettingsRepository {
                 "_id": 0,
                 "user_id": 1,
                 "intervals": 1,
-                "created_at_epoch_seconds": 1,
+                "updated_at_epoch_seconds": 1,
             })
             .sort(doc! { "user_id": 1 })
             .await
@@ -220,26 +220,20 @@ impl MongoUserSettingsRepository {
                     return true;
                 }
 
-                let Some(intervals) = document.intervals.as_ref() else {
-                    return false;
-                };
-
-                has_non_empty(intervals.api_key.as_deref())
-                    || has_non_empty(intervals.athlete_id.as_deref())
-                    || intervals.updated_at_epoch_seconds.is_some()
+                should_include_non_requested_bootstrap_user(document)
             })
-            .map(|document| IntervalsPollBootstrapUser {
-                user_id: document.user_id,
-                desired_active: document.intervals.as_ref().is_some_and(|intervals| {
-                    has_non_empty(intervals.api_key.as_deref())
-                        && has_non_empty(intervals.athlete_id.as_deref())
-                        && intervals.connected != Some(false)
-                }),
-                intervals_updated_at_epoch_seconds: document
+            .map(|document| {
+                let desired_active = document
                     .intervals
                     .as_ref()
-                    .and_then(|intervals| intervals.updated_at_epoch_seconds)
-                    .or(document.created_at_epoch_seconds),
+                    .is_some_and(is_bootstrap_active_intervals);
+                let intervals_updated_at_epoch_seconds = bootstrap_intervals_updated_at(&document);
+
+                IntervalsPollBootstrapUser {
+                    user_id: document.user_id,
+                    desired_active,
+                    intervals_updated_at_epoch_seconds,
+                }
             })
             .collect())
     }
@@ -249,12 +243,35 @@ fn has_non_empty(value: Option<&str>) -> bool {
     value.is_some_and(|value| !value.trim().is_empty())
 }
 
+fn is_bootstrap_active_intervals(intervals: &IntervalsPollBootstrapIntervalsDocument) -> bool {
+    has_non_empty(intervals.api_key.as_deref())
+        && has_non_empty(intervals.athlete_id.as_deref())
+        && intervals.connected != Some(false)
+}
+
+fn should_include_non_requested_bootstrap_user(
+    document: &IntervalsPollBootstrapUserDocument,
+) -> bool {
+    document
+        .intervals
+        .as_ref()
+        .is_some_and(is_bootstrap_active_intervals)
+}
+
+fn bootstrap_intervals_updated_at(document: &IntervalsPollBootstrapUserDocument) -> Option<i64> {
+    document
+        .intervals
+        .as_ref()
+        .and_then(|intervals| intervals.updated_at_epoch_seconds)
+        .or(document.updated_at_epoch_seconds)
+}
+
 fn build_intervals_poll_bootstrap_filter(user_ids: &[String]) -> mongodb::bson::Document {
     let mut filter_clauses = vec![doc! {
-        "$or": [
+        "$and": [
             { "intervals.api_key": { "$type": "string", "$regex": "\\S" } },
             { "intervals.athlete_id": { "$type": "string", "$regex": "\\S" } },
-            { "intervals.updated_at_epoch_seconds": { "$type": "number" } },
+            { "intervals.connected": { "$ne": false } },
         ]
     }];
 
@@ -640,9 +657,12 @@ mod tests {
     };
 
     use super::{
-        build_intervals_poll_bootstrap_filter, default_availability_document, has_non_empty,
+        bootstrap_intervals_updated_at, build_intervals_poll_bootstrap_filter,
+        default_availability_document, has_non_empty, is_bootstrap_active_intervals,
         map_document_availability_to_domain, map_domain_availability_to_document, AiAgentsDocument,
-        IntervalsPollBootstrapUser, MongoUserSettingsRepository, OptionsDocument, SettingsDocument,
+        IntervalsPollBootstrapIntervalsDocument, IntervalsPollBootstrapUser,
+        IntervalsPollBootstrapUserDocument, MongoUserSettingsRepository, OptionsDocument,
+        SettingsDocument,
     };
     use crate::domain::settings::{
         AvailabilityDay, AvailabilitySettings, UserSettingsRepository, Weekday,
@@ -851,10 +871,10 @@ mod tests {
             doc! {
                 "$or": [
                     {
-                        "$or": [
+                        "$and": [
                             { "intervals.api_key": { "$type": "string", "$regex": "\\S" } },
                             { "intervals.athlete_id": { "$type": "string", "$regex": "\\S" } },
-                            { "intervals.updated_at_epoch_seconds": { "$type": "number" } },
+                            { "intervals.connected": { "$ne": false } },
                         ]
                     },
                     { "user_id": { "$in": ["user-1"] } },
@@ -872,15 +892,75 @@ mod tests {
             doc! {
                 "$or": [
                     {
-                        "$or": [
+                        "$and": [
                             { "intervals.api_key": { "$type": "string", "$regex": "\\S" } },
                             { "intervals.athlete_id": { "$type": "string", "$regex": "\\S" } },
-                            { "intervals.updated_at_epoch_seconds": { "$type": "number" } },
+                            { "intervals.connected": { "$ne": false } },
                         ]
                     },
                 ]
             }
         );
+    }
+
+    #[test]
+    fn is_bootstrap_active_intervals_requires_complete_connected_credentials() {
+        assert!(is_bootstrap_active_intervals(
+            &IntervalsPollBootstrapIntervalsDocument {
+                api_key: Some("api-key".to_string()),
+                athlete_id: Some("athlete-1".to_string()),
+                connected: Some(true),
+                updated_at_epoch_seconds: Some(10),
+            }
+        ));
+        assert!(is_bootstrap_active_intervals(
+            &IntervalsPollBootstrapIntervalsDocument {
+                api_key: Some("api-key".to_string()),
+                athlete_id: Some("athlete-1".to_string()),
+                connected: None,
+                updated_at_epoch_seconds: None,
+            }
+        ));
+        assert!(!is_bootstrap_active_intervals(
+            &IntervalsPollBootstrapIntervalsDocument {
+                api_key: Some(" ".to_string()),
+                athlete_id: Some("athlete-1".to_string()),
+                connected: Some(true),
+                updated_at_epoch_seconds: Some(10),
+            }
+        ));
+        assert!(!is_bootstrap_active_intervals(
+            &IntervalsPollBootstrapIntervalsDocument {
+                api_key: Some("api-key".to_string()),
+                athlete_id: None,
+                connected: Some(true),
+                updated_at_epoch_seconds: Some(10),
+            }
+        ));
+        assert!(!is_bootstrap_active_intervals(
+            &IntervalsPollBootstrapIntervalsDocument {
+                api_key: Some("api-key".to_string()),
+                athlete_id: Some("athlete-1".to_string()),
+                connected: Some(false),
+                updated_at_epoch_seconds: Some(10),
+            }
+        ));
+    }
+
+    #[test]
+    fn bootstrap_intervals_updated_at_falls_back_to_document_updated_at() {
+        let document = IntervalsPollBootstrapUserDocument {
+            user_id: "user-1".to_string(),
+            updated_at_epoch_seconds: Some(40),
+            intervals: Some(IntervalsPollBootstrapIntervalsDocument {
+                api_key: Some("api-key".to_string()),
+                athlete_id: Some("athlete-1".to_string()),
+                connected: Some(true),
+                updated_at_epoch_seconds: None,
+            }),
+        };
+
+        assert_eq!(bootstrap_intervals_updated_at(&document), Some(40));
     }
 
     #[tokio::test]
@@ -990,6 +1070,7 @@ mod tests {
 
         let users = repository
             .list_intervals_poll_bootstrap_users(&[
+                "explicitly-disconnected-user".to_string(),
                 "disconnected-user".to_string(),
                 "poll-only-user".to_string(),
             ])
@@ -1186,8 +1267,8 @@ mod tests {
     }
 
     async fn test_mongo_client_or_skip() -> Option<Client> {
-        let mongo_uri = "mongodb://localhost:27017";
-        let client = match Client::with_uri_str(mongo_uri).await {
+        let mongo_uri = test_mongo_uri();
+        let client = match Client::with_uri_str(&mongo_uri).await {
             Ok(client) => client,
             Err(error) => {
                 if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
@@ -1222,6 +1303,14 @@ mod tests {
                 None
             }
         }
+    }
+
+    fn test_mongo_uri() -> String {
+        std::env::var("MONGODB_URI")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "mongodb://localhost:27017".to_string())
     }
 
     fn unique_test_database_name(prefix: &str) -> String {
