@@ -8,7 +8,7 @@ use crate::domain::{
     completed_workouts::{
         CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutError,
         CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics, CompletedWorkoutRepository,
-        CompletedWorkoutStream, CompletedWorkoutZoneTime,
+        CompletedWorkoutSeries, CompletedWorkoutStream, CompletedWorkoutZoneTime,
     },
     external_sync::{
         CanonicalEntityRef, ExternalObservation, ExternalObservationRepository, ExternalProvider,
@@ -626,14 +626,14 @@ pub(super) fn sample_completed_workout_with_id(completed_workout_id: &str) -> Co
     sample_completed_workout_for_provider(
         ExternalProvider::Intervals,
         completed_workout_id,
-        Some(serde_json::json!([180, 240, 310])),
+        Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310])),
     )
 }
 
 pub(super) fn sample_completed_workout_for_provider(
     _provider: ExternalProvider,
     completed_workout_id: &str,
-    primary_series: Option<serde_json::Value>,
+    primary_series: Option<CompletedWorkoutSeries>,
 ) -> CompletedWorkout {
     CompletedWorkout::new(
         completed_workout_id.to_string(),

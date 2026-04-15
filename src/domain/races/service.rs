@@ -324,6 +324,37 @@ where
                     )
                     .await
                     .map_err(map_intervals_error)?
+            } else if let Some(existing_event) = self
+                .find_existing_remote_race_event(&pending.user_id, &pending)
+                .await?
+            {
+                self.sync_states
+                    .upsert(
+                        pending_sync_state
+                            .clone()
+                            .mark_remote_created(existing_event.id.to_string()),
+                    )
+                    .await
+                    .map_err(map_sync_repository_error)?;
+
+                self.intervals
+                    .update_event(
+                        &pending.user_id,
+                        existing_event.id,
+                        UpdateEvent {
+                            category: Some(projected_event_category(&pending)),
+                            start_date_local: Some(projected_event_start_date_local(&pending.date)),
+                            event_type: Some(projected_event_type(&pending).to_string()),
+                            name: Some(projected_event_name(&pending)),
+                            description: Some(projected_event_description(&pending)),
+                            indoor: Some(false),
+                            color: None,
+                            workout_doc: None,
+                            file_upload: None,
+                        },
+                    )
+                    .await
+                    .map_err(map_intervals_error)?
             } else {
                 let remote_event = self
                     .intervals
@@ -381,6 +412,32 @@ where
                 Err(error)
             }
         }
+    }
+
+    async fn find_existing_remote_race_event(
+        &self,
+        user_id: &str,
+        race: &Race,
+    ) -> Result<Option<crate::domain::intervals::Event>, RaceError> {
+        let date_range = DateRange {
+            oldest: race.date.clone(),
+            newest: race.date.clone(),
+        };
+        let canonical_race_marker = canonical_race_id_marker(&race.race_id);
+
+        let events = self
+            .intervals
+            .list_events(user_id, &date_range)
+            .await
+            .map_err(map_intervals_error)?;
+
+        Ok(events.into_iter().find(|event| {
+            event.description.as_deref().is_some_and(|description| {
+                description
+                    .lines()
+                    .any(|line| line == canonical_race_marker)
+            })
+        }))
     }
 }
 
@@ -540,11 +597,16 @@ fn projected_event_category(race: &Race) -> crate::domain::intervals::EventCateg
 
 fn projected_event_description(race: &Race) -> String {
     format!(
-        "distance_meters={}\ndiscipline={}\npriority={}",
+        "distance_meters={}\ndiscipline={}\npriority={}\n{}",
         race.distance_meters,
         race.discipline.as_str(),
-        race.priority.as_str()
+        race.priority.as_str(),
+        canonical_race_id_marker(&race.race_id)
     )
+}
+
+fn canonical_race_id_marker(race_id: &str) -> String {
+    format!("canonical_race_id={race_id}")
 }
 
 fn map_intervals_error(error: IntervalsError) -> RaceError {

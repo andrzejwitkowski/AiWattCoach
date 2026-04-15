@@ -5,7 +5,7 @@ mod tests;
 
 pub use model::{
     CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutError, CompletedWorkoutInterval,
-    CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics, CompletedWorkoutStream,
-    CompletedWorkoutZoneTime,
+    CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+    CompletedWorkoutStream, CompletedWorkoutZoneTime,
 };
 pub use ports::{BoxFuture, CompletedWorkoutRepository};

@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::domain::completed_workouts::{
     BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutDetails,
     CompletedWorkoutError, CompletedWorkoutInterval, CompletedWorkoutIntervalGroup,
-    CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutStream,
-    CompletedWorkoutZoneTime,
+    CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutSeries,
+    CompletedWorkoutStream, CompletedWorkoutZoneTime,
 };
 
 #[derive(Clone)]
@@ -452,8 +452,8 @@ fn map_stream_to_document(stream: &CompletedWorkoutStream) -> CompletedWorkoutSt
     CompletedWorkoutStreamDocument {
         stream_type: stream.stream_type.clone(),
         name: stream.name.clone(),
-        primary_series: stream.primary_series.clone(),
-        secondary_series: stream.secondary_series.clone(),
+        primary_series: map_series_to_value(stream.primary_series.as_ref()),
+        secondary_series: map_series_to_value(stream.secondary_series.as_ref()),
         value_type_is_array: stream.value_type_is_array,
         custom: stream.custom,
         all_null: stream.all_null,
@@ -464,20 +464,68 @@ fn map_stream_to_domain(stream: CompletedWorkoutStreamDocument) -> CompletedWork
     CompletedWorkoutStream {
         stream_type: stream.stream_type,
         name: stream.name,
-        primary_series: stream.primary_series,
-        secondary_series: stream.secondary_series,
+        primary_series: map_stream_series(stream.primary_series),
+        secondary_series: map_stream_series(stream.secondary_series),
         value_type_is_array: stream.value_type_is_array,
         custom: stream.custom,
         all_null: stream.all_null,
     }
 }
 
+fn map_series_to_value(series: Option<&CompletedWorkoutSeries>) -> Option<serde_json::Value> {
+    match series? {
+        CompletedWorkoutSeries::Integers(values) => Some(serde_json::json!(values)),
+        CompletedWorkoutSeries::Floats(values) => Some(serde_json::json!(values)),
+        CompletedWorkoutSeries::Bools(values) => Some(serde_json::json!(values)),
+        CompletedWorkoutSeries::Strings(values) => Some(serde_json::json!(values)),
+    }
+}
+
+fn map_stream_series(value: Option<serde_json::Value>) -> Option<CompletedWorkoutSeries> {
+    let value = value?;
+    let serde_json::Value::Array(items) = value else {
+        return None;
+    };
+
+    if items.iter().all(|item| item.as_i64().is_some()) {
+        return Some(CompletedWorkoutSeries::Integers(
+            items.into_iter().filter_map(|item| item.as_i64()).collect(),
+        ));
+    }
+
+    if items.iter().all(|item| item.as_f64().is_some()) {
+        return Some(CompletedWorkoutSeries::Floats(
+            items.into_iter().filter_map(|item| item.as_f64()).collect(),
+        ));
+    }
+
+    if items.iter().all(|item| item.as_bool().is_some()) {
+        return Some(CompletedWorkoutSeries::Bools(
+            items
+                .into_iter()
+                .filter_map(|item| item.as_bool())
+                .collect(),
+        ));
+    }
+
+    if items.iter().all(|item| item.as_str().is_some()) {
+        return Some(CompletedWorkoutSeries::Strings(
+            items
+                .into_iter()
+                .filter_map(|item| item.as_str().map(ToString::to_string))
+                .collect(),
+        ));
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use crate::domain::completed_workouts::{
         CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutInterval,
-        CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics, CompletedWorkoutStream,
-        CompletedWorkoutZoneTime,
+        CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+        CompletedWorkoutStream, CompletedWorkoutZoneTime,
     };
 
     use super::{map_document_to_domain, map_workout_to_document};
@@ -544,7 +592,7 @@ mod tests {
                 streams: vec![CompletedWorkoutStream {
                     stream_type: "watts".to_string(),
                     name: Some("Power".to_string()),
-                    primary_series: Some(serde_json::json!([180, 220, 260])),
+                    primary_series: Some(CompletedWorkoutSeries::Integers(vec![180, 220, 260])),
                     secondary_series: None,
                     value_type_is_array: false,
                     custom: false,

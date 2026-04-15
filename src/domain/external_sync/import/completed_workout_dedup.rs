@@ -2,7 +2,8 @@ use super::date_keys::start_minute_bucket;
 
 use crate::domain::{
     completed_workouts::{
-        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutStream,
+        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+        CompletedWorkoutStream,
     },
     intervals::{round_distance_bucket, round_duration_bucket},
 };
@@ -87,8 +88,8 @@ fn completed_workout_stream_bucket(workout: &CompletedWorkout) -> String {
 }
 
 fn completed_workout_stream_sample_count(stream: &CompletedWorkoutStream) -> Option<i32> {
-    let primary = json_array_len(stream.primary_series.as_ref());
-    let secondary = json_array_len(stream.secondary_series.as_ref());
+    let primary = series_len(stream.primary_series.as_ref());
+    let secondary = series_len(stream.secondary_series.as_ref());
     primary.or(secondary)
 }
 
@@ -115,18 +116,30 @@ fn completed_workout_stream_distance_bucket(workout: &CompletedWorkout) -> Optio
         })
 }
 
-fn json_array_len(value: Option<&serde_json::Value>) -> Option<i32> {
-    let len = value?.as_array()?.len();
+fn series_len(series: Option<&CompletedWorkoutSeries>) -> Option<i32> {
+    let len = match series? {
+        CompletedWorkoutSeries::Integers(values) => values.len(),
+        CompletedWorkoutSeries::Floats(values) => values.len(),
+        CompletedWorkoutSeries::Bools(values) => values.len(),
+        CompletedWorkoutSeries::Strings(values) => values.len(),
+    };
     i32::try_from(len).ok().filter(|value| *value > 0)
 }
 
-fn last_numeric_value(value: Option<&serde_json::Value>) -> Option<f64> {
-    value?
-        .as_array()?
-        .iter()
-        .rev()
-        .find_map(serde_json::Value::as_f64)
-        .filter(|value| value.is_finite() && *value > 0.0)
+fn last_numeric_value(series: Option<&CompletedWorkoutSeries>) -> Option<f64> {
+    match series? {
+        CompletedWorkoutSeries::Integers(values) => values
+            .iter()
+            .rev()
+            .map(|value| *value as f64)
+            .find(|value| value.is_finite() && *value > 0.0),
+        CompletedWorkoutSeries::Floats(values) => values
+            .iter()
+            .rev()
+            .copied()
+            .find(|value| value.is_finite() && *value > 0.0),
+        CompletedWorkoutSeries::Bools(_) | CompletedWorkoutSeries::Strings(_) => None,
+    }
 }
 
 pub(super) fn merge_completed_workout(

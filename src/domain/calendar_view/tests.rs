@@ -2,8 +2,8 @@ use crate::domain::{
     calendar::{PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository, PlannedWorkoutSyncStatus},
     completed_workouts::CompletedWorkoutRepository,
     completed_workouts::{
-        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutStream,
-        CompletedWorkoutZoneTime,
+        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+        CompletedWorkoutStream, CompletedWorkoutZoneTime,
     },
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
@@ -1215,7 +1215,7 @@ fn sample_completed_workout() -> CompletedWorkout {
             streams: vec![CompletedWorkoutStream {
                 stream_type: "watts".to_string(),
                 name: Some("Power".to_string()),
-                primary_series: Some(serde_json::json!([180, 240, 310])),
+                primary_series: Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310])),
                 secondary_series: None,
                 value_type_is_array: false,
                 custom: false,

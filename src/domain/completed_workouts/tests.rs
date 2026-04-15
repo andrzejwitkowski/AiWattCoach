@@ -1,6 +1,6 @@
 use super::{
     CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutRepository,
-    CompletedWorkoutStream, CompletedWorkoutZoneTime,
+    CompletedWorkoutSeries, CompletedWorkoutStream, CompletedWorkoutZoneTime,
 };
 
 #[test]
@@ -31,7 +31,7 @@ fn completed_workout_uses_local_canonical_id() {
             streams: vec![CompletedWorkoutStream {
                 stream_type: "watts".to_string(),
                 name: Some("Power".to_string()),
-                primary_series: Some(serde_json::json!([180, 240, 310])),
+                primary_series: Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310])),
                 secondary_series: None,
                 value_type_is_array: false,
                 custom: false,
@@ -132,7 +132,7 @@ fn sample_workout(
             streams: vec![CompletedWorkoutStream {
                 stream_type: "watts".to_string(),
                 name: Some("Power".to_string()),
-                primary_series: Some(serde_json::json!([180, 240, 310])),
+                primary_series: Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310])),
                 secondary_series: None,
                 value_type_is_array: false,
                 custom: false,

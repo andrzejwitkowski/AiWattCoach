@@ -362,6 +362,7 @@ struct RecordingIntervalsService {
     created_events: Arc<Mutex<Vec<CreateEvent>>>,
     updated_events: Arc<Mutex<Vec<(i64, UpdateEvent)>>>,
     deleted_event_ids: Arc<Mutex<Vec<i64>>>,
+    listed_events: Arc<Mutex<Vec<Event>>>,
     fail_updates: bool,
 }
 
@@ -403,6 +404,13 @@ impl RecordingIntervalsService {
             ..Self::default()
         }
     }
+
+    fn with_listed_events(events: Vec<Event>) -> Self {
+        Self {
+            listed_events: Arc::new(Mutex::new(events)),
+            ..Self::default()
+        }
+    }
 }
 
 impl IntervalsUseCases for RecordingIntervalsService {
@@ -411,7 +419,8 @@ impl IntervalsUseCases for RecordingIntervalsService {
         _user_id: &str,
         _range: &DateRange,
     ) -> IntervalsBoxFuture<Result<Vec<Event>, IntervalsError>> {
-        Box::pin(async { Ok(Vec::new()) })
+        let listed_events = self.listed_events.clone();
+        Box::pin(async move { Ok(listed_events.lock().unwrap().clone()) })
     }
 
     fn get_event(
@@ -532,6 +541,10 @@ async fn create_race_persists_and_syncs_to_intervals() {
     let created_events = intervals.created_events.lock().unwrap();
     assert_eq!(created_events.len(), 1);
     assert_eq!(created_events[0].category, EventCategory::RaceB);
+    assert_eq!(
+        created_events[0].description.as_deref(),
+        Some("distance_meters=120000\ndiscipline=gravel\npriority=B\ncanonical_race_id=race-123")
+    );
     assert_eq!(repository.stored().len(), 1);
     let sync_state = sync_states.stored().pop().expect("expected sync state");
     assert_eq!(sync_state.external_id.as_deref(), Some("77"));
@@ -754,6 +767,76 @@ async fn create_race_retry_after_lost_final_sync_write_updates_existing_remote_e
 
     assert_eq!(intervals.created_events.lock().unwrap().len(), 1);
     assert_eq!(intervals.updated_events.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn create_race_retry_without_external_id_reuses_existing_remote_event() {
+    let repository = InMemoryRaceRepository::with_races(vec![Race {
+        race_id: "race-123".to_string(),
+        user_id: "user-1".to_string(),
+        date: "2026-09-12".to_string(),
+        name: "Gravel Attack".to_string(),
+        distance_meters: 120_000,
+        discipline: RaceDiscipline::Gravel,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 1,
+    }]);
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    let intervals = RecordingIntervalsService::with_listed_events(vec![Event {
+        id: 77,
+        start_date_local: "2026-09-12T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Race Gravel Attack".to_string()),
+        category: EventCategory::RaceB,
+        description: Some(
+            "distance_meters=120000\ndiscipline=gravel\npriority=B\ncanonical_race_id=race-123"
+                .to_string(),
+        ),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    }]);
+    let service = RaceService::new(
+        repository,
+        intervals.clone(),
+        sync_states.clone(),
+        TestClock,
+        TestIdGenerator::default(),
+    );
+
+    service
+        .update_race(
+            "user-1",
+            "race-123",
+            UpdateRace {
+                date: "2026-09-12".to_string(),
+                name: "Updated Gravel Attack".to_string(),
+                distance_meters: 125_000,
+                discipline: RaceDiscipline::Road,
+                priority: RacePriority::A,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(intervals.created_events.lock().unwrap().len(), 0);
+    assert_eq!(intervals.updated_events.lock().unwrap().len(), 1);
+    let updated_events = intervals.updated_events.lock().unwrap();
+    assert_eq!(updated_events[0].0, 77);
+    assert_eq!(
+        updated_events[0].1.name.as_deref(),
+        Some("Race Updated Gravel Attack")
+    );
+    assert_eq!(updated_events[0].1.category, Some(EventCategory::RaceA));
+    assert_eq!(
+        updated_events[0].1.description.as_deref(),
+        Some("distance_meters=125000\ndiscipline=road\npriority=A\ncanonical_race_id=race-123")
+    );
+    let stored_sync = sync_states.stored();
+    assert_eq!(stored_sync.len(), 1);
+    assert_eq!(stored_sync[0].external_id.as_deref(), Some("77"));
 }
 
 #[tokio::test]

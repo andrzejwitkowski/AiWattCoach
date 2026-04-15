@@ -1,6 +1,15 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CompletedWorkoutSeries {
+    Integers(Vec<i64>),
+    Floats(Vec<f64>),
+    Bools(Vec<bool>),
+    Strings(Vec<String>),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CompletedWorkoutMetrics {
     pub training_stress_score: Option<i32>,
     pub normalized_power_watts: Option<i32>,
@@ -71,8 +80,8 @@ pub struct CompletedWorkoutStream {
     // Providers may expose one or two raw payload series for the same stream type.
     // The canonical model keeps these as generic primary/secondary series and lets
     // `stream_type` define the business meaning (for example watts, cadence, heartrate).
-    pub primary_series: Option<serde_json::Value>,
-    pub secondary_series: Option<serde_json::Value>,
+    pub primary_series: Option<CompletedWorkoutSeries>,
+    pub secondary_series: Option<CompletedWorkoutSeries>,
     pub value_type_is_array: bool,
     pub custom: bool,
     pub all_null: bool,

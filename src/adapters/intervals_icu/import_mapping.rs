@@ -2,8 +2,8 @@ use sha2::{Digest, Sha256};
 
 use crate::domain::{
     completed_workouts::{
-        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutStream,
-        CompletedWorkoutZoneTime,
+        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+        CompletedWorkoutStream, CompletedWorkoutZoneTime,
     },
     external_sync::{
         ExternalCompletedWorkoutImport, ExternalImportCommand, ExternalPlannedWorkoutImport,
@@ -176,8 +176,8 @@ pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> Ext
                     .map(|stream| CompletedWorkoutStream {
                         stream_type: stream.stream_type,
                         name: stream.name,
-                        primary_series: stream.data,
-                        secondary_series: stream.data2,
+                        primary_series: map_stream_series(stream.data),
+                        secondary_series: map_stream_series(stream.data2),
                         value_type_is_array: stream.value_type_is_array,
                         custom: stream.custom,
                         all_null: stream.all_null,
@@ -201,6 +201,45 @@ pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> Ext
             },
         ),
     }))
+}
+
+fn map_stream_series(value: Option<serde_json::Value>) -> Option<CompletedWorkoutSeries> {
+    let value = value?;
+    let serde_json::Value::Array(items) = value else {
+        return None;
+    };
+
+    if items.iter().all(|item| item.as_i64().is_some()) {
+        return Some(CompletedWorkoutSeries::Integers(
+            items.into_iter().filter_map(|item| item.as_i64()).collect(),
+        ));
+    }
+
+    if items.iter().all(|item| item.as_f64().is_some()) {
+        return Some(CompletedWorkoutSeries::Floats(
+            items.into_iter().filter_map(|item| item.as_f64()).collect(),
+        ));
+    }
+
+    if items.iter().all(|item| item.as_bool().is_some()) {
+        return Some(CompletedWorkoutSeries::Bools(
+            items
+                .into_iter()
+                .filter_map(|item| item.as_bool())
+                .collect(),
+        ));
+    }
+
+    if items.iter().all(|item| item.as_str().is_some()) {
+        return Some(CompletedWorkoutSeries::Strings(
+            items
+                .into_iter()
+                .filter_map(|item| item.as_str().map(ToString::to_string))
+                .collect(),
+        ));
+    }
+
+    None
 }
 
 fn map_event_to_planned_workout_payload(
