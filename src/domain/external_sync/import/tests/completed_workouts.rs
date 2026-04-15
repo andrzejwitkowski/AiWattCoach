@@ -324,7 +324,7 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
         .upsert(PlannedWorkoutToken::new(
             "user-1".to_string(),
             "planned-imported-1".to_string(),
-            "PW123ABC45".to_string(),
+            "AB123CDE45".to_string(),
         ))
         .await
         .unwrap();
@@ -346,7 +346,7 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-1".to_string(),
-                marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=PW123ABC45]".to_string()],
+                marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=AB123CDE45]".to_string()],
                 workout: sample_completed_workout(),
             },
         )))
