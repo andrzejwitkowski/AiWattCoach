@@ -30,7 +30,7 @@ pub enum ExternalObjectKind {
     SpecialDay,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanonicalEntityKind {
     PlannedWorkout,
     CompletedWorkout,
@@ -38,7 +38,7 @@ pub enum CanonicalEntityKind {
     SpecialDay,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CanonicalEntityRef {
     pub entity_kind: CanonicalEntityKind,
     pub entity_id: String,

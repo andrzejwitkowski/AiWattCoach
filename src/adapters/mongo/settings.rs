@@ -197,26 +197,7 @@ impl MongoUserSettingsRepository {
         let collection = self
             .collection
             .clone_with_type::<IntervalsPollBootstrapUserDocument>();
-        let filter = if user_ids.is_empty() {
-            doc! {
-                "$or": [
-                    { "intervals.api_key": { "$exists": true } },
-                    { "intervals.athlete_id": { "$exists": true } },
-                    { "intervals.connected": { "$exists": true } },
-                    { "intervals.updated_at_epoch_seconds": { "$exists": true } },
-                ]
-            }
-        } else {
-            doc! {
-                "$or": [
-                    { "user_id": { "$in": user_ids } },
-                    { "intervals.api_key": { "$exists": true } },
-                    { "intervals.athlete_id": { "$exists": true } },
-                    { "intervals.connected": { "$exists": true } },
-                    { "intervals.updated_at_epoch_seconds": { "$exists": true } },
-                ]
-            }
-        };
+        let filter = build_intervals_poll_bootstrap_filter(user_ids);
         let documents = collection
             .find(filter)
             .projection(doc! {
@@ -266,6 +247,22 @@ impl MongoUserSettingsRepository {
 
 fn has_non_empty(value: Option<&str>) -> bool {
     value.is_some_and(|value| !value.trim().is_empty())
+}
+
+fn build_intervals_poll_bootstrap_filter(user_ids: &[String]) -> mongodb::bson::Document {
+    let mut filter_clauses = vec![doc! {
+        "$or": [
+            { "intervals.api_key": { "$type": "string", "$regex": "\\S" } },
+            { "intervals.athlete_id": { "$type": "string", "$regex": "\\S" } },
+            { "intervals.updated_at_epoch_seconds": { "$type": "number" } },
+        ]
+    }];
+
+    if !user_ids.is_empty() {
+        filter_clauses.push(doc! { "user_id": { "$in": user_ids } });
+    }
+
+    doc! { "$or": filter_clauses }
 }
 
 impl UserSettingsRepository for MongoUserSettingsRepository {
@@ -643,9 +640,9 @@ mod tests {
     };
 
     use super::{
-        default_availability_document, has_non_empty, map_document_availability_to_domain,
-        map_domain_availability_to_document, AiAgentsDocument, IntervalsPollBootstrapUser,
-        MongoUserSettingsRepository, OptionsDocument, SettingsDocument,
+        build_intervals_poll_bootstrap_filter, default_availability_document, has_non_empty,
+        map_document_availability_to_domain, map_domain_availability_to_document, AiAgentsDocument,
+        IntervalsPollBootstrapUser, MongoUserSettingsRepository, OptionsDocument, SettingsDocument,
     };
     use crate::domain::settings::{
         AvailabilityDay, AvailabilitySettings, UserSettingsRepository, Weekday,
@@ -845,6 +842,47 @@ mod tests {
         assert!(!has_non_empty(None));
     }
 
+    #[test]
+    fn build_intervals_poll_bootstrap_filter_matches_non_empty_credentials_or_existing_users() {
+        let filter = build_intervals_poll_bootstrap_filter(&["user-1".to_string()]);
+
+        assert_eq!(
+            filter,
+            doc! {
+                "$or": [
+                    {
+                        "$or": [
+                            { "intervals.api_key": { "$type": "string", "$regex": "\\S" } },
+                            { "intervals.athlete_id": { "$type": "string", "$regex": "\\S" } },
+                            { "intervals.updated_at_epoch_seconds": { "$type": "number" } },
+                        ]
+                    },
+                    { "user_id": { "$in": ["user-1"] } },
+                ]
+            }
+        );
+    }
+
+    #[test]
+    fn build_intervals_poll_bootstrap_filter_omits_user_id_clause_without_existing_users() {
+        let filter = build_intervals_poll_bootstrap_filter(&[]);
+
+        assert_eq!(
+            filter,
+            doc! {
+                "$or": [
+                    {
+                        "$or": [
+                            { "intervals.api_key": { "$type": "string", "$regex": "\\S" } },
+                            { "intervals.athlete_id": { "$type": "string", "$regex": "\\S" } },
+                            { "intervals.updated_at_epoch_seconds": { "$type": "number" } },
+                        ]
+                    },
+                ]
+            }
+        );
+    }
+
     #[tokio::test]
     async fn list_intervals_poll_bootstrap_users_keeps_existing_poll_users_even_when_disconnected()
     {
@@ -926,6 +964,25 @@ mod tests {
                     },
                     ..build_settings_document("invalid-connected-user", 50)
                 },
+                serde_json::from_value::<SettingsDocument>(serde_json::json!({
+                    "user_id": "blank-legacy-user",
+                    "ai_agents": {},
+                    "intervals": {
+                        "api_key": "   ",
+                        "athlete_id": "   ",
+                        "connected": true,
+                        "updated_at_epoch_seconds": null
+                    },
+                    "options": {},
+                    "availability": {
+                        "configured": false,
+                        "days": []
+                    },
+                    "cycling": {},
+                    "created_at_epoch_seconds": 1,
+                    "updated_at_epoch_seconds": 55
+                }))
+                .unwrap(),
                 build_settings_document("disconnected-user", 40),
             ])
             .await
@@ -974,6 +1031,7 @@ mod tests {
                 },
             ]
         );
+        assert!(!users.iter().any(|user| user.user_id == "blank-legacy-user"));
 
         client.database(&database_name).drop().await.unwrap();
     }

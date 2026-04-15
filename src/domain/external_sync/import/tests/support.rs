@@ -463,6 +463,32 @@ impl ExternalSyncStateRepository for InMemorySyncStateRepository {
         })
     }
 
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|state| {
+                    state.user_id == user_id
+                        && state.provider == provider
+                        && canonical_entities.contains(&state.canonical_entity)
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
     fn delete_by_provider_and_canonical_entity(
         &self,
         user_id: &str,

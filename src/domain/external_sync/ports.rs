@@ -41,6 +41,13 @@ pub trait ExternalSyncStateRepository: Clone + Send + Sync + 'static {
         canonical_entity: &CanonicalEntityRef,
     ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>>;
 
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>>;
+
     fn delete_by_provider_and_canonical_entity(
         &self,
         user_id: &str,
@@ -119,6 +126,15 @@ impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
         _canonical_entity: &CanonicalEntityRef,
     ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 
     fn delete_by_provider_and_canonical_entity(
