@@ -1,5 +1,5 @@
 use crate::domain::{
-    completed_workouts::CompletedWorkoutRepository,
+    completed_workouts::{CompletedWorkoutRepository, CompletedWorkoutSeries},
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalImportCommand, ExternalObjectKind,
         ExternalObservation, ExternalObservationParams, ExternalObservationRepository,
@@ -103,7 +103,7 @@ async fn import_completed_workout_reuses_existing_canonical_workout_for_matching
     let incoming = sample_completed_workout_for_provider(
         ExternalProvider::Wahoo,
         "wahoo-activity-1",
-        Some(serde_json::json!([180, 240, 310, 330])),
+        Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310, 330])),
     );
     let outcome = service
         .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
