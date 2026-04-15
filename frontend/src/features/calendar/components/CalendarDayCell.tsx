@@ -60,7 +60,9 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     ?? nonRaceEvents.find((event) => Boolean(event.actualWorkout))
     ?? day.events[0]
     ?? null;
-  const visibleActivity = primaryCompletedActivity ?? primaryActivity;
+  const visibleActivity = primaryPlannedItem
+    ? null
+    : (primaryCompletedActivity ?? primaryActivity);
   const primaryPlannedWorkoutEvent = raceLabel
     ? primaryPlannedItem?.event ?? null
     : primaryPlannedItem?.event

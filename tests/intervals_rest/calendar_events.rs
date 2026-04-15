@@ -18,11 +18,13 @@ use tower::util::ServiceExt;
 use crate::{
     app::{
         intervals_test_app, intervals_test_app_with_calendar_entries,
+        intervals_test_app_with_calendar_entries_and_completed_workouts,
         intervals_test_app_with_projections,
         intervals_test_app_with_projections_and_calendar_entries, sample_calendar_entry,
         sample_planned_calendar_entry, InMemoryCalendarEntryViewRepository,
+        InMemoryCompletedWorkoutRepository,
     },
-    fixtures::{get_json, session_cookie},
+    fixtures::{get_json, sample_completed_workout, session_cookie},
     identity_fakes::{SessionMappedIdentityService, TestIdentityServiceWithSession},
     intervals_fakes::{ScopedIntervalsService, TestIntervalsService},
 };
@@ -85,6 +87,57 @@ async fn list_calendar_events_returns_local_planned_entries_for_authenticated_us
     assert_eq!(
         event.get("startDateLocal").unwrap().as_str(),
         Some("2026-03-22")
+    );
+    assert!(event.get("actualWorkout").unwrap().is_null());
+}
+
+#[tokio::test]
+async fn list_calendar_events_returns_actual_workout_for_linked_planned_entry() {
+    let mut entry = sample_planned_calendar_entry(
+        "planned:intervals-event:11",
+        "2026-03-22",
+        "VO2 Session",
+        "- 10min 55%",
+    );
+    entry.completed_workout_id = Some("a41".to_string());
+    let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        InMemoryCalendarEntryViewRepository::with_entries(vec![entry]),
+        InMemoryCompletedWorkoutRepository::with_workouts(vec![sample_completed_workout(
+            "a41",
+            Some(
+                "planned:intervals-event:11"
+                    .trim_start_matches("planned:")
+                    .to_string(),
+            ),
+        )]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    let event = &body.as_array().unwrap()[0];
+    assert_eq!(
+        event
+            .get("actualWorkout")
+            .unwrap()
+            .get("activityId")
+            .unwrap()
+            .as_str(),
+        Some("a41")
     );
 }
 
@@ -286,6 +339,7 @@ async fn list_calendar_events_returns_predicted_events_with_positive_safe_ids() 
             "Build Session",
             "Build Session\n- 60m 70%",
         )]),
+        InMemoryCompletedWorkoutRepository::default(),
     )
     .await;
 
@@ -375,7 +429,12 @@ async fn sync_planned_workout_returns_synced_calendar_event() {
     assert_eq!(created_event[0].start_date_local, "2026-03-26T00:00:00");
     assert_eq!(created_event[0].name.as_deref(), Some("Build Session"));
     assert_eq!(created_event[0].workout_doc, None);
-    assert_eq!(created_event[0].description.as_deref(), Some("- 60m 70%"));
+    let description = created_event[0]
+        .description
+        .as_deref()
+        .expect("synced description");
+    assert!(description.contains("- 60m 70%"));
+    assert!(description.contains("[AIWATTCOACH:pw="));
 }
 
 #[tokio::test]
@@ -456,7 +515,12 @@ async fn sync_planned_workout_preserves_existing_remote_description() {
         .find(|event| event.id != 41)
         .expect("synced event copy should be created");
     assert_eq!(synced_event.start_date_local, "2026-03-26T00:00:00");
-    assert_eq!(synced_event.description.as_deref(), Some("- 60m 70%"));
+    let description = synced_event
+        .description
+        .as_deref()
+        .expect("synced description");
+    assert!(description.contains("- 60m 70%"));
+    assert!(description.contains("[AIWATTCOACH:pw="));
     assert_eq!(synced_event.workout_doc, None);
 }
 

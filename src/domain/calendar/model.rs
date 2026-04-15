@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::domain::intervals::ActualWorkoutMatch;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalendarError {
     NotFound,
@@ -206,6 +208,7 @@ pub struct CalendarEvent {
     pub projected_workout: Option<CalendarProjectedWorkout>,
     pub sync_status: Option<PlannedWorkoutSyncStatus>,
     pub linked_intervals_event_id: Option<i64>,
+    pub actual_workout: Option<ActualWorkoutMatch>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

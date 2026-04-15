@@ -6,6 +6,8 @@ use std::{
 use aiwattcoach::{
     adapters::mongo::{
         completed_workouts::MongoCompletedWorkoutRepository,
+        planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
+        planned_workout_tokens::MongoPlannedWorkoutTokenRepository,
         planned_workouts::MongoPlannedWorkoutRepository, special_days::MongoSpecialDayRepository,
         training_plan_projections::MongoTrainingPlanProjectionRepository,
     },
@@ -15,6 +17,11 @@ use aiwattcoach::{
             CompletedWorkoutRepository, CompletedWorkoutSeries, CompletedWorkoutStream,
             CompletedWorkoutZoneTime,
         },
+        planned_completed_links::{
+            PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkMatchSource,
+            PlannedCompletedWorkoutLinkRepository,
+        },
+        planned_workout_tokens::{PlannedWorkoutToken, PlannedWorkoutTokenRepository},
         planned_workouts::{
             PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutRepository,
             PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
@@ -266,6 +273,136 @@ async fn special_day_repository_round_trips_and_lists_by_date_range() {
             .and_then(|options| options.name.as_deref())
             == Some("special_days_user_special_day_unique")
             && index.keys == doc! { "user_id": 1, "special_day_id": 1 }
+    }));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn planned_workout_token_repository_round_trips_and_indexes_tokens() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoPlannedWorkoutTokenRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .upsert(PlannedWorkoutToken::new(
+            "user-1".to_string(),
+            "planned-1".to_string(),
+            "PW123ABC".to_string(),
+        ))
+        .await
+        .unwrap();
+
+    let by_planned = repository
+        .find_by_planned_workout_id("user-1", "planned-1")
+        .await
+        .unwrap();
+    let by_token = repository
+        .find_by_match_token("user-1", "PW123ABC")
+        .await
+        .unwrap();
+
+    assert_eq!(by_planned, by_token);
+    assert_eq!(
+        by_planned.map(|token| token.match_token),
+        Some("PW123ABC".to_string())
+    );
+
+    let indexes = fixture
+        .client
+        .database(&fixture.database)
+        .collection::<mongodb::bson::Document>("planned_workout_tokens")
+        .list_indexes()
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+
+    assert!(indexes.iter().any(|index| {
+        index
+            .options
+            .as_ref()
+            .and_then(|options| options.name.as_deref())
+            == Some("planned_workout_tokens_user_planned_workout_unique")
+            && index.keys == doc! { "user_id": 1, "planned_workout_id": 1 }
+    }));
+    assert!(indexes.iter().any(|index| {
+        index
+            .options
+            .as_ref()
+            .and_then(|options| options.name.as_deref())
+            == Some("planned_workout_tokens_user_match_token_unique")
+            && index.keys == doc! { "user_id": 1, "match_token": 1 }
+    }));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn planned_completed_link_repository_round_trips_and_indexes_links() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoPlannedCompletedWorkoutLinkRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .upsert(PlannedCompletedWorkoutLink::new(
+            "user-1".to_string(),
+            "planned-1".to_string(),
+            "completed-1".to_string(),
+            PlannedCompletedWorkoutLinkMatchSource::Token,
+            1_700_000_123,
+        ))
+        .await
+        .unwrap();
+
+    let by_planned = repository
+        .find_by_planned_workout_id("user-1", "planned-1")
+        .await
+        .unwrap();
+    let by_completed = repository
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap();
+
+    assert_eq!(by_planned, by_completed);
+    assert_eq!(
+        by_planned.map(|link| link.match_source),
+        Some(PlannedCompletedWorkoutLinkMatchSource::Token)
+    );
+
+    let indexes = fixture
+        .client
+        .database(&fixture.database)
+        .collection::<mongodb::bson::Document>("planned_completed_workout_links")
+        .list_indexes()
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+
+    assert!(indexes.iter().any(|index| {
+        index
+            .options
+            .as_ref()
+            .and_then(|options| options.name.as_deref())
+            == Some("planned_completed_links_user_planned_unique")
+            && index.keys == doc! { "user_id": 1, "planned_workout_id": 1 }
+    }));
+    assert!(indexes.iter().any(|index| {
+        index
+            .options
+            .as_ref()
+            .and_then(|options| options.name.as_deref())
+            == Some("planned_completed_links_user_completed_unique")
+            && index.keys == doc! { "user_id": 1, "completed_workout_id": 1 }
     }));
 
     fixture.cleanup().await;

@@ -320,6 +320,30 @@ pub(crate) fn test_service_with_training_plan_and_latest_activity(
     .with_latest_completed_activity_service(latest_completed_activity_service)
 }
 
+pub(crate) fn test_service_with_training_plan_latest_activity_and_completed_target(
+    repository: InMemoryWorkoutSummaryRepository,
+    training_plan_service: Arc<dyn TrainingPlanUseCases>,
+    latest_completed_activity_service: Arc<
+        dyn aiwattcoach::domain::workout_summary::LatestCompletedActivityUseCases,
+    >,
+    completed_workout_target_service: Arc<dyn CompletedWorkoutTargetUseCases>,
+) -> WorkoutSummaryService<
+    InMemoryWorkoutSummaryRepository,
+    InMemoryCoachReplyOperationRepository,
+    TestClock,
+    TestIdGenerator,
+> {
+    WorkoutSummaryService::new(
+        repository,
+        InMemoryCoachReplyOperationRepository::default(),
+        TestClock,
+        TestIdGenerator::default(),
+    )
+    .with_training_plan_service(training_plan_service)
+    .with_latest_completed_activity_service(latest_completed_activity_service)
+    .with_completed_workout_target_service(completed_workout_target_service)
+}
+
 pub(crate) fn default_dev_coach() -> Arc<dyn WorkoutCoach> {
     Arc::new(DevWorkoutCoach)
 }
@@ -365,10 +389,34 @@ pub(crate) struct RecordingLatestCompletedActivityService {
     calls: Arc<Mutex<Vec<String>>>,
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct RecordingCompletedWorkoutTargetService {
+    allowed_workout_ids: Arc<Mutex<Vec<String>>>,
+    calls: Arc<Mutex<Vec<String>>>,
+}
+
 impl RecordingLatestCompletedActivityService {
     pub(crate) fn new(latest_activity_id: Option<&str>) -> Self {
         Self {
             latest_activity_id: Arc::new(Mutex::new(latest_activity_id.map(str::to_string))),
+            calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub(crate) fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl RecordingCompletedWorkoutTargetService {
+    pub(crate) fn allowing(workout_ids: &[&str]) -> Self {
+        Self {
+            allowed_workout_ids: Arc::new(Mutex::new(
+                workout_ids
+                    .iter()
+                    .map(|value| (*value).to_string())
+                    .collect(),
+            )),
             calls: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -395,6 +443,25 @@ impl aiwattcoach::domain::workout_summary::LatestCompletedActivityUseCases
                 .unwrap()
                 .push(format!("latest_completed_activity_id:{user_id}"));
             Ok(latest_activity_id)
+        })
+    }
+}
+
+impl CompletedWorkoutTargetUseCases for RecordingCompletedWorkoutTargetService {
+    fn is_completed_workout_target(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> aiwattcoach::domain::workout_summary::BoxFuture<Result<bool, WorkoutSummaryError>> {
+        let allowed_workout_ids = self.allowed_workout_ids.lock().unwrap().clone();
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            calls.lock().unwrap().push(format!(
+                "is_completed_workout_target:{user_id}:{workout_id}"
+            ));
+            Ok(allowed_workout_ids.contains(&workout_id))
         })
     }
 }

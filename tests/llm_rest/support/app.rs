@@ -16,6 +16,7 @@ use aiwattcoach::{
             workout_summary_coach::LlmWorkoutCoach,
         },
         support::{SystemClock, UuidIdGenerator},
+        workout_summary_completed_target::CompletedWorkoutTargetAdapter,
     },
     build_app_with_frontend_dist,
     config::AppState,
@@ -173,7 +174,10 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
             ),
         )
         .with_athlete_summary_service(Arc::new(athlete_summary_service.clone()))
-        .with_settings_service(settings_service.clone()),
+        .with_settings_service(settings_service.clone())
+        .with_completed_workout_target_service(Arc::new(
+            CompletedWorkoutTargetAdapter::new(intervals_service.clone()),
+        )),
     );
 
     let app = build_app_with_frontend_dist(

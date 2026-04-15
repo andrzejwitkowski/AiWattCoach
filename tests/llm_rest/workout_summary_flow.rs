@@ -17,6 +17,8 @@ use tower::util::ServiceExt;
 
 use crate::support::{ai_config, get_json, llm_rest_test_context};
 
+const COMPLETED_WORKOUT_ID: &str = "activity-1";
+
 #[tokio::test]
 async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
     let context = llm_rest_test_context().await;
@@ -27,8 +29,8 @@ async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
         "or-saved-key",
     );
     context.seed_user_settings(settings);
-    context.seed_summary(context.default_summary("workout-1"));
-    context.seed_activity(context.default_activity("user-1", "workout-1"));
+    context.seed_summary(context.default_summary(COMPLETED_WORKOUT_ID));
+    context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
 
     let response = context
         .app
@@ -36,7 +38,7 @@ async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/workout-summaries/workout-1/messages")
+                .uri("/api/workout-summaries/activity-1/messages")
                 .header(header::COOKIE, context.session_cookie("session-1"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"content":"Legs felt heavy today"}"#))
@@ -92,7 +94,8 @@ async fn workout_summary_websocket_creates_and_reuses_gemini_cache() {
     let mut settings = context.default_settings();
     settings.ai_agents = ai_config(LlmProvider::Gemini, "gemini-2.5-flash", "gemini-key");
     context.seed_user_settings(settings);
-    context.seed_summary(context.default_summary("workout-1"));
+    context.seed_summary(context.default_summary(COMPLETED_WORKOUT_ID));
+    context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
     context.seed_athlete_summary(
         "user-1",
         Some(AthleteSummary {
@@ -114,7 +117,7 @@ async fn workout_summary_websocket_creates_and_reuses_gemini_cache() {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{address}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws")
         .into_client_request()
         .unwrap();
     request
@@ -189,7 +192,8 @@ async fn workout_summary_websocket_sends_system_message_before_reply_when_summar
     settings.intervals.api_key = Some("intervals-key".to_string());
     settings.intervals.athlete_id = Some("i248035".to_string());
     context.seed_user_settings(settings);
-    context.seed_summary(context.default_summary("workout-1"));
+    context.seed_summary(context.default_summary(COMPLETED_WORKOUT_ID));
+    context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
     context.seed_athlete_summary("user-1", None, true);
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -199,7 +203,7 @@ async fn workout_summary_websocket_sends_system_message_before_reply_when_summar
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{address}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws")
         .into_client_request()
         .unwrap();
     request
@@ -248,7 +252,8 @@ async fn workout_summary_websocket_skips_system_message_when_athlete_summary_is_
     settings.intervals.api_key = Some("intervals-key".to_string());
     settings.intervals.athlete_id = Some("i248035".to_string());
     context.seed_user_settings(settings);
-    context.seed_summary(context.default_summary("workout-1"));
+    context.seed_summary(context.default_summary(COMPLETED_WORKOUT_ID));
+    context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
     context.seed_athlete_summary(
         "user-1",
         Some(AthleteSummary {
@@ -270,7 +275,7 @@ async fn workout_summary_websocket_skips_system_message_when_athlete_summary_is_
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{address}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws")
         .into_client_request()
         .unwrap();
     request

@@ -98,6 +98,14 @@ pub trait LatestCompletedActivityUseCases: Send + Sync {
     ) -> BoxFuture<Result<Option<String>, WorkoutSummaryError>>;
 }
 
+pub trait CompletedWorkoutTargetUseCases: Send + Sync {
+    fn is_completed_workout_target(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> BoxFuture<Result<bool, WorkoutSummaryError>>;
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SaveWorkflowStatus {
     Generated,
@@ -147,6 +155,7 @@ where
     settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     training_plan_service: Option<Arc<dyn TrainingPlanUseCases>>,
     latest_completed_activity_service: Option<Arc<dyn LatestCompletedActivityUseCases>>,
+    completed_workout_target_service: Option<Arc<dyn CompletedWorkoutTargetUseCases>>,
 }
 
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
@@ -185,6 +194,7 @@ where
             settings_service: None,
             training_plan_service: None,
             latest_completed_activity_service: None,
+            completed_workout_target_service: None,
         }
     }
 
@@ -220,6 +230,14 @@ where
         self
     }
 
+    pub fn with_completed_workout_target_service(
+        mut self,
+        completed_workout_target_service: Arc<dyn CompletedWorkoutTargetUseCases>,
+    ) -> Self {
+        self.completed_workout_target_service = Some(completed_workout_target_service);
+        self
+    }
+
     async fn get_existing_summary(
         &self,
         user_id: &str,
@@ -229,6 +247,37 @@ where
             .find_by_user_id_and_workout_id(user_id, workout_id)
             .await?
             .ok_or(WorkoutSummaryError::NotFound)
+    }
+
+    async fn validate_completed_workout_target(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Result<(), WorkoutSummaryError> {
+        let is_completed_target = self
+            .is_completed_workout_target(user_id, workout_id)
+            .await?;
+        if is_completed_target {
+            Ok(())
+        } else {
+            Err(WorkoutSummaryError::Validation(
+                "workout summary is only available for completed workouts".to_string(),
+            ))
+        }
+    }
+
+    async fn is_completed_workout_target(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Result<bool, WorkoutSummaryError> {
+        let Some(service) = &self.completed_workout_target_service else {
+            return Ok(true);
+        };
+
+        service
+            .is_completed_workout_target(user_id, workout_id)
+            .await
     }
 
     async fn append_message_with_role(

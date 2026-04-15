@@ -36,7 +36,9 @@ use aiwattcoach::{
             external_sync_states::MongoExternalSyncStateRepository,
             llm_context_cache::MongoLlmContextCacheRepository,
             login_state::MongoLoginStateRepository,
+            planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
             planned_workout_syncs::MongoPlannedWorkoutSyncRepository,
+            planned_workout_tokens::MongoPlannedWorkoutTokenRepository,
             planned_workouts::MongoPlannedWorkoutRepository,
             provider_poll_states::MongoProviderPollStateRepository,
             races::MongoRaceRepository,
@@ -50,6 +52,7 @@ use aiwattcoach::{
             workout_summary::MongoWorkoutSummaryRepository,
         },
         support::{SystemClock, UuidIdGenerator},
+        workout_summary_completed_target::CompletedWorkoutTargetAdapter,
         workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
     build_app,
@@ -217,6 +220,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let planned_workout_repository =
         MongoPlannedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
     planned_workout_repository.ensure_indexes().await?;
+    let planned_workout_token_repository =
+        MongoPlannedWorkoutTokenRepository::new(mongo_client.clone(), &mongo_database);
+    planned_workout_token_repository.ensure_indexes().await?;
+    let planned_completed_link_repository =
+        MongoPlannedCompletedWorkoutLinkRepository::new(mongo_client.clone(), &mongo_database);
+    planned_completed_link_repository.ensure_indexes().await?;
     let completed_workout_repository =
         MongoCompletedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
     completed_workout_repository.ensure_indexes().await?;
@@ -264,6 +273,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         completed_workout_repository.clone(),
         race_repository.clone(),
         special_day_repository.clone(),
+        planned_workout_token_repository.clone(),
+        planned_completed_link_repository.clone(),
         external_observation_repository.clone(),
         external_sync_state_repository.clone(),
         SystemClock,
@@ -333,6 +344,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_athlete_summary_service(athlete_summary_service.clone())
         .with_settings_service(settings_service.clone())
+        .with_completed_workout_target_service(Arc::new(CompletedWorkoutTargetAdapter::new(
+            activity_repository.clone(),
+        )))
         .with_latest_completed_activity_service(Arc::new(
             LatestCompletedActivityAdapter::new(activity_repository.clone()),
         )),
@@ -376,6 +390,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             planned_workout_sync_repository,
             SystemClock,
         )
+        .with_planned_workout_tokens(planned_workout_token_repository)
         .with_provider_poll_states(provider_poll_state_repository)
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );

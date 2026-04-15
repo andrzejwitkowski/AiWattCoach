@@ -8,6 +8,11 @@ use crate::domain::{
     calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
     completed_workouts::{CompletedWorkout, CompletedWorkoutError, CompletedWorkoutRepository},
     identity::Clock,
+    planned_completed_links::{
+        PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkMatchSource,
+        PlannedCompletedWorkoutLinkRepository,
+    },
+    planned_workout_tokens::{extract_planned_workout_marker, PlannedWorkoutTokenRepository},
     planned_workouts::{PlannedWorkout, PlannedWorkoutError, PlannedWorkoutRepository},
     races::{Race, RaceError, RaceRepository},
     special_days::{SpecialDay, SpecialDayError, SpecialDayRepository},
@@ -54,6 +59,7 @@ pub struct ExternalCompletedWorkoutImport {
     pub provider: ExternalProvider,
     pub external_id: String,
     pub normalized_payload_hash: String,
+    pub marker_sources: Vec<String>,
     pub workout: CompletedWorkout,
 }
 
@@ -116,6 +122,8 @@ pub struct ExternalImportService<
     CompletedWorkouts,
     Races,
     SpecialDays,
+    PlannedWorkoutTokens,
+    PlannedCompletedLinks,
     Observations,
     SyncStates,
     Time,
@@ -125,6 +133,8 @@ pub struct ExternalImportService<
     CompletedWorkouts: CompletedWorkoutRepository + Clone + 'static,
     Races: RaceRepository + Clone + 'static,
     SpecialDays: SpecialDayRepository + Clone + 'static,
+    PlannedWorkoutTokens: PlannedWorkoutTokenRepository + Clone + 'static,
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone + 'static,
     Observations: ExternalObservationRepository + Clone + 'static,
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
@@ -134,18 +144,32 @@ pub struct ExternalImportService<
     completed_workouts: CompletedWorkouts,
     races: Races,
     special_days: SpecialDays,
+    planned_workout_tokens: PlannedWorkoutTokens,
+    planned_completed_links: PlannedCompletedLinks,
     observations: Observations,
     sync_states: SyncStates,
     clock: Time,
     refresh: Refresh,
 }
 
-impl<PlannedWorkouts, CompletedWorkouts, Races, SpecialDays, Observations, SyncStates, Time>
+impl<
+        PlannedWorkouts,
+        CompletedWorkouts,
+        Races,
+        SpecialDays,
+        PlannedWorkoutTokens,
+        PlannedCompletedLinks,
+        Observations,
+        SyncStates,
+        Time,
+    >
     ExternalImportService<
         PlannedWorkouts,
         CompletedWorkouts,
         Races,
         SpecialDays,
+        PlannedWorkoutTokens,
+        PlannedCompletedLinks,
         Observations,
         SyncStates,
         Time,
@@ -155,15 +179,23 @@ where
     CompletedWorkouts: CompletedWorkoutRepository + Clone + 'static,
     Races: RaceRepository + Clone + 'static,
     SpecialDays: SpecialDayRepository + Clone + 'static,
+    PlannedWorkoutTokens: PlannedWorkoutTokenRepository + Clone + 'static,
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone + 'static,
     Observations: ExternalObservationRepository + Clone + 'static,
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
 {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "external import service coordinates canonical roots, matching metadata, and refresh dependencies"
+    )]
     pub fn new(
         planned_workouts: PlannedWorkouts,
         completed_workouts: CompletedWorkouts,
         races: Races,
         special_days: SpecialDays,
+        planned_workout_tokens: PlannedWorkoutTokens,
+        planned_completed_links: PlannedCompletedLinks,
         observations: Observations,
         sync_states: SyncStates,
         clock: Time,
@@ -173,6 +205,8 @@ where
             completed_workouts,
             races,
             special_days,
+            planned_workout_tokens,
+            planned_completed_links,
             observations,
             sync_states,
             clock,
@@ -186,6 +220,8 @@ impl<
         CompletedWorkouts,
         Races,
         SpecialDays,
+        PlannedWorkoutTokens,
+        PlannedCompletedLinks,
         Observations,
         SyncStates,
         Time,
@@ -196,6 +232,8 @@ impl<
         CompletedWorkouts,
         Races,
         SpecialDays,
+        PlannedWorkoutTokens,
+        PlannedCompletedLinks,
         Observations,
         SyncStates,
         Time,
@@ -206,6 +244,8 @@ where
     CompletedWorkouts: CompletedWorkoutRepository + Clone + 'static,
     Races: RaceRepository + Clone + 'static,
     SpecialDays: SpecialDayRepository + Clone + 'static,
+    PlannedWorkoutTokens: PlannedWorkoutTokenRepository + Clone + 'static,
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone + 'static,
     Observations: ExternalObservationRepository + Clone + 'static,
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
@@ -219,6 +259,8 @@ where
         CompletedWorkouts,
         Races,
         SpecialDays,
+        PlannedWorkoutTokens,
+        PlannedCompletedLinks,
         Observations,
         SyncStates,
         Time,
@@ -232,6 +274,8 @@ where
             completed_workouts: self.completed_workouts,
             races: self.races,
             special_days: self.special_days,
+            planned_workout_tokens: self.planned_workout_tokens,
+            planned_completed_links: self.planned_completed_links,
             observations: self.observations,
             sync_states: self.sync_states,
             clock: self.clock,
@@ -299,14 +343,37 @@ where
         command: ExternalCompletedWorkoutImport,
     ) -> Result<ExternalImportOutcome, ExternalImportError> {
         let dedup_key = completed_workout_dedup_key(&command.workout);
+        let linked_planned_workout_id = self
+            .resolve_planned_workout_id_for_completed_workout(
+                &command.workout.user_id,
+                &command.marker_sources,
+                &command.workout,
+            )
+            .await?;
+        let mut incoming = command.workout;
+        if linked_planned_workout_id.is_some() {
+            incoming.planned_workout_id = linked_planned_workout_id.clone();
+        }
         let workout = self
-            .resolve_completed_workout_target(command.workout, dedup_key.as_deref())
+            .resolve_completed_workout_target(incoming, dedup_key.as_deref())
             .await?;
         let workout = self
             .completed_workouts
             .upsert(workout)
             .await
             .map_err(map_completed_workout_error)?;
+        if let Some(planned_workout_id) = &workout.planned_workout_id {
+            self.planned_completed_links
+                .upsert(PlannedCompletedWorkoutLink::new(
+                    workout.user_id.clone(),
+                    planned_workout_id.clone(),
+                    workout.completed_workout_id.clone(),
+                    PlannedCompletedWorkoutLinkMatchSource::Token,
+                    self.clock.now_epoch_seconds(),
+                ))
+                .await
+                .map_err(map_planned_completed_link_error)?;
+        }
         let canonical_entity = CanonicalEntityRef::new(
             CanonicalEntityKind::CompletedWorkout,
             workout.completed_workout_id.clone(),
@@ -506,6 +573,40 @@ where
             ))),
         }
     }
+
+    async fn resolve_planned_workout_id_for_completed_workout(
+        &self,
+        user_id: &str,
+        marker_sources: &[String],
+        workout: &CompletedWorkout,
+    ) -> Result<Option<String>, ExternalImportError> {
+        for source in marker_sources {
+            let Some(match_token) = extract_planned_workout_marker(source) else {
+                continue;
+            };
+            let planned_workout = self
+                .planned_workout_tokens
+                .find_by_match_token(user_id, &match_token)
+                .await
+                .map_err(map_planned_workout_token_error)?;
+            if let Some(planned_workout) = planned_workout {
+                return Ok(Some(planned_workout.planned_workout_id));
+            }
+        }
+
+        let workout_date = date_key(&workout.start_date_local).to_string();
+        let same_day_planned_workouts = self
+            .planned_workouts
+            .list_by_user_id_and_date_range(user_id, &workout_date, &workout_date)
+            .await
+            .map_err(map_planned_workout_error)?;
+
+        match same_day_planned_workouts.as_slice() {
+            [] => Ok(None),
+            [planned_workout] => Ok(Some(planned_workout.planned_workout_id.clone())),
+            _ => Ok(None),
+        }
+    }
 }
 
 impl<
@@ -513,6 +614,8 @@ impl<
         CompletedWorkouts,
         Races,
         SpecialDays,
+        PlannedWorkoutTokens,
+        PlannedCompletedLinks,
         Observations,
         SyncStates,
         Time,
@@ -523,6 +626,8 @@ impl<
         CompletedWorkouts,
         Races,
         SpecialDays,
+        PlannedWorkoutTokens,
+        PlannedCompletedLinks,
         Observations,
         SyncStates,
         Time,
@@ -533,6 +638,8 @@ where
     CompletedWorkouts: CompletedWorkoutRepository + Clone + 'static,
     Races: RaceRepository + Clone + 'static,
     SpecialDays: SpecialDayRepository + Clone + 'static,
+    PlannedWorkoutTokens: PlannedWorkoutTokenRepository + Clone + 'static,
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone + 'static,
     Observations: ExternalObservationRepository + Clone + 'static,
     SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
@@ -575,5 +682,25 @@ fn map_race_error(error: RaceError) -> ExternalImportError {
 fn map_special_day_error(error: SpecialDayError) -> ExternalImportError {
     match error {
         SpecialDayError::Repository(message) => ExternalImportError::SpecialDay(message),
+    }
+}
+
+fn map_planned_workout_token_error(
+    error: crate::domain::planned_workout_tokens::PlannedWorkoutTokenError,
+) -> ExternalImportError {
+    match error {
+        crate::domain::planned_workout_tokens::PlannedWorkoutTokenError::Repository(message) => {
+            ExternalImportError::Repository(message)
+        }
+    }
+}
+
+fn map_planned_completed_link_error(
+    error: crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+) -> ExternalImportError {
+    match error {
+        crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError::Repository(
+            message,
+        ) => ExternalImportError::Repository(message),
     }
 }

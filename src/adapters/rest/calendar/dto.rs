@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::rest::intervals::EventDefinitionDto;
+use crate::adapters::rest::intervals::{ActualWorkoutDto, EventDefinitionDto};
 
 #[derive(Deserialize)]
 pub(in crate::adapters::rest) struct ListCalendarEventsQuery {
@@ -93,7 +93,7 @@ pub(super) struct CalendarEventDto {
     #[serde(rename = "eventDefinition")]
     pub event_definition: EventDefinitionDto,
     #[serde(rename = "actualWorkout")]
-    pub actual_workout: Option<serde_json::Value>,
+    pub actual_workout: Option<ActualWorkoutDto>,
     #[serde(rename = "plannedSource")]
     pub planned_source: String,
     #[serde(rename = "syncStatus")]

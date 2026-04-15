@@ -158,9 +158,8 @@ pub(super) fn build_recent_day_contexts(
             let planned_workouts = day_events
                 .iter()
                 .filter(|event| event.category == EventCategory::Workout)
-                .map(|event| {
-                    build_planned_workout(event, matched.event_to_activity.contains_key(&event.id))
-                })
+                .filter(|event| !matched.event_to_activity.contains_key(&event.id))
+                .map(|event| build_planned_workout(event, false))
                 .collect::<Vec<_>>();
             let special_days = day_events
                 .iter()
@@ -614,6 +613,14 @@ pub(super) fn infer_focus_kind(
         .any(|workout| workout.activity_id == workout_id)
     {
         return "activity".to_string();
+    }
+    if recent_days
+        .iter()
+        .flat_map(|day| &day.workouts)
+        .filter_map(|workout| workout.planned_workout.as_ref())
+        .any(|planned| planned.event_id.to_string() == workout_id)
+    {
+        return "event".to_string();
     }
     if recent_days
         .iter()

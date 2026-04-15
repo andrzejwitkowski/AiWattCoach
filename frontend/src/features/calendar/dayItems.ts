@@ -31,6 +31,7 @@ export type CalendarDayItem =
     subtitle: string | null;
     dateKey: string;
     event: IntervalEvent;
+    activity: IntervalActivity | null;
     priorityRank: number;
     tss: number | null;
   }
@@ -99,11 +100,10 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
       continue;
     }
 
-    if (event.actualWorkout) {
-      continue;
-    }
-
     if (plannedWorkout) {
+      const matchedActivity = event.actualWorkout?.activityId
+        ? day.activities.find((activity) => activity.id === event.actualWorkout?.activityId) ?? null
+        : null;
       items.push({
         kind: 'planned',
         id: `planned:${event.calendarEntryId ?? event.id}`,
@@ -111,6 +111,7 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
         subtitle: summarizePlannedEvent(event, options.locale),
         dateKey: day.dateKey,
         event,
+        activity: matchedActivity,
         priorityRank: 1,
         tss: event.eventDefinition.summary.estimatedTrainingStressScore !== null
           ? Math.round(event.eventDefinition.summary.estimatedTrainingStressScore)
@@ -124,6 +125,9 @@ export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): 
 
   for (const activity of day.activities) {
     const matchedEvent = day.events.find((event) => event.actualWorkout?.activityId === activity.id) ?? null;
+    if (matchedEvent && isPlannedWorkoutEvent(matchedEvent)) {
+      continue;
+    }
     items.push({
       kind: 'completed',
       id: `activity:${activity.id}`,
@@ -146,7 +150,7 @@ export function selectDayItemDetail(item: CalendarDayItem): WorkoutDetailSelecti
       return {
         dateKey: item.dateKey,
         event: item.event,
-        activity: null,
+        activity: item.activity,
       };
     case 'completed':
       return {

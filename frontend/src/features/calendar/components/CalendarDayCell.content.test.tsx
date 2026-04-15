@@ -105,7 +105,7 @@ describe('CalendarDayCell content', () => {
     expect(container).not.toHaveTextContent('Swim');
   });
 
-  it('does not leak planned summary metrics into a mixed day activity subtitle', () => {
+  it('keeps the planned workout as the primary summary on mixed days', () => {
     const day = makeCalendarDay({
       date: new Date(2026, 2, 27),
       dateKey: '2026-03-27',
@@ -135,10 +135,10 @@ describe('CalendarDayCell content', () => {
 
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
 
-    expect(container).toHaveTextContent('Evening Ride');
-    expect(container).toHaveTextContent('Ride');
-    expect(container).not.toHaveTextContent('64.4 TSS');
-    expect(container).not.toHaveTextContent('60 min');
+    expect(container).toHaveTextContent('Planned Workout');
+    expect(container).toHaveTextContent('Planned Build');
+    expect(container).toHaveTextContent('60 min');
+    expect(container).toHaveTextContent('64 TSS');
   });
 
   it('shows planned workout summary details and coach label for planned-only days', () => {
@@ -592,12 +592,12 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByText('Grojec')).toBeInTheDocument();
   });
 
-  it('does not show the planned workout badge for completed events without loaded activities', () => {
+  it('keeps the planned workout badge for planned events enriched with actual workout data', () => {
     const day = makeCalendarDay({
       events: [
         makeEvent({
           id: 41,
-          name: 'Completed Build',
+          name: 'Planned Build',
           actualWorkout: {
             activityId: 'a41',
             activityName: 'Completed Build Outside',
@@ -625,10 +625,10 @@ describe('CalendarDayCell content', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const dayCell = container.firstElementChild as HTMLElement;
 
-    expect(within(dayCell).queryByText('Planned Workout')).not.toBeInTheDocument();
-    expect(within(dayCell).getByText('Completed Build')).toBeInTheDocument();
-    expect(dayCell).not.toHaveTextContent('20 min');
-    expect(dayCell).not.toHaveTextContent('30 TSS');
+    expect(within(dayCell).getByText('Planned Workout')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Planned Build')).toBeInTheDocument();
+    expect(dayCell).toHaveTextContent('20 min');
+    expect(dayCell).toHaveTextContent('30 TSS');
   });
 
   it('does not render a clickable button without a real select handler', () => {

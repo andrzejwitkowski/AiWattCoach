@@ -16,6 +16,8 @@ async fn import_planned_workout_persists_canonical_state_and_refreshes_day() {
     let completed_workouts = InMemoryCompletedWorkoutRepository::default();
     let races = InMemoryRaceRepository::default();
     let special_days = InMemorySpecialDayRepository::default();
+    let planned_workout_tokens = InMemoryPlannedWorkoutTokenRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
     let observations = InMemoryObservationRepository::default();
     let sync_states = InMemorySyncStateRepository::default();
     let refresh = RecordingRefresh::default();
@@ -24,6 +26,8 @@ async fn import_planned_workout_persists_canonical_state_and_refreshes_day() {
         completed_workouts,
         races,
         special_days,
+        planned_workout_tokens,
+        planned_completed_links,
         observations.clone(),
         sync_states.clone(),
         refresh.clone(),
@@ -72,6 +76,8 @@ async fn import_race_persists_canonical_state_and_refreshes_day() {
     let completed_workouts = InMemoryCompletedWorkoutRepository::default();
     let races = InMemoryRaceRepository::default();
     let special_days = InMemorySpecialDayRepository::default();
+    let planned_workout_tokens = InMemoryPlannedWorkoutTokenRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
     let observations = InMemoryObservationRepository::default();
     let sync_states = InMemorySyncStateRepository::default();
     let refresh = RecordingRefresh::default();
@@ -80,6 +86,8 @@ async fn import_race_persists_canonical_state_and_refreshes_day() {
         completed_workouts,
         races.clone(),
         special_days,
+        planned_workout_tokens,
+        planned_completed_links,
         observations.clone(),
         sync_states.clone(),
         refresh.clone(),
@@ -129,6 +137,8 @@ async fn import_special_day_persists_canonical_state_and_refreshes_day() {
     let completed_workouts = InMemoryCompletedWorkoutRepository::default();
     let races = InMemoryRaceRepository::default();
     let special_days = InMemorySpecialDayRepository::default();
+    let planned_workout_tokens = InMemoryPlannedWorkoutTokenRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
     let observations = InMemoryObservationRepository::default();
     let sync_states = InMemorySyncStateRepository::default();
     let refresh = RecordingRefresh::default();
@@ -137,6 +147,8 @@ async fn import_special_day_persists_canonical_state_and_refreshes_day() {
         completed_workouts,
         races,
         special_days.clone(),
+        planned_workout_tokens,
+        planned_completed_links,
         observations.clone(),
         sync_states.clone(),
         refresh.clone(),

@@ -5,6 +5,11 @@ use crate::domain::{
         ExternalObservation, ExternalObservationParams, ExternalObservationRepository,
         ExternalProvider,
     },
+    planned_completed_links::{
+        PlannedCompletedWorkoutLinkMatchSource, PlannedCompletedWorkoutLinkRepository,
+    },
+    planned_workout_tokens::{PlannedWorkoutToken, PlannedWorkoutTokenRepository},
+    planned_workouts::PlannedWorkoutRepository,
 };
 
 use super::super::{
@@ -19,6 +24,8 @@ async fn import_completed_workout_persists_canonical_state_and_refreshes_start_d
     let completed_workouts = InMemoryCompletedWorkoutRepository::default();
     let races = InMemoryRaceRepository::default();
     let special_days = InMemorySpecialDayRepository::default();
+    let planned_workout_tokens = InMemoryPlannedWorkoutTokenRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
     let observations = InMemoryObservationRepository::default();
     let sync_states = InMemorySyncStateRepository::default();
     let refresh = RecordingRefresh::default();
@@ -27,6 +34,8 @@ async fn import_completed_workout_persists_canonical_state_and_refreshes_start_d
         completed_workouts.clone(),
         races,
         special_days,
+        planned_workout_tokens,
+        planned_completed_links,
         observations.clone(),
         sync_states.clone(),
         refresh.clone(),
@@ -38,6 +47,7 @@ async fn import_completed_workout_persists_canonical_state_and_refreshes_start_d
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-1".to_string(),
+                marker_sources: Vec::new(),
                 workout: sample_completed_workout(),
             },
         )))
@@ -96,6 +106,8 @@ async fn import_completed_workout_reuses_existing_canonical_workout_for_matching
         completed_workouts.clone(),
         InMemoryRaceRepository::default(),
         InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
         observations.clone(),
         InMemorySyncStateRepository::default(),
     );
@@ -111,6 +123,7 @@ async fn import_completed_workout_reuses_existing_canonical_workout_for_matching
                 provider: ExternalProvider::Wahoo,
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-1".to_string(),
+                marker_sources: Vec::new(),
                 workout: incoming,
             },
         )))
@@ -137,6 +150,8 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
         InMemoryCompletedWorkoutRepository::default(),
         InMemoryRaceRepository::default(),
         InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -147,6 +162,7 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
                 provider: ExternalProvider::Wahoo,
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-1".to_string(),
+                marker_sources: Vec::new(),
                 workout: sample_completed_workout_for_provider(
                     ExternalProvider::Wahoo,
                     "wahoo-activity-1",
@@ -162,6 +178,7 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-intervals-1".to_string(),
+                marker_sources: Vec::new(),
                 workout: sample_completed_workout(),
             },
         )))
@@ -181,6 +198,8 @@ async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help
         InMemoryCompletedWorkoutRepository::default(),
         InMemoryRaceRepository::default(),
         InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -191,6 +210,7 @@ async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-intervals-1".to_string(),
+                marker_sources: Vec::new(),
                 workout: sample_completed_workout(),
             },
         )))
@@ -202,6 +222,7 @@ async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help
                 provider: ExternalProvider::Other,
                 external_id: "provider-b-77".to_string(),
                 normalized_payload_hash: "hash-provider-b-1".to_string(),
+                marker_sources: Vec::new(),
                 workout: sample_completed_workout_for_provider(
                     ExternalProvider::Other,
                     "provider-b-77",
@@ -261,6 +282,8 @@ async fn import_completed_workout_rejects_ambiguous_fingerprint_match() {
         completed_workouts,
         InMemoryRaceRepository::default(),
         InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
         observations,
         InMemorySyncStateRepository::default(),
     );
@@ -271,6 +294,7 @@ async fn import_completed_workout_rejects_ambiguous_fingerprint_match() {
                 provider: ExternalProvider::Other,
                 external_id: "provider-c-1".to_string(),
                 normalized_payload_hash: "hash-provider-c-1".to_string(),
+                marker_sources: Vec::new(),
                 workout: sample_completed_workout_for_provider(
                     ExternalProvider::Other,
                     "provider-c-1",
@@ -285,4 +309,64 @@ async fn import_completed_workout_rejects_ambiguous_fingerprint_match() {
         error,
         ExternalImportError::CompletedWorkout(message) if message.contains("ambiguous")
     ));
+}
+
+#[tokio::test]
+async fn import_completed_workout_links_by_match_token_and_persists_link() {
+    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(sample_planned_workout())
+        .await
+        .unwrap();
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let planned_workout_tokens = InMemoryPlannedWorkoutTokenRepository::default();
+    planned_workout_tokens
+        .upsert(PlannedWorkoutToken::new(
+            "user-1".to_string(),
+            "planned-imported-1".to_string(),
+            "PW123ABC45".to_string(),
+        ))
+        .await
+        .unwrap();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let service = external_import_service_without_refresh(
+        planned_workouts,
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        planned_workout_tokens,
+        planned_completed_links.clone(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-completed-1".to_string(),
+                marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=PW123ABC45]".to_string()],
+                workout: sample_completed_workout(),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(
+        stored[0].planned_workout_id.as_deref(),
+        Some("planned-imported-1")
+    );
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-imported-1")
+        .await
+        .unwrap()
+        .expect("planned-completed link");
+    assert_eq!(link.planned_workout_id, "planned-imported-1");
+    assert_eq!(
+        link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Token
+    );
 }

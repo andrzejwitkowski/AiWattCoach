@@ -105,7 +105,22 @@ async fn rebuild_for_user_replaces_stale_entries_and_stays_idempotent() {
         .list_by_user_id_and_date_range("user-1", "2026-05-01", "2026-05-31")
         .await
         .unwrap();
-    assert_eq!(persisted.len(), 4);
+    assert_eq!(persisted.len(), 3);
+    let planned = persisted
+        .iter()
+        .find(|entry| entry.entry_id == "planned:planned-1")
+        .expect("planned entry should remain");
+    assert_eq!(planned.completed_workout_id.as_deref(), Some("completed-1"));
+    assert_eq!(
+        planned
+            .summary
+            .as_ref()
+            .and_then(|summary| summary.training_stress_score),
+        Some(82)
+    );
+    assert!(!persisted
+        .iter()
+        .any(|entry| entry.entry_id == "completed:completed-1"));
     assert!(persisted
         .iter()
         .all(|entry| entry.entry_id != "special:special-stale"));
@@ -287,7 +302,7 @@ async fn rebuild_for_user_uses_external_sync_state_for_imported_planned_workouts
 }
 
 #[tokio::test]
-async fn rebuild_for_user_does_not_copy_planned_sync_to_completed_entries() {
+async fn rebuild_for_user_keeps_sync_on_merged_planned_entry_without_standalone_completed_entry() {
     let repository = InMemoryCalendarEntryViewRepository::default();
     let planned_syncs =
         TestPlannedWorkoutSyncRepository::with_records(vec![PlannedWorkoutSyncRecord {
@@ -317,12 +332,16 @@ async fn rebuild_for_user_does_not_copy_planned_sync_to_completed_entries() {
         .await
         .unwrap();
 
-    let completed = rebuilt
+    let planned = rebuilt
         .iter()
-        .find(|entry| entry.entry_id == "completed:completed-1")
-        .expect("completed entry after rebuild");
+        .find(|entry| entry.entry_id == "planned:planned-1")
+        .expect("planned entry after rebuild");
 
-    assert_eq!(completed.sync, None);
+    assert_eq!(planned.sync, None);
+    assert_eq!(planned.completed_workout_id.as_deref(), Some("completed-1"));
+    assert!(!rebuilt
+        .iter()
+        .any(|entry| entry.entry_id == "completed:completed-1"));
 }
 
 #[tokio::test]
@@ -455,13 +474,28 @@ async fn refresh_range_for_user_rebuilds_only_requested_dates() {
         .await
         .unwrap();
 
-    assert_eq!(refreshed.len(), 4);
+    assert_eq!(refreshed.len(), 3);
+    let planned = refreshed
+        .iter()
+        .find(|entry| entry.entry_id == "planned:planned-1")
+        .expect("planned entry after refresh");
+    assert_eq!(planned.completed_workout_id.as_deref(), Some("completed-1"));
+    assert_eq!(
+        planned
+            .summary
+            .as_ref()
+            .and_then(|summary| summary.training_stress_score),
+        Some(82)
+    );
+    assert!(!refreshed
+        .iter()
+        .any(|entry| entry.entry_id == "completed:completed-1"));
 
     let all_entries = views
         .list_by_user_id_and_date_range("user-1", "2026-05-01", "2026-05-31")
         .await
         .unwrap();
-    assert_eq!(all_entries.len(), 5);
+    assert_eq!(all_entries.len(), 4);
     assert!(all_entries
         .iter()
         .any(|entry| entry.entry_id == "special:special-stale"));

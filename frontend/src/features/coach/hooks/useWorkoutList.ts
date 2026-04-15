@@ -70,17 +70,6 @@ function chooseMatchedActivity(
   return null;
 }
 
-function chooseSummary(candidates: WorkoutSummary[]): WorkoutSummary | null {
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  return [...candidates].sort((left, right) => {
-    return right.updatedAtEpochSeconds - left.updatedAtEpochSeconds
-      || right.createdAtEpochSeconds - left.createdAtEpochSeconds;
-  })[0] ?? null;
-}
-
 function inferEventIdHint(activity: IntervalActivity): string | null {
   const values = [activity.externalId, activity.description, activity.name];
 
@@ -104,6 +93,7 @@ function buildWorkoutItems(
   const summariesById = new Map(summaries.map((summary) => [summary.workoutId, summary]));
   const activitiesByDate = new Map<string, IntervalActivity[]>();
   const eventsByDate = new Map<string, IntervalEvent[]>();
+  const eventsByActualWorkoutActivityId = new Map<string, IntervalEvent[]>();
 
   for (const activity of activitiesSorted) {
     const dateKey = extractDateKey(activity.startDateLocal);
@@ -117,11 +107,31 @@ function buildWorkoutItems(
     const existing = eventsByDate.get(dateKey) ?? [];
     existing.push(event);
     eventsByDate.set(dateKey, existing);
+
+    const actualWorkoutActivityId = event.actualWorkout?.activityId;
+    if (actualWorkoutActivityId) {
+      const activityMatches = eventsByActualWorkoutActivityId.get(actualWorkoutActivityId) ?? [];
+      activityMatches.push(event);
+      eventsByActualWorkoutActivityId.set(actualWorkoutActivityId, activityMatches);
+    }
   }
 
   const matchedActivityIds = new Set<string>();
   const matchedEventIds = new Set<number>();
   const activityEventMatches = new Map<string, IntervalEvent>();
+
+  for (const activity of activitiesSorted) {
+    const linkedEvent = (eventsByActualWorkoutActivityId.get(activity.id) ?? []).find(
+      (event) => !matchedEventIds.has(event.id),
+    );
+    if (!linkedEvent || matchedActivityIds.has(activity.id)) {
+      continue;
+    }
+
+    matchedActivityIds.add(activity.id);
+    matchedEventIds.add(linkedEvent.id);
+    activityEventMatches.set(activity.id, linkedEvent);
+  }
 
   for (const activity of activitiesSorted) {
     const hintedEventId = inferEventIdHint(activity);
@@ -164,12 +174,8 @@ function buildWorkoutItems(
 
   const items: CoachWorkoutListItem[] = activitiesSorted.map((activity) => {
     const matchedEvent = activityEventMatches.get(activity.id) ?? null;
-    const summary = chooseSummary(
-      [summariesById.get(activity.id), matchedEvent ? summariesById.get(String(matchedEvent.id)) : undefined].filter(
-        (value): value is WorkoutSummary => value !== undefined,
-      ),
-    );
-    const id = summary?.workoutId ?? activity.id;
+    const summary = summariesById.get(activity.id) ?? null;
+    const id = activity.id;
 
     return {
       id,
@@ -217,9 +223,22 @@ function isWithinWeek(value: string, weekStart: Date): boolean {
 }
 
 function applySummaryToItem(item: CoachWorkoutListItem, summary: WorkoutSummary): CoachWorkoutListItem {
+  if (item.activity) {
+    if (item.activity.id !== summary.workoutId) {
+      return item;
+    }
+
+    return {
+      ...item,
+      id: item.activity.id,
+      summary,
+      hasSummary: true,
+      hasConversation: summary.messages.some((message) => message.role === 'coach'),
+    };
+  }
+
   const hasSummaryMatch = item.id === summary.workoutId
     || item.summary?.workoutId === summary.workoutId
-    || item.activity?.id === summary.workoutId
     || String(item.event?.id ?? '') === summary.workoutId;
 
   if (!hasSummaryMatch) {
@@ -276,10 +295,7 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
         .slice(0, WORKOUT_LOOKBACK_WEEKS * WORKOUT_PAGE_SIZE);
       const summaries = await listWorkoutSummaries(
         apiBaseUrl,
-        [
-          ...workoutEvents.map((event) => String(event.id)),
-          ...recentActivities.map((activity) => activity.id),
-        ],
+        recentActivities.map((activity) => activity.id),
       );
       const nextItems = buildWorkoutItems(workoutEvents, recentActivities, summaries);
 
