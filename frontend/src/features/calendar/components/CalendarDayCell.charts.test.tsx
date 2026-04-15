@@ -24,6 +24,21 @@ describe('CalendarDayCell charts', () => {
           id: 3,
           name: 'Planned intervals',
           indoor: false,
+          actualWorkout: {
+            activityId: 'a3',
+            activityName: 'Morning Ride',
+            startDateLocal: '2026-03-26T08:00:00',
+            powerValues: [180, 240, 310],
+            cadenceValues: [],
+            heartRateValues: [],
+            speedValues: [],
+            averagePowerWatts: 243,
+            normalizedPowerWatts: 258,
+            trainingStressScore: 88,
+            intensityFactor: 0.87,
+            complianceScore: 1,
+            matchedIntervals: [],
+          },
           eventDefinition: makeEventDefinition({
             intervals: [
               makeIntervalDefinition({ definition: '10m' }),
@@ -49,7 +64,7 @@ describe('CalendarDayCell charts', () => {
 
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
 
-    expect(container).toHaveTextContent('Morning Ride');
+    expect(container).toHaveTextContent('Planned intervals');
     expect(container.querySelectorAll('[data-chart-bar="mini"]').length).toBe(4);
   });
 
