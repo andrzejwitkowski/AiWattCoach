@@ -180,16 +180,44 @@ where
                 .map(|record| (format!("{}:{}", record.operation_key, record.date), record))
                 .collect::<std::collections::HashMap<_, _>>();
 
-            let mut projected = planned
+            let planned_entities = planned
                 .iter()
                 .map(|workout| {
-                    let mut entry = project_planned_workout_entry(workout, None);
+                    CanonicalEntityRef::new(
+                        CanonicalEntityKind::PlannedWorkout,
+                        workout.planned_workout_id.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let planned_sync_states_by_entity = sync_states
+                .find_by_provider_and_canonical_entities(
+                    &user_id,
+                    ExternalProvider::Intervals,
+                    &planned_entities,
+                )
+                .await
+                .map_err(map_sync_error)?
+                .into_iter()
+                .map(|state| (state.canonical_entity.clone(), state))
+                .collect::<std::collections::HashMap<_, _>>();
+
+            let mut projected = Vec::with_capacity(planned.len());
+            for workout in &planned {
+                let planned_entity = CanonicalEntityRef::new(
+                    CanonicalEntityKind::PlannedWorkout,
+                    workout.planned_workout_id.clone(),
+                );
+                let mut entry = project_planned_workout_entry(
+                    workout,
+                    planned_sync_states_by_entity.get(&planned_entity),
+                );
+                if entry.sync.is_none() {
                     entry.sync = planned_syncs_by_id
                         .get(&workout.planned_workout_id)
                         .map(map_planned_sync_record_to_calendar_entry_sync);
-                    entry
-                })
-                .collect::<Vec<_>>();
+                }
+                projected.push(entry);
+            }
             projected.extend(completed.iter().map(project_completed_workout_entry));
             for race in &races {
                 let sync_state = sync_states

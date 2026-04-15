@@ -16,6 +16,7 @@ use crate::domain::{
     races::{Race, RaceDiscipline, RacePriority, RaceRepository},
     special_days::{SpecialDay, SpecialDayKind, SpecialDayRepository},
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::ports::InMemoryCalendarEntryViewRepository;
 use super::{
@@ -438,6 +439,135 @@ async fn refresh_range_for_user_uses_planned_workout_sync_records_for_planned_en
     );
 }
 
+#[tokio::test]
+async fn refresh_range_for_user_uses_external_sync_state_for_imported_planned_workouts() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(
+            CanonicalEntityKind::PlannedWorkout,
+            "imported-planned-1".to_string(),
+        ),
+    )
+    .mark_synced("144".to_string(), "hash-1".to_string(), 2)]);
+
+    planned
+        .upsert(PlannedWorkout::new(
+            "imported-planned-1".to_string(),
+            "user-1".to_string(),
+            "2026-05-10".to_string(),
+            sample_planned_workout().workout,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        planned_syncs,
+        completed,
+        races,
+        special_days,
+        sync_states,
+    );
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(
+        refreshed[0]
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        Some(144)
+    );
+    assert_eq!(
+        refreshed[0]
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("synced")
+    );
+}
+
+#[tokio::test]
+async fn refresh_range_for_user_batches_planned_workout_sync_state_lookups() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![
+        ExternalSyncState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            CanonicalEntityRef::new(
+                CanonicalEntityKind::PlannedWorkout,
+                "imported-planned-1".to_string(),
+            ),
+        )
+        .mark_synced("144".to_string(), "hash-1".to_string(), 2),
+        ExternalSyncState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            CanonicalEntityRef::new(
+                CanonicalEntityKind::PlannedWorkout,
+                "imported-planned-2".to_string(),
+            ),
+        )
+        .mark_synced("145".to_string(), "hash-2".to_string(), 3),
+    ]);
+
+    planned
+        .upsert(PlannedWorkout::new(
+            "imported-planned-1".to_string(),
+            "user-1".to_string(),
+            "2026-05-10".to_string(),
+            sample_planned_workout().workout.clone(),
+        ))
+        .await
+        .unwrap();
+    planned
+        .upsert(PlannedWorkout::new(
+            "imported-planned-2".to_string(),
+            "user-1".to_string(),
+            "2026-05-11".to_string(),
+            sample_planned_workout().workout,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        planned_syncs,
+        completed,
+        races,
+        special_days,
+        sync_states.clone(),
+    );
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-11")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 2);
+    let (single_lookups, batch_lookups) = sync_states.lookup_counts();
+    assert_eq!(single_lookups, 0);
+    assert_eq!(batch_lookups, 1);
+}
+
 #[derive(Clone, Default)]
 struct TestPlannedWorkoutRepository {
     stored: std::sync::Arc<std::sync::Mutex<Vec<PlannedWorkout>>>,
@@ -826,13 +956,24 @@ impl SpecialDayRepository for TestSpecialDayRepository {
 #[derive(Clone, Default)]
 struct TestExternalSyncStateRepository {
     states: std::sync::Arc<std::sync::Mutex<Vec<ExternalSyncState>>>,
+    single_lookup_count: std::sync::Arc<AtomicUsize>,
+    batch_lookup_count: std::sync::Arc<AtomicUsize>,
 }
 
 impl TestExternalSyncStateRepository {
     fn with_states(states: Vec<ExternalSyncState>) -> Self {
         Self {
             states: std::sync::Arc::new(std::sync::Mutex::new(states)),
+            single_lookup_count: std::sync::Arc::new(AtomicUsize::new(0)),
+            batch_lookup_count: std::sync::Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    fn lookup_counts(&self) -> (usize, usize) {
+        (
+            self.single_lookup_count.load(Ordering::Relaxed),
+            self.batch_lookup_count.load(Ordering::Relaxed),
+        )
     }
 }
 
@@ -855,9 +996,11 @@ impl ExternalSyncStateRepository for TestExternalSyncStateRepository {
         Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
     > {
         let states = self.states.clone();
+        let single_lookup_count = self.single_lookup_count.clone();
         let user_id = user_id.to_string();
         let canonical_entity = canonical_entity.clone();
         Box::pin(async move {
+            single_lookup_count.fetch_add(1, Ordering::Relaxed);
             Ok(states
                 .lock()
                 .unwrap()
@@ -868,6 +1011,34 @@ impl ExternalSyncStateRepository for TestExternalSyncStateRepository {
                         && state.canonical_entity == canonical_entity
                 })
                 .cloned())
+        })
+    }
+
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let batch_lookup_count = self.batch_lookup_count.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            batch_lookup_count.fetch_add(1, Ordering::Relaxed);
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|state| {
+                    state.user_id == user_id
+                        && state.provider == provider
+                        && canonical_entities.contains(&state.canonical_entity)
+                })
+                .cloned()
+                .collect())
         })
     }
 

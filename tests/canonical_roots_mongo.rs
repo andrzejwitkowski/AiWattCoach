@@ -5,17 +5,19 @@ use std::{
 
 use aiwattcoach::{
     adapters::mongo::{
-        activities::MongoActivityRepository, completed_workouts::MongoCompletedWorkoutRepository,
+        completed_workouts::MongoCompletedWorkoutRepository,
         planned_workouts::MongoPlannedWorkoutRepository, special_days::MongoSpecialDayRepository,
         training_plan_projections::MongoTrainingPlanProjectionRepository,
     },
     domain::{
-        completed_workouts::CompletedWorkoutRepository,
-        intervals::{
-            Activity, ActivityDetails, ActivityMetrics, ActivityRepositoryPort, ActivityStream,
-            ActivityZoneTime,
+        completed_workouts::{
+            CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics,
+            CompletedWorkoutRepository, CompletedWorkoutStream, CompletedWorkoutZoneTime,
         },
-        planned_workouts::PlannedWorkoutRepository,
+        planned_workouts::{
+            PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutRepository,
+            PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
+        },
         special_days::{SpecialDay, SpecialDayKind, SpecialDayRepository},
         training_plan::{
             TrainingPlanDay, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
@@ -103,35 +105,81 @@ async fn planned_workout_repository_excludes_snapshot_start_date_even_when_it_ha
 }
 
 #[tokio::test]
-async fn completed_workout_repository_reads_activities_as_canonical_completed_workouts() {
+async fn planned_workout_repository_merges_imported_and_projected_workouts() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
     };
-    let activity_repository =
-        MongoActivityRepository::new(fixture.client.clone(), &fixture.database);
-    activity_repository.ensure_indexes().await.unwrap();
+    let projection_repository =
+        MongoTrainingPlanProjectionRepository::new(fixture.client.clone(), &fixture.database);
+    projection_repository.ensure_indexes().await.unwrap();
+    let repository = MongoPlannedWorkoutRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let snapshot = sample_snapshot("training-plan:user-1:workout-3:1700000002", "2026-04-06");
+    projection_repository
+        .replace_window(
+            snapshot.clone(),
+            sample_projected_days(&snapshot),
+            "2026-04-06",
+            1_700_000_002,
+        )
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_imported_planned_workout(
+            "imported-planned-1",
+            "user-1",
+            "2026-04-20",
+        ))
+        .await
+        .unwrap();
+
+    let workouts = repository
+        .list_by_user_id_and_date_range("user-1", "2026-04-07", "2026-04-30")
+        .await
+        .unwrap();
+
+    assert!(workouts
+        .iter()
+        .any(|workout| workout.planned_workout_id == "imported-planned-1"));
+    assert!(workouts.iter().any(|workout| {
+        workout.planned_workout_id == "training-plan:user-1:workout-3:1700000002:2026-04-07"
+    }));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn completed_workout_repository_round_trips_canonical_completed_workouts() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
     let repository =
         MongoCompletedWorkoutRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
 
-    activity_repository
-        .upsert(
+    repository
+        .upsert(sample_completed_workout(
+            "completed-2",
             "user-1",
-            sample_activity("activity-2", "2026-05-02T08:00:00"),
-        )
+            "2026-05-02T08:00:00",
+        ))
         .await
         .unwrap();
-    activity_repository
-        .upsert(
+    repository
+        .upsert(sample_completed_workout(
+            "completed-1",
             "user-1",
-            sample_activity("activity-1", "2026-05-01T08:00:00"),
-        )
+            "2026-05-01T08:00:00",
+        ))
         .await
         .unwrap();
-    activity_repository
-        .upsert(
+    repository
+        .upsert(sample_completed_workout(
+            "completed-3",
             "user-2",
-            sample_activity("activity-3", "2026-05-01T08:00:00"),
-        )
+            "2026-05-01T08:00:00",
+        ))
         .await
         .unwrap();
 
@@ -141,10 +189,30 @@ async fn completed_workout_repository_reads_activities_as_canonical_completed_wo
         .unwrap();
 
     assert_eq!(workouts.len(), 2);
-    assert_eq!(workouts[0].completed_workout_id, "activity-1");
+    assert_eq!(workouts[0].completed_workout_id, "completed-1");
     assert_eq!(workouts[0].metrics.training_stress_score, Some(78));
     assert_eq!(workouts[0].details.streams.len(), 1);
-    assert_eq!(workouts[1].completed_workout_id, "activity-2");
+    assert_eq!(workouts[1].completed_workout_id, "completed-2");
+
+    let indexes = fixture
+        .client
+        .database(&fixture.database)
+        .collection::<mongodb::bson::Document>("completed_workouts")
+        .list_indexes()
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+
+    assert!(indexes.iter().any(|index| {
+        index
+            .options
+            .as_ref()
+            .and_then(|options| options.name.as_deref())
+            == Some("completed_workouts_user_completed_workout_unique")
+            && index.keys == doc! { "user_id": 1, "completed_workout_id": 1 }
+    }));
 
     fixture.cleanup().await;
 }
@@ -330,35 +398,43 @@ fn sample_planned_workout() -> aiwattcoach::domain::intervals::PlannedWorkout {
     }
 }
 
-fn sample_activity(activity_id: &str, start_date_local: &str) -> Activity {
-    Activity {
-        id: activity_id.to_string(),
-        athlete_id: Some("athlete-1".to_string()),
-        start_date_local: start_date_local.to_string(),
-        start_date: Some(start_date_local.to_string()),
-        name: Some("Threshold Ride".to_string()),
-        description: Some("Strong steady work".to_string()),
-        activity_type: Some("Ride".to_string()),
-        source: Some("intervals".to_string()),
-        external_id: Some(format!("paired_event_id={activity_id}")),
-        device_name: Some("Trainer".to_string()),
-        distance_meters: Some(35_000.0),
-        moving_time_seconds: Some(3600),
-        elapsed_time_seconds: Some(3700),
-        total_elevation_gain_meters: Some(400.0),
-        total_elevation_loss_meters: Some(400.0),
-        average_speed_mps: Some(9.7),
-        max_speed_mps: Some(15.0),
-        average_heart_rate_bpm: Some(150),
-        max_heart_rate_bpm: Some(175),
-        average_cadence_rpm: Some(88.0),
-        trainer: true,
-        commute: false,
-        race: false,
-        has_heart_rate: true,
-        stream_types: vec!["watts".to_string()],
-        tags: vec!["quality".to_string()],
-        metrics: ActivityMetrics {
+fn sample_imported_planned_workout(
+    planned_workout_id: &str,
+    user_id: &str,
+    date: &str,
+) -> PlannedWorkout {
+    PlannedWorkout::new(
+        planned_workout_id.to_string(),
+        user_id.to_string(),
+        date.to_string(),
+        PlannedWorkoutContent {
+            lines: vec![
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Imported Threshold".to_string(),
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 900,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 90.0,
+                        max: 95.0,
+                    },
+                }),
+            ],
+        },
+    )
+}
+
+fn sample_completed_workout(
+    completed_workout_id: &str,
+    user_id: &str,
+    start_date_local: &str,
+) -> CompletedWorkout {
+    CompletedWorkout::new(
+        completed_workout_id.to_string(),
+        user_id.to_string(),
+        start_date_local.to_string(),
+        CompletedWorkoutMetrics {
             training_stress_score: Some(78),
             normalized_power_watts: Some(245),
             intensity_factor: Some(0.83),
@@ -374,21 +450,21 @@ fn sample_activity(activity_id: &str, start_date_local: &str) -> Activity {
             pace_load: None,
             strain_score: None,
         },
-        details: ActivityDetails {
+        CompletedWorkoutDetails {
             intervals: Vec::new(),
             interval_groups: Vec::new(),
-            streams: vec![ActivityStream {
+            streams: vec![CompletedWorkoutStream {
                 stream_type: "watts".to_string(),
                 name: Some("Power".to_string()),
-                data: Some(serde_json::json!([180, 240, 310])),
-                data2: None,
+                primary_series: Some(serde_json::json!([180, 240, 310])),
+                secondary_series: None,
                 value_type_is_array: false,
                 custom: false,
                 all_null: false,
             }],
             interval_summary: vec!["tempo".to_string()],
             skyline_chart: Vec::new(),
-            power_zone_times: vec![ActivityZoneTime {
+            power_zone_times: vec![CompletedWorkoutZoneTime {
                 zone_id: "z3".to_string(),
                 seconds: 1200,
             }],
@@ -396,8 +472,7 @@ fn sample_activity(activity_id: &str, start_date_local: &str) -> Activity {
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
-        details_unavailable_reason: None,
-    }
+    )
 }
 
 fn sample_special_day(special_day_id: &str, user_id: &str, date: &str) -> SpecialDay {

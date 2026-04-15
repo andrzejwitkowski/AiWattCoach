@@ -1,3 +1,4 @@
+use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +21,7 @@ struct ExternalObservationDocument {
     canonical_entity_kind: String,
     canonical_entity_id: String,
     normalized_payload_hash: Option<String>,
+    dedup_key: Option<String>,
     observed_at_epoch_seconds: i64,
 }
 
@@ -51,6 +53,14 @@ impl MongoExternalObservationRepository {
                     .options(
                         IndexOptions::builder()
                             .name("external_observations_user_canonical_entity".to_string())
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "external_object_kind": 1, "dedup_key": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("external_observations_user_object_dedup_key".to_string())
                             .build(),
                     )
                     .build(),
@@ -108,6 +118,37 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
             Ok(document.map(map_document_to_observation))
         })
     }
+
+    fn find_by_dedup_key(
+        &self,
+        user_id: &str,
+        external_object_kind: ExternalObjectKind,
+        dedup_key: &str,
+    ) -> BoxFuture<Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let external_object_kind = external_object_kind_as_str(&external_object_kind).to_string();
+        let dedup_key = dedup_key.to_string();
+        Box::pin(async move {
+            collection
+                .find(doc! {
+                    "user_id": &user_id,
+                    "external_object_kind": &external_object_kind,
+                    "dedup_key": &dedup_key,
+                })
+                .await
+                .map_err(storage_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(storage_error)
+                .map(|documents| {
+                    documents
+                        .into_iter()
+                        .map(map_document_to_observation)
+                        .collect()
+                })
+        })
+    }
 }
 
 fn storage_error(error: mongodb::error::Error) -> ExternalSyncRepositoryError {
@@ -127,6 +168,7 @@ fn map_observation_to_document(observation: &ExternalObservation) -> ExternalObs
         .to_string(),
         canonical_entity_id: observation.canonical_entity.entity_id.clone(),
         normalized_payload_hash: observation.normalized_payload_hash.clone(),
+        dedup_key: observation.dedup_key.clone(),
         observed_at_epoch_seconds: observation.observed_at_epoch_seconds,
     }
 }
@@ -142,6 +184,7 @@ fn map_document_to_observation(document: ExternalObservationDocument) -> Externa
             entity_id: document.canonical_entity_id,
         },
         normalized_payload_hash: document.normalized_payload_hash,
+        dedup_key: document.dedup_key,
         observed_at_epoch_seconds: document.observed_at_epoch_seconds,
     }
 }
@@ -204,22 +247,26 @@ fn map_canonical_entity_kind(value: &str) -> CanonicalEntityKind {
 mod tests {
     use crate::domain::external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalObjectKind, ExternalObservation,
-        ExternalProvider,
+        ExternalObservationParams, ExternalProvider,
     };
 
     use super::{map_document_to_observation, map_observation_to_document};
 
     #[test]
     fn observation_document_round_trip_preserves_fields() {
-        let observation = ExternalObservation::new(
-            "user-1".to_string(),
-            ExternalProvider::Intervals,
-            ExternalObjectKind::Race,
-            "remote-1".to_string(),
-            CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
-            Some("hash-1".to_string()),
-            1_700_000_000,
-        );
+        let observation = ExternalObservation::new(ExternalObservationParams {
+            user_id: "user-1".to_string(),
+            provider: ExternalProvider::Intervals,
+            external_object_kind: ExternalObjectKind::Race,
+            external_id: "remote-1".to_string(),
+            canonical_entity: CanonicalEntityRef::new(
+                CanonicalEntityKind::Race,
+                "race-1".to_string(),
+            ),
+            normalized_payload_hash: Some("hash-1".to_string()),
+            dedup_key: Some("dedup-1".to_string()),
+            observed_at_epoch_seconds: 1_700_000_000,
+        });
 
         let mapped = map_document_to_observation(map_observation_to_document(&observation));
 

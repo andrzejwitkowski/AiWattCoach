@@ -1,4 +1,4 @@
-use std::{error::Error, future::Future, net::SocketAddr, sync::Arc, time::Duration};
+use std::{error::Error, net::SocketAddr, sync::Arc, time::Duration};
 
 use aiwattcoach::{
     adapters::{
@@ -53,11 +53,12 @@ use aiwattcoach::{
         workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
     build_app,
-    config::Settings,
+    config::{spawn_provider_polling_loop, ProviderPollingService, Settings},
     domain::athlete_summary::AthleteSummaryService,
     domain::calendar::CalendarService,
     domain::calendar_labels::CalendarLabelsService,
     domain::calendar_view::CalendarEntryViewRefreshService,
+    domain::external_sync::ExternalImportService,
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
     },
@@ -66,88 +67,19 @@ use aiwattcoach::{
     domain::settings::UserSettingsService,
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_plan::TrainingPlanGenerationService,
-    domain::workout_summary::{WorkoutSummaryError, WorkoutSummaryService},
+    domain::workout_summary::WorkoutSummaryService,
     telemetry::setup_telemetry,
     AppState,
 };
 use tokio::net::TcpListener;
-use tokio::sync::Notify;
 use tracing::info;
 
-#[derive(Clone)]
-struct TrainingPlanWorkoutSummaryAdapter<Service> {
-    workout_summary_service: Arc<Service>,
-}
+mod main_support;
 
-impl<Service> TrainingPlanWorkoutSummaryAdapter<Service> {
-    fn new(workout_summary_service: Arc<Service>) -> Self {
-        Self {
-            workout_summary_service,
-        }
-    }
-}
-
-impl<Service> aiwattcoach::domain::training_plan::TrainingPlanWorkoutSummaryPort
-    for TrainingPlanWorkoutSummaryAdapter<Service>
-where
-    Service: aiwattcoach::domain::workout_summary::WorkoutSummaryUseCases + Send + Sync + 'static,
-{
-    fn persist_workout_recap(
-        &self,
-        user_id: &str,
-        workout_id: &str,
-        recap: aiwattcoach::domain::workout_summary::WorkoutRecap,
-    ) -> aiwattcoach::domain::training_plan::BoxFuture<
-        Result<(), aiwattcoach::domain::training_plan::TrainingPlanError>,
-    > {
-        let workout_summary_service = self.workout_summary_service.clone();
-        let user_id = user_id.to_string();
-        let workout_id = workout_id.to_string();
-        Box::pin(async move {
-            workout_summary_service
-                .persist_workout_recap(&user_id, &workout_id, recap)
-                .await
-                .map(|_| ())
-                .map_err(map_workout_summary_error)
-        })
-    }
-}
-
-fn map_workout_summary_error(
-    error: WorkoutSummaryError,
-) -> aiwattcoach::domain::training_plan::TrainingPlanError {
-    match error {
-        WorkoutSummaryError::Validation(message) => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(message)
-        }
-        WorkoutSummaryError::Locked => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
-                "workout summary is saved and cannot be edited".to_string(),
-            )
-        }
-        WorkoutSummaryError::NotFound => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
-                "workout summary not found".to_string(),
-            )
-        }
-        WorkoutSummaryError::AlreadyExists => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
-                "workout summary already exists".to_string(),
-            )
-        }
-        WorkoutSummaryError::ReplyAlreadyPending => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
-                "coach reply generation is already pending for this message".to_string(),
-            )
-        }
-        WorkoutSummaryError::Llm(error) => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(error.to_string())
-        }
-        WorkoutSummaryError::Repository(message) => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Repository(message)
-        }
-    }
-}
+use main_support::{
+    finish_server_shutdown, reconcile_intervals_poll_states, shutdown_signal,
+    TrainingPlanWorkoutSummaryAdapter,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -214,11 +146,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let llm_context_cache_repository =
         MongoLlmContextCacheRepository::new(mongo_client.clone(), &mongo_database);
     llm_context_cache_repository.ensure_indexes().await?;
-    let settings_service = Arc::new(
-        UserSettingsService::new(settings_repository, SystemClock)
-            .with_llm_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
-    );
-    let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let llm_http_client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .build()?;
@@ -273,12 +200,26 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let provider_poll_state_repository =
         MongoProviderPollStateRepository::new(mongo_client.clone(), &mongo_database);
     provider_poll_state_repository.ensure_indexes().await?;
+    reconcile_intervals_poll_states(
+        &settings_repository,
+        &provider_poll_state_repository,
+        &SystemClock,
+    )
+    .await?;
+    let settings_service = Arc::new(
+        UserSettingsService::new(settings_repository, SystemClock)
+            .with_provider_poll_states(provider_poll_state_repository.clone())
+            .with_llm_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
+    );
+    let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let race_repository = MongoRaceRepository::new(mongo_client.clone(), &mongo_database);
     race_repository.ensure_indexes().await?;
     let planned_workout_repository =
         MongoPlannedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
+    planned_workout_repository.ensure_indexes().await?;
     let completed_workout_repository =
         MongoCompletedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
+    completed_workout_repository.ensure_indexes().await?;
     let special_day_repository =
         MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);
     special_day_repository.ensure_indexes().await?;
@@ -301,9 +242,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     upload_operation_repository.ensure_indexes().await?;
     let calendar_entry_view_refresh_service = CalendarEntryViewRefreshService::new(
         calendar_entry_view_repository.clone(),
-        planned_workout_repository,
+        planned_workout_repository.clone(),
         planned_workout_sync_repository.clone(),
-        completed_workout_repository,
+        completed_workout_repository.clone(),
         race_repository.clone(),
         special_day_repository.clone(),
         external_sync_state_repository.clone(),
@@ -318,6 +259,25 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     } else {
         IntervalsSettingsAdapter::Live(SettingsIntervalsProvider::new(settings_service.clone()))
     };
+    let external_import_service = ExternalImportService::new(
+        planned_workout_repository.clone(),
+        completed_workout_repository.clone(),
+        race_repository.clone(),
+        special_day_repository.clone(),
+        external_observation_repository.clone(),
+        external_sync_state_repository.clone(),
+        SystemClock,
+    )
+    .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone());
+    let provider_polling_service = ProviderPollingService::new(
+        intervals_api_client.clone(),
+        intervals_settings_provider.clone(),
+        provider_poll_state_repository.clone(),
+        external_import_service,
+        SystemClock,
+        UuidIdGenerator,
+    )
+    .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone());
     let activity_identity_extractor = ActivityFileIdentityExtractor;
     let intervals_service = Arc::new(
         IntervalsService::new(
@@ -399,6 +359,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             SystemClock,
             UuidIdGenerator,
         )
+        .with_provider_poll_states(provider_poll_state_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
     let race_calendar_source =
@@ -413,6 +374,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             race_calendar_source,
             SystemClock,
         )
+        .with_provider_poll_states(provider_poll_state_repository)
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
     let workout_summary_service = Arc::new(
@@ -448,6 +410,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .with_intervals_connection_tester(Arc::new(intervals_connection_tester)),
     );
     let listener = TcpListener::bind(address).await?;
+    spawn_provider_polling_loop(provider_polling_service);
 
     let serve_result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -455,69 +418,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let telemetry_shutdown_result = telemetry.shutdown();
 
     finish_server_shutdown(serve_result, telemetry_shutdown_result)
-}
-
-fn finish_server_shutdown(
-    serve_result: std::io::Result<()>,
-    telemetry_shutdown_result: Result<(), Box<dyn Error + Send + Sync>>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    match (serve_result, telemetry_shutdown_result) {
-        (Ok(()), Ok(())) => Ok(()),
-        (Err(serve_error), Ok(())) => Err(Box::new(serve_error)),
-        (Ok(()), Err(telemetry_error)) => Err(telemetry_error),
-        (Err(serve_error), Err(telemetry_error)) => Err(Box::new(std::io::Error::other(format!(
-            "server failed: {serve_error}; telemetry shutdown failed: {telemetry_error}"
-        )))),
-    }
-}
-
-async fn shutdown_signal() {
-    let shutdown = Arc::new(Notify::new());
-    let ctrl_c = wait_for_ctrl_c(tokio::signal::ctrl_c(), shutdown.clone());
-
-    #[cfg(unix)]
-    let terminate = wait_for_sigterm(
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()),
-        shutdown,
-    );
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
-}
-
-async fn wait_for_ctrl_c<F>(ctrl_c: F, shutdown: Arc<Notify>)
-where
-    F: Future<Output = std::io::Result<()>>,
-{
-    match ctrl_c.await {
-        Ok(()) => shutdown.notify_waiters(),
-        Err(error) => {
-            tracing::error!(%error, "Failed to listen for Ctrl+C");
-            shutdown.notified().await;
-        }
-    }
-}
-
-#[cfg(unix)]
-async fn wait_for_sigterm(
-    signal: std::io::Result<tokio::signal::unix::Signal>,
-    shutdown: Arc<Notify>,
-) {
-    match signal {
-        Ok(mut signal) => {
-            signal.recv().await;
-            shutdown.notify_waiters();
-        }
-        Err(error) => {
-            tracing::error!(%error, "Failed to listen for SIGTERM");
-            shutdown.notified().await;
-        }
-    }
 }
 
 #[cfg(test)]

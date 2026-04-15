@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     future::Future,
     io::Write,
@@ -12,8 +13,8 @@ static TEST_TRACING_INIT: OnceLock<()> = OnceLock::new();
 static TRACE_CAPTURE_ID: AtomicU64 = AtomicU64::new(1);
 static ACTIVE_LOG_BUFFERS: OnceLock<Mutex<HashMap<String, SharedLogBuffer>>> = OnceLock::new();
 
-tokio::task_local! {
-    static CURRENT_CAPTURE_ID: String;
+thread_local! {
+    static CURRENT_CAPTURE_ID: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 #[derive(Clone, Default)]
@@ -70,7 +71,8 @@ impl Write for GlobalLogWriter {
 
 impl Drop for GlobalLogWriter {
     fn drop(&mut self) {
-        let Some(capture_id) = CURRENT_CAPTURE_ID.try_with(Clone::clone).ok() else {
+        let capture_id = CURRENT_CAPTURE_ID.with(|capture_id| capture_id.borrow().clone());
+        let Some(capture_id) = capture_id else {
             return;
         };
 
@@ -110,6 +112,29 @@ impl Drop for ActiveLogBufferGuard {
     }
 }
 
+struct CurrentCaptureScope {
+    previous_capture_id: Option<String>,
+}
+
+impl CurrentCaptureScope {
+    fn install(capture_id: String) -> Self {
+        let previous_capture_id = CURRENT_CAPTURE_ID
+            .with(|current_capture_id| current_capture_id.replace(Some(capture_id)));
+
+        Self {
+            previous_capture_id,
+        }
+    }
+}
+
+impl Drop for CurrentCaptureScope {
+    fn drop(&mut self) {
+        CURRENT_CAPTURE_ID.with(|current_capture_id| {
+            *current_capture_id.borrow_mut() = self.previous_capture_id.clone();
+        });
+    }
+}
+
 pub async fn capture_tracing_logs<F, Fut, T>(run: F) -> (T, String)
 where
     F: FnOnce() -> Fut,
@@ -122,7 +147,9 @@ where
         TRACE_CAPTURE_ID.fetch_add(1, Ordering::Relaxed)
     );
     let active_buffer = ActiveLogBufferGuard::install(capture_id.clone(), logs.clone());
-    let output = CURRENT_CAPTURE_ID.scope(capture_id, run()).await;
+    let current_capture_scope = CurrentCaptureScope::install(capture_id);
+    let output = run().await;
+    drop(current_capture_scope);
     drop(active_buffer);
     let captured = logs.contents();
 
@@ -144,4 +171,50 @@ fn init_test_tracing_subscriber() {
         tracing::subscriber::set_global_default(subscriber)
             .expect("test tracing subscriber should install once");
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capture_tracing_logs;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn capture_tracing_logs_restores_outer_capture_after_nested_call() {
+        let ((inner_result, inner_logs), outer_logs) = capture_tracing_logs(|| async {
+            tracing::info!(message = "outer-before");
+            let nested = capture_tracing_logs(|| async {
+                tracing::info!(message = "inner-only");
+                41
+            })
+            .await;
+            tracing::info!(message = "outer-after");
+            nested
+        })
+        .await;
+
+        assert_eq!(inner_result, 41);
+        assert!(
+            !inner_logs.contains("outer-before"),
+            "inner logs leaked outer-before: {inner_logs}"
+        );
+        assert!(
+            !inner_logs.contains("outer-after"),
+            "inner logs leaked outer-after: {inner_logs}"
+        );
+        assert!(
+            inner_logs.contains("inner-only"),
+            "inner logs missing inner message: {inner_logs}"
+        );
+        assert!(
+            outer_logs.contains("outer-before"),
+            "outer logs missing outer-before: {outer_logs}"
+        );
+        assert!(
+            outer_logs.contains("outer-after"),
+            "outer logs missing outer-after: {outer_logs}"
+        );
+        assert!(
+            !outer_logs.contains("inner-only"),
+            "outer logs leaked inner message: {outer_logs}"
+        );
+    }
 }

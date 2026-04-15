@@ -1,5 +1,9 @@
 use futures::TryStreamExt;
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::{doc, Bson, Document},
+    options::IndexOptions,
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::external_sync::{
@@ -19,6 +23,10 @@ struct ProviderPollStateDocument {
     stream: String,
     cursor: Option<String>,
     next_due_at_epoch_seconds: i64,
+    last_attempted_at_epoch_seconds: Option<i64>,
+    last_successful_at_epoch_seconds: Option<i64>,
+    last_error: Option<String>,
+    backoff_until_epoch_seconds: Option<i64>,
 }
 
 impl MongoProviderPollStateRepository {
@@ -55,6 +63,33 @@ impl MongoProviderPollStateRepository {
             .map_err(storage_error)?;
         Ok(())
     }
+
+    pub async fn list_user_ids_for_provider(
+        &self,
+        provider: ExternalProvider,
+    ) -> Result<Vec<String>, ExternalSyncRepositoryError> {
+        #[derive(Deserialize)]
+        struct UserIdDocument {
+            user_id: String,
+        }
+
+        let collection = self.collection.clone_with_type::<UserIdDocument>();
+        collection
+            .find(doc! { "provider": provider_as_str(&provider) })
+            .projection(doc! { "_id": 0, "user_id": 1 })
+            .sort(doc! { "user_id": 1 })
+            .await
+            .map_err(storage_error)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(storage_error)
+            .map(|documents| {
+                documents
+                    .into_iter()
+                    .map(|document| document.user_id)
+                    .collect()
+            })
+    }
 }
 
 impl ProviderPollStateRepository for MongoProviderPollStateRepository {
@@ -88,7 +123,7 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
         let collection = self.collection.clone();
         Box::pin(async move {
             let documents = collection
-                .find(doc! { "next_due_at_epoch_seconds": { "$lte": now_epoch_seconds } })
+                .find(build_due_filter(now_epoch_seconds))
                 .sort(doc! { "next_due_at_epoch_seconds": 1, "user_id": 1, "provider": 1, "stream": 1 })
                 .await
                 .map_err(storage_error)?
@@ -135,6 +170,10 @@ fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDoc
         stream: stream_as_str(&state.stream).to_string(),
         cursor: state.cursor.clone(),
         next_due_at_epoch_seconds: state.next_due_at_epoch_seconds,
+        last_attempted_at_epoch_seconds: state.last_attempted_at_epoch_seconds,
+        last_successful_at_epoch_seconds: state.last_successful_at_epoch_seconds,
+        last_error: state.last_error.clone(),
+        backoff_until_epoch_seconds: state.backoff_until_epoch_seconds,
     }
 }
 
@@ -147,6 +186,10 @@ fn map_document_to_poll_state(
         stream: map_stream(&document.stream)?,
         cursor: document.cursor,
         next_due_at_epoch_seconds: document.next_due_at_epoch_seconds,
+        last_attempted_at_epoch_seconds: document.last_attempted_at_epoch_seconds,
+        last_successful_at_epoch_seconds: document.last_successful_at_epoch_seconds,
+        last_error: document.last_error,
+        backoff_until_epoch_seconds: document.backoff_until_epoch_seconds,
     })
 }
 
@@ -189,12 +232,26 @@ fn storage_error(error: mongodb::error::Error) -> ExternalSyncRepositoryError {
     ExternalSyncRepositoryError::Storage(error.to_string())
 }
 
+fn build_due_filter(now_epoch_seconds: i64) -> Document {
+    doc! {
+        "next_due_at_epoch_seconds": { "$lte": now_epoch_seconds },
+        "$or": [
+            { "backoff_until_epoch_seconds": { "$exists": false } },
+            { "backoff_until_epoch_seconds": Bson::Null },
+            { "backoff_until_epoch_seconds": { "$lte": now_epoch_seconds } },
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use mongodb::bson::{doc, Bson};
+
     use crate::domain::external_sync::{ExternalProvider, ProviderPollState, ProviderPollStream};
 
     use super::{
-        map_document_to_poll_state, map_poll_state_to_document, ProviderPollStateDocument,
+        build_due_filter, map_document_to_poll_state, map_poll_state_to_document,
+        ProviderPollStateDocument,
     };
 
     #[test]
@@ -205,6 +262,10 @@ mod tests {
             stream: ProviderPollStream::Calendar,
             cursor: Some("cursor-1".to_string()),
             next_due_at_epoch_seconds: 1_700_000_000,
+            last_attempted_at_epoch_seconds: Some(1_700_000_001),
+            last_successful_at_epoch_seconds: Some(1_700_000_002),
+            last_error: Some("temporary upstream error".to_string()),
+            backoff_until_epoch_seconds: Some(1_700_000_300),
         };
 
         let mapped = map_document_to_poll_state(map_poll_state_to_document(&state)).unwrap();
@@ -220,6 +281,10 @@ mod tests {
             stream: "mystery".to_string(),
             cursor: None,
             next_due_at_epoch_seconds: 1_700_000_000,
+            last_attempted_at_epoch_seconds: None,
+            last_successful_at_epoch_seconds: None,
+            last_error: None,
+            backoff_until_epoch_seconds: None,
         })
         .unwrap_err();
 
@@ -227,5 +292,25 @@ mod tests {
             error,
             crate::domain::external_sync::ExternalSyncRepositoryError::CorruptData(_)
         ));
+    }
+
+    #[test]
+    fn due_filter_respects_backoff_window() {
+        let filter = build_due_filter(1_700_000_000);
+
+        assert_eq!(
+            filter.get_document("next_due_at_epoch_seconds").unwrap(),
+            &doc! { "$lte": Bson::Int64(1_700_000_000) }
+        );
+        assert_eq!(
+            filter.get_array("$or").unwrap(),
+            &vec![
+                Bson::Document(doc! { "backoff_until_epoch_seconds": { "$exists": false } }),
+                Bson::Document(doc! { "backoff_until_epoch_seconds": Bson::Null }),
+                Bson::Document(
+                    doc! { "backoff_until_epoch_seconds": { "$lte": Bson::Int64(1_700_000_000) } },
+                ),
+            ]
+        );
     }
 }

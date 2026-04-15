@@ -1,3 +1,4 @@
+use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
@@ -105,6 +106,50 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
                 .map_err(storage_error)?;
 
             Ok(document.map(map_document_to_sync_state))
+        })
+    }
+
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let provider = provider_as_str(&provider).to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            if canonical_entities.is_empty() {
+                return Ok(Vec::new());
+            }
+
+            let entity_filters = canonical_entities
+                .into_iter()
+                .map(|canonical_entity| {
+                    doc! {
+                        "canonical_entity_kind": canonical_entity_kind_as_str(&canonical_entity.entity_kind),
+                        "canonical_entity_id": canonical_entity.entity_id,
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let documents = collection
+                .find(doc! {
+                    "user_id": &user_id,
+                    "provider": &provider,
+                    "$or": entity_filters,
+                })
+                .await
+                .map_err(storage_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(storage_error)?;
+
+            Ok(documents
+                .into_iter()
+                .map(map_document_to_sync_state)
+                .collect())
         })
     }
 

@@ -3,7 +3,8 @@ use crate::domain::{
     calendar_view::{CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRefreshPort},
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
-        ExternalSyncState, ExternalSyncStateRepository, ExternalSyncStatus,
+        ExternalSyncState, ExternalSyncStateRepository, ExternalSyncStatus, ProviderPollState,
+        ProviderPollStateRepository, ProviderPollStream,
     },
     identity::{Clock, IdGenerator},
     intervals::{
@@ -101,6 +102,17 @@ impl InMemoryExternalSyncStateRepository {
     }
 }
 
+#[derive(Clone, Default)]
+struct InMemoryProviderPollStateRepository {
+    states: Arc<Mutex<Vec<ProviderPollState>>>,
+}
+
+impl InMemoryProviderPollStateRepository {
+    fn stored(&self) -> Vec<ProviderPollState> {
+        self.states.lock().unwrap().clone()
+    }
+}
+
 impl ExternalSyncStateRepository for InMemoryExternalSyncStateRepository {
     fn upsert(
         &self,
@@ -150,6 +162,32 @@ impl ExternalSyncStateRepository for InMemoryExternalSyncStateRepository {
         })
     }
 
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|state| {
+                    state.user_id == user_id
+                        && state.provider == provider
+                        && canonical_entities.contains(&state.canonical_entity)
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
     fn delete_by_provider_and_canonical_entity(
         &self,
         user_id: &str,
@@ -170,6 +208,67 @@ impl ExternalSyncStateRepository for InMemoryExternalSyncStateRepository {
                     && state.canonical_entity == canonical_entity)
             });
             Ok(())
+        })
+    }
+}
+
+impl ProviderPollStateRepository for InMemoryProviderPollStateRepository {
+    fn upsert(
+        &self,
+        state: ProviderPollState,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<ProviderPollState, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        Box::pin(async move {
+            let mut states = states.lock().unwrap();
+            states.retain(|existing| {
+                !(existing.user_id == state.user_id
+                    && existing.provider == state.provider
+                    && existing.stream == state.stream)
+            });
+            states.push(state.clone());
+            Ok(state)
+        })
+    }
+
+    fn list_due(
+        &self,
+        now_epoch_seconds: i64,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        Box::pin(async move {
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|state| state.is_due(now_epoch_seconds))
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn find_by_provider_and_stream(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        stream: ProviderPollStream,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ProviderPollState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id && state.provider == provider && state.stream == stream
+                })
+                .cloned())
         })
     }
 }
@@ -402,6 +501,7 @@ impl IntervalsUseCases for RecordingIntervalsService {
 async fn create_race_persists_and_syncs_to_intervals() {
     let repository = InMemoryRaceRepository::default();
     let sync_states = InMemoryExternalSyncStateRepository::default();
+    let poll_states = InMemoryProviderPollStateRepository::default();
     let intervals = RecordingIntervalsService::default();
     let refresh = RecordingCalendarRefresh::default();
     let service = RaceService::new(
@@ -411,6 +511,7 @@ async fn create_race_persists_and_syncs_to_intervals() {
         TestClock,
         TestIdGenerator::default(),
     )
+    .with_provider_poll_states(poll_states.clone())
     .with_calendar_view_refresh(refresh.clone());
 
     let created = service
@@ -435,6 +536,9 @@ async fn create_race_persists_and_syncs_to_intervals() {
     let sync_state = sync_states.stored().pop().expect("expected sync state");
     assert_eq!(sync_state.external_id.as_deref(), Some("77"));
     assert_eq!(sync_state.sync_status, ExternalSyncStatus::Synced);
+    let poll_state = poll_states.stored().pop().expect("expected poll state");
+    assert_eq!(poll_state.stream, ProviderPollStream::Calendar);
+    assert_eq!(poll_state.next_due_at_epoch_seconds, 1_700_000_000);
     assert_eq!(
         refresh.stored(),
         vec![(
@@ -508,6 +612,7 @@ async fn update_race_marks_failure_when_intervals_update_fails() {
     };
     let repository = InMemoryRaceRepository::with_races(vec![existing]);
     let sync_states = InMemoryExternalSyncStateRepository::default();
+    let poll_states = InMemoryProviderPollStateRepository::default();
     let race_ref = CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string());
     let existing_sync = ExternalSyncState::new(
         "user-1".to_string(),
@@ -526,7 +631,8 @@ async fn update_race_marks_failure_when_intervals_update_fails() {
         sync_states.clone(),
         TestClock,
         TestIdGenerator::default(),
-    );
+    )
+    .with_provider_poll_states(poll_states.clone());
 
     let error = service
         .update_race(
@@ -551,6 +657,7 @@ async fn update_race_marks_failure_when_intervals_update_fails() {
     assert_eq!(updated_sync.sync_status, ExternalSyncStatus::Failed);
     assert_eq!(updated_sync.last_error.as_deref(), Some("boom"));
     assert_eq!(updated_sync.canonical_entity, race_ref);
+    assert!(poll_states.stored().is_empty());
 }
 
 #[tokio::test]
