@@ -616,6 +616,11 @@ pub(super) fn sample_planned_workout() -> PlannedWorkout {
             ],
         },
     )
+    .with_event_metadata(
+        Some("Imported Threshold".to_string()),
+        Some("Strong over-unders".to_string()),
+        Some("Ride".to_string()),
+    )
 }
 
 pub(super) fn sample_completed_workout() -> CompletedWorkout {
@@ -639,6 +644,12 @@ pub(super) fn sample_completed_workout_for_provider(
         completed_workout_id.to_string(),
         "user-1".to_string(),
         "2026-05-11T08:00:00".to_string(),
+        None,
+        Some("Threshold Ride".to_string()),
+        Some("Strong day".to_string()),
+        Some("Ride".to_string()),
+        Some(3600),
+        Some(35_200.0),
         CompletedWorkoutMetrics {
             training_stress_score: Some(78),
             normalized_power_watts: Some(245),

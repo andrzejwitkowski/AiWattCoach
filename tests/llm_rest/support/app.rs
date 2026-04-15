@@ -31,9 +31,11 @@ use mongodb::Client;
 use super::{
     identity::TestIdentityServiceWithSession,
     in_memory::{
-        sample_activity, sample_summary, sample_user_settings, InMemoryAthleteSummaryService,
-        InMemoryCoachReplyOperationRepository, InMemoryIntervalsService,
-        InMemoryLlmContextCacheRepository, InMemoryUserSettingsRepository,
+        canonical_completed_workout_from_activity, sample_activity, sample_summary,
+        sample_user_settings, InMemoryAthleteSummaryService, InMemoryCoachReplyOperationRepository,
+        InMemoryCompletedWorkoutRepository, InMemoryIntervalsService,
+        InMemoryLlmContextCacheRepository, InMemoryPlannedWorkoutRepository,
+        InMemorySpecialDayRepository, InMemoryUserSettingsRepository,
         InMemoryWorkoutSummaryRepository,
     },
     server::TestLlmUpstreamServer,
@@ -50,6 +52,7 @@ pub(crate) struct LlmRestTestContext {
     summary_repository: InMemoryWorkoutSummaryRepository,
     athlete_summary_service: InMemoryAthleteSummaryService,
     intervals_service: InMemoryIntervalsService,
+    completed_workout_repository: InMemoryCompletedWorkoutRepository,
     _fixture: FrontendFixture,
 }
 
@@ -90,7 +93,10 @@ impl LlmRestTestContext {
     }
 
     pub(crate) fn seed_activity(&self, activity: aiwattcoach::domain::intervals::Activity) {
-        self.intervals_service.seed_activities(vec![activity]);
+        self.intervals_service
+            .seed_activities(vec![activity.clone()]);
+        self.completed_workout_repository
+            .seed(vec![canonical_completed_workout_from_activity(&activity)]);
     }
 
     pub(crate) fn default_activity(
@@ -123,6 +129,9 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
     let reply_operation_repository = InMemoryCoachReplyOperationRepository::default();
     let athlete_summary_service = InMemoryAthleteSummaryService::default();
     let intervals_service = InMemoryIntervalsService::default();
+    let completed_workout_repository = InMemoryCompletedWorkoutRepository::default();
+    let planned_workout_repository = InMemoryPlannedWorkoutRepository;
+    let special_day_repository = InMemorySpecialDayRepository;
 
     let settings_service = Arc::new(
         UserSettingsService::new(settings_repository.clone(), SystemClock)
@@ -143,12 +152,16 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
             UuidIdGenerator,
             Arc::new(
                 {
-                    let training_context_builder = Arc::new(DefaultTrainingContextBuilder::new(
-                        settings_service.clone(),
-                        Arc::new(intervals_service.clone()),
-                        Arc::new(summary_repository.clone()),
-                        SystemClock,
-                    ));
+                    let training_context_builder = Arc::new(
+                        DefaultTrainingContextBuilder::new(
+                            settings_service.clone(),
+                            Arc::new(summary_repository.clone()),
+                            SystemClock,
+                        )
+                        .with_completed_workout_repository(completed_workout_repository.clone())
+                        .with_planned_workout_repository(planned_workout_repository.clone())
+                        .with_special_day_repository(special_day_repository.clone()),
+                    );
                     LlmWorkoutCoach::new(
                         llm_adapter.clone(),
                         llm_config_provider.clone(),
@@ -190,6 +203,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
         summary_repository,
         athlete_summary_service,
         intervals_service,
+        completed_workout_repository,
         _fixture: fixture,
     }
 }

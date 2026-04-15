@@ -150,6 +150,12 @@ pub(super) fn merge_completed_workout(
         completed_workout_id: existing.completed_workout_id,
         user_id: existing.user_id,
         start_date_local: incoming.start_date_local,
+        planned_workout_id: incoming.planned_workout_id.or(existing.planned_workout_id),
+        name: incoming.name.or(existing.name),
+        description: incoming.description.or(existing.description),
+        activity_type: incoming.activity_type.or(existing.activity_type),
+        duration_seconds: incoming.duration_seconds.or(existing.duration_seconds),
+        distance_meters: incoming.distance_meters.or(existing.distance_meters),
         metrics: merge_completed_workout_metrics(existing.metrics, incoming.metrics),
         details: merge_completed_workout_details(existing.details, incoming.details),
     }

@@ -13,6 +13,8 @@ pub struct SpecialDay {
     pub user_id: String,
     pub date: String,
     pub kind: SpecialDayKind,
+    pub title: Option<String>,
+    pub description: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,12 +38,16 @@ impl SpecialDay {
         user_id: String,
         date: String,
         kind: SpecialDayKind,
+        title: Option<String>,
+        description: Option<String>,
     ) -> Self {
         Self {
             special_day_id,
             user_id,
             date,
             kind,
+            title,
+            description,
         }
     }
 }

@@ -5,8 +5,9 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::calendar_view::{
-    BoxFuture as CalendarEntryViewBoxFuture, CalendarEntryKind, CalendarEntrySummary,
-    CalendarEntrySync, CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRepository,
+    BoxFuture as CalendarEntryViewBoxFuture, CalendarEntryKind, CalendarEntryRace,
+    CalendarEntrySummary, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
+    CalendarEntryViewRepository,
 };
 
 #[derive(Clone)]
@@ -25,12 +26,21 @@ struct CalendarEntryViewDocument {
     title: String,
     subtitle: Option<String>,
     description: Option<String>,
+    raw_workout_doc: Option<String>,
     planned_workout_id: Option<String>,
     completed_workout_id: Option<String>,
     race_id: Option<String>,
     special_day_id: Option<String>,
+    race: Option<CalendarEntryRaceDocument>,
     summary: Option<CalendarEntrySummaryDocument>,
     sync: Option<CalendarEntrySyncDocument>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CalendarEntryRaceDocument {
+    distance_meters: i32,
+    discipline: String,
+    priority: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -294,10 +304,16 @@ fn map_entry_to_document(
         title: entry.title.clone(),
         subtitle: entry.subtitle.clone(),
         description: entry.description.clone(),
+        raw_workout_doc: entry.raw_workout_doc.clone(),
         planned_workout_id: entry.planned_workout_id.clone(),
         completed_workout_id: entry.completed_workout_id.clone(),
         race_id: entry.race_id.clone(),
         special_day_id: entry.special_day_id.clone(),
+        race: entry.race.as_ref().map(|race| CalendarEntryRaceDocument {
+            distance_meters: race.distance_meters,
+            discipline: race.discipline.clone(),
+            priority: race.priority.clone(),
+        }),
         summary: entry
             .summary
             .as_ref()
@@ -325,10 +341,16 @@ fn map_document_to_entry(
         title: document.title,
         subtitle: document.subtitle,
         description: document.description,
+        raw_workout_doc: document.raw_workout_doc,
         planned_workout_id: document.planned_workout_id,
         completed_workout_id: document.completed_workout_id,
         race_id: document.race_id,
         special_day_id: document.special_day_id,
+        race: document.race.map(|race| CalendarEntryRace {
+            distance_meters: race.distance_meters,
+            discipline: race.discipline,
+            priority: race.priority,
+        }),
         summary: document.summary.map(|summary| CalendarEntrySummary {
             training_stress_score: summary.training_stress_score,
             intensity_factor: summary.intensity_factor,

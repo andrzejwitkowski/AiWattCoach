@@ -366,6 +366,7 @@ fn sample_entry_for_user(
         title: format!("Entry {entry_id}"),
         subtitle: Some("subtitle".to_string()),
         description: Some("description".to_string()),
+        raw_workout_doc: Some("- 10m 55%".to_string()),
         planned_workout_id: entry_id
             .starts_with("planned:")
             .then(|| entry_id.replace("planned:", "planned-")),
@@ -378,6 +379,13 @@ fn sample_entry_for_user(
         special_day_id: entry_id
             .starts_with("special:")
             .then(|| entry_id.replace("special:", "special-")),
+        race: entry_id.starts_with("race:").then(|| {
+            aiwattcoach::domain::calendar_view::CalendarEntryRace {
+                distance_meters: 120_000,
+                discipline: "gravel".to_string(),
+                priority: "B".to_string(),
+            }
+        }),
         summary: Some(CalendarEntrySummary {
             training_stress_score: Some(82),
             intensity_factor: Some(0.86),

@@ -235,6 +235,97 @@ async fn rebuild_for_user_uses_authoritative_sync_when_view_store_is_empty() {
 }
 
 #[tokio::test]
+async fn rebuild_for_user_uses_external_sync_state_for_imported_planned_workouts() {
+    let repository = InMemoryCalendarEntryViewRepository::default();
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(
+            CanonicalEntityKind::PlannedWorkout,
+            "imported-planned-1".to_string(),
+        ),
+    )
+    .mark_synced("144".to_string(), "hash-1".to_string(), 2)]);
+    let service = CalendarEntryViewService::new(repository)
+        .with_sync_sources(TestPlannedWorkoutSyncRepository::default(), sync_states);
+
+    let rebuilt = service
+        .rebuild_for_user(
+            "user-1",
+            &[PlannedWorkout::new(
+                "imported-planned-1".to_string(),
+                "user-1".to_string(),
+                "2026-05-10".to_string(),
+                sample_planned_workout().workout,
+            )],
+            &[sample_completed_workout()],
+            &[sample_race()],
+            &[sample_special_day()],
+        )
+        .await
+        .unwrap();
+
+    let planned = rebuilt
+        .iter()
+        .find(|entry| entry.entry_id == "planned:imported-planned-1")
+        .expect("imported planned entry after rebuild");
+
+    assert_eq!(
+        planned
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        Some(144)
+    );
+    assert_eq!(
+        planned
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("synced")
+    );
+}
+
+#[tokio::test]
+async fn rebuild_for_user_does_not_copy_planned_sync_to_completed_entries() {
+    let repository = InMemoryCalendarEntryViewRepository::default();
+    let planned_syncs =
+        TestPlannedWorkoutSyncRepository::with_records(vec![PlannedWorkoutSyncRecord {
+            user_id: "user-1".to_string(),
+            operation_key: "planned".to_string(),
+            date: "2026-05-10".to_string(),
+            source_workout_id: "source-1".to_string(),
+            intervals_event_id: Some(88),
+            status: PlannedWorkoutSyncStatus::Synced,
+            synced_payload_hash: Some("hash-1".to_string()),
+            last_error: None,
+            created_at_epoch_seconds: 1,
+            updated_at_epoch_seconds: 2,
+            last_synced_at_epoch_seconds: Some(2),
+        }]);
+    let service = CalendarEntryViewService::new(repository)
+        .with_sync_sources(planned_syncs, TestExternalSyncStateRepository::default());
+
+    let rebuilt = service
+        .rebuild_for_user(
+            "user-1",
+            &[sample_planned_workout()],
+            &[sample_completed_workout()],
+            &[],
+            &[],
+        )
+        .await
+        .unwrap();
+
+    let completed = rebuilt
+        .iter()
+        .find(|entry| entry.entry_id == "completed:completed-1")
+        .expect("completed entry after rebuild");
+
+    assert_eq!(completed.sync, None);
+}
+
+#[tokio::test]
 async fn replace_range_for_user_replaces_only_target_range_and_handles_date_moves() {
     let repository = InMemoryCalendarEntryViewRepository::default();
 
@@ -1098,8 +1189,29 @@ fn planned_workout_projection_builds_local_entry() {
 
     assert_eq!(entry.entry_id, "planned:planned-1");
     assert_eq!(entry.title, "Threshold builder");
+    assert_eq!(entry.description.as_deref(), Some("Classic threshold set"));
     assert_eq!(entry.planned_workout_id.as_deref(), Some("planned-1"));
     assert_eq!(entry.sync, None);
+}
+
+#[test]
+fn planned_workout_projection_serializes_equal_watts_targets_in_round_trip_safe_form() {
+    let workout = PlannedWorkout::new(
+        "planned-watts".to_string(),
+        "user-1".to_string(),
+        "2026-05-10".to_string(),
+        PlannedWorkoutContent {
+            lines: vec![PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                duration_seconds: 300,
+                kind: PlannedWorkoutStepKind::Steady,
+                target: PlannedWorkoutTarget::WattsRange { min: 250, max: 250 },
+            })],
+        },
+    );
+
+    let entry = project_planned_workout_entry(&workout, None);
+
+    assert_eq!(entry.raw_workout_doc.as_deref(), Some("- 5m 250-250W"));
 }
 
 #[test]
@@ -1107,6 +1219,9 @@ fn completed_workout_projection_carries_local_summary() {
     let entry = project_completed_workout_entry(&sample_completed_workout());
 
     assert_eq!(entry.entry_id, "completed:completed-1");
+    assert_eq!(entry.title, "Threshold Ride");
+    assert_eq!(entry.description.as_deref(), Some("Strong day"));
+    assert_eq!(entry.planned_workout_id.as_deref(), Some("planned-1"));
     assert_eq!(
         entry
             .summary
@@ -1134,9 +1249,18 @@ fn race_projection_keeps_label_shape_and_sync_metadata() {
     assert_eq!(entry.entry_id, "race:race-1");
     assert_eq!(entry.title, "Race Gravel Attack");
     assert_eq!(entry.subtitle.as_deref(), Some("120 km • Kat. B"));
+    assert_eq!(entry.description, None);
     assert_eq!(
-        entry.description.as_deref(),
-        Some("distance_meters=120000\ndiscipline=gravel\npriority=B")
+        entry.race.as_ref().map(|race| race.distance_meters),
+        Some(120_000)
+    );
+    assert_eq!(
+        entry.race.as_ref().map(|race| race.discipline.as_str()),
+        Some("gravel")
+    );
+    assert_eq!(
+        entry.race.as_ref().map(|race| race.priority.as_str()),
+        Some("B")
     );
     assert_eq!(
         entry
@@ -1152,7 +1276,8 @@ fn special_day_projection_keeps_meaningful_title() {
     let entry = project_special_day_entry(&sample_special_day());
 
     assert_eq!(entry.entry_id, "special:special-1");
-    assert_eq!(entry.title, "Illness");
+    assert_eq!(entry.title, "Flu");
+    assert_eq!(entry.description.as_deref(), Some("Stay off the bike"));
     assert_eq!(entry.special_day_id.as_deref(), Some("special-1"));
 }
 
@@ -1177,6 +1302,11 @@ fn sample_planned_workout() -> PlannedWorkout {
             ],
         },
     )
+    .with_event_metadata(
+        Some("Threshold builder".to_string()),
+        Some("Classic threshold set".to_string()),
+        Some("Ride".to_string()),
+    )
 }
 
 fn sample_bridged_planned_workout(operation_key: &str, date: &str) -> PlannedWorkout {
@@ -1193,6 +1323,12 @@ fn sample_completed_workout() -> CompletedWorkout {
         "completed-1".to_string(),
         "user-1".to_string(),
         "2026-05-11T08:00:00".to_string(),
+        Some("planned-1".to_string()),
+        Some("Threshold Ride".to_string()),
+        Some("Strong day".to_string()),
+        Some("Ride".to_string()),
+        Some(3600),
+        Some(35_200.0),
         CompletedWorkoutMetrics {
             training_stress_score: Some(82),
             normalized_power_watts: Some(252),
@@ -1273,6 +1409,8 @@ fn sample_special_day() -> SpecialDay {
         "user-1".to_string(),
         "2026-05-13".to_string(),
         SpecialDayKind::Illness,
+        Some("Flu".to_string()),
+        Some("Stay off the bike".to_string()),
     )
 }
 
@@ -1282,6 +1420,8 @@ fn sample_other_special_day() -> SpecialDay {
         "user-1".to_string(),
         "2026-05-09".to_string(),
         SpecialDayKind::Other,
+        Some("Travel".to_string()),
+        Some("Airport day".to_string()),
     )
 }
 
@@ -1291,6 +1431,8 @@ fn sample_special_day_for_user(user_id: &str) -> SpecialDay {
         user_id.to_string(),
         "2026-05-13".to_string(),
         SpecialDayKind::Other,
+        Some("Other".to_string()),
+        Some("Other user note".to_string()),
     )
 }
 
@@ -1300,6 +1442,8 @@ fn sample_orphan_entry() -> super::CalendarEntryView {
         "user-1".to_string(),
         "2026-05-14".to_string(),
         SpecialDayKind::Other,
+        Some("Maintenance".to_string()),
+        Some("Bike in workshop".to_string()),
     ))
 }
 

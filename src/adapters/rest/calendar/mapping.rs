@@ -1,10 +1,13 @@
 use crate::{
-    adapters::rest::intervals::map_event_to_dto_with_parsed_workout_doc,
+    adapters::rest::intervals::{
+        EventDefinitionDto, IntervalDefinitionDto, WorkoutSegmentDto, WorkoutSummaryDto,
+    },
     domain::{
-        calendar::CalendarEvent,
+        calendar::{CalendarEvent, CalendarEventCategory},
         calendar_labels::{
             CalendarLabel, CalendarLabelPayload, CalendarLabelsResponse, CalendarRaceLabel,
         },
+        intervals::parse_workout_doc,
     },
 };
 
@@ -16,27 +19,72 @@ use super::dto::{
 
 pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDto {
     let CalendarEvent {
+        id,
         calendar_entry_id,
-        event,
+        start_date_local,
+        name,
+        category,
+        description,
+        indoor,
+        color,
+        raw_workout_doc,
         source,
         projected_workout,
         sync_status,
         linked_intervals_event_id,
     } = event;
-    let structured_workout_text = event.structured_workout_text().map(ToString::to_string);
-    let event_dto =
-        map_event_to_dto_with_parsed_workout_doc(event, structured_workout_text.as_deref(), None);
+    let parsed = parse_workout_doc(
+        raw_workout_doc
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .or(description.as_deref()),
+        None,
+    );
 
     CalendarEventDto {
-        id: event_dto.id,
+        id,
         calendar_entry_id,
-        start_date_local: event_dto.start_date_local,
-        name: event_dto.name,
-        category: event_dto.category,
-        description: event_dto.description,
-        indoor: event_dto.indoor,
-        color: event_dto.color,
-        event_definition: event_dto.event_definition,
+        start_date_local,
+        name,
+        category: map_category(category),
+        description,
+        indoor,
+        color,
+        event_definition: EventDefinitionDto {
+            raw_workout_doc,
+            intervals: parsed
+                .intervals
+                .iter()
+                .map(|interval| IntervalDefinitionDto {
+                    definition: interval.definition.clone(),
+                    repeat_count: interval.repeat_count,
+                    duration_seconds: interval.duration_seconds,
+                    target_percent_ftp: interval.target_percent_ftp,
+                    zone_id: interval.zone_id,
+                })
+                .collect(),
+            segments: parsed
+                .segments
+                .iter()
+                .map(|segment| WorkoutSegmentDto {
+                    order: segment.order,
+                    label: segment.label.clone(),
+                    duration_seconds: segment.duration_seconds,
+                    start_offset_seconds: segment.start_offset_seconds,
+                    end_offset_seconds: segment.end_offset_seconds,
+                    target_percent_ftp: segment.target_percent_ftp,
+                    zone_id: segment.zone_id,
+                })
+                .collect(),
+            summary: WorkoutSummaryDto {
+                total_segments: parsed.summary.total_segments,
+                total_duration_seconds: parsed.summary.total_duration_seconds,
+                estimated_normalized_power_watts: parsed.summary.estimated_normalized_power_watts,
+                estimated_average_power_watts: parsed.summary.estimated_average_power_watts,
+                estimated_intensity_factor: parsed.summary.estimated_intensity_factor,
+                estimated_training_stress_score: parsed.summary.estimated_training_stress_score,
+            },
+        },
         actual_workout: None,
         planned_source: source.as_str().to_string(),
         sync_status: sync_status.map(|status| status.as_str().to_string()),
@@ -48,6 +96,10 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
             source_workout_id: projected.source_workout_id,
         }),
     }
+}
+
+fn map_category(category: CalendarEventCategory) -> String {
+    category.as_str().to_string()
 }
 
 pub(super) fn map_calendar_labels_to_dto(

@@ -41,6 +41,9 @@ struct ImportedPlannedWorkoutDocument {
     user_id: String,
     planned_workout_id: String,
     date: String,
+    name: Option<String>,
+    description: Option<String>,
+    event_type: Option<String>,
     workout: StoredPlannedWorkoutContentDocument,
 }
 
@@ -312,7 +315,8 @@ fn map_projected_document_to_domain(
                     .lines,
             ),
         },
-    ))
+    )
+    .with_event_metadata(None, None, Some("Ride".to_string())))
 }
 
 fn map_imported_workout_to_document(workout: &PlannedWorkout) -> ImportedPlannedWorkoutDocument {
@@ -320,6 +324,9 @@ fn map_imported_workout_to_document(workout: &PlannedWorkout) -> ImportedPlanned
         user_id: workout.user_id.clone(),
         planned_workout_id: workout.planned_workout_id.clone(),
         date: workout.date.clone(),
+        name: workout.name.clone(),
+        description: workout.description.clone(),
+        event_type: workout.event_type.clone(),
         workout: StoredPlannedWorkoutContentDocument {
             lines: workout
                 .workout
@@ -346,7 +353,8 @@ fn map_imported_document_to_domain(
                 .map(map_stored_line_to_domain)
                 .collect::<Result<Vec<_>, _>>()?,
         },
-    ))
+    )
+    .with_event_metadata(document.name, document.description, document.event_type))
 }
 
 fn map_workout_lines(
@@ -526,6 +534,11 @@ mod tests {
                     }),
                 ],
             },
+        )
+        .with_event_metadata(
+            Some("Imported Threshold".to_string()),
+            Some("Strong over-unders".to_string()),
+            Some("Ride".to_string()),
         );
 
         let mapped =
@@ -540,6 +553,9 @@ mod tests {
             user_id: "user-1".to_string(),
             planned_workout_id: "planned-1".to_string(),
             date: "2026-05-10".to_string(),
+            name: None,
+            description: None,
+            event_type: None,
             workout: StoredPlannedWorkoutContentDocument {
                 lines: vec![StoredPlannedWorkoutLineDocument::Step {
                     duration_seconds: 600,

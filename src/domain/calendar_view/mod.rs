@@ -12,8 +12,8 @@ pub use integrity::{
     verify_calendar_entry_integrity, CalendarEntryIntegrityIssue, CalendarEntryIntegrityReport,
 };
 pub use model::{
-    CalendarEntryKind, CalendarEntrySummary, CalendarEntrySync, CalendarEntryView,
-    CalendarEntryViewError,
+    CalendarEntryKind, CalendarEntryRace, CalendarEntrySummary, CalendarEntrySync,
+    CalendarEntryView, CalendarEntryViewError,
 };
 pub use ports::{BoxFuture, CalendarEntryViewRepository};
 pub use projection::{

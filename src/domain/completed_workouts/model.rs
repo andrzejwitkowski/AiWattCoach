@@ -105,6 +105,12 @@ pub struct CompletedWorkout {
     pub completed_workout_id: String,
     pub user_id: String,
     pub start_date_local: String,
+    pub planned_workout_id: Option<String>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub activity_type: Option<String>,
+    pub duration_seconds: Option<i32>,
+    pub distance_meters: Option<f64>,
     pub metrics: CompletedWorkoutMetrics,
     pub details: CompletedWorkoutDetails,
 }
@@ -125,10 +131,20 @@ impl std::fmt::Display for CompletedWorkoutError {
 impl std::error::Error for CompletedWorkoutError {}
 
 impl CompletedWorkout {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "canonical completed workouts carry explicit identity, metadata, metrics, and details"
+    )]
     pub fn new(
         completed_workout_id: String,
         user_id: String,
         start_date_local: String,
+        planned_workout_id: Option<String>,
+        name: Option<String>,
+        description: Option<String>,
+        activity_type: Option<String>,
+        duration_seconds: Option<i32>,
+        distance_meters: Option<f64>,
         metrics: CompletedWorkoutMetrics,
         details: CompletedWorkoutDetails,
     ) -> Self {
@@ -136,6 +152,12 @@ impl CompletedWorkout {
             completed_workout_id,
             user_id,
             start_date_local,
+            planned_workout_id,
+            name,
+            description,
+            activity_type,
+            duration_seconds,
+            distance_meters,
             metrics,
             details,
         }

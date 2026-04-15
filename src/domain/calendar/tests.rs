@@ -2,10 +2,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::domain::{
     calendar::{
-        CalendarError, CalendarService, CalendarUseCases, HiddenCalendarEventSource,
-        PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository, SyncPlannedWorkout,
+        CalendarError, CalendarService, CalendarUseCases, PlannedWorkoutSyncRecord,
+        PlannedWorkoutSyncRepository, SyncPlannedWorkout,
     },
-    calendar_view::{CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRefreshPort},
+    calendar_view::{
+        CalendarEntryKind, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
+        CalendarEntryViewRefreshPort, CalendarEntryViewRepository,
+    },
     external_sync::{
         ExternalProvider, ExternalSyncRepositoryError, ProviderPollState,
         ProviderPollStateRepository, ProviderPollStream,
@@ -37,6 +40,7 @@ async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
             color: None,
             workout_doc: None,
         }),
+        InMemoryCalendarEntryViewRepository::default(),
         FakeProjectionRepository::with_days(vec![projected_day(
             "user-1",
             "training-plan:user-1:w1:1",
@@ -44,7 +48,6 @@ async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
             "Build Session",
         )]),
         InMemoryPlannedWorkoutSyncRepository::default(),
-        EmptyHiddenCalendarEventSource,
         FixedClock,
     )
     .with_provider_poll_states(poll_states.clone())
@@ -90,6 +93,7 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
         FakeIntervalsService::with_create_error(IntervalsError::ConnectionError(
             "intervals unavailable".to_string(),
         )),
+        InMemoryCalendarEntryViewRepository::default(),
         FakeProjectionRepository::with_days(vec![projected_day(
             "user-1",
             "training-plan:user-1:w1:1",
@@ -97,7 +101,6 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
             "Build Session",
         )]),
         InMemoryPlannedWorkoutSyncRepository::default(),
-        EmptyHiddenCalendarEventSource,
         FixedClock,
     )
     .with_provider_poll_states(poll_states.clone())
@@ -172,6 +175,7 @@ impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
 struct FakeIntervalsService {
     created_event: Event,
     create_error: Option<IntervalsError>,
+    list_events_error: Option<IntervalsError>,
 }
 
 impl FakeIntervalsService {
@@ -179,6 +183,7 @@ impl FakeIntervalsService {
         Self {
             created_event,
             create_error: None,
+            list_events_error: None,
         }
     }
 
@@ -196,6 +201,25 @@ impl FakeIntervalsService {
                 workout_doc: None,
             },
             create_error: Some(create_error),
+            list_events_error: None,
+        }
+    }
+
+    fn with_events_error(list_events_error: IntervalsError) -> Self {
+        Self {
+            created_event: Event {
+                id: 0,
+                start_date_local: "2026-03-26T00:00:00".to_string(),
+                event_type: None,
+                name: None,
+                category: EventCategory::Workout,
+                description: None,
+                indoor: false,
+                color: None,
+                workout_doc: None,
+            },
+            create_error: None,
+            list_events_error: Some(list_events_error),
         }
     }
 }
@@ -206,7 +230,13 @@ impl IntervalsUseCases for FakeIntervalsService {
         _user_id: &str,
         _range: &DateRange,
     ) -> IntervalsBoxFuture<Result<Vec<Event>, IntervalsError>> {
-        Box::pin(async { Ok(Vec::new()) })
+        let list_events_error = self.list_events_error.clone();
+        Box::pin(async move {
+            match list_events_error {
+                Some(error) => Err(error),
+                None => Ok(Vec::new()),
+            }
+        })
     }
 
     fn get_event(
@@ -397,15 +427,89 @@ impl ProviderPollStateRepository for InMemoryProviderPollStateRepository {
 }
 
 #[derive(Clone, Default)]
-struct EmptyHiddenCalendarEventSource;
+struct InMemoryCalendarEntryViewRepository {
+    stored: Arc<Mutex<Vec<CalendarEntryView>>>,
+}
 
-impl HiddenCalendarEventSource for EmptyHiddenCalendarEventSource {
-    fn list_hidden_intervals_event_ids(
+impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
+    fn list_by_user_id_and_date_range(
         &self,
-        _user_id: &str,
-        _range: &DateRange,
-    ) -> crate::domain::calendar::BoxFuture<Result<Vec<i64>, CalendarError>> {
-        Box::pin(async { Ok(Vec::new()) })
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> crate::domain::calendar_view::BoxFuture<
+        Result<Vec<CalendarEntryView>, CalendarEntryViewError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| entry.user_id == user_id)
+                .filter(|entry| entry.date >= oldest && entry.date <= newest)
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn upsert(
+        &self,
+        entry: CalendarEntryView,
+    ) -> crate::domain::calendar_view::BoxFuture<Result<CalendarEntryView, CalendarEntryViewError>>
+    {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                !(existing.user_id == entry.user_id && existing.entry_id == entry.entry_id)
+            });
+            stored.push(entry.clone());
+            Ok(entry)
+        })
+    }
+
+    fn replace_all_for_user(
+        &self,
+        user_id: &str,
+        entries: Vec<CalendarEntryView>,
+    ) -> crate::domain::calendar_view::BoxFuture<
+        Result<Vec<CalendarEntryView>, CalendarEntryViewError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| existing.user_id != user_id);
+            stored.extend(entries.clone());
+            Ok(entries)
+        })
+    }
+
+    fn replace_range_for_user(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+        entries: Vec<CalendarEntryView>,
+    ) -> crate::domain::calendar_view::BoxFuture<
+        Result<Vec<CalendarEntryView>, CalendarEntryViewError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                existing.user_id != user_id || existing.date < oldest || existing.date > newest
+            });
+            stored.extend(entries.clone());
+            Ok(entries)
+        })
     }
 }
 
@@ -493,6 +597,126 @@ impl Clock for FixedClock {
     fn now_epoch_seconds(&self) -> i64 {
         1_700_000_000
     }
+}
+
+#[tokio::test]
+async fn list_events_reads_from_calendar_entry_view_only() {
+    let entries = InMemoryCalendarEntryViewRepository::default();
+    entries
+        .upsert(CalendarEntryView {
+            entry_id: "planned:training-plan:user-1:w1:1:2026-03-26".to_string(),
+            user_id: "user-1".to_string(),
+            entry_kind: CalendarEntryKind::PlannedWorkout,
+            date: "2026-03-26".to_string(),
+            start_date_local: Some("2026-03-26T00:00:00".to_string()),
+            title: "Build Session".to_string(),
+            subtitle: Some("2 lines".to_string()),
+            description: None,
+            raw_workout_doc: Some("Build Session\n- 60m 70%".to_string()),
+            planned_workout_id: Some("training-plan:user-1:w1:1:2026-03-26".to_string()),
+            completed_workout_id: None,
+            race_id: None,
+            special_day_id: None,
+            race: None,
+            summary: None,
+            sync: Some(CalendarEntrySync {
+                linked_intervals_event_id: Some(77),
+                sync_status: Some("synced".to_string()),
+            }),
+        })
+        .await
+        .unwrap();
+
+    let service = CalendarService::new(
+        FakeIntervalsService::with_events_error(IntervalsError::ConnectionError(
+            "should not be called".to_string(),
+        )),
+        entries,
+        FakeProjectionRepository::default(),
+        InMemoryPlannedWorkoutSyncRepository::default(),
+        FixedClock,
+    );
+
+    let events = service
+        .list_events(
+            "user-1",
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-03-31".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].id, 77);
+    assert_eq!(
+        events[0].calendar_entry_id,
+        "planned:training-plan:user-1:w1:1:2026-03-26"
+    );
+    assert_eq!(events[0].name.as_deref(), Some("Build Session"));
+    assert_eq!(events[0].start_date_local, "2026-03-26");
+    assert_eq!(
+        events[0].raw_workout_doc.as_deref(),
+        Some("Build Session\n- 60m 70%")
+    );
+}
+
+#[tokio::test]
+async fn list_events_skips_completed_entries_even_with_planned_backlink() {
+    let entries = InMemoryCalendarEntryViewRepository::default();
+    entries
+        .upsert(CalendarEntryView {
+            entry_id: "completed:completed-1".to_string(),
+            user_id: "user-1".to_string(),
+            entry_kind: CalendarEntryKind::CompletedWorkout,
+            date: "2026-03-26".to_string(),
+            start_date_local: Some("2026-03-26T08:00:00".to_string()),
+            title: "Completed Build Session".to_string(),
+            subtitle: Some("TSS 82".to_string()),
+            description: Some("Strong day".to_string()),
+            raw_workout_doc: None,
+            planned_workout_id: Some("training-plan:user-1:w1:1:2026-03-26".to_string()),
+            completed_workout_id: Some("completed-1".to_string()),
+            race_id: None,
+            special_day_id: None,
+            race: None,
+            summary: None,
+            sync: None,
+        })
+        .await
+        .unwrap();
+
+    let service = CalendarService::new(
+        FakeIntervalsService::with_created_event(Event {
+            id: 0,
+            start_date_local: "2026-03-26T00:00:00".to_string(),
+            event_type: None,
+            name: None,
+            category: EventCategory::Workout,
+            description: None,
+            indoor: false,
+            color: None,
+            workout_doc: None,
+        }),
+        entries,
+        FakeProjectionRepository::default(),
+        InMemoryPlannedWorkoutSyncRepository::default(),
+        FixedClock,
+    );
+
+    let events = service
+        .list_events(
+            "user-1",
+            &DateRange {
+                oldest: "2026-03-01".to_string(),
+                newest: "2026-03-31".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(events.is_empty());
 }
 
 fn projected_day(

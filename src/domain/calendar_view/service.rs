@@ -14,8 +14,8 @@ use crate::domain::{
 
 use super::{
     project_completed_workout_entry, project_planned_workout_entry, project_race_entry,
-    project_special_day_entry, rebuild_calendar_entries, BoxFuture, CalendarEntryView,
-    CalendarEntryViewError, CalendarEntryViewRepository,
+    project_special_day_entry, rebuild_calendar_entries, BoxFuture, CalendarEntryKind,
+    CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRepository,
 };
 
 const CALENDAR_REBUILD_RANGE_START: &str = "0000-01-01";
@@ -145,6 +145,15 @@ where
             .iter()
             .map(|race| race.race_id.clone())
             .collect::<Vec<_>>();
+        let planned_entities = planned_workouts
+            .iter()
+            .map(|workout| {
+                CanonicalEntityRef::new(
+                    CanonicalEntityKind::PlannedWorkout,
+                    workout.planned_workout_id.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
         let mut entries =
             rebuild_calendar_entries(planned_workouts, completed_workouts, races, special_days);
         Box::pin(async move {
@@ -161,6 +170,17 @@ where
             let planned_syncs_by_id = planned_syncs
                 .into_iter()
                 .map(|record| (format!("{}:{}", record.operation_key, record.date), record))
+                .collect::<std::collections::HashMap<_, _>>();
+            let planned_sync_states_by_entity = sync_states
+                .find_by_provider_and_canonical_entities(
+                    &user_id,
+                    ExternalProvider::Intervals,
+                    &planned_entities,
+                )
+                .await
+                .map_err(map_sync_error)?
+                .into_iter()
+                .map(|state| (state.canonical_entity.clone(), state))
                 .collect::<std::collections::HashMap<_, _>>();
             let mut race_syncs_by_id = std::collections::HashMap::new();
             for race_id in race_ids {
@@ -188,10 +208,22 @@ where
                 .filter_map(|entry| entry.sync.map(|sync| (entry.entry_id, sync)))
                 .collect::<std::collections::HashMap<_, _>>();
             for entry in &mut entries {
-                if let Some(planned_workout_id) = &entry.planned_workout_id {
-                    if let Some(record) = planned_syncs_by_id.get(planned_workout_id) {
-                        entry.sync = Some(map_planned_sync_record_to_calendar_entry_sync(record));
-                        continue;
+                if entry.entry_kind == CalendarEntryKind::PlannedWorkout {
+                    if let Some(planned_workout_id) = &entry.planned_workout_id {
+                        let planned_entity = CanonicalEntityRef::new(
+                            CanonicalEntityKind::PlannedWorkout,
+                            planned_workout_id.clone(),
+                        );
+                        if let Some(sync_state) = planned_sync_states_by_entity.get(&planned_entity)
+                        {
+                            entry.sync = map_external_sync_state(Some(sync_state));
+                            continue;
+                        }
+                        if let Some(record) = planned_syncs_by_id.get(planned_workout_id) {
+                            entry.sync =
+                                Some(map_planned_sync_record_to_calendar_entry_sync(record));
+                            continue;
+                        }
                     }
                 }
                 if let Some(race_id) = &entry.race_id {

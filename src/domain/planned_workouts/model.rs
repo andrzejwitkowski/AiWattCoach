@@ -45,6 +45,9 @@ pub struct PlannedWorkout {
     pub planned_workout_id: String,
     pub user_id: String,
     pub date: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub event_type: Option<String>,
     pub workout: PlannedWorkoutContent,
 }
 
@@ -74,7 +77,22 @@ impl PlannedWorkout {
             planned_workout_id,
             user_id,
             date,
+            name: None,
+            description: None,
+            event_type: None,
             workout,
         }
+    }
+
+    pub fn with_event_metadata(
+        mut self,
+        name: Option<String>,
+        description: Option<String>,
+        event_type: Option<String>,
+    ) -> Self {
+        self.name = name;
+        self.description = description;
+        self.event_type = event_type;
+        self
     }
 }

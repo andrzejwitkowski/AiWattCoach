@@ -293,10 +293,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let training_context_builder = Arc::new(
         DefaultTrainingContextBuilder::new(
             settings_service.clone(),
-            intervals_service.clone(),
             Arc::new(workout_summary_repository.clone()),
             SystemClock,
         )
+        .with_completed_workout_repository(completed_workout_repository.clone())
+        .with_planned_workout_repository(planned_workout_repository.clone())
+        .with_special_day_repository(special_day_repository.clone())
         .with_race_repository(Arc::new(race_repository.clone()))
         .with_training_plan_projection_repository(Arc::new(
             training_plan_projection_repository.clone(),
@@ -369,9 +371,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let calendar_service = Arc::new(
         CalendarService::new(
             (*intervals_service).clone(),
+            calendar_entry_view_repository.clone(),
             training_plan_projection_repository.clone(),
             planned_workout_sync_repository,
-            race_calendar_source,
             SystemClock,
         )
         .with_provider_poll_states(provider_poll_state_repository)

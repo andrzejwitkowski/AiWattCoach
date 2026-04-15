@@ -48,6 +48,11 @@ fn map_workout_event_import(
                 user_id.to_string(),
                 event_date(&event.start_date_local).to_string(),
                 map_event_to_planned_workout_payload(event)?,
+            )
+            .with_event_metadata(
+                event.name.clone(),
+                event.description.clone(),
+                event.event_type.clone(),
             ),
         },
     ))
@@ -86,6 +91,8 @@ fn map_special_day_event_import(user_id: &str, event: &Event) -> ExternalImportC
             user_id.to_string(),
             event_date(&event.start_date_local).to_string(),
             map_special_day_kind(&event.category),
+            event.name.clone(),
+            event.description.clone(),
         ),
     })
 }
@@ -99,6 +106,14 @@ pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> Ext
             format!("intervals-activity:{}", activity.id),
             user_id.to_string(),
             activity.start_date_local.clone(),
+            None,
+            activity.name.clone(),
+            activity.description.clone(),
+            activity.activity_type.clone(),
+            activity
+                .elapsed_time_seconds
+                .or(activity.moving_time_seconds),
+            activity.distance_meters,
             CompletedWorkoutMetrics {
                 training_stress_score: activity.metrics.training_stress_score,
                 normalized_power_watts: activity.metrics.normalized_power_watts,
@@ -450,6 +465,12 @@ mod tests {
         assert_eq!(command.external_id, "144");
         assert_eq!(command.workout.planned_workout_id, "intervals-event:144");
         assert_eq!(command.workout.date, "2026-05-10");
+        assert_eq!(command.workout.name.as_deref(), Some("Threshold Builder"));
+        assert_eq!(
+            command.workout.description.as_deref(),
+            Some("Threshold Builder\n- 10m 90-95%")
+        );
+        assert_eq!(command.workout.event_type.as_deref(), Some("Ride"));
         assert_eq!(command.workout.workout.lines.len(), 2);
     }
 
@@ -519,6 +540,11 @@ mod tests {
         );
         assert_eq!(command.special_day.date, "2026-06-01");
         assert_eq!(command.special_day.kind, SpecialDayKind::Note);
+        assert_eq!(command.special_day.title.as_deref(), Some("Recovery Note"));
+        assert_eq!(
+            command.special_day.description.as_deref(),
+            Some("Keep easy")
+        );
     }
 
     #[test]
@@ -604,6 +630,11 @@ mod tests {
             "intervals-activity:activity-1"
         );
         assert_eq!(command.workout.start_date_local, "2026-05-11T08:00:00");
+        assert_eq!(command.workout.name.as_deref(), Some("Threshold Ride"));
+        assert_eq!(command.workout.description.as_deref(), Some("Strong day"));
+        assert_eq!(command.workout.activity_type.as_deref(), Some("Ride"));
+        assert_eq!(command.workout.duration_seconds, Some(3700));
+        assert_eq!(command.workout.distance_meters, Some(35_000.0));
         assert_eq!(command.workout.metrics.training_stress_score, Some(78));
         assert_eq!(command.workout.details.streams.len(), 1);
     }

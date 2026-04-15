@@ -14,15 +14,6 @@ pub(super) fn map_event_to_dto(event: Event) -> EventDto {
     map_event_to_dto_with_parsed(event, None, None)
 }
 
-pub(crate) fn map_event_to_dto_with_parsed_workout_doc(
-    event: Event,
-    workout_doc: Option<&str>,
-    actual_workout: Option<ActualWorkoutDto>,
-) -> EventDto {
-    let parsed = parse_workout_doc(workout_doc, None);
-    map_event_to_dto_with_parsed(event, Some(parsed), actual_workout)
-}
-
 pub(super) fn map_enriched_event_to_dto(enriched_event: EnrichedEvent) -> EventDto {
     map_event_to_dto_with_parsed(
         enriched_event.event,

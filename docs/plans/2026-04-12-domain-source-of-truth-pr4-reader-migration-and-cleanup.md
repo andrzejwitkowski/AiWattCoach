@@ -1,252 +1,158 @@
-# Domain Source of Truth PR4: Reader Migration And Cleanup Implementation Plan
+# Domain Source of Truth PR4: Reader Migration And Cleanup
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Goal:** Move business readers to canonical local state while keeping the current `GET /api/calendar/events` contract as compatible as practical during this PR.
 
-**Goal:** Migrate application readers to the persisted domain-backed read model and remove the old Intervals-first event flow from business reads.
+## Rules
 
-**Architecture:** Switch calendar, labels, training context, and related consumer flows to read only from local canonical state and `CalendarEntryView`. Remove or drastically shrink the old `domain::intervals::Event` read path and expose canonical local IDs through APIs where needed. No consumer in this PR may read metrics, streams, intervals, TSS, IF, VI, or workout definitions directly from provider APIs once those fields are persisted canonically in local domain storage.
+- Keep external calendar response shape stable unless a field cannot be built honestly from local state.
+- Do not restore provider reads just to preserve old behavior.
+- If a reader still needs provider-shaped data, add the missing canonical field instead.
+- `Intervals` may remain on command-side and provider adapter paths.
 
-**Tech Stack:** Rust 2021, Axum REST handlers, persisted Mongo read model, existing training-context module, existing calendar and labels services.
+## Current Gaps
 
-## Boundary Rule
+- `SpecialDay` is too thin for `sick_note` and special-day reader semantics.
+- `CompletedWorkout` is missing reader-friendly metadata.
+- There is no durable planned-to-completed link in canonical local state.
+- `calendar` domain is still provider-shaped.
+- `CalendarEntryView` still encodes some typed data in text fields.
 
-- Reader migrations may depend only on canonical domain roots, canonical value objects, and persisted read models.
-- During cleanup, remove any remaining dependency where business read paths import provider-specific domain types from `src/domain/intervals/**` only to avoid modeling the data canonically.
-- If a read path still needs provider-shaped data, treat that as a modeling gap in canonical domain storage and fix the model rather than reusing provider types.
+## Checklist
 
----
+### 1. Fill canonical model gaps
 
-### Task 1: Migrate calendar domain service to `CalendarEntryView`
+Files:
+- `src/domain/special_days/model.rs`
+- `src/adapters/mongo/special_days.rs`
+- `src/domain/completed_workouts/model.rs`
+- `src/adapters/mongo/completed_workouts.rs`
 
-**Files:**
-- Modify: `src/domain/calendar/model.rs`
-- Modify: `src/domain/calendar/ports.rs`
-- Modify: `src/domain/calendar/service.rs`
-- Modify: tests under `src/domain/calendar/**`
+Scope:
+- Add text fields to `SpecialDay`.
+- Add read-side metadata to `CompletedWorkout`.
+- Add optional `planned_workout_id` to `CompletedWorkout`.
 
-**Step 1: Write failing tests**
-Cover:
-- calendar list returns entries from local read model only
-- planned entries, completed entries, races, and special days all render correctly
-- no provider fetch is needed to serve a list request
+Done when:
+- Local state carries everything `calendar` and `training_context` need without provider read fallbacks.
 
-**Step 2: Remove `domain::intervals::Event` from calendar model**
-Replace embedded upstream event data with local read-model shape.
+### 2. Refresh `CalendarEntryView` projections
 
-**Step 3: Change service implementation**
-Read from `CalendarEntryViewRepository` instead of `IntervalsUseCases`.
+Files:
+- `src/domain/calendar_view/projection.rs`
+- read-model refresh paths touched by PR1 to PR3
 
-**Step 4: Keep command paths separate**
-If `sync_planned_workout` remains, it should operate through write side and provider sync state, not through upstream event list reads.
+Scope:
+- Use canonical metadata for titles, descriptions, and summaries.
+- Remove obvious placeholder fallbacks where canonical values now exist.
 
-**Step 5: Run tests**
-```bash
-cargo test calendar -- --nocapture
-```
+Done when:
+- `CalendarEntryView` is sufficient as the local read source for calendar readers.
 
-**Step 6: Commit**
-```bash
-git add src/domain/calendar
-git commit -m "refactor: read calendar from persisted calendar view"
-```
+### 3. Migrate domain `calendar` to local-first
 
-### Task 2: Migrate REST calendar adapter and DTOs to canonical IDs
+Files:
+- `src/domain/calendar/model.rs`
+- `src/domain/calendar/service.rs`
+- `src/domain/calendar/ports.rs`
 
-**Files:**
-- Modify: `src/adapters/rest/calendar/dto.rs`
-- Modify: `src/adapters/rest/calendar/mapping.rs`
-- Modify: `src/adapters/rest/calendar/handlers.rs`
-- Modify: tests covering calendar REST behavior
+Scope:
+- Replace `domain::intervals::Event` in `CalendarEvent`.
+- Serve `list_events` from `CalendarEntryView`.
+- Keep `sync_planned_workout` as command-side logic.
 
-**Step 1: Write failing tests**
-Cover:
-- canonical local IDs in responses
-- correct mixed entry rendering
-- no implicit dependency on Intervals event IDs
+Done when:
+- Calendar business reads do not call Intervals list/get event APIs.
 
-**Step 2: Update DTOs and mappings**
-Keep provider refs as metadata only if needed.
+### 4. Keep calendar REST contract compatible
 
-Do not make REST responses dependent on provider fetches for detailed workout data. If detailed metrics or structure are exposed, they must come from canonical local storage.
+Files:
+- `src/adapters/rest/calendar/dto.rs`
+- `src/adapters/rest/calendar/mapping.rs`
+- `src/adapters/rest/calendar/handlers.rs`
+- calendar REST tests
 
-**Step 3: Update handlers**
-Ensure handlers only call local calendar read use cases.
+Scope:
+- Preserve current response shape where practical.
+- Build response fields from local canonical state and read models.
+- Keep provider identifiers only as metadata.
 
-**Step 4: Run tests**
-```bash
-cargo test calendar_rest -- --nocapture
-```
+Done when:
+- `GET /api/calendar/events` stays practically compatible without live provider reads.
 
-**Step 5: Commit**
-```bash
-git add src/adapters/rest/calendar tests
-git commit -m "refactor: expose canonical calendar ids in rest adapter"
-```
+### 5. Migrate `training_context` to local repositories
 
-### Task 3: Migrate calendar labels to local read model
+Files:
+- `src/domain/training_context/service/mod.rs`
+- `src/domain/training_context/service/context.rs`
+- `src/domain/training_context/service/history.rs`
+- `src/domain/training_context/service/power.rs`
+- `src/domain/training_context/service/dates.rs`
 
-**Files:**
-- Modify: `src/domain/calendar_labels/model.rs`
-- Modify: `src/domain/calendar_labels/ports.rs`
-- Modify: `src/domain/calendar_labels/service.rs`
-- Modify: tests under `src/domain/calendar_labels/**`
+Scope:
+- Build recent and upcoming context from canonical local state.
+- Use `CompletedWorkoutRepository`, `PlannedWorkoutRepository`, `SpecialDayRepository`, `RaceRepository`, and `CalendarEntryView` as needed.
+- Replace plan-to-completion matching with canonical link first, heuristic fallback only for legacy rows.
 
-**Step 1: Write failing tests**
-Cover:
-- labels come from local read side
-- race labels still render correctly
-- planned and special day labels do not require Intervals reads
+Done when:
+- Training context business reads no longer depend on Intervals event reads.
 
-**Step 2: Switch label source**
-Read from `CalendarEntryView` and canonical roots where needed.
+### 6. Treat `calendar_labels` as cleanup
 
-**Step 3: Remove Intervals-only assumptions**
-Especially around race and special event labeling.
+Files:
+- `src/domain/calendar_labels/service.rs`
+- `src/adapters/mongo/calendar_entry_view_calendar.rs`
 
-**Step 4: Run tests**
-```bash
-cargo test calendar_labels -- --nocapture
-```
+Scope:
+- Keep labels local-first.
+- Align label mapping with updated `CalendarEntryView` fields.
+- Remove text parsing hacks if the diff stays small.
 
-**Step 5: Commit**
-```bash
-git add src/domain/calendar_labels
-git commit -m "refactor: build calendar labels from local calendar view"
-```
+Done when:
+- Labels remain local and do not pull architecture backward.
 
-### Task 4: Migrate training context to local sources
+### 7. Remove legacy business reads from `domain::intervals`
 
-**Files:**
-- Modify: `src/domain/training_context/service/mod.rs`
-- Modify: `src/domain/training_context/service/context.rs`
-- Modify: `src/domain/training_context/model.rs` if needed
-- Modify: tests under `src/domain/training_context/**`
+Files:
+- calendar and training-context call sites
+- any remaining thin wrappers that only exist for old read flows
 
-**Step 1: Write failing tests**
-Cover:
-- recent and upcoming context builds from local read or write data
-- sickness or special day context comes from `SpecialDay`
-- future planned context comes from local planned workouts or calendar view
-- completed workouts use local completed-workout backing data
+Scope:
+- Leave `Intervals` only for polling, import, sync command-side, and provider-specific adapter responsibilities.
 
-**Step 2: Replace Intervals event reads**
-Remove dependence on:
-- `list_events`
-- `get_event`
-for business reads.
+Done when:
+- `domain::intervals` is no longer the read-side source of truth for business flows.
 
-**Step 3: Keep execution metrics from canonical completed-workout data**
-Migrate current activity metrics and details into canonical completed-workout reads where still useful, but do not treat provider fetches as the source for those fields.
+### 8. Verify in layers
 
-**Step 4: Rework plan-completion matching**
-Use canonical relations where available, fallback heuristics only where necessary.
+Order:
+- model and repository tests for `special_days`, `completed_workouts`, `calendar_view`
+- `calendar` domain and REST tests
+- `training_context` tests
+- full Rust verification
+- frontend tests and build only if contract-facing behavior changed
 
-**Step 5: Run tests**
-```bash
-cargo test training_context -- --nocapture
-```
+Commands:
+- `cargo fmt --all --check`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo test`
+- `bun run verify:rust`
+- `bun run --cwd frontend test`
+- `bun run --cwd frontend build`
 
-**Step 6: Commit**
-```bash
-git add src/domain/training_context
-git commit -m "refactor: build training context from local domain state"
-```
+## Execution Order
 
-### Task 5: Migrate any LLM-facing context builders to local source of truth
+1. Fill canonical model gaps.
+2. Refresh `CalendarEntryView` projections.
+3. Migrate domain `calendar`.
+4. Keep calendar REST contract compatible.
+5. Migrate `training_context`.
+6. Cleanup `calendar_labels`.
+7. Remove legacy business reads.
+8. Run final verification.
 
-**Files:**
-- Modify: any domain modules producing LLM input from calendar or history state
-- Modify: relevant tests
+## Acceptance
 
-**Step 1: Write failing tests**
-Cover:
-- LLM context does not need direct provider reads
-- calendar and history data come from canonical domain state
-
-**Step 2: Replace upstream event dependencies**
-Use local read model or canonical roots only.
-
-If LLM inputs need stream-derived or metric-derived details, source them from canonical persisted domain models rather than provider APIs.
-
-**Step 3: Run tests**
-```bash
-cargo test llm training_context -- --nocapture
-```
-
-**Step 4: Commit**
-```bash
-git add src/domain
-git commit -m "refactor: source llm context from local domain state"
-```
-
-### Task 6: Remove legacy Intervals-first read flow
-
-**Files:**
-- Modify or remove: `src/domain/intervals/service/events.rs`
-- Modify: `src/domain/intervals/service.rs`
-- Modify: `src/domain/intervals/mod.rs`
-- Modify: `src/main.rs`
-- Modify: any tests still targeting legacy read path
-
-**Step 1: Write failing compile checks or grep-based checklist**
-Confirm no business reader still depends on legacy Intervals event reads.
-
-**Step 2: Remove unused event-centric APIs**
-Delete or shrink:
-- legacy list or get event reader methods
-- legacy adapters only used by old read flow
-
-**Step 3: Keep only adapter-valid responsibilities**
-Retain only code that still makes sense as:
-- provider DTO handling
-- provider HTTP client logic
-- adapter-specific mapping helpers
-- shared utilities if truly needed
-
-**Step 4: Run tests**
-```bash
-cargo test -- --nocapture
-```
-
-**Step 5: Commit**
-```bash
-git add src/domain/intervals src/main.rs
-git commit -m "cleanup: remove legacy intervals-first read flow"
-```
-
-### Task 7: Final verification for PR4
-
-**Step 1: Run formatter check**
-```bash
-cargo fmt --all --check
-```
-
-**Step 2: Run clippy**
-```bash
-cargo clippy --all-targets --all-features -- -D warnings
-```
-
-**Step 3: Run full backend tests**
-```bash
-cargo test
-```
-
-**Step 4: Run repo Rust verification**
-```bash
-bun run verify:rust
-```
-
-**Step 5: Run frontend tests only if DTO or API contracts changed**
-```bash
-bun run --cwd frontend test
-bun run --cwd frontend build
-```
-
-**Step 6: Rebuild graphify as required by repo instructions after implementation session**
-Run the repo-required rebuild command after code changes are complete.
-
-**Step 7: Commit final fixes**
-```bash
-git add .
-git commit -m "test: verify local domain as application source of truth"
-```
+- `GET /api/calendar/events` remains practically compatible.
+- `calendar` and `training_context` do not perform business reads from Intervals.
+- `sync_planned_workout` still works.
+- Local canonical state is the source of truth for readers, not just writers and importers.
