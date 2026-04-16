@@ -458,7 +458,7 @@ fn hash_event(event: &Event) -> String {
 fn hash_activity(activity: &Activity) -> String {
     let workout = map_activity_to_completed_workout("hash-user", activity);
     let digest = Sha256::digest(format!(
-        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
         workout.completed_workout_id,
         workout.start_date_local,
         workout.planned_workout_id.as_deref().unwrap_or_default(),
@@ -466,6 +466,10 @@ fn hash_activity(activity: &Activity) -> String {
         workout.description.as_deref().unwrap_or_default(),
         workout.activity_type.as_deref().unwrap_or_default(),
         workout.trainer,
+        activity
+            .details_unavailable_reason
+            .as_deref()
+            .unwrap_or_default(),
         workout
             .duration_seconds
             .map(|value| value.to_string())
@@ -707,6 +711,36 @@ mod tests {
             panic!("expected completed workout import");
         };
 
+        assert_ne!(
+            base_command.normalized_payload_hash,
+            changed_command.normalized_payload_hash
+        );
+    }
+
+    #[test]
+    fn activity_hash_changes_when_details_unavailable_reason_changes() {
+        let base = sample_activity();
+        let mut changed = sample_activity();
+        changed.details_unavailable_reason = Some("strava_stub".to_string());
+
+        let ExternalImportCommand::UpsertCompletedWorkout(base_command) =
+            map_activity_to_import_command("user-1", &base)
+        else {
+            panic!("expected completed workout import");
+        };
+        let ExternalImportCommand::UpsertCompletedWorkout(changed_command) =
+            map_activity_to_import_command("user-1", &changed)
+        else {
+            panic!("expected completed workout import");
+        };
+
+        assert_eq!(
+            changed_command
+                .workout
+                .details_unavailable_reason
+                .as_deref(),
+            Some("strava_stub")
+        );
         assert_ne!(
             base_command.normalized_payload_hash,
             changed_command.normalized_payload_hash

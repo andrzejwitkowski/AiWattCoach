@@ -81,5 +81,18 @@
                 ),
             ],
         )),
+        Module((
+            name: "google_oauth_must_not_import_rest",
+            matches: Module("^aiwattcoach::adapters::google_oauth($|::.*)"),
+            rules: [
+                RestrictImports(
+                    allowed_only: None,
+                    denied: Some([
+                        "^aiwattcoach::adapters::rest($|::.*)",
+                    ]),
+                    severity: Error,
+                ),
+            ],
+        )),
     ],
 )

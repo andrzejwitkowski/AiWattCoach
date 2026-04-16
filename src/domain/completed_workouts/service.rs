@@ -75,10 +75,14 @@ where
     }
 }
 
-fn canonical_completed_workout_id(activity_id: &str) -> String {
+pub fn canonical_completed_workout_id(activity_id: &str) -> String {
     if activity_id.starts_with("intervals-activity:") {
         activity_id.to_string()
     } else {
         format!("intervals-activity:{activity_id}")
     }
+}
+
+pub fn completed_workout_activity_id(id: &str) -> &str {
+    id.strip_prefix("intervals-activity:").unwrap_or(id)
 }

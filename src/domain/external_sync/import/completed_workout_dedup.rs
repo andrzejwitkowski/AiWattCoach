@@ -167,6 +167,15 @@ pub(super) fn merge_completed_workout(
     existing: CompletedWorkout,
     incoming: CompletedWorkout,
 ) -> CompletedWorkout {
+    let merged_details = merge_completed_workout_details(existing.details, incoming.details);
+    let details_unavailable_reason = if has_any_details(&merged_details) {
+        None
+    } else {
+        incoming
+            .details_unavailable_reason
+            .or(existing.details_unavailable_reason)
+    };
+
     CompletedWorkout {
         completed_workout_id: existing.completed_workout_id,
         user_id: existing.user_id,
@@ -181,11 +190,21 @@ pub(super) fn merge_completed_workout(
         duration_seconds: incoming.duration_seconds.or(existing.duration_seconds),
         distance_meters: incoming.distance_meters.or(existing.distance_meters),
         metrics: merge_completed_workout_metrics(existing.metrics, incoming.metrics),
-        details: merge_completed_workout_details(existing.details, incoming.details),
-        details_unavailable_reason: incoming
-            .details_unavailable_reason
-            .or(existing.details_unavailable_reason),
+        details: merged_details,
+        details_unavailable_reason,
     }
+}
+
+fn has_any_details(details: &CompletedWorkoutDetails) -> bool {
+    !(details.intervals.is_empty()
+        && details.interval_groups.is_empty()
+        && details.streams.is_empty()
+        && details.interval_summary.is_empty()
+        && details.skyline_chart.is_empty()
+        && details.power_zone_times.is_empty()
+        && details.heart_rate_zone_times.is_empty()
+        && details.pace_zone_times.is_empty()
+        && details.gap_zone_times.is_empty())
 }
 
 fn merge_completed_workout_metrics(

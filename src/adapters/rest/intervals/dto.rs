@@ -194,7 +194,7 @@ pub(in crate::adapters::rest) struct EventFileUploadDto {
 }
 
 #[derive(Serialize)]
-pub(crate) struct ActivityDto {
+pub(in crate::adapters::rest) struct ActivityDto {
     pub id: String,
     #[serde(rename = "startDateLocal")]
     pub start_date_local: String,
@@ -238,7 +238,7 @@ pub(crate) struct ActivityDto {
 }
 
 #[derive(Serialize)]
-pub(crate) struct ActivityMetricsDto {
+pub(in crate::adapters::rest) struct ActivityMetricsDto {
     #[serde(rename = "trainingStressScore")]
     pub training_stress_score: Option<i32>,
     #[serde(rename = "normalizedPowerWatts")]
@@ -268,7 +268,7 @@ pub(crate) struct ActivityMetricsDto {
 }
 
 #[derive(Serialize)]
-pub(crate) struct ActivityDetailsDto {
+pub(in crate::adapters::rest) struct ActivityDetailsDto {
     pub intervals: Vec<ActivityIntervalDto>,
     #[serde(rename = "intervalGroups")]
     pub interval_groups: Vec<ActivityIntervalGroupDto>,
@@ -288,7 +288,7 @@ pub(crate) struct ActivityDetailsDto {
 }
 
 #[derive(Serialize)]
-pub(crate) struct ActivityIntervalDto {
+pub(in crate::adapters::rest) struct ActivityIntervalDto {
     pub id: Option<i32>,
     pub label: Option<String>,
     #[serde(rename = "intervalType")]
@@ -327,7 +327,7 @@ pub(crate) struct ActivityIntervalDto {
 }
 
 #[derive(Serialize)]
-pub(crate) struct ActivityIntervalGroupDto {
+pub(in crate::adapters::rest) struct ActivityIntervalGroupDto {
     pub id: String,
     pub count: Option<i32>,
     #[serde(rename = "startIndex")]
@@ -355,7 +355,7 @@ pub(crate) struct ActivityIntervalGroupDto {
 }
 
 #[derive(Serialize)]
-pub(crate) struct ActivityStreamDto {
+pub(in crate::adapters::rest) struct ActivityStreamDto {
     #[serde(rename = "streamType")]
     pub stream_type: String,
     pub name: Option<String>,
@@ -369,7 +369,7 @@ pub(crate) struct ActivityStreamDto {
 }
 
 #[derive(Serialize)]
-pub(crate) struct ActivityZoneTimeDto {
+pub(in crate::adapters::rest) struct ActivityZoneTimeDto {
     #[serde(rename = "zoneId")]
     pub zone_id: String,
     pub seconds: i32,

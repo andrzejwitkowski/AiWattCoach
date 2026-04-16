@@ -3,7 +3,10 @@ use serde_json::Value;
 use crate::{
     adapters::rest::intervals::{map_activity_to_dto, ActivityDto},
     domain::{
-        completed_workouts::{CompletedWorkout, CompletedWorkoutSeries, CompletedWorkoutStream},
+        completed_workouts::{
+            completed_workout_activity_id, CompletedWorkout, CompletedWorkoutSeries,
+            CompletedWorkoutStream,
+        },
         intervals::{
             Activity, ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
             ActivityStream, ActivityZoneTime,
@@ -149,14 +152,10 @@ fn map_completed_workout_to_activity(workout: CompletedWorkout) -> Activity {
 fn canonical_activity_id(workout: &CompletedWorkout) -> String {
     workout
         .source_activity_id
-        .clone()
-        .unwrap_or_else(|| legacy_activity_id(&workout.completed_workout_id).to_string())
-}
-
-fn legacy_activity_id(completed_workout_id: &str) -> &str {
-    completed_workout_id
-        .strip_prefix("intervals-activity:")
-        .unwrap_or(completed_workout_id)
+        .as_deref()
+        .map(completed_workout_activity_id)
+        .unwrap_or_else(|| completed_workout_activity_id(&workout.completed_workout_id))
+        .to_string()
 }
 
 fn map_stream_to_activity_stream(stream: CompletedWorkoutStream) -> ActivityStream {

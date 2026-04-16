@@ -610,7 +610,7 @@ fn sample_completed_workout(
         Some("Threshold Ride".to_string()),
         Some("Strong day".to_string()),
         Some("Ride".to_string()),
-        Some("external-1".to_string()),
+        Some(format!("external-{completed_workout_id}")),
         false,
         Some(3600),
         Some(35_000.0),

@@ -10,4 +10,7 @@ pub use model::{
     CompletedWorkoutStream, CompletedWorkoutZoneTime,
 };
 pub use ports::{BoxFuture, CompletedWorkoutRepository};
-pub use service::{CompletedWorkoutReadService, CompletedWorkoutReadUseCases};
+pub use service::{
+    canonical_completed_workout_id, completed_workout_activity_id, CompletedWorkoutReadService,
+    CompletedWorkoutReadUseCases,
+};

@@ -1,5 +1,5 @@
 use crate::domain::{
-    completed_workouts::CompletedWorkoutRepository,
+    completed_workouts::{canonical_completed_workout_id, CompletedWorkoutRepository},
     workout_summary::{BoxFuture, CompletedWorkoutTargetUseCases, WorkoutSummaryError},
 };
 
@@ -43,13 +43,5 @@ where
                 Err(error) => Err(WorkoutSummaryError::Repository(error.to_string())),
             }
         })
-    }
-}
-
-fn canonical_completed_workout_id(workout_id: &str) -> String {
-    if workout_id.starts_with("intervals-activity:") {
-        workout_id.to_string()
-    } else {
-        format!("intervals-activity:{workout_id}")
     }
 }

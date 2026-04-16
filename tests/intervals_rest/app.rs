@@ -419,7 +419,10 @@ impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
         let stored = self.stored.clone();
         Box::pin(async move {
             let mut stored = stored.lock().unwrap();
-            stored.retain(|existing| existing.completed_workout_id != workout.completed_workout_id);
+            stored.retain(|existing| {
+                !(existing.user_id == workout.user_id
+                    && existing.completed_workout_id == workout.completed_workout_id)
+            });
             stored.push(workout.clone());
             Ok(workout)
         })

@@ -60,6 +60,45 @@ async fn list_completed_workouts_returns_canonical_workouts_for_authenticated_us
 }
 
 #[tokio::test]
+async fn list_completed_workouts_excludes_other_users_workouts() {
+    let mut other_user_workout = sample_completed_workout("activity-99", None);
+    other_user_workout.user_id = "user-2".to_string();
+
+    let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        InMemoryCalendarEntryViewRepository::default(),
+        InMemoryCompletedWorkoutRepository::with_workouts(vec![
+            sample_completed_workout("activity-11", None),
+            other_user_workout,
+        ]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/completed-workouts?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = get_json(response).await;
+    let ids = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item.get("id").and_then(Value::as_str))
+        .collect::<Vec<_>>();
+
+    assert_eq!(ids, vec!["activity-11"]);
+}
+
+#[tokio::test]
 async fn list_completed_workouts_preserves_trainer_flag_from_canonical_workout() {
     let mut workout = sample_completed_workout("activity-31", None);
     workout.trainer = true;
@@ -130,6 +169,33 @@ async fn get_completed_workout_returns_canonical_workout_detail() {
             .len(),
         1
     );
+}
+
+#[tokio::test]
+async fn get_completed_workout_returns_404_for_other_users_workout() {
+    let mut other_user_workout = sample_completed_workout("activity-98", None);
+    other_user_workout.user_id = "user-2".to_string();
+
+    let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        InMemoryCalendarEntryViewRepository::default(),
+        InMemoryCompletedWorkoutRepository::with_workouts(vec![other_user_workout]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/completed-workouts/activity-98")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
