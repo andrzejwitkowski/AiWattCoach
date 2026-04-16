@@ -125,6 +125,37 @@ describe('IntervalsCard', () => {
     expect(screen.getByLabelText(/athlete id/i)).toHaveValue('athlete-999');
   });
 
+  it('treats saved raw api key draft as clean after parent refreshes with masked value', async () => {
+    updateIntervalsMock.mockResolvedValue(buildSettings({ athleteId: 'athlete-999' }));
+
+    const { rerender } = render(
+      <IntervalsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: 'next-api-key' } });
+    fireEvent.change(screen.getByLabelText(/athlete id/i), { target: { value: 'athlete-999' } });
+    fireEvent.click(screen.getByRole('button', { name: /^connect intervals$/i }));
+
+    await waitFor(() => {
+      expect(updateIntervalsMock).toHaveBeenCalled();
+    });
+
+    rerender(
+      <IntervalsCard
+        settings={buildSettings({
+          apiKey: '***...9999',
+          apiKeySet: true,
+          athleteId: 'athlete-999',
+          connected: true,
+        })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /^connect intervals$/i })).toBeDisabled();
+  });
+
   it('sends explicit clears when saved intervals fields are blanked', async () => {
     updateIntervalsMock.mockResolvedValue(
       buildSettings({ apiKey: null, apiKeySet: false, athleteId: null, connected: false }),
@@ -165,6 +196,27 @@ describe('IntervalsCard', () => {
     });
   });
 
+  it('omits an unchanged athlete id when testing only a new api key draft', async () => {
+    testIntervalsConnectionMock.mockResolvedValue({
+      connected: true,
+      message: 'Connection successful.',
+      usedSavedApiKey: false,
+      usedSavedAthleteId: true,
+      persistedStatusUpdated: false,
+    });
+
+    render(<IntervalsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: 'next-api-key' } });
+    fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
+
+    await waitFor(() => {
+      expect(testIntervalsConnectionMock).toHaveBeenCalledWith('', {
+        apiKey: 'next-api-key',
+      });
+    });
+  });
+
   it('shows an OK status when the connection test succeeds', async () => {
     testIntervalsConnectionMock.mockResolvedValue({
       connected: true,
@@ -180,6 +232,25 @@ describe('IntervalsCard', () => {
 
     expect(await screen.findByText(/^OK$/)).toBeInTheDocument();
     expect(screen.getByText(/connection successful/i)).toBeInTheDocument();
+  });
+
+  it('refreshes settings after a successful test that persists connection state', async () => {
+    testIntervalsConnectionMock.mockResolvedValue({
+      connected: true,
+      message: 'Connection successful.',
+      usedSavedApiKey: false,
+      usedSavedAthleteId: false,
+      persistedStatusUpdated: true,
+    });
+
+    const onSave = vi.fn();
+    render(<IntervalsCard settings={buildSettings()} apiBaseUrl="" onSave={onSave} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('shows a FAILED status when the connection test fails', async () => {
@@ -218,6 +289,39 @@ describe('IntervalsCard', () => {
     await waitFor(() => {
       expect(screen.queryByText(/^OK$/)).not.toBeInTheDocument();
     });
+  });
+
+  it('allows reconnecting saved credentials for a disconnected user without editing fields', async () => {
+    updateIntervalsMock.mockResolvedValue(buildSettings({ connected: true }));
+
+    render(
+      <IntervalsCard
+        settings={buildSettings({ connected: false, apiKeySet: true, athleteId: 'athlete-123' })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    const connectButton = screen.getByRole('button', { name: /^connect intervals$/i });
+    expect(connectButton).toBeEnabled();
+
+    fireEvent.click(connectButton);
+
+    await waitFor(() => {
+      expect(updateIntervalsMock).toHaveBeenCalledWith('', {});
+    });
+  });
+
+  it('does not allow reconnecting when saved credentials are incomplete', () => {
+    render(
+      <IntervalsCard
+        settings={buildSettings({ connected: false, apiKeySet: true, athleteId: null })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /^connect intervals$/i })).toBeDisabled();
   });
 
   it('ignores stale in-flight test results after the draft changes', async () => {
@@ -260,5 +364,102 @@ describe('IntervalsCard', () => {
 
     expect(screen.queryByText(/^OK$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/connection successful/i)).not.toBeInTheDocument();
+  });
+
+  it('refreshes settings for stale persisted test results without showing stale status', async () => {
+    let resolveTest:
+      | ((value: {
+          connected: boolean;
+          message: string;
+          usedSavedApiKey: boolean;
+          usedSavedAthleteId: boolean;
+          persistedStatusUpdated: boolean;
+        }) => void)
+      | undefined;
+
+    testIntervalsConnectionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveTest = resolve;
+        }),
+    );
+
+    const onSave = vi.fn();
+    render(<IntervalsCard settings={buildSettings()} apiBaseUrl="" onSave={onSave} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
+    fireEvent.change(screen.getByLabelText(/athlete id/i), { target: { value: 'athlete-555' } });
+
+    await act(async () => {
+      resolveTest?.({
+        connected: true,
+        message: 'Connection successful.',
+        usedSavedApiKey: false,
+        usedSavedAthleteId: false,
+        persistedStatusUpdated: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/^OK$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/connection successful/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps only later field edits dirty after a stale persisted api key test refresh', async () => {
+    let resolveTest:
+      | ((value: {
+          connected: boolean;
+          message: string;
+          usedSavedApiKey: boolean;
+          usedSavedAthleteId: boolean;
+          persistedStatusUpdated: boolean;
+        }) => void)
+      | undefined;
+
+    testIntervalsConnectionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveTest = resolve;
+        }),
+    );
+
+    const { rerender } = render(<IntervalsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: 'next-api-key' } });
+    fireEvent.click(screen.getByRole('button', { name: /^test connection$/i }));
+    fireEvent.change(screen.getByLabelText(/athlete id/i), { target: { value: 'athlete-555' } });
+
+    await act(async () => {
+      resolveTest?.({
+        connected: true,
+        message: 'Connection successful.',
+        usedSavedApiKey: false,
+        usedSavedAthleteId: true,
+        persistedStatusUpdated: true,
+      });
+      await Promise.resolve();
+    });
+
+    rerender(
+      <IntervalsCard
+        settings={buildSettings({
+          apiKey: '***...9999',
+          apiKeySet: true,
+          athleteId: 'athlete-123',
+          connected: true,
+        })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^connect intervals$/i }));
+
+    await waitFor(() => {
+      expect(updateIntervalsMock).toHaveBeenCalledWith('', {
+        athleteId: 'athlete-555',
+      });
+    });
   });
 });

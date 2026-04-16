@@ -54,41 +54,46 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
     };
   }, [persistedApiKey, persistedAthleteId]);
 
-  const hasPersistedCredentials = intervals.apiKeySet || Boolean(intervals.athleteId);
+  const hasSavedCompleteCredentials = intervals.apiKeySet && Boolean(intervals.athleteId);
   const hasDirtyDraft = draft.apiKey !== cleanDraft.apiKey || draft.athleteId !== cleanDraft.athleteId;
+  const canReconnectSavedCredentials = hasSavedCompleteCredentials && !intervals.connected && !hasDirtyDraft;
 
   const saveRequest = useMemo(() => {
     const trimmedApiKey = draft.apiKey.trim();
     const trimmedAthleteId = draft.athleteId.trim();
+    const cleanApiKey = cleanDraft.apiKey.trim();
+    const cleanAthleteId = cleanDraft.athleteId.trim();
     const request: Record<string, string | null> = {};
 
-    if (draft.apiKey !== persistedApiKey) {
+    if (trimmedApiKey !== cleanApiKey) {
       request.apiKey = trimmedApiKey ? trimmedApiKey : null;
     }
-    if (draft.athleteId !== persistedAthleteId) {
+    if (trimmedAthleteId !== cleanAthleteId) {
       request.athleteId = trimmedAthleteId ? trimmedAthleteId : null;
     }
 
     return request;
-  }, [draft.apiKey, draft.athleteId, persistedApiKey, persistedAthleteId]);
+  }, [cleanDraft.apiKey, cleanDraft.athleteId, draft.apiKey, draft.athleteId]);
 
   const visibleTestRequest = useMemo(() => {
     const trimmedApiKey = draft.apiKey.trim();
     const trimmedAthleteId = draft.athleteId.trim();
+    const cleanApiKey = cleanDraft.apiKey.trim();
+    const cleanAthleteId = cleanDraft.athleteId.trim();
     const request: Record<string, string> = {};
 
-    if (trimmedApiKey && trimmedApiKey !== persistedApiKey) {
+    if (trimmedApiKey && trimmedApiKey !== cleanApiKey) {
       request.apiKey = trimmedApiKey;
     }
-    if (trimmedAthleteId) {
+    if (trimmedAthleteId && trimmedAthleteId !== cleanAthleteId) {
       request.athleteId = trimmedAthleteId;
     }
 
     return request;
-  }, [draft.apiKey, draft.athleteId, persistedApiKey]);
+  }, [cleanDraft.apiKey, cleanDraft.athleteId, draft.apiKey, draft.athleteId]);
 
-  const canSave = Object.keys(saveRequest).length > 0;
-  const canTest = Object.keys(visibleTestRequest).length > 0 || hasPersistedCredentials;
+  const canSave = Object.keys(saveRequest).length > 0 || canReconnectSavedCredentials;
+  const canTest = Object.keys(visibleTestRequest).length > 0 || hasSavedCompleteCredentials;
 
   const clearTestStatusIfNeeded = () => {
     testRunIdRef.current += 1;
@@ -116,7 +121,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
       message: 'Saving current Intervals.icu credentials...',
     });
     try {
-      await updateIntervals(apiBaseUrl, saveRequest);
+      await updateIntervals(apiBaseUrl, canReconnectSavedCredentials ? {} : saveRequest);
       setCleanDraft(draft);
       setStatus({
         tone: 'success',
@@ -139,6 +144,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
     if (!canTest) return;
     const testRunId = testRunIdRef.current + 1;
     testRunIdRef.current = testRunId;
+    const submittedTestRequest = visibleTestRequest;
     setIsTesting(true);
     setStatus({
       tone: 'neutral',
@@ -146,11 +152,22 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
       message: 'Testing current Intervals.icu values...',
     });
     try {
-      const result = await testIntervalsConnection(apiBaseUrl, visibleTestRequest);
+      const result = await testIntervalsConnection(apiBaseUrl, submittedTestRequest);
       if (testRunId !== testRunIdRef.current) {
+        if (result.persistedStatusUpdated) {
+          setCleanDraft((current) => ({
+            apiKey: submittedTestRequest.apiKey ?? current.apiKey,
+            athleteId: submittedTestRequest.athleteId ?? current.athleteId,
+          }));
+          onSave();
+        }
         return;
       }
       setStatusFromTest(result);
+      if (result.persistedStatusUpdated) {
+        setCleanDraft(draft);
+        onSave();
+      }
     } catch (err) {
       if (testRunId !== testRunIdRef.current) {
         return;
@@ -278,7 +295,7 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
         <button
           className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-cyan-400 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => { void handleSave(); }}
-          disabled={isSaving || isTesting || !canSave || !hasDirtyDraft}
+          disabled={isSaving || isTesting || !canSave}
           type="button"
         >
           <RefreshCw size={15} className={isSaving ? 'animate-spin' : undefined} />

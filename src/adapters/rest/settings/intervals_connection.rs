@@ -1,4 +1,4 @@
-use crate::domain::settings::UserSettings;
+use crate::domain::settings::{IntervalsConfig, UserSettings};
 
 use super::dto::{
     test_connection_response, TestIntervalsConnectionRequest, TestIntervalsConnectionResponse,
@@ -34,6 +34,7 @@ pub(super) fn merge_connection_credentials(
             "Both API key and athlete ID are required.",
             transient_api_key_not_provided && current.intervals.api_key.is_some(),
             transient_athlete_id_not_provided && current.intervals.athlete_id.is_some(),
+            false,
         )
     })
 }
@@ -72,9 +73,37 @@ fn merge_credentials(
     }
 }
 
+pub(super) fn build_persisted_intervals_config(credentials: &MergedCredentials) -> IntervalsConfig {
+    IntervalsConfig {
+        api_key: Some(credentials.api_key.clone()),
+        athlete_id: Some(credentials.athlete_id.clone()),
+        connected: true,
+    }
+}
+
+pub(super) fn should_persist_tested_credentials(
+    credentials: &MergedCredentials,
+    current: &UserSettings,
+) -> bool {
+    current.intervals.api_key.as_deref() != Some(credentials.api_key.as_str())
+        || current.intervals.athlete_id.as_deref() != Some(credentials.athlete_id.as_str())
+        || !current.intervals.connected
+}
+
+pub(super) fn can_persist_tested_credentials(
+    initial: &UserSettings,
+    latest: &UserSettings,
+) -> bool {
+    initial.intervals == latest.intervals
+}
+
 #[cfg(test)]
 mod tests {
-    use super::normalize_optional_input;
+    use super::{
+        can_persist_tested_credentials, normalize_optional_input,
+        should_persist_tested_credentials, MergedCredentials,
+    };
+    use crate::domain::settings::UserSettings;
 
     #[test]
     fn normalize_optional_input_trims_non_empty_values() {
@@ -92,5 +121,45 @@ mod tests {
     #[test]
     fn normalize_optional_input_preserves_none() {
         assert_eq!(normalize_optional_input(None), None);
+    }
+
+    #[test]
+    fn should_persist_tested_credentials_returns_true_when_connection_is_disconnected() {
+        let mut current = UserSettings::new_defaults("user-1".to_string(), 1000);
+        current.intervals.api_key = Some("saved-api-key".to_string());
+        current.intervals.athlete_id = Some("saved-athlete-id".to_string());
+        current.intervals.connected = false;
+
+        let credentials = MergedCredentials {
+            api_key: "saved-api-key".to_string(),
+            athlete_id: "saved-athlete-id".to_string(),
+            used_saved_api_key: true,
+            used_saved_athlete_id: true,
+        };
+
+        assert!(should_persist_tested_credentials(&credentials, &current));
+    }
+
+    #[test]
+    fn can_persist_tested_credentials_rejects_changed_saved_fallbacks() {
+        let mut initial = UserSettings::new_defaults("user-1".to_string(), 1000);
+        initial.intervals.api_key = Some("old-api-key".to_string());
+        initial.intervals.athlete_id = Some("saved-athlete-id".to_string());
+
+        let mut latest = initial.clone();
+        latest.intervals.api_key = Some("new-api-key".to_string());
+
+        assert!(!can_persist_tested_credentials(&initial, &latest));
+    }
+
+    #[test]
+    fn can_persist_tested_credentials_allows_unchanged_intervals_state() {
+        let mut initial = UserSettings::new_defaults("user-1".to_string(), 1000);
+        initial.intervals.api_key = Some("saved-api-key".to_string());
+        initial.intervals.athlete_id = Some("saved-athlete-id".to_string());
+
+        let latest = initial.clone();
+
+        assert!(can_persist_tested_credentials(&initial, &latest));
     }
 }

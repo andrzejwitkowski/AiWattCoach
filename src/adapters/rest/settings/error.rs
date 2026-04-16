@@ -73,6 +73,7 @@ pub(super) fn map_connection_error_to_response(
                     "Invalid API key or athlete ID. Please check your credentials.",
                     used_saved_api_key,
                     used_saved_athlete_id,
+                    false,
                 )),
             )
                 .into_response()
@@ -86,6 +87,7 @@ pub(super) fn map_connection_error_to_response(
                     "Invalid configuration. Please check athlete ID.",
                     used_saved_api_key,
                     used_saved_athlete_id,
+                    false,
                 )),
             )
                 .into_response()
@@ -99,6 +101,7 @@ pub(super) fn map_connection_error_to_response(
                     "Intervals.icu is currently unavailable. Please try again later.",
                     used_saved_api_key,
                     used_saved_athlete_id,
+                    false,
                 )),
             )
                 .into_response()

@@ -45,7 +45,7 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
   }
 
   function handleSave() {
-    void refreshSettings();
+    void refreshSettings({ background: true });
   }
 
   return (

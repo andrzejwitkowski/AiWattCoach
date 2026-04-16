@@ -7,7 +7,7 @@ type SettingsContextValue = {
   settings: UserSettingsResponse | null;
   isLoading: boolean;
   error: string | null;
-  refreshSettings: () => Promise<void>;
+  refreshSettings: (options?: { background?: boolean }) => Promise<void>;
   setSettings: React.Dispatch<React.SetStateAction<UserSettingsResponse | null>>;
 };
 
@@ -24,8 +24,11 @@ export function SettingsProvider({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshSettings = useCallback(async () => {
-    setIsLoading(true);
+  const refreshSettings = useCallback(async (options?: { background?: boolean }) => {
+    const background = options?.background ?? false;
+    if (!background) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const data = await loadSettings(apiBaseUrl);
