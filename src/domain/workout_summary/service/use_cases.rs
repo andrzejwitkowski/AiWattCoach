@@ -1,5 +1,9 @@
 use super::*;
 
+use futures::{stream, StreamExt, TryStreamExt};
+
+const LIST_SUMMARIES_TARGET_CHECK_CONCURRENCY: usize = 8;
+
 #[derive(Clone, PartialEq, Eq)]
 struct RecapSnapshot {
     text: Option<String>,
@@ -104,15 +108,22 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            let mut completed_workout_ids = Vec::with_capacity(workout_ids.len());
-            for workout_id in workout_ids {
-                if service
-                    .is_completed_workout_target(&user_id, &workout_id)
-                    .await?
-                {
-                    completed_workout_ids.push(workout_id);
+            let completed_workout_ids = stream::iter(workout_ids.into_iter().map(|workout_id| {
+                let service = service.clone();
+                let user_id = user_id.clone();
+                async move {
+                    let is_completed = service
+                        .is_completed_workout_target(&user_id, &workout_id)
+                        .await?;
+                    Ok::<_, WorkoutSummaryError>(is_completed.then_some(workout_id))
                 }
-            }
+            }))
+            .buffered(LIST_SUMMARIES_TARGET_CHECK_CONCURRENCY)
+            .try_collect::<Vec<_>>()
+            .await?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
 
             if completed_workout_ids.is_empty() {
                 return Ok(Vec::new());

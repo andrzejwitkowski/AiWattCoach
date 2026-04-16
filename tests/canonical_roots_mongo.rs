@@ -377,6 +377,39 @@ async fn planned_completed_link_repository_round_trips_and_indexes_links() {
         Some(PlannedCompletedWorkoutLinkMatchSource::Token)
     );
 
+    repository
+        .upsert(PlannedCompletedWorkoutLink::new(
+            "user-1".to_string(),
+            "planned-2".to_string(),
+            "completed-1".to_string(),
+            PlannedCompletedWorkoutLinkMatchSource::Explicit,
+            1_700_000_456,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        repository
+            .find_by_planned_workout_id("user-1", "planned-1")
+            .await
+            .unwrap(),
+        None
+    );
+    let relinked = repository
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap();
+    assert_eq!(
+        relinked
+            .as_ref()
+            .map(|link| link.planned_workout_id.as_str()),
+        Some("planned-2")
+    );
+    assert_eq!(
+        relinked.map(|link| link.match_source),
+        Some(PlannedCompletedWorkoutLinkMatchSource::Explicit)
+    );
+
     let indexes = fixture
         .client
         .database(&fixture.database)

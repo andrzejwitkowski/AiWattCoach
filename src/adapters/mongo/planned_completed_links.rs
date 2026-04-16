@@ -114,6 +114,14 @@ impl PlannedCompletedWorkoutLinkRepository for MongoPlannedCompletedWorkoutLinkR
         let document = map_domain_to_document(&link);
         Box::pin(async move {
             collection
+                .delete_many(doc! {
+                    "user_id": &document.user_id,
+                    "completed_workout_id": &document.completed_workout_id,
+                    "planned_workout_id": { "$ne": &document.planned_workout_id },
+                })
+                .await
+                .map_err(|error| PlannedCompletedWorkoutLinkError::Repository(error.to_string()))?;
+            collection
                 .replace_one(
                     doc! {
                         "user_id": &document.user_id,

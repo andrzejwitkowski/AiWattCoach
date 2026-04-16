@@ -464,7 +464,8 @@ impl PlannedCompletedWorkoutLinkRepository for InMemoryPlannedCompletedWorkoutLi
             let mut stored = stored.lock().unwrap();
             stored.retain(|existing| {
                 !(existing.user_id == link.user_id
-                    && existing.planned_workout_id == link.planned_workout_id)
+                    && (existing.planned_workout_id == link.planned_workout_id
+                        || existing.completed_workout_id == link.completed_workout_id))
             });
             stored.push(link.clone());
             Ok(link)
@@ -759,10 +760,17 @@ pub(super) fn external_import_service_without_refresh(
 }
 
 pub(super) fn sample_planned_workout() -> PlannedWorkout {
+    sample_planned_workout_on_date("planned-imported-1", "2026-05-10")
+}
+
+pub(super) fn sample_planned_workout_on_date(
+    planned_workout_id: &str,
+    date: &str,
+) -> PlannedWorkout {
     PlannedWorkout::new(
-        "planned-imported-1".to_string(),
+        planned_workout_id.to_string(),
         "user-1".to_string(),
-        "2026-05-10".to_string(),
+        date.to_string(),
         PlannedWorkoutContent {
             lines: vec![
                 PlannedWorkoutLine::Text(PlannedWorkoutText {

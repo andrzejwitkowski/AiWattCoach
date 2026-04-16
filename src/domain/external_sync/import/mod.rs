@@ -29,6 +29,12 @@ use super::{
     ExternalSyncStateRepository,
 };
 
+#[derive(Clone)]
+struct ResolvedPlannedWorkoutLink {
+    planned_workout_id: String,
+    match_source: PlannedCompletedWorkoutLinkMatchSource,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExternalImportCommand {
     UpsertPlannedWorkout(ExternalPlannedWorkoutImport),
@@ -343,32 +349,40 @@ where
         command: ExternalCompletedWorkoutImport,
     ) -> Result<ExternalImportOutcome, ExternalImportError> {
         let dedup_key = completed_workout_dedup_key(&command.workout);
-        let linked_planned_workout_id = self
+        let resolved_link = self
             .resolve_planned_workout_id_for_completed_workout(
                 &command.workout.user_id,
                 &command.marker_sources,
                 &command.workout,
             )
             .await?;
-        let mut incoming = command.workout;
-        if linked_planned_workout_id.is_some() {
-            incoming.planned_workout_id = linked_planned_workout_id.clone();
-        }
-        let workout = self
-            .resolve_completed_workout_target(incoming, dedup_key.as_deref())
+        let mut workout = self
+            .resolve_completed_workout_target(command.workout, dedup_key.as_deref())
             .await?;
+        let existing_link = self
+            .planned_completed_links
+            .find_by_completed_workout_id(&workout.user_id, &workout.completed_workout_id)
+            .await
+            .map_err(map_planned_completed_link_error)?;
+        let selected_link = choose_preferred_planned_workout_link(
+            existing_link_candidate(existing_link.as_ref(), &workout),
+            resolved_link,
+        );
+        workout.planned_workout_id = selected_link
+            .as_ref()
+            .map(|link| link.planned_workout_id.clone());
         let workout = self
             .completed_workouts
             .upsert(workout)
             .await
             .map_err(map_completed_workout_error)?;
-        if let Some(planned_workout_id) = &workout.planned_workout_id {
+        if let Some(link) = selected_link {
             self.planned_completed_links
                 .upsert(PlannedCompletedWorkoutLink::new(
                     workout.user_id.clone(),
-                    planned_workout_id.clone(),
+                    link.planned_workout_id,
                     workout.completed_workout_id.clone(),
-                    PlannedCompletedWorkoutLinkMatchSource::Token,
+                    link.match_source,
                     self.clock.now_epoch_seconds(),
                 ))
                 .await
@@ -579,7 +593,7 @@ where
         user_id: &str,
         marker_sources: &[String],
         workout: &CompletedWorkout,
-    ) -> Result<Option<String>, ExternalImportError> {
+    ) -> Result<Option<ResolvedPlannedWorkoutLink>, ExternalImportError> {
         for source in marker_sources {
             let Some(match_token) = extract_planned_workout_marker(source) else {
                 continue;
@@ -590,7 +604,10 @@ where
                 .await
                 .map_err(map_planned_workout_token_error)?;
             if let Some(planned_workout) = planned_workout {
-                return Ok(Some(planned_workout.planned_workout_id));
+                return Ok(Some(ResolvedPlannedWorkoutLink {
+                    planned_workout_id: planned_workout.planned_workout_id,
+                    match_source: PlannedCompletedWorkoutLinkMatchSource::Token,
+                }));
             }
         }
 
@@ -603,9 +620,78 @@ where
 
         match same_day_planned_workouts.as_slice() {
             [] => Ok(None),
-            [planned_workout] => Ok(Some(planned_workout.planned_workout_id.clone())),
+            [planned_workout] => Ok(Some(ResolvedPlannedWorkoutLink {
+                planned_workout_id: planned_workout.planned_workout_id.clone(),
+                match_source: PlannedCompletedWorkoutLinkMatchSource::Heuristic,
+            })),
             _ => Ok(None),
         }
+    }
+}
+
+fn existing_link_candidate(
+    existing_link: Option<&PlannedCompletedWorkoutLink>,
+    workout: &CompletedWorkout,
+) -> Option<ResolvedPlannedWorkoutLink> {
+    if let Some(link) = existing_link {
+        return Some(ResolvedPlannedWorkoutLink {
+            planned_workout_id: link.planned_workout_id.clone(),
+            match_source: link.match_source.clone(),
+        });
+    }
+
+    workout
+        .planned_workout_id
+        .as_ref()
+        .map(|planned_workout_id| ResolvedPlannedWorkoutLink {
+            planned_workout_id: planned_workout_id.clone(),
+            match_source: PlannedCompletedWorkoutLinkMatchSource::Heuristic,
+        })
+}
+
+fn choose_preferred_planned_workout_link(
+    existing_link: Option<ResolvedPlannedWorkoutLink>,
+    resolved_link: Option<ResolvedPlannedWorkoutLink>,
+) -> Option<ResolvedPlannedWorkoutLink> {
+    match (existing_link, resolved_link) {
+        (Some(existing), Some(resolved))
+            if existing.planned_workout_id == resolved.planned_workout_id =>
+        {
+            Some(ResolvedPlannedWorkoutLink {
+                planned_workout_id: existing.planned_workout_id,
+                match_source: max_match_source(existing.match_source, resolved.match_source),
+            })
+        }
+        (Some(existing), Some(resolved)) => {
+            if match_source_rank(&resolved.match_source) > match_source_rank(&existing.match_source)
+            {
+                Some(resolved)
+            } else {
+                Some(existing)
+            }
+        }
+        (Some(existing), None) => Some(existing),
+        (None, Some(resolved)) => Some(resolved),
+        (None, None) => None,
+    }
+}
+
+fn max_match_source(
+    left: PlannedCompletedWorkoutLinkMatchSource,
+    right: PlannedCompletedWorkoutLinkMatchSource,
+) -> PlannedCompletedWorkoutLinkMatchSource {
+    if match_source_rank(&right) > match_source_rank(&left) {
+        right
+    } else {
+        left
+    }
+}
+
+fn match_source_rank(source: &PlannedCompletedWorkoutLinkMatchSource) -> u8 {
+    match source {
+        PlannedCompletedWorkoutLinkMatchSource::Heuristic => 0,
+        PlannedCompletedWorkoutLinkMatchSource::Token => 1,
+        PlannedCompletedWorkoutLinkMatchSource::Explicit => 2,
     }
 }
 
