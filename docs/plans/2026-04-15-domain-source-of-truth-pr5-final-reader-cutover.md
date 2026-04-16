@@ -54,6 +54,10 @@ PR5 is the final cutover PR that removes those remaining reader-side dependencie
 7. Cut over frontend calendar, coach, and workout detail reads.
 8. Remove remaining backend and frontend business-read dependencies on `/api/intervals/*`.
 
+### Mandatory scope for PR5 architecture safety
+
+0. Add compile-based architecture guard with `cargo_pup` so `src/domain/**` cannot import `crate::adapters::**`.
+
 ### Explicitly out of scope for PR5
 
 - redesigning public DTOs for aesthetic cleanliness only
@@ -266,20 +270,22 @@ Those can happen later only if a concrete need remains after the source-of-truth
 
 ## Execution Order
 
-1. Fill canonical model and repository gaps.
-2. Implement data migration and backfill.
-3. Cut over backend calendar.
-4. Cut over workout summary.
-5. Cut over `training_context`.
-6. Add local completed-workout and detail endpoints.
-7. Cut over frontend reads.
-8. Remove compatibility bridges and reader fallbacks.
-9. Run final verification.
+1. Add compile-based architecture guard with `cargo_pup`.
+2. Fill canonical model and repository gaps.
+3. Implement data migration and backfill.
+4. Cut over backend calendar.
+5. Cut over workout summary.
+6. Cut over `training_context`.
+7. Add local completed-workout and detail endpoints.
+8. Cut over frontend reads.
+9. Remove compatibility bridges and reader fallbacks.
+10. Run final verification.
 
 ## Verification
 
 ### Targeted checks during implementation
 
+- `bun run verify:arch`
 - `cargo test completed_workouts -- --nocapture`
 - `cargo test calendar_view -- --nocapture`
 - `cargo test calendar_labels -- --nocapture`
@@ -291,6 +297,7 @@ Those can happen later only if a concrete need remains after the source-of-truth
 
 ### Final checks
 
+- `bun run verify:arch`
 - `cargo fmt --all --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test`
@@ -318,6 +325,7 @@ This PR is not done until it passes the repo review loop:
 - preserving current frontend expectations while changing backend data sources
 - hidden remaining helper paths that still depend on `domain::intervals` business types
 - existing users with incomplete or stale `calendar_entry_views`
+- `cargo_pup` module matching may need calibration against the library crate structure before the guard becomes reliable
 
 ## Definition Of Done
 
@@ -327,6 +335,7 @@ PR5 is complete when all of the following are true:
 - frontend calendar, coach, and workout detail screens no longer use `/api/intervals/events` or `/api/intervals/activities` for business reads
 - `Intervals` remains only a provider adapter and command-side integration path
 - legacy planned or event summary identity is no longer part of the active product flow
+- `cargo_pup` blocks any new `domain -> adapters` import
 - all required verification commands were run and their output was read
 
 ## What Should Still Remain After PR5

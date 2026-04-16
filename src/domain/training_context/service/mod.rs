@@ -837,7 +837,7 @@ fn map_completed_workout_to_activity(workout: &CompletedWorkout) -> Activity {
         average_heart_rate_bpm: None,
         max_heart_rate_bpm: None,
         average_cadence_rpm: None,
-        trainer: false,
+        trainer: workout.trainer,
         commute: false,
         race: false,
         has_heart_rate: workout

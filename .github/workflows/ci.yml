@@ -8,6 +8,28 @@ on:
   pull_request:
 
 jobs:
+  rust-architecture:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install pinned nightly toolchain
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        with:
+          toolchain: nightly-2026-01-22
+          components: rust-src, rustc-dev, llvm-tools-preview
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae
+
+      - name: Install cargo_pup
+        run: cargo +nightly-2026-01-22 install cargo_pup --version 0.1.7 --locked
+
+      - name: Run architecture guard
+        run: ./scripts/verify_arch.sh
+
   frontend-test-and-build:
     runs-on: ubuntu-latest
 

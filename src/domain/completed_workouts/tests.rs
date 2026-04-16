@@ -9,10 +9,13 @@ fn completed_workout_uses_local_canonical_id() {
         "completed-1".to_string(),
         "user-1".to_string(),
         "2026-05-01T08:00:00".to_string(),
+        Some("activity-1".to_string()),
         Some("planned-1".to_string()),
         Some("Threshold Ride".to_string()),
         Some("Strong day".to_string()),
         Some("Ride".to_string()),
+        Some("external-1".to_string()),
+        true,
         Some(3600),
         Some(35_000.0),
         CompletedWorkoutMetrics {
@@ -53,19 +56,27 @@ fn completed_workout_uses_local_canonical_id() {
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        Some("details unavailable".to_string()),
     );
 
     assert_eq!(workout.completed_workout_id, "completed-1");
     assert_eq!(workout.user_id, "user-1");
     assert_eq!(workout.start_date_local, "2026-05-01T08:00:00");
+    assert_eq!(workout.source_activity_id.as_deref(), Some("activity-1"));
     assert_eq!(workout.planned_workout_id.as_deref(), Some("planned-1"));
     assert_eq!(workout.name.as_deref(), Some("Threshold Ride"));
     assert_eq!(workout.description.as_deref(), Some("Strong day"));
     assert_eq!(workout.activity_type.as_deref(), Some("Ride"));
+    assert_eq!(workout.external_id.as_deref(), Some("external-1"));
+    assert!(workout.trainer);
     assert_eq!(workout.duration_seconds, Some(3600));
     assert_eq!(workout.distance_meters, Some(35_000.0));
     assert_eq!(workout.metrics.training_stress_score, Some(78));
     assert_eq!(workout.details.streams.len(), 1);
+    assert_eq!(
+        workout.details_unavailable_reason.as_deref(),
+        Some("details unavailable")
+    );
 }
 
 fn assert_completed_workout_repository<T: CompletedWorkoutRepository>() {}
@@ -122,10 +133,13 @@ fn sample_workout(
         completed_workout_id.to_string(),
         user_id.to_string(),
         start_date_local.to_string(),
+        Some(format!("activity-{completed_workout_id}")),
         None,
         None,
         None,
         None,
+        None,
+        false,
         None,
         None,
         CompletedWorkoutMetrics {
@@ -166,5 +180,61 @@ fn sample_workout(
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        None,
     )
+}
+
+#[tokio::test]
+async fn completed_workout_repository_finds_by_source_activity_id() {
+    let repository = super::ports::NoopCompletedWorkoutRepository::default();
+    repository
+        .upsert(sample_workout(
+            "completed-1",
+            "user-1",
+            "2026-05-01T08:00:00",
+        ))
+        .await
+        .unwrap();
+
+    let workout = repository
+        .find_by_user_id_and_source_activity_id("user-1", "activity-completed-1")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        workout
+            .as_ref()
+            .map(|workout| workout.completed_workout_id.as_str()),
+        Some("completed-1")
+    );
+}
+
+#[tokio::test]
+async fn completed_workout_repository_finds_latest_by_user() {
+    let repository = super::ports::NoopCompletedWorkoutRepository::default();
+    repository
+        .upsert(sample_workout(
+            "completed-1",
+            "user-1",
+            "2026-05-01T08:00:00",
+        ))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_workout(
+            "completed-2",
+            "user-1",
+            "2026-05-02T08:00:00",
+        ))
+        .await
+        .unwrap();
+
+    let workout = repository.find_latest_by_user_id("user-1").await.unwrap();
+
+    assert_eq!(
+        workout
+            .as_ref()
+            .map(|workout| workout.completed_workout_id.as_str()),
+        Some("completed-2")
+    );
 }

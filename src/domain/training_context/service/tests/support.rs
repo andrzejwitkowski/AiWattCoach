@@ -195,6 +195,61 @@ impl TestCompletedWorkoutRepository {
 }
 
 impl CompletedWorkoutRepository for TestCompletedWorkoutRepository {
+    fn find_by_user_id_and_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        let workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            Ok(workouts.into_iter().find(|workout| {
+                workout.user_id == user_id && workout.completed_workout_id == completed_workout_id
+            }))
+        })
+    }
+
+    fn find_by_user_id_and_source_activity_id(
+        &self,
+        user_id: &str,
+        source_activity_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        let workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        let source_activity_id = source_activity_id.to_string();
+        Box::pin(async move {
+            Ok(workouts.into_iter().find(|workout| {
+                workout.user_id == user_id
+                    && workout.source_activity_id.as_deref() == Some(source_activity_id.as_str())
+            }))
+        })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        let mut workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            workouts.retain(|workout| workout.user_id == user_id);
+            workouts.sort_by(|left, right| {
+                right
+                    .start_date_local
+                    .cmp(&left.start_date_local)
+                    .then_with(|| right.completed_workout_id.cmp(&left.completed_workout_id))
+            });
+            Ok(workouts.into_iter().next())
+        })
+    }
+
     fn list_by_user_id(
         &self,
         user_id: &str,
@@ -685,10 +740,13 @@ pub(super) fn sample_completed_workout_on_date_with_ftp(
         completed_workout_id: format!("intervals-activity:{id}"),
         user_id: "user-1".to_string(),
         start_date_local: start_date_local.to_string(),
+        source_activity_id: Some(id.to_string()),
         planned_workout_id,
         name: Some("Sweet Spot".to_string()),
         description: None,
         activity_type: Some("Ride".to_string()),
+        external_id: None,
+        trainer: false,
         duration_seconds: Some(3600),
         distance_meters: None,
         metrics: CompletedWorkoutMetrics {
@@ -787,6 +845,7 @@ pub(super) fn sample_completed_workout_on_date_with_ftp(
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        details_unavailable_reason: None,
     }
 }
 

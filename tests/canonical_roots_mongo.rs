@@ -605,10 +605,13 @@ fn sample_completed_workout(
         completed_workout_id.to_string(),
         user_id.to_string(),
         start_date_local.to_string(),
+        Some(completed_workout_id.to_string()),
         None,
         Some("Threshold Ride".to_string()),
         Some("Strong day".to_string()),
         Some("Ride".to_string()),
+        Some(format!("external-{completed_workout_id}")),
+        false,
         Some(3600),
         Some(35_000.0),
         CompletedWorkoutMetrics {
@@ -649,6 +652,7 @@ fn sample_completed_workout(
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        None,
     )
 }
 

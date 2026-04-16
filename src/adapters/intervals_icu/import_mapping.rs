@@ -121,10 +121,13 @@ fn map_activity_to_completed_workout(user_id: &str, activity: &Activity) -> Comp
         format!("intervals-activity:{}", activity.id),
         user_id.to_string(),
         activity.start_date_local.clone(),
+        Some(activity.id.clone()),
         None,
         activity.name.clone(),
         activity.description.clone(),
         activity.activity_type.clone(),
+        activity.external_id.clone(),
+        activity.trainer,
         activity
             .elapsed_time_seconds
             .or(activity.moving_time_seconds),
@@ -229,6 +232,7 @@ fn map_activity_to_completed_workout(user_id: &str, activity: &Activity) -> Comp
             pace_zone_times: activity.details.pace_zone_times.clone(),
             gap_zone_times: activity.details.gap_zone_times.clone(),
         },
+        activity.details_unavailable_reason.clone(),
     )
 }
 
@@ -454,13 +458,18 @@ fn hash_event(event: &Event) -> String {
 fn hash_activity(activity: &Activity) -> String {
     let workout = map_activity_to_completed_workout("hash-user", activity);
     let digest = Sha256::digest(format!(
-        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
         workout.completed_workout_id,
         workout.start_date_local,
         workout.planned_workout_id.as_deref().unwrap_or_default(),
         workout.name.as_deref().unwrap_or_default(),
         workout.description.as_deref().unwrap_or_default(),
         workout.activity_type.as_deref().unwrap_or_default(),
+        workout.trainer,
+        activity
+            .details_unavailable_reason
+            .as_deref()
+            .unwrap_or_default(),
         workout
             .duration_seconds
             .map(|value| value.to_string())
@@ -678,6 +687,7 @@ mod tests {
         assert_eq!(command.workout.name.as_deref(), Some("Threshold Ride"));
         assert_eq!(command.workout.description.as_deref(), Some("Strong day"));
         assert_eq!(command.workout.activity_type.as_deref(), Some("Ride"));
+        assert!(command.workout.trainer);
         assert_eq!(command.workout.duration_seconds, Some(3700));
         assert_eq!(command.workout.distance_meters, Some(35_000.0));
         assert_eq!(command.workout.metrics.training_stress_score, Some(78));
@@ -701,6 +711,36 @@ mod tests {
             panic!("expected completed workout import");
         };
 
+        assert_ne!(
+            base_command.normalized_payload_hash,
+            changed_command.normalized_payload_hash
+        );
+    }
+
+    #[test]
+    fn activity_hash_changes_when_details_unavailable_reason_changes() {
+        let base = sample_activity();
+        let mut changed = sample_activity();
+        changed.details_unavailable_reason = Some("strava_stub".to_string());
+
+        let ExternalImportCommand::UpsertCompletedWorkout(base_command) =
+            map_activity_to_import_command("user-1", &base)
+        else {
+            panic!("expected completed workout import");
+        };
+        let ExternalImportCommand::UpsertCompletedWorkout(changed_command) =
+            map_activity_to_import_command("user-1", &changed)
+        else {
+            panic!("expected completed workout import");
+        };
+
+        assert_eq!(
+            changed_command
+                .workout
+                .details_unavailable_reason
+                .as_deref(),
+            Some("strava_stub")
+        );
         assert_ne!(
             base_command.normalized_payload_hash,
             changed_command.normalized_payload_hash

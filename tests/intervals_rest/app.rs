@@ -21,7 +21,10 @@ use aiwattcoach::{
             CalendarEntryKind, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
             CalendarEntryViewRepository,
         },
-        completed_workouts::{CompletedWorkout, CompletedWorkoutError, CompletedWorkoutRepository},
+        completed_workouts::{
+            CompletedWorkout, CompletedWorkoutError, CompletedWorkoutReadService,
+            CompletedWorkoutRepository,
+        },
         identity::{Clock, IdentityUseCases},
         intervals::{DateRange, IntervalsUseCases},
         races::RaceUseCases,
@@ -124,6 +127,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
 ) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
+    let completed_workout_repository = completed_workouts;
     let calendar_service = Arc::new(
         CalendarService::new(
             intervals_service.clone(),
@@ -132,9 +136,12 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
             InMemoryPlannedWorkoutSyncRepository,
             TestClock,
         )
-        .with_completed_workouts(completed_workouts),
+        .with_completed_workouts(completed_workout_repository.clone()),
     );
     let calendar_labels_service = Arc::new(CalendarLabelsService::new(EmptyCalendarLabelSource));
+    let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
+        completed_workout_repository,
+    ));
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -151,6 +158,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
         )
         .with_calendar_service(calendar_service)
         .with_calendar_labels_service(calendar_labels_service)
+        .with_completed_workout_service(completed_workout_service)
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
     )
@@ -293,6 +301,69 @@ impl InMemoryCompletedWorkoutRepository {
 }
 
 impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
+    fn find_by_user_id_and_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored.lock().unwrap().iter().find_map(|workout| {
+                (workout.user_id == user_id && workout.completed_workout_id == completed_workout_id)
+                    .then(|| workout.clone())
+            }))
+        })
+    }
+
+    fn find_by_user_id_and_source_activity_id(
+        &self,
+        user_id: &str,
+        source_activity_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let source_activity_id = source_activity_id.to_string();
+        Box::pin(async move {
+            Ok(stored.lock().unwrap().iter().find_map(|workout| {
+                (workout.user_id == user_id
+                    && workout.source_activity_id.as_deref() == Some(source_activity_id.as_str()))
+                .then(|| workout.clone())
+            }))
+        })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut workouts = stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| workout.user_id == user_id)
+                .cloned()
+                .collect::<Vec<_>>();
+            workouts.sort_by(|left, right| {
+                right
+                    .start_date_local
+                    .cmp(&left.start_date_local)
+                    .then_with(|| right.completed_workout_id.cmp(&left.completed_workout_id))
+            });
+            Ok(workouts.into_iter().next())
+        })
+    }
+
     fn list_by_user_id(
         &self,
         user_id: &str,
@@ -348,7 +419,10 @@ impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
         let stored = self.stored.clone();
         Box::pin(async move {
             let mut stored = stored.lock().unwrap();
-            stored.retain(|existing| existing.completed_workout_id != workout.completed_workout_id);
+            stored.retain(|existing| {
+                !(existing.user_id == workout.user_id
+                    && existing.completed_workout_id == workout.completed_workout_id)
+            });
             stored.push(workout.clone());
             Ok(workout)
         })

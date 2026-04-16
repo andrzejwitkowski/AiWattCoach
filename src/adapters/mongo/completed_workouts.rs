@@ -19,14 +19,19 @@ struct CompletedWorkoutDocument {
     user_id: String,
     completed_workout_id: String,
     start_date_local: String,
+    source_activity_id: Option<String>,
     planned_workout_id: Option<String>,
     name: Option<String>,
     description: Option<String>,
     activity_type: Option<String>,
+    external_id: Option<String>,
+    #[serde(default)]
+    trainer: bool,
     duration_seconds: Option<i32>,
     distance_meters: Option<f64>,
     metrics: CompletedWorkoutMetricsDocument,
     details: CompletedWorkoutDetailsDocument,
+    details_unavailable_reason: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -146,6 +151,14 @@ impl MongoCompletedWorkoutRepository {
                             .build(),
                     )
                     .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "source_activity_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("completed_workouts_user_source_activity_id".to_string())
+                            .build(),
+                    )
+                    .build(),
             ])
             .await
             .map_err(|error| CompletedWorkoutError::Repository(error.to_string()))?;
@@ -155,6 +168,65 @@ impl MongoCompletedWorkoutRepository {
 }
 
 impl CompletedWorkoutRepository for MongoCompletedWorkoutRepository {
+    fn find_by_user_id_and_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Option<CompletedWorkout>, CompletedWorkoutError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            collection
+                .find_one(doc! {
+                    "user_id": &user_id,
+                    "completed_workout_id": &completed_workout_id,
+                })
+                .await
+                .map_err(|error| CompletedWorkoutError::Repository(error.to_string()))?
+                .map(map_document_to_domain)
+                .transpose()
+        })
+    }
+
+    fn find_by_user_id_and_source_activity_id(
+        &self,
+        user_id: &str,
+        source_activity_id: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Option<CompletedWorkout>, CompletedWorkoutError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let source_activity_id = source_activity_id.to_string();
+        Box::pin(async move {
+            collection
+                .find_one(doc! {
+                    "user_id": &user_id,
+                    "source_activity_id": &source_activity_id,
+                })
+                .await
+                .map_err(|error| CompletedWorkoutError::Repository(error.to_string()))?
+                .map(map_document_to_domain)
+                .transpose()
+        })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Option<CompletedWorkout>, CompletedWorkoutError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            collection
+                .find_one(doc! { "user_id": &user_id })
+                .sort(doc! { "start_date_local": -1, "completed_workout_id": -1 })
+                .await
+                .map_err(|error| CompletedWorkoutError::Repository(error.to_string()))?
+                .map(map_document_to_domain)
+                .transpose()
+        })
+    }
+
     fn list_by_user_id(
         &self,
         user_id: &str,
@@ -235,14 +307,18 @@ fn map_workout_to_document(workout: &CompletedWorkout) -> CompletedWorkoutDocume
         user_id: workout.user_id.clone(),
         completed_workout_id: workout.completed_workout_id.clone(),
         start_date_local: workout.start_date_local.clone(),
+        source_activity_id: workout.source_activity_id.clone(),
         planned_workout_id: workout.planned_workout_id.clone(),
         name: workout.name.clone(),
         description: workout.description.clone(),
         activity_type: workout.activity_type.clone(),
+        external_id: workout.external_id.clone(),
+        trainer: workout.trainer,
         duration_seconds: workout.duration_seconds,
         distance_meters: workout.distance_meters,
         metrics: map_metrics_to_document(&workout.metrics),
         details: map_details_to_document(&workout.details),
+        details_unavailable_reason: workout.details_unavailable_reason.clone(),
     }
 }
 
@@ -253,14 +329,18 @@ fn map_document_to_domain(
         document.completed_workout_id,
         document.user_id,
         document.start_date_local,
+        document.source_activity_id,
         document.planned_workout_id,
         document.name,
         document.description,
         document.activity_type,
+        document.external_id,
+        document.trainer,
         document.duration_seconds,
         document.distance_meters,
         map_metrics_to_domain(document.metrics),
         map_details_to_domain(document.details),
+        document.details_unavailable_reason,
     ))
 }
 
@@ -554,10 +634,13 @@ mod tests {
             "completed-1".to_string(),
             "user-1".to_string(),
             "2026-05-10T08:00:00".to_string(),
+            Some("activity-1".to_string()),
             Some("planned-1".to_string()),
             Some("Threshold Ride".to_string()),
             Some("Strong day".to_string()),
             Some("Ride".to_string()),
+            Some("external-1".to_string()),
+            true,
             Some(3600),
             Some(42_000.0),
             CompletedWorkoutMetrics {
@@ -632,6 +715,7 @@ mod tests {
                 pace_zone_times: vec![10],
                 gap_zone_times: vec![20],
             },
+            Some("details unavailable".to_string()),
         );
 
         let mapped = map_document_to_domain(map_workout_to_document(&workout)).unwrap();

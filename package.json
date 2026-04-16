@@ -7,8 +7,9 @@
     "dev:docker": "docker compose -f docker-compose-dev.yml up --build",
     "dev:docker:down": "docker compose -f docker-compose-dev.yml down -v",
     "verify:rust": "cargo fmt -- --check && cargo clippy --all-targets --all-features -- -D warnings",
+    "verify:arch": "./scripts/verify_arch.sh",
     "verify:frontend": "bun run --cwd frontend test && bun run --cwd frontend build",
-    "verify:all": "bun run verify:rust && cargo test && bun run verify:frontend",
+    "verify:all": "bun run verify:rust && bun run verify:arch && cargo test && bun run verify:frontend",
     "test:all": "bun run verify:all"
   },
   "devDependencies": {

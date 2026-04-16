@@ -64,6 +64,70 @@ impl InMemoryCompletedWorkoutRepository {
 }
 
 impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
+    fn find_by_user_id_and_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<
+            Option<CompletedWorkout>,
+            aiwattcoach::domain::completed_workouts::CompletedWorkoutError,
+        >,
+    > {
+        let workouts = self.workouts.lock().unwrap().clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            Ok(workouts.into_iter().find(|workout| {
+                workout.user_id == user_id && workout.completed_workout_id == completed_workout_id
+            }))
+        })
+    }
+
+    fn find_by_user_id_and_source_activity_id(
+        &self,
+        user_id: &str,
+        source_activity_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<
+            Option<CompletedWorkout>,
+            aiwattcoach::domain::completed_workouts::CompletedWorkoutError,
+        >,
+    > {
+        let workouts = self.workouts.lock().unwrap().clone();
+        let user_id = user_id.to_string();
+        let source_activity_id = source_activity_id.to_string();
+        Box::pin(async move {
+            Ok(workouts.into_iter().find(|workout| {
+                workout.user_id == user_id
+                    && workout.source_activity_id.as_deref() == Some(source_activity_id.as_str())
+            }))
+        })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<
+            Option<CompletedWorkout>,
+            aiwattcoach::domain::completed_workouts::CompletedWorkoutError,
+        >,
+    > {
+        let mut workouts = self.workouts.lock().unwrap().clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            workouts.retain(|workout| workout.user_id == user_id);
+            workouts.sort_by(|left, right| {
+                right
+                    .start_date_local
+                    .cmp(&left.start_date_local)
+                    .then_with(|| right.completed_workout_id.cmp(&left.completed_workout_id))
+            });
+            Ok(workouts.into_iter().next())
+        })
+    }
+
     fn list_by_user_id(
         &self,
         user_id: &str,
@@ -202,10 +266,13 @@ pub(crate) fn canonical_completed_workout_from_activity(activity: &Activity) -> 
         completed_workout_id: format!("intervals-activity:{}", activity.id),
         user_id: activity.athlete_id.clone().unwrap_or_default(),
         start_date_local: activity.start_date_local.clone(),
+        source_activity_id: Some(activity.id.clone()),
         planned_workout_id: None,
         name: activity.name.clone(),
         description: activity.description.clone(),
         activity_type: activity.activity_type.clone(),
+        external_id: activity.external_id.clone(),
+        trainer: activity.trainer,
         duration_seconds: activity
             .elapsed_time_seconds
             .or(activity.moving_time_seconds),
@@ -306,6 +373,7 @@ pub(crate) fn canonical_completed_workout_from_activity(activity: &Activity) -> 
             pace_zone_times: activity.details.pace_zone_times.clone(),
             gap_zone_times: activity.details.gap_zone_times.clone(),
         },
+        details_unavailable_reason: activity.details_unavailable_reason.clone(),
     }
 }
 

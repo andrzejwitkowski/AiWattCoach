@@ -8,7 +8,7 @@ use tower::util::ServiceExt;
 
 use crate::shared::{auth_test_app, auth_test_app_with_custom_settings, TestIdentityService};
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn google_start_redirects_to_provider() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -29,7 +29,7 @@ async fn google_start_redirects_to_provider() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn google_start_drops_unsafe_return_to_values() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -50,7 +50,7 @@ async fn google_start_drops_unsafe_return_to_values() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn google_callback_sets_cookie_and_redirects_into_calendar() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -81,7 +81,7 @@ async fn google_callback_sets_cookie_and_redirects_into_calendar() {
     assert!(cookie.contains("SameSite=Lax"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn google_callback_sets_none_same_site_cookie_for_cross_site_mode() {
     let settings = Settings::from_map(&BTreeMap::from([
         ("APP_NAME".to_string(), "AiWattCoach".to_string()),
@@ -135,7 +135,7 @@ async fn google_callback_sets_none_same_site_cookie_for_cross_site_mode() {
     assert!(cookie.contains("Secure"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn frontend_fallback_serves_index_from_kept_fixture() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -153,7 +153,7 @@ async fn frontend_fallback_serves_index_from_kept_fixture() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn google_start_forwards_return_to_to_identity_service() {
     let service = TestIdentityService::default();
     let captured = service.last_return_to.clone();
@@ -173,7 +173,7 @@ async fn google_start_forwards_return_to_to_identity_service() {
     assert_eq!(captured.lock().unwrap().as_deref(), Some("/settings"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn google_callback_forwards_state_and_code_to_identity_service() {
     let service = TestIdentityService::default();
     let captured = service.last_callback_input.clone();

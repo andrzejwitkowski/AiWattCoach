@@ -2,6 +2,7 @@ mod admin;
 mod athlete_summary;
 mod auth;
 mod calendar;
+mod completed_workouts;
 mod cookies;
 mod health;
 mod intervals;
@@ -109,6 +110,14 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         )
         .route("/api/calendar/events", get(calendar::list_events))
         .route("/api/calendar/labels", get(calendar::list_labels))
+        .route(
+            "/api/completed-workouts",
+            get(completed_workouts::list_completed_workouts),
+        )
+        .route(
+            "/api/completed-workouts/{activity_id}",
+            get(completed_workouts::get_completed_workout),
+        )
         .route(
             "/api/calendar/planned-workouts/{operation_key}/{date}/sync",
             post(calendar::sync_planned_workout),
