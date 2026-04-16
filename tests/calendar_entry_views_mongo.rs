@@ -228,7 +228,7 @@ async fn calendar_entry_view_repository_replaces_only_target_range_and_handles_d
             vec![sample_entry(
                 "planned:1",
                 CalendarEntryKind::PlannedWorkout,
-                "2026-05-15",
+                "2026-05-11",
             )],
         )
         .await
@@ -242,7 +242,7 @@ async fn calendar_entry_view_repository_replaces_only_target_range_and_handles_d
     assert_eq!(user_entries.len(), 2);
     assert!(user_entries
         .iter()
-        .any(|entry| entry.entry_id == "planned:1" && entry.date == "2026-05-15"));
+        .any(|entry| entry.entry_id == "planned:1" && entry.date == "2026-05-11"));
     assert!(user_entries
         .iter()
         .any(|entry| entry.entry_id == "special:1"));
