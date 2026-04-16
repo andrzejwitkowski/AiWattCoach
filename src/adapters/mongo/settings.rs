@@ -1091,24 +1091,24 @@ mod tests {
                     intervals_updated_at_epoch_seconds: Some(20),
                 },
                 IntervalsPollBootstrapUser {
-                    user_id: "explicitly-disconnected-user".to_string(),
-                    desired_active: false,
-                    intervals_updated_at_epoch_seconds: Some(30),
-                },
-                IntervalsPollBootstrapUser {
                     user_id: "disconnected-user".to_string(),
                     desired_active: false,
                     intervals_updated_at_epoch_seconds: None,
                 },
                 IntervalsPollBootstrapUser {
-                    user_id: "poll-only-user".to_string(),
+                    user_id: "explicitly-disconnected-user".to_string(),
                     desired_active: false,
-                    intervals_updated_at_epoch_seconds: None,
+                    intervals_updated_at_epoch_seconds: Some(30),
                 },
                 IntervalsPollBootstrapUser {
                     user_id: "legacy-missing-connected".to_string(),
                     desired_active: true,
                     intervals_updated_at_epoch_seconds: Some(40),
+                },
+                IntervalsPollBootstrapUser {
+                    user_id: "poll-only-user".to_string(),
+                    desired_active: false,
+                    intervals_updated_at_epoch_seconds: None,
                 },
             ]
         );

@@ -266,9 +266,12 @@ where
                 )
                 .await
             {
-                self.refresh_race_date(&existing.user_id, &existing.date)
-                    .await;
-                return Err(map_sync_repository_error(error));
+                warn!(
+                    user_id = %existing.user_id,
+                    race_id = %existing.race_id,
+                    %error,
+                    "race delete succeeded locally but failed to delete sync state"
+                );
             }
         }
 

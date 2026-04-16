@@ -285,7 +285,8 @@ fn map_special_day_error(
     error: crate::domain::special_days::SpecialDayError,
 ) -> CalendarEntryViewError {
     match error {
-        crate::domain::special_days::SpecialDayError::Repository(message) => {
+        crate::domain::special_days::SpecialDayError::Validation(message)
+        | crate::domain::special_days::SpecialDayError::Repository(message) => {
             CalendarEntryViewError::Repository(message)
         }
     }

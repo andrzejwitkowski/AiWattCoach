@@ -252,6 +252,36 @@ async fn calendar_entry_view_repository_replaces_only_target_range_and_handles_d
 }
 
 #[tokio::test]
+async fn calendar_entry_view_repository_rejects_replace_range_entries_outside_requested_dates() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoCalendarEntryViewRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let error = repository
+        .replace_range_for_user(
+            "user-1",
+            "2026-05-10",
+            "2026-05-12",
+            vec![sample_entry(
+                "planned:1",
+                CalendarEntryKind::PlannedWorkout,
+                "2026-05-15",
+            )],
+        )
+        .await
+        .unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains("calendar entry date out of range"));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
 async fn calendar_entry_view_repository_creates_expected_indexes() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;

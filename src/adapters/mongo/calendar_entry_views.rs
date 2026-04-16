@@ -235,6 +235,12 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
                         entry.user_id
                     )));
                 }
+                if entry.date < oldest || entry.date > newest {
+                    return Err(CalendarEntryViewError::Repository(format!(
+                        "calendar entry date out of range for replace_range_for_user: expected {oldest}..={newest}, got {}",
+                        entry.date
+                    )));
+                }
                 Ok(map_entry_to_document(entry, &rewrite_gen))
             })
             .collect::<Result<Vec<_>, _>>();

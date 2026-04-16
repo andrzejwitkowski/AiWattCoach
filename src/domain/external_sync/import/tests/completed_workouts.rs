@@ -81,6 +81,60 @@ async fn import_completed_workout_persists_canonical_state_and_refreshes_start_d
 }
 
 #[tokio::test]
+async fn import_completed_workout_returns_error_for_stale_dedup_mapping() {
+    let observations = InMemoryObservationRepository::default();
+    let existing = sample_completed_workout();
+    observations
+        .upsert(ExternalObservation::new(ExternalObservationParams {
+            user_id: "user-1".to_string(),
+            provider: ExternalProvider::Intervals,
+            external_object_kind: ExternalObjectKind::CompletedWorkout,
+            external_id: "intervals-activity-77".to_string(),
+            canonical_entity: CanonicalEntityRef::new(
+                CanonicalEntityKind::CompletedWorkout,
+                existing.completed_workout_id.clone(),
+            ),
+            normalized_payload_hash: Some("hash-existing".to_string()),
+            dedup_key: completed_workout_dedup_key(&existing),
+            observed_at_epoch_seconds: 1_699_999_000,
+        }))
+        .await
+        .unwrap();
+    let service = external_import_service_without_refresh(
+        InMemoryPlannedWorkoutRepository::default(),
+        InMemoryCompletedWorkoutRepository::default(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        observations,
+        InMemorySyncStateRepository::default(),
+    );
+
+    let error = service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Wahoo,
+                external_id: "wahoo-activity-1".to_string(),
+                normalized_payload_hash: "hash-wahoo-1".to_string(),
+                marker_sources: Vec::new(),
+                workout: sample_completed_workout_for_provider(
+                    ExternalProvider::Wahoo,
+                    "wahoo-activity-1",
+                    Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310, 330])),
+                ),
+            },
+        )))
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        ExternalImportError::CompletedWorkout(message) if message.contains("stale completed workout dedup match")
+    ));
+}
+
+#[tokio::test]
 async fn import_completed_workout_reuses_existing_canonical_workout_for_matching_dedup_key() {
     let observations = InMemoryObservationRepository::default();
     let completed_workouts = InMemoryCompletedWorkoutRepository::default();
@@ -142,6 +196,51 @@ async fn import_completed_workout_reuses_existing_canonical_workout_for_matching
         existing.completed_workout_id
     );
     assert_eq!(observations.stored().len(), 2);
+}
+
+#[tokio::test]
+async fn import_completed_workout_refreshes_old_and_new_dates_when_existing_canonical_date_moves() {
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let refresh = RecordingRefresh::default();
+    let mut existing = sample_completed_workout();
+    existing.start_date_local = "2026-05-10T08:00:00".to_string();
+    completed_workouts.upsert(existing.clone()).await.unwrap();
+    let service = external_import_service(
+        InMemoryPlannedWorkoutRepository::default(),
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+        refresh.clone(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-intervals-2".to_string(),
+                marker_sources: Vec::new(),
+                workout: sample_completed_workout(),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].start_date_local, "2026-05-11T08:00:00");
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-05-10".to_string(),
+            "2026-05-11".to_string(),
+        )]
+    );
 }
 
 #[tokio::test]

@@ -1306,6 +1306,23 @@ fn race_projection_keeps_label_shape_and_sync_metadata() {
 }
 
 #[test]
+#[should_panic(expected = "intervals sync state external_id must parse as i64")]
+fn race_projection_panics_when_intervals_external_id_is_not_numeric() {
+    let sync_state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+    )
+    .mark_synced(
+        "not-a-number".to_string(),
+        "hash-1".to_string(),
+        1_700_000_000,
+    );
+
+    let _ = project_race_entry(&sample_race(), Some(&sync_state));
+}
+
+#[test]
 fn special_day_projection_keeps_meaningful_title() {
     let entry = project_special_day_entry(&sample_special_day());
 
@@ -1446,6 +1463,7 @@ fn sample_special_day() -> SpecialDay {
         Some("Flu".to_string()),
         Some("Stay off the bike".to_string()),
     )
+    .unwrap()
 }
 
 fn sample_other_special_day() -> SpecialDay {
@@ -1457,6 +1475,7 @@ fn sample_other_special_day() -> SpecialDay {
         Some("Travel".to_string()),
         Some("Airport day".to_string()),
     )
+    .unwrap()
 }
 
 fn sample_special_day_for_user(user_id: &str) -> SpecialDay {
@@ -1468,17 +1487,21 @@ fn sample_special_day_for_user(user_id: &str) -> SpecialDay {
         Some("Other".to_string()),
         Some("Other user note".to_string()),
     )
+    .unwrap()
 }
 
 fn sample_orphan_entry() -> super::CalendarEntryView {
-    project_special_day_entry(&SpecialDay::new(
-        "orphan-1".to_string(),
-        "user-1".to_string(),
-        "2026-05-14".to_string(),
-        SpecialDayKind::Other,
-        Some("Maintenance".to_string()),
-        Some("Bike in workshop".to_string()),
-    ))
+    project_special_day_entry(
+        &SpecialDay::new(
+            "orphan-1".to_string(),
+            "user-1".to_string(),
+            "2026-05-14".to_string(),
+            SpecialDayKind::Other,
+            Some("Maintenance".to_string()),
+            Some("Bike in workshop".to_string()),
+        )
+        .unwrap(),
+    )
 }
 
 fn sample_type_mismatch_entry() -> super::CalendarEntryView {

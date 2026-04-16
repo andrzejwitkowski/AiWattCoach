@@ -35,6 +35,11 @@ struct ResolvedPlannedWorkoutLink {
     match_source: PlannedCompletedWorkoutLinkMatchSource,
 }
 
+struct ResolvedCompletedWorkoutTarget {
+    workout: CompletedWorkout,
+    refresh_dates: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExternalImportCommand {
     UpsertPlannedWorkout(ExternalPlannedWorkoutImport),
@@ -336,7 +341,7 @@ where
             &self.refresh,
             self.persist_sync_metadata(&workout.user_id, metadata),
             &workout.user_id,
-            &workout.date,
+            &[workout.date.clone()],
             command.provider,
             command.external_id,
             canonical_entity,
@@ -356,9 +361,11 @@ where
                 &command.workout,
             )
             .await?;
-        let mut workout = self
+        let resolved_target = self
             .resolve_completed_workout_target(command.workout, dedup_key.as_deref())
             .await?;
+        let mut workout = resolved_target.workout;
+        let refresh_dates = resolved_target.refresh_dates;
         let existing_link = self
             .planned_completed_links
             .find_by_completed_workout_id(&workout.user_id, &workout.completed_workout_id)
@@ -405,7 +412,7 @@ where
             &self.refresh,
             self.persist_sync_metadata(&workout.user_id, metadata),
             &workout.user_id,
-            date_key(&workout.start_date_local),
+            &refresh_dates,
             command.provider,
             command.external_id,
             canonical_entity,
@@ -437,7 +444,7 @@ where
             &self.refresh,
             self.persist_sync_metadata(&race.user_id, metadata),
             &race.user_id,
-            &race.date,
+            &[race.date.clone()],
             command.provider,
             command.external_id,
             canonical_entity,
@@ -471,7 +478,7 @@ where
             &self.refresh,
             self.persist_sync_metadata(&special_day.user_id, metadata),
             &special_day.user_id,
-            &special_day.date,
+            &[special_day.date.clone()],
             command.provider,
             command.external_id,
             canonical_entity,
@@ -531,7 +538,7 @@ where
         &self,
         incoming: CompletedWorkout,
         dedup_key: Option<&str>,
-    ) -> Result<CompletedWorkout, ExternalImportError> {
+    ) -> Result<ResolvedCompletedWorkoutTarget, ExternalImportError> {
         let stored_workouts = self
             .completed_workouts
             .list_by_user_id(&incoming.user_id)
@@ -543,11 +550,17 @@ where
             .find(|existing| existing.completed_workout_id == incoming.completed_workout_id)
             .cloned();
         if let Some(existing) = direct_match {
-            return Ok(merge_completed_workout(existing, incoming));
+            return Ok(ResolvedCompletedWorkoutTarget {
+                refresh_dates: completed_workout_refresh_dates(Some(&existing), &incoming),
+                workout: merge_completed_workout(existing, incoming),
+            });
         }
 
         let Some(dedup_key) = dedup_key else {
-            return Ok(incoming);
+            return Ok(ResolvedCompletedWorkoutTarget {
+                refresh_dates: completed_workout_refresh_dates(None, &incoming),
+                workout: incoming,
+            });
         };
 
         let observations = self
@@ -571,16 +584,24 @@ where
         matches.dedup();
 
         match matches.as_slice() {
-            [] => Ok(incoming),
+            [] => Ok(ResolvedCompletedWorkoutTarget {
+                refresh_dates: completed_workout_refresh_dates(None, &incoming),
+                workout: incoming,
+            }),
             [canonical_id] => {
                 let Some(existing) = stored_workouts
                     .into_iter()
                     .find(|workout| workout.completed_workout_id == *canonical_id)
                 else {
-                    return Ok(incoming);
+                    return Err(ExternalImportError::CompletedWorkout(format!(
+                        "stale completed workout dedup match for key '{dedup_key}' points to missing canonical workout '{canonical_id}'"
+                    )));
                 };
 
-                Ok(merge_completed_workout(existing, incoming))
+                Ok(ResolvedCompletedWorkoutTarget {
+                    refresh_dates: completed_workout_refresh_dates(Some(&existing), &incoming),
+                    workout: merge_completed_workout(existing, incoming),
+                })
             }
             _ => Err(ExternalImportError::CompletedWorkout(format!(
                 "ambiguous completed workout dedup match for key '{dedup_key}'"
@@ -627,6 +648,19 @@ where
             _ => Ok(None),
         }
     }
+}
+
+fn completed_workout_refresh_dates(
+    existing: Option<&CompletedWorkout>,
+    incoming: &CompletedWorkout,
+) -> Vec<String> {
+    let mut dates = vec![date_key(&incoming.start_date_local).to_string()];
+    if let Some(existing) = existing {
+        dates.push(date_key(&existing.start_date_local).to_string());
+    }
+    dates.sort();
+    dates.dedup();
+    dates
 }
 
 fn existing_link_candidate(
@@ -767,7 +801,9 @@ fn map_race_error(error: RaceError) -> ExternalImportError {
 
 fn map_special_day_error(error: SpecialDayError) -> ExternalImportError {
     match error {
-        SpecialDayError::Repository(message) => ExternalImportError::SpecialDay(message),
+        SpecialDayError::Validation(message) | SpecialDayError::Repository(message) => {
+            ExternalImportError::SpecialDay(message)
+        }
     }
 }
 

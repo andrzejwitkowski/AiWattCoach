@@ -193,17 +193,33 @@ pub(crate) async fn shutdown_signal() {
     let ctrl_c = wait_for_ctrl_c(tokio::signal::ctrl_c(), shutdown.clone());
 
     #[cfg(unix)]
-    let terminate = wait_for_sigterm(
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()),
-        shutdown,
-    );
+    let terminate = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+    {
+        Ok(signal) => Some(wait_for_sigterm(Ok(signal), shutdown)),
+        Err(error) => {
+            tracing::error!(%error, "Failed to register SIGTERM handler");
+            None
+        }
+    };
 
     #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
+    let _terminate = ();
 
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+    #[cfg(unix)]
+    {
+        if let Some(terminate) = terminate {
+            tokio::select! {
+                _ = ctrl_c => {},
+                _ = terminate => {},
+            }
+        } else {
+            ctrl_c.await;
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        ctrl_c.await;
     }
 }
 

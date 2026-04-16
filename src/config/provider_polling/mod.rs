@@ -446,13 +446,11 @@ fn advance_calendar_cursor(
     events: &[crate::domain::intervals::Event],
     range: &DateRange,
 ) -> Option<String> {
-    let newest_seen = events
-        .iter()
-        .filter_map(|event| event.start_date_local.get(..10).map(ToString::to_string))
-        .max();
-    newest_seen
-        .or_else(|| state.cursor.clone())
-        .or_else(|| Some(range.newest.clone()))
+    if events.is_empty() {
+        return state.cursor.clone().or_else(|| Some(range.newest.clone()));
+    }
+
+    Some(range.newest.clone())
 }
 
 fn advance_completed_workout_cursor(

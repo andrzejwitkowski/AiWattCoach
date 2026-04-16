@@ -48,7 +48,15 @@ fn completed_workout_duration_seconds(workout: &CompletedWorkout) -> Option<i32>
         .filter_map(completed_workout_stream_sample_count)
         .max();
 
-    group_duration.or(interval_duration).or(stream_duration)
+    [
+        workout.duration_seconds,
+        group_duration,
+        interval_duration,
+        stream_duration,
+    ]
+    .into_iter()
+    .flatten()
+    .max()
 }
 
 fn completed_workout_distance_bucket(workout: &CompletedWorkout) -> Option<i32> {
@@ -65,8 +73,21 @@ fn completed_workout_distance_bucket(workout: &CompletedWorkout) -> Option<i32> 
         .filter_map(|interval| interval.distance_meters)
         .max_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
     let stream_distance = completed_workout_stream_distance_bucket(workout);
+    let workout_distance = workout
+        .distance_meters
+        .filter(|value| value.is_finite() && *value > 0.0);
 
-    round_distance_bucket(group_distance.or(interval_distance).or(stream_distance))
+    let max_distance = [
+        workout_distance,
+        group_distance,
+        interval_distance,
+        stream_distance,
+    ]
+    .into_iter()
+    .flatten()
+    .max_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+
+    round_distance_bucket(max_distance)
 }
 
 fn completed_workout_stream_bucket(workout: &CompletedWorkout) -> String {

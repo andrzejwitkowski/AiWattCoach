@@ -661,4 +661,5 @@ fn sample_special_day(special_day_id: &str, user_id: &str, date: &str) -> Specia
         Some("Illness".to_string()),
         Some("Recovery day".to_string()),
     )
+    .unwrap()
 }
