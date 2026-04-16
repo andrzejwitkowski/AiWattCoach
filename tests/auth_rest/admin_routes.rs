@@ -7,7 +7,7 @@ use tower::util::ServiceExt;
 
 use crate::shared::{auth_test_app, TestIdentityService, RESPONSE_LIMIT_BYTES};
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn admin_system_info_requires_authentication() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -24,7 +24,7 @@ async fn admin_system_info_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn admin_system_info_rejects_non_admin_user() {
     let app = auth_test_app(TestIdentityService {
         admin_cookie_role: aiwattcoach::domain::identity::Role::User,
@@ -46,7 +46,7 @@ async fn admin_system_info_rejects_non_admin_user() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn admin_system_info_rejects_stale_cookie_as_unauthorized() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -64,7 +64,7 @@ async fn admin_system_info_rejects_stale_cookie_as_unauthorized() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn admin_system_info_returns_payload_for_admin() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
