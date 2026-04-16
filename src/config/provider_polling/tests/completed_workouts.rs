@@ -1,5 +1,6 @@
 use crate::domain::external_sync::{
-    ExternalProvider, ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
+    ExternalImportCommand, ExternalProvider, ProviderPollState, ProviderPollStateRepository,
+    ProviderPollStream,
 };
 
 use super::{support::*, ProviderPollingService};
@@ -103,4 +104,40 @@ async fn poll_due_once_marks_failure_and_backoff_when_import_fails() {
     assert_eq!(stored.last_error.as_deref(), Some("import exploded"));
     assert_eq!(stored.backoff_until_epoch_seconds, Some(1_700_000_120));
     assert_eq!(stored.next_due_at_epoch_seconds, 1_700_000_120);
+}
+
+#[tokio::test]
+async fn completed_stream_enriches_activity_details_before_import() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let imports = RecordingImportService::default();
+    let listed = sample_activity("activity-1");
+    let detailed = sample_detailed_activity("activity-1");
+    let service = ProviderPollingService::new(
+        FakeIntervalsApi::with_activities_and_details(vec![listed], vec![detailed]),
+        FakeIntervalsSettings,
+        poll_states,
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_windows(7, 14, 7);
+
+    service.poll_due_once().await.unwrap();
+
+    let commands = imports.commands();
+    assert_eq!(commands.len(), 1);
+
+    let ExternalImportCommand::UpsertCompletedWorkout(import) = &commands[0] else {
+        panic!("expected completed workout import");
+    };
+
+    assert!(!import.workout.details.streams.is_empty());
+    assert!(!import.workout.details.intervals.is_empty());
+    assert!(!import.workout.details.interval_groups.is_empty());
 }

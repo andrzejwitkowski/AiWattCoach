@@ -674,13 +674,8 @@ fn existing_link_candidate(
         });
     }
 
-    workout
-        .planned_workout_id
-        .as_ref()
-        .map(|planned_workout_id| ResolvedPlannedWorkoutLink {
-            planned_workout_id: planned_workout_id.clone(),
-            match_source: PlannedCompletedWorkoutLinkMatchSource::Heuristic,
-        })
+    let _ = workout;
+    None
 }
 
 fn choose_preferred_planned_workout_link(

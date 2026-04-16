@@ -534,6 +534,25 @@ impl PlannedCompletedWorkoutLinkRepository for InMemoryPlannedCompletedWorkoutLi
             Ok(link)
         })
     }
+
+    fn delete_by_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<(), PlannedCompletedWorkoutLinkError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            stored.lock().unwrap().retain(|existing| {
+                !(existing.user_id == user_id
+                    && existing.completed_workout_id == completed_workout_id)
+            });
+            Ok(())
+        })
+    }
 }
 
 impl InMemoryObservationRepository {

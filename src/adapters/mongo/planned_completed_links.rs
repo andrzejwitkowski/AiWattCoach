@@ -135,6 +135,26 @@ impl PlannedCompletedWorkoutLinkRepository for MongoPlannedCompletedWorkoutLinkR
             Ok(link)
         })
     }
+
+    fn delete_by_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> PlannedCompletedWorkoutLinkBoxFuture<Result<(), PlannedCompletedWorkoutLinkError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            collection
+                .delete_many(doc! {
+                    "user_id": &user_id,
+                    "completed_workout_id": &completed_workout_id,
+                })
+                .await
+                .map_err(|error| PlannedCompletedWorkoutLinkError::Repository(error.to_string()))?;
+            Ok(())
+        })
+    }
 }
 
 fn map_domain_to_document(

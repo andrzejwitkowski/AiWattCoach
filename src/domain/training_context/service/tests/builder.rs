@@ -157,6 +157,7 @@ async fn builder_renders_recent_and_historical_context() {
             "84:1".to_string(),
         ]
     );
+    assert_eq!(recent_day.workouts[0].cadence_values_5s, vec![84]);
     assert_eq!(
         recent_day.workouts[0]
             .planned_workout
@@ -233,6 +234,7 @@ async fn builder_renders_recent_and_historical_context() {
         .volatile_context
         .contains("Strong sweet spot execution with steady control"));
     assert!(result.rendered.volatile_context.contains("\"pc\":["));
+    assert!(result.rendered.volatile_context.contains("\"c5\":[84]"));
     assert!(result.rendered.volatile_context.contains("\"tss\":80"));
     assert!(result.rendered.volatile_context.contains("\"pd\":["));
     assert!(result

@@ -334,8 +334,27 @@ where
             .await
             .map_err(|error| error.to_string())?;
         for activity in &activities {
+            let import_activity = match self
+                .intervals_api
+                .get_activity(credentials, &activity.id)
+                .await
+            {
+                Ok(detailed) => detailed,
+                Err(error) => {
+                    warn!(
+                        user_id = %state.user_id,
+                        activity_id = %activity.id,
+                        %error,
+                        "completed workout enrichment failed; importing listed activity without full details"
+                    );
+                    activity.clone()
+                }
+            };
             self.imports
-                .import(map_activity_to_import_command(&state.user_id, activity))
+                .import(map_activity_to_import_command(
+                    &state.user_id,
+                    &import_activity,
+                ))
                 .await
                 .map_err(|error| error.to_string())?;
         }

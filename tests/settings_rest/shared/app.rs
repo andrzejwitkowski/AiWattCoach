@@ -12,6 +12,7 @@ use aiwattcoach::{
     config::AppState,
     domain::{
         athlete_summary::AthleteSummaryUseCases,
+        completed_workouts::CompletedWorkoutAdminUseCases,
         identity::IdentityUseCases,
         intervals::IntervalsConnectionTester,
         llm::{LlmChatPort, UserLlmConfigProvider},
@@ -80,6 +81,32 @@ pub(crate) async fn settings_test_app_with_services(
         None,
     )
     .await
+}
+
+pub(crate) async fn settings_test_app_with_completed_workout_service(
+    identity_service: impl IdentityUseCases + 'static,
+    settings_service: impl UserSettingsUseCases + 'static,
+    completed_workout_service: impl CompletedWorkoutAdminUseCases + 'static,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = frontend_fixture();
+
+    let app_state = AppState::new(
+        settings.app_name,
+        settings.mongo.database,
+        test_mongo_client(&settings.mongo.uri).await,
+    )
+    .with_identity_service(
+        std::sync::Arc::new(identity_service),
+        "aiwattcoach_session",
+        "lax",
+        false,
+        24,
+    )
+    .with_settings_service(std::sync::Arc::new(settings_service))
+    .with_completed_workout_admin_service(std::sync::Arc::new(completed_workout_service));
+
+    build_app_with_frontend_dist(app_state, fixture.dist_dir())
 }
 
 pub(crate) async fn settings_test_app_with_athlete_summary(

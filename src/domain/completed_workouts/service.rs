@@ -15,6 +15,23 @@ pub trait CompletedWorkoutReadUseCases: Send + Sync {
     ) -> BoxFuture<Result<Option<CompletedWorkout>, CompletedWorkoutError>>;
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackfillCompletedWorkoutDetailsResult {
+    pub scanned: usize,
+    pub enriched: usize,
+    pub skipped: usize,
+    pub failed: usize,
+}
+
+pub trait CompletedWorkoutAdminUseCases: Send + Sync {
+    fn backfill_missing_details(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> BoxFuture<Result<BackfillCompletedWorkoutDetailsResult, CompletedWorkoutError>>;
+}
+
 #[derive(Clone)]
 pub struct CompletedWorkoutReadService<Repo> {
     repository: Repo,

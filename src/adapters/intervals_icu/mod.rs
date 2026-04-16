@@ -1,4 +1,5 @@
 pub mod adapter;
+pub mod backfill;
 pub mod client;
 pub mod dev_client;
 pub mod dev_settings_adapter;
