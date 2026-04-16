@@ -26,6 +26,31 @@ pub trait CompletedWorkoutRepository: Clone + Send + Sync + 'static {
     ) -> BoxFuture<Result<CompletedWorkout, CompletedWorkoutError>>;
 }
 
+impl CompletedWorkoutRepository for () {
+    fn list_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        _user_id: &str,
+        _oldest: &str,
+        _newest: &str,
+    ) -> BoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn upsert(
+        &self,
+        workout: CompletedWorkout,
+    ) -> BoxFuture<Result<CompletedWorkout, CompletedWorkoutError>> {
+        Box::pin(async move { Ok(workout) })
+    }
+}
+
 #[cfg(test)]
 #[derive(Clone, Default)]
 pub struct NoopCompletedWorkoutRepository {

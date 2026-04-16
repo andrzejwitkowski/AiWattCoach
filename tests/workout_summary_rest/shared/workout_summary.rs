@@ -20,6 +20,7 @@ pub(crate) struct TestWorkoutSummaryService {
     processed_user_messages: Arc<Mutex<Vec<String>>>,
     coach_reply_delay: Option<Duration>,
     availability_configured: bool,
+    completed_workout_ids: Arc<Mutex<Option<Vec<String>>>>,
 }
 
 impl TestWorkoutSummaryService {
@@ -29,6 +30,7 @@ impl TestWorkoutSummaryService {
             processed_user_messages: Arc::new(Mutex::new(Vec::new())),
             coach_reply_delay: None,
             availability_configured: true,
+            completed_workout_ids: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -39,6 +41,16 @@ impl TestWorkoutSummaryService {
 
     pub(crate) fn with_availability_configured(mut self, configured: bool) -> Self {
         self.availability_configured = configured;
+        self
+    }
+
+    pub(crate) fn with_completed_workout_ids(mut self, workout_ids: &[&str]) -> Self {
+        self.completed_workout_ids = Arc::new(Mutex::new(Some(
+            workout_ids
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+        )));
         self
     }
 
@@ -54,6 +66,18 @@ impl TestWorkoutSummaryService {
             .find(|summary| summary.user_id == user_id && summary.workout_id == workout_id)
             .cloned()
     }
+
+    fn validate_completed_target(&self, workout_id: &str) -> Result<(), WorkoutSummaryError> {
+        let completed_workout_ids = self.completed_workout_ids.lock().unwrap().clone();
+        match completed_workout_ids {
+            Some(workout_ids) if !workout_ids.iter().any(|value| value == workout_id) => {
+                Err(WorkoutSummaryError::Validation(
+                    "workout summary is only available for completed workouts".to_string(),
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
 }
 
 impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
@@ -62,6 +86,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_id: &str,
         workout_id: &str,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -81,6 +109,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_id: &str,
         workout_id: &str,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -105,6 +137,14 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_id: &str,
         workout_ids: Vec<String>,
     ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
+        let completed_workout_ids = match self.completed_workout_ids.lock().unwrap().clone() {
+            Some(allowed) => workout_ids
+                .into_iter()
+                .filter(|workout_id| allowed.iter().any(|value| value == workout_id))
+                .collect::<Vec<_>>(),
+            None => workout_ids,
+        };
+
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
@@ -114,7 +154,9 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 .iter()
                 .filter(|summary| {
                     summary.user_id == user_id
-                        && workout_ids.iter().any(|id| id == &summary.workout_id)
+                        && completed_workout_ids
+                            .iter()
+                            .any(|id| id == &summary.workout_id)
                 })
                 .cloned()
                 .collect();
@@ -138,6 +180,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         workout_id: &str,
         rpe: u8,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -165,6 +211,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_id: &str,
         workout_id: &str,
     ) -> BoxFuture<Result<SaveSummaryResult, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -201,6 +251,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         user_id: &str,
         workout_id: &str,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -225,6 +279,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         workout_id: &str,
         recap: WorkoutRecap,
     ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -253,6 +311,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         workout_id: &str,
         content: String,
     ) -> BoxFuture<Result<SendMessageResult, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let processed_user_messages = self.processed_user_messages.clone();
         let availability_configured = self.availability_configured;
@@ -319,6 +381,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         workout_id: &str,
         content: String,
     ) -> BoxFuture<Result<PersistedUserMessage, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let processed_user_messages = self.processed_user_messages.clone();
         let availability_configured = self.availability_configured;
@@ -378,6 +444,10 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         workout_id: &str,
         user_message_id: String,
     ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
+        if let Err(error) = self.validate_completed_target(workout_id) {
+            return Box::pin(async move { Err(error) });
+        }
+
         let summaries = self.summaries.clone();
         let coach_reply_delay = self.coach_reply_delay;
         let availability_configured = self.availability_configured;

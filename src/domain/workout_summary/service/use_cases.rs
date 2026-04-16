@@ -1,5 +1,9 @@
 use super::*;
 
+use futures::{stream, StreamExt, TryStreamExt};
+
+const LIST_SUMMARIES_TARGET_CHECK_CONCURRENCY: usize = 8;
+
 #[derive(Clone, PartialEq, Eq)]
 struct RecapSnapshot {
     text: Option<String>,
@@ -45,7 +49,12 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
-        Box::pin(async move { service.get_existing_summary(&user_id, &workout_id).await })
+        Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+            service.get_existing_summary(&user_id, &workout_id).await
+        })
     }
 
     fn create_summary(
@@ -57,6 +66,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+
             if let Some(existing) = service
                 .repository
                 .find_by_user_id_and_workout_id(&user_id, &workout_id)
@@ -95,9 +108,30 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
+            let completed_workout_ids = stream::iter(workout_ids.into_iter().map(|workout_id| {
+                let service = service.clone();
+                let user_id = user_id.clone();
+                async move {
+                    let is_completed = service
+                        .is_completed_workout_target(&user_id, &workout_id)
+                        .await?;
+                    Ok::<_, WorkoutSummaryError>(is_completed.then_some(workout_id))
+                }
+            }))
+            .buffered(LIST_SUMMARIES_TARGET_CHECK_CONCURRENCY)
+            .try_collect::<Vec<_>>()
+            .await?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+            if completed_workout_ids.is_empty() {
+                return Ok(Vec::new());
+            }
+
             let mut summaries = service
                 .repository
-                .find_by_user_id_and_workout_ids(&user_id, workout_ids)
+                .find_by_user_id_and_workout_ids(&user_id, completed_workout_ids)
                 .await?;
             summaries.sort_by(|left, right| {
                 right
@@ -123,6 +157,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+
             let rpe = validate_rpe(rpe)?;
             let existing = service.get_existing_summary(&user_id, &workout_id).await?;
             if existing.saved_at_epoch_seconds.is_some() {
@@ -148,6 +186,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+
             let existing = service.get_existing_summary(&user_id, &workout_id).await?;
             if existing.saved_at_epoch_seconds.is_some() {
                 let recap_before_retry = RecapSnapshot::from_summary(&existing);
@@ -372,6 +414,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+
             let existing = service.get_existing_summary(&user_id, &workout_id).await?;
             if existing.saved_at_epoch_seconds.is_none() {
                 return Ok(existing);
@@ -396,6 +442,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+
             let existing = service.get_existing_summary(&user_id, &workout_id).await?;
             if existing.workout_recap_text.as_deref() == Some(recap.text.as_str())
                 && existing.workout_recap_provider.as_deref() == Some(recap.provider.as_str())
@@ -425,6 +475,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+
             let persisted = service
                 .append_user_message(&user_id, &workout_id, content)
                 .await?;
@@ -450,6 +504,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+
             let user_message = service
                 .append_message_with_role(&user_id, &workout_id, MessageRole::User, content)
                 .await?;
@@ -491,6 +549,10 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
+            service
+                .validate_completed_workout_target(&user_id, &workout_id)
+                .await?;
+
             let user_message = service
                 .get_message_by_id(&user_id, &workout_id, &user_message_id)
                 .await?;

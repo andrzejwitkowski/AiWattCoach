@@ -14,8 +14,8 @@ use aiwattcoach::domain::{
         CompletedWorkoutZoneTime,
     },
     intervals::{
-        Activity, ActivityDetails, ActivityMetrics, ActivityStream, DateRange, Event,
-        IntervalsError, IntervalsUseCases,
+        Activity, ActivityDetails, ActivityMetrics, ActivityRepositoryPort, ActivityStream,
+        DateRange, Event, IntervalsError, IntervalsUseCases,
     },
     llm::{BoxFuture as LlmBoxFuture, LlmContextCache, LlmContextCacheRepository, LlmError},
     planned_workouts::{PlannedWorkout, PlannedWorkoutRepository},

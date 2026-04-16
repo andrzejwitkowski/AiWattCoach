@@ -5,7 +5,8 @@ mod mapping;
 mod validation;
 
 pub(crate) use dto::{
-    EventDefinitionDto, IntervalDefinitionDto, WorkoutSegmentDto, WorkoutSummaryDto,
+    ActualWorkoutDto, EventDefinitionDto, IntervalDefinitionDto, MatchedWorkoutIntervalDto,
+    WorkoutSegmentDto, WorkoutSummaryDto,
 };
 pub(super) use handlers::{
     create_activity, create_event, delete_activity, delete_event, download_fit, get_activity,

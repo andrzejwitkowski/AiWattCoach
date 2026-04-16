@@ -20,7 +20,7 @@ pub use projection::{
     project_completed_workout_entry, project_planned_workout_entry, project_race_entry,
     project_special_day_entry,
 };
-pub use rebuild::rebuild_calendar_entries;
+pub use rebuild::{merge_workout_entries, rebuild_calendar_entries};
 pub use refresh::{
     CalendarEntryViewRefreshPort, CalendarEntryViewRefreshService, NoopCalendarEntryViewRefresh,
 };

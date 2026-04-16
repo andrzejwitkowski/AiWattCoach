@@ -140,6 +140,7 @@ async fn builder_renders_recent_and_historical_context() {
         .find(|day| day.date == "2026-04-03")
         .expect("recent day should exist");
     assert_eq!(recent_day.workouts.len(), 1);
+    assert!(recent_day.planned_workouts.is_empty());
     assert!(!recent_day.sick_day);
     assert_eq!(recent_day.workouts[0].rpe, Some(7));
     assert_eq!(
@@ -239,6 +240,40 @@ async fn builder_renders_recent_and_historical_context() {
         .volatile_context
         .contains("\"swid\":\"ride-1\""));
     assert!(!result.rendered.volatile_context.contains("\"p5\":["));
+    assert!(!result
+        .rendered
+        .volatile_context
+        .contains("\"pw\":[{\"id\":101"));
+}
+
+#[tokio::test]
+async fn builder_dedups_matched_recent_planned_workout_from_day_plans() {
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(TestWorkoutSummaryRepository),
+        FixedClock,
+    )
+    .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
+    .with_planned_workout_repository(TestPlannedWorkoutRepository::default())
+    .with_special_day_repository(TestSpecialDayRepository::default());
+
+    let result = builder.build("user-1", "ride-1").await.unwrap();
+    let recent_day = result
+        .context
+        .recent_days
+        .iter()
+        .find(|day| day.date == "2026-04-03")
+        .expect("recent day should exist");
+
+    assert_eq!(recent_day.workouts.len(), 1);
+    assert!(recent_day.planned_workouts.is_empty());
+    assert_eq!(
+        recent_day.workouts[0]
+            .planned_workout
+            .as_ref()
+            .map(|planned| planned.event_id),
+        Some(101)
+    );
 }
 
 #[tokio::test]

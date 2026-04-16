@@ -100,6 +100,145 @@ impl IntervalsUseCases for InMemoryIntervalsService {
     }
 }
 
+impl ActivityRepositoryPort for InMemoryIntervalsService {
+    fn upsert(
+        &self,
+        _user_id: &str,
+        activity: Activity,
+    ) -> aiwattcoach::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+        let service = self.clone();
+        Box::pin(async move {
+            let mut stored = service.activities.lock().unwrap();
+            stored.retain(|existing| existing.id != activity.id);
+            stored.push(activity.clone());
+            Ok(activity)
+        })
+    }
+
+    fn upsert_many(
+        &self,
+        _user_id: &str,
+        activities: Vec<Activity>,
+    ) -> aiwattcoach::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        let service = self.clone();
+        Box::pin(async move {
+            let mut stored = service.activities.lock().unwrap();
+            for activity in &activities {
+                stored.retain(|existing| existing.id != activity.id);
+                stored.push(activity.clone());
+            }
+            Ok(activities)
+        })
+    }
+
+    fn find_by_user_id_and_range(
+        &self,
+        user_id: &str,
+        range: &DateRange,
+    ) -> aiwattcoach::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        let oldest = range.oldest.clone();
+        let newest = range.newest.clone();
+        Box::pin(async move {
+            let stored = service.activities.lock().unwrap();
+            Ok(stored
+                .iter()
+                .filter(|activity| activity.athlete_id.as_deref() == Some(user_id.as_str()))
+                .filter(|activity| activity.start_date_local.as_str() >= oldest.as_str())
+                .filter(|activity| activity.start_date_local.as_str() <= newest.as_str())
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn find_by_user_id_and_activity_id(
+        &self,
+        user_id: &str,
+        activity_id: &str,
+    ) -> aiwattcoach::domain::intervals::BoxFuture<Result<Option<Activity>, IntervalsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            Ok(service
+                .activities
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|activity| {
+                    activity.id == activity_id
+                        && activity.athlete_id.as_deref() == Some(user_id.as_str())
+                })
+                .cloned())
+        })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::intervals::BoxFuture<Result<Option<Activity>, IntervalsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut activities = service
+                .activities
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|activity| activity.athlete_id.as_deref() == Some(user_id.as_str()))
+                .cloned()
+                .collect::<Vec<_>>();
+            activities.sort_by(|left, right| right.start_date_local.cmp(&left.start_date_local));
+            Ok(activities.into_iter().next())
+        })
+    }
+
+    fn find_by_user_id_and_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> aiwattcoach::domain::intervals::BoxFuture<Result<Option<Activity>, IntervalsError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            Ok(service
+                .activities
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|activity| {
+                    activity.athlete_id.as_deref() == Some(user_id.as_str())
+                        && activity.external_id.as_deref() == Some(external_id.as_str())
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_user_id_and_fallback_identity(
+        &self,
+        _user_id: &str,
+        _identity: &str,
+    ) -> aiwattcoach::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn delete(
+        &self,
+        _user_id: &str,
+        activity_id: &str,
+    ) -> aiwattcoach::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+        let service = self.clone();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            let mut stored = service.activities.lock().unwrap();
+            stored.retain(|activity| activity.id != activity_id);
+            Ok(())
+        })
+    }
+}
+
 pub(crate) fn sample_activity(user_id: &str, activity_id: &str) -> Activity {
     Activity {
         id: activity_id.to_string(),

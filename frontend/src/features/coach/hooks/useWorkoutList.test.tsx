@@ -259,6 +259,61 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.event?.id).toBe(777);
   });
 
+  it('prefers actualWorkout activity links over heuristic matching and keeps one item', async () => {
+    vi.mocked(listEvents).mockResolvedValue([
+      {
+        ...eventFixture,
+        id: 880,
+        name: 'Planned Threshold Session',
+        startDateLocal: '2026-03-24T09:00:00',
+        actualWorkout: {
+          activityId: 'activity-linked',
+          activityName: 'Completed Threshold Ride',
+          startDateLocal: '2026-03-24T10:00:00',
+          powerValues: [],
+          cadenceValues: [],
+          heartRateValues: [],
+          speedValues: [],
+          averagePowerWatts: 210,
+          normalizedPowerWatts: 225,
+          trainingStressScore: 68,
+          intensityFactor: 0.81,
+          complianceScore: 0.92,
+          matchedIntervals: [],
+        },
+      },
+      {
+        ...eventFixture,
+        id: 881,
+        name: 'Completed Threshold Ride',
+        startDateLocal: '2026-03-24T10:00:00',
+        actualWorkout: null,
+      },
+    ]);
+    vi.mocked(listActivities).mockResolvedValue([
+      {
+        ...activityFixture,
+        id: 'activity-linked',
+        name: 'Completed Threshold Ride',
+        startDateLocal: '2026-03-24T10:00:00',
+        startDate: '2026-03-24T09:00:00Z',
+      },
+    ]);
+    vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0]?.source).toBe('activity');
+    expect(result.current.items[0]?.activity?.id).toBe('activity-linked');
+    expect(result.current.items[0]?.event?.id).toBe(880);
+    expect(result.current.items[0]?.event?.actualWorkout?.activityId).toBe('activity-linked');
+  });
+
   it('keeps only the newest refresh result when loads overlap', async () => {
     let resolveFirst: (() => void) | undefined;
     let resolveSecond: (() => void) | undefined;
@@ -339,7 +394,7 @@ describe('useWorkoutList', () => {
     act(() => {
       result.current.replaceSummary({
         id: 'summary-101',
-        workoutId: '101',
+        workoutId: 'activity-101',
         rpe: 7,
         messages: [
           {
@@ -399,8 +454,74 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.source).toBe('activity');
     expect(result.current.items[0]?.activity?.id).toBe('activity-451');
     expect(result.current.items[0]?.event?.id).toBe(451);
-    expect(result.current.items[0]?.summary?.workoutId).toBe('451');
-    expect(result.current.items[0]?.id).toBe('451');
+    expect(result.current.items[0]?.summary).toBeNull();
+    expect(result.current.items[0]?.id).toBe('activity-451');
+  });
+
+  it('keeps activity identity when a legacy event summary also exists', async () => {
+    vi.mocked(listEvents).mockResolvedValue([
+      {
+        ...eventFixture,
+        id: 990,
+        name: 'Linked Planned Workout',
+        startDateLocal: '2026-03-24T09:00:00',
+        actualWorkout: {
+          activityId: 'activity-990',
+          activityName: 'Completed Ride',
+          startDateLocal: '2026-03-24T10:00:00',
+          powerValues: [],
+          cadenceValues: [],
+          heartRateValues: [],
+          speedValues: [],
+          averagePowerWatts: 200,
+          normalizedPowerWatts: 215,
+          trainingStressScore: 60,
+          intensityFactor: 0.8,
+          complianceScore: 0.9,
+          matchedIntervals: [],
+        },
+      },
+    ]);
+    vi.mocked(listActivities).mockResolvedValue([
+      {
+        ...activityFixture,
+        id: 'activity-990',
+        name: 'Completed Ride',
+        startDateLocal: '2026-03-24T10:00:00',
+        startDate: '2026-03-24T09:00:00Z',
+      },
+    ]);
+    vi.mocked(listWorkoutSummaries).mockResolvedValue([
+      {
+        id: 'summary-legacy-event',
+        workoutId: '990',
+        rpe: 5,
+        messages: [],
+        savedAtEpochSeconds: null,
+        createdAtEpochSeconds: 1,
+        updatedAtEpochSeconds: 2,
+      },
+      {
+        id: 'summary-activity',
+        workoutId: 'activity-990',
+        rpe: 7,
+        messages: [],
+        savedAtEpochSeconds: null,
+        createdAtEpochSeconds: 3,
+        updatedAtEpochSeconds: 4,
+      },
+    ]);
+
+    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0]?.id).toBe('activity-990');
+    expect(result.current.items[0]?.summary?.workoutId).toBe('activity-990');
+    expect(listWorkoutSummaries).toHaveBeenCalledWith('', ['activity-990']);
   });
 
   it('uses an activity-only item when no related event exists', async () => {

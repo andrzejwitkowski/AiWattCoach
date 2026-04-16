@@ -8,6 +8,8 @@ pub mod external_sync;
 pub mod identity;
 pub mod intervals;
 pub mod llm;
+pub mod planned_completed_links;
+pub mod planned_workout_tokens;
 pub mod planned_workouts;
 pub mod races;
 pub mod settings;

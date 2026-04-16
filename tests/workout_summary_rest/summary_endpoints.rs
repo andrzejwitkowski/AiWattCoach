@@ -90,6 +90,35 @@ async fn create_summary_returns_created_summary() {
 }
 
 #[tokio::test]
+async fn create_summary_rejects_planned_workout_target() {
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::default().with_completed_workout_ids(&["activity-1"]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/workout-summaries/workout-1")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: Value = get_json(response).await;
+    assert_eq!(
+        body.get("error").and_then(Value::as_str),
+        Some("workout summary is only available for completed workouts")
+    );
+}
+
+#[tokio::test]
 async fn get_summary_returns_existing_summary() {
     let app = workout_summary_test_app(
         TestIdentityServiceWithSession::default(),
@@ -152,6 +181,40 @@ async fn list_summaries_returns_batch_results() {
     assert_eq!(
         summaries[1].get("workoutId").unwrap().as_str().unwrap(),
         "workout-1"
+    );
+}
+
+#[tokio::test]
+async fn list_summaries_ignores_planned_workout_ids() {
+    let app = workout_summary_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![
+            sample_summary_with_updated_at("workout-1", 1_700_000_050),
+            sample_summary_with_updated_at("activity-1", 1_700_000_100),
+        ])
+        .with_completed_workout_ids(&["activity-1"]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/workout-summaries?workoutIds=workout-1,activity-1")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    let summaries = body.as_array().unwrap();
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(
+        summaries[0].get("workoutId").unwrap().as_str().unwrap(),
+        "activity-1"
     );
 }
 

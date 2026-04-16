@@ -167,9 +167,13 @@ describe('CalendarWeekSection', () => {
 
     const onSelectWorkout = vi.fn();
     const onSelectDayItems = vi.fn();
-    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />);
+    const { container } = render(
+      <CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />,
+    );
 
-    await userEvent.click(screen.getByRole('button', { name: /unrelated ride/i }));
+    const dayButton = container.querySelector('.calendar-grid button') as HTMLButtonElement | null;
+    expect(dayButton).toBeTruthy();
+    await userEvent.click(dayButton as HTMLButtonElement);
 
     expect(onSelectWorkout).not.toHaveBeenCalled();
     expect(onSelectDayItems).toHaveBeenCalledTimes(1);
@@ -466,14 +470,14 @@ describe('CalendarWeekSection', () => {
     });
   });
 
-  it('selects the matched activity when the event includes actual workout data', async () => {
+  it('selects the planned event and matched activity when a planned workout includes actual workout data', async () => {
     const week = createWeek('loaded');
     week.days[0] = {
       ...week.days[0],
       events: [{
         id: 12,
         startDateLocal: '2026-03-23',
-        name: 'Completed workout',
+        name: 'Planned workout',
         category: 'WORKOUT',
         description: null,
         indoor: false,
@@ -561,9 +565,11 @@ describe('CalendarWeekSection', () => {
     };
 
     const onSelectWorkout = vi.fn();
-    render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
+    const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /matched ride/i }));
+    const dayButton = container.querySelector('.calendar-grid button') as HTMLButtonElement | null;
+    expect(dayButton).toBeTruthy();
+    await userEvent.click(dayButton as HTMLButtonElement);
 
     expect(onSelectWorkout).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
@@ -572,14 +578,14 @@ describe('CalendarWeekSection', () => {
     });
   });
 
-  it('selects the matched activity even when it is not the first activity of the day', async () => {
+  it('selects the planned event with the matched activity even when it is not the first activity of the day', async () => {
     const week = createWeek('loaded');
     week.days[0] = {
       ...week.days[0],
       events: [{
         id: 13,
         startDateLocal: '2026-03-23',
-        name: 'Completed workout',
+        name: 'Planned workout',
         category: 'WORKOUT',
         description: null,
         indoor: false,
@@ -725,18 +731,17 @@ describe('CalendarWeekSection', () => {
       <CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />,
     );
 
-    const dayButtons = Array.from(container.querySelectorAll('.calendar-grid button')) as HTMLButtonElement[];
-    const matchedRideButton = dayButtons.find((button) => button.textContent?.includes('Matched ride'));
-    expect(matchedRideButton).toBeDefined();
+    const dayButton = container.querySelector('.calendar-grid button') as HTMLButtonElement | null;
+    expect(dayButton).toBeTruthy();
 
-    await userEvent.click(matchedRideButton as HTMLButtonElement);
+    await userEvent.click(dayButton as HTMLButtonElement);
 
     expect(onSelectWorkout).not.toHaveBeenCalled();
     expect(onSelectDayItems).toHaveBeenCalledTimes(1);
     expect(onSelectDayItems).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
       items: expect.arrayContaining([
-        expect.objectContaining({ kind: 'completed', title: 'Matched ride' }),
+        expect.objectContaining({ kind: 'planned', title: 'Planned workout' }),
         expect.objectContaining({ kind: 'completed', title: 'Morning spin' }),
       ]),
     });
@@ -839,11 +844,10 @@ describe('CalendarWeekSection', () => {
     const onSelectWorkout = vi.fn();
     const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
 
-    const morningSpinButton = Array.from(container.querySelectorAll('.calendar-grid button'))
-      .find((button) => button.textContent?.includes('Morning spin')) as HTMLButtonElement | undefined;
-    expect(morningSpinButton).toBeDefined();
+    const dayButton = container.querySelector('.calendar-grid button') as HTMLButtonElement | null;
+    expect(dayButton).toBeTruthy();
 
-    await userEvent.click(morningSpinButton as HTMLButtonElement);
+    await userEvent.click(dayButton as HTMLButtonElement);
 
     expect(onSelectWorkout).toHaveBeenCalledWith({
       dateKey: '2026-03-23',
@@ -852,7 +856,7 @@ describe('CalendarWeekSection', () => {
     });
   });
 
-  it('falls back to a later completed workout event even when a generic note appears first', async () => {
+  it('falls back to a later planned-vs-actual event even when a generic note appears first', async () => {
     const week = createWeek('loaded');
     week.days[0] = {
       ...week.days[0],
@@ -875,7 +879,7 @@ describe('CalendarWeekSection', () => {
         {
           id: 17,
           startDateLocal: '2026-03-23',
-          name: 'Completed workout',
+          name: 'Planned workout',
           category: 'WORKOUT',
           description: null,
           indoor: false,
@@ -958,11 +962,10 @@ describe('CalendarWeekSection', () => {
     const onSelectWorkout = vi.fn();
     const { container } = render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} />);
 
-    const morningSpinButton = Array.from(container.querySelectorAll('.calendar-grid button'))
-      .find((button) => button.textContent?.includes('Morning spin')) as HTMLButtonElement | undefined;
-    expect(morningSpinButton).toBeDefined();
+    const dayButton = container.querySelector('.calendar-grid button') as HTMLButtonElement | null;
+    expect(dayButton).toBeTruthy();
 
-    await userEvent.click(morningSpinButton as HTMLButtonElement);
+    await userEvent.click(dayButton as HTMLButtonElement);
 
     expect(onSelectWorkout).toHaveBeenCalledWith({
       dateKey: '2026-03-23',

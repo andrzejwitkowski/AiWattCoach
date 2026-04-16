@@ -21,6 +21,7 @@ use aiwattcoach::{
             CalendarEntryKind, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
             CalendarEntryViewRepository,
         },
+        completed_workouts::{CompletedWorkout, CompletedWorkoutError, CompletedWorkoutRepository},
         identity::{Clock, IdentityUseCases},
         intervals::{DateRange, IntervalsUseCases},
         races::RaceUseCases,
@@ -46,6 +47,7 @@ pub(crate) async fn intervals_test_app(
         intervals_service,
         EmptyTrainingPlanProjectionRepository,
         InMemoryCalendarEntryViewRepository::default(),
+        InMemoryCompletedWorkoutRepository::default(),
     )
     .await
 }
@@ -60,6 +62,7 @@ pub(crate) async fn intervals_test_app_with_projections(
         intervals_service,
         projections,
         InMemoryCalendarEntryViewRepository::default(),
+        InMemoryCompletedWorkoutRepository::default(),
     )
     .await
 }
@@ -69,11 +72,45 @@ pub(crate) async fn intervals_test_app_with_calendar_entries(
     intervals_service: impl IntervalsUseCases + Clone + 'static,
     calendar_entry_views: impl CalendarEntryViewRepository + 'static,
 ) -> axum::Router {
-    intervals_test_app_with_projections_and_calendar_entries(
+    intervals_test_app_with_projections_calendar_entries_and_completed_workouts(
         identity_service,
         intervals_service,
         EmptyTrainingPlanProjectionRepository,
         calendar_entry_views,
+        InMemoryCompletedWorkoutRepository::default(),
+    )
+    .await
+}
+
+pub(crate) async fn intervals_test_app_with_calendar_entries_and_completed_workouts(
+    identity_service: impl IdentityUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+    calendar_entry_views: impl CalendarEntryViewRepository + 'static,
+    completed_workouts: impl CompletedWorkoutRepository + 'static,
+) -> axum::Router {
+    intervals_test_app_with_projections_calendar_entries_and_completed_workouts(
+        identity_service,
+        intervals_service,
+        EmptyTrainingPlanProjectionRepository,
+        calendar_entry_views,
+        completed_workouts,
+    )
+    .await
+}
+
+async fn intervals_test_app_with_projections_calendar_entries_and_completed_workouts(
+    identity_service: impl IdentityUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+    projections: impl TrainingPlanProjectionRepository + Clone + 'static,
+    calendar_entry_views: impl CalendarEntryViewRepository + 'static,
+    completed_workouts: impl CompletedWorkoutRepository + 'static,
+) -> axum::Router {
+    intervals_test_app_with_projections_and_calendar_entries(
+        identity_service,
+        intervals_service,
+        projections,
+        calendar_entry_views,
+        completed_workouts,
     )
     .await
 }
@@ -83,16 +120,20 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
     intervals_service: impl IntervalsUseCases + Clone + 'static,
     projections: impl TrainingPlanProjectionRepository + Clone + 'static,
     calendar_entry_views: impl CalendarEntryViewRepository + 'static,
+    completed_workouts: impl CompletedWorkoutRepository + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
-    let calendar_service = Arc::new(CalendarService::new(
-        intervals_service.clone(),
-        calendar_entry_views,
-        projections,
-        InMemoryPlannedWorkoutSyncRepository,
-        TestClock,
-    ));
+    let calendar_service = Arc::new(
+        CalendarService::new(
+            intervals_service.clone(),
+            calendar_entry_views,
+            projections,
+            InMemoryPlannedWorkoutSyncRepository,
+            TestClock,
+        )
+        .with_completed_workouts(completed_workouts),
+    );
     let calendar_labels_service = Arc::new(CalendarLabelsService::new(EmptyCalendarLabelSource));
 
     build_app_with_frontend_dist(
@@ -125,13 +166,16 @@ pub(crate) async fn intervals_test_app_with_all_services(
 ) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = frontend_fixture();
-    let calendar_service = Arc::new(CalendarService::new(
-        intervals_service.clone(),
-        InMemoryCalendarEntryViewRepository::default(),
-        projections,
-        InMemoryPlannedWorkoutSyncRepository,
-        TestClock,
-    ));
+    let calendar_service = Arc::new(
+        CalendarService::new(
+            intervals_service.clone(),
+            InMemoryCalendarEntryViewRepository::default(),
+            projections,
+            InMemoryPlannedWorkoutSyncRepository,
+            TestClock,
+        )
+        .with_completed_workouts(InMemoryCompletedWorkoutRepository::default()),
+    );
     let calendar_labels_service = Arc::new(CalendarLabelsService::new(calendar_label_source));
 
     build_app_with_frontend_dist(
@@ -234,6 +278,82 @@ impl PlannedWorkoutSyncRepository for InMemoryPlannedWorkoutSyncRepository {
 
 #[derive(Clone, Default)]
 struct EmptyCalendarLabelSource;
+
+#[derive(Clone, Default)]
+pub(crate) struct InMemoryCompletedWorkoutRepository {
+    stored: Arc<std::sync::Mutex<Vec<CompletedWorkout>>>,
+}
+
+impl InMemoryCompletedWorkoutRepository {
+    pub(crate) fn with_workouts(workouts: Vec<CompletedWorkout>) -> Self {
+        Self {
+            stored: Arc::new(std::sync::Mutex::new(workouts)),
+        }
+    }
+}
+
+impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<Vec<CompletedWorkout>, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| workout.user_id == user_id)
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<Vec<CompletedWorkout>, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| workout.user_id == user_id)
+                .filter(|workout| {
+                    let date = workout.start_date_local.get(..10).unwrap_or_default();
+                    date >= oldest.as_str() && date <= newest.as_str()
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn upsert(
+        &self,
+        workout: CompletedWorkout,
+    ) -> aiwattcoach::domain::completed_workouts::BoxFuture<
+        Result<CompletedWorkout, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| existing.completed_workout_id != workout.completed_workout_id);
+            stored.push(workout.clone());
+            Ok(workout)
+        })
+    }
+}
 
 impl CalendarLabelSource for EmptyCalendarLabelSource {
     fn list_labels(

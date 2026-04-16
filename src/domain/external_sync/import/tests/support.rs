@@ -15,6 +15,13 @@ use crate::domain::{
         ExternalSyncRepositoryError, ExternalSyncState, ExternalSyncStateRepository,
     },
     identity::Clock,
+    planned_completed_links::{
+        PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkError,
+        PlannedCompletedWorkoutLinkRepository,
+    },
+    planned_workout_tokens::{
+        PlannedWorkoutToken, PlannedWorkoutTokenError, PlannedWorkoutTokenRepository,
+    },
     planned_workouts::{
         PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
         PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
@@ -113,6 +120,16 @@ pub(super) struct InMemoryCompletedWorkoutRepository {
 #[derive(Clone, Default)]
 pub(super) struct InMemoryRaceRepository {
     stored: Arc<Mutex<Vec<Race>>>,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct InMemoryPlannedWorkoutTokenRepository {
+    stored: Arc<Mutex<Vec<PlannedWorkoutToken>>>,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct InMemoryPlannedCompletedWorkoutLinkRepository {
+    stored: Arc<Mutex<Vec<PlannedCompletedWorkoutLink>>>,
 }
 
 impl RaceRepository for InMemoryRaceRepository {
@@ -329,6 +346,133 @@ impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
     }
 }
 
+impl PlannedWorkoutTokenRepository for InMemoryPlannedWorkoutTokenRepository {
+    fn find_by_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> crate::domain::planned_workout_tokens::BoxFuture<
+        Result<Option<PlannedWorkoutToken>, PlannedWorkoutTokenError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|token| {
+                    token.user_id == user_id && token.planned_workout_id == planned_workout_id
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_match_token(
+        &self,
+        user_id: &str,
+        match_token: &str,
+    ) -> crate::domain::planned_workout_tokens::BoxFuture<
+        Result<Option<PlannedWorkoutToken>, PlannedWorkoutTokenError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let match_token = match_token.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|token| token.user_id == user_id && token.match_token == match_token)
+                .cloned())
+        })
+    }
+
+    fn upsert(
+        &self,
+        token: PlannedWorkoutToken,
+    ) -> crate::domain::planned_workout_tokens::BoxFuture<
+        Result<PlannedWorkoutToken, PlannedWorkoutTokenError>,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                !(existing.user_id == token.user_id
+                    && existing.planned_workout_id == token.planned_workout_id)
+            });
+            stored.push(token.clone());
+            Ok(token)
+        })
+    }
+}
+
+impl PlannedCompletedWorkoutLinkRepository for InMemoryPlannedCompletedWorkoutLinkRepository {
+    fn find_by_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<Option<PlannedCompletedWorkoutLink>, PlannedCompletedWorkoutLinkError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|link| {
+                    link.user_id == user_id && link.planned_workout_id == planned_workout_id
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<Option<PlannedCompletedWorkoutLink>, PlannedCompletedWorkoutLinkError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|link| {
+                    link.user_id == user_id && link.completed_workout_id == completed_workout_id
+                })
+                .cloned())
+        })
+    }
+
+    fn upsert(
+        &self,
+        link: PlannedCompletedWorkoutLink,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkError>,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                !(existing.user_id == link.user_id
+                    && (existing.planned_workout_id == link.planned_workout_id
+                        || existing.completed_workout_id == link.completed_workout_id))
+            });
+            stored.push(link.clone());
+            Ok(link)
+        })
+    }
+}
+
 impl InMemoryObservationRepository {
     pub(super) fn stored(&self) -> Vec<ExternalObservation> {
         self.stored.lock().unwrap().clone()
@@ -538,11 +682,17 @@ impl CalendarEntryViewRefreshPort for RecordingRefresh {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Test wiring mirrors ExternalImportService dependencies explicitly"
+)]
 pub(super) fn external_import_service(
     planned_workouts: InMemoryPlannedWorkoutRepository,
     completed_workouts: InMemoryCompletedWorkoutRepository,
     races: InMemoryRaceRepository,
     special_days: InMemorySpecialDayRepository,
+    planned_workout_tokens: InMemoryPlannedWorkoutTokenRepository,
+    planned_completed_links: InMemoryPlannedCompletedWorkoutLinkRepository,
     observations: InMemoryObservationRepository,
     sync_states: InMemorySyncStateRepository,
     refresh: RecordingRefresh,
@@ -551,6 +701,8 @@ pub(super) fn external_import_service(
     InMemoryCompletedWorkoutRepository,
     InMemoryRaceRepository,
     InMemorySpecialDayRepository,
+    InMemoryPlannedWorkoutTokenRepository,
+    InMemoryPlannedCompletedWorkoutLinkRepository,
     InMemoryObservationRepository,
     InMemorySyncStateRepository,
     FixedClock,
@@ -561,6 +713,8 @@ pub(super) fn external_import_service(
         completed_workouts,
         races,
         special_days,
+        planned_workout_tokens,
+        planned_completed_links,
         observations,
         sync_states,
         FixedClock,
@@ -568,11 +722,17 @@ pub(super) fn external_import_service(
     .with_calendar_view_refresh(refresh)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Test wiring mirrors ExternalImportService dependencies explicitly"
+)]
 pub(super) fn external_import_service_without_refresh(
     planned_workouts: InMemoryPlannedWorkoutRepository,
     completed_workouts: InMemoryCompletedWorkoutRepository,
     races: InMemoryRaceRepository,
     special_days: InMemorySpecialDayRepository,
+    planned_workout_tokens: InMemoryPlannedWorkoutTokenRepository,
+    planned_completed_links: InMemoryPlannedCompletedWorkoutLinkRepository,
     observations: InMemoryObservationRepository,
     sync_states: InMemorySyncStateRepository,
 ) -> ExternalImportService<
@@ -580,6 +740,8 @@ pub(super) fn external_import_service_without_refresh(
     InMemoryCompletedWorkoutRepository,
     InMemoryRaceRepository,
     InMemorySpecialDayRepository,
+    InMemoryPlannedWorkoutTokenRepository,
+    InMemoryPlannedCompletedWorkoutLinkRepository,
     InMemoryObservationRepository,
     InMemorySyncStateRepository,
     FixedClock,
@@ -589,6 +751,8 @@ pub(super) fn external_import_service_without_refresh(
         completed_workouts,
         races,
         special_days,
+        planned_workout_tokens,
+        planned_completed_links,
         observations,
         sync_states,
         FixedClock,
@@ -596,10 +760,17 @@ pub(super) fn external_import_service_without_refresh(
 }
 
 pub(super) fn sample_planned_workout() -> PlannedWorkout {
+    sample_planned_workout_on_date("planned-imported-1", "2026-05-10")
+}
+
+pub(super) fn sample_planned_workout_on_date(
+    planned_workout_id: &str,
+    date: &str,
+) -> PlannedWorkout {
     PlannedWorkout::new(
-        "planned-imported-1".to_string(),
+        planned_workout_id.to_string(),
         "user-1".to_string(),
-        "2026-05-10".to_string(),
+        date.to_string(),
         PlannedWorkoutContent {
             lines: vec![
                 PlannedWorkoutLine::Text(PlannedWorkoutText {

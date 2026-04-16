@@ -14,8 +14,9 @@ use aiwattcoach::domain::{
     training_plan::{GeneratedTrainingPlan, TrainingPlanError, TrainingPlanUseCases},
     workout_summary::{
         BoxFuture, CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
-        CoachReplyOperationStatus, ConversationMessage, MessageRole, WorkoutCoach, WorkoutRecap,
-        WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
+        CoachReplyOperationStatus, CompletedWorkoutTargetUseCases, ConversationMessage,
+        MessageRole, WorkoutCoach, WorkoutRecap, WorkoutSummary, WorkoutSummaryError,
+        WorkoutSummaryRepository, WorkoutSummaryService,
     },
 };
 
@@ -33,7 +34,9 @@ pub(crate) use services::{
     default_dev_coach, existing_summary, existing_summary_with_finished_conversation, test_service,
     test_service_with_coach, test_service_with_coach_and_athlete_summary,
     test_service_with_settings, test_service_with_training_plan,
-    test_service_with_training_plan_and_latest_activity, PersistCheckingTrainingPlanService,
+    test_service_with_training_plan_and_latest_activity,
+    test_service_with_training_plan_latest_activity_and_completed_target,
+    PersistCheckingTrainingPlanService, RecordingCompletedWorkoutTargetService,
     RecordingLatestCompletedActivityService, RecordingTrainingPlanService,
     RefreshingTrainingPlanService, StubAthleteSummaryService, TestAvailabilitySettingsService,
 };

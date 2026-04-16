@@ -2,25 +2,29 @@
 
 This document describes the current code as it exists today.
 
-It explains two things:
+It explains three related behaviors:
 
-- how completed-workout deduplication currently works during external import
-- what the frontend currently renders when a planned workout exists locally and a completed workout later arrives from Intervals
+- how completed-workout deduplication works during external import
+- how planned and completed workouts are linked during import and rendered on the calendar
+- how workout summary identity works for linked planned/completed pairs
 
 ## Scope
 
 This document covers:
 
+- Intervals import mapping in `src/adapters/intervals_icu/import_mapping.rs`
 - canonical completed-workout import in `src/domain/external_sync/import/mod.rs`
 - dedup key generation in `src/domain/external_sync/import/completed_workout_dedup.rs`
-- frontend calendar composition in `frontend/src/features/calendar/hooks/useCalendarData.ts`
-- frontend day-item rendering in `frontend/src/features/calendar/dayItems.ts`
+- calendar read-model rebuild and refresh in `src/domain/calendar_view/rebuild.rs` and `src/domain/calendar_view/refresh.rs`
+- calendar API mapping in `src/domain/calendar/service.rs` and `src/adapters/rest/calendar/*`
+- frontend calendar composition in `frontend/src/features/calendar/hooks/useCalendarData.ts` and `frontend/src/features/calendar/dayItems.ts`
+- coach list and summary targeting in `frontend/src/features/coach/hooks/useWorkoutList.ts` and `src/domain/workout_summary/service/*`
 
 It does not describe intended future behavior. It only describes the current implementation.
 
-## Where Dedup Happens
+## Import Pipeline
 
-Completed-workout dedup happens only when an external completed workout is imported into canonical local state.
+Completed-workout dedup still happens only when an external completed workout is imported into canonical local state.
 
 Relevant path:
 
@@ -30,36 +34,51 @@ Relevant path:
 
 The import flow is:
 
-1. An external activity is mapped into `ExternalImportCommand::UpsertCompletedWorkout`.
-2. `ExternalImportService::import_completed_workout()` computes a dedup key for the incoming canonical `CompletedWorkout`.
-3. `resolve_completed_workout_target()` decides whether to:
-   - update an existing canonical completed workout, or
+1. An Intervals activity is mapped into `ExternalImportCommand::UpsertCompletedWorkout`.
+2. `map_activity_to_import_command(...)` builds a canonical `CompletedWorkout` with:
+   - `completed_workout_id = intervals-activity:<activity-id>`
+   - top-level duration and distance copied from the activity payload
+   - `marker_sources` collected from `external_id`, `description`, and `name`
+3. `ExternalImportService::import_completed_workout()` computes a dedup key for the incoming canonical workout.
+4. The importer tries to resolve a linked `planned_workout_id` for the incoming completed workout.
+5. The importer resolves the canonical completed-workout target:
+   - merge into an existing canonical completed workout, or
    - keep the incoming workout as a new canonical row.
-4. The chosen canonical workout is upserted into `completed_workouts`.
-5. Sync metadata is persisted.
-6. `calendar_entry_views` is refreshed for the workout start day.
+6. The chosen canonical completed workout is upserted into `completed_workouts`.
+7. If the canonical completed workout has a `planned_workout_id`, the importer upserts a durable row into `planned_completed_links`.
+8. External observations and sync state are persisted.
+9. `calendar_entry_views` is refreshed for the completed workout day.
 
 ## Flow Diagram
 
 ```mermaid
 flowchart TD
-    A[External activity payload] --> B[map_activity_to_import_command]
+    A[Intervals activity payload] --> B[map_activity_to_import_command]
     B --> C[ExternalImportService::import_completed_workout]
     C --> D[Build dedup key]
-    D --> E{Existing canonical target?}
-    E -->|same completed_workout_id| F[Merge into existing canonical workout]
-    E -->|one dedup-key match via external_observations| F
-    E -->|no match| G[Create or keep new canonical workout]
-    E -->|multiple dedup-key matches| H[Fail as ambiguous]
-    F --> I[Upsert completed_workouts]
+    C --> E[Resolve planned_workout_id]
+    E -->|marker token| F[Link to planned workout]
+    E -->|single same-day planned workout| F
+    E -->|no unique match| G[No planned link]
+    D --> H{Existing canonical completed target?}
+    H -->|same completed_workout_id| I[Merge into existing canonical workout]
+    H -->|one dedup-key match via external_observations| I
+    H -->|no match| J[Keep or create canonical completed workout]
+    H -->|multiple dedup-key matches| K[Fail as ambiguous]
+    F --> I
+    F --> J
     G --> I
-    I --> J[Persist external_observations and external_sync_states]
-    J --> K[Refresh calendar_entry_views for start day]
-    K --> L[GET /api/calendar/events]
-    I --> M[GET /api/intervals/activities]
-    L --> N[frontend useCalendarData]
-    M --> N
-    N --> O[day.events and day.activities rendered side-by-side]
+    G --> J
+    I --> L[Upsert completed_workouts]
+    J --> L
+    L --> M[Upsert planned_completed_links when planned_workout_id exists]
+    M --> N[Persist external_observations and external_sync_states]
+    N --> O[Refresh calendar_entry_views for workout day]
+    O --> P[GET /api/calendar/events]
+    L --> Q[GET /api/intervals/activities]
+    P --> R[frontend useCalendarData]
+    Q --> R
+    R --> S[buildDayItems collapses 1:1 linked pair]
 ```
 
 ## Dedup Matching Order
@@ -68,7 +87,7 @@ flowchart TD
 
 1. Direct canonical id match
 2. Dedup-key match through `external_observations`
-3. Otherwise create or keep a separate canonical workout
+3. Otherwise create or keep a separate canonical completed workout
 
 ### 1. Direct canonical id match
 
@@ -100,6 +119,47 @@ Then it behaves like this:
 
 The ambiguous case is intentional. The code prefers a visible failure over silently merging the workout into the wrong canonical row.
 
+## Planned-Completed Linking During Import
+
+In addition to completed-vs-completed dedup, the importer now tries to attach an imported completed workout to a planned workout.
+
+That happens in `resolve_planned_workout_id_for_completed_workout()`.
+
+The linking order is:
+
+1. Marker-based lookup
+2. Single same-day planned workout fallback
+3. Otherwise no planned link
+
+### 1. Marker-based lookup
+
+The importer scans `marker_sources` extracted from the Intervals activity payload.
+
+Today those sources are:
+
+- `activity.external_id`
+- `activity.description`
+- `activity.name`
+
+If one of them contains an `[AIWATTCOACH:pw=<token>]` marker, the importer looks up the token in `planned_workout_tokens` and resolves the linked `planned_workout_id`.
+
+### 2. Single same-day planned workout fallback
+
+If no marker resolves, the importer loads planned workouts for the completed workout day.
+
+If there is exactly one planned workout on that day, the importer links the completed workout to that `planned_workout_id`.
+
+If there are zero or multiple same-day planned workouts, the importer does not infer a link.
+
+### 3. Persisted link shape
+
+If the canonical completed workout ends up with a `planned_workout_id`, the importer:
+
+- stores that `planned_workout_id` on the canonical `CompletedWorkout`
+- upserts a durable `planned_completed_links` row
+
+The current calendar merge path uses `CompletedWorkout.planned_workout_id` directly. The separate link repository is also persisted as durable linkage metadata.
+
 ## How The Dedup Key Is Built
 
 The current dedup key format is built in `completed_workout_dedup_key()` and looks like:
@@ -129,7 +189,7 @@ Then the duration is rounded with `round_duration_bucket(...)`.
 
 Important current limitation:
 
-- the dedup helper currently does not fall back to top-level `CompletedWorkout.duration_seconds`
+- the dedup helper does not fall back to top-level `CompletedWorkout.duration_seconds`
 - if details are sparse and no usable groups, intervals, or streams exist, the dedup key may be missing
 
 ### Rounded distance
@@ -144,7 +204,7 @@ Then the distance is rounded with `round_distance_bucket(...)`.
 
 Important current limitation:
 
-- the dedup helper currently does not fall back to top-level `CompletedWorkout.distance_meters`
+- the dedup helper does not fall back to top-level `CompletedWorkout.distance_meters`
 
 ### Stream bucket
 
@@ -181,6 +241,8 @@ These prefer incoming data, but fall back to existing values if incoming is empt
 
 `start_date_local` is taken from the incoming workout.
 
+This is important for linking: if the incoming activity resolves a `planned_workout_id`, a previously stored canonical completed workout can gain that planned link during merge.
+
 ### Metrics
 
 Each metric field prefers the incoming value, then falls back to the existing value.
@@ -211,120 +273,170 @@ This applies to:
 
 So the merge strategy is not a deep union. It is a preference for richer incoming detail when present.
 
-## What Dedup Does Not Do
+## Calendar Read Model
 
-The current dedup logic does not:
+The calendar read model now merges planned and completed workouts for rendering.
 
-- deduplicate planned workouts against completed workouts
-- hide completed activities in the frontend calendar
-- collapse a planned calendar event and a completed activity into one list row on the calendar screen
-- infer a completed-workout match purely from a planned workout existing on the same day
+Relevant path:
 
-Dedup is only about deciding whether two imported completed-workout payloads should map to the same canonical `completed_workouts` row.
+- `src/domain/calendar_view/rebuild.rs`
+- `src/domain/calendar_view/refresh.rs`
 
-## Scenario: Planned Workout Exists, Then Intervals Completed Workout Arrives
+`merge_workout_entries(...)` starts from projected planned-workout entries and then inspects completed workouts grouped by `planned_workout_id`.
 
-This is the current behavior for the specific scenario:
+For each `planned_workout_id`:
 
-1. the app already has a planned workout for a date
-2. later an Intervals completed workout for that date is fetched and imported
+- if exactly one completed workout points to that planned workout and a planned entry exists:
+  - the planned entry gets `completed_workout_id`
+  - the planned entry gets the completed-workout summary payload
+  - the planned entry backfills description from the completed entry if needed
+  - the standalone completed entry is suppressed from the read model
+- otherwise:
+  - the planned entry stays unmerged
+  - the completed workout remains a standalone completed-workout entry in the read model
 
-There are two separate backend read paths involved.
+This means the read model collapses only the simple 1:1 linked case.
 
-### Planned workout path
+## Calendar API Behavior
 
-The planned workout appears in calendar events via the local calendar read model:
+`CalendarService::list_events()` still does not emit standalone completed-workout entries from `calendar_entry_views`.
 
-- canonical `planned_workouts`
-- projected into `calendar_entry_views`
-- returned by `GET /api/calendar/events`
+That filter is still here:
 
-For planned workouts, the frontend treats a `WORKOUT` event with workout structure as a planned workout item.
+- `CalendarEntryKind::CompletedWorkout => return None`
 
-### Completed workout path
+But the API now also loads canonical completed workouts for the requested date range and uses them to enrich planned events.
 
-The completed workout does not appear as a standalone `CalendarEvent` in the current `/api/calendar/events` response.
+When a projected calendar entry has `completed_workout_id`, `map_calendar_entry_to_event(...)` sets:
 
-`CalendarService::list_events()` explicitly skips `CalendarEntryKind::CompletedWorkout` rows.
+- `CalendarEvent.actual_workout`
 
-Instead, completed workouts come from the activities endpoint:
+The `actual_workout.activity_id` is derived from the canonical completed-workout id by stripping the `intervals-activity:` prefix.
 
-- `GET /api/intervals/activities`
+So the current `/api/calendar/events` behavior is:
 
-The frontend calendar loads both sources independently:
+- standalone completed rows are still omitted
+- linked planned rows are returned
+- linked planned rows can now carry `actualWorkout`
+
+## Frontend Calendar Rendering
+
+The frontend still loads three sources independently:
 
 - `listCalendarEvents(...)`
 - `listActivities(...)`
+- `listCalendarLabels(...)`
 
-Then `useCalendarData()` groups them by date and stores them separately as:
+`useCalendarData()` groups them by day into:
 
 - `day.events`
 - `day.activities`
+- `day.labels`
 
-## What The Screen Renders Today
+The key change is in `buildDayItems()`.
 
-For that scenario, the calendar day will usually show two separate items:
+### Planned item behavior
 
-1. a planned workout item from `day.events`
-2. a completed workout item from `day.activities`
+For a planned workout event:
 
-Why:
+- the frontend looks at `event.actualWorkout?.activityId`
+- if that id matches a loaded activity for the day, the planned item carries that activity in `item.activity`
 
-- `buildDayItems()` creates planned items from `day.events`
-- `buildDayItems()` also creates completed items from `day.activities`
-- the completed item is only linked to an event when `event.actualWorkout?.activityId === activity.id`
+So a linked planned row can render as a planned workout with attached actual/completed workout context.
 
-That match comes from enriched Intervals event details, not from the local calendar list response.
+### Completed item suppression
 
-### Important current detail
+For each activity:
 
-The local calendar list endpoint currently returns:
+- the frontend looks for a matching event where `event.actualWorkout?.activityId === activity.id`
+- if that matched event is a planned workout event, the standalone completed day item is skipped
 
-- planned events with `actualWorkout: null`
+This is what collapses the visible day list for the 1:1 linked case.
 
-So range-loaded calendar data does not collapse the planned event and completed activity into one row.
+### Resulting day-list behavior
 
-The planned item and completed item both remain visible on the same date.
+If a planned workout exists and exactly one completed workout links to it:
 
-## What Happens In The Details Modal
+- the day usually shows one planned item
+- that planned item carries the matched completed activity
+- the separate completed item is suppressed
 
-When the user clicks:
+If there is no link, or the backend could not collapse the pair into a 1:1 planned/completed relationship:
 
-- the planned item: the UI opens planned-workout details
-- the completed item: the UI opens completed-workout details
+- the planned item and completed activity can still appear separately
 
-For the completed item, the selection may also carry a matched event if one is present in the loaded day state.
+## Details Modal Behavior
 
-But during ordinary range loading, the frontend deliberately does not hydrate detailed event or activity data. It uses the list payloads only.
+When the user clicks a linked planned row on the calendar:
 
-That means the richer planned-vs-actual combined view depends on loading event detail later, not on the initial weekly calendar payload.
+- `selectDayItemDetail(...)` returns both the planned event and the matched activity
 
-## Why The Screen Looks Like That
+So the details modal can render a combined planned-vs-actual view directly from the list payloads in the linked case.
 
-The current behavior is a result of these choices:
+## Coach Summary Identity
 
-1. planned calendar rows and completed activities are treated as separate read models
-2. completed workouts are intentionally removed from `/api/calendar/events`
-3. the frontend calendar composes `events` and `activities` side-by-side instead of merging them during week loading
-4. a planned/completed relationship is only surfaced when an event carries `actualWorkout.activityId`, which is not populated in the current local calendar list response
+The coach page now treats linked planned/completed pairs as activity-backed items for summary purposes.
 
-So if a planned workout exists and a completed workout later arrives from Intervals, the calendar screen currently shows both because they come from different API sources and are not collapsed together at list-load time.
+Relevant path:
+
+- `frontend/src/features/coach/hooks/useWorkoutList.ts`
+- `src/domain/workout_summary/service/mod.rs`
+- `src/domain/workout_summary/service/use_cases.rs`
+
+Current behavior:
+
+- the coach list matches activities to events using `event.actualWorkout.activityId` first
+- linked rows use `activity.id` as the stable item identity
+- summary batch loading is requested only for completed `activity.id` values
+- single-summary operations validate that the target is a completed workout
+- batch listing filters out non-completed ids instead of failing the whole batch
+
+The practical rule is:
+
+- summary, chat, RPE, save, and recap are only for completed activities
+- planned workout ids and event ids are not valid workout summary targets
+- a linked planned workout is only context for the completed activity, not a separate summary identity
+
+## What Dedup And Linking Do Not Do
+
+The current implementation still does not:
+
+- turn planned workouts and completed workouts into one shared canonical domain entity
+- collapse ambiguous or one-to-many planned/completed relationships into a single rendered row
+- create workout summaries for planned workouts
+- use `planned_completed_links` as the primary source for calendar rendering
+
+Completed-workout dedup still decides only whether multiple completed-workout payloads should reuse the same canonical `completed_workouts` row.
+
+Planned/completed rendering collapse is a separate read-model and UI behavior built on top of `CompletedWorkout.planned_workout_id` plus `actualWorkout` hydration.
 
 ## Short Summary
 
-Current dedup behavior:
+Current completed-workout dedup behavior:
 
 - deduplicates only completed-workout imports against other completed-workout imports
 - uses a fingerprint of start minute, rounded duration, rounded distance, and stream types
 - merges into one canonical completed workout when exactly one match is found
 - fails on ambiguous fingerprint matches
 
-Current rendering behavior for planned-then-completed:
+Current planned/completed linking behavior:
 
-- the planned workout remains visible as a planned calendar item
-- the fetched completed workout appears as a separate completed activity item
-- they are not automatically collapsed into one item in the week/day list
-- this is because the frontend loads `events` and `activities` separately, and `/api/calendar/events` does not currently emit completed workout rows
+- tries marker-based matching first
+- falls back to linking to exactly one same-day planned workout
+- stores the resolved `planned_workout_id` on the canonical completed workout
+- persists a durable `planned_completed_links` row
+
+Current calendar rendering behavior for a 1:1 linked pair:
+
+- the backend projects the planned row with `completed_workout_id`
+- `/api/calendar/events` returns the planned event with `actualWorkout`
+- the frontend renders one planned item with attached completed activity context
+- the standalone completed calendar item is suppressed
+
+Current coach summary behavior:
+
+- the linked pair is summary-targeted only through the completed activity id
+- planned/event ids are not valid summary targets
 
 ## Known Gaps
 
@@ -341,30 +453,26 @@ That means:
 
 If an imported completed workout has sparse or missing detail structures, dedup may not find a key even when the top-level workout fields would have been enough to identify a likely match.
 
-### Dedup only applies to completed-workout imports
+### Same-day fallback links only when there is exactly one planned workout
 
-The current logic does not connect a planned workout and a completed workout into one canonical entity.
+If multiple planned workouts exist on the same day and no marker resolves, the importer leaves `planned_workout_id` unset.
 
-It only decides whether multiple completed-workout imports should reuse the same canonical `completed_workouts` row.
+That avoids guessing, but it also means some legitimate planned/completed pairs will stay unlinked until a marker-based path exists.
 
-### Calendar rendering does not collapse planned and completed rows
+### Calendar collapse only handles the 1:1 linked case
 
-Even when a planned workout and completed activity clearly refer to the same real-world session, the weekly calendar list usually renders both rows separately.
+`merge_workout_entries(...)` only merges when exactly one completed workout points to a planned workout and the planned entry exists.
 
-That happens because:
+If there are multiple completed workouts for the same planned workout, or no planned entry exists in the refreshed range, the list falls back to separate planned and completed representations.
 
-- planned rows come from `/api/calendar/events`
-- completed rows come from `/api/intervals/activities`
-- current range-loaded calendar events do not carry `actualWorkout` matches
+### Standalone completed calendar entries are still filtered out of `/api/calendar/events`
 
-### Detailed planned-vs-actual linking is not available in the list payload
+Completed-workout entries can exist in `calendar_entry_views`, but `CalendarService::list_events()` still does not emit them directly.
 
-The richer link between a planned workout and an actual activity exists in enriched Intervals event detail paths, not in the current local calendar list payload.
+The frontend relies on `/api/intervals/activities` for completed-workout list data.
 
-So the list screen cannot reliably collapse the rows during initial range loading.
+### Planned workouts never own summaries
 
-### Ambiguous dedup matches fail hard
+This is intentional current behavior, not an accident.
 
-If the same dedup key points to more than one canonical completed workout, the importer rejects the incoming workout as ambiguous.
-
-This is safer than a silent wrong merge, but it means the system currently has no automatic tie-break strategy for ambiguous completed-workout matches.
+Workout summaries are only available for completed activities. Linked planned workouts act as context only.

@@ -102,6 +102,14 @@ pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> Ext
         provider: ExternalProvider::Intervals,
         external_id: activity.id.clone(),
         normalized_payload_hash: hash_activity(activity),
+        marker_sources: vec![
+            activity.external_id.clone(),
+            activity.description.clone(),
+            activity.name.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect(),
         workout: CompletedWorkout::new(
             format!("intervals-activity:{}", activity.id),
             user_id.to_string(),

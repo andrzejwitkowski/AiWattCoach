@@ -10,7 +10,7 @@ use crate::domain::{
 };
 
 use super::{
-    project_completed_workout_entry, project_planned_workout_entry, project_race_entry,
+    merge_workout_entries, project_planned_workout_entry, project_race_entry,
     project_special_day_entry, BoxFuture, CalendarEntrySync, CalendarEntryView,
     CalendarEntryViewError, CalendarEntryViewRepository,
 };
@@ -201,7 +201,7 @@ where
                 .map(|state| (state.canonical_entity.clone(), state))
                 .collect::<std::collections::HashMap<_, _>>();
 
-            let mut projected = Vec::with_capacity(planned.len());
+            let mut projected_planned = Vec::with_capacity(planned.len());
             for workout in &planned {
                 let planned_entity = CanonicalEntityRef::new(
                     CanonicalEntityKind::PlannedWorkout,
@@ -216,9 +216,9 @@ where
                         .get(&workout.planned_workout_id)
                         .map(map_planned_sync_record_to_calendar_entry_sync);
                 }
-                projected.push(entry);
+                projected_planned.push(entry);
             }
-            projected.extend(completed.iter().map(project_completed_workout_entry));
+            let mut projected = merge_workout_entries(projected_planned, &completed);
             for race in &races {
                 let sync_state = sync_states
                     .find_by_provider_and_canonical_entity(
