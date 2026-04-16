@@ -176,7 +176,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
         .with_athlete_summary_service(Arc::new(athlete_summary_service.clone()))
         .with_settings_service(settings_service.clone())
         .with_completed_workout_target_service(Arc::new(
-            CompletedWorkoutTargetAdapter::new(intervals_service.clone()),
+            CompletedWorkoutTargetAdapter::new(completed_workout_repository.clone()),
         )),
     );
 

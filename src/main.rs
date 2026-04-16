@@ -61,6 +61,7 @@ use aiwattcoach::{
     domain::calendar::CalendarService,
     domain::calendar_labels::CalendarLabelsService,
     domain::calendar_view::CalendarEntryViewRefreshService,
+    domain::completed_workouts::CompletedWorkoutReadService,
     domain::external_sync::ExternalImportService,
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
@@ -345,10 +346,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_athlete_summary_service(athlete_summary_service.clone())
         .with_settings_service(settings_service.clone())
         .with_completed_workout_target_service(Arc::new(CompletedWorkoutTargetAdapter::new(
-            activity_repository.clone(),
+            completed_workout_repository.clone(),
         )))
         .with_latest_completed_activity_service(Arc::new(
-            LatestCompletedActivityAdapter::new(activity_repository.clone()),
+            LatestCompletedActivityAdapter::new(completed_workout_repository.clone()),
         )),
     );
     let training_plan_service = Arc::new(
@@ -382,6 +383,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         MongoCalendarEntryViewCalendarSource::new(mongo_client.clone(), &mongo_database);
     let calendar_labels_service =
         Arc::new(CalendarLabelsService::new(race_calendar_source.clone()));
+    let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
+        completed_workout_repository.clone(),
+    ));
     let calendar_service = Arc::new(
         CalendarService::new(
             (*intervals_service).clone(),
@@ -392,6 +396,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_planned_workout_tokens(planned_workout_token_repository)
         .with_provider_poll_states(provider_poll_state_repository)
+        .with_completed_workouts(completed_workout_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
     let workout_summary_service = Arc::new(
@@ -419,6 +424,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .with_settings_service(settings_service)
             .with_calendar_service(calendar_service)
             .with_calendar_labels_service(calendar_labels_service)
+            .with_completed_workout_service(completed_workout_service)
             .with_athlete_summary_service(athlete_summary_service)
             .with_llm_services(llm_adapter, llm_config_provider)
             .with_workout_summary_service(workout_summary_service)

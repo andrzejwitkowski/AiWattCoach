@@ -32,6 +32,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1.18.1", features = ["v4"] }
 
 [dev-dependencies]
+cargo_pup_lint_config = "0.1.7"
 opentelemetry_sdk = { version = "0.28", features = ["logs", "rt-tokio", "testing"] }
 tokio-tungstenite = "0.28"
 

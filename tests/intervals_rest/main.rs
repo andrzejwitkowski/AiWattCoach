@@ -5,6 +5,7 @@ mod activities;
 mod app;
 mod calendar_events;
 mod calendar_labels;
+mod completed_workouts;
 mod error_logging;
 mod event_mutations;
 mod event_queries;

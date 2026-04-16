@@ -1,5 +1,6 @@
 mod model;
 mod ports;
+mod service;
 #[cfg(test)]
 mod tests;
 
@@ -9,3 +10,4 @@ pub use model::{
     CompletedWorkoutStream, CompletedWorkoutZoneTime,
 };
 pub use ports::{BoxFuture, CompletedWorkoutRepository};
+pub use service::{CompletedWorkoutReadService, CompletedWorkoutReadUseCases};

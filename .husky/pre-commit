@@ -4,10 +4,11 @@ staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
 
 case "$staged_files" in
   *".rs"*)
-    echo "Rust changes detected; running verify:rust"
+    echo "Rust changes detected; running verify:rust and verify:arch"
     bun run verify:rust
+    bun run verify:arch
     ;;
   *)
-    echo "No staged Rust changes; skipping verify:rust"
+    echo "No staged Rust changes; skipping verify:rust and verify:arch"
     ;;
 esac

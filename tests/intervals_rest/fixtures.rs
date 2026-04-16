@@ -114,10 +114,13 @@ pub(crate) fn sample_completed_workout(
         completed_workout_id: id.to_string(),
         user_id: "user-1".to_string(),
         start_date_local: "2026-03-22T08:00:00".to_string(),
+        source_activity_id: Some(id.to_string()),
         planned_workout_id,
         name: Some("VO2 Session Completed".to_string()),
         description: Some("Strong finish".to_string()),
         activity_type: Some("Ride".to_string()),
+        external_id: Some(format!("external-{id}")),
+        trainer: false,
         duration_seconds: Some(3600),
         distance_meters: Some(40200.0),
         metrics: CompletedWorkoutMetrics {
@@ -155,6 +158,7 @@ pub(crate) fn sample_completed_workout(
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        details_unavailable_reason: None,
     }
 }
 

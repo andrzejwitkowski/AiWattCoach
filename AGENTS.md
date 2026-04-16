@@ -116,6 +116,7 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 
 - Run Rust clippy exactly like CI: `cargo clippy --all-targets --all-features -- -D warnings`
 - Run repo Rust verification shortcut: `bun run verify:rust`
+- Run architecture boundary verification: `bun run verify:arch`
 
 ## Test Commands
 
@@ -135,14 +136,15 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 ## CI / Hook Expectations
 
 - CI runs:
+  - `bun run verify:arch`
   - `cargo fmt -- --check`
   - `cargo clippy --all-targets --all-features -- -D warnings`
   - `cargo test`
   - `bun run --cwd frontend test`
   - `bun run --cwd frontend build`
-- Pre-commit hook runs `bun run verify:rust` when staged Rust files exist.
+- Pre-commit hook runs `bun run verify:rust` and `bun run verify:arch` when staged Rust files exist.
 - Pre-push hook runs `bun run verify:all`.
-- Before finishing meaningful Rust work, run at least `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and the relevant tests.
+- Before finishing meaningful Rust work, run at least `bun run verify:arch`, `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and the relevant tests.
 
 ## Rust Style Guidelines
 
@@ -161,6 +163,8 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 - Use descriptive enum variants like `CredentialsNotConfigured`, `Unauthenticated`, `NotFound`.
 
 ## Import Conventions
+
+- `src/domain/**` must not import `crate::adapters::**`; this is enforced by `cargo_pup`.
 
 - Group imports by std / external crates / crate-local modules.
 - Use nested imports when they improve readability.

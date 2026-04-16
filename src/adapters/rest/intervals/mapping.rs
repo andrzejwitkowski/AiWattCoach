@@ -119,7 +119,7 @@ fn map_matched_interval_to_dto(interval: MatchedWorkoutInterval) -> MatchedWorko
     }
 }
 
-pub(super) fn map_activity_to_dto(activity: Activity) -> ActivityDto {
+pub(crate) fn map_activity_to_dto(activity: Activity) -> ActivityDto {
     ActivityDto {
         id: activity.id,
         start_date_local: activity.start_date_local,

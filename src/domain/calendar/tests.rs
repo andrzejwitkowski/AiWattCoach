@@ -931,7 +931,7 @@ async fn list_events_hydrates_actual_workout_from_linked_completed_workout() {
 
     assert_eq!(events.len(), 1);
     let actual = events[0].actual_workout.as_ref().expect("actual workout");
-    assert_eq!(actual.activity_id, "a41");
+    assert_eq!(actual.activity_id, "intervals-activity:a41");
     assert_eq!(
         actual.activity_name.as_deref(),
         Some("Completed Build Session")
@@ -946,6 +946,69 @@ struct InMemoryCompletedWorkoutRepository {
 }
 
 impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
+    fn find_by_user_id_and_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored.lock().unwrap().iter().find_map(|workout| {
+                (workout.user_id == user_id && workout.completed_workout_id == completed_workout_id)
+                    .then(|| workout.clone())
+            }))
+        })
+    }
+
+    fn find_by_user_id_and_source_activity_id(
+        &self,
+        user_id: &str,
+        source_activity_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let source_activity_id = source_activity_id.to_string();
+        Box::pin(async move {
+            Ok(stored.lock().unwrap().iter().find_map(|workout| {
+                (workout.user_id == user_id
+                    && workout.source_activity_id.as_deref() == Some(source_activity_id.as_str()))
+                .then(|| workout.clone())
+            }))
+        })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, CompletedWorkoutError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let mut workouts = stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| workout.user_id == user_id)
+                .cloned()
+                .collect::<Vec<_>>();
+            workouts.sort_by(|left, right| {
+                right
+                    .start_date_local
+                    .cmp(&left.start_date_local)
+                    .then_with(|| right.completed_workout_id.cmp(&left.completed_workout_id))
+            });
+            Ok(workouts.into_iter().next())
+        })
+    }
+
     fn list_by_user_id(
         &self,
         user_id: &str,
@@ -1012,10 +1075,13 @@ fn sample_completed_workout(completed_workout_id: &str) -> CompletedWorkout {
         completed_workout_id: completed_workout_id.to_string(),
         user_id: "user-1".to_string(),
         start_date_local: "2026-03-26T08:00:00".to_string(),
+        source_activity_id: Some(completed_workout_id.to_string()),
         planned_workout_id: Some("training-plan:user-1:w1:1:2026-03-26".to_string()),
         name: Some("Completed Build Session".to_string()),
         description: Some("Strong day".to_string()),
         activity_type: Some("Ride".to_string()),
+        external_id: Some("external-completed".to_string()),
+        trainer: false,
         duration_seconds: Some(3600),
         distance_meters: Some(35200.0),
         metrics: CompletedWorkoutMetrics {
@@ -1053,6 +1119,7 @@ fn sample_completed_workout(completed_workout_id: &str) -> CompletedWorkout {
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
+        details_unavailable_reason: None,
     }
 }
 

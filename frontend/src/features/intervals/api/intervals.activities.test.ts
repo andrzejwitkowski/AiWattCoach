@@ -174,13 +174,13 @@ describe('intervals api activities', () => {
     expect(uploaded.created).toBe(true);
     expect(loaded.id).toBe('i2');
     expect(updated.name).toBe('Updated Ride');
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/intervals/activities?oldest=2026-03-01&newest=2026-03-31', expect.objectContaining({ method: 'GET', credentials: 'include' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/completed-workouts?oldest=2026-03-01&newest=2026-03-31', expect.objectContaining({ method: 'GET', credentials: 'include' }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/intervals/activities', expect.objectContaining({
       method: 'POST',
       credentials: 'include',
       body: JSON.stringify({ filename: 'ride.fit', fileContentsBase64: 'AQID', name: 'Uploaded Ride' }),
     }));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/intervals/activities/i2', expect.objectContaining({ method: 'GET', credentials: 'include' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/completed-workouts/i2', expect.objectContaining({ method: 'GET', credentials: 'include' }));
     expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/intervals/activities/i2', expect.objectContaining({
       method: 'PUT',
       credentials: 'include',

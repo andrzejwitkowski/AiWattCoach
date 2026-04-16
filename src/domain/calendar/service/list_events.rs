@@ -161,7 +161,10 @@ fn map_calendar_sync_status(value: Option<&str>) -> Option<PlannedWorkoutSyncSta
 
 fn map_completed_workout_to_actual_workout_match(workout: &CompletedWorkout) -> ActualWorkoutMatch {
     ActualWorkoutMatch {
-        activity_id: legacy_activity_id(&workout.completed_workout_id).to_string(),
+        activity_id: workout
+            .source_activity_id
+            .clone()
+            .unwrap_or_else(|| legacy_activity_id(&workout.completed_workout_id).to_string()),
         activity_name: workout.name.clone(),
         start_date_local: workout.start_date_local.clone(),
         power_values: integer_stream_values(&workout.details.streams, &["watts"]),

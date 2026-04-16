@@ -1,5 +1,5 @@
 use crate::domain::{
-    intervals::ActivityRepositoryPort,
+    completed_workouts::CompletedWorkoutRepository,
     workout_summary::{BoxFuture, LatestCompletedActivityUseCases, WorkoutSummaryError},
 };
 
@@ -16,7 +16,7 @@ impl<Repo> LatestCompletedActivityAdapter<Repo> {
 
 impl<Repo> LatestCompletedActivityUseCases for LatestCompletedActivityAdapter<Repo>
 where
-    Repo: ActivityRepositoryPort + Clone + Send + Sync + 'static,
+    Repo: CompletedWorkoutRepository + Clone + Send + Sync + 'static,
 {
     fn latest_completed_activity_id(
         &self,
@@ -28,7 +28,17 @@ where
             repository
                 .find_latest_by_user_id(&user_id)
                 .await
-                .map(|activity| activity.map(|activity| activity.id))
+                .map(|workout| {
+                    workout.map(|workout| {
+                        workout.source_activity_id.unwrap_or_else(|| {
+                            workout
+                                .completed_workout_id
+                                .strip_prefix("intervals-activity:")
+                                .unwrap_or(&workout.completed_workout_id)
+                                .to_string()
+                        })
+                    })
+                })
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))
         })
     }
