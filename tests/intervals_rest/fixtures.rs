@@ -1,5 +1,9 @@
-use aiwattcoach::domain::intervals::{
-    Activity, ActivityDetails, ActivityMetrics, ActivityStream, Event, EventCategory,
+use aiwattcoach::domain::{
+    completed_workouts::{
+        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+        CompletedWorkoutStream,
+    },
+    intervals::{Activity, ActivityDetails, ActivityMetrics, ActivityStream, Event, EventCategory},
 };
 use axum::{
     body::to_bytes,
@@ -91,6 +95,62 @@ pub(crate) fn sample_activity(id: &str, name: &str) -> Activity {
             }],
             interval_groups: Vec::new(),
             streams: Vec::new(),
+            interval_summary: vec!["tempo".to_string()],
+            skyline_chart: Vec::new(),
+            power_zone_times: Vec::new(),
+            heart_rate_zone_times: vec![60, 120],
+            pace_zone_times: Vec::new(),
+            gap_zone_times: Vec::new(),
+        },
+        details_unavailable_reason: None,
+    }
+}
+
+pub(crate) fn sample_completed_workout(
+    id: &str,
+    planned_workout_id: Option<String>,
+) -> CompletedWorkout {
+    CompletedWorkout {
+        completed_workout_id: id.to_string(),
+        user_id: "user-1".to_string(),
+        start_date_local: "2026-03-22T08:00:00".to_string(),
+        source_activity_id: Some(id.to_string()),
+        planned_workout_id,
+        name: Some("VO2 Session Completed".to_string()),
+        description: Some("Strong finish".to_string()),
+        activity_type: Some("Ride".to_string()),
+        external_id: Some(format!("external-{id}")),
+        trainer: false,
+        duration_seconds: Some(3600),
+        distance_meters: Some(40200.0),
+        metrics: CompletedWorkoutMetrics {
+            training_stress_score: Some(72),
+            normalized_power_watts: Some(238),
+            intensity_factor: Some(0.84),
+            efficiency_factor: None,
+            variability_index: None,
+            average_power_watts: Some(228),
+            ftp_watts: Some(283),
+            total_work_joules: None,
+            calories: None,
+            trimp: None,
+            power_load: None,
+            heart_rate_load: None,
+            pace_load: None,
+            strain_score: None,
+        },
+        details: CompletedWorkoutDetails {
+            intervals: Vec::new(),
+            interval_groups: Vec::new(),
+            streams: vec![CompletedWorkoutStream {
+                stream_type: "watts".to_string(),
+                name: Some("Power".to_string()),
+                primary_series: Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310])),
+                secondary_series: None,
+                value_type_is_array: false,
+                custom: false,
+                all_null: false,
+            }],
             interval_summary: vec!["tempo".to_string()],
             skyline_chart: Vec::new(),
             power_zone_times: Vec::new(),

@@ -96,10 +96,11 @@ graphify hook install
 Then regenerate or query from the repo root:
 
 ```bash
-graphify . --no-viz --update
+./scripts/rebuild_graphify.sh
 graphify query "show the calendar and races flow"
-graphify explain "CalendarService"
 ```
+
+`./scripts/rebuild_graphify.sh` prefers `GRAPHIFY_PYTHON`, then a valid executable path from `graphify-out/.graphify_python`, and finally the default `pipx` venv at `~/.local/pipx/venvs/graphifyy/bin/python`.
 
 `.graphifyignore` excludes generated outputs and build directories so the graph does not index its own artifacts.
 
@@ -113,6 +114,7 @@ The app shell shows backend connectivity state and exposes a dedicated settings/
 ## CI
 
 GitHub Actions runs:
+- `bun run verify:arch`
 - `cargo fmt -- --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test`
@@ -127,13 +129,17 @@ For local end-to-end verification, run:
 ```bash
 bun install
 bun install --cwd frontend
+rustup toolchain install nightly-2026-01-22
+rustup component add --toolchain nightly-2026-01-22 rust-src rustc-dev llvm-tools-preview
+cargo +nightly-2026-01-22 install cargo_pup --version 0.1.7 --locked
+bun run verify:arch
 bun run verify:rust
 bun run test:all
 ```
 
 Git hooks enforce part of this automatically:
 
-- `pre-commit` runs `bun run verify:rust` when staged Rust files are present
+- `pre-commit` runs `bun run verify:rust` and `bun run verify:arch` when staged Rust files are present
 - `pre-push` runs `bun run verify:all`
 
 ## Releases

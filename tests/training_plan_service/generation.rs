@@ -1,4 +1,7 @@
 use super::support::*;
+use aiwattcoach::domain::calendar_view::{
+    CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRefreshPort,
+};
 
 #[tokio::test]
 async fn generates_snapshot_and_projected_days_for_saved_workout() {
@@ -42,11 +45,10 @@ async fn generates_snapshot_and_projected_days_for_saved_workout() {
             .count(),
         13
     );
-    assert!(!projected_days.stored_days().iter().any(|day| {
-        day.date == FIRST_DAY
-            && day.superseded_at_epoch_seconds.is_none()
-            && day.date.as_str() > FIRST_DAY
-    }));
+    assert!(!result
+        .active_projected_days
+        .iter()
+        .any(|day| day.date == FIRST_DAY));
 
     let operation = operations.stored_operation();
     assert_eq!(operation.status, WorkflowStatus::Completed);
@@ -262,4 +264,134 @@ async fn successful_generation_records_real_workflow_attempts() {
             WorkflowPhase::ProjectionUpdate,
         ]
     );
+}
+
+#[tokio::test]
+async fn generation_refreshes_calendar_view_for_generated_window() {
+    let call_log = new_call_log();
+    let snapshots = InMemoryTrainingPlanSnapshotRepository::new();
+    let projected_days =
+        InMemoryTrainingPlanProjectedDayRepository::new(snapshots.snapshots.clone());
+    let operations = InMemoryTrainingPlanOperationRepository::new(call_log.clone());
+    let workout_summary = StubWorkoutSummaryPort::new(call_log.clone());
+    let generator = StubTrainingPlanGenerator::new(
+        call_log,
+        vec![Ok(workout_recap())],
+        vec![Ok(valid_plan_window(FIRST_DAY))],
+        vec![],
+    );
+    let refresh = RecordingCalendarRefresh::default();
+    let service = TrainingPlanGenerationService::new(
+        snapshots,
+        projected_days,
+        operations,
+        generator,
+        workout_summary,
+        FixedClock {
+            now_epoch_seconds: date_epoch(FIRST_DAY),
+        },
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            USER_ID.to_string(),
+            FIRST_DAY.to_string(),
+            "2026-04-19".to_string(),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn generation_fails_when_refresh_fails_after_projection_persistence() {
+    let call_log = new_call_log();
+    let snapshots = InMemoryTrainingPlanSnapshotRepository::new();
+    let projected_days =
+        InMemoryTrainingPlanProjectedDayRepository::new(snapshots.snapshots.clone());
+    let operations = InMemoryTrainingPlanOperationRepository::new(call_log.clone());
+    let workout_summary = StubWorkoutSummaryPort::new(call_log.clone());
+    let generator = StubTrainingPlanGenerator::new(
+        call_log,
+        vec![Ok(workout_recap())],
+        vec![Ok(valid_plan_window(FIRST_DAY))],
+        vec![],
+    );
+    let service = TrainingPlanGenerationService::new(
+        snapshots,
+        projected_days,
+        operations,
+        generator,
+        workout_summary,
+        FixedClock {
+            now_epoch_seconds: date_epoch(FIRST_DAY),
+        },
+    )
+    .with_calendar_view_refresh(FailingCalendarRefresh);
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        result,
+        TrainingPlanError::Repository("refresh unavailable".to_string())
+    );
+}
+
+#[derive(Clone, Default)]
+struct RecordingCalendarRefresh {
+    calls: std::sync::Arc<std::sync::Mutex<Vec<(String, String, String)>>>,
+}
+
+impl RecordingCalendarRefresh {
+    fn calls(&self) -> Vec<(String, String, String)> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
+    fn refresh_range_for_user(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> aiwattcoach::domain::calendar_view::BoxFuture<
+        Result<Vec<CalendarEntryView>, CalendarEntryViewError>,
+    > {
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            calls.lock().unwrap().push((user_id, oldest, newest));
+            Ok(Vec::new())
+        })
+    }
+}
+
+#[derive(Clone)]
+struct FailingCalendarRefresh;
+
+impl CalendarEntryViewRefreshPort for FailingCalendarRefresh {
+    fn refresh_range_for_user(
+        &self,
+        _user_id: &str,
+        _oldest: &str,
+        _newest: &str,
+    ) -> aiwattcoach::domain::calendar_view::BoxFuture<
+        Result<Vec<CalendarEntryView>, CalendarEntryViewError>,
+    > {
+        Box::pin(async {
+            Err(CalendarEntryViewError::Repository(
+                "refresh unavailable".to_string(),
+            ))
+        })
+    }
 }

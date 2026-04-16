@@ -5,6 +5,7 @@ use mongodb::Client;
 use crate::domain::athlete_summary::AthleteSummaryUseCases;
 use crate::domain::calendar::CalendarUseCases;
 use crate::domain::calendar_labels::CalendarLabelsUseCases;
+use crate::domain::completed_workouts::CompletedWorkoutReadUseCases;
 use crate::domain::identity::IdentityUseCases;
 use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
@@ -21,6 +22,7 @@ pub struct AppState {
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub calendar_service: Option<Arc<dyn CalendarUseCases>>,
     pub calendar_labels_service: Option<Arc<dyn CalendarLabelsUseCases>>,
+    pub completed_workout_service: Option<Arc<dyn CompletedWorkoutReadUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub race_service: Option<Arc<dyn RaceUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
@@ -49,6 +51,7 @@ impl AppState {
             identity_service: None,
             calendar_service: None,
             calendar_labels_service: None,
+            completed_workout_service: None,
             intervals_service: None,
             race_service: None,
             settings_service: None,
@@ -98,6 +101,14 @@ impl AppState {
         calendar_labels_service: Arc<dyn CalendarLabelsUseCases>,
     ) -> Self {
         self.calendar_labels_service = Some(calendar_labels_service);
+        self
+    }
+
+    pub fn with_completed_workout_service(
+        mut self,
+        completed_workout_service: Arc<dyn CompletedWorkoutReadUseCases>,
+    ) -> Self {
+        self.completed_workout_service = Some(completed_workout_service);
         self
     }
 

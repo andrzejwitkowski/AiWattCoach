@@ -5,8 +5,7 @@ mod service;
 mod tests;
 
 pub use model::{
-    CreateRace, Race, RaceDiscipline, RaceError, RacePriority, RaceResult, RaceSyncStatus,
-    UpdateRace,
+    CreateRace, Race, RaceDiscipline, RaceError, RacePriority, RaceResult, UpdateRace,
 };
 pub use ports::{BoxFuture, RaceRepository, RaceUseCases};
 pub use service::RaceService;

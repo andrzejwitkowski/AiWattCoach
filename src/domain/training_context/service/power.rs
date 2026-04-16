@@ -1,4 +1,4 @@
-use crate::domain::intervals::{Activity, ActivityStream};
+use crate::domain::intervals::ActivityStream;
 
 use super::{MAX_CHUNKS_PER_WORKOUT, STREAM_BUCKET_SIZE};
 
@@ -212,10 +212,6 @@ fn format_encoded_runs(runs: Vec<EncodedPowerRun>) -> Vec<String> {
     runs.into_iter()
         .map(|run| format!("{}:{}", run.level, run.duration_seconds))
         .collect()
-}
-
-pub(super) fn activity_has_required_detail(activity: &Activity) -> bool {
-    !activity.details.streams.is_empty()
 }
 
 fn extract_numeric_values(value: &serde_json::Value) -> Vec<i32> {

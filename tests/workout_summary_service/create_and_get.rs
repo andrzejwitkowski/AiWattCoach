@@ -1,13 +1,16 @@
 use aiwattcoach::domain::workout_summary::{
-    WorkoutRecap, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryUseCases,
+    WorkoutRecap, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
+    WorkoutSummaryUseCases,
 };
 use std::sync::{Arc, Mutex};
 
 use crate::shared::{
     existing_summary, existing_summary_with_finished_conversation, test_service,
     test_service_with_settings, test_service_with_training_plan,
-    test_service_with_training_plan_and_latest_activity, InMemoryWorkoutSummaryRepository,
-    PersistCheckingTrainingPlanService, RecordingLatestCompletedActivityService,
+    test_service_with_training_plan_and_latest_activity,
+    test_service_with_training_plan_latest_activity_and_completed_target,
+    InMemoryWorkoutSummaryRepository, PersistCheckingTrainingPlanService,
+    RecordingCompletedWorkoutTargetService, RecordingLatestCompletedActivityService,
     RecordingTrainingPlanService, RefreshingTrainingPlanService, TestAvailabilitySettingsService,
 };
 
@@ -303,6 +306,73 @@ async fn mark_saved_generates_recap_and_plan_for_latest_completed_activity() {
         vec![
             "generate_recap_for_saved_workout:user-1:workout-1:1700000000".to_string(),
             "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_rejects_planned_workout_targets() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(
+        existing_summary_with_finished_conversation(),
+    );
+    let training_plan = RecordingTrainingPlanService::default();
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let completed_target = RecordingCompletedWorkoutTargetService::allowing(&["activity-1"]);
+    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+        repository.clone(),
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity.clone()),
+        std::sync::Arc::new(completed_target.clone()),
+    );
+
+    let error = service.mark_saved("user-1", "workout-1").await.unwrap_err();
+
+    assert_eq!(
+        error,
+        WorkoutSummaryError::Validation(
+            "workout summary is only available for completed workouts".to_string()
+        )
+    );
+    assert!(repository.calls().is_empty());
+    assert!(training_plan.calls().is_empty());
+    assert!(latest_activity.calls().is_empty());
+    assert_eq!(
+        completed_target.calls(),
+        vec!["is_completed_workout_target:user-1:workout-1".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn list_summaries_ignores_non_completed_workout_targets() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    repository.overwrite_summary(aiwattcoach::domain::workout_summary::WorkoutSummary {
+        workout_id: "activity-1".to_string(),
+        ..existing_summary()
+    });
+    let completed_target = RecordingCompletedWorkoutTargetService::allowing(&["activity-1"]);
+    let service = WorkoutSummaryService::new(
+        repository,
+        crate::shared::InMemoryCoachReplyOperationRepository::default(),
+        crate::shared::TestClock,
+        crate::shared::TestIdGenerator::default(),
+    )
+    .with_completed_workout_target_service(std::sync::Arc::new(completed_target.clone()));
+
+    let summaries = service
+        .list_summaries(
+            "user-1",
+            vec!["workout-1".to_string(), "activity-1".to_string()],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].workout_id, "activity-1");
+    assert_eq!(
+        completed_target.calls(),
+        vec![
+            "is_completed_workout_target:user-1:workout-1".to_string(),
+            "is_completed_workout_target:user-1:activity-1".to_string(),
         ]
     );
 }

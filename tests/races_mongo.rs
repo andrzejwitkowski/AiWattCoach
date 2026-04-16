@@ -4,11 +4,21 @@ use std::{
 };
 
 use aiwattcoach::{
-    adapters::mongo::races::MongoRaceRepository,
+    adapters::mongo::{
+        calendar_entry_view_calendar::MongoCalendarEntryViewCalendarSource,
+        calendar_entry_views::MongoCalendarEntryViewRepository,
+        external_sync_states::MongoExternalSyncStateRepository, races::MongoRaceRepository,
+    },
     domain::{
+        calendar::HiddenCalendarEventSource,
         calendar_labels::CalendarLabelSource,
+        calendar_view::{project_race_entry, CalendarEntryViewRepository},
+        external_sync::{
+            CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState,
+            ExternalSyncStateRepository,
+        },
         intervals::DateRange,
-        races::{Race, RaceDiscipline, RacePriority, RaceRepository, RaceSyncStatus},
+        races::{Race, RaceDiscipline, RacePriority, RaceRepository},
     },
     Settings,
 };
@@ -26,11 +36,11 @@ async fn race_repository_round_trips_race_and_lists_by_date_range() {
     repository.ensure_indexes().await.unwrap();
 
     repository
-        .upsert(sample_race("race-1", "2026-09-12", Some(44)))
+        .upsert(sample_race("race-1", "2026-09-12"))
         .await
         .unwrap();
     repository
-        .upsert(sample_race("race-2", "2026-10-01", None))
+        .upsert(sample_race("race-2", "2026-10-01"))
         .await
         .unwrap();
 
@@ -40,7 +50,6 @@ async fn race_repository_round_trips_race_and_lists_by_date_range() {
         .unwrap()
         .expect("expected race");
     assert_eq!(found.name, "Gravel Attack");
-    assert_eq!(found.linked_intervals_event_id, Some(44));
 
     let listed = repository
         .list_by_user_id_and_range(
@@ -85,36 +94,36 @@ async fn race_repository_creates_expected_indexes() {
             == Some("races_user_race_unique")
             && index.keys == doc! { "user_id": 1, "race_id": 1 }
     }));
-    assert!(indexes.iter().any(|index| {
-        index
-            .options
-            .as_ref()
-            .and_then(|options| options.name.as_deref())
-            == Some("races_user_linked_intervals_event")
-            && index.keys == doc! { "user_id": 1, "linked_intervals_event_id": 1 }
-    }));
-
     fixture.cleanup().await;
 }
 
 #[tokio::test]
-async fn race_repository_exposes_races_as_calendar_labels_and_hidden_event_ids() {
+async fn calendar_entry_view_calendar_source_reads_race_labels_from_persisted_view() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
     };
     let repository = MongoRaceRepository::new(fixture.client.clone(), &fixture.database);
+    let view_repository =
+        MongoCalendarEntryViewRepository::new(fixture.client.clone(), &fixture.database);
+    let calendar_source =
+        MongoCalendarEntryViewCalendarSource::new(fixture.client.clone(), &fixture.database);
     repository.ensure_indexes().await.unwrap();
+    view_repository.ensure_indexes().await.unwrap();
 
-    repository
-        .upsert(sample_race("race-1", "2026-09-12", Some(44)))
+    let race_1 = sample_race("race-1", "2026-09-12");
+    let race_2 = sample_race("race-2", "2026-09-13");
+    repository.upsert(race_1.clone()).await.unwrap();
+    repository.upsert(race_2.clone()).await.unwrap();
+    view_repository
+        .upsert(project_race_entry(&race_1, None))
         .await
         .unwrap();
-    repository
-        .upsert(sample_race("race-2", "2026-09-13", None))
+    view_repository
+        .upsert(project_race_entry(&race_2, None))
         .await
         .unwrap();
 
-    let labels = repository
+    let labels = calendar_source
         .list_labels(
             "user-1",
             &DateRange {
@@ -128,9 +137,62 @@ async fn race_repository_exposes_races_as_calendar_labels_and_hidden_event_ids()
     assert_eq!(labels[0].label_key, "race:race-1");
     assert_eq!(labels[0].title, "Race Gravel Attack");
 
-    let hidden_event_ids =
-        aiwattcoach::domain::calendar::HiddenCalendarEventSource::list_hidden_intervals_event_ids(
-            &repository,
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn race_calendar_hides_only_intervals_events_linked_to_races_in_requested_range() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoRaceRepository::new(fixture.client.clone(), &fixture.database);
+    let sync_repository =
+        MongoExternalSyncStateRepository::new(fixture.client.clone(), &fixture.database);
+    let view_repository =
+        MongoCalendarEntryViewRepository::new(fixture.client.clone(), &fixture.database);
+    let calendar_source =
+        MongoCalendarEntryViewCalendarSource::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+    sync_repository.ensure_indexes().await.unwrap();
+    view_repository.ensure_indexes().await.unwrap();
+
+    let race_1 = sample_race("race-1", "2026-09-12");
+    let race_2 = sample_race("race-2", "2026-10-12");
+    repository.upsert(race_1.clone()).await.unwrap();
+    repository.upsert(race_2.clone()).await.unwrap();
+    let sync_1 = sync_repository
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+            )
+            .mark_synced("41".to_string(), "hash-1".to_string(), 1_700_000_000),
+        )
+        .await
+        .unwrap();
+    let sync_2 = sync_repository
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-2".to_string()),
+            )
+            .mark_synced("99".to_string(), "hash-2".to_string(), 1_700_000_100),
+        )
+        .await
+        .unwrap();
+    view_repository
+        .upsert(project_race_entry(&race_1, Some(&sync_1)))
+        .await
+        .unwrap();
+    view_repository
+        .upsert(project_race_entry(&race_2, Some(&sync_2)))
+        .await
+        .unwrap();
+
+    let hidden_ids = calendar_source
+        .list_hidden_intervals_event_ids(
             "user-1",
             &DateRange {
                 oldest: "2026-09-01".to_string(),
@@ -139,7 +201,8 @@ async fn race_repository_exposes_races_as_calendar_labels_and_hidden_event_ids()
         )
         .await
         .unwrap();
-    assert_eq!(hidden_event_ids, vec![44]);
+
+    assert_eq!(hidden_ids, vec![41]);
 
     fixture.cleanup().await;
 }
@@ -192,7 +255,7 @@ impl MongoFixture {
     }
 }
 
-fn sample_race(race_id: &str, date: &str, linked_intervals_event_id: Option<i64>) -> Race {
+fn sample_race(race_id: &str, date: &str) -> Race {
     Race {
         race_id: race_id.to_string(),
         user_id: "user-1".to_string(),
@@ -201,13 +264,8 @@ fn sample_race(race_id: &str, date: &str, linked_intervals_event_id: Option<i64>
         distance_meters: 120_000,
         discipline: RaceDiscipline::Gravel,
         priority: RacePriority::B,
-        linked_intervals_event_id,
-        sync_status: RaceSyncStatus::Synced,
-        synced_payload_hash: Some("hash".to_string()),
-        last_error: None,
         result: None,
         created_at_epoch_seconds: 1,
         updated_at_epoch_seconds: 2,
-        last_synced_at_epoch_seconds: Some(2),
     }
 }

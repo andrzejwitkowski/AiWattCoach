@@ -4,14 +4,28 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate};
-use futures::{stream, StreamExt};
 
 use crate::domain::{
+    completed_workouts::{
+        BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutError,
+        CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutSeries,
+    },
     identity::Clock,
-    intervals::{Activity, DateRange, Event, IntervalsUseCases},
+    intervals::{
+        Activity, ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
+        ActivityStream, ActivityZoneTime, DateRange, Event, EventCategory,
+    },
     llm::LlmError,
+    planned_workouts::{
+        BoxFuture as PlannedWorkoutBoxFuture, PlannedWorkout, PlannedWorkoutError,
+        PlannedWorkoutRepository,
+    },
     races::RaceRepository,
     settings::UserSettingsUseCases,
+    special_days::{
+        BoxFuture as SpecialDayBoxFuture, SpecialDay, SpecialDayError, SpecialDayKind,
+        SpecialDayRepository,
+    },
     training_context::{model::*, packing::render_training_context},
     training_plan::TrainingPlanProjectionRepository,
     workout_summary::WorkoutSummaryRepository,
@@ -31,9 +45,8 @@ use context::{
     projected_interval_blocks, projected_raw_workout_doc, projected_workout_name,
     RecentWorkoutSummaryLookup,
 };
-use dates::{activity_date, epoch_seconds_to_date, event_date, intervals_status_message};
+use dates::{activity_date, epoch_seconds_to_date, event_date};
 use history::build_recent_interval_blocks_by_activity_id;
-use power::activity_has_required_detail;
 
 pub trait TrainingContextBuilder: Send + Sync {
     fn build(
@@ -48,10 +61,114 @@ pub trait TrainingContextBuilder: Send + Sync {
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
 }
 
-const MAX_RECENT_ACTIVITY_FETCHES: usize = 4;
 const STREAM_BUCKET_SIZE: usize = 5;
 const MAX_CHUNKS_PER_WORKOUT: usize = 48;
 const STABLE_FUTURE_EVENT_DAYS: i64 = 120;
+
+trait CompletedWorkoutReadPort: Send + Sync {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>>;
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>>;
+}
+
+impl<Repository> CompletedWorkoutReadPort for Repository
+where
+    Repository: CompletedWorkoutRepository,
+{
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>> {
+        CompletedWorkoutRepository::list_by_user_id(self, user_id)
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> CompletedWorkoutBoxFuture<Result<Vec<CompletedWorkout>, CompletedWorkoutError>> {
+        CompletedWorkoutRepository::list_by_user_id_and_date_range(self, user_id, oldest, newest)
+    }
+}
+
+trait PlannedWorkoutReadPort: Send + Sync {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> PlannedWorkoutBoxFuture<Result<Vec<PlannedWorkout>, PlannedWorkoutError>>;
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> PlannedWorkoutBoxFuture<Result<Vec<PlannedWorkout>, PlannedWorkoutError>>;
+}
+
+impl<Repository> PlannedWorkoutReadPort for Repository
+where
+    Repository: PlannedWorkoutRepository,
+{
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> PlannedWorkoutBoxFuture<Result<Vec<PlannedWorkout>, PlannedWorkoutError>> {
+        PlannedWorkoutRepository::list_by_user_id(self, user_id)
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> PlannedWorkoutBoxFuture<Result<Vec<PlannedWorkout>, PlannedWorkoutError>> {
+        PlannedWorkoutRepository::list_by_user_id_and_date_range(self, user_id, oldest, newest)
+    }
+}
+
+trait SpecialDayReadPort: Send + Sync {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> SpecialDayBoxFuture<Result<Vec<SpecialDay>, SpecialDayError>>;
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> SpecialDayBoxFuture<Result<Vec<SpecialDay>, SpecialDayError>>;
+}
+
+impl<Repository> SpecialDayReadPort for Repository
+where
+    Repository: SpecialDayRepository,
+{
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> SpecialDayBoxFuture<Result<Vec<SpecialDay>, SpecialDayError>> {
+        SpecialDayRepository::list_by_user_id(self, user_id)
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> SpecialDayBoxFuture<Result<Vec<SpecialDay>, SpecialDayError>> {
+        SpecialDayRepository::list_by_user_id_and_date_range(self, user_id, oldest, newest)
+    }
+}
 
 #[derive(Clone)]
 pub struct DefaultTrainingContextBuilder<Time>
@@ -59,8 +176,10 @@ where
     Time: Clock,
 {
     settings_service: Arc<dyn UserSettingsUseCases>,
-    intervals_service: Arc<dyn IntervalsUseCases>,
     workout_summary_repository: Arc<dyn WorkoutSummaryRepository>,
+    completed_workout_repository: Option<Arc<dyn CompletedWorkoutReadPort>>,
+    planned_workout_repository: Option<Arc<dyn PlannedWorkoutReadPort>>,
+    special_day_repository: Option<Arc<dyn SpecialDayReadPort>>,
     race_repository: Option<Arc<dyn RaceRepository>>,
     training_plan_projection_repository: Option<Arc<dyn TrainingPlanProjectionRepository>>,
     clock: Time,
@@ -72,18 +191,43 @@ where
 {
     pub fn new(
         settings_service: Arc<dyn UserSettingsUseCases>,
-        intervals_service: Arc<dyn IntervalsUseCases>,
         workout_summary_repository: Arc<dyn WorkoutSummaryRepository>,
         clock: Time,
     ) -> Self {
         Self {
             settings_service,
-            intervals_service,
             workout_summary_repository,
+            completed_workout_repository: None,
+            planned_workout_repository: None,
+            special_day_repository: None,
             race_repository: None,
             training_plan_projection_repository: None,
             clock,
         }
+    }
+
+    pub fn with_completed_workout_repository<Repository>(mut self, repository: Repository) -> Self
+    where
+        Repository: CompletedWorkoutRepository,
+    {
+        self.completed_workout_repository = Some(Arc::new(repository));
+        self
+    }
+
+    pub fn with_planned_workout_repository<Repository>(mut self, repository: Repository) -> Self
+    where
+        Repository: PlannedWorkoutRepository,
+    {
+        self.planned_workout_repository = Some(Arc::new(repository));
+        self
+    }
+
+    pub fn with_special_day_repository<Repository>(mut self, repository: Repository) -> Self
+    where
+        Repository: SpecialDayRepository,
+    {
+        self.special_day_repository = Some(Arc::new(repository));
+        self
     }
 
     pub fn with_race_repository(mut self, race_repository: Arc<dyn RaceRepository>) -> Self {
@@ -166,50 +310,51 @@ where
             newest: stable_future_events_end.format("%Y-%m-%d").to_string(),
         };
 
-        let history_activities_result = self
-            .intervals_service
-            .list_activities(user_id, &activities_range)
-            .await;
-        let events_result = self
-            .intervals_service
-            .list_events(user_id, &events_range)
-            .await;
-        let stable_future_events_result = self
-            .intervals_service
-            .list_events(user_id, &stable_future_events_range)
-            .await;
+        let (history_completed_workouts, activities_status) = match self
+            .list_completed_workouts(user_id, &activities_range.oldest, &activities_range.newest)
+            .await
+        {
+            Ok(workouts) => (workouts, "ok".to_string()),
+            Err(_) => (Vec::new(), "internal_error".to_string()),
+        };
+        let history_activities = history_completed_workouts
+            .iter()
+            .map(map_completed_workout_to_activity)
+            .collect::<Vec<_>>();
 
-        let (history_activities, activities_status) = match history_activities_result {
-            Ok(activities) => (activities, "ok".to_string()),
-            Err(error) => (Vec::new(), intervals_status_message(&error)),
-        };
-        let (events, short_range_events_status) = match events_result {
-            Ok(events) => (events, None),
-            Err(error) => (Vec::new(), Some(intervals_status_message(&error))),
-        };
-        let (stable_future_events, stable_range_events_status) = match stable_future_events_result {
-            Ok(events) => (
-                events
-                    .into_iter()
-                    .filter(|event| {
-                        let date = event_date(event);
-                        date > focus_date && date <= stable_future_events_end
-                    })
-                    .collect::<Vec<_>>(),
-                None,
-            ),
-            Err(error) => (Vec::new(), Some(intervals_status_message(&error))),
-        };
-        let events_status = match (short_range_events_status, stable_range_events_status) {
-            (None, None) => "ok".to_string(),
-            (Some(status), None) | (None, Some(status)) => status,
-            (Some(short_status), Some(stable_status)) if short_status == stable_status => {
-                short_status
+        let (planned_workouts, special_days, events_status) = match self
+            .load_event_sources(
+                user_id,
+                &events_range.oldest,
+                &stable_future_events_range.newest,
+            )
+            .await
+        {
+            Ok((planned_workouts, special_days)) => {
+                (planned_workouts, special_days, "ok".to_string())
             }
-            (Some(short_status), Some(stable_status)) => {
-                format!("short_range={short_status}; stable_range={stable_status}")
-            }
+            Err(_) => (Vec::new(), Vec::new(), "internal_error".to_string()),
         };
+        let planned_events_by_id = planned_workouts
+            .iter()
+            .map(|workout| {
+                (
+                    workout.planned_workout_id.clone(),
+                    map_planned_workout_to_event(workout),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let direct_event_matches =
+            build_direct_event_matches(&history_completed_workouts, &planned_events_by_id);
+        let all_events = build_local_events(&planned_workouts, &special_days);
+        let stable_future_events = all_events
+            .iter()
+            .filter(|event| {
+                let date = event_date(event);
+                date > focus_date && date <= stable_future_events_end
+            })
+            .cloned()
+            .collect::<Vec<_>>();
         let configured_ftp = settings
             .cycling
             .ftp_watts
@@ -223,18 +368,17 @@ where
             .map(|activity| activity.id.clone())
             .collect::<Vec<_>>();
 
-        let detailed_recent_activities = self
-            .load_detailed_recent_activities(user_id, &history_activities, recent_start, focus_date)
-            .await;
+        let detailed_recent_activities =
+            self.load_detailed_recent_activities(&history_activities, recent_start, focus_date);
         let historical_activity_ids = history_activities
             .iter()
             .map(|activity| activity.id.clone())
             .collect::<Vec<_>>();
         let summaries_by_id = self
-            .load_rpe_by_workout_id(user_id, &recent_activity_ids, &events)
+            .load_rpe_by_workout_id(user_id, &recent_activity_ids, &all_events)
             .await;
         let workout_recaps_by_id = self
-            .load_workout_recaps_by_workout_id(user_id, &historical_activity_ids, &events)
+            .load_workout_recaps_by_workout_id(user_id, &historical_activity_ids, &all_events)
             .await;
         let projected_days = self.load_projected_day_contexts(user_id, focus_date).await;
         let races = self.load_race_contexts(user_id).await;
@@ -246,12 +390,12 @@ where
             .map(|activity| (activity.id.clone(), activity))
             .collect::<HashMap<_, _>>();
 
-        let recent_events = events
+        let recent_events = all_events
             .iter()
             .filter(|event| event_date(event) >= recent_start && event_date(event) <= focus_date)
             .cloned()
             .collect::<Vec<_>>();
-        let upcoming_events = events
+        let upcoming_events = all_events
             .iter()
             .filter(|event| event_date(event) > focus_date && event_date(event) <= upcoming_end)
             .cloned()
@@ -259,6 +403,7 @@ where
         let matched_recent_workouts = build_event_activity_matches(
             &recent_events,
             &detailed_recent_activities,
+            &direct_event_matches,
             configured_ftp,
         );
         let recent_interval_blocks_by_activity_id = build_recent_interval_blocks_by_activity_id(
@@ -351,38 +496,17 @@ where
         Ok(TrainingContextBuildResult { context, rendered })
     }
 
-    async fn load_detailed_recent_activities(
+    fn load_detailed_recent_activities(
         &self,
-        user_id: &str,
         activities: &[Activity],
         start: NaiveDate,
         end: NaiveDate,
     ) -> Vec<Activity> {
-        let recent = activities
+        activities
             .iter()
             .filter(|activity| activity_date(activity) >= start && activity_date(activity) <= end)
             .cloned()
-            .collect::<Vec<_>>();
-
-        stream::iter(recent)
-            .map(|activity| async move {
-                if activity_has_required_detail(&activity) {
-                    return activity;
-                }
-
-                let fallback = activity.clone();
-                match self
-                    .intervals_service
-                    .get_activity(user_id, &activity.id)
-                    .await
-                {
-                    Ok(detailed) => detailed,
-                    Err(_) => fallback,
-                }
-            })
-            .buffer_unordered(MAX_RECENT_ACTIVITY_FETCHES)
             .collect()
-            .await
     }
 
     async fn load_rpe_by_workout_id(
@@ -520,19 +644,450 @@ where
             return None;
         }
 
-        if let Ok(activity) = self
-            .intervals_service
-            .get_activity(user_id, workout_id)
-            .await
-        {
-            return Some(activity_date(&activity));
+        if let Some(repository) = &self.completed_workout_repository {
+            if let Ok(workouts) = repository.list_by_user_id(user_id).await {
+                if let Some(workout) = workouts.into_iter().find(|workout| {
+                    workout.completed_workout_id == workout_id
+                        || legacy_activity_id(&workout.completed_workout_id) == workout_id
+                }) {
+                    return Some(dates::parse_date(date_key(&workout.start_date_local)));
+                }
+            }
         }
 
-        let event_id = workout_id.parse::<i64>().ok()?;
-        self.intervals_service
-            .get_event(user_id, event_id)
+        if let Some(repository) = &self.planned_workout_repository {
+            if let Ok(workouts) = repository.list_by_user_id(user_id).await {
+                if let Some(workout) = workouts
+                    .into_iter()
+                    .find(|workout| planned_workout_matches_identity(workout, workout_id))
+                {
+                    return Some(dates::parse_date(&workout.date));
+                }
+            }
+        }
+
+        if let Some(repository) = &self.special_day_repository {
+            if let Ok(days) = repository.list_by_user_id(user_id).await {
+                if let Some(day) = days
+                    .into_iter()
+                    .find(|day| special_day_matches_identity(day, workout_id))
+                {
+                    return Some(dates::parse_date(&day.date));
+                }
+            }
+        }
+
+        let repository = self.training_plan_projection_repository.as_ref()?;
+        repository
+            .list_active_by_user_id(user_id)
             .await
-            .ok()
-            .map(|event| event_date(&event))
+            .ok()?
+            .into_iter()
+            .find(|day| {
+                day.workout_id == workout_id
+                    || format!("{}:{}", day.operation_key, day.date) == workout_id
+            })
+            .map(|day| dates::parse_date(&day.date))
     }
+
+    async fn list_completed_workouts(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> Result<Vec<CompletedWorkout>, CompletedWorkoutError> {
+        let Some(repository) = &self.completed_workout_repository else {
+            return Ok(Vec::new());
+        };
+
+        repository
+            .list_by_user_id_and_date_range(user_id, oldest, newest)
+            .await
+    }
+
+    async fn load_event_sources(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> Result<(Vec<PlannedWorkout>, Vec<SpecialDay>), LlmError> {
+        let planned_workouts = match &self.planned_workout_repository {
+            Some(repository) => repository
+                .list_by_user_id_and_date_range(user_id, oldest, newest)
+                .await
+                .map_err(|error| LlmError::Internal(error.to_string()))?,
+            None => Vec::new(),
+        };
+        let special_days = match &self.special_day_repository {
+            Some(repository) => repository
+                .list_by_user_id_and_date_range(user_id, oldest, newest)
+                .await
+                .map_err(|error| LlmError::Internal(error.to_string()))?,
+            None => Vec::new(),
+        };
+
+        Ok((planned_workouts, special_days))
+    }
+}
+
+fn build_local_events(
+    planned_workouts: &[PlannedWorkout],
+    special_days: &[SpecialDay],
+) -> Vec<Event> {
+    let mut events = planned_workouts
+        .iter()
+        .filter(|workout| !is_projected_planned_workout(workout))
+        .map(map_planned_workout_to_event)
+        .collect::<Vec<_>>();
+    events.extend(special_days.iter().map(map_special_day_to_event));
+    events.sort_by(|left, right| {
+        left.start_date_local
+            .cmp(&right.start_date_local)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    events
+}
+
+fn build_direct_event_matches(
+    completed_workouts: &[CompletedWorkout],
+    planned_events_by_id: &HashMap<String, Event>,
+) -> HashMap<String, Event> {
+    completed_workouts
+        .iter()
+        .filter_map(|workout| {
+            workout
+                .planned_workout_id
+                .as_ref()
+                .and_then(|planned_workout_id| {
+                    planned_events_by_id
+                        .get(planned_workout_id)
+                        .cloned()
+                        .map(|event| {
+                            (
+                                legacy_activity_id(&workout.completed_workout_id).to_string(),
+                                event,
+                            )
+                        })
+                })
+        })
+        .collect()
+}
+
+fn map_planned_workout_to_event(workout: &PlannedWorkout) -> Event {
+    Event {
+        id: canonical_event_id(&workout.planned_workout_id, &workout.date),
+        start_date_local: format!("{}T00:00:00", workout.date),
+        event_type: workout.event_type.clone(),
+        name: workout
+            .name
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                workout.workout.lines.iter().find_map(|line| match line {
+                    crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => {
+                        Some(text.text.clone())
+                    }
+                    _ => None,
+                })
+            }),
+        category: EventCategory::Workout,
+        description: workout.description.clone(),
+        indoor: false,
+        color: None,
+        workout_doc: Some(serialize_canonical_planned_workout(workout)),
+    }
+}
+
+fn map_special_day_to_event(day: &SpecialDay) -> Event {
+    Event {
+        id: canonical_event_id(&day.special_day_id, &day.date),
+        start_date_local: format!("{}T00:00:00", day.date),
+        event_type: None,
+        name: day
+            .title
+            .clone()
+            .or_else(|| Some(default_special_day_name(&day.kind))),
+        category: EventCategory::Note,
+        description: day.description.clone(),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    }
+}
+
+fn map_completed_workout_to_activity(workout: &CompletedWorkout) -> Activity {
+    Activity {
+        id: legacy_activity_id(&workout.completed_workout_id).to_string(),
+        athlete_id: None,
+        start_date_local: workout.start_date_local.clone(),
+        start_date: None,
+        name: workout.name.clone(),
+        description: workout.description.clone(),
+        activity_type: workout.activity_type.clone(),
+        source: Some("canonical".to_string()),
+        external_id: None,
+        device_name: None,
+        distance_meters: workout.distance_meters,
+        moving_time_seconds: workout.duration_seconds,
+        elapsed_time_seconds: workout.duration_seconds,
+        total_elevation_gain_meters: None,
+        total_elevation_loss_meters: None,
+        average_speed_mps: None,
+        max_speed_mps: None,
+        average_heart_rate_bpm: None,
+        max_heart_rate_bpm: None,
+        average_cadence_rpm: None,
+        trainer: workout.trainer,
+        commute: false,
+        race: false,
+        has_heart_rate: workout
+            .details
+            .streams
+            .iter()
+            .any(|stream| stream.stream_type.eq_ignore_ascii_case("heartrate")),
+        stream_types: workout
+            .details
+            .streams
+            .iter()
+            .map(|stream| stream.stream_type.clone())
+            .collect(),
+        tags: Vec::new(),
+        metrics: map_completed_metrics(&workout.metrics),
+        details: ActivityDetails {
+            intervals: workout
+                .details
+                .intervals
+                .iter()
+                .map(|interval| ActivityInterval {
+                    id: interval.id,
+                    label: interval.label.clone(),
+                    interval_type: interval.interval_type.clone(),
+                    group_id: interval.group_id.clone(),
+                    start_index: interval.start_index,
+                    end_index: interval.end_index,
+                    start_time_seconds: interval.start_time_seconds,
+                    end_time_seconds: interval.end_time_seconds,
+                    moving_time_seconds: interval.moving_time_seconds,
+                    elapsed_time_seconds: interval.elapsed_time_seconds,
+                    distance_meters: interval.distance_meters,
+                    average_power_watts: interval.average_power_watts,
+                    normalized_power_watts: interval.normalized_power_watts,
+                    training_stress_score: interval.training_stress_score,
+                    average_heart_rate_bpm: interval.average_heart_rate_bpm,
+                    average_cadence_rpm: interval.average_cadence_rpm,
+                    average_speed_mps: interval.average_speed_mps,
+                    average_stride_meters: interval.average_stride_meters,
+                    zone: interval.zone,
+                })
+                .collect(),
+            interval_groups: workout
+                .details
+                .interval_groups
+                .iter()
+                .map(|group| ActivityIntervalGroup {
+                    id: group.id.clone(),
+                    count: group.count,
+                    start_index: group.start_index,
+                    moving_time_seconds: group.moving_time_seconds,
+                    elapsed_time_seconds: group.elapsed_time_seconds,
+                    distance_meters: group.distance_meters,
+                    average_power_watts: group.average_power_watts,
+                    normalized_power_watts: group.normalized_power_watts,
+                    training_stress_score: group.training_stress_score,
+                    average_heart_rate_bpm: group.average_heart_rate_bpm,
+                    average_cadence_rpm: group.average_cadence_rpm,
+                    average_speed_mps: group.average_speed_mps,
+                    average_stride_meters: group.average_stride_meters,
+                })
+                .collect(),
+            streams: workout
+                .details
+                .streams
+                .iter()
+                .map(map_completed_stream)
+                .collect(),
+            interval_summary: workout.details.interval_summary.clone(),
+            skyline_chart: workout.details.skyline_chart.clone(),
+            power_zone_times: workout
+                .details
+                .power_zone_times
+                .iter()
+                .map(|zone| ActivityZoneTime {
+                    zone_id: zone.zone_id.clone(),
+                    seconds: zone.seconds,
+                })
+                .collect(),
+            heart_rate_zone_times: workout.details.heart_rate_zone_times.clone(),
+            pace_zone_times: workout.details.pace_zone_times.clone(),
+            gap_zone_times: workout.details.gap_zone_times.clone(),
+        },
+        details_unavailable_reason: None,
+    }
+}
+
+fn map_completed_metrics(metrics: &CompletedWorkoutMetrics) -> ActivityMetrics {
+    ActivityMetrics {
+        training_stress_score: metrics.training_stress_score,
+        normalized_power_watts: metrics.normalized_power_watts,
+        intensity_factor: metrics.intensity_factor,
+        efficiency_factor: metrics.efficiency_factor,
+        variability_index: metrics.variability_index,
+        average_power_watts: metrics.average_power_watts,
+        ftp_watts: metrics.ftp_watts,
+        total_work_joules: metrics.total_work_joules,
+        calories: metrics.calories,
+        trimp: metrics.trimp,
+        power_load: metrics.power_load,
+        heart_rate_load: metrics.heart_rate_load,
+        pace_load: metrics.pace_load,
+        strain_score: metrics.strain_score,
+    }
+}
+
+fn map_completed_stream(
+    stream: &crate::domain::completed_workouts::CompletedWorkoutStream,
+) -> ActivityStream {
+    ActivityStream {
+        stream_type: stream.stream_type.clone(),
+        name: stream.name.clone(),
+        data: map_completed_series(stream.primary_series.as_ref()),
+        data2: map_completed_series(stream.secondary_series.as_ref()),
+        value_type_is_array: stream.value_type_is_array,
+        custom: stream.custom,
+        all_null: stream.all_null,
+    }
+}
+
+fn map_completed_series(series: Option<&CompletedWorkoutSeries>) -> Option<serde_json::Value> {
+    match series? {
+        CompletedWorkoutSeries::Integers(values) => Some(serde_json::json!(values)),
+        CompletedWorkoutSeries::Floats(values) => Some(serde_json::json!(values)),
+        CompletedWorkoutSeries::Bools(values) => Some(serde_json::json!(values)),
+        CompletedWorkoutSeries::Strings(values) => Some(serde_json::json!(values)),
+    }
+}
+
+fn serialize_canonical_planned_workout(workout: &PlannedWorkout) -> String {
+    let structured = crate::domain::intervals::PlannedWorkout {
+        lines: workout
+            .workout
+            .lines
+            .iter()
+            .cloned()
+            .map(map_canonical_line_to_intervals_line)
+            .collect(),
+    };
+
+    crate::domain::intervals::serialize_planned_workout(&structured)
+}
+
+fn map_canonical_line_to_intervals_line(
+    line: crate::domain::planned_workouts::PlannedWorkoutLine,
+) -> crate::domain::intervals::PlannedWorkoutLine {
+    match line {
+        crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => {
+            crate::domain::intervals::PlannedWorkoutLine::Text(
+                crate::domain::intervals::PlannedWorkoutText { text: text.text },
+            )
+        }
+        crate::domain::planned_workouts::PlannedWorkoutLine::Repeat(repeat) => {
+            crate::domain::intervals::PlannedWorkoutLine::Repeat(
+                crate::domain::intervals::PlannedWorkoutRepeat {
+                    title: repeat.title,
+                    count: repeat.count,
+                },
+            )
+        }
+        crate::domain::planned_workouts::PlannedWorkoutLine::Step(step) => {
+            crate::domain::intervals::PlannedWorkoutLine::Step(
+                crate::domain::intervals::PlannedWorkoutStep {
+                    duration_seconds: step.duration_seconds,
+                    kind: match step.kind {
+                        crate::domain::planned_workouts::PlannedWorkoutStepKind::Steady => {
+                            crate::domain::intervals::PlannedWorkoutStepKind::Steady
+                        }
+                        crate::domain::planned_workouts::PlannedWorkoutStepKind::Ramp => {
+                            crate::domain::intervals::PlannedWorkoutStepKind::Ramp
+                        }
+                    },
+                    target: match step.target {
+                        crate::domain::planned_workouts::PlannedWorkoutTarget::PercentFtp {
+                            min,
+                            max,
+                        } => {
+                            crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max }
+                        }
+                        crate::domain::planned_workouts::PlannedWorkoutTarget::WattsRange {
+                            min,
+                            max,
+                        } => {
+                            crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max }
+                        }
+                    },
+                },
+            )
+        }
+    }
+}
+
+fn legacy_activity_id(completed_workout_id: &str) -> &str {
+    completed_workout_id
+        .strip_prefix("intervals-activity:")
+        .unwrap_or(completed_workout_id)
+}
+
+fn canonical_event_id(entity_id: &str, date: &str) -> i64 {
+    entity_id
+        .strip_prefix("intervals-event:")
+        .or_else(|| entity_id.strip_prefix("intervals-special-day:"))
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or_else(|| synthetic_event_id(entity_id, date))
+}
+
+fn synthetic_event_id(entity_id: &str, date: &str) -> i64 {
+    use sha2::{Digest, Sha256};
+
+    const MAX_JS_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
+    let digest = Sha256::digest(format!("{entity_id}:{date}"));
+    let mut bytes = [0_u8; 8];
+    bytes.copy_from_slice(&digest[..8]);
+    let value = u64::from_be_bytes(bytes);
+    ((value % MAX_JS_SAFE_INTEGER) + 1) as i64
+}
+
+fn is_projected_planned_workout(workout: &PlannedWorkout) -> bool {
+    workout
+        .planned_workout_id
+        .rsplit_once(':')
+        .is_some_and(|(_, projected_date)| projected_date == workout.date)
+}
+
+fn planned_workout_matches_identity(workout: &PlannedWorkout, workout_id: &str) -> bool {
+    workout.planned_workout_id == workout_id
+        || workout_id.parse::<i64>().ok().is_some_and(|event_id| {
+            event_id == canonical_event_id(&workout.planned_workout_id, &workout.date)
+        })
+}
+
+fn special_day_matches_identity(day: &SpecialDay, workout_id: &str) -> bool {
+    day.special_day_id == workout_id
+        || workout_id
+            .parse::<i64>()
+            .ok()
+            .is_some_and(|event_id| event_id == canonical_event_id(&day.special_day_id, &day.date))
+}
+
+fn default_special_day_name(kind: &SpecialDayKind) -> String {
+    match kind {
+        SpecialDayKind::Illness => "Illness".to_string(),
+        SpecialDayKind::Travel => "Travel".to_string(),
+        SpecialDayKind::Blocked => "Blocked day".to_string(),
+        SpecialDayKind::Note => "Note".to_string(),
+        SpecialDayKind::Other => "Special day".to_string(),
+    }
+}
+
+fn date_key(value: &str) -> &str {
+    value.get(..10).unwrap_or(value)
 }

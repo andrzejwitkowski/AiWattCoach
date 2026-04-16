@@ -6,7 +6,7 @@ use aiwattcoach::domain::{
     intervals::DateRange,
     races::{
         BoxFuture as RaceBoxFuture, CreateRace, Race, RaceDiscipline, RaceError, RacePriority,
-        RaceSyncStatus, RaceUseCases, UpdateRace,
+        RaceUseCases, UpdateRace,
     },
 };
 use axum::{
@@ -56,11 +56,8 @@ async fn create_race_returns_created_race_payload() {
         body.get("name").and_then(|value| value.as_str()),
         Some("Gravel Attack")
     );
-    assert_eq!(
-        body.get("linkedIntervalsEventId")
-            .and_then(|value| value.as_i64()),
-        Some(99)
-    );
+    assert!(body.get("linkedIntervalsEventId").is_none());
+    assert!(body.get("syncStatus").is_none());
 }
 
 #[tokio::test]
@@ -493,14 +490,9 @@ impl RaceUseCases for RecordingRaceService {
                 distance_meters: request.distance_meters,
                 discipline: request.discipline,
                 priority: request.priority,
-                linked_intervals_event_id: Some(99),
-                sync_status: RaceSyncStatus::Synced,
-                synced_payload_hash: Some("hash".to_string()),
-                last_error: None,
                 result: None,
                 created_at_epoch_seconds: 1,
                 updated_at_epoch_seconds: 1,
-                last_synced_at_epoch_seconds: Some(1),
             };
             races.lock().unwrap().push(race.clone());
             Ok(race)
@@ -544,13 +536,8 @@ fn sample_race() -> Race {
         distance_meters: 120_000,
         discipline: RaceDiscipline::Gravel,
         priority: RacePriority::B,
-        linked_intervals_event_id: Some(99),
-        sync_status: RaceSyncStatus::Synced,
-        synced_payload_hash: Some("hash".to_string()),
-        last_error: None,
         result: None,
         created_at_epoch_seconds: 1,
         updated_at_epoch_seconds: 1,
-        last_synced_at_epoch_seconds: Some(1),
     }
 }

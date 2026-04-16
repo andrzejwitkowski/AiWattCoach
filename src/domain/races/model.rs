@@ -62,25 +62,6 @@ impl RacePriority {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RaceSyncStatus {
-    Pending,
-    Synced,
-    Failed,
-    PendingDelete,
-}
-
-impl RaceSyncStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Synced => "synced",
-            Self::Failed => "failed",
-            Self::PendingDelete => "pending_delete",
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RaceResult {
     Finished,
     Dnf,
@@ -106,14 +87,9 @@ pub struct Race {
     pub distance_meters: i32,
     pub discipline: RaceDiscipline,
     pub priority: RacePriority,
-    pub linked_intervals_event_id: Option<i64>,
-    pub sync_status: RaceSyncStatus,
-    pub synced_payload_hash: Option<String>,
-    pub last_error: Option<String>,
     pub result: Option<RaceResult>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
-    pub last_synced_at_epoch_seconds: Option<i64>,
 }
 
 impl Race {
@@ -131,14 +107,9 @@ impl Race {
             distance_meters: request.distance_meters,
             discipline: request.discipline,
             priority: request.priority,
-            linked_intervals_event_id: None,
-            sync_status: RaceSyncStatus::Pending,
-            synced_payload_hash: None,
-            last_error: None,
             result: None,
             created_at_epoch_seconds: now_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
-            last_synced_at_epoch_seconds: None,
         }
     }
 
@@ -151,79 +122,9 @@ impl Race {
             distance_meters: request.distance_meters,
             discipline: request.discipline,
             priority: request.priority,
-            linked_intervals_event_id: self.linked_intervals_event_id,
-            sync_status: RaceSyncStatus::Pending,
-            synced_payload_hash: self.synced_payload_hash.clone(),
-            last_error: None,
             result: self.result.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
-            last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
-        }
-    }
-
-    pub fn mark_synced(
-        &self,
-        linked_intervals_event_id: i64,
-        synced_payload_hash: String,
-        now_epoch_seconds: i64,
-    ) -> Self {
-        Self {
-            race_id: self.race_id.clone(),
-            user_id: self.user_id.clone(),
-            date: self.date.clone(),
-            name: self.name.clone(),
-            distance_meters: self.distance_meters,
-            discipline: self.discipline.clone(),
-            priority: self.priority.clone(),
-            linked_intervals_event_id: Some(linked_intervals_event_id),
-            sync_status: RaceSyncStatus::Synced,
-            synced_payload_hash: Some(synced_payload_hash),
-            last_error: None,
-            result: self.result.clone(),
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: now_epoch_seconds,
-            last_synced_at_epoch_seconds: Some(now_epoch_seconds),
-        }
-    }
-
-    pub fn mark_failed(&self, error: String, now_epoch_seconds: i64) -> Self {
-        Self {
-            race_id: self.race_id.clone(),
-            user_id: self.user_id.clone(),
-            date: self.date.clone(),
-            name: self.name.clone(),
-            distance_meters: self.distance_meters,
-            discipline: self.discipline.clone(),
-            priority: self.priority.clone(),
-            linked_intervals_event_id: self.linked_intervals_event_id,
-            sync_status: RaceSyncStatus::Failed,
-            synced_payload_hash: self.synced_payload_hash.clone(),
-            last_error: Some(error),
-            result: self.result.clone(),
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: now_epoch_seconds,
-            last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
-        }
-    }
-
-    pub fn mark_pending_delete(&self, now_epoch_seconds: i64) -> Self {
-        Self {
-            race_id: self.race_id.clone(),
-            user_id: self.user_id.clone(),
-            date: self.date.clone(),
-            name: self.name.clone(),
-            distance_meters: self.distance_meters,
-            discipline: self.discipline.clone(),
-            priority: self.priority.clone(),
-            linked_intervals_event_id: self.linked_intervals_event_id,
-            sync_status: RaceSyncStatus::PendingDelete,
-            synced_payload_hash: self.synced_payload_hash.clone(),
-            last_error: None,
-            result: self.result.clone(),
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: now_epoch_seconds,
-            last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
         }
     }
 

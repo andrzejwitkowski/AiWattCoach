@@ -1,0 +1,98 @@
+(
+    lints: [
+        Module((
+            name: "domain_must_not_import_adapters",
+            matches: Module("^aiwattcoach::domain($|::.*)"),
+            rules: [
+                RestrictImports(
+                    allowed_only: None,
+                    denied: Some([
+                        "^aiwattcoach::adapters($|::.*)",
+                    ]),
+                    severity: Error,
+                ),
+            ],
+        )),
+        Module((
+            name: "domain_must_not_import_config",
+            matches: Module("^aiwattcoach::domain($|::.*)"),
+            rules: [
+                RestrictImports(
+                    allowed_only: None,
+                    denied: Some([
+                        "^aiwattcoach::config($|::.*)",
+                    ]),
+                    severity: Error,
+                ),
+            ],
+        )),
+        Module((
+            name: "rest_must_not_import_infra_adapters",
+            matches: Module("^aiwattcoach::adapters::rest($|::.*)"),
+            rules: [
+                RestrictImports(
+                    allowed_only: None,
+                    denied: Some([
+                        "^aiwattcoach::adapters::mongo($|::.*)",
+                        "^aiwattcoach::adapters::intervals_icu($|::.*)",
+                        "^aiwattcoach::adapters::llm($|::.*)",
+                        "^aiwattcoach::adapters::google_oauth($|::.*)",
+                    ]),
+                    severity: Error,
+                ),
+            ],
+        )),
+        Module((
+            name: "mongo_must_not_import_rest",
+            matches: Module("^aiwattcoach::adapters::mongo($|::.*)"),
+            rules: [
+                RestrictImports(
+                    allowed_only: None,
+                    denied: Some([
+                        "^aiwattcoach::adapters::rest($|::.*)",
+                    ]),
+                    severity: Error,
+                ),
+            ],
+        )),
+        Module((
+            name: "intervals_adapter_must_not_import_rest",
+            matches: Module("^aiwattcoach::adapters::intervals_icu($|::.*)"),
+            rules: [
+                RestrictImports(
+                    allowed_only: None,
+                    denied: Some([
+                        "^aiwattcoach::adapters::rest($|::.*)",
+                    ]),
+                    severity: Error,
+                ),
+            ],
+        )),
+        Module((
+            name: "llm_adapter_must_not_import_rest",
+            matches: Module("^aiwattcoach::adapters::llm($|::.*)"),
+            rules: [
+                RestrictImports(
+                    allowed_only: None,
+                    denied: Some([
+                        "^aiwattcoach::adapters::rest($|::.*)",
+                    ]),
+                    severity: Error,
+                ),
+            ],
+        )),
+        Module((
+            name: "google_oauth_must_not_import_rest",
+            matches: Module("^aiwattcoach::adapters::google_oauth($|::.*)"),
+            rules: [
+                RestrictImports(
+                    allowed_only: None,
+                    denied: Some([
+                        "^aiwattcoach::adapters::rest($|::.*)",
+                    ]),
+                    severity: Error,
+                ),
+            ],
+        )),
+    ],
+)

@@ -1,18 +1,31 @@
 use crate::domain::{
+    completed_workouts::{
+        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics,
+        CompletedWorkoutRepository, CompletedWorkoutSeries, CompletedWorkoutStream,
+        CompletedWorkoutZoneTime,
+    },
     identity::Clock,
     intervals::{
-        Activity, ActivityDetails, ActivityMetrics, ActivityStream, DateRange, Event,
-        EventCategory, IntervalsError, IntervalsUseCases, PlannedWorkout, PlannedWorkoutLine,
-        PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
+        DateRange, PlannedWorkout, PlannedWorkoutLine, PlannedWorkoutStep, PlannedWorkoutStepKind,
+        PlannedWorkoutTarget, PlannedWorkoutText,
+    },
+    planned_workouts::{
+        PlannedWorkout as CanonicalPlannedWorkout,
+        PlannedWorkoutContent as CanonicalPlannedWorkoutContent,
+        PlannedWorkoutLine as CanonicalPlannedWorkoutLine, PlannedWorkoutRepository,
+        PlannedWorkoutStep as CanonicalPlannedWorkoutStep,
+        PlannedWorkoutStepKind as CanonicalPlannedWorkoutStepKind,
+        PlannedWorkoutTarget as CanonicalPlannedWorkoutTarget,
+        PlannedWorkoutText as CanonicalPlannedWorkoutText,
     },
     races::{
         BoxFuture as RaceBoxFuture, Race, RaceDiscipline, RaceError, RacePriority, RaceRepository,
-        RaceSyncStatus,
     },
     settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, CyclingSettings,
         IntervalsConfig, SettingsError, UserSettings, UserSettingsUseCases, Weekday,
     },
+    special_days::{SpecialDay, SpecialDayKind, SpecialDayRepository},
     training_plan::{
         TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
         TrainingPlanSnapshot,
@@ -155,140 +168,270 @@ fn test_availability() -> AvailabilitySettings {
 }
 
 #[derive(Clone)]
-pub(super) struct TestIntervalsService;
+pub(super) struct TestWorkoutSummaryRepository;
 
-impl IntervalsUseCases for TestIntervalsService {
-    fn list_events(
+#[derive(Clone)]
+pub(super) struct TestCompletedWorkoutRepository {
+    workouts: Vec<CompletedWorkout>,
+}
+
+impl Default for TestCompletedWorkoutRepository {
+    fn default() -> Self {
+        Self {
+            workouts: vec![sample_completed_workout_on_date_with_ftp(
+                "ride-1",
+                "2026-04-03T08:00:00",
+                Some(300),
+                Some("intervals-event:101".to_string()),
+            )],
+        }
+    }
+}
+
+impl TestCompletedWorkoutRepository {
+    pub(super) fn with_workouts(workouts: Vec<CompletedWorkout>) -> Self {
+        Self { workouts }
+    }
+}
+
+impl CompletedWorkoutRepository for TestCompletedWorkoutRepository {
+    fn find_by_user_id_and_completed_workout_id(
         &self,
-        _user_id: &str,
-        _range: &DateRange,
-    ) -> crate::domain::intervals::BoxFuture<Result<Vec<Event>, IntervalsError>> {
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        let workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
         Box::pin(async move {
-            Ok(vec![
-                Event {
-                    id: 101,
-                    start_date_local: "2026-04-03T07:00:00".to_string(),
-                    event_type: Some("Ride".to_string()),
-                    name: Some("Sweet Spot".to_string()),
-                    category: EventCategory::Workout,
-                    description: None,
-                    indoor: false,
-                    color: None,
-                    workout_doc: Some("- 2x10min 90-95%".to_string()),
-                },
-                Event {
-                    id: 202,
-                    start_date_local: "2026-04-02T09:00:00".to_string(),
-                    event_type: Some("Ride".to_string()),
-                    name: Some("Sick day".to_string()),
-                    category: EventCategory::Note,
-                    description: Some("Felt unwell with sore throat".to_string()),
-                    indoor: false,
-                    color: None,
-                    workout_doc: None,
-                },
-                Event {
-                    id: 303,
-                    start_date_local: "2026-04-25T07:00:00".to_string(),
-                    event_type: Some("Ride".to_string()),
-                    name: Some("Long Tempo".to_string()),
-                    category: EventCategory::Workout,
-                    description: Some("Endurance with tempo finish".to_string()),
-                    indoor: false,
-                    color: None,
-                    workout_doc: Some("- 90m 75%".to_string()),
-                },
-            ])
+            Ok(workouts.into_iter().find(|workout| {
+                workout.user_id == user_id && workout.completed_workout_id == completed_workout_id
+            }))
         })
     }
 
-    fn get_event(
+    fn find_by_user_id_and_source_activity_id(
         &self,
-        _user_id: &str,
-        _event_id: i64,
-    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn create_event(
-        &self,
-        _user_id: &str,
-        _event: crate::domain::intervals::CreateEvent,
-    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn update_event(
-        &self,
-        _user_id: &str,
-        _event_id: i64,
-        _event: crate::domain::intervals::UpdateEvent,
-    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn delete_event(
-        &self,
-        _user_id: &str,
-        _event_id: i64,
-    ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
-        unreachable!()
-    }
-
-    fn download_fit(
-        &self,
-        _user_id: &str,
-        _event_id: i64,
-    ) -> crate::domain::intervals::BoxFuture<Result<Vec<u8>, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn list_activities(
-        &self,
-        _user_id: &str,
-        _range: &DateRange,
-    ) -> crate::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
-        Box::pin(async move { Ok(vec![sample_activity_with_ftp(Some(300))]) })
-    }
-
-    fn get_activity(
-        &self,
-        _user_id: &str,
-        _activity_id: &str,
-    ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
-        Box::pin(async move { Ok(sample_activity_with_ftp(Some(300))) })
-    }
-
-    fn upload_activity(
-        &self,
-        _user_id: &str,
-        _upload: crate::domain::intervals::UploadActivity,
-    ) -> crate::domain::intervals::BoxFuture<
-        Result<crate::domain::intervals::UploadedActivities, IntervalsError>,
+        user_id: &str,
+        source_activity_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
     > {
-        unreachable!()
+        let workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        let source_activity_id = source_activity_id.to_string();
+        Box::pin(async move {
+            Ok(workouts.into_iter().find(|workout| {
+                workout.user_id == user_id
+                    && workout.source_activity_id.as_deref() == Some(source_activity_id.as_str())
+            }))
+        })
     }
 
-    fn update_activity(
+    fn find_latest_by_user_id(
         &self,
-        _user_id: &str,
-        _activity_id: &str,
-        _activity: crate::domain::intervals::UpdateActivity,
-    ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
-        unreachable!()
+        user_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        let mut workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            workouts.retain(|workout| workout.user_id == user_id);
+            workouts.sort_by(|left, right| {
+                right
+                    .start_date_local
+                    .cmp(&left.start_date_local)
+                    .then_with(|| right.completed_workout_id.cmp(&left.completed_workout_id))
+            });
+            Ok(workouts.into_iter().next())
+        })
     }
 
-    fn delete_activity(
+    fn list_by_user_id(
         &self,
-        _user_id: &str,
-        _activity_id: &str,
-    ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
+        user_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Vec<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        let workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(workouts
+                .into_iter()
+                .filter(|workout| workout.user_id == user_id)
+                .collect())
+        })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Vec<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        let workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            Ok(workouts
+                .into_iter()
+                .filter(|workout| workout.user_id == user_id)
+                .filter(|workout| {
+                    let date = workout.start_date_local.get(..10).unwrap_or_default();
+                    date >= oldest.as_str() && date <= newest.as_str()
+                })
+                .collect())
+        })
+    }
+
+    fn upsert(
+        &self,
+        _workout: CompletedWorkout,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<CompletedWorkout, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
         unreachable!()
     }
 }
 
 #[derive(Clone)]
-pub(super) struct TestWorkoutSummaryRepository;
+pub(super) struct TestPlannedWorkoutRepository {
+    workouts: Vec<CanonicalPlannedWorkout>,
+}
+
+impl Default for TestPlannedWorkoutRepository {
+    fn default() -> Self {
+        Self {
+            workouts: vec![
+                sample_planned_workout(101, "2026-04-03"),
+                sample_planned_workout(303, "2026-04-25"),
+            ],
+        }
+    }
+}
+
+impl PlannedWorkoutRepository for TestPlannedWorkoutRepository {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::planned_workouts::BoxFuture<
+        Result<Vec<CanonicalPlannedWorkout>, crate::domain::planned_workouts::PlannedWorkoutError>,
+    > {
+        let workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(workouts
+                .into_iter()
+                .filter(|workout| workout.user_id == user_id)
+                .collect())
+        })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> crate::domain::planned_workouts::BoxFuture<
+        Result<Vec<CanonicalPlannedWorkout>, crate::domain::planned_workouts::PlannedWorkoutError>,
+    > {
+        let workouts = self.workouts.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            Ok(workouts
+                .into_iter()
+                .filter(|workout| workout.user_id == user_id)
+                .filter(|workout| workout.date >= oldest && workout.date <= newest)
+                .collect())
+        })
+    }
+
+    fn upsert(
+        &self,
+        _workout: CanonicalPlannedWorkout,
+    ) -> crate::domain::planned_workouts::BoxFuture<
+        Result<CanonicalPlannedWorkout, crate::domain::planned_workouts::PlannedWorkoutError>,
+    > {
+        unreachable!()
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct TestSpecialDayRepository {
+    days: Vec<SpecialDay>,
+}
+
+impl Default for TestSpecialDayRepository {
+    fn default() -> Self {
+        Self {
+            days: vec![SpecialDay::new(
+                "intervals-special-day:202".to_string(),
+                "user-1".to_string(),
+                "2026-04-02".to_string(),
+                SpecialDayKind::Note,
+                Some("Sick day".to_string()),
+                Some("Felt unwell with sore throat".to_string()),
+            )
+            .unwrap()],
+        }
+    }
+}
+
+impl SpecialDayRepository for TestSpecialDayRepository {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::special_days::BoxFuture<
+        Result<Vec<SpecialDay>, crate::domain::special_days::SpecialDayError>,
+    > {
+        let days = self.days.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(days
+                .into_iter()
+                .filter(|day| day.user_id == user_id)
+                .collect())
+        })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> crate::domain::special_days::BoxFuture<
+        Result<Vec<SpecialDay>, crate::domain::special_days::SpecialDayError>,
+    > {
+        let days = self.days.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            Ok(days
+                .into_iter()
+                .filter(|day| day.user_id == user_id)
+                .filter(|day| day.date >= oldest && day.date <= newest)
+                .collect())
+        })
+    }
+
+    fn upsert(
+        &self,
+        _special_day: SpecialDay,
+    ) -> crate::domain::special_days::BoxFuture<
+        Result<SpecialDay, crate::domain::special_days::SpecialDayError>,
+    > {
+        unreachable!()
+    }
+}
 
 #[derive(Clone)]
 pub(super) struct TestRaceRepository;
@@ -305,14 +448,9 @@ impl RaceRepository for TestRaceRepository {
                 distance_meters: 123_000,
                 discipline: RaceDiscipline::Road,
                 priority: RacePriority::A,
-                linked_intervals_event_id: Some(999),
-                sync_status: RaceSyncStatus::Synced,
-                synced_payload_hash: Some("hash".to_string()),
-                last_error: None,
                 result: None,
                 created_at_epoch_seconds: 1,
                 updated_at_epoch_seconds: 1,
-                last_synced_at_epoch_seconds: Some(1),
             }])
         })
     }
@@ -334,14 +472,9 @@ impl RaceRepository for TestRaceRepository {
                 distance_meters: 123_000,
                 discipline: RaceDiscipline::Road,
                 priority: RacePriority::A,
-                linked_intervals_event_id: Some(999),
-                sync_status: RaceSyncStatus::Synced,
-                synced_payload_hash: Some("hash".to_string()),
-                last_error: None,
                 result: None,
                 created_at_epoch_seconds: 1,
                 updated_at_epoch_seconds: 1,
-                last_synced_at_epoch_seconds: Some(1),
             }]
             .into_iter()
             .filter(|race| race.date >= oldest && race.date <= newest)
@@ -597,166 +730,26 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
     }
 }
 
-#[derive(Clone)]
-pub(super) struct FtpOrderingIntervalsService;
-
-impl IntervalsUseCases for FtpOrderingIntervalsService {
-    fn list_events(
-        &self,
-        _user_id: &str,
-        _range: &DateRange,
-    ) -> crate::domain::intervals::BoxFuture<Result<Vec<Event>, IntervalsError>> {
-        Box::pin(async move {
-            Ok(vec![Event {
-                id: 101,
-                start_date_local: "2026-04-03T07:00:00".to_string(),
-                event_type: Some("Ride".to_string()),
-                name: Some("Workout match".to_string()),
-                category: EventCategory::Workout,
-                description: None,
-                indoor: false,
-                color: None,
-                workout_doc: Some("- 2x10min 90-95%".to_string()),
-            }])
-        })
-    }
-
-    fn get_event(
-        &self,
-        _user_id: &str,
-        _event_id: i64,
-    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn create_event(
-        &self,
-        _user_id: &str,
-        _event: crate::domain::intervals::CreateEvent,
-    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn update_event(
-        &self,
-        _user_id: &str,
-        _event_id: i64,
-        _event: crate::domain::intervals::UpdateEvent,
-    ) -> crate::domain::intervals::BoxFuture<Result<Event, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn delete_event(
-        &self,
-        _user_id: &str,
-        _event_id: i64,
-    ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
-        unreachable!()
-    }
-
-    fn download_fit(
-        &self,
-        _user_id: &str,
-        _event_id: i64,
-    ) -> crate::domain::intervals::BoxFuture<Result<Vec<u8>, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn list_activities(
-        &self,
-        _user_id: &str,
-        _range: &DateRange,
-    ) -> crate::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
-        Box::pin(async move {
-            Ok(vec![
-                sample_activity_on_date_with_ftp("ride-late", "2026-04-03T08:00:00", Some(320)),
-                sample_activity_on_date_with_ftp("ride-early", "2026-03-15T08:00:00", Some(280)),
-            ])
-        })
-    }
-
-    fn get_activity(
-        &self,
-        _user_id: &str,
-        _activity_id: &str,
-    ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
-        Box::pin(async move {
-            Ok(sample_activity_on_date_with_ftp(
-                "ride-late",
-                "2026-04-03T08:00:00",
-                Some(320),
-            ))
-        })
-    }
-
-    fn upload_activity(
-        &self,
-        _user_id: &str,
-        _upload: crate::domain::intervals::UploadActivity,
-    ) -> crate::domain::intervals::BoxFuture<
-        Result<crate::domain::intervals::UploadedActivities, IntervalsError>,
-    > {
-        unreachable!()
-    }
-
-    fn update_activity(
-        &self,
-        _user_id: &str,
-        _activity_id: &str,
-        _activity: crate::domain::intervals::UpdateActivity,
-    ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
-        unreachable!()
-    }
-
-    fn delete_activity(
-        &self,
-        _user_id: &str,
-        _activity_id: &str,
-    ) -> crate::domain::intervals::BoxFuture<Result<(), IntervalsError>> {
-        unreachable!()
-    }
-}
-
-pub(super) fn sample_activity_on_date_with_ftp(
+pub(super) fn sample_completed_workout_on_date_with_ftp(
     id: &str,
     start_date_local: &str,
     ftp_watts: Option<i32>,
-) -> Activity {
-    let mut activity = sample_activity_with_ftp(ftp_watts);
-    activity.id = id.to_string();
-    activity.start_date_local = start_date_local.to_string();
-    activity
-}
-
-pub(super) fn sample_activity_with_ftp(ftp_watts: Option<i32>) -> Activity {
-    Activity {
-        id: "ride-1".to_string(),
-        athlete_id: None,
-        start_date_local: "2026-04-03T08:00:00".to_string(),
-        start_date: None,
+    planned_workout_id: Option<String>,
+) -> CompletedWorkout {
+    CompletedWorkout {
+        completed_workout_id: format!("intervals-activity:{id}"),
+        user_id: "user-1".to_string(),
+        start_date_local: start_date_local.to_string(),
+        source_activity_id: Some(id.to_string()),
+        planned_workout_id,
         name: Some("Sweet Spot".to_string()),
         description: None,
         activity_type: Some("Ride".to_string()),
-        source: None,
         external_id: None,
-        device_name: None,
-        distance_meters: None,
-        moving_time_seconds: Some(3600),
-        elapsed_time_seconds: Some(3600),
-        total_elevation_gain_meters: None,
-        total_elevation_loss_meters: None,
-        average_speed_mps: None,
-        max_speed_mps: None,
-        average_heart_rate_bpm: None,
-        max_heart_rate_bpm: None,
-        average_cadence_rpm: None,
         trainer: false,
-        commute: false,
-        race: false,
-        has_heart_rate: false,
-        stream_types: vec!["watts".to_string(), "cadence".to_string()],
-        tags: Vec::new(),
-        metrics: ActivityMetrics {
+        duration_seconds: Some(3600),
+        distance_meters: None,
+        metrics: CompletedWorkoutMetrics {
             training_stress_score: Some(80),
             normalized_power_watts: Some(250),
             intensity_factor: Some(0.83),
@@ -772,9 +765,9 @@ pub(super) fn sample_activity_with_ftp(ftp_watts: Option<i32>) -> Activity {
             pace_load: None,
             strain_score: None,
         },
-        details: ActivityDetails {
+        details: CompletedWorkoutDetails {
             intervals: vec![
-                crate::domain::intervals::ActivityInterval {
+                crate::domain::completed_workouts::CompletedWorkoutInterval {
                     id: Some(1),
                     label: Some("Work 1".to_string()),
                     interval_type: Some("WORK".to_string()),
@@ -795,7 +788,7 @@ pub(super) fn sample_activity_with_ftp(ftp_watts: Option<i32>) -> Activity {
                     average_stride_meters: None,
                     zone: Some(4),
                 },
-                crate::domain::intervals::ActivityInterval {
+                crate::domain::completed_workouts::CompletedWorkoutInterval {
                     id: Some(2),
                     label: Some("Work 2".to_string()),
                     interval_type: Some("WORK".to_string()),
@@ -819,20 +812,24 @@ pub(super) fn sample_activity_with_ftp(ftp_watts: Option<i32>) -> Activity {
             ],
             interval_groups: Vec::new(),
             streams: vec![
-                ActivityStream {
+                CompletedWorkoutStream {
                     stream_type: "watts".to_string(),
                     name: None,
-                    data: Some(serde_json::json!([200, 220, 240, 260, 280])),
-                    data2: None,
+                    primary_series: Some(CompletedWorkoutSeries::Integers(vec![
+                        200, 220, 240, 260, 280,
+                    ])),
+                    secondary_series: None,
                     value_type_is_array: false,
                     custom: false,
                     all_null: false,
                 },
-                ActivityStream {
+                CompletedWorkoutStream {
                     stream_type: "cadence".to_string(),
                     name: None,
-                    data: Some(serde_json::json!([80, 82, 84, 86, 88])),
-                    data2: None,
+                    primary_series: Some(CompletedWorkoutSeries::Integers(vec![
+                        80, 82, 84, 86, 88,
+                    ])),
+                    secondary_series: None,
                     value_type_is_array: false,
                     custom: false,
                     all_null: false,
@@ -840,11 +837,52 @@ pub(super) fn sample_activity_with_ftp(ftp_watts: Option<i32>) -> Activity {
             ],
             interval_summary: Vec::new(),
             skyline_chart: Vec::new(),
-            power_zone_times: Vec::new(),
+            power_zone_times: vec![CompletedWorkoutZoneTime {
+                zone_id: "z4".to_string(),
+                seconds: 1200,
+            }],
             heart_rate_zone_times: Vec::new(),
             pace_zone_times: Vec::new(),
             gap_zone_times: Vec::new(),
         },
         details_unavailable_reason: None,
     }
+}
+
+pub(super) fn sample_planned_workout(event_id: i64, date: &str) -> CanonicalPlannedWorkout {
+    let (name, description, workout_doc) = if event_id == 303 {
+        (
+            "Long Tempo",
+            Some("Endurance with tempo finish".to_string()),
+            "- 90m 75%",
+        )
+    } else {
+        ("Sweet Spot", None, "- 2x10min 90-95%")
+    };
+
+    CanonicalPlannedWorkout::new(
+        format!("intervals-event:{event_id}"),
+        "user-1".to_string(),
+        date.to_string(),
+        CanonicalPlannedWorkoutContent {
+            lines: vec![
+                CanonicalPlannedWorkoutLine::Text(CanonicalPlannedWorkoutText {
+                    text: name.to_string(),
+                }),
+                CanonicalPlannedWorkoutLine::Step(CanonicalPlannedWorkoutStep {
+                    duration_seconds: if event_id == 303 { 5400 } else { 1200 },
+                    kind: CanonicalPlannedWorkoutStepKind::Steady,
+                    target: CanonicalPlannedWorkoutTarget::PercentFtp {
+                        min: if event_id == 303 { 75.0 } else { 90.0 },
+                        max: if event_id == 303 { 75.0 } else { 95.0 },
+                    },
+                }),
+            ],
+        },
+    )
+    .with_event_metadata(
+        Some(name.to_string()),
+        description.or_else(|| Some(workout_doc.to_string()).filter(|_| event_id != 101)),
+        Some("Ride".to_string()),
+    )
 }

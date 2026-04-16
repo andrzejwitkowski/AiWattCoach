@@ -23,6 +23,7 @@ describe('DayItemsModal', () => {
                 title: 'Opener',
                 subtitle: '20 min',
                 dateKey: '2026-03-23',
+                activity: null,
                 priorityRank: 1,
                 tss: 16,
                 event: {

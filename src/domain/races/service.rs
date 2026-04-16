@@ -1,37 +1,158 @@
 use crate::domain::{
+    calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
+    external_sync::{
+        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
+        ExternalSyncState, ExternalSyncStateRepository, NoopProviderPollStateRepository,
+        ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
+    },
     identity::{Clock, IdGenerator},
     intervals::{CreateEvent, DateRange, IntervalsError, IntervalsUseCases, UpdateEvent},
 };
+use tracing::warn;
 
 use super::{BoxFuture, CreateRace, Race, RaceError, RaceRepository, RaceUseCases, UpdateRace};
 
 #[derive(Clone)]
-pub struct RaceService<Repository, Intervals, Time, Ids>
-where
+pub struct RaceService<
+    Repository,
+    Intervals,
+    SyncStates,
+    Time,
+    Ids,
+    PollStates = NoopProviderPollStateRepository,
+    Refresh = NoopCalendarEntryViewRefresh,
+> where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
+    SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
+    PollStates: ProviderPollStateRepository + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     repository: Repository,
     intervals: Intervals,
+    sync_states: SyncStates,
     clock: Time,
     ids: Ids,
+    poll_states: PollStates,
+    refresh: Refresh,
 }
 
-impl<Repository, Intervals, Time, Ids> RaceService<Repository, Intervals, Time, Ids>
+impl<Repository, Intervals, SyncStates, Time, Ids>
+    RaceService<Repository, Intervals, SyncStates, Time, Ids>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
+    SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
 {
-    pub fn new(repository: Repository, intervals: Intervals, clock: Time, ids: Ids) -> Self {
+    pub fn new(
+        repository: Repository,
+        intervals: Intervals,
+        sync_states: SyncStates,
+        clock: Time,
+        ids: Ids,
+    ) -> Self {
         Self {
             repository,
             intervals,
+            sync_states,
             clock,
             ids,
+            poll_states: NoopProviderPollStateRepository,
+            refresh: NoopCalendarEntryViewRefresh,
+        }
+    }
+}
+
+impl<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
+    RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
+where
+    Repository: RaceRepository + Clone + 'static,
+    Intervals: IntervalsUseCases + Clone + 'static,
+    SyncStates: ExternalSyncStateRepository + Clone + 'static,
+    Time: Clock + Clone + 'static,
+    Ids: IdGenerator + Clone + 'static,
+    PollStates: ProviderPollStateRepository + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
+{
+    pub fn with_provider_poll_states<NewPollStates>(
+        self,
+        poll_states: NewPollStates,
+    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, NewPollStates, Refresh>
+    where
+        NewPollStates: ProviderPollStateRepository + Clone + 'static,
+    {
+        RaceService {
+            repository: self.repository,
+            intervals: self.intervals,
+            sync_states: self.sync_states,
+            clock: self.clock,
+            ids: self.ids,
+            poll_states,
+            refresh: self.refresh,
+        }
+    }
+
+    pub fn with_calendar_view_refresh<NewRefresh>(
+        self,
+        refresh: NewRefresh,
+    ) -> RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, NewRefresh>
+    where
+        NewRefresh: CalendarEntryViewRefreshPort + Clone + 'static,
+    {
+        RaceService {
+            repository: self.repository,
+            intervals: self.intervals,
+            sync_states: self.sync_states,
+            clock: self.clock,
+            ids: self.ids,
+            poll_states: self.poll_states,
+            refresh,
+        }
+    }
+
+    async fn mark_calendar_poll_due_soon(&self, user_id: &str) {
+        let now = self.clock.now_epoch_seconds();
+        let existing_state = match self
+            .poll_states
+            .find_by_provider_and_stream(
+                user_id,
+                ExternalProvider::Intervals,
+                ProviderPollStream::Calendar,
+            )
+            .await
+        {
+            Ok(state) => state,
+            Err(error) => {
+                warn!(%user_id, %error, "race sync succeeded but failed to load provider poll state");
+                return;
+            }
+        };
+
+        let state = existing_state.unwrap_or_else(|| {
+            ProviderPollState::new(
+                user_id.to_string(),
+                ExternalProvider::Intervals,
+                ProviderPollStream::Calendar,
+                now,
+            )
+        });
+
+        if let Err(error) = self.poll_states.upsert(state.mark_due_soon(now)).await {
+            warn!(%user_id, %error, "race sync succeeded but failed to mark calendar poll due soon");
+        }
+    }
+
+    async fn refresh_race_date(&self, user_id: &str, date: &str) {
+        if let Err(error) = self
+            .refresh
+            .refresh_range_for_user(user_id, date, date)
+            .await
+        {
+            warn!(%user_id, %date, %error, "race write succeeded but calendar view refresh failed");
         }
     }
 
@@ -62,7 +183,10 @@ where
         let now = self.clock.now_epoch_seconds();
         let pending = Race::pending_new(self.ids.new_id("race"), user_id.to_string(), request, now);
         let pending = self.repository.upsert(pending).await?;
-        self.sync_pending_race(pending).await
+        let result = self.sync_pending_race(pending.clone()).await;
+        self.refresh_race_date(&pending.user_id, &pending.date)
+            .await;
+        result
     }
 
     async fn update_race_impl(
@@ -82,7 +206,10 @@ where
             .repository
             .upsert(existing.mark_pending_update(request, self.clock.now_epoch_seconds()))
             .await?;
-        self.sync_pending_race(pending).await
+        let result = self.sync_pending_race(pending.clone()).await;
+        self.refresh_race_date(&pending.user_id, &pending.date)
+            .await;
+        result
     }
 
     async fn delete_race_impl(&self, user_id: &str, race_id: &str) -> Result<(), RaceError> {
@@ -92,34 +219,96 @@ where
             .await?
             .ok_or(RaceError::NotFound)?;
 
-        if let Some(linked_intervals_event_id) = existing.linked_intervals_event_id {
-            let pending = existing.mark_pending_delete(self.clock.now_epoch_seconds());
-            let pending = self.repository.upsert(pending).await?;
-            let delete_result = self
-                .intervals
-                .delete_event(user_id, linked_intervals_event_id)
-                .await
-                .map_err(map_intervals_error);
-            if let Err(error) = delete_result {
-                let failed = pending.mark_failed(error.to_string(), self.clock.now_epoch_seconds());
-                if let Err(persist_error) = self.repository.upsert(failed).await {
-                    tracing::error!(
-                        user_id = %pending.user_id,
-                        race_id = %pending.race_id,
-                        error = %persist_error,
-                        "failed to persist race delete failure state"
-                    );
+        let race_ref = race_entity_ref(&existing.race_id);
+        let existing_sync_state = self
+            .sync_states
+            .find_by_provider_and_canonical_entity(user_id, ExternalProvider::Intervals, &race_ref)
+            .await
+            .map_err(map_sync_repository_error)?;
+
+        if let Some(sync_state) = existing_sync_state.as_ref() {
+            if let Some(linked_intervals_event_id) =
+                parse_intervals_event_id(sync_state.external_id.as_deref(), &existing.race_id)?
+            {
+                let pending_sync_state = self
+                    .sync_states
+                    .upsert(sync_state.clone().mark_pending_delete())
+                    .await
+                    .map_err(map_sync_repository_error)?;
+                let delete_result = self
+                    .intervals
+                    .delete_event(user_id, linked_intervals_event_id)
+                    .await
+                    .map_err(map_intervals_error);
+                if let Err(error) = delete_result {
+                    self.sync_states
+                        .upsert(pending_sync_state.mark_failed(error.to_string()))
+                        .await
+                        .map_err(map_sync_repository_error)?;
+                    return Err(error);
                 }
-                return Err(error);
             }
         }
 
-        self.repository.delete(user_id, race_id).await
+        if let Err(error) = self.repository.delete(user_id, race_id).await {
+            self.refresh_race_date(&existing.user_id, &existing.date)
+                .await;
+            return Err(error);
+        }
+
+        if existing_sync_state.is_some() {
+            if let Err(error) = self
+                .sync_states
+                .delete_by_provider_and_canonical_entity(
+                    user_id,
+                    ExternalProvider::Intervals,
+                    &race_ref,
+                )
+                .await
+            {
+                warn!(
+                    user_id = %existing.user_id,
+                    race_id = %existing.race_id,
+                    %error,
+                    "race delete succeeded locally but failed to delete sync state"
+                );
+            }
+        }
+
+        self.refresh_race_date(&existing.user_id, &existing.date)
+            .await;
+
+        Ok(())
     }
 
     async fn sync_pending_race(&self, pending: Race) -> Result<Race, RaceError> {
+        let race_ref = race_entity_ref(&pending.race_id);
+        let existing_sync_state = self
+            .sync_states
+            .find_by_provider_and_canonical_entity(
+                &pending.user_id,
+                ExternalProvider::Intervals,
+                &race_ref,
+            )
+            .await
+            .map_err(map_sync_repository_error)?
+            .unwrap_or_else(|| {
+                ExternalSyncState::new(
+                    pending.user_id.clone(),
+                    ExternalProvider::Intervals,
+                    race_ref.clone(),
+                )
+            });
+        let pending_sync_state = self
+            .sync_states
+            .upsert(existing_sync_state.mark_pending_push())
+            .await
+            .map_err(map_sync_repository_error)?;
         let sync_result: Result<i64, RaceError> = async {
-            let remote_event = if let Some(event_id) = pending.linked_intervals_event_id {
+            let remote_event = if let Some(event_id) = parse_intervals_event_id(
+                pending_sync_state.external_id.as_deref(),
+                &pending.race_id,
+            )? {
                 self.intervals
                     .update_event(
                         &pending.user_id,
@@ -138,8 +327,40 @@ where
                     )
                     .await
                     .map_err(map_intervals_error)?
-            } else {
+            } else if let Some(existing_event) = self
+                .find_existing_remote_race_event(&pending.user_id, &pending)
+                .await?
+            {
+                self.sync_states
+                    .upsert(
+                        pending_sync_state
+                            .clone()
+                            .mark_remote_created(existing_event.id.to_string()),
+                    )
+                    .await
+                    .map_err(map_sync_repository_error)?;
+
                 self.intervals
+                    .update_event(
+                        &pending.user_id,
+                        existing_event.id,
+                        UpdateEvent {
+                            category: Some(projected_event_category(&pending)),
+                            start_date_local: Some(projected_event_start_date_local(&pending.date)),
+                            event_type: Some(projected_event_type(&pending).to_string()),
+                            name: Some(projected_event_name(&pending)),
+                            description: Some(projected_event_description(&pending)),
+                            indoor: Some(false),
+                            color: None,
+                            workout_doc: None,
+                            file_upload: None,
+                        },
+                    )
+                    .await
+                    .map_err(map_intervals_error)?
+            } else {
+                let remote_event = self
+                    .intervals
                     .create_event(
                         &pending.user_id,
                         CreateEvent {
@@ -155,7 +376,18 @@ where
                         },
                     )
                     .await
-                    .map_err(map_intervals_error)?
+                    .map_err(map_intervals_error)?;
+
+                self.sync_states
+                    .upsert(
+                        pending_sync_state
+                            .clone()
+                            .mark_remote_created(remote_event.id.to_string()),
+                    )
+                    .await
+                    .map_err(map_sync_repository_error)?;
+
+                remote_event
             };
 
             Ok(remote_event.id)
@@ -164,36 +396,64 @@ where
 
         match sync_result {
             Ok(remote_event_id) => {
-                let synced = pending.mark_synced(
-                    remote_event_id,
-                    pending.payload_hash(),
-                    self.clock.now_epoch_seconds(),
-                );
-                self.repository.upsert(synced).await
+                self.sync_states
+                    .upsert(pending_sync_state.mark_synced(
+                        remote_event_id.to_string(),
+                        pending.payload_hash(),
+                        self.clock.now_epoch_seconds(),
+                    ))
+                    .await
+                    .map_err(map_sync_repository_error)?;
+                self.mark_calendar_poll_due_soon(&pending.user_id).await;
+                Ok(pending)
             }
             Err(error) => {
-                let failed = pending.mark_failed(error.to_string(), self.clock.now_epoch_seconds());
-                if let Err(persist_error) = self.repository.upsert(failed).await {
-                    tracing::error!(
-                        user_id = %pending.user_id,
-                        race_id = %pending.race_id,
-                        error = %persist_error,
-                        "failed to persist race sync failure state"
-                    );
-                }
+                self.sync_states
+                    .upsert(pending_sync_state.mark_failed(error.to_string()))
+                    .await
+                    .map_err(map_sync_repository_error)?;
                 Err(error)
             }
         }
     }
+
+    async fn find_existing_remote_race_event(
+        &self,
+        user_id: &str,
+        race: &Race,
+    ) -> Result<Option<crate::domain::intervals::Event>, RaceError> {
+        let date_range = DateRange {
+            oldest: race.date.clone(),
+            newest: race.date.clone(),
+        };
+        let canonical_race_marker = canonical_race_id_marker(&race.race_id);
+
+        let events = self
+            .intervals
+            .list_events(user_id, &date_range)
+            .await
+            .map_err(map_intervals_error)?;
+
+        Ok(events.into_iter().find(|event| {
+            event.description.as_deref().is_some_and(|description| {
+                description
+                    .lines()
+                    .any(|line| line == canonical_race_marker)
+            })
+        }))
+    }
 }
 
-impl<Repository, Intervals, Time, Ids> RaceUseCases
-    for RaceService<Repository, Intervals, Time, Ids>
+impl<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh> RaceUseCases
+    for RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>
 where
     Repository: RaceRepository + Clone + 'static,
     Intervals: IntervalsUseCases + Clone + 'static,
+    SyncStates: ExternalSyncStateRepository + Clone + 'static,
     Time: Clock + Clone + 'static,
     Ids: IdGenerator + Clone + 'static,
+    PollStates: ProviderPollStateRepository + Clone + 'static,
+    Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     fn list_races(
         &self,
@@ -340,11 +600,16 @@ fn projected_event_category(race: &Race) -> crate::domain::intervals::EventCateg
 
 fn projected_event_description(race: &Race) -> String {
     format!(
-        "distance_meters={}\ndiscipline={}\npriority={}",
+        "distance_meters={}\ndiscipline={}\npriority={}\n{}",
         race.distance_meters,
         race.discipline.as_str(),
-        race.priority.as_str()
+        race.priority.as_str(),
+        canonical_race_id_marker(&race.race_id)
     )
+}
+
+fn canonical_race_id_marker(race_id: &str) -> String {
+    format!("canonical_race_id={race_id}")
 }
 
 fn map_intervals_error(error: IntervalsError) -> RaceError {
@@ -357,5 +622,30 @@ fn map_intervals_error(error: IntervalsError) -> RaceError {
         IntervalsError::ApiError(message)
         | IntervalsError::ConnectionError(message)
         | IntervalsError::Internal(message) => RaceError::Unavailable(message),
+    }
+}
+
+fn map_sync_repository_error(error: ExternalSyncRepositoryError) -> RaceError {
+    match error {
+        ExternalSyncRepositoryError::Storage(message)
+        | ExternalSyncRepositoryError::CorruptData(message) => RaceError::Internal(message),
+    }
+}
+
+fn race_entity_ref(race_id: &str) -> CanonicalEntityRef {
+    CanonicalEntityRef::new(CanonicalEntityKind::Race, race_id.to_string())
+}
+
+fn parse_intervals_event_id(
+    external_id: Option<&str>,
+    race_id: &str,
+) -> Result<Option<i64>, RaceError> {
+    match external_id {
+        None => Ok(None),
+        Some(value) => value.parse::<i64>().map(Some).map_err(|_| {
+            RaceError::Internal(format!(
+                "invalid stored intervals event id for race {race_id}: {value}"
+            ))
+        }),
     }
 }

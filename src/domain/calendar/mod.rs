@@ -1,12 +1,16 @@
 mod model;
 mod ports;
 mod service;
+#[cfg(test)]
+mod tests;
 
 pub use model::{
-    CalendarError, CalendarEvent, CalendarEventSource, CalendarProjectedWorkout,
-    PlannedWorkoutSyncRecord, PlannedWorkoutSyncStatus, SyncPlannedWorkout,
+    CalendarError, CalendarEvent, CalendarEventCategory, CalendarEventSource,
+    CalendarProjectedWorkout, PlannedWorkoutSyncRecord, PlannedWorkoutSyncStatus,
+    SyncPlannedWorkout,
 };
 pub use ports::{
-    BoxFuture, CalendarUseCases, HiddenCalendarEventSource, PlannedWorkoutSyncRepository,
+    BoxFuture, CalendarUseCases, HiddenCalendarEventSource, NoopPlannedWorkoutSyncRepository,
+    PlannedWorkoutSyncRepository,
 };
 pub use service::CalendarService;

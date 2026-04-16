@@ -9,6 +9,7 @@ use crate::{
         ApiCall, FakeActivityIdentityExtractor, FakeActivityRepository, FakeIntervalsApi,
         FakeSettingsPort, RepoCall,
     },
+    refresh_support::RecordingCalendarRefresh,
 };
 
 #[tokio::test]
@@ -427,5 +428,48 @@ async fn upload_activity_persists_uploaded_activities() {
             RepoCall::FindExternalId("garmin-1".to_string()),
             RepoCall::UpsertMany(1),
         ]
+    );
+}
+
+#[tokio::test]
+async fn upload_activity_refreshes_calendar_view_for_uploaded_activity_dates() {
+    let uploaded_activity = sample_activity("i92", "Uploaded Ride");
+    let refresh = RecordingCalendarRefresh::default();
+    let service = IntervalsService::new(
+        FakeIntervalsApi::with_uploaded_activities(UploadedActivities {
+            created: true,
+            activity_ids: vec![uploaded_activity.id.clone()],
+            activities: vec![uploaded_activity],
+        }),
+        FakeSettingsPort::with_credentials(valid_credentials()),
+        FakeActivityRepository::default(),
+        NoopActivityUploadOperationRepository::default(),
+        FakeActivityIdentityExtractor::default(),
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    service
+        .upload_activity(
+            "user-1",
+            UploadActivity {
+                filename: "ride.fit".to_string(),
+                file_bytes: vec![1, 2, 3],
+                name: Some("Uploaded Ride".to_string()),
+                description: None,
+                device_name: None,
+                external_id: Some("garmin-92".to_string()),
+                paired_event_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-03-22".to_string(),
+            "2026-03-22".to_string(),
+        )]
     );
 }

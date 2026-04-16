@@ -158,9 +158,8 @@ pub(super) fn build_recent_day_contexts(
             let planned_workouts = day_events
                 .iter()
                 .filter(|event| event.category == EventCategory::Workout)
-                .map(|event| {
-                    build_planned_workout(event, matched.event_to_activity.contains_key(&event.id))
-                })
+                .filter(|event| !matched.event_to_activity.contains_key(&event.id))
+                .map(|event| build_planned_workout(event, false))
                 .collect::<Vec<_>>();
             let special_days = day_events
                 .iter()
@@ -504,17 +503,44 @@ pub(super) struct RecentWorkoutSummaryLookup<'a> {
 pub(super) fn build_event_activity_matches(
     events: &[Event],
     activities: &[Activity],
+    direct_matches: &HashMap<String, Event>,
     configured_ftp: Option<i32>,
 ) -> EventActivityMatches {
     let mut scored_matches = Vec::new();
+    let mut matches = EventActivityMatches::default();
+    let mut used_event_ids = BTreeSet::new();
+    let mut used_activity_ids = BTreeSet::new();
+
+    for activity in activities {
+        let Some(event) = direct_matches.get(&activity.id) else {
+            continue;
+        };
+
+        used_event_ids.insert(event.id);
+        used_activity_ids.insert(activity.id.clone());
+        matches
+            .event_to_activity
+            .insert(event.id, activity.id.clone());
+        matches
+            .activity_to_event
+            .insert(activity.id.clone(), event.clone());
+    }
+
     for event in events
         .iter()
         .filter(|event| event.category == EventCategory::Workout)
     {
+        if used_event_ids.contains(&event.id) {
+            continue;
+        }
+
         let event_date = date_key(&event.start_date_local);
         let same_day = activities
             .iter()
-            .filter(|activity| date_key(&activity.start_date_local) == event_date)
+            .filter(|activity| {
+                !used_activity_ids.contains(&activity.id)
+                    && date_key(&activity.start_date_local) == event_date
+            })
             .collect::<Vec<_>>();
 
         for activity in same_day {
@@ -535,9 +561,6 @@ pub(super) fn build_event_activity_matches(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let mut used_event_ids = BTreeSet::new();
-    let mut used_activity_ids = BTreeSet::new();
-    let mut matches = EventActivityMatches::default();
     for (_score, event, activity) in scored_matches {
         if used_event_ids.contains(&event.id) || used_activity_ids.contains(&activity.id) {
             continue;
@@ -590,6 +613,14 @@ pub(super) fn infer_focus_kind(
         .any(|workout| workout.activity_id == workout_id)
     {
         return "activity".to_string();
+    }
+    if recent_days
+        .iter()
+        .flat_map(|day| &day.workouts)
+        .filter_map(|workout| workout.planned_workout.as_ref())
+        .any(|planned| planned.event_id.to_string() == workout_id)
+    {
+        return "event".to_string();
     }
     if recent_days
         .iter()

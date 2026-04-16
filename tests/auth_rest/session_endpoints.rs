@@ -7,7 +7,7 @@ use tower::util::ServiceExt;
 
 use crate::shared::{auth_test_app, TestIdentityService, RESPONSE_LIMIT_BYTES};
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn me_returns_unauthenticated_without_cookie() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -31,7 +31,7 @@ async fn me_returns_unauthenticated_without_cookie() {
     assert_eq!(payload["authenticated"], false);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn me_returns_current_user_when_cookie_matches_session() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -59,7 +59,7 @@ async fn me_returns_current_user_when_cookie_matches_session() {
     assert_eq!(payload["user"]["roles"][1], "admin");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn me_reads_session_cookie_from_later_cookie_header() {
     let app = auth_test_app(TestIdentityService::default()).await;
     let mut request = Request::builder()
@@ -87,7 +87,7 @@ async fn me_reads_session_cookie_from_later_cookie_header() {
     assert_eq!(payload["user"]["email"], "admin@example.com");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn logout_clears_session_cookie() {
     let app = auth_test_app(TestIdentityService::default()).await;
 
@@ -115,7 +115,7 @@ async fn logout_clears_session_cookie() {
     assert!(cookie.contains("Max-Age=0"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn logout_forwards_session_id_to_identity_service() {
     let service = TestIdentityService::default();
     let captured = service.last_logout_session_id.clone();

@@ -76,13 +76,13 @@ export async function deleteEvent(apiBaseUrl: string, eventId: number) {
 
 export async function listActivities(apiBaseUrl: string, query: unknown) {
   const validated = listEventsQuerySchema.parse(query);
-  const path = `/api/intervals/activities?${toQueryString(validated)}`;
+  const path = `/api/completed-workouts?${toQueryString(validated)}`;
   const data = await get(apiBaseUrl, path);
   return intervalActivitiesResponseSchema.parse(data);
 }
 
 export async function loadActivity(apiBaseUrl: string, activityId: string) {
-  const data = await get(apiBaseUrl, `/api/intervals/activities/${activityId}`);
+  const data = await get(apiBaseUrl, `/api/completed-workouts/${activityId}`);
   return intervalActivitySchema.parse(data);
 }
 

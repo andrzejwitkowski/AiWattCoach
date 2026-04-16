@@ -11,3 +11,4 @@
 .worktrees/
 /frontend/.vite/
 /graphify-out/cache/
+/.pup/

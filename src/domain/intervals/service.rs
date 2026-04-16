@@ -14,6 +14,7 @@ use super::{
     PestParserPocRepositoryPort, PestParserPocSource, PestParserPocWorkoutRecord, UpdateActivity,
     UpdateEvent, UploadActivity, UploadedActivities,
 };
+use crate::domain::calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh};
 use crate::domain::identity::Clock;
 use crate::domain::intervals::workout::parse_workout_ast;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -165,6 +166,7 @@ pub struct IntervalsService<
     Extractor,
     PocRepo = NoopPestParserPocRepository,
     Time = LiveClock,
+    Refresh = NoopCalendarEntryViewRefresh,
 > where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
@@ -173,6 +175,7 @@ pub struct IntervalsService<
     Extractor: ActivityFileIdentityExtractorPort,
     PocRepo: PestParserPocRepositoryPort,
     Time: Clock,
+    Refresh: CalendarEntryViewRefreshPort,
 {
     api: Api,
     settings: Settings,
@@ -181,6 +184,7 @@ pub struct IntervalsService<
     identity_extractor: Extractor,
     pest_parser_poc_repository: Option<PocRepo>,
     clock: Time,
+    refresh: Refresh,
 }
 
 impl<Api, Settings, Activities, UploadOperations, Extractor>
@@ -192,6 +196,7 @@ impl<Api, Settings, Activities, UploadOperations, Extractor>
         Extractor,
         NoopPestParserPocRepository,
         LiveClock,
+        NoopCalendarEntryViewRefresh,
     >
 where
     Api: IntervalsApiPort,
@@ -215,12 +220,13 @@ where
             identity_extractor,
             pest_parser_poc_repository: None,
             clock: LiveClock,
+            refresh: NoopCalendarEntryViewRefresh,
         }
     }
 }
 
-impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
-    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
+impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
+    IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
@@ -229,11 +235,12 @@ where
     Extractor: ActivityFileIdentityExtractorPort,
     PocRepo: PestParserPocRepositoryPort,
     Time: Clock,
+    Refresh: CalendarEntryViewRefreshPort,
 {
     pub fn with_pest_parser_poc_repository<Repo>(
         self,
         repository: Repo,
-    ) -> IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, Repo, Time>
+    ) -> IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, Repo, Time, Refresh>
     where
         Repo: PestParserPocRepositoryPort,
     {
@@ -245,13 +252,23 @@ where
             identity_extractor: self.identity_extractor,
             pest_parser_poc_repository: Some(repository),
             clock: self.clock,
+            refresh: self.refresh,
         }
     }
 
     pub fn with_clock<NewTime>(
         self,
         clock: NewTime,
-    ) -> IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, NewTime>
+    ) -> IntervalsService<
+        Api,
+        Settings,
+        Activities,
+        UploadOperations,
+        Extractor,
+        PocRepo,
+        NewTime,
+        Refresh,
+    >
     where
         NewTime: Clock,
     {
@@ -263,6 +280,35 @@ where
             identity_extractor: self.identity_extractor,
             pest_parser_poc_repository: self.pest_parser_poc_repository,
             clock,
+            refresh: self.refresh,
+        }
+    }
+
+    pub fn with_calendar_view_refresh<NewRefresh>(
+        self,
+        refresh: NewRefresh,
+    ) -> IntervalsService<
+        Api,
+        Settings,
+        Activities,
+        UploadOperations,
+        Extractor,
+        PocRepo,
+        Time,
+        NewRefresh,
+    >
+    where
+        NewRefresh: CalendarEntryViewRefreshPort,
+    {
+        IntervalsService {
+            api: self.api,
+            settings: self.settings,
+            activities: self.activities,
+            upload_operations: self.upload_operations,
+            identity_extractor: self.identity_extractor,
+            pest_parser_poc_repository: self.pest_parser_poc_repository,
+            clock: self.clock,
+            refresh,
         }
     }
 
@@ -334,8 +380,18 @@ fn normalize_workout_text(input: &str) -> String {
         .join("\n")
 }
 
-impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time> IntervalsUseCases
-    for IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time>
+impl<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
+    IntervalsUseCases
+    for IntervalsService<
+        Api,
+        Settings,
+        Activities,
+        UploadOperations,
+        Extractor,
+        PocRepo,
+        Time,
+        Refresh,
+    >
 where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
@@ -344,6 +400,7 @@ where
     Extractor: ActivityFileIdentityExtractorPort,
     PocRepo: PestParserPocRepositoryPort,
     Time: Clock,
+    Refresh: CalendarEntryViewRefreshPort,
 {
     fn list_events(
         &self,

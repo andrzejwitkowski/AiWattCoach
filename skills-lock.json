@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "494d59fffe67c87b485f4ee2fb1abd73fc9d0d508c4c8bd9c43a9edd3242f730"
     },
+    "cove": {
+      "source": "r9000labs/cove",
+      "sourceType": "github",
+      "computedHash": "844f53be3b754a75ca0325ee08ee872c1bce26559537759e03ea02baef9dce72"
+    },
     "bun": {
       "source": "bun.sh",
       "sourceType": "well-known",

@@ -1,0 +1,264 @@
+use super::date_keys::start_minute_bucket;
+
+use crate::domain::{
+    completed_workouts::{
+        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+        CompletedWorkoutStream,
+    },
+    intervals::{round_distance_bucket, round_duration_bucket},
+};
+
+pub(super) fn completed_workout_dedup_key(workout: &CompletedWorkout) -> Option<String> {
+    let start_bucket = start_minute_bucket(&workout.start_date_local)?;
+    let duration_seconds = completed_workout_duration_seconds(workout)?;
+    let distance_bucket_meters = completed_workout_distance_bucket(workout);
+    let stream_bucket = completed_workout_stream_bucket(workout);
+    Some(format!(
+        "v1:{}|{}|{}|{}",
+        start_bucket,
+        round_duration_bucket(duration_seconds),
+        distance_bucket_meters
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        stream_bucket,
+    ))
+}
+
+fn completed_workout_duration_seconds(workout: &CompletedWorkout) -> Option<i32> {
+    let group_duration = workout
+        .details
+        .interval_groups
+        .iter()
+        .filter_map(|group| group.elapsed_time_seconds.or(group.moving_time_seconds))
+        .max();
+    let interval_duration = workout
+        .details
+        .intervals
+        .iter()
+        .filter_map(|interval| {
+            interval
+                .elapsed_time_seconds
+                .or(interval.moving_time_seconds)
+        })
+        .max();
+    let stream_duration = workout
+        .details
+        .streams
+        .iter()
+        .filter_map(completed_workout_stream_sample_count)
+        .max();
+
+    [
+        workout.duration_seconds,
+        group_duration,
+        interval_duration,
+        stream_duration,
+    ]
+    .into_iter()
+    .flatten()
+    .max()
+}
+
+fn completed_workout_distance_bucket(workout: &CompletedWorkout) -> Option<i32> {
+    let group_distance = workout
+        .details
+        .interval_groups
+        .iter()
+        .filter_map(|group| group.distance_meters)
+        .max_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let interval_distance = workout
+        .details
+        .intervals
+        .iter()
+        .filter_map(|interval| interval.distance_meters)
+        .max_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let stream_distance = completed_workout_stream_distance_bucket(workout);
+    let workout_distance = workout
+        .distance_meters
+        .filter(|value| value.is_finite() && *value > 0.0);
+
+    let max_distance = [
+        workout_distance,
+        group_distance,
+        interval_distance,
+        stream_distance,
+    ]
+    .into_iter()
+    .flatten()
+    .max_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+
+    round_distance_bucket(max_distance)
+}
+
+fn completed_workout_stream_bucket(workout: &CompletedWorkout) -> String {
+    let mut stream_types = workout
+        .details
+        .streams
+        .iter()
+        .map(|stream| stream.stream_type.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    stream_types.sort();
+    stream_types.dedup();
+
+    if stream_types.is_empty() {
+        "none".to_string()
+    } else {
+        stream_types.join(",")
+    }
+}
+
+fn completed_workout_stream_sample_count(stream: &CompletedWorkoutStream) -> Option<i32> {
+    let primary = series_len(stream.primary_series.as_ref());
+    let secondary = series_len(stream.secondary_series.as_ref());
+    primary.or(secondary)
+}
+
+fn completed_workout_stream_distance_bucket(workout: &CompletedWorkout) -> Option<f64> {
+    workout
+        .details
+        .streams
+        .iter()
+        .find(|stream| {
+            stream.stream_type.eq_ignore_ascii_case("distance")
+                || stream.stream_type.eq_ignore_ascii_case("dist")
+        })
+        .and_then(|stream| last_numeric_value(stream.primary_series.as_ref()))
+        .or_else(|| {
+            workout
+                .details
+                .streams
+                .iter()
+                .find(|stream| {
+                    stream.stream_type.eq_ignore_ascii_case("distance")
+                        || stream.stream_type.eq_ignore_ascii_case("dist")
+                })
+                .and_then(|stream| last_numeric_value(stream.secondary_series.as_ref()))
+        })
+}
+
+fn series_len(series: Option<&CompletedWorkoutSeries>) -> Option<i32> {
+    let len = match series? {
+        CompletedWorkoutSeries::Integers(values) => values.len(),
+        CompletedWorkoutSeries::Floats(values) => values.len(),
+        CompletedWorkoutSeries::Bools(values) => values.len(),
+        CompletedWorkoutSeries::Strings(values) => values.len(),
+    };
+    i32::try_from(len).ok().filter(|value| *value > 0)
+}
+
+fn last_numeric_value(series: Option<&CompletedWorkoutSeries>) -> Option<f64> {
+    match series? {
+        CompletedWorkoutSeries::Integers(values) => values
+            .iter()
+            .rev()
+            .map(|value| *value as f64)
+            .find(|value| value.is_finite() && *value > 0.0),
+        CompletedWorkoutSeries::Floats(values) => values
+            .iter()
+            .rev()
+            .copied()
+            .find(|value| value.is_finite() && *value > 0.0),
+        CompletedWorkoutSeries::Bools(_) | CompletedWorkoutSeries::Strings(_) => None,
+    }
+}
+
+pub(super) fn merge_completed_workout(
+    existing: CompletedWorkout,
+    incoming: CompletedWorkout,
+) -> CompletedWorkout {
+    let merged_details = merge_completed_workout_details(existing.details, incoming.details);
+    let details_unavailable_reason = if has_any_details(&merged_details) {
+        None
+    } else {
+        incoming
+            .details_unavailable_reason
+            .or(existing.details_unavailable_reason)
+    };
+
+    CompletedWorkout {
+        completed_workout_id: existing.completed_workout_id,
+        user_id: existing.user_id,
+        start_date_local: incoming.start_date_local,
+        source_activity_id: incoming.source_activity_id.or(existing.source_activity_id),
+        planned_workout_id: incoming.planned_workout_id.or(existing.planned_workout_id),
+        name: incoming.name.or(existing.name),
+        description: incoming.description.or(existing.description),
+        activity_type: incoming.activity_type.or(existing.activity_type),
+        external_id: incoming.external_id.or(existing.external_id),
+        trainer: incoming.trainer || existing.trainer,
+        duration_seconds: incoming.duration_seconds.or(existing.duration_seconds),
+        distance_meters: incoming.distance_meters.or(existing.distance_meters),
+        metrics: merge_completed_workout_metrics(existing.metrics, incoming.metrics),
+        details: merged_details,
+        details_unavailable_reason,
+    }
+}
+
+fn has_any_details(details: &CompletedWorkoutDetails) -> bool {
+    !(details.intervals.is_empty()
+        && details.interval_groups.is_empty()
+        && details.streams.is_empty()
+        && details.interval_summary.is_empty()
+        && details.skyline_chart.is_empty()
+        && details.power_zone_times.is_empty()
+        && details.heart_rate_zone_times.is_empty()
+        && details.pace_zone_times.is_empty()
+        && details.gap_zone_times.is_empty())
+}
+
+fn merge_completed_workout_metrics(
+    existing: CompletedWorkoutMetrics,
+    incoming: CompletedWorkoutMetrics,
+) -> CompletedWorkoutMetrics {
+    CompletedWorkoutMetrics {
+        training_stress_score: incoming
+            .training_stress_score
+            .or(existing.training_stress_score),
+        normalized_power_watts: incoming
+            .normalized_power_watts
+            .or(existing.normalized_power_watts),
+        intensity_factor: incoming.intensity_factor.or(existing.intensity_factor),
+        efficiency_factor: incoming.efficiency_factor.or(existing.efficiency_factor),
+        variability_index: incoming.variability_index.or(existing.variability_index),
+        average_power_watts: incoming
+            .average_power_watts
+            .or(existing.average_power_watts),
+        ftp_watts: incoming.ftp_watts.or(existing.ftp_watts),
+        total_work_joules: incoming.total_work_joules.or(existing.total_work_joules),
+        calories: incoming.calories.or(existing.calories),
+        trimp: incoming.trimp.or(existing.trimp),
+        power_load: incoming.power_load.or(existing.power_load),
+        heart_rate_load: incoming.heart_rate_load.or(existing.heart_rate_load),
+        pace_load: incoming.pace_load.or(existing.pace_load),
+        strain_score: incoming.strain_score.or(existing.strain_score),
+    }
+}
+
+fn merge_completed_workout_details(
+    existing: CompletedWorkoutDetails,
+    incoming: CompletedWorkoutDetails,
+) -> CompletedWorkoutDetails {
+    CompletedWorkoutDetails {
+        intervals: prefer_non_empty(incoming.intervals, existing.intervals),
+        interval_groups: prefer_non_empty(incoming.interval_groups, existing.interval_groups),
+        streams: prefer_non_empty(incoming.streams, existing.streams),
+        interval_summary: prefer_non_empty(incoming.interval_summary, existing.interval_summary),
+        skyline_chart: prefer_non_empty(incoming.skyline_chart, existing.skyline_chart),
+        power_zone_times: prefer_non_empty(incoming.power_zone_times, existing.power_zone_times),
+        heart_rate_zone_times: prefer_non_empty(
+            incoming.heart_rate_zone_times,
+            existing.heart_rate_zone_times,
+        ),
+        pace_zone_times: prefer_non_empty(incoming.pace_zone_times, existing.pace_zone_times),
+        gap_zone_times: prefer_non_empty(incoming.gap_zone_times, existing.gap_zone_times),
+    }
+}
+
+fn prefer_non_empty<T>(incoming: Vec<T>, existing: Vec<T>) -> Vec<T> {
+    if incoming.is_empty() {
+        existing
+    } else {
+        incoming
+    }
+}

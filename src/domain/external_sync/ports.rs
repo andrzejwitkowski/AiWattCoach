@@ -1,0 +1,176 @@
+use std::{future::Future, pin::Pin};
+
+use super::{
+    CanonicalEntityRef, ExternalObjectKind, ExternalObservation, ExternalProvider,
+    ExternalSyncRepositoryError, ExternalSyncState, ProviderPollState, ProviderPollStream,
+};
+
+pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
+
+pub trait ExternalObservationRepository: Clone + Send + Sync + 'static {
+    fn upsert(
+        &self,
+        observation: ExternalObservation,
+    ) -> BoxFuture<Result<ExternalObservation, ExternalSyncRepositoryError>>;
+
+    fn find_by_provider_and_external_id(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<ExternalObservation>, ExternalSyncRepositoryError>>;
+
+    fn find_by_dedup_key(
+        &self,
+        user_id: &str,
+        external_object_kind: ExternalObjectKind,
+        dedup_key: &str,
+    ) -> BoxFuture<Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>>;
+}
+
+pub trait ExternalSyncStateRepository: Clone + Send + Sync + 'static {
+    fn upsert(
+        &self,
+        state: ExternalSyncState,
+    ) -> BoxFuture<Result<ExternalSyncState, ExternalSyncRepositoryError>>;
+
+    fn find_by_provider_and_canonical_entity(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entity: &CanonicalEntityRef,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>>;
+
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>>;
+
+    fn delete_by_provider_and_canonical_entity(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entity: &CanonicalEntityRef,
+    ) -> BoxFuture<Result<(), ExternalSyncRepositoryError>>;
+}
+
+pub trait ProviderPollStateRepository: Clone + Send + Sync + 'static {
+    fn upsert(
+        &self,
+        state: ProviderPollState,
+    ) -> BoxFuture<Result<ProviderPollState, ExternalSyncRepositoryError>>;
+
+    fn list_due(
+        &self,
+        now_epoch_seconds: i64,
+    ) -> BoxFuture<Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>>;
+
+    fn find_by_provider_and_stream(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        stream: ProviderPollStream,
+    ) -> BoxFuture<Result<Option<ProviderPollState>, ExternalSyncRepositoryError>>;
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Clone, Default)]
+pub struct NoopExternalObservationRepository;
+
+#[cfg(test)]
+impl ExternalObservationRepository for NoopExternalObservationRepository {
+    fn upsert(
+        &self,
+        observation: ExternalObservation,
+    ) -> BoxFuture<Result<ExternalObservation, ExternalSyncRepositoryError>> {
+        Box::pin(async move { Ok(observation) })
+    }
+
+    fn find_by_provider_and_external_id(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _external_id: &str,
+    ) -> BoxFuture<Result<Option<ExternalObservation>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_dedup_key(
+        &self,
+        _user_id: &str,
+        _external_object_kind: ExternalObjectKind,
+        _dedup_key: &str,
+    ) -> BoxFuture<Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct NoopExternalSyncStateRepository;
+
+impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
+    fn upsert(
+        &self,
+        state: ExternalSyncState,
+    ) -> BoxFuture<Result<ExternalSyncState, ExternalSyncRepositoryError>> {
+        Box::pin(async move { Ok(state) })
+    }
+
+    fn find_by_provider_and_canonical_entity(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entity: &CanonicalEntityRef,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn delete_by_provider_and_canonical_entity(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entity: &CanonicalEntityRef,
+    ) -> BoxFuture<Result<(), ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct NoopProviderPollStateRepository;
+
+impl ProviderPollStateRepository for NoopProviderPollStateRepository {
+    fn upsert(
+        &self,
+        state: ProviderPollState,
+    ) -> BoxFuture<Result<ProviderPollState, ExternalSyncRepositoryError>> {
+        Box::pin(async move { Ok(state) })
+    }
+
+    fn list_due(
+        &self,
+        _now_epoch_seconds: i64,
+    ) -> BoxFuture<Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn find_by_provider_and_stream(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _stream: ProviderPollStream,
+    ) -> BoxFuture<Result<Option<ProviderPollState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(None) })
+    }
+}

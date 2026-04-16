@@ -1,10 +1,14 @@
 use crate::{
-    adapters::rest::intervals::map_event_to_dto_with_parsed_workout_doc,
+    adapters::rest::intervals::{
+        ActualWorkoutDto, EventDefinitionDto, IntervalDefinitionDto, MatchedWorkoutIntervalDto,
+        WorkoutSegmentDto, WorkoutSummaryDto,
+    },
     domain::{
-        calendar::CalendarEvent,
+        calendar::{CalendarEvent, CalendarEventCategory},
         calendar_labels::{
             CalendarLabel, CalendarLabelPayload, CalendarLabelsResponse, CalendarRaceLabel,
         },
+        intervals::parse_workout_doc,
     },
 };
 
@@ -16,28 +20,74 @@ use super::dto::{
 
 pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDto {
     let CalendarEvent {
+        id,
         calendar_entry_id,
-        event,
+        start_date_local,
+        name,
+        category,
+        description,
+        indoor,
+        color,
+        raw_workout_doc,
         source,
         projected_workout,
         sync_status,
         linked_intervals_event_id,
+        actual_workout,
     } = event;
-    let structured_workout_text = event.structured_workout_text().map(ToString::to_string);
-    let event_dto =
-        map_event_to_dto_with_parsed_workout_doc(event, structured_workout_text.as_deref(), None);
+    let parsed = parse_workout_doc(
+        raw_workout_doc
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .or(description.as_deref()),
+        None,
+    );
 
     CalendarEventDto {
-        id: event_dto.id,
+        id,
         calendar_entry_id,
-        start_date_local: event_dto.start_date_local,
-        name: event_dto.name,
-        category: event_dto.category,
-        description: event_dto.description,
-        indoor: event_dto.indoor,
-        color: event_dto.color,
-        event_definition: event_dto.event_definition,
-        actual_workout: None,
+        start_date_local,
+        name,
+        category: map_category(category),
+        description,
+        indoor,
+        color,
+        event_definition: EventDefinitionDto {
+            raw_workout_doc,
+            intervals: parsed
+                .intervals
+                .iter()
+                .map(|interval| IntervalDefinitionDto {
+                    definition: interval.definition.clone(),
+                    repeat_count: interval.repeat_count,
+                    duration_seconds: interval.duration_seconds,
+                    target_percent_ftp: interval.target_percent_ftp,
+                    zone_id: interval.zone_id,
+                })
+                .collect(),
+            segments: parsed
+                .segments
+                .iter()
+                .map(|segment| WorkoutSegmentDto {
+                    order: segment.order,
+                    label: segment.label.clone(),
+                    duration_seconds: segment.duration_seconds,
+                    start_offset_seconds: segment.start_offset_seconds,
+                    end_offset_seconds: segment.end_offset_seconds,
+                    target_percent_ftp: segment.target_percent_ftp,
+                    zone_id: segment.zone_id,
+                })
+                .collect(),
+            summary: WorkoutSummaryDto {
+                total_segments: parsed.summary.total_segments,
+                total_duration_seconds: parsed.summary.total_duration_seconds,
+                estimated_normalized_power_watts: parsed.summary.estimated_normalized_power_watts,
+                estimated_average_power_watts: parsed.summary.estimated_average_power_watts,
+                estimated_intensity_factor: parsed.summary.estimated_intensity_factor,
+                estimated_training_stress_score: parsed.summary.estimated_training_stress_score,
+            },
+        },
+        actual_workout: actual_workout.map(map_actual_workout_to_dto),
         planned_source: source.as_str().to_string(),
         sync_status: sync_status.map(|status| status.as_str().to_string()),
         linked_intervals_event_id,
@@ -48,6 +98,49 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
             source_workout_id: projected.source_workout_id,
         }),
     }
+}
+
+fn map_actual_workout_to_dto(
+    actual_workout: crate::domain::intervals::ActualWorkoutMatch,
+) -> ActualWorkoutDto {
+    ActualWorkoutDto {
+        activity_id: actual_workout.activity_id,
+        activity_name: actual_workout.activity_name,
+        start_date_local: actual_workout.start_date_local,
+        power_values: actual_workout.power_values,
+        cadence_values: actual_workout.cadence_values,
+        heart_rate_values: actual_workout.heart_rate_values,
+        speed_values: actual_workout.speed_values,
+        average_power_watts: actual_workout.average_power_watts,
+        normalized_power_watts: actual_workout.normalized_power_watts,
+        training_stress_score: actual_workout.training_stress_score,
+        intensity_factor: actual_workout.intensity_factor,
+        compliance_score: actual_workout.compliance_score,
+        matched_intervals: actual_workout
+            .matched_intervals
+            .into_iter()
+            .map(|interval| MatchedWorkoutIntervalDto {
+                planned_segment_order: interval.planned_segment_order,
+                planned_label: interval.planned_label,
+                planned_duration_seconds: interval.planned_duration_seconds,
+                target_percent_ftp: interval.target_percent_ftp,
+                zone_id: interval.zone_id,
+                actual_interval_id: interval.actual_interval_id,
+                actual_start_time_seconds: interval.actual_start_time_seconds,
+                actual_end_time_seconds: interval.actual_end_time_seconds,
+                average_power_watts: interval.average_power_watts,
+                normalized_power_watts: interval.normalized_power_watts,
+                average_heart_rate_bpm: interval.average_heart_rate_bpm,
+                average_cadence_rpm: interval.average_cadence_rpm,
+                average_speed_mps: interval.average_speed_mps,
+                compliance_score: interval.compliance_score,
+            })
+            .collect(),
+    }
+}
+
+fn map_category(category: CalendarEventCategory) -> String {
+    category.as_str().to_string()
 }
 
 pub(super) fn map_calendar_labels_to_dto(

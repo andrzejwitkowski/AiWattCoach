@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::intervals::Event;
+use crate::domain::intervals::ActualWorkoutMatch;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalendarError {
@@ -173,14 +173,42 @@ pub struct CalendarProjectedWorkout {
     pub source_workout_id: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CalendarEventCategory {
+    Workout,
+    Race,
+    Note,
+    Other,
+}
+
+impl CalendarEventCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Workout => "WORKOUT",
+            Self::Race => "RACE",
+            Self::Note => "NOTE",
+            Self::Other => "OTHER",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CalendarEvent {
+    pub id: i64,
     pub calendar_entry_id: String,
-    pub event: Event,
+    pub start_date_local: String,
+    pub name: Option<String>,
+    pub category: CalendarEventCategory,
+    pub description: Option<String>,
+    pub indoor: bool,
+    pub color: Option<String>,
+    pub raw_workout_doc: Option<String>,
     pub source: CalendarEventSource,
     pub projected_workout: Option<CalendarProjectedWorkout>,
     pub sync_status: Option<PlannedWorkoutSyncStatus>,
     pub linked_intervals_event_id: Option<i64>,
+    pub actual_workout: Option<ActualWorkoutMatch>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
