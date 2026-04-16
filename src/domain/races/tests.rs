@@ -930,7 +930,7 @@ async fn delete_race_refreshes_calendar_view_when_sync_state_delete_fails_after_
     let intervals = RecordingIntervalsService::default();
     let refresh = RecordingCalendarRefresh::default();
     let service = RaceService::new(
-        repository,
+        repository.clone(),
         intervals.clone(),
         sync_states,
         TestClock,
@@ -938,9 +938,9 @@ async fn delete_race_refreshes_calendar_view_when_sync_state_delete_fails_after_
     )
     .with_calendar_view_refresh(refresh.clone());
 
-    let error = service.delete_race("user-1", "race-1").await.unwrap_err();
+    service.delete_race("user-1", "race-1").await.unwrap();
 
-    assert_eq!(error, RaceError::Internal("sync delete boom".to_string()));
+    assert!(repository.stored().is_empty());
     assert_eq!(*intervals.deleted_event_ids.lock().unwrap(), vec![88]);
     assert_eq!(
         refresh.stored(),

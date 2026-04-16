@@ -93,11 +93,13 @@ fn map_special_day_event_import(user_id: &str, event: &Event) -> ExternalImportC
             map_special_day_kind(&event.category),
             event.name.clone(),
             event.description.clone(),
-        ),
+        )
+        .expect("intervals special day import should always produce canonical YYYY-MM-DD date"),
     })
 }
 
 pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> ExternalImportCommand {
+    let workout = map_activity_to_completed_workout(user_id, activity);
     ExternalImportCommand::UpsertCompletedWorkout(Box::new(ExternalCompletedWorkoutImport {
         provider: ExternalProvider::Intervals,
         external_id: activity.id.clone(),
@@ -110,120 +112,124 @@ pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> Ext
         .into_iter()
         .flatten()
         .collect(),
-        workout: CompletedWorkout::new(
-            format!("intervals-activity:{}", activity.id),
-            user_id.to_string(),
-            activity.start_date_local.clone(),
-            None,
-            activity.name.clone(),
-            activity.description.clone(),
-            activity.activity_type.clone(),
-            activity
-                .elapsed_time_seconds
-                .or(activity.moving_time_seconds),
-            activity.distance_meters,
-            CompletedWorkoutMetrics {
-                training_stress_score: activity.metrics.training_stress_score,
-                normalized_power_watts: activity.metrics.normalized_power_watts,
-                intensity_factor: activity.metrics.intensity_factor,
-                efficiency_factor: activity.metrics.efficiency_factor,
-                variability_index: activity.metrics.variability_index,
-                average_power_watts: activity.metrics.average_power_watts,
-                ftp_watts: activity.metrics.ftp_watts,
-                total_work_joules: activity.metrics.total_work_joules,
-                calories: activity.metrics.calories,
-                trimp: activity.metrics.trimp,
-                power_load: activity.metrics.power_load,
-                heart_rate_load: activity.metrics.heart_rate_load,
-                pace_load: activity.metrics.pace_load,
-                strain_score: activity.metrics.strain_score,
-            },
-            CompletedWorkoutDetails {
-                intervals: activity
-                    .details
-                    .intervals
-                    .iter()
-                    .cloned()
-                    .map(
-                        |interval| crate::domain::completed_workouts::CompletedWorkoutInterval {
-                            id: interval.id,
-                            label: interval.label,
-                            interval_type: interval.interval_type,
-                            group_id: interval.group_id,
-                            start_index: interval.start_index,
-                            end_index: interval.end_index,
-                            start_time_seconds: interval.start_time_seconds,
-                            end_time_seconds: interval.end_time_seconds,
-                            moving_time_seconds: interval.moving_time_seconds,
-                            elapsed_time_seconds: interval.elapsed_time_seconds,
-                            distance_meters: interval.distance_meters,
-                            average_power_watts: interval.average_power_watts,
-                            normalized_power_watts: interval.normalized_power_watts,
-                            training_stress_score: interval.training_stress_score,
-                            average_heart_rate_bpm: interval.average_heart_rate_bpm,
-                            average_cadence_rpm: interval.average_cadence_rpm,
-                            average_speed_mps: interval.average_speed_mps,
-                            average_stride_meters: interval.average_stride_meters,
-                            zone: interval.zone,
-                        },
-                    )
-                    .collect(),
-                interval_groups: activity
-                    .details
-                    .interval_groups
-                    .iter()
-                    .cloned()
-                    .map(
-                        |group| crate::domain::completed_workouts::CompletedWorkoutIntervalGroup {
-                            id: group.id,
-                            count: group.count,
-                            start_index: group.start_index,
-                            moving_time_seconds: group.moving_time_seconds,
-                            elapsed_time_seconds: group.elapsed_time_seconds,
-                            distance_meters: group.distance_meters,
-                            average_power_watts: group.average_power_watts,
-                            normalized_power_watts: group.normalized_power_watts,
-                            training_stress_score: group.training_stress_score,
-                            average_heart_rate_bpm: group.average_heart_rate_bpm,
-                            average_cadence_rpm: group.average_cadence_rpm,
-                            average_speed_mps: group.average_speed_mps,
-                            average_stride_meters: group.average_stride_meters,
-                        },
-                    )
-                    .collect(),
-                streams: activity
-                    .details
-                    .streams
-                    .iter()
-                    .cloned()
-                    .map(|stream| CompletedWorkoutStream {
-                        stream_type: stream.stream_type,
-                        name: stream.name,
-                        primary_series: map_stream_series(stream.data),
-                        secondary_series: map_stream_series(stream.data2),
-                        value_type_is_array: stream.value_type_is_array,
-                        custom: stream.custom,
-                        all_null: stream.all_null,
-                    })
-                    .collect(),
-                interval_summary: activity.details.interval_summary.clone(),
-                skyline_chart: activity.details.skyline_chart.clone(),
-                power_zone_times: activity
-                    .details
-                    .power_zone_times
-                    .iter()
-                    .cloned()
-                    .map(|zone| CompletedWorkoutZoneTime {
-                        zone_id: zone.zone_id,
-                        seconds: zone.seconds,
-                    })
-                    .collect(),
-                heart_rate_zone_times: activity.details.heart_rate_zone_times.clone(),
-                pace_zone_times: activity.details.pace_zone_times.clone(),
-                gap_zone_times: activity.details.gap_zone_times.clone(),
-            },
-        ),
+        workout,
     }))
+}
+
+fn map_activity_to_completed_workout(user_id: &str, activity: &Activity) -> CompletedWorkout {
+    CompletedWorkout::new(
+        format!("intervals-activity:{}", activity.id),
+        user_id.to_string(),
+        activity.start_date_local.clone(),
+        None,
+        activity.name.clone(),
+        activity.description.clone(),
+        activity.activity_type.clone(),
+        activity
+            .elapsed_time_seconds
+            .or(activity.moving_time_seconds),
+        activity.distance_meters,
+        CompletedWorkoutMetrics {
+            training_stress_score: activity.metrics.training_stress_score,
+            normalized_power_watts: activity.metrics.normalized_power_watts,
+            intensity_factor: activity.metrics.intensity_factor,
+            efficiency_factor: activity.metrics.efficiency_factor,
+            variability_index: activity.metrics.variability_index,
+            average_power_watts: activity.metrics.average_power_watts,
+            ftp_watts: activity.metrics.ftp_watts,
+            total_work_joules: activity.metrics.total_work_joules,
+            calories: activity.metrics.calories,
+            trimp: activity.metrics.trimp,
+            power_load: activity.metrics.power_load,
+            heart_rate_load: activity.metrics.heart_rate_load,
+            pace_load: activity.metrics.pace_load,
+            strain_score: activity.metrics.strain_score,
+        },
+        CompletedWorkoutDetails {
+            intervals: activity
+                .details
+                .intervals
+                .iter()
+                .cloned()
+                .map(
+                    |interval| crate::domain::completed_workouts::CompletedWorkoutInterval {
+                        id: interval.id,
+                        label: interval.label,
+                        interval_type: interval.interval_type,
+                        group_id: interval.group_id,
+                        start_index: interval.start_index,
+                        end_index: interval.end_index,
+                        start_time_seconds: interval.start_time_seconds,
+                        end_time_seconds: interval.end_time_seconds,
+                        moving_time_seconds: interval.moving_time_seconds,
+                        elapsed_time_seconds: interval.elapsed_time_seconds,
+                        distance_meters: interval.distance_meters,
+                        average_power_watts: interval.average_power_watts,
+                        normalized_power_watts: interval.normalized_power_watts,
+                        training_stress_score: interval.training_stress_score,
+                        average_heart_rate_bpm: interval.average_heart_rate_bpm,
+                        average_cadence_rpm: interval.average_cadence_rpm,
+                        average_speed_mps: interval.average_speed_mps,
+                        average_stride_meters: interval.average_stride_meters,
+                        zone: interval.zone,
+                    },
+                )
+                .collect(),
+            interval_groups: activity
+                .details
+                .interval_groups
+                .iter()
+                .cloned()
+                .map(
+                    |group| crate::domain::completed_workouts::CompletedWorkoutIntervalGroup {
+                        id: group.id,
+                        count: group.count,
+                        start_index: group.start_index,
+                        moving_time_seconds: group.moving_time_seconds,
+                        elapsed_time_seconds: group.elapsed_time_seconds,
+                        distance_meters: group.distance_meters,
+                        average_power_watts: group.average_power_watts,
+                        normalized_power_watts: group.normalized_power_watts,
+                        training_stress_score: group.training_stress_score,
+                        average_heart_rate_bpm: group.average_heart_rate_bpm,
+                        average_cadence_rpm: group.average_cadence_rpm,
+                        average_speed_mps: group.average_speed_mps,
+                        average_stride_meters: group.average_stride_meters,
+                    },
+                )
+                .collect(),
+            streams: activity
+                .details
+                .streams
+                .iter()
+                .cloned()
+                .map(|stream| CompletedWorkoutStream {
+                    stream_type: stream.stream_type,
+                    name: stream.name,
+                    primary_series: map_stream_series(stream.data),
+                    secondary_series: map_stream_series(stream.data2),
+                    value_type_is_array: stream.value_type_is_array,
+                    custom: stream.custom,
+                    all_null: stream.all_null,
+                })
+                .collect(),
+            interval_summary: activity.details.interval_summary.clone(),
+            skyline_chart: activity.details.skyline_chart.clone(),
+            power_zone_times: activity
+                .details
+                .power_zone_times
+                .iter()
+                .cloned()
+                .map(|zone| CompletedWorkoutZoneTime {
+                    zone_id: zone.zone_id,
+                    seconds: zone.seconds,
+                })
+                .collect(),
+            heart_rate_zone_times: activity.details.heart_rate_zone_times.clone(),
+            pace_zone_times: activity.details.pace_zone_times.clone(),
+            gap_zone_times: activity.details.gap_zone_times.clone(),
+        },
+    )
 }
 
 fn map_stream_series(value: Option<serde_json::Value>) -> Option<CompletedWorkoutSeries> {
@@ -368,23 +374,57 @@ fn infer_race_distance_meters(description: Option<&str>) -> i32 {
 
 fn parse_first_distance_meters(text: &str) -> Option<i32> {
     let lower = text.to_ascii_lowercase();
-    for token in lower.split(|ch: char| ch.is_ascii_whitespace() || ch == ',' || ch == ';') {
-        if let Some(km) = token.strip_suffix("km") {
-            let kilometers = km.parse::<f64>().ok()?;
-            let meters = (kilometers * 1000.0).round();
-            if meters.is_finite() && meters <= i32::MAX as f64 {
-                return Some(meters as i32);
-            }
+    let tokens = lower
+        .split(|ch: char| ch.is_ascii_whitespace() || ch == ',' || ch == ';')
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+    for (index, token) in tokens.iter().enumerate() {
+        if let Some(distance) = parse_distance_token(token) {
+            return Some(distance);
         }
-        if let Some(meters) = token.strip_suffix('m') {
-            let meters = meters.parse::<i32>().ok()?;
-            if meters > 0 {
-                return Some(meters);
-            }
+
+        let Some(next_token) = tokens.get(index + 1) else {
+            continue;
+        };
+        if let Some(distance) = parse_split_distance_tokens(token, next_token) {
+            return Some(distance);
         }
     }
 
     None
+}
+
+fn parse_distance_token(token: &str) -> Option<i32> {
+    if let Some(km) = token.strip_suffix("km") {
+        return kilometers_to_meters(km.parse::<f64>().ok()?);
+    }
+
+    if let Some(meters) = token.strip_suffix('m') {
+        let meters = meters.parse::<i32>().ok()?;
+        return (meters > 0).then_some(meters);
+    }
+
+    None
+}
+
+fn parse_split_distance_tokens(value: &str, unit: &str) -> Option<i32> {
+    match unit {
+        "km" => kilometers_to_meters(value.parse::<f64>().ok()?),
+        "m" => {
+            let meters = value.parse::<i32>().ok()?;
+            (meters > 0).then_some(meters)
+        }
+        _ => None,
+    }
+}
+
+fn kilometers_to_meters(kilometers: f64) -> Option<i32> {
+    let meters = (kilometers * 1000.0).round();
+    if meters.is_finite() && meters > 0.0 && meters <= i32::MAX as f64 {
+        Some(meters as i32)
+    } else {
+        None
+    }
 }
 
 fn map_special_day_kind(category: &EventCategory) -> SpecialDayKind {
@@ -412,16 +452,28 @@ fn hash_event(event: &Event) -> String {
 }
 
 fn hash_activity(activity: &Activity) -> String {
+    let workout = map_activity_to_completed_workout("hash-user", activity);
     let digest = Sha256::digest(format!(
-        "{}\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}",
-        activity.id,
-        activity.start_date_local,
-        activity.activity_type.as_deref().unwrap_or_default(),
-        activity.name.as_deref().unwrap_or_default(),
-        activity.description.as_deref().unwrap_or_default(),
-        activity.metrics.training_stress_score,
-        activity.metrics.normalized_power_watts,
-        activity.metrics.intensity_factor,
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        workout.completed_workout_id,
+        workout.start_date_local,
+        workout.planned_workout_id.as_deref().unwrap_or_default(),
+        workout.name.as_deref().unwrap_or_default(),
+        workout.description.as_deref().unwrap_or_default(),
+        workout.activity_type.as_deref().unwrap_or_default(),
+        workout
+            .duration_seconds
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+        workout
+            .distance_meters
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+        serde_json::to_string(&workout.metrics)
+            .expect("completed workout metrics should serialize into a stable payload hash"),
+        serde_json::to_string(&workout.details)
+            .expect("completed workout details should serialize into a stable payload hash"),
+        activity.external_id.as_deref().unwrap_or_default(),
     ));
     format!("{digest:x}")
 }
@@ -518,6 +570,60 @@ mod tests {
     }
 
     #[test]
+    fn maps_race_event_distance_when_unit_is_split_by_space() {
+        let command = map_event_to_import_command(
+            "user-1",
+            &crate::domain::intervals::Event {
+                id: 56,
+                start_date_local: "2026-09-13T00:00:00".to_string(),
+                event_type: Some("Road".to_string()),
+                name: Some("Big Day".to_string()),
+                category: crate::domain::intervals::EventCategory::Race,
+                description: Some("Target event over 120 km with a fast finish".to_string()),
+                indoor: false,
+                color: None,
+                workout_doc: None,
+            },
+            &FixedIdGenerator,
+        )
+        .unwrap()
+        .expect("expected import command");
+
+        let ExternalImportCommand::UpsertRace(command) = command else {
+            panic!("expected race import");
+        };
+
+        assert_eq!(command.race.distance_meters, 120_000);
+    }
+
+    #[test]
+    fn maps_race_event_distance_when_first_distance_token_is_invalid() {
+        let command = map_event_to_import_command(
+            "user-1",
+            &crate::domain::intervals::Event {
+                id: 57,
+                start_date_local: "2026-09-14T00:00:00".to_string(),
+                event_type: Some("Road".to_string()),
+                name: Some("Circuit".to_string()),
+                category: crate::domain::intervals::EventCategory::Race,
+                description: Some("xkm warmup then 500 m sprint finish".to_string()),
+                indoor: false,
+                color: None,
+                workout_doc: None,
+            },
+            &FixedIdGenerator,
+        )
+        .unwrap()
+        .expect("expected import command");
+
+        let ExternalImportCommand::UpsertRace(command) = command else {
+            panic!("expected race import");
+        };
+
+        assert_eq!(command.race.distance_meters, 500);
+    }
+
+    #[test]
     fn maps_special_event_into_special_day_import() {
         let command = map_event_to_import_command(
             "user-1",
@@ -557,76 +663,7 @@ mod tests {
 
     #[test]
     fn maps_activity_into_completed_workout_import() {
-        let command = map_activity_to_import_command(
-            "user-1",
-            &crate::domain::intervals::Activity {
-                id: "activity-1".to_string(),
-                athlete_id: None,
-                start_date_local: "2026-05-11T08:00:00".to_string(),
-                start_date: None,
-                name: Some("Threshold Ride".to_string()),
-                description: Some("Strong day".to_string()),
-                activity_type: Some("Ride".to_string()),
-                source: Some("intervals".to_string()),
-                external_id: Some("external-1".to_string()),
-                device_name: Some("Trainer".to_string()),
-                distance_meters: Some(35_000.0),
-                moving_time_seconds: Some(3600),
-                elapsed_time_seconds: Some(3700),
-                total_elevation_gain_meters: Some(400.0),
-                total_elevation_loss_meters: Some(400.0),
-                average_speed_mps: Some(9.7),
-                max_speed_mps: Some(15.0),
-                average_heart_rate_bpm: Some(150),
-                max_heart_rate_bpm: Some(175),
-                average_cadence_rpm: Some(88.0),
-                trainer: true,
-                commute: false,
-                race: false,
-                has_heart_rate: true,
-                stream_types: vec!["watts".to_string()],
-                tags: vec!["quality".to_string()],
-                metrics: ActivityMetrics {
-                    training_stress_score: Some(78),
-                    normalized_power_watts: Some(245),
-                    intensity_factor: Some(0.83),
-                    efficiency_factor: None,
-                    variability_index: Some(1.04),
-                    average_power_watts: Some(221),
-                    ftp_watts: Some(295),
-                    total_work_joules: Some(750),
-                    calories: Some(900),
-                    trimp: None,
-                    power_load: None,
-                    heart_rate_load: None,
-                    pace_load: None,
-                    strain_score: None,
-                },
-                details: ActivityDetails {
-                    intervals: Vec::new(),
-                    interval_groups: Vec::new(),
-                    streams: vec![ActivityStream {
-                        stream_type: "watts".to_string(),
-                        name: Some("Power".to_string()),
-                        data: Some(serde_json::json!([180, 240, 310])),
-                        data2: None,
-                        value_type_is_array: false,
-                        custom: false,
-                        all_null: false,
-                    }],
-                    interval_summary: vec!["tempo".to_string()],
-                    skyline_chart: Vec::new(),
-                    power_zone_times: vec![ActivityZoneTime {
-                        zone_id: "z3".to_string(),
-                        seconds: 1200,
-                    }],
-                    heart_rate_zone_times: vec![600],
-                    pace_zone_times: Vec::new(),
-                    gap_zone_times: Vec::new(),
-                },
-                details_unavailable_reason: None,
-            },
-        );
+        let command = map_activity_to_import_command("user-1", &sample_activity());
 
         let ExternalImportCommand::UpsertCompletedWorkout(command) = command else {
             panic!("expected completed workout import");
@@ -645,5 +682,98 @@ mod tests {
         assert_eq!(command.workout.distance_meters, Some(35_000.0));
         assert_eq!(command.workout.metrics.training_stress_score, Some(78));
         assert_eq!(command.workout.details.streams.len(), 1);
+    }
+
+    #[test]
+    fn activity_hash_changes_when_persisted_details_change() {
+        let base = sample_activity();
+        let mut changed = sample_activity();
+        changed.details.interval_summary = vec!["tempo".to_string(), "extra note".to_string()];
+
+        let ExternalImportCommand::UpsertCompletedWorkout(base_command) =
+            map_activity_to_import_command("user-1", &base)
+        else {
+            panic!("expected completed workout import");
+        };
+        let ExternalImportCommand::UpsertCompletedWorkout(changed_command) =
+            map_activity_to_import_command("user-1", &changed)
+        else {
+            panic!("expected completed workout import");
+        };
+
+        assert_ne!(
+            base_command.normalized_payload_hash,
+            changed_command.normalized_payload_hash
+        );
+    }
+
+    fn sample_activity() -> crate::domain::intervals::Activity {
+        crate::domain::intervals::Activity {
+            id: "activity-1".to_string(),
+            athlete_id: None,
+            start_date_local: "2026-05-11T08:00:00".to_string(),
+            start_date: None,
+            name: Some("Threshold Ride".to_string()),
+            description: Some("Strong day".to_string()),
+            activity_type: Some("Ride".to_string()),
+            source: Some("intervals".to_string()),
+            external_id: Some("external-1".to_string()),
+            device_name: Some("Trainer".to_string()),
+            distance_meters: Some(35_000.0),
+            moving_time_seconds: Some(3600),
+            elapsed_time_seconds: Some(3700),
+            total_elevation_gain_meters: Some(400.0),
+            total_elevation_loss_meters: Some(400.0),
+            average_speed_mps: Some(9.7),
+            max_speed_mps: Some(15.0),
+            average_heart_rate_bpm: Some(150),
+            max_heart_rate_bpm: Some(175),
+            average_cadence_rpm: Some(88.0),
+            trainer: true,
+            commute: false,
+            race: false,
+            has_heart_rate: true,
+            stream_types: vec!["watts".to_string()],
+            tags: vec!["quality".to_string()],
+            metrics: ActivityMetrics {
+                training_stress_score: Some(78),
+                normalized_power_watts: Some(245),
+                intensity_factor: Some(0.83),
+                efficiency_factor: None,
+                variability_index: Some(1.04),
+                average_power_watts: Some(221),
+                ftp_watts: Some(295),
+                total_work_joules: Some(750),
+                calories: Some(900),
+                trimp: None,
+                power_load: None,
+                heart_rate_load: None,
+                pace_load: None,
+                strain_score: None,
+            },
+            details: ActivityDetails {
+                intervals: Vec::new(),
+                interval_groups: Vec::new(),
+                streams: vec![ActivityStream {
+                    stream_type: "watts".to_string(),
+                    name: Some("Power".to_string()),
+                    data: Some(serde_json::json!([180, 240, 310])),
+                    data2: None,
+                    value_type_is_array: false,
+                    custom: false,
+                    all_null: false,
+                }],
+                interval_summary: vec!["tempo".to_string()],
+                skyline_chart: Vec::new(),
+                power_zone_times: vec![ActivityZoneTime {
+                    zone_id: "z3".to_string(),
+                    seconds: 1200,
+                }],
+                heart_rate_zone_times: vec![600],
+                pace_zone_times: Vec::new(),
+                gap_zone_times: Vec::new(),
+            },
+            details_unavailable_reason: None,
+        }
     }
 }

@@ -105,7 +105,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
                 .await
                 .map_err(storage_error)?;
 
-            Ok(document.map(map_document_to_sync_state))
+            document.map(map_document_to_sync_state).transpose()
         })
     }
 
@@ -146,10 +146,10 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
                 .await
                 .map_err(storage_error)?;
 
-            Ok(documents
+            documents
                 .into_iter()
                 .map(map_document_to_sync_state)
-                .collect())
+                .collect::<Result<Vec<_>, _>>()
         })
     }
 
@@ -202,23 +202,25 @@ fn map_sync_state_to_document(state: &ExternalSyncState) -> ExternalSyncStateDoc
     }
 }
 
-fn map_document_to_sync_state(document: ExternalSyncStateDocument) -> ExternalSyncState {
-    ExternalSyncState {
+fn map_document_to_sync_state(
+    document: ExternalSyncStateDocument,
+) -> Result<ExternalSyncState, ExternalSyncRepositoryError> {
+    Ok(ExternalSyncState {
         user_id: document.user_id,
-        provider: map_provider(&document.provider),
+        provider: map_provider(&document.provider)?,
         canonical_entity: CanonicalEntityRef {
-            entity_kind: map_canonical_entity_kind(&document.canonical_entity_kind),
+            entity_kind: map_canonical_entity_kind(&document.canonical_entity_kind)?,
             entity_id: document.canonical_entity_id,
         },
         external_id: document.external_id,
-        sync_status: map_sync_status(&document.sync_status),
+        sync_status: map_sync_status(&document.sync_status)?,
         last_synced_payload_hash: document.last_synced_payload_hash,
         last_seen_remote_payload_hash: document.last_seen_remote_payload_hash,
         last_error: document.last_error,
         last_synced_at_epoch_seconds: document.last_synced_at_epoch_seconds,
         last_seen_remote_at_epoch_seconds: document.last_seen_remote_at_epoch_seconds,
-        conflict_status: map_conflict_status(&document.conflict_status),
-    }
+        conflict_status: map_conflict_status(&document.conflict_status)?,
+    })
 }
 
 fn provider_as_str(provider: &ExternalProvider) -> &'static str {
@@ -256,38 +258,52 @@ fn sync_status_as_str(status: &ExternalSyncStatus) -> &'static str {
     }
 }
 
-fn map_provider(value: &str) -> ExternalProvider {
+fn map_provider(value: &str) -> Result<ExternalProvider, ExternalSyncRepositoryError> {
     match value {
-        "intervals" => ExternalProvider::Intervals,
-        "wahoo" => ExternalProvider::Wahoo,
-        "strava" => ExternalProvider::Strava,
-        _ => ExternalProvider::Other,
+        "intervals" => Ok(ExternalProvider::Intervals),
+        "wahoo" => Ok(ExternalProvider::Wahoo),
+        "strava" => Ok(ExternalProvider::Strava),
+        "other" => Ok(ExternalProvider::Other),
+        other => Err(ExternalSyncRepositoryError::CorruptData(format!(
+            "unknown external sync provider: {other}"
+        ))),
     }
 }
 
-fn map_canonical_entity_kind(value: &str) -> CanonicalEntityKind {
+fn map_canonical_entity_kind(
+    value: &str,
+) -> Result<CanonicalEntityKind, ExternalSyncRepositoryError> {
     match value {
-        "planned_workout" => CanonicalEntityKind::PlannedWorkout,
-        "completed_workout" => CanonicalEntityKind::CompletedWorkout,
-        "race" => CanonicalEntityKind::Race,
-        _ => CanonicalEntityKind::SpecialDay,
+        "planned_workout" => Ok(CanonicalEntityKind::PlannedWorkout),
+        "completed_workout" => Ok(CanonicalEntityKind::CompletedWorkout),
+        "race" => Ok(CanonicalEntityKind::Race),
+        "special_day" => Ok(CanonicalEntityKind::SpecialDay),
+        other => Err(ExternalSyncRepositoryError::CorruptData(format!(
+            "unknown canonical entity kind: {other}"
+        ))),
     }
 }
 
-fn map_conflict_status(value: &str) -> ConflictStatus {
+fn map_conflict_status(value: &str) -> Result<ConflictStatus, ExternalSyncRepositoryError> {
     match value {
-        "in_sync" => ConflictStatus::InSync,
-        "conflict_detected" => ConflictStatus::ConflictDetected,
-        _ => ConflictStatus::Unknown,
+        "unknown" => Ok(ConflictStatus::Unknown),
+        "in_sync" => Ok(ConflictStatus::InSync),
+        "conflict_detected" => Ok(ConflictStatus::ConflictDetected),
+        other => Err(ExternalSyncRepositoryError::CorruptData(format!(
+            "unknown conflict status: {other}"
+        ))),
     }
 }
 
-fn map_sync_status(value: &str) -> ExternalSyncStatus {
+fn map_sync_status(value: &str) -> Result<ExternalSyncStatus, ExternalSyncRepositoryError> {
     match value {
-        "synced" => ExternalSyncStatus::Synced,
-        "failed" => ExternalSyncStatus::Failed,
-        "pending_delete" => ExternalSyncStatus::PendingDelete,
-        _ => ExternalSyncStatus::Pending,
+        "pending" => Ok(ExternalSyncStatus::Pending),
+        "synced" => Ok(ExternalSyncStatus::Synced),
+        "failed" => Ok(ExternalSyncStatus::Failed),
+        "pending_delete" => Ok(ExternalSyncStatus::PendingDelete),
+        other => Err(ExternalSyncRepositoryError::CorruptData(format!(
+            "unknown external sync status: {other}"
+        ))),
     }
 }
 
@@ -295,10 +311,12 @@ fn map_sync_status(value: &str) -> ExternalSyncStatus {
 mod tests {
     use crate::domain::external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ConflictStatus, ExternalProvider,
-        ExternalSyncState, ExternalSyncStatus,
+        ExternalSyncRepositoryError, ExternalSyncState, ExternalSyncStatus,
     };
 
-    use super::{map_document_to_sync_state, map_sync_state_to_document};
+    use super::{
+        map_document_to_sync_state, map_sync_state_to_document, ExternalSyncStateDocument,
+    };
 
     #[test]
     fn sync_state_document_round_trip_preserves_fields() {
@@ -310,11 +328,53 @@ mod tests {
         .mark_synced("77".to_string(), "hash-1".to_string(), 1_700_000_000)
         .observe_remote("hash-2".to_string(), 1_700_000_100);
 
-        let mapped = map_document_to_sync_state(map_sync_state_to_document(&state));
+        let mapped = map_document_to_sync_state(map_sync_state_to_document(&state)).unwrap();
 
         assert_eq!(mapped.conflict_status, ConflictStatus::ConflictDetected);
         assert_eq!(mapped.external_id.as_deref(), Some("77"));
         assert_eq!(mapped.sync_status, ExternalSyncStatus::Synced);
         assert_eq!(mapped, state);
+    }
+
+    #[test]
+    fn sync_state_document_rejects_unknown_provider() {
+        let error = map_document_to_sync_state(ExternalSyncStateDocument {
+            user_id: "user-1".to_string(),
+            provider: "mystery".to_string(),
+            canonical_entity_kind: "race".to_string(),
+            canonical_entity_id: "race-1".to_string(),
+            external_id: Some("77".to_string()),
+            sync_status: "synced".to_string(),
+            last_synced_payload_hash: Some("hash-1".to_string()),
+            last_seen_remote_payload_hash: Some("hash-1".to_string()),
+            last_error: None,
+            last_synced_at_epoch_seconds: Some(1_700_000_000),
+            last_seen_remote_at_epoch_seconds: Some(1_700_000_000),
+            conflict_status: "in_sync".to_string(),
+        })
+        .unwrap_err();
+
+        assert!(matches!(error, ExternalSyncRepositoryError::CorruptData(_)));
+    }
+
+    #[test]
+    fn sync_state_document_rejects_unknown_sync_status() {
+        let error = map_document_to_sync_state(ExternalSyncStateDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            canonical_entity_kind: "race".to_string(),
+            canonical_entity_id: "race-1".to_string(),
+            external_id: Some("77".to_string()),
+            sync_status: "mystery".to_string(),
+            last_synced_payload_hash: Some("hash-1".to_string()),
+            last_seen_remote_payload_hash: Some("hash-1".to_string()),
+            last_error: None,
+            last_synced_at_epoch_seconds: Some(1_700_000_000),
+            last_seen_remote_at_epoch_seconds: Some(1_700_000_000),
+            conflict_status: "in_sync".to_string(),
+        })
+        .unwrap_err();
+
+        assert!(matches!(error, ExternalSyncRepositoryError::CorruptData(_)));
     }
 }

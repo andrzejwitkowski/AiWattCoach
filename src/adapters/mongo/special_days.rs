@@ -149,14 +149,14 @@ fn map_special_day_to_document(special_day: &SpecialDay) -> SpecialDayDocument {
 fn map_document_to_special_day(
     document: SpecialDayDocument,
 ) -> Result<SpecialDay, SpecialDayError> {
-    Ok(SpecialDay::new(
+    SpecialDay::new(
         document.special_day_id,
         document.user_id,
         document.date,
         map_kind_from_str(&document.kind)?,
         document.title,
         document.description,
-    ))
+    )
 }
 
 fn map_kind_to_str(kind: &SpecialDayKind) -> &'static str {

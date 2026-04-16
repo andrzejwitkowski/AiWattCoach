@@ -324,7 +324,8 @@ impl Default for TestSpecialDayRepository {
                 SpecialDayKind::Note,
                 Some("Sick day".to_string()),
                 Some("Felt unwell with sore throat".to_string()),
-            )],
+            )
+            .unwrap()],
         }
     }
 }

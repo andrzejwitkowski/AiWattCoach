@@ -341,12 +341,7 @@ where
                 {
                     state
                 } else {
-                    ProviderPollState {
-                        next_due_at_epoch_seconds: now_epoch_seconds,
-                        backoff_until_epoch_seconds: None,
-                        last_error: None,
-                        ..state
-                    }
+                    ProviderPollState { ..state }
                 }
             }
             None => ProviderPollState::new(
@@ -884,5 +879,59 @@ mod tests {
         assert!(stored
             .iter()
             .all(|state| state.last_successful_at_epoch_seconds.is_none()));
+    }
+
+    #[tokio::test]
+    async fn update_intervals_without_credential_change_keeps_future_poll_schedule() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
+        settings.intervals = IntervalsConfig {
+            api_key: Some("same-key".to_string()),
+            athlete_id: Some("same-athlete".to_string()),
+            connected: true,
+        };
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let poll_states = InMemoryProviderPollStateRepository::default();
+        poll_states
+            .upsert(ProviderPollState {
+                user_id: "user-1".to_string(),
+                provider: ExternalProvider::Intervals,
+                stream: ProviderPollStream::Calendar,
+                cursor: Some("2026-05-01".to_string()),
+                next_due_at_epoch_seconds: 1_700_099_999,
+                last_attempted_at_epoch_seconds: Some(1_699_999_000),
+                last_successful_at_epoch_seconds: Some(1_699_999_100),
+                last_error: Some("transient".to_string()),
+                backoff_until_epoch_seconds: Some(1_700_100_100),
+            })
+            .await
+            .unwrap();
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_provider_poll_states(poll_states.clone());
+
+        service
+            .update_intervals(
+                "user-1",
+                IntervalsConfig {
+                    api_key: Some("same-key".to_string()),
+                    athlete_id: Some("same-athlete".to_string()),
+                    connected: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        let stored = poll_states.stored();
+        assert!(stored.iter().any(|state| {
+            state.stream == ProviderPollStream::Calendar
+                && state.next_due_at_epoch_seconds == 1_700_099_999
+                && state.backoff_until_epoch_seconds == Some(1_700_100_100)
+                && state.last_error.as_deref() == Some("transient")
+        }));
+        assert!(stored.iter().any(|state| {
+            state.stream == ProviderPollStream::CompletedWorkouts
+                && state.next_due_at_epoch_seconds == 1_700_000_000
+                && state.backoff_until_epoch_seconds.is_none()
+                && state.last_error.is_none()
+        }));
     }
 }

@@ -1,3 +1,5 @@
+use chrono::NaiveDate;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SpecialDayKind {
     Illness,
@@ -19,13 +21,14 @@ pub struct SpecialDay {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SpecialDayError {
+    Validation(String),
     Repository(String),
 }
 
 impl std::fmt::Display for SpecialDayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Repository(message) => write!(f, "{message}"),
+            Self::Validation(message) | Self::Repository(message) => write!(f, "{message}"),
         }
     }
 }
@@ -40,14 +43,23 @@ impl SpecialDay {
         kind: SpecialDayKind,
         title: Option<String>,
         description: Option<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, SpecialDayError> {
+        validate_date(&date)?;
+
+        Ok(Self {
             special_day_id,
             user_id,
             date,
             kind,
             title,
             description,
-        }
+        })
     }
+}
+
+fn validate_date(date: &str) -> Result<(), SpecialDayError> {
+    NaiveDate::parse_from_str(date, "%Y-%m-%d").map_err(|error| {
+        SpecialDayError::Validation(format!("invalid special day date '{date}': {error}"))
+    })?;
+    Ok(())
 }

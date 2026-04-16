@@ -288,10 +288,19 @@ fn map_external_sync_state(
     sync_state: Option<&ExternalSyncState>,
 ) -> Option<super::CalendarEntrySync> {
     sync_state.map(|state| super::CalendarEntrySync {
-        linked_intervals_event_id: state
-            .external_id
-            .as_deref()
-            .and_then(|value| value.parse::<i64>().ok()),
+        linked_intervals_event_id: linked_intervals_event_id(state),
         sync_status: Some(state.sync_status.as_str().to_string()),
+    })
+}
+
+fn linked_intervals_event_id(state: &ExternalSyncState) -> Option<i64> {
+    if state.provider != ExternalProvider::Intervals {
+        return None;
+    }
+
+    state.external_id.as_deref().map(|value| {
+        value.parse::<i64>().unwrap_or_else(|error| {
+            panic!("intervals sync state external_id must parse as i64, got '{value}': {error}")
+        })
     })
 }

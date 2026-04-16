@@ -14,7 +14,8 @@ fn special_day_uses_local_canonical_id_and_kind() {
         SpecialDayKind::Illness,
         Some("Sick day".to_string()),
         Some("Fever and sore throat".to_string()),
-    );
+    )
+    .unwrap();
 
     assert_eq!(day.special_day_id, "special-1");
     assert_eq!(day.user_id, "user-1");
@@ -159,4 +160,23 @@ fn sample_day(special_day_id: &str, user_id: &str, date: &str) -> SpecialDay {
         Some("Illness".to_string()),
         Some("Recovery day".to_string()),
     )
+    .unwrap()
+}
+
+#[test]
+fn special_day_rejects_non_canonical_date() {
+    let error = SpecialDay::new(
+        "special-invalid".to_string(),
+        "user-1".to_string(),
+        "2026/05/02".to_string(),
+        SpecialDayKind::Illness,
+        Some("Sick day".to_string()),
+        Some("Fever and sore throat".to_string()),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        super::SpecialDayError::Validation(message) if message.contains("invalid special day date")
+    ));
 }

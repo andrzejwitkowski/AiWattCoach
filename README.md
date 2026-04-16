@@ -96,10 +96,11 @@ graphify hook install
 Then regenerate or query from the repo root:
 
 ```bash
-graphify . --no-viz --update
+./scripts/rebuild_graphify.sh
 graphify query "show the calendar and races flow"
-graphify explain "CalendarService"
 ```
+
+`./scripts/rebuild_graphify.sh` prefers `GRAPHIFY_PYTHON`, then a valid executable path from `graphify-out/.graphify_python`, and finally the default `pipx` venv at `~/.local/pipx/venvs/graphifyy/bin/python`.
 
 `.graphifyignore` excludes generated outputs and build directories so the graph does not index its own artifacts.
 

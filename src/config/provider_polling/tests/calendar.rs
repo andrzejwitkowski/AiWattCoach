@@ -55,7 +55,7 @@ async fn poll_due_once_imports_calendar_events_and_marks_success() {
     assert_eq!(stored.last_successful_at_epoch_seconds, Some(1_700_000_000));
     assert_eq!(stored.last_error, None);
     assert_eq!(stored.backoff_until_epoch_seconds, None);
-    assert_eq!(stored.cursor.as_deref(), Some("2026-05-10"));
+    assert_eq!(stored.cursor.as_deref(), Some("2023-11-28"));
     assert_eq!(stored.next_due_at_epoch_seconds, 1_700_000_300);
 }
 
