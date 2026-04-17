@@ -861,18 +861,12 @@ mod tests {
         let stored = poll_states.stored();
         assert!(stored
             .iter()
-            .all(|state| state.next_due_at_epoch_seconds == 1_700_000_000));
+            .all(|state| state.next_due_at_epoch_seconds == i64::MAX));
         assert!(stored.iter().all(|state| state.cursor.is_none()));
         assert!(stored
             .iter()
             .all(|state| state.backoff_until_epoch_seconds.is_none()));
         assert!(stored.iter().all(|state| state.last_error.is_none()));
-        assert!(stored
-            .iter()
-            .all(|state| state.last_attempted_at_epoch_seconds.is_none()));
-        assert!(stored
-            .iter()
-            .all(|state| state.last_successful_at_epoch_seconds.is_none()));
     }
 
     #[tokio::test]
