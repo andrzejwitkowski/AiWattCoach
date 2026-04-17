@@ -625,6 +625,7 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
                     operation_key: "training-plan:user-1:ride-1:1775174400".to_string(),
                     date: "2026-04-04".to_string(),
                     rest_day: false,
+                    rest_day_reason: None,
                     workout: Some(PlannedWorkout {
                         lines: vec![
                             PlannedWorkoutLine::Text(PlannedWorkoutText {
@@ -650,6 +651,7 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
                     operation_key: "training-plan:user-1:ride-1:1775174400".to_string(),
                     date: "2026-04-07".to_string(),
                     rest_day: false,
+                    rest_day_reason: None,
                     workout: Some(PlannedWorkout {
                         lines: vec![
                             PlannedWorkoutLine::Text(PlannedWorkoutText {

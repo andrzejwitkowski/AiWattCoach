@@ -206,6 +206,7 @@ pub(crate) fn snapshot_projected_days_for_first_day() -> Vec<TrainingPlanProject
             operation_key: snapshot.operation_key.clone(),
             date: day.date.clone(),
             rest_day: day.rest_day,
+            rest_day_reason: day.rest_day_reason.clone(),
             workout: day.workout.clone(),
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: date_epoch(FIRST_DAY),
@@ -240,10 +241,12 @@ pub(crate) fn valid_plan_window_days(
         let day = parsed.days.into_iter().next().unwrap();
         let date = day.date.clone();
         let rest_day = day.is_rest_day();
+        let rest_day_reason = day.rest_day_reason().map(ToString::to_string);
         let workout = day.into_workout();
         days.push(aiwattcoach::domain::training_plan::TrainingPlanDay {
             date,
             rest_day,
+            rest_day_reason,
             workout,
         });
     }

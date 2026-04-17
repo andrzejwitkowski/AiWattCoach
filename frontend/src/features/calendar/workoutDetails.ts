@@ -91,6 +91,10 @@ export function isPlannedWorkoutEvent(
     return false;
   }
 
+  if (event.restDay) {
+    return true;
+  }
+
   return event.eventDefinition.intervals.length > 0
     || event.eventDefinition.segments.length > 0
     || event.eventDefinition.summary.totalDurationSeconds > 0

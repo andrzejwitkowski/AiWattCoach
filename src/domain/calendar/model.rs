@@ -171,6 +171,8 @@ pub struct CalendarProjectedWorkout {
     pub operation_key: String,
     pub date: String,
     pub source_workout_id: String,
+    pub rest_day: bool,
+    pub rest_day_reason: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,6 +203,8 @@ pub struct CalendarEvent {
     pub name: Option<String>,
     pub category: CalendarEventCategory,
     pub description: Option<String>,
+    pub rest_day: bool,
+    pub rest_day_reason: Option<String>,
     pub indoor: bool,
     pub color: Option<String>,
     pub raw_workout_doc: Option<String>,

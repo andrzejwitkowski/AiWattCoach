@@ -35,6 +35,8 @@ const eventFixture: IntervalEvent = {
   name: 'Wild Snow',
   category: 'WORKOUT',
   description: null,
+  restDay: false,
+  restDayReason: null,
   indoor: false,
   color: null,
   eventDefinition: {

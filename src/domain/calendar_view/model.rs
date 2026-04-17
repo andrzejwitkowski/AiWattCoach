@@ -62,6 +62,8 @@ pub struct CalendarEntryView {
     pub title: String,
     pub subtitle: Option<String>,
     pub description: Option<String>,
+    pub rest_day: bool,
+    pub rest_day_reason: Option<String>,
     pub raw_workout_doc: Option<String>,
     pub planned_workout_id: Option<String>,
     pub completed_workout_id: Option<String>,

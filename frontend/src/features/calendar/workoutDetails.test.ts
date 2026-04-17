@@ -11,6 +11,8 @@ describe('workoutDetails', () => {
       name: 'VO2 Session',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: true,
       color: null,
       eventDefinition: {
@@ -58,6 +60,8 @@ describe('workoutDetails', () => {
       name: 'Steady Builder',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: true,
       color: null,
       eventDefinition: {
@@ -96,6 +100,8 @@ describe('workoutDetails', () => {
       name: 'Zone Builder',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: true,
       color: null,
       eventDefinition: {
@@ -144,6 +150,8 @@ describe('workoutDetails', () => {
       name: 'Unknown Build',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: true,
       color: null,
       eventDefinition: {
@@ -182,6 +190,8 @@ describe('workoutDetails', () => {
       name: 'Target Build',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: true,
       color: null,
       eventDefinition: {
@@ -453,6 +463,8 @@ describe('workoutDetails', () => {
       name: 'Builder',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -496,6 +508,8 @@ describe('workoutDetails', () => {
       name: 'Mixed Intervals',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -730,6 +744,8 @@ describe('workoutDetails', () => {
       name: 'Threshold Build',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -777,6 +793,8 @@ describe('workoutDetails', () => {
       name: 'Mismatch Workout',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: true,
       color: null,
       eventDefinition: {
@@ -827,6 +845,8 @@ describe('workoutDetails', () => {
       name: 'Repeat Build',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -871,6 +891,8 @@ describe('workoutDetails', () => {
       name: 'VO2 Template',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -929,6 +951,8 @@ describe('workoutDetails', () => {
       name: 'A race',
       category: 'RACE',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -969,6 +993,8 @@ describe('workoutDetails', () => {
       name: 'Workout',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -1067,6 +1093,8 @@ describe('workoutDetails', () => {
       name: 'Planned workout',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -1154,6 +1182,8 @@ describe('workoutDetails', () => {
       name: 'Planned workout',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -1247,6 +1277,8 @@ describe('workoutDetails', () => {
       name: 'Completed workout',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {
@@ -1293,6 +1325,8 @@ describe('workoutDetails', () => {
       name: 'Completed workout',
       category: 'WORKOUT',
       description: null,
+      restDay: false,
+      restDayReason: null,
       indoor: false,
       color: null,
       eventDefinition: {

@@ -33,6 +33,8 @@ describe('DayItemsModal', () => {
                   name: 'Opener',
                   category: 'WORKOUT',
                   description: null,
+                  restDay: false,
+                  restDayReason: null,
                   indoor: false,
                   color: null,
                   eventDefinition: {

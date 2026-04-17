@@ -118,6 +118,7 @@ fn compact_render_is_non_empty_and_estimates_tokens() {
                 }],
                 raw_workout_doc: Some("Main Set\n- 10m 92-97%".to_string()),
                 rest_day: false,
+                rest_day_reason: None,
             }],
         }],
     };

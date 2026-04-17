@@ -318,6 +318,8 @@ struct CompactProjectedWorkout<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     doc: Option<&'a str>,
     rest: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rr: Option<&'a str>,
 }
 
 impl<'a> CompactProjectedWorkout<'a> {
@@ -333,6 +335,7 @@ impl<'a> CompactProjectedWorkout<'a> {
                 .collect(),
             doc: workout.raw_workout_doc.as_deref(),
             rest: workout.rest_day,
+            rr: workout.rest_day_reason.as_deref(),
         }
     }
 }

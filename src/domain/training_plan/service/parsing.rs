@@ -36,10 +36,12 @@ where
     fn map_parsed_day(day: PlannedWorkoutDay) -> TrainingPlanDay {
         let date = day.date.clone();
         let rest_day = day.is_rest_day();
+        let rest_day_reason = day.rest_day_reason().map(ToString::to_string);
         let workout = day.into_workout();
         TrainingPlanDay {
             date,
             rest_day,
+            rest_day_reason,
             workout,
         }
     }

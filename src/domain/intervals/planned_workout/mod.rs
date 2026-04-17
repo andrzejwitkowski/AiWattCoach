@@ -78,14 +78,16 @@ pub struct PlannedWorkoutDays {
 pub struct PlannedWorkoutDay {
     pub date: String,
     rest_day: bool,
+    rest_day_reason: Option<String>,
     workout: Option<PlannedWorkout>,
 }
 
 impl PlannedWorkoutDay {
-    pub fn rest(date: String) -> Self {
+    pub fn rest(date: String, rest_day_reason: Option<String>) -> Self {
         Self {
             date,
             rest_day: true,
+            rest_day_reason,
             workout: None,
         }
     }
@@ -94,6 +96,7 @@ impl PlannedWorkoutDay {
         Self {
             date,
             rest_day: false,
+            rest_day_reason: None,
             workout: Some(workout),
         }
     }
@@ -102,8 +105,16 @@ impl PlannedWorkoutDay {
         self.rest_day
     }
 
+    pub fn rest_day_reason(&self) -> Option<&str> {
+        self.rest_day_reason.as_deref()
+    }
+
     pub fn planned_workout(&self) -> Option<&PlannedWorkout> {
         self.workout.as_ref()
+    }
+
+    pub fn into_rest_day_reason(self) -> Option<String> {
+        self.rest_day_reason
     }
 
     pub fn into_workout(self) -> Option<PlannedWorkout> {

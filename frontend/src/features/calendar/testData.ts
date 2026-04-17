@@ -7,9 +7,13 @@ type EventDefinitionOverrides = Partial<Omit<IntervalEvent['eventDefinition'], '
   summary?: Partial<IntervalEvent['eventDefinition']['summary']>;
 };
 
-type EventOverrides = Partial<Omit<IntervalEvent, 'eventDefinition' | 'actualWorkout'>> & {
+type EventOverrides = Partial<Omit<IntervalEvent, 'eventDefinition' | 'actualWorkout' | 'projectedWorkout'>> & {
   eventDefinition?: EventDefinitionOverrides;
   actualWorkout?: Partial<NonNullable<IntervalEvent['actualWorkout']>> | null;
+  projectedWorkout?: Omit<NonNullable<IntervalEvent['projectedWorkout']>, 'restDay' | 'restDayReason'> & {
+    restDay?: boolean;
+    restDayReason?: string | null;
+  } | null;
 };
 
 type ActivityDetailsOverrides = Partial<Omit<IntervalActivity['details'], 'intervals' | 'intervalGroups' | 'streams'>> & {
@@ -119,7 +123,7 @@ export function makeActualWorkout(
 }
 
 export function makeEvent(overrides: EventOverrides = {}): IntervalEvent {
-  const { eventDefinition, actualWorkout, ...eventOverrides } = overrides;
+  const { eventDefinition, actualWorkout, projectedWorkout, ...eventOverrides } = overrides;
 
   return {
     id: 1,
@@ -128,6 +132,8 @@ export function makeEvent(overrides: EventOverrides = {}): IntervalEvent {
     name: 'Workout',
     category: 'WORKOUT',
     description: null,
+    restDay: false,
+    restDayReason: null,
     indoor: true,
     color: null,
     eventDefinition: makeEventDefinition(eventDefinition),
@@ -140,7 +146,15 @@ export function makeEvent(overrides: EventOverrides = {}): IntervalEvent {
     plannedSource: 'intervals',
     syncStatus: null,
     linkedIntervalsEventId: null,
-    projectedWorkout: null,
+    projectedWorkout:
+      projectedWorkout === undefined
+        ? null
+        : projectedWorkout === null
+          ? null
+          : {
+              restDay: false,
+              ...projectedWorkout,
+            },
     ...eventOverrides,
   };
 }

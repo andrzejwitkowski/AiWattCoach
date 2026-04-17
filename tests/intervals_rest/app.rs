@@ -554,6 +554,8 @@ pub(crate) fn sample_calendar_entry(
         title: format!("Entry {entry_id}"),
         subtitle: None,
         description: None,
+        rest_day: false,
+        rest_day_reason: None,
         raw_workout_doc: None,
         planned_workout_id: None,
         completed_workout_id: None,

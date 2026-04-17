@@ -26,6 +26,8 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
         name,
         category,
         description,
+        rest_day,
+        rest_day_reason,
         indoor,
         color,
         raw_workout_doc,
@@ -36,10 +38,14 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
         actual_workout,
     } = event;
     let parsed = parse_workout_doc(
-        raw_workout_doc
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .or(description.as_deref()),
+        if rest_day {
+            None
+        } else {
+            raw_workout_doc
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .or(description.as_deref())
+        },
         None,
     );
 
@@ -50,6 +56,8 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
         name,
         category: map_category(category),
         description,
+        rest_day,
+        rest_day_reason,
         indoor,
         color,
         event_definition: EventDefinitionDto {
@@ -96,6 +104,8 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
             operation_key: projected.operation_key,
             date: projected.date,
             source_workout_id: projected.source_workout_id,
+            rest_day: projected.rest_day,
+            rest_day_reason: projected.rest_day_reason,
         }),
     }
 }

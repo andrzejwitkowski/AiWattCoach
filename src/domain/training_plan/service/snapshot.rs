@@ -95,6 +95,7 @@ where
                 operation_key: snapshot.operation_key.clone(),
                 date: day.date.clone(),
                 rest_day: day.rest_day,
+                rest_day_reason: day.rest_day_reason.clone(),
                 workout: day.workout.clone(),
                 superseded_at_epoch_seconds: None,
                 created_at_epoch_seconds: self.clock.now_epoch_seconds(),

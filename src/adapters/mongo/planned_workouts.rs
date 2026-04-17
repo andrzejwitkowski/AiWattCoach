@@ -27,6 +27,10 @@ struct TrainingPlanProjectedDayDocument {
     user_id: String,
     operation_key: String,
     date: String,
+    #[serde(default)]
+    rest_day: bool,
+    #[serde(default)]
+    rest_day_reason: Option<String>,
     workout: Option<PlannedWorkoutDocument>,
 }
 
@@ -41,6 +45,10 @@ struct ImportedPlannedWorkoutDocument {
     user_id: String,
     planned_workout_id: String,
     date: String,
+    #[serde(default)]
+    rest_day: bool,
+    #[serde(default)]
+    rest_day_reason: Option<String>,
     name: Option<String>,
     description: Option<String>,
     event_type: Option<String>,
@@ -203,7 +211,10 @@ async fn load_projected_workouts(
     let mut filter = doc! {
         "user_id": user_id,
         "superseded_at_epoch_seconds": Bson::Null,
-        "workout": { "$ne": Bson::Null },
+        "$or": [
+            { "workout": { "$ne": Bson::Null } },
+            { "rest_day": true },
+        ],
     };
     if let Some((oldest, newest)) = range {
         filter.insert(
@@ -298,13 +309,28 @@ async fn load_snapshot_start_dates(
 fn map_projected_document_to_domain(
     document: TrainingPlanProjectedDayDocument,
 ) -> Result<PlannedWorkout, PlannedWorkoutError> {
+    if document.rest_day {
+        return Ok(PlannedWorkout::new(
+            format!("{}:{}", document.operation_key, document.date),
+            document.user_id,
+            document.date,
+            PlannedWorkoutContent { lines: Vec::new() },
+        )
+        .with_event_metadata(
+            Some("Rest Day".to_string()),
+            document.rest_day_reason.clone(),
+            Some("Ride".to_string()),
+        )
+        .as_rest_day(document.rest_day_reason));
+    }
+
     let workout = document.workout.ok_or_else(|| {
         PlannedWorkoutError::Repository(
             "projected day is missing planned workout payload".to_string(),
         )
     })?;
 
-    Ok(PlannedWorkout::new(
+    let planned_workout = PlannedWorkout::new(
         format!("{}:{}", document.operation_key, document.date),
         document.user_id,
         document.date,
@@ -316,7 +342,9 @@ fn map_projected_document_to_domain(
             ),
         },
     )
-    .with_event_metadata(None, None, Some("Ride".to_string())))
+    .with_event_metadata(None, None, Some("Ride".to_string()));
+
+    Ok(planned_workout)
 }
 
 fn map_imported_workout_to_document(workout: &PlannedWorkout) -> ImportedPlannedWorkoutDocument {
@@ -324,6 +352,8 @@ fn map_imported_workout_to_document(workout: &PlannedWorkout) -> ImportedPlanned
         user_id: workout.user_id.clone(),
         planned_workout_id: workout.planned_workout_id.clone(),
         date: workout.date.clone(),
+        rest_day: workout.rest_day,
+        rest_day_reason: workout.rest_day_reason.clone(),
         name: workout.name.clone(),
         description: workout.description.clone(),
         event_type: workout.event_type.clone(),
@@ -341,7 +371,7 @@ fn map_imported_workout_to_document(workout: &PlannedWorkout) -> ImportedPlanned
 fn map_imported_document_to_domain(
     document: ImportedPlannedWorkoutDocument,
 ) -> Result<PlannedWorkout, PlannedWorkoutError> {
-    Ok(PlannedWorkout::new(
+    let planned_workout = PlannedWorkout::new(
         document.planned_workout_id,
         document.user_id,
         document.date,
@@ -354,7 +384,13 @@ fn map_imported_document_to_domain(
                 .collect::<Result<Vec<_>, _>>()?,
         },
     )
-    .with_event_metadata(document.name, document.description, document.event_type))
+    .with_event_metadata(document.name, document.description, document.event_type);
+
+    if document.rest_day {
+        Ok(planned_workout.as_rest_day(document.rest_day_reason))
+    } else {
+        Ok(planned_workout)
+    }
 }
 
 fn map_workout_lines(
@@ -553,6 +589,8 @@ mod tests {
             user_id: "user-1".to_string(),
             planned_workout_id: "planned-1".to_string(),
             date: "2026-05-10".to_string(),
+            rest_day: false,
+            rest_day_reason: None,
             name: None,
             description: None,
             event_type: None,

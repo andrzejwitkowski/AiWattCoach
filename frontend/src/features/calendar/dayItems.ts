@@ -63,7 +63,7 @@ export type CalendarDayItemsSelection = {
 };
 
 export function isInteractiveDayItem(item: CalendarDayItem): boolean {
-  return item.kind !== 'event';
+  return item.kind !== 'event' && !(item.kind === 'planned' && item.event.restDay);
 }
 
 export function buildDayItems(day: CalendarDay, options: BuildDayItemsOptions): CalendarDayItem[] {
@@ -179,6 +179,10 @@ function compareDayItems(left: CalendarDayItem, right: CalendarDayItem): number 
 }
 
 function summarizePlannedEvent(event: IntervalEvent, locale: string): string | null {
+  if (event.restDay) {
+    return event.restDayReason ?? null;
+  }
+
   const durationMinutes = event.eventDefinition.summary.totalDurationSeconds > 0
     ? Math.round(event.eventDefinition.summary.totalDurationSeconds / 60)
     : null;

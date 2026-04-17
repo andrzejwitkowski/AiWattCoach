@@ -28,7 +28,10 @@ struct TrainingPlanProjectedDayDocument {
     workout_id: String,
     operation_key: String,
     date: String,
+    #[serde(default)]
     rest_day: bool,
+    #[serde(default)]
+    rest_day_reason: Option<String>,
     workout: Option<PlannedWorkoutDocument>,
     superseded_at_epoch_seconds: Option<i64>,
     created_at_epoch_seconds: i64,
@@ -308,6 +311,7 @@ fn map_projected_day_to_document(
         operation_key: day.operation_key.clone(),
         date: day.date.clone(),
         rest_day: day.rest_day,
+        rest_day_reason: day.rest_day_reason.clone(),
         workout: day
             .workout
             .as_ref()
@@ -328,6 +332,7 @@ fn map_document_to_projected_day(
         operation_key: document.operation_key,
         date: document.date,
         rest_day: document.rest_day,
+        rest_day_reason: document.rest_day_reason,
         workout: document
             .workout
             .map(map_document_to_planned_workout)

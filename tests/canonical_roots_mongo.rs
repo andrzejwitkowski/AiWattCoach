@@ -49,7 +49,10 @@ async fn planned_workout_repository_reads_active_projected_days_as_canonical_wor
     projection_repository.ensure_indexes().await.unwrap();
     let repository = MongoPlannedWorkoutRepository::new(fixture.client.clone(), &fixture.database);
 
-    let snapshot = sample_snapshot("training-plan:user-1:workout-1:1700000000", "2026-04-06");
+    let mut snapshot = sample_snapshot("training-plan:user-1:workout-1:1700000000", "2026-04-06");
+    snapshot.days[4].rest_day = true;
+    snapshot.days[4].rest_day_reason = Some("Need recovery after prior block".to_string());
+    snapshot.days[4].workout = None;
     projection_repository
         .replace_window(
             snapshot.clone(),
@@ -73,6 +76,10 @@ async fn planned_workout_repository_reads_active_projected_days_as_canonical_wor
     assert_eq!(workouts[0].date, "2026-04-07");
     assert_eq!(workouts[0].user_id, "user-1");
     assert_eq!(workouts[0].workout.lines.len(), 2);
+    assert!(workouts.iter().any(|workout| {
+        workout.rest_day
+            && workout.rest_day_reason.as_deref() == Some("Need recovery after prior block")
+    }));
 
     fixture.cleanup().await;
 }
@@ -501,6 +508,8 @@ fn sample_snapshot(operation_key: &str, start_date: &str) -> TrainingPlanSnapsho
             TrainingPlanDay {
                 date,
                 rest_day: offset == 0,
+                rest_day_reason: (offset == 0)
+                    .then(|| "Need recovery after prior block".to_string()),
                 workout: (offset != 0).then(sample_planned_workout),
             }
         })
@@ -539,6 +548,7 @@ fn sample_projected_days(snapshot: &TrainingPlanSnapshot) -> Vec<TrainingPlanPro
             operation_key: snapshot.operation_key.clone(),
             date: day.date.clone(),
             rest_day: day.rest_day,
+            rest_day_reason: day.rest_day_reason.clone(),
             workout: day.workout.clone(),
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: snapshot.created_at_epoch_seconds,

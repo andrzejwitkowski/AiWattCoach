@@ -88,6 +88,11 @@ pub(super) struct CalendarEventDto {
     pub name: Option<String>,
     pub category: String,
     pub description: Option<String>,
+    #[serde(rename = "restDay")]
+    pub rest_day: bool,
+    #[serde(rename = "restDayReason")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rest_day_reason: Option<String>,
     pub indoor: bool,
     pub color: Option<String>,
     #[serde(rename = "eventDefinition")]
@@ -115,4 +120,9 @@ pub(super) struct ProjectedWorkoutDto {
     pub date: String,
     #[serde(rename = "sourceWorkoutId")]
     pub source_workout_id: String,
+    #[serde(rename = "restDay")]
+    pub rest_day: bool,
+    #[serde(rename = "restDayReason")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rest_day_reason: Option<String>,
 }

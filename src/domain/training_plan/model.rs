@@ -26,6 +26,7 @@ impl std::error::Error for TrainingPlanError {}
 pub struct TrainingPlanDay {
     pub date: String,
     pub rest_day: bool,
+    pub rest_day_reason: Option<String>,
     pub workout: Option<PlannedWorkout>,
 }
 
@@ -48,6 +49,7 @@ pub struct TrainingPlanProjectedDay {
     pub operation_key: String,
     pub date: String,
     pub rest_day: bool,
+    pub rest_day_reason: Option<String>,
     pub workout: Option<PlannedWorkout>,
     pub superseded_at_epoch_seconds: Option<i64>,
     pub created_at_epoch_seconds: i64,
