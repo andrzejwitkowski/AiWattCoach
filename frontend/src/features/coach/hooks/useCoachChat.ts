@@ -10,6 +10,7 @@ import {
 } from '../api/workoutSummary';
 import {
   clientWsMessageSchema,
+  type CoachChatProgressState,
   serverWsMessageSchema,
   type ConversationMessage,
   type WorkoutSummary,
@@ -43,8 +44,6 @@ type PendingSocketState = {
   socket: WebSocket;
   promise: Promise<WebSocket>;
 };
-
-export type CoachChatProgressState = 'idle' | 'awaiting-reply' | 'saving-summary';
 
 export const availabilityRequiredChatError = 'availability must be configured before chatting with coach';
 
@@ -468,6 +467,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     savingRequestIdRef.current = requestId;
 
     setIsSaving(true);
+    setProgressState('saving-summary');
     setError(null);
 
     try {
@@ -489,6 +489,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     } finally {
       if (savingRequestIdRef.current === requestId && currentWorkoutIdRef.current === requestedWorkoutId) {
         setIsSaving(false);
+        setProgressState('idle');
       }
     }
   }, [apiBaseUrl, applySummaryState, workoutId]);
@@ -525,8 +526,8 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
       const socket = await connectSocket(requestedWorkoutId);
       assertCurrentWorkout(requestedWorkoutId);
       const payload = clientWsMessageSchema.parse({ type: 'send_message', content: trimmed });
-      socket.send(JSON.stringify(payload));
       setProgressState('awaiting-reply');
+      socket.send(JSON.stringify(payload));
       setMessages((current) => {
         if (currentWorkoutIdRef.current !== requestedWorkoutId) {
           return current;

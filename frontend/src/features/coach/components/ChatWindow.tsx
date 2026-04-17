@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-import type { ConversationMessage } from '../types';
+import type { CoachChatProgressState, ConversationMessage } from '../types';
 import { ChatHeader } from './ChatHeader';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
@@ -14,7 +14,7 @@ type ChatWindowProps = {
   requiresRpe?: boolean;
   requiresAvailability?: boolean;
   availabilityMessage?: string | null;
-  progressState?: 'idle' | 'awaiting-reply' | 'saving-summary';
+  progressState?: CoachChatProgressState;
   error: string | null;
   inputDisabled?: boolean;
   onSendMessage: (content: string) => Promise<boolean>;

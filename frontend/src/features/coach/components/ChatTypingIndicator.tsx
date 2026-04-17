@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next';
 
+import type { CoachChatProgressState } from '../types';
+
 type ChatTypingIndicatorProps = {
-  progressState?: 'idle' | 'awaiting-reply' | 'saving-summary';
+  progressState?: CoachChatProgressState;
 };
 
 export function ChatTypingIndicator({ progressState = 'idle' }: ChatTypingIndicatorProps) {

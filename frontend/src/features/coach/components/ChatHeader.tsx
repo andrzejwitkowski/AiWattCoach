@@ -1,13 +1,15 @@
 import { Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import type { CoachChatProgressState } from '../types';
+
 type ChatHeaderProps = {
   isConnected: boolean;
   hasSelectedWorkout: boolean;
   isSaved?: boolean;
   requiresRpe?: boolean;
   requiresAvailability?: boolean;
-  progressState?: 'idle' | 'awaiting-reply' | 'saving-summary';
+  progressState?: CoachChatProgressState;
 };
 
 export function ChatHeader({

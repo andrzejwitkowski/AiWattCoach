@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react';
 
-import type { ConversationMessage } from '../types';
+import type { CoachChatProgressState, ConversationMessage } from '../types';
 import { ChatMessage } from './ChatMessage';
 import { ChatTypingIndicator } from './ChatTypingIndicator';
 
 type ChatMessageListProps = {
   messages: ConversationMessage[];
   isCoachTyping: boolean;
-  progressState?: 'idle' | 'awaiting-reply' | 'saving-summary';
+  progressState?: CoachChatProgressState;
 };
 
 export function ChatMessageList({ messages, isCoachTyping, progressState = 'idle' }: ChatMessageListProps) {

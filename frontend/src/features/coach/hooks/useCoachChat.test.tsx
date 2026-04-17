@@ -385,6 +385,42 @@ describe('useCoachChat', () => {
     expect(result.current.progressState).toBe('idle');
   });
 
+  it('resets saving progress when save workflow fails', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    let rejectSave: ((reason?: unknown) => void) | undefined;
+
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+    vi.mocked(saveWorkoutSummary).mockImplementationOnce(() => new Promise((_, reject) => {
+      rejectSave = reject;
+    }));
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('101');
+    });
+
+    let savePromise: Promise<Awaited<ReturnType<typeof result.current.saveSummary>>> | undefined;
+
+    await act(async () => {
+      savePromise = result.current.saveSummary();
+    });
+
+    expect(result.current.isSaving).toBe(true);
+    expect(result.current.progressState).toBe('saving-summary');
+
+    act(() => {
+      rejectSave?.(new HttpError(500, 'save failed'));
+    });
+
+    await act(async () => {
+      await savePromise;
+    });
+
+    expect(result.current.isSaving).toBe(false);
+    expect(result.current.progressState).toBe('idle');
+  });
+
   it('reopens a saved summary for editing', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockResolvedValue({ ...summaryFixture, savedAtEpochSeconds: 3 });
