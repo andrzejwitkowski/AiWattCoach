@@ -7,21 +7,24 @@ import { ChatTypingIndicator } from './ChatTypingIndicator';
 type ChatMessageListProps = {
   messages: ConversationMessage[];
   isCoachTyping: boolean;
+  progressState?: 'idle' | 'awaiting-reply' | 'saving-summary';
 };
 
-export function ChatMessageList({ messages, isCoachTyping }: ChatMessageListProps) {
+export function ChatMessageList({ messages, isCoachTyping, progressState = 'idle' }: ChatMessageListProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
+  const shouldShowProgressIndicator = progressState !== 'idle';
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
-  }, [isCoachTyping, messages]);
+  }, [isCoachTyping, messages, progressState]);
 
   return (
     <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-6 py-6">
       {messages.map((message) => (
         <ChatMessage key={message.id} message={message} />
       ))}
-      {isCoachTyping ? <ChatTypingIndicator /> : null}
+      {shouldShowProgressIndicator ? <ChatTypingIndicator progressState={progressState} /> : null}
+      {!shouldShowProgressIndicator && isCoachTyping ? <ChatTypingIndicator /> : null}
       <div ref={endRef} />
     </div>
   );

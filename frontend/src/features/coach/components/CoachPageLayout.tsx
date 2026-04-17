@@ -43,6 +43,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   const chatError = isAvailabilityRequiredChatError(chat.error) ? null : chat.error;
   const requiresAvailability = (!settingsContext.isLoading && !hasSettingsLoadError && !availabilityConfigured)
     || isAvailabilityRequiredChatError(chat.error);
+  const isChatBusy = chat.progressState !== 'idle';
 
   useEffect(() => {
     selectedWorkoutIdRef.current = selectedWorkoutId;
@@ -129,7 +130,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
               <WorkoutHeader item={selectedItem} hasConversation={chat.hasConversation} />
               <RpeSelector
                 value={chat.draftRpe}
-                disabled={!isEditing || chat.isLoading}
+                disabled={!isEditing || chat.isLoading || isChatBusy}
                 onChange={chat.setDraftRpe}
               />
               <ChatWindow
@@ -145,9 +146,11 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
                     ? t('coach.chatAvailabilityRequiredBanner')
                     : null
                 }
+                progressState={chat.progressState}
                 error={chatError ?? (hasSettingsLoadError ? settingsContext.error : null)}
                 inputDisabled={
                   chat.isLoading
+                  || isChatBusy
                   || !isEditing
                   || chat.isSaved
                   || chat.draftRpe === null
@@ -158,7 +161,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
                 onSendMessage={chat.sendMessage}
               />
               <WorkoutActionButtons
-                disabled={chat.isLoading}
+                disabled={chat.isLoading || isChatBusy}
                 isSaving={chat.isSaving}
                 isEditing={isEditing}
                 canSave={chat.draftRpe !== null}

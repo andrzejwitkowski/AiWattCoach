@@ -7,6 +7,7 @@ type ChatHeaderProps = {
   isSaved?: boolean;
   requiresRpe?: boolean;
   requiresAvailability?: boolean;
+  progressState?: 'idle' | 'awaiting-reply' | 'saving-summary';
 };
 
 export function ChatHeader({
@@ -15,10 +16,15 @@ export function ChatHeader({
   isSaved = false,
   requiresRpe = false,
   requiresAvailability = false,
+  progressState = 'idle',
 }: ChatHeaderProps) {
   const { t } = useTranslation();
   const statusLabel = !hasSelectedWorkout
     ? t('coach.selectWorkoutPrompt')
+    : progressState === 'saving-summary'
+      ? t('coach.chatSavingSummary')
+    : progressState === 'awaiting-reply'
+      ? t('coach.chatAwaitingReply')
     : requiresAvailability
       ? t('coach.chatRequiresAvailability')
     : requiresRpe
