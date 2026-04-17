@@ -507,19 +507,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn backfill_missing_details_skips_summary_only_workout() {
+    async fn backfill_missing_details_skips_activity_without_backfillable_details() {
         let repository = TestCompletedWorkoutRepository::default();
-        repository
-            .upsert(sample_summary_only_workout())
-            .await
-            .unwrap();
+        repository.upsert(sample_sparse_workout()).await.unwrap();
+        let lookups = Arc::new(Mutex::new(Vec::new()));
         let imports = RecordingImports::default();
         let service = IntervalsCompletedWorkoutBackfillService::new(
             repository,
             TestSettings,
             TestApi {
-                activity: sample_summary_only_activity(),
-                lookups: Arc::new(Mutex::new(Vec::new())),
+                activity: sample_unbackfillable_activity(),
+                lookups: lookups.clone(),
             },
             imports.clone(),
         );
@@ -534,6 +532,7 @@ mod tests {
         assert_eq!(result.skipped, 1);
         assert_eq!(result.failed, 0);
         assert!(imports.commands().is_empty());
+        assert_eq!(lookups.lock().unwrap().as_slice(), &["i1".to_string()]);
     }
 
     fn sample_sparse_workout() -> CompletedWorkout {
@@ -689,25 +688,17 @@ mod tests {
         workout
     }
 
-    fn sample_summary_only_workout() -> CompletedWorkout {
-        let mut workout = sample_sparse_workout();
-        workout.completed_workout_id = "intervals-activity:i3".to_string();
-        workout.source_activity_id = Some("i3".to_string());
-        workout.details.interval_summary = vec!["tempo summary".to_string()];
-        workout
-    }
-
-    fn sample_summary_only_activity() -> Activity {
+    fn sample_unbackfillable_activity() -> Activity {
         let mut activity = sample_detailed_activity();
-        activity.id = "i3".to_string();
         activity.details.streams.clear();
         activity.details.intervals.clear();
         activity.details.interval_groups.clear();
-        activity.details.interval_summary = vec!["tempo summary".to_string()];
-        activity.details.power_zone_times = vec![crate::domain::intervals::ActivityZoneTime {
-            zone_id: "z3".to_string(),
-            seconds: 1200,
-        }];
+        activity.details.interval_summary.clear();
+        activity.details.skyline_chart.clear();
+        activity.details.power_zone_times.clear();
+        activity.details.heart_rate_zone_times.clear();
+        activity.details.pace_zone_times.clear();
+        activity.details.gap_zone_times.clear();
         activity
     }
 }

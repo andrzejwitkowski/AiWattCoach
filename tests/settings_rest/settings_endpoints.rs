@@ -319,6 +319,42 @@ async fn update_intervals_reactivates_saved_credentials_when_user_is_disconnecte
 }
 
 #[tokio::test]
+async fn update_intervals_does_not_activate_incomplete_saved_credentials() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.intervals.api_key = Some("saved-api-key".to_string());
+    settings.intervals.athlete_id = None;
+    settings.intervals.connected = true;
+
+    let app = settings_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/settings/intervals")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response_body: Value = get_json(response).await;
+    let intervals = response_body.get("intervals").unwrap();
+
+    assert!(intervals.get("apiKeySet").unwrap().as_bool().unwrap());
+    assert!(intervals.get("athleteId").is_some_and(Value::is_null));
+    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
+}
+
+#[tokio::test]
 async fn update_intervals_keeps_connection_active_when_complete_credentials_are_saved() {
     let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
     settings.intervals.api_key = Some("saved-api-key".to_string());

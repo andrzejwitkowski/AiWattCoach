@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use crate::config::AppState;
 use crate::domain::identity::IdentityError;
@@ -101,7 +102,10 @@ pub async fn backfill_completed_workout_details(
                 failed: result.failed,
             })
             .into_response(),
-            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            Err(error) => {
+                error!(user_id = %path.user_id, error = %error, "backfill_missing_details failed");
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
         },
         Err(IdentityError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
         Err(crate::domain::identity::IdentityError::Forbidden) => {

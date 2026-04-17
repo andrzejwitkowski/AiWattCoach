@@ -2,6 +2,7 @@ use crate::domain::external_sync::{
     ExternalImportCommand, ExternalProvider, ProviderPollState, ProviderPollStateRepository,
     ProviderPollStream,
 };
+use crate::domain::intervals::IntervalsError;
 
 use super::{support::*, ProviderPollingService};
 
@@ -140,4 +141,51 @@ async fn completed_stream_enriches_activity_details_before_import() {
     assert!(!import.workout.details.streams.is_empty());
     assert!(!import.workout.details.intervals.is_empty());
     assert!(!import.workout.details.interval_groups.is_empty());
+}
+
+#[tokio::test]
+async fn completed_stream_fails_poll_when_detail_enrichment_has_transient_error() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let imports = RecordingImportService::default();
+    let listed = sample_activity("activity-1");
+    let service = ProviderPollingService::new(
+        FakeIntervalsApi::with_activities_and_detail_errors(
+            vec![listed],
+            vec![(
+                "activity-1".to_string(),
+                IntervalsError::ConnectionError("timeout".to_string()),
+            )],
+        ),
+        FakeIntervalsSettings,
+        poll_states.clone(),
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_timing(300, 120)
+    .with_windows(7, 14, 7);
+
+    let processed = service.poll_due_once().await.unwrap();
+
+    assert_eq!(processed, 1);
+    assert!(imports.commands().is_empty());
+
+    let stored = poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.last_successful_at_epoch_seconds, None);
+    assert_eq!(stored.last_error.as_deref(), Some("completed workout enrichment failed for activity activity-1: Connection error: timeout"));
+    assert_eq!(stored.backoff_until_epoch_seconds, Some(1_700_000_120));
 }

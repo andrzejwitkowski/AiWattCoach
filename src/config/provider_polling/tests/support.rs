@@ -134,6 +134,7 @@ pub(super) struct FakeIntervalsApi {
     events: Vec<Event>,
     activities: Vec<Activity>,
     detailed_activities: Arc<Mutex<std::collections::HashMap<String, Activity>>>,
+    detail_errors: Arc<Mutex<std::collections::HashMap<String, IntervalsError>>>,
 }
 
 #[derive(Clone, Default)]
@@ -149,6 +150,7 @@ impl FakeIntervalsApi {
             events,
             activities: Vec::new(),
             detailed_activities: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            detail_errors: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -157,6 +159,7 @@ impl FakeIntervalsApi {
             events: Vec::new(),
             activities,
             detailed_activities: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            detail_errors: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -172,6 +175,20 @@ impl FakeIntervalsApi {
             events: Vec::new(),
             activities,
             detailed_activities: Arc::new(Mutex::new(detailed)),
+            detail_errors: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    pub(super) fn with_activities_and_detail_errors(
+        activities: Vec<Activity>,
+        detail_errors: Vec<(String, IntervalsError)>,
+    ) -> Self {
+        let detail_errors = detail_errors.into_iter().collect();
+        Self {
+            events: Vec::new(),
+            activities,
+            detailed_activities: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            detail_errors: Arc::new(Mutex::new(detail_errors)),
         }
     }
 }
@@ -252,8 +269,12 @@ impl IntervalsApiPort for FakeIntervalsApi {
         activity_id: &str,
     ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
         let detailed_activities = self.detailed_activities.clone();
+        let detail_errors = self.detail_errors.clone();
         let activity_id = activity_id.to_string();
         Box::pin(async move {
+            if let Some(error) = detail_errors.lock().unwrap().get(&activity_id).cloned() {
+                return Err(error);
+            }
             detailed_activities
                 .lock()
                 .unwrap()

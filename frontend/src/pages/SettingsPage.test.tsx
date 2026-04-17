@@ -29,9 +29,15 @@ vi.mock('../features/settings/components/OptionsCard', () => ({
   OptionsCard: () => <div>options-card</div>,
 }));
 
+vi.mock('../features/settings/components/IntervalsCard', () => ({
+  IntervalsCard: vi.fn(() => <button type="button">Test Connection</button>),
+}));
+
 const { loadSettings } = await import('../features/settings/api/settings');
+const { IntervalsCard } = await import('../features/settings/components/IntervalsCard');
 
 const loadSettingsMock = vi.mocked(loadSettings);
+const intervalsCardMock = vi.mocked(IntervalsCard);
 
 const settingsFixture: UserSettingsResponse = {
   aiAgents: {
@@ -97,9 +103,6 @@ describe('SettingsPage', () => {
           }),
       );
 
-    const { IntervalsCard } = await import('../features/settings/components/IntervalsCard');
-    const intervalsSpy = vi.spyOn(await import('../features/settings/components/IntervalsCard'), 'IntervalsCard');
-
     render(
       <SettingsProvider apiBaseUrl="">
         <SettingsPage apiBaseUrl="" />
@@ -108,7 +111,7 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByText('ai-agents-card')).toBeInTheDocument();
 
-    const intervalsProps = intervalsSpy.mock.calls.at(-1)?.[0];
+    const intervalsProps = intervalsCardMock.mock.calls.at(-1)?.[0];
     expect(intervalsProps).toBeDefined();
 
     await act(async () => {
@@ -125,6 +128,6 @@ describe('SettingsPage', () => {
     });
 
     expect(screen.getByText('ai-agents-card')).toBeInTheDocument();
-    expect(IntervalsCard).toBeDefined();
+    expect(intervalsCardMock).toHaveBeenCalled();
   });
 });

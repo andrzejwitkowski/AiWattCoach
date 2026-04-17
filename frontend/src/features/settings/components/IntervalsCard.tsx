@@ -55,7 +55,9 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
   }, [persistedApiKey, persistedAthleteId]);
 
   const hasSavedCompleteCredentials = intervals.apiKeySet && Boolean(intervals.athleteId);
-  const hasDirtyDraft = draft.apiKey !== cleanDraft.apiKey || draft.athleteId !== cleanDraft.athleteId;
+  const hasDirtyDraft =
+    draft.apiKey.trim() !== cleanDraft.apiKey.trim() ||
+    draft.athleteId.trim() !== cleanDraft.athleteId.trim();
   const canReconnectSavedCredentials = hasSavedCompleteCredentials && !intervals.connected && !hasDirtyDraft;
 
   const saveRequest = useMemo(() => {
