@@ -371,8 +371,21 @@ where
             .find_by_completed_workout_id(&workout.user_id, &workout.completed_workout_id)
             .await
             .map_err(map_planned_completed_link_error)?;
+        if existing_link.is_none() {
+            persist_legacy_planned_workout_link(
+                &self.planned_completed_links,
+                &workout,
+                self.clock.now_epoch_seconds(),
+            )
+            .await?;
+        }
+        let existing_link = self
+            .planned_completed_links
+            .find_by_completed_workout_id(&workout.user_id, &workout.completed_workout_id)
+            .await
+            .map_err(map_planned_completed_link_error)?;
         let selected_link = choose_preferred_planned_workout_link(
-            existing_link_candidate(existing_link.as_ref(), &workout),
+            existing_link_candidate(existing_link.as_ref()),
             resolved_link,
         );
         workout.planned_workout_id = selected_link
@@ -638,8 +651,14 @@ where
             .list_by_user_id_and_date_range(user_id, &workout_date, &workout_date)
             .await
             .map_err(map_planned_workout_error)?;
+        let matching_name_planned_workouts = same_day_planned_workouts
+            .into_iter()
+            .filter(|planned_workout| {
+                same_workout_name(planned_workout.name.as_deref(), workout.name.as_deref())
+            })
+            .collect::<Vec<_>>();
 
-        match same_day_planned_workouts.as_slice() {
+        match matching_name_planned_workouts.as_slice() {
             [] => Ok(None),
             [planned_workout] => Ok(Some(ResolvedPlannedWorkoutLink {
                 planned_workout_id: planned_workout.planned_workout_id.clone(),
@@ -663,24 +682,65 @@ fn completed_workout_refresh_dates(
     dates
 }
 
-fn existing_link_candidate(
-    existing_link: Option<&PlannedCompletedWorkoutLink>,
-    workout: &CompletedWorkout,
-) -> Option<ResolvedPlannedWorkoutLink> {
-    if let Some(link) = existing_link {
-        return Some(ResolvedPlannedWorkoutLink {
-            planned_workout_id: link.planned_workout_id.clone(),
-            match_source: link.match_source.clone(),
-        });
+fn same_workout_name(left: Option<&str>, right: Option<&str>) -> bool {
+    let Some(left) = normalize_workout_name(left) else {
+        return false;
+    };
+    let Some(right) = normalize_workout_name(right) else {
+        return false;
+    };
+
+    left == right
+}
+
+fn normalize_workout_name(value: Option<&str>) -> Option<String> {
+    let normalized = value?.trim();
+    if normalized.is_empty() {
+        return None;
     }
 
-    workout
-        .planned_workout_id
-        .as_ref()
-        .map(|planned_workout_id| ResolvedPlannedWorkoutLink {
-            planned_workout_id: planned_workout_id.clone(),
-            match_source: PlannedCompletedWorkoutLinkMatchSource::Heuristic,
-        })
+    Some(
+        normalized
+            .to_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+fn existing_link_candidate(
+    existing_link: Option<&PlannedCompletedWorkoutLink>,
+) -> Option<ResolvedPlannedWorkoutLink> {
+    existing_link.map(|link| ResolvedPlannedWorkoutLink {
+        planned_workout_id: link.planned_workout_id.clone(),
+        match_source: link.match_source.clone(),
+    })
+}
+
+async fn persist_legacy_planned_workout_link<PlannedCompletedLinks>(
+    planned_completed_links: &PlannedCompletedLinks,
+    workout: &CompletedWorkout,
+    linked_at_epoch_seconds: i64,
+) -> Result<(), ExternalImportError>
+where
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository,
+{
+    let Some(planned_workout_id) = workout.planned_workout_id.as_ref() else {
+        return Ok(());
+    };
+
+    planned_completed_links
+        .upsert(PlannedCompletedWorkoutLink::new(
+            workout.user_id.clone(),
+            planned_workout_id.clone(),
+            workout.completed_workout_id.clone(),
+            PlannedCompletedWorkoutLinkMatchSource::Explicit,
+            linked_at_epoch_seconds,
+        ))
+        .await
+        .map_err(map_planned_completed_link_error)?;
+
+    Ok(())
 }
 
 fn choose_preferred_planned_workout_link(

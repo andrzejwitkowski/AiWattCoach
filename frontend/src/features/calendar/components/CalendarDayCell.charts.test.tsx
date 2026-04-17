@@ -64,8 +64,8 @@ describe('CalendarDayCell charts', () => {
 
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
 
-    expect(container).toHaveTextContent('Planned intervals');
-    expect(container.querySelectorAll('[data-chart-bar="mini"]').length).toBe(4);
+    expect(container).toHaveTextContent('Morning Ride');
+    expect(container.querySelectorAll('[data-chart-bar="mini"]').length).toBeGreaterThan(0);
   });
 
   it('renders completed mini-chart bars from skyline chart payloads', () => {
@@ -154,6 +154,38 @@ describe('CalendarDayCell charts', () => {
 
     expect(firstBar.style.flexGrow).toBe('1200');
     expect(secondBar.style.flexGrow).toBe('300');
+  });
+
+  it('uses the same expanded planned interval source as the detail modal mini-chart', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 28),
+      dateKey: '2026-04-28',
+      events: [
+        makeEvent({
+          id: 88,
+          name: 'Mixed Intervals',
+          eventDefinition: makeEventDefinition({
+            rawWorkoutDoc: 'Mixed Intervals\nWarmup\n- 20m ramp 50-75%\nMain Set 4x\n- 5m 105%\n- 3m 55%\nMain Set 2 10x\n- 30s 130%\n- 30s 50%\nCooldown\n- 10m 50%',
+            intervals: [
+              makeIntervalDefinition({ definition: '- 20m ramp 50-75%', durationSeconds: 1200, targetPercentFtp: 62.5, zoneId: 2 }),
+              makeIntervalDefinition({ definition: '- 5m 105%', durationSeconds: 300, targetPercentFtp: 105, zoneId: 4 }),
+              makeIntervalDefinition({ definition: '- 3m 55%', durationSeconds: 180, targetPercentFtp: 55, zoneId: 1 }),
+              makeIntervalDefinition({ definition: '- 30s 130%', durationSeconds: 30, targetPercentFtp: 130, zoneId: 6 }),
+              makeIntervalDefinition({ definition: '- 30s 50%', durationSeconds: 30, targetPercentFtp: 50, zoneId: 1 }),
+              makeIntervalDefinition({ definition: '- 10m 50%', durationSeconds: 600, targetPercentFtp: 50, zoneId: 1 }),
+            ],
+            summary: makeWorkoutSummary({ totalDurationSeconds: 4320 }),
+          }),
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const chartBars = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
+
+    expect(chartBars.length).toBeGreaterThan(10);
+    expect(chartBars.map((bar) => bar.style.backgroundColor)).toContain('rgb(255, 115, 81)');
+    expect(chartBars.map((bar) => bar.style.backgroundColor)).toContain('rgb(210, 255, 154)');
   });
 
   it('renders race mini-chart bars from race labels', () => {

@@ -244,6 +244,58 @@ async fn import_completed_workout_refreshes_old_and_new_dates_when_existing_cano
 }
 
 #[tokio::test]
+async fn import_completed_workout_merges_enriched_details_into_existing_sparse_record() {
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let mut existing = sample_completed_workout();
+    existing.details.streams.clear();
+    existing.details.intervals.clear();
+    existing.details.interval_groups.clear();
+    completed_workouts.upsert(existing.clone()).await.unwrap();
+
+    let service = external_import_service_without_refresh(
+        InMemoryPlannedWorkoutRepository::default(),
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    let mut incoming = sample_completed_workout();
+    incoming
+        .details
+        .streams
+        .push(crate::domain::completed_workouts::CompletedWorkoutStream {
+            stream_type: "watts".to_string(),
+            name: Some("Power".to_string()),
+            primary_series: Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310, 330])),
+            secondary_series: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        });
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-enriched-details".to_string(),
+                marker_sources: Vec::new(),
+                workout: incoming,
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(stored.len(), 1);
+    assert!(!stored[0].details.streams.is_empty());
+}
+
+#[tokio::test]
 async fn import_completed_workout_matches_even_when_other_provider_arrives_first() {
     let service = external_import_service_without_refresh(
         InMemoryPlannedWorkoutRepository::default(),
@@ -475,9 +527,10 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
 async fn import_completed_workout_links_single_same_day_planned_workout_as_heuristic() {
     let planned_workouts = InMemoryPlannedWorkoutRepository::default();
     planned_workouts
-        .upsert(sample_planned_workout_on_date(
+        .upsert(sample_planned_workout_named_on_date(
             "planned-same-day",
             "2026-05-11",
+            "Threshold Ride",
         ))
         .await
         .unwrap();
@@ -501,7 +554,7 @@ async fn import_completed_workout_links_single_same_day_planned_workout_as_heuri
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-heuristic".to_string(),
                 marker_sources: Vec::new(),
-                workout: sample_completed_workout(),
+                workout: sample_completed_workout_named("Threshold Ride"),
             },
         )))
         .await
@@ -523,6 +576,53 @@ async fn import_completed_workout_links_single_same_day_planned_workout_as_heuri
         link.match_source,
         PlannedCompletedWorkoutLinkMatchSource::Heuristic
     );
+}
+
+#[tokio::test]
+async fn import_completed_workout_does_not_link_same_day_planned_workout_when_name_differs() {
+    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(sample_planned_workout_named_on_date(
+            "planned-same-day",
+            "2026-05-11",
+            "Priming Session",
+        ))
+        .await
+        .unwrap();
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let service = external_import_service_without_refresh(
+        planned_workouts,
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        planned_completed_links.clone(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-completed-no-heuristic".to_string(),
+                marker_sources: Vec::new(),
+                workout: sample_completed_workout_named("Blue Top"),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(stored[0].planned_workout_id, None);
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-imported-1")
+        .await
+        .unwrap();
+    assert!(link.is_none());
 }
 
 #[tokio::test]
@@ -652,14 +752,19 @@ async fn import_completed_workout_does_not_downgrade_existing_explicit_link_matc
 async fn import_completed_workout_does_not_inherit_explicit_match_source_from_different_pair() {
     let planned_workouts = InMemoryPlannedWorkoutRepository::default();
     planned_workouts
-        .upsert(sample_planned_workout_on_date(
+        .upsert(sample_planned_workout_named_on_date(
             "planned-original",
             "2026-05-10",
+            "Original Ride",
         ))
         .await
         .unwrap();
     planned_workouts
-        .upsert(sample_planned_workout_on_date("planned-new", "2026-05-11"))
+        .upsert(sample_planned_workout_named_on_date(
+            "planned-new",
+            "2026-05-11",
+            "Threshold Ride",
+        ))
         .await
         .unwrap();
     let completed_workouts = InMemoryCompletedWorkoutRepository::default();
@@ -692,7 +797,7 @@ async fn import_completed_workout_does_not_inherit_explicit_match_source_from_di
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-new-pair".to_string(),
                 marker_sources: Vec::new(),
-                workout: sample_completed_workout(),
+                workout: sample_completed_workout_named("Threshold Ride"),
             },
         )))
         .await
@@ -778,6 +883,113 @@ async fn import_completed_workout_preserves_existing_completed_workout_link_over
         .unwrap()
         .expect("planned-completed link");
     assert_eq!(link.planned_workout_id, "planned-existing");
+    assert_eq!(
+        link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Explicit
+    );
+}
+
+#[tokio::test]
+async fn import_completed_workout_preserves_legacy_planned_id_when_no_better_match_exists() {
+    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(sample_planned_workout_named_on_date(
+            "planned-fallback",
+            "2026-05-11",
+            "Threshold Ride",
+        ))
+        .await
+        .unwrap();
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let mut existing = sample_completed_workout();
+    existing.planned_workout_id = Some("planned-legacy".to_string());
+    completed_workouts.upsert(existing).await.unwrap();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let service = external_import_service_without_refresh(
+        planned_workouts,
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        planned_completed_links.clone(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-completed-drop-legacy-planned-id".to_string(),
+                marker_sources: Vec::new(),
+                workout: sample_completed_workout_named("Threshold Ride"),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(
+        stored[0].planned_workout_id.as_deref(),
+        Some("planned-legacy")
+    );
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-imported-1")
+        .await
+        .unwrap()
+        .expect("planned-completed link");
+    assert_eq!(link.planned_workout_id, "planned-legacy");
+    assert_eq!(
+        link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Explicit
+    );
+}
+
+#[tokio::test]
+async fn import_completed_workout_persists_existing_legacy_planned_id_when_no_replacement_exists() {
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let mut existing = sample_completed_workout();
+    existing.planned_workout_id = Some("planned-legacy".to_string());
+    completed_workouts.upsert(existing).await.unwrap();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let service = external_import_service_without_refresh(
+        InMemoryPlannedWorkoutRepository::default(),
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        planned_completed_links.clone(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-completed-preserve-legacy-planned-id".to_string(),
+                marker_sources: Vec::new(),
+                workout: sample_completed_workout_named("Completely Different Ride"),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(
+        stored[0].planned_workout_id.as_deref(),
+        Some("planned-legacy")
+    );
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-imported-1")
+        .await
+        .unwrap()
+        .expect("planned-completed link");
+    assert_eq!(link.planned_workout_id, "planned-legacy");
     assert_eq!(
         link.match_source,
         PlannedCompletedWorkoutLinkMatchSource::Explicit

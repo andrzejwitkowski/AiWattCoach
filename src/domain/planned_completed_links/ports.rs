@@ -21,4 +21,10 @@ pub trait PlannedCompletedWorkoutLinkRepository: Clone + Send + Sync + 'static {
         &self,
         link: PlannedCompletedWorkoutLink,
     ) -> BoxFuture<Result<PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkError>>;
+
+    fn delete_by_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> BoxFuture<Result<(), PlannedCompletedWorkoutLinkError>>;
 }

@@ -169,15 +169,12 @@ pub(super) fn map_intervals_update(
         normalize_string_input(body.athlete_id),
         current.intervals.athlete_id.clone(),
     );
+    let credentials_changed =
+        api_key != current.intervals.api_key || athlete_id != current.intervals.athlete_id;
+    let has_complete_credentials = api_key.is_some() && athlete_id.is_some();
 
     IntervalsConfig {
-        connected: if api_key != current.intervals.api_key
-            || athlete_id != current.intervals.athlete_id
-        {
-            false
-        } else {
-            current.intervals.connected
-        },
+        connected: current.intervals.connected && !credentials_changed && has_complete_credentials,
         api_key,
         athlete_id,
     }

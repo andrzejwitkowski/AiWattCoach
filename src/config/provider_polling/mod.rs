@@ -334,8 +334,54 @@ where
             .await
             .map_err(|error| error.to_string())?;
         for activity in &activities {
+            let import_activity = match self
+                .intervals_api
+                .get_activity(credentials, &activity.id)
+                .await
+            {
+                Ok(detailed) => detailed,
+                Err(crate::domain::intervals::IntervalsError::NotFound) => {
+                    warn!(
+                        user_id = %state.user_id,
+                        activity_id = %activity.id,
+                        error_kind = "not_found",
+                        "completed workout enrichment not found; importing listed activity without full details"
+                    );
+                    activity.clone()
+                }
+                Err(error) => {
+                    let error_kind = match &error {
+                        crate::domain::intervals::IntervalsError::Unauthenticated => {
+                            "unauthenticated"
+                        }
+                        crate::domain::intervals::IntervalsError::CredentialsNotConfigured => {
+                            "credentials_not_configured"
+                        }
+                        crate::domain::intervals::IntervalsError::ApiError(_) => "api_error",
+                        crate::domain::intervals::IntervalsError::ConnectionError(_) => {
+                            "connection_error"
+                        }
+                        crate::domain::intervals::IntervalsError::NotFound => "not_found",
+                        crate::domain::intervals::IntervalsError::Internal(_) => "internal",
+                    };
+                    warn!(
+                        user_id = %state.user_id,
+                        activity_id = %activity.id,
+                        error_kind,
+                        error = %error,
+                        "completed workout enrichment failed"
+                    );
+                    return Err(format!(
+                        "completed workout enrichment failed for activity {}: {}",
+                        activity.id, error
+                    ));
+                }
+            };
             self.imports
-                .import(map_activity_to_import_command(&state.user_id, activity))
+                .import(map_activity_to_import_command(
+                    &state.user_id,
+                    &import_activity,
+                ))
                 .await
                 .map_err(|error| error.to_string())?;
         }

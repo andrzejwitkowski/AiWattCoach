@@ -211,13 +211,14 @@ pub(super) fn test_connection_response(
     message: &str,
     used_saved_api_key: bool,
     used_saved_athlete_id: bool,
+    persisted_status_updated: bool,
 ) -> TestIntervalsConnectionResponse {
     TestIntervalsConnectionResponse {
         connected,
         message: message.to_string(),
         used_saved_api_key,
         used_saved_athlete_id,
-        persisted_status_updated: false,
+        persisted_status_updated,
     }
 }
 

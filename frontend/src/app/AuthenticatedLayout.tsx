@@ -5,7 +5,6 @@ import {
   Calendar,
   Flag,
   LayoutDashboard,
-  Play,
   Settings,
   ShieldCheck,
 } from 'lucide-react';
@@ -58,16 +57,6 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
             <NavItem to="/admin/system-info" icon={ShieldCheck} label="System Info" />
           )}
         </nav>
-
-        <div className="p-3">
-          <button
-            className="w-full flex items-center justify-center gap-2 bg-cyan-400 text-slate-950 font-semibold rounded-xl py-3 text-sm hover:bg-cyan-300 transition"
-            type="button"
-          >
-            <Play size={14} />
-            START WORKOUT
-          </button>
-        </div>
       </aside>
 
       <div className="ml-56 flex-1 flex flex-col min-h-screen">

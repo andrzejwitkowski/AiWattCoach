@@ -80,10 +80,7 @@ impl UserSettingsUseCases for TestSettingsService {
         intervals: IntervalsConfig,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         let mut settings = self.take_or_default_settings(user_id);
-        settings.intervals = IntervalsConfig {
-            connected: intervals.api_key.is_some() && intervals.athlete_id.is_some(),
-            ..intervals
-        };
+        settings.intervals = intervals;
         settings.updated_at_epoch_seconds = 2000;
         let result = self.store_updated_settings(settings);
         Box::pin(async move { Ok(result) })
@@ -135,6 +132,83 @@ impl RepositoryErrorSettingsService {
         Self {
             message: message.to_string(),
         }
+    }
+}
+
+pub(crate) struct UpdateIntervalsErrorSettingsService {
+    message: String,
+    settings: Mutex<Option<UserSettings>>,
+}
+
+impl UpdateIntervalsErrorSettingsService {
+    pub(crate) fn new(message: &str, settings: UserSettings) -> Self {
+        Self {
+            message: message.to_string(),
+            settings: Mutex::new(Some(settings)),
+        }
+    }
+}
+
+impl UserSettingsUseCases for UpdateIntervalsErrorSettingsService {
+    fn find_settings(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let settings = { self.settings.lock().unwrap().clone() };
+        Box::pin(async move { Ok(settings) })
+    }
+
+    fn get_settings(&self, user_id: &str) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let user_id = user_id.to_string();
+        let settings = { self.settings.lock().unwrap().clone() };
+        Box::pin(async move {
+            Ok(settings.unwrap_or_else(|| UserSettings::new_defaults(user_id, 1000)))
+        })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: AiAgentsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: IntervalsConfig,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: AnalysisOptions,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: CyclingSettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: AvailabilitySettings,
+    ) -> BoxFuture<Result<UserSettings, SettingsError>> {
+        let message = self.message.clone();
+        Box::pin(async move { Err(SettingsError::Repository(message)) })
     }
 }
 

@@ -133,12 +133,15 @@ impl IntervalsSettingsPort for FakeIntervalsSettings {
 pub(super) struct FakeIntervalsApi {
     events: Vec<Event>,
     activities: Vec<Activity>,
+    detailed_activities: Arc<Mutex<std::collections::HashMap<String, Activity>>>,
+    detail_errors: Arc<Mutex<std::collections::HashMap<String, IntervalsError>>>,
 }
 
 #[derive(Clone, Default)]
 pub(super) struct RecordingIntervalsApi {
     event_ranges: Arc<Mutex<Vec<(String, String)>>>,
     activity_ranges: Arc<Mutex<Vec<(String, String)>>>,
+    activity_lookups: Arc<Mutex<Vec<String>>>,
 }
 
 impl FakeIntervalsApi {
@@ -146,6 +149,8 @@ impl FakeIntervalsApi {
         Self {
             events,
             activities: Vec::new(),
+            detailed_activities: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            detail_errors: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -153,6 +158,37 @@ impl FakeIntervalsApi {
         Self {
             events: Vec::new(),
             activities,
+            detailed_activities: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            detail_errors: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    pub(super) fn with_activities_and_details(
+        activities: Vec<Activity>,
+        detailed_activities: Vec<Activity>,
+    ) -> Self {
+        let detailed = detailed_activities
+            .into_iter()
+            .map(|activity| (activity.id.clone(), activity))
+            .collect();
+        Self {
+            events: Vec::new(),
+            activities,
+            detailed_activities: Arc::new(Mutex::new(detailed)),
+            detail_errors: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    pub(super) fn with_activities_and_detail_errors(
+        activities: Vec<Activity>,
+        detail_errors: Vec<(String, IntervalsError)>,
+    ) -> Self {
+        let detail_errors = detail_errors.into_iter().collect();
+        Self {
+            events: Vec::new(),
+            activities,
+            detailed_activities: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            detail_errors: Arc::new(Mutex::new(detail_errors)),
         }
     }
 }
@@ -164,6 +200,10 @@ impl RecordingIntervalsApi {
 
     pub(super) fn activity_ranges(&self) -> Vec<(String, String)> {
         self.activity_ranges.lock().unwrap().clone()
+    }
+
+    pub(super) fn activity_lookups(&self) -> Vec<String> {
+        self.activity_lookups.lock().unwrap().clone()
     }
 }
 
@@ -225,6 +265,27 @@ impl IntervalsApiPort for FakeIntervalsApi {
     ) -> crate::domain::intervals::BoxFuture<Result<Vec<Activity>, IntervalsError>> {
         let activities = self.activities.clone();
         Box::pin(async move { Ok(activities) })
+    }
+
+    fn get_activity(
+        &self,
+        _credentials: &IntervalsCredentials,
+        activity_id: &str,
+    ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+        let detailed_activities = self.detailed_activities.clone();
+        let detail_errors = self.detail_errors.clone();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            if let Some(error) = detail_errors.lock().unwrap().get(&activity_id).cloned() {
+                return Err(error);
+            }
+            detailed_activities
+                .lock()
+                .unwrap()
+                .get(&activity_id)
+                .cloned()
+                .ok_or(IntervalsError::NotFound)
+        })
     }
 }
 
@@ -299,6 +360,19 @@ impl IntervalsApiPort for RecordingIntervalsApi {
                 .unwrap()
                 .push((range.oldest, range.newest));
             Ok(Vec::new())
+        })
+    }
+
+    fn get_activity(
+        &self,
+        _credentials: &IntervalsCredentials,
+        activity_id: &str,
+    ) -> crate::domain::intervals::BoxFuture<Result<Activity, IntervalsError>> {
+        let activity_lookups = self.activity_lookups.clone();
+        let activity_id = activity_id.to_string();
+        Box::pin(async move {
+            activity_lookups.lock().unwrap().push(activity_id);
+            Err(IntervalsError::NotFound)
         })
     }
 }
@@ -529,4 +603,65 @@ pub(super) fn sample_activity(activity_id: &str) -> Activity {
         },
         details_unavailable_reason: None,
     }
+}
+
+pub(super) fn sample_detailed_activity(activity_id: &str) -> Activity {
+    let mut activity = sample_activity(activity_id);
+    activity.details = ActivityDetails {
+        intervals: vec![crate::domain::intervals::ActivityInterval {
+            id: Some(1),
+            label: Some("Hard".to_string()),
+            interval_type: Some("WORK".to_string()),
+            group_id: Some("g1".to_string()),
+            start_index: Some(0),
+            end_index: Some(59),
+            start_time_seconds: Some(0),
+            end_time_seconds: Some(60),
+            moving_time_seconds: Some(60),
+            elapsed_time_seconds: Some(60),
+            distance_meters: Some(500.0),
+            average_power_watts: Some(320),
+            normalized_power_watts: Some(330),
+            training_stress_score: Some(12.5),
+            average_heart_rate_bpm: Some(165),
+            average_cadence_rpm: Some(95.0),
+            average_speed_mps: Some(8.1),
+            average_stride_meters: None,
+            zone: Some(5),
+        }],
+        interval_groups: vec![crate::domain::intervals::ActivityIntervalGroup {
+            id: "g1".to_string(),
+            count: Some(1),
+            start_index: Some(0),
+            moving_time_seconds: Some(60),
+            elapsed_time_seconds: Some(60),
+            distance_meters: Some(500.0),
+            average_power_watts: Some(320),
+            normalized_power_watts: Some(330),
+            training_stress_score: Some(12.5),
+            average_heart_rate_bpm: Some(165),
+            average_cadence_rpm: Some(95.0),
+            average_speed_mps: Some(8.1),
+            average_stride_meters: None,
+        }],
+        streams: vec![crate::domain::intervals::ActivityStream {
+            stream_type: "watts".to_string(),
+            name: Some("Power".to_string()),
+            data: Some(serde_json::json!([200, 250, 300, 320])),
+            data2: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        }],
+        interval_summary: vec!["1x 60s 320w".to_string()],
+        skyline_chart: vec!["chart".to_string()],
+        power_zone_times: vec![crate::domain::intervals::ActivityZoneTime {
+            zone_id: "Z5".to_string(),
+            seconds: 60,
+        }],
+        heart_rate_zone_times: vec![60],
+        pace_zone_times: Vec::new(),
+        gap_zone_times: Vec::new(),
+    };
+    activity
 }

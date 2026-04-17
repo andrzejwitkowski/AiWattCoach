@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
-import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildFiveSecondAveragePowerSeries, buildMatchedWorkoutBars, buildPlannedWorkoutBars, buildPlannedWorkoutChartIntervals, buildPlannedWorkoutPowerSeries, buildPlannedWorkoutStructureItems, extractCompletedPowerValues, formatDurationLabel, formatPlannedWorkoutIntervalLabel, isPlannedWorkoutEvent, selectWorkoutDetail } from './workoutDetails';
+import { buildCompletedWorkoutBars, buildCompletedWorkoutPreviewBars, buildFiveSecondAveragePowerSeries, buildMatchedWorkoutBars, buildPlannedWorkoutBars, buildPlannedWorkoutChartIntervals, buildPlannedWorkoutPowerSeries, buildPlannedWorkoutStructureItems, buildPlannedWorkoutStructureSections, extractCompletedPowerValues, formatDurationLabel, formatPlannedWorkoutIntervalLabel, isPlannedWorkoutEvent, selectWorkoutDetail } from './workoutDetails';
 
 describe('workoutDetails', () => {
   it('builds planned bars from parsed workout segments with zone colors', () => {
@@ -489,6 +489,240 @@ describe('workoutDetails', () => {
     ]);
   });
 
+  it('builds grouped planned workout sections from raw workout headings', () => {
+    const event: IntervalEvent = {
+      id: 199,
+      startDateLocal: '2026-04-28',
+      name: 'Mixed Intervals',
+      category: 'WORKOUT',
+      description: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: 'Mixed Intervals\nWarmup\n- 20m ramp 50-75%\nMain Set 4x\n- 5m 105%\n- 3m 55%\nMain Set 2 10x\n- 30s 130%\n- 30s 50%\nCooldown\n- 10m 50%',
+        intervals: [
+          {
+            definition: '- 20m ramp 50-75%',
+            repeatCount: 1,
+            durationSeconds: 1200,
+            targetPercentFtp: 62.5,
+            zoneId: 2,
+          },
+          {
+            definition: '- 5m 105%',
+            repeatCount: 1,
+            durationSeconds: 300,
+            targetPercentFtp: 105,
+            zoneId: 4,
+          },
+          {
+            definition: '- 3m 55%',
+            repeatCount: 1,
+            durationSeconds: 180,
+            targetPercentFtp: 55,
+            zoneId: 1,
+          },
+          {
+            definition: '- 30s 130%',
+            repeatCount: 1,
+            durationSeconds: 30,
+            targetPercentFtp: 130,
+            zoneId: 6,
+          },
+          {
+            definition: '- 30s 50%',
+            repeatCount: 1,
+            durationSeconds: 30,
+            targetPercentFtp: 50,
+            zoneId: 1,
+          },
+          {
+            definition: '- 10m 50%',
+            repeatCount: 1,
+            durationSeconds: 600,
+            targetPercentFtp: 50,
+            zoneId: 1,
+          },
+        ],
+        segments: [
+          {
+            order: 0,
+            label: 'Mixed Intervals',
+            durationSeconds: 1,
+            startOffsetSeconds: 0,
+            endOffsetSeconds: 1,
+            targetPercentFtp: null,
+            zoneId: null,
+          },
+        ],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 2340,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutStructureSections(event)).toEqual([
+      {
+        id: 'section-0',
+        label: 'Warmup',
+        repeatCount: 1,
+        durationSeconds: 1200,
+        steps: [
+          {
+            id: 'section-step-0',
+            label: '20m ramp 50-75% FTP',
+            detail: '20m • 62.5% FTP',
+            durationSeconds: 1200,
+            targetPercentFtp: 62.5,
+            zoneId: 2,
+          },
+        ],
+        targetPercentFtp: 62.5,
+        zoneId: 2,
+      },
+      {
+        id: 'section-1',
+        label: 'Main Set 4x',
+        repeatCount: 4,
+        durationSeconds: 1920,
+        steps: [
+          {
+            id: 'section-step-1',
+            label: '5m 105% FTP',
+            detail: '5m • 105% FTP',
+            durationSeconds: 300,
+            targetPercentFtp: 105,
+            zoneId: 4,
+          },
+          {
+            id: 'section-step-2',
+            label: '3m 55% FTP',
+            detail: '3m • 55% FTP',
+            durationSeconds: 180,
+            targetPercentFtp: 55,
+            zoneId: 1,
+          },
+        ],
+        targetPercentFtp: 105,
+        zoneId: 4,
+      },
+      {
+        id: 'section-2',
+        label: 'Main Set 2 10x',
+        repeatCount: 10,
+        durationSeconds: 600,
+        steps: [
+          {
+            id: 'section-step-3',
+            label: '30s 130% FTP',
+            detail: '30s • 130% FTP',
+            durationSeconds: 30,
+            targetPercentFtp: 130,
+            zoneId: 6,
+          },
+          {
+            id: 'section-step-4',
+            label: '30s 50% FTP',
+            detail: '30s • 50% FTP',
+            durationSeconds: 30,
+            targetPercentFtp: 50,
+            zoneId: 1,
+          },
+        ],
+        targetPercentFtp: 130,
+        zoneId: 6,
+      },
+      {
+        id: 'section-3',
+        label: 'Cooldown',
+        repeatCount: 1,
+        durationSeconds: 600,
+        steps: [
+          {
+            id: 'section-step-5',
+            label: '10m 50% FTP',
+            detail: '10m • 50% FTP',
+            durationSeconds: 600,
+            targetPercentFtp: 50,
+            zoneId: 1,
+          },
+        ],
+        targetPercentFtp: 50,
+        zoneId: 1,
+      },
+    ]);
+    expect(buildPlannedWorkoutBars(event).map((bar) => bar.widthUnits)).toEqual([
+      1200,
+      300,
+      180,
+      300,
+      180,
+      300,
+      180,
+      300,
+      180,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      600,
+    ]);
+    expect(buildPlannedWorkoutChartIntervals(event).map((interval) => interval.label)).toEqual([
+      '20m ramp 50-75% FTP',
+      '5m 105% FTP 1/4',
+      '3m 55% FTP 1/4',
+      '5m 105% FTP 2/4',
+      '3m 55% FTP 2/4',
+      '5m 105% FTP 3/4',
+      '3m 55% FTP 3/4',
+      '5m 105% FTP 4/4',
+      '3m 55% FTP 4/4',
+      '30s 130% FTP 1/10',
+      '30s 50% FTP 1/10',
+      '30s 130% FTP 2/10',
+      '30s 50% FTP 2/10',
+      '30s 130% FTP 3/10',
+      '30s 50% FTP 3/10',
+      '30s 130% FTP 4/10',
+      '30s 50% FTP 4/10',
+      '30s 130% FTP 5/10',
+      '30s 50% FTP 5/10',
+      '30s 130% FTP 6/10',
+      '30s 50% FTP 6/10',
+      '30s 130% FTP 7/10',
+      '30s 50% FTP 7/10',
+      '30s 130% FTP 8/10',
+      '30s 50% FTP 8/10',
+      '30s 130% FTP 9/10',
+      '30s 50% FTP 9/10',
+      '30s 130% FTP 10/10',
+      '30s 50% FTP 10/10',
+      '10m 50% FTP',
+    ]);
+  });
+
   it('builds planned power series from segments for the detail chart', () => {
     const event: IntervalEvent = {
       id: 101,
@@ -534,6 +768,56 @@ describe('workoutDetails', () => {
     };
 
     expect(buildPlannedWorkoutPowerSeries(event, 300)).toEqual([65, 65, 100]);
+  });
+
+  it('falls back when raw workout section steps do not match parsed intervals', () => {
+    const event: IntervalEvent = {
+      id: 404,
+      startDateLocal: '2026-04-10',
+      name: 'Mismatch Workout',
+      category: 'WORKOUT',
+      description: null,
+      indoor: true,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: 'Mismatch Workout\nWarmup\n- 10m 55%\nMain Set\n- 5m 105%\n- 3m 55%',
+        intervals: [
+          {
+            definition: '- 10m 55%',
+            repeatCount: 1,
+            durationSeconds: 600,
+            targetPercentFtp: 55,
+            zoneId: 1,
+          },
+        ],
+        segments: [],
+        summary: {
+          totalSegments: 0,
+          totalDurationSeconds: 600,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutStructureSections(event)).toEqual([
+      {
+        id: 'interval-0',
+        label: '10m 55% FTP',
+        durationSeconds: 600,
+        steps: [
+          {
+            id: 'interval-0-detail',
+            label: '10m 55% FTP',
+            detail: '10m • 55% FTP',
+            durationSeconds: 600,
+          },
+        ],
+      },
+    ]);
   });
 
   it('expands repeated interval definitions in planned power series and chart intervals', () => {

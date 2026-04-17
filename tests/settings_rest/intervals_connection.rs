@@ -11,6 +11,7 @@ use tower::util::ServiceExt;
 use crate::shared::{
     get_json, session_cookie, settings_test_app_with_intervals, MockIntervalsConnectionTester,
     RepositoryErrorSettingsService, TestIdentityServiceWithSession, TestSettingsService,
+    UpdateIntervalsErrorSettingsService,
 };
 
 #[tokio::test]
@@ -75,10 +76,218 @@ async fn test_intervals_connection_returns_200_on_success() {
     );
     assert!(!body.get("usedSavedApiKey").unwrap().as_bool().unwrap());
     assert!(!body.get("usedSavedAthleteId").unwrap().as_bool().unwrap());
+    assert!(body
+        .get("persistedStatusUpdated")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+}
+
+#[tokio::test]
+async fn test_intervals_connection_persists_successful_draft_credentials() {
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::default(),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_ok(),
+        )),
+    )
+    .await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"apiKey":"valid-key","athleteId":"athlete-123"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    assert!(body
+        .get("persistedStatusUpdated")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+
+    let refreshed = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.status(), StatusCode::OK);
+
+    let refreshed_body: Value = get_json(refreshed).await;
+    let intervals = refreshed_body.get("intervals").unwrap();
+    assert!(intervals.get("apiKeySet").unwrap().as_bool().unwrap());
+    assert_eq!(
+        intervals.get("athleteId").unwrap().as_str().unwrap(),
+        "athlete-123"
+    );
+    assert!(intervals.get("connected").unwrap().as_bool().unwrap());
+}
+
+#[tokio::test]
+async fn test_intervals_connection_reports_success_even_when_persisting_status_fails() {
+    let settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        UpdateIntervalsErrorSettingsService::new("settings repository unavailable", settings),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_ok(),
+        )),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"apiKey":"valid-key","athleteId":"athlete-123"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    assert!(body.get("connected").unwrap().as_bool().unwrap());
     assert!(!body
         .get("persistedStatusUpdated")
         .unwrap()
         .as_bool()
+        .unwrap());
+}
+
+#[tokio::test]
+async fn test_intervals_connection_reactivates_saved_credentials_for_disconnected_user() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.intervals.api_key = Some("saved-api-key".to_string());
+    settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
+    settings.intervals.connected = false;
+
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_ok(),
+        )),
+    )
+    .await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"apiKey":"","athleteId":""}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    assert!(body.get("usedSavedApiKey").unwrap().as_bool().unwrap());
+    assert!(body.get("usedSavedAthleteId").unwrap().as_bool().unwrap());
+    assert!(body
+        .get("persistedStatusUpdated")
+        .unwrap()
+        .as_bool()
+        .unwrap());
+
+    let refreshed = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let refreshed_body: Value = get_json(refreshed).await;
+    assert!(refreshed_body
+        .get("intervals")
+        .and_then(|intervals| intervals.get("connected"))
+        .and_then(Value::as_bool)
+        .unwrap());
+}
+
+#[tokio::test]
+async fn test_intervals_connection_failure_does_not_persist_connection_state() {
+    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    settings.intervals.api_key = Some("saved-api-key".to_string());
+    settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
+    settings.intervals.connected = false;
+
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        TestSettingsService::with_settings(settings),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_err(IntervalsConnectionError::Unauthenticated),
+        )),
+    )
+    .await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"apiKey":"","athleteId":""}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let refreshed = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/settings")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let refreshed_body: Value = get_json(refreshed).await;
+    assert!(!refreshed_body
+        .get("intervals")
+        .and_then(|intervals| intervals.get("connected"))
+        .and_then(Value::as_bool)
         .unwrap());
 }
 

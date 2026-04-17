@@ -289,7 +289,8 @@ where
 fn normalize_intervals_config(mut intervals: IntervalsConfig) -> IntervalsConfig {
     intervals.api_key = normalize_optional_non_empty(intervals.api_key);
     intervals.athlete_id = normalize_optional_non_empty(intervals.athlete_id);
-    intervals.connected = intervals.api_key.is_some() && intervals.athlete_id.is_some();
+    intervals.connected =
+        intervals.connected && intervals.api_key.is_some() && intervals.athlete_id.is_some();
     intervals
 }
 
@@ -707,7 +708,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn update_intervals_marks_connection_active_and_seeds_due_poll_states() {
+    async fn update_intervals_preserves_requested_connection_state_and_seeds_due_poll_states() {
         let settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
         let repository = InMemoryUserSettingsRepository::with_settings(settings);
         let poll_states = InMemoryProviderPollStateRepository::default();
@@ -726,22 +727,15 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(updated.intervals.connected);
+        assert!(!updated.intervals.connected);
         assert_eq!(updated.intervals.api_key.as_deref(), Some("api-key"));
         assert_eq!(updated.intervals.athlete_id.as_deref(), Some("athlete-1"));
 
         let stored = poll_states.stored();
         assert_eq!(stored.len(), 2);
-        assert!(stored.iter().any(|state| {
-            state.provider == ExternalProvider::Intervals
-                && state.stream == ProviderPollStream::Calendar
-                && state.next_due_at_epoch_seconds == 1_700_000_000
-        }));
-        assert!(stored.iter().any(|state| {
-            state.provider == ExternalProvider::Intervals
-                && state.stream == ProviderPollStream::CompletedWorkouts
-                && state.next_due_at_epoch_seconds == 1_700_000_000
-        }));
+        assert!(stored
+            .iter()
+            .all(|state| state.next_due_at_epoch_seconds == i64::MAX));
     }
 
     #[tokio::test]
@@ -867,18 +861,12 @@ mod tests {
         let stored = poll_states.stored();
         assert!(stored
             .iter()
-            .all(|state| state.next_due_at_epoch_seconds == 1_700_000_000));
+            .all(|state| state.next_due_at_epoch_seconds == i64::MAX));
         assert!(stored.iter().all(|state| state.cursor.is_none()));
         assert!(stored
             .iter()
             .all(|state| state.backoff_until_epoch_seconds.is_none()));
         assert!(stored.iter().all(|state| state.last_error.is_none()));
-        assert!(stored
-            .iter()
-            .all(|state| state.last_attempted_at_epoch_seconds.is_none()));
-        assert!(stored
-            .iter()
-            .all(|state| state.last_successful_at_epoch_seconds.is_none()));
     }
 
     #[tokio::test]

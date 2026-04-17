@@ -105,7 +105,7 @@ describe('CalendarDayCell content', () => {
     expect(container).not.toHaveTextContent('Swim');
   });
 
-  it('keeps the planned workout as the primary summary on mixed days', () => {
+  it('keeps the completed workout as the primary summary when a planned workout is matched to an activity', () => {
     const day = makeCalendarDay({
       date: new Date(2026, 2, 27),
       dateKey: '2026-03-27',
@@ -113,6 +113,10 @@ describe('CalendarDayCell content', () => {
         makeEvent({
           id: 40,
           name: 'Planned Build',
+          actualWorkout: {
+            activityId: 'a40',
+            activityName: 'Evening Ride',
+          },
           eventDefinition: {
             summary: {
               totalDurationSeconds: 3600,
@@ -125,9 +129,9 @@ describe('CalendarDayCell content', () => {
         makeActivity({
           id: 'a40',
           name: 'Evening Ride',
-          movingTimeSeconds: null,
-          elapsedTimeSeconds: null,
-          metrics: { trainingStressScore: null },
+          movingTimeSeconds: 3600,
+          elapsedTimeSeconds: 3660,
+          metrics: { trainingStressScore: 64 },
           hasHeartRate: false,
         }),
       ],
@@ -135,8 +139,9 @@ describe('CalendarDayCell content', () => {
 
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
 
-    expect(container).toHaveTextContent('Planned Workout');
-    expect(container).toHaveTextContent('Planned Build');
+    expect(container).toHaveTextContent('Completed Workout');
+    expect(container).toHaveTextContent('Plan Matched');
+    expect(container).toHaveTextContent('Evening Ride');
     expect(container).toHaveTextContent('60 min');
     expect(container).toHaveTextContent('64 TSS');
   });
@@ -592,7 +597,7 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByText('Grojec')).toBeInTheDocument();
   });
 
-  it('keeps the planned workout badge for planned events enriched with actual workout data', () => {
+  it('keeps a plan-matched badge for planned events enriched with actual workout data', () => {
     const day = makeCalendarDay({
       events: [
         makeEvent({
@@ -619,16 +624,49 @@ describe('CalendarDayCell content', () => {
           },
         }),
       ],
-      activities: [],
+      activities: [
+        makeActivity({
+          id: 'a41',
+          name: 'Completed Build Outside',
+          movingTimeSeconds: 1200,
+          metrics: { trainingStressScore: 30 },
+        }),
+      ],
     });
 
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const dayCell = container.firstElementChild as HTMLElement;
 
-    expect(within(dayCell).getByText('Planned Workout')).toBeInTheDocument();
-    expect(within(dayCell).getByText('Planned Build')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Completed Workout')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Plan Matched')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Completed Build Outside')).toBeInTheDocument();
     expect(dayCell).toHaveTextContent('20 min');
     expect(dayCell).toHaveTextContent('30 TSS');
+  });
+
+  it('greys out unmatched planned workouts from past days and marks them as not done', () => {
+    const day = makeCalendarDay({
+      date: new Date(2020, 2, 27),
+      dateKey: '2020-03-27',
+      events: [
+        makeEvent({
+          id: 5,
+          name: 'Coach Build',
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 3600,
+              estimatedTrainingStressScore: 64,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByText('Not Done')).toBeInTheDocument();
+    expect(dayCell.className).toContain('opacity-70');
   });
 
   it('does not render a clickable button without a real select handler', () => {

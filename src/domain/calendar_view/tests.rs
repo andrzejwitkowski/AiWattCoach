@@ -9,6 +9,10 @@ use crate::domain::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
         ExternalSyncState, ExternalSyncStateRepository,
     },
+    planned_completed_links::{
+        PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkMatchSource,
+        PlannedCompletedWorkoutLinkRepository,
+    },
     planned_workouts::{
         PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutRepository,
         PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
@@ -693,6 +697,269 @@ async fn refresh_range_for_user_batches_planned_workout_sync_state_lookups() {
     assert_eq!(batch_lookups, 1);
 }
 
+#[tokio::test]
+async fn refresh_range_for_user_clears_orphaned_heuristic_links_and_replaces_stale_planned_entries()
+{
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+    let planned_completed_links = TestPlannedCompletedWorkoutLinkRepository::default();
+
+    let mut workout = sample_completed_workout();
+    workout.start_date_local = "2026-05-10T08:00:00".to_string();
+    completed.upsert(workout).await.unwrap();
+    planned_completed_links
+        .upsert(PlannedCompletedWorkoutLink::new(
+            "user-1".to_string(),
+            "planned-1".to_string(),
+            "completed-1".to_string(),
+            PlannedCompletedWorkoutLinkMatchSource::Heuristic,
+            1_700_000_000,
+        ))
+        .await
+        .unwrap();
+    views
+        .upsert(project_planned_workout_entry(
+            &sample_planned_workout(),
+            None,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views.clone(),
+        planned,
+        planned_syncs,
+        completed.clone(),
+        races,
+        special_days,
+        sync_states,
+    )
+    .with_planned_completed_links(planned_completed_links.clone());
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+    assert_eq!(
+        refreshed[0].completed_workout_id.as_deref(),
+        Some("completed-1")
+    );
+
+    let stored_workout = completed
+        .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("completed workout remains stored");
+    assert_eq!(stored_workout.planned_workout_id, None);
+
+    let stored_link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap();
+    assert_eq!(stored_link, None);
+
+    let persisted = views
+        .list_by_user_id_and_date_range("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+    assert_eq!(persisted.len(), 1);
+    assert_eq!(persisted[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+}
+
+#[tokio::test]
+async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+    let planned_completed_links = TestPlannedCompletedWorkoutLinkRepository::default();
+
+    let mut workout = sample_completed_workout();
+    workout.start_date_local = "2026-05-10T08:00:00".to_string();
+    completed.upsert(workout).await.unwrap();
+    planned_completed_links
+        .upsert(PlannedCompletedWorkoutLink::new(
+            "user-1".to_string(),
+            "planned-1".to_string(),
+            "completed-1".to_string(),
+            PlannedCompletedWorkoutLinkMatchSource::Explicit,
+            1_700_000_000,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        planned_syncs,
+        completed.clone(),
+        races,
+        special_days,
+        sync_states,
+    )
+    .with_planned_completed_links(planned_completed_links.clone());
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+    assert_eq!(
+        refreshed[0].planned_workout_id.as_deref(),
+        Some("planned-1")
+    );
+
+    let stored_workout = completed
+        .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("completed workout remains stored");
+    assert_eq!(
+        stored_workout.planned_workout_id.as_deref(),
+        Some("planned-1")
+    );
+
+    let stored_link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("explicit link remains stored");
+    assert_eq!(
+        stored_link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Explicit
+    );
+}
+
+#[tokio::test]
+async fn refresh_range_for_user_preserves_heuristic_link_when_planned_workout_exists_outside_range()
+{
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+    let planned_completed_links = TestPlannedCompletedWorkoutLinkRepository::default();
+
+    let mut planned_workout = sample_planned_workout();
+    planned_workout.date = "2026-05-11".to_string();
+    planned.upsert(planned_workout).await.unwrap();
+
+    let mut workout = sample_completed_workout();
+    workout.start_date_local = "2026-05-10T08:00:00".to_string();
+    completed.upsert(workout).await.unwrap();
+    planned_completed_links
+        .upsert(PlannedCompletedWorkoutLink::new(
+            "user-1".to_string(),
+            "planned-1".to_string(),
+            "completed-1".to_string(),
+            PlannedCompletedWorkoutLinkMatchSource::Heuristic,
+            1_700_000_000,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        planned_syncs,
+        completed.clone(),
+        races,
+        special_days,
+        sync_states,
+    )
+    .with_planned_completed_links(planned_completed_links.clone());
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+    assert_eq!(
+        refreshed[0].planned_workout_id.as_deref(),
+        Some("planned-1")
+    );
+
+    let stored_workout = completed
+        .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("completed workout remains stored");
+    assert_eq!(
+        stored_workout.planned_workout_id.as_deref(),
+        Some("planned-1")
+    );
+
+    let stored_link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("heuristic link remains stored");
+    assert_eq!(
+        stored_link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Heuristic
+    );
+}
+
+#[tokio::test]
+async fn refresh_range_for_user_clears_legacy_orphaned_planned_id_without_link_row() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+    let planned_completed_links = TestPlannedCompletedWorkoutLinkRepository::default();
+
+    let mut workout = sample_completed_workout();
+    workout.start_date_local = "2026-05-10T08:00:00".to_string();
+    completed.upsert(workout).await.unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        planned_syncs,
+        completed.clone(),
+        races,
+        special_days,
+        sync_states,
+    )
+    .with_planned_completed_links(planned_completed_links);
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+    assert_eq!(refreshed[0].planned_workout_id, None);
+
+    let stored_workout = completed
+        .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("completed workout remains stored");
+    assert_eq!(stored_workout.planned_workout_id, None);
+}
+
 #[derive(Clone, Default)]
 struct TestPlannedWorkoutRepository {
     stored: std::sync::Arc<std::sync::Mutex<Vec<PlannedWorkout>>>,
@@ -764,6 +1031,11 @@ impl PlannedWorkoutRepository for TestPlannedWorkoutRepository {
 #[derive(Clone, Default)]
 struct TestCompletedWorkoutRepository {
     stored: std::sync::Arc<std::sync::Mutex<Vec<CompletedWorkout>>>,
+}
+
+#[derive(Clone, Default)]
+struct TestPlannedCompletedWorkoutLinkRepository {
+    stored: std::sync::Arc<std::sync::Mutex<Vec<PlannedCompletedWorkoutLink>>>,
 }
 
 #[derive(Clone, Default)]
@@ -977,6 +1249,99 @@ impl CompletedWorkoutRepository for TestCompletedWorkoutRepository {
             });
             stored.push(workout.clone());
             Ok(workout)
+        })
+    }
+}
+
+impl PlannedCompletedWorkoutLinkRepository for TestPlannedCompletedWorkoutLinkRepository {
+    fn find_by_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<
+            Option<PlannedCompletedWorkoutLink>,
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|link| {
+                    link.user_id == user_id && link.planned_workout_id == planned_workout_id
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<
+            Option<PlannedCompletedWorkoutLink>,
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|link| {
+                    link.user_id == user_id && link.completed_workout_id == completed_workout_id
+                })
+                .cloned())
+        })
+    }
+
+    fn upsert(
+        &self,
+        link: PlannedCompletedWorkoutLink,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<
+            PlannedCompletedWorkoutLink,
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                !(existing.user_id == link.user_id
+                    && (existing.planned_workout_id == link.planned_workout_id
+                        || existing.completed_workout_id == link.completed_workout_id))
+            });
+            stored.push(link.clone());
+            Ok(link)
+        })
+    }
+
+    fn delete_by_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<(), crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            stored.lock().unwrap().retain(|existing| {
+                !(existing.user_id == user_id
+                    && existing.completed_workout_id == completed_workout_id)
+            });
+            Ok(())
         })
     }
 }

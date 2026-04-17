@@ -19,6 +19,13 @@ export type PlannedWorkoutStructureItem = {
   durationSeconds: number | null;
 };
 
+export type PlannedWorkoutStructureSection = {
+  id: string;
+  label: string;
+  durationSeconds: number | null;
+  steps: PlannedWorkoutStructureItem[];
+};
+
 export type PlannedWorkoutChartInterval = {
   id: string;
   startSecond: number;
@@ -28,6 +35,30 @@ export type PlannedWorkoutChartInterval = {
 
 type PlannedIntervalDefinition = IntervalEvent['eventDefinition']['intervals'][number];
 type PlannedWorkoutSegment = IntervalEvent['eventDefinition']['segments'][number];
+type PlannedWorkoutTargetSummary = {
+  targetPercentFtp: number | null;
+  zoneId: number | null;
+};
+type PlannedWorkoutSectionStep = PlannedWorkoutStructureItem & {
+  targetPercentFtp: number | null;
+  zoneId: number | null;
+};
+type PlannedWorkoutSectionModel = PlannedWorkoutStructureSection & {
+  repeatCount: number;
+  steps: PlannedWorkoutSectionStep[];
+  targetPercentFtp: number | null;
+  zoneId: number | null;
+};
+
+type PlannedWorkoutExpandedChartStep = {
+  id: string;
+  label: string;
+  durationSeconds: number;
+  startSecond: number;
+  endSecond: number;
+  targetPercentFtp: number | null;
+  zoneId: number | null;
+};
 
 function plannedEventKey(event: IntervalEvent): string {
   return event.calendarEntryId ?? String(event.id);
@@ -68,6 +99,15 @@ export function isPlannedWorkoutEvent(
 }
 
 export function buildPlannedWorkoutBars(event: IntervalEvent): WorkoutBar[] {
+  const groupedChartSteps = buildExpandedGroupedPlannedChartSteps(event);
+  if (groupedChartSteps.length > 0) {
+    return groupedChartSteps.map((step) => ({
+      height: plannedBarHeight(step.targetPercentFtp, step.zoneId),
+      color: plannedBarColor(step.targetPercentFtp, step.zoneId),
+      widthUnits: normalizeWidthUnits(step.durationSeconds),
+    }));
+  }
+
   const expandedSegments = buildExpandedPlannedSegments(event);
   if (expandedSegments.length === 0) {
     return event.eventDefinition.intervals.map((interval) => ({
@@ -135,6 +175,18 @@ export function buildPlannedWorkoutPowerSeries(
   event: IntervalEvent,
   sampleDurationSeconds = 5,
 ): number[] {
+  const groupedChartSteps = buildExpandedGroupedPlannedChartSteps(event);
+  if (groupedChartSteps.length > 0) {
+    return groupedChartSteps.flatMap((step) =>
+      Array.from(
+        {
+          length: plannedSampleCount(step.durationSeconds, sampleDurationSeconds),
+        },
+        () => plannedTargetValue(step.targetPercentFtp, step.zoneId),
+      ),
+    );
+  }
+
   const segments = buildExpandedPlannedSegments(event);
 
   if (segments.length > 0) {
@@ -161,6 +213,16 @@ export function buildPlannedWorkoutPowerSeries(
 export function buildPlannedWorkoutChartIntervals(
   event: IntervalEvent,
 ): PlannedWorkoutChartInterval[] {
+  const groupedChartSteps = buildExpandedGroupedPlannedChartSteps(event);
+  if (groupedChartSteps.length > 0) {
+    return groupedChartSteps.map((step) => ({
+      id: step.id,
+      startSecond: step.startSecond,
+      endSecond: step.endSecond,
+      label: step.label,
+    }));
+  }
+
   const segments = buildExpandedPlannedSegments(event);
 
   if (segments.length > 0) {
@@ -226,6 +288,29 @@ export function buildPlannedWorkoutStructureItems(
       detail: null,
       durationSeconds: null,
     }));
+}
+
+export function buildPlannedWorkoutStructureSections(
+  event: IntervalEvent,
+): PlannedWorkoutStructureSection[] {
+  const groupedSections = buildGroupedPlannedWorkoutSections(event);
+  if (groupedSections.length > 0) {
+    return groupedSections;
+  }
+
+  return buildPlannedWorkoutStructureItems(event).map((item) => ({
+    id: item.id,
+    label: item.label,
+    durationSeconds: item.durationSeconds,
+    steps: item.detail
+      ? [{
+        id: `${item.id}-detail`,
+        label: item.label,
+        detail: item.detail,
+        durationSeconds: item.durationSeconds,
+      }]
+      : [],
+  }));
 }
 
 export function formatPlannedWorkoutIntervalLabel(
@@ -366,6 +451,187 @@ function normalizeWidthUnits(durationSeconds: number | null | undefined): number
   }
 
   return durationSeconds;
+}
+
+function buildGroupedPlannedWorkoutSections(
+  event: IntervalEvent,
+): PlannedWorkoutSectionModel[] {
+  const rawWorkoutDoc = event.eventDefinition.rawWorkoutDoc?.trim();
+  if (!rawWorkoutDoc) {
+    return [];
+  }
+
+  const lines = rawWorkoutDoc
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const containsSectionHeadings = lines.some((line) => !isWorkoutStepLine(line));
+  if (!containsSectionHeadings) {
+    return [];
+  }
+
+  const normalizedEventName = normalizeWorkoutText(event.name).toLocaleLowerCase();
+  const stepIntervals = event.eventDefinition.intervals.filter((interval) => interval.durationSeconds !== null);
+  const rawStepLines = lines.filter((line) => isWorkoutStepLine(line)).length;
+  if (rawStepLines !== stepIntervals.length) {
+    return [];
+  }
+  const sections: PlannedWorkoutSectionModel[] = [];
+  let currentSection: {
+    label: string;
+    repeatCount: number;
+    steps: PlannedWorkoutSectionStep[];
+  } | null = null;
+  let stepIndex = 0;
+
+  const flushCurrentSection = () => {
+    if (!currentSection || currentSection.steps.length === 0) {
+      return;
+    }
+
+    const sectionDuration = currentSection.steps.reduce(
+      (total, step) => total + (step.durationSeconds ?? 0),
+      0,
+    );
+    const sectionTarget = currentSection.steps.reduce<PlannedWorkoutTargetSummary>(
+      (best, step) => selectHigherTarget(best, step),
+      { targetPercentFtp: null, zoneId: null },
+    );
+
+    sections.push({
+      id: `section-${sections.length}`,
+      label: currentSection.label,
+      repeatCount: Math.max(1, currentSection.repeatCount),
+      durationSeconds: sectionDuration > 0
+        ? sectionDuration * Math.max(1, currentSection.repeatCount)
+        : null,
+      steps: currentSection.steps,
+      targetPercentFtp: sectionTarget.targetPercentFtp,
+      zoneId: sectionTarget.zoneId,
+    });
+  };
+
+  for (const line of lines) {
+    const normalizedLine = normalizeWorkoutText(line);
+    if (!normalizedLine) {
+      continue;
+    }
+
+    if (!isWorkoutStepLine(line)) {
+      if (normalizedEventName && normalizedLine.toLocaleLowerCase() === normalizedEventName) {
+        continue;
+      }
+
+      flushCurrentSection();
+      currentSection = {
+        label: normalizedLine,
+        repeatCount: parseWorkoutSectionRepeatCount(normalizedLine),
+        steps: [],
+      };
+      continue;
+    }
+
+    const interval = stepIntervals[stepIndex] ?? null;
+    stepIndex += 1;
+    const step = interval
+      ? buildPlannedWorkoutSectionStep(interval, stepIndex - 1)
+      : {
+        id: `raw-step-${stepIndex - 1}`,
+        label: normalizedLine,
+        detail: null,
+        durationSeconds: null,
+        targetPercentFtp: null,
+        zoneId: null,
+      };
+
+    if (!currentSection) {
+      currentSection = {
+        label: event.name?.trim() || 'Workout',
+        repeatCount: 1,
+        steps: [],
+      };
+    }
+
+    currentSection.steps.push(step);
+  }
+
+  flushCurrentSection();
+  return sections;
+}
+
+function buildPlannedWorkoutSectionStep(
+  interval: PlannedIntervalDefinition,
+  index: number,
+): PlannedWorkoutSectionStep {
+  return {
+    id: `section-step-${index}`,
+    label: formatPlannedWorkoutIntervalLabel(interval),
+    detail: buildPlannedWorkoutIntervalDetail(interval),
+    durationSeconds: interval.durationSeconds,
+    targetPercentFtp: interval.targetPercentFtp ?? null,
+    zoneId: interval.zoneId ?? null,
+  };
+}
+
+function buildExpandedGroupedPlannedChartSteps(
+  event: IntervalEvent,
+): PlannedWorkoutExpandedChartStep[] {
+  const sections = buildGroupedPlannedWorkoutSections(event);
+  if (sections.length === 0) {
+    return [];
+  }
+
+  const expandedSteps: PlannedWorkoutExpandedChartStep[] = [];
+  let currentSecond = 0;
+
+  for (const section of sections) {
+    const repeatCount = Math.max(1, section.repeatCount);
+    for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex += 1) {
+      for (const step of section.steps) {
+        const durationSeconds = step.durationSeconds ?? 0;
+        if (durationSeconds <= 0) {
+          continue;
+        }
+
+        expandedSteps.push({
+          id: `${section.id}-repeat-${repeatIndex}-${step.id}`,
+          label: repeatCount > 1 ? `${step.label} ${repeatIndex + 1}/${repeatCount}` : step.label,
+          durationSeconds,
+          startSecond: currentSecond,
+          endSecond: currentSecond + durationSeconds,
+          targetPercentFtp: step.targetPercentFtp,
+          zoneId: step.zoneId,
+        });
+        currentSecond += durationSeconds;
+      }
+    }
+  }
+
+  return expandedSteps;
+}
+
+function isWorkoutStepLine(line: string): boolean {
+  return /^[-*]\s+/.test(line.trim());
+}
+
+function parseWorkoutSectionRepeatCount(label: string): number {
+  const matches = Array.from(label.matchAll(/(\d+)\s*x\b/gi));
+  const rawRepeatCount = matches.at(-1)?.[1];
+  if (!rawRepeatCount) {
+    return 1;
+  }
+
+  const repeatCount = Number.parseInt(rawRepeatCount, 10);
+  return Number.isFinite(repeatCount) && repeatCount > 0 ? repeatCount : 1;
+}
+
+function selectHigherTarget(
+  current: PlannedWorkoutTargetSummary,
+  next: PlannedWorkoutTargetSummary,
+): PlannedWorkoutTargetSummary {
+  const currentTarget = plannedTargetValueOrNull(current.targetPercentFtp, current.zoneId) ?? 0;
+  const nextTarget = plannedTargetValueOrNull(next.targetPercentFtp, next.zoneId) ?? 0;
+  return nextTarget > currentTarget ? next : current;
 }
 
 function buildPlannedWorkoutIntervalDetail(

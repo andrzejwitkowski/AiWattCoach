@@ -4,6 +4,9 @@ use crate::domain::{
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncStateRepository,
     },
+    planned_completed_links::{
+        PlannedCompletedWorkoutLinkMatchSource, PlannedCompletedWorkoutLinkRepository,
+    },
     planned_workouts::PlannedWorkoutRepository,
     races::RaceRepository,
     special_days::SpecialDayRepository,
@@ -38,6 +41,59 @@ impl CalendarEntryViewRefreshPort for NoopCalendarEntryViewRefresh {
     }
 }
 
+#[derive(Clone, Default)]
+pub struct NoopPlannedCompletedWorkoutLinkRepository;
+
+impl PlannedCompletedWorkoutLinkRepository for NoopPlannedCompletedWorkoutLinkRepository {
+    fn find_by_planned_workout_id(
+        &self,
+        _user_id: &str,
+        _planned_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<
+            Option<crate::domain::planned_completed_links::PlannedCompletedWorkoutLink>,
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+        >,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_completed_workout_id(
+        &self,
+        _user_id: &str,
+        _completed_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<
+            Option<crate::domain::planned_completed_links::PlannedCompletedWorkoutLink>,
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+        >,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn upsert(
+        &self,
+        link: crate::domain::planned_completed_links::PlannedCompletedWorkoutLink,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLink,
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+        >,
+    > {
+        Box::pin(async move { Ok(link) })
+    }
+
+    fn delete_by_completed_workout_id(
+        &self,
+        _user_id: &str,
+        _completed_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<(), crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError>,
+    > {
+        Box::pin(async { Ok(()) })
+    }
+}
+
 #[derive(Clone)]
 pub struct CalendarEntryViewRefreshService<
     Views,
@@ -47,6 +103,7 @@ pub struct CalendarEntryViewRefreshService<
     Races,
     SpecialDays,
     SyncStates,
+    PlannedCompletedLinks = NoopPlannedCompletedWorkoutLinkRepository,
 > where
     Views: CalendarEntryViewRepository + Clone,
     Planned: PlannedWorkoutRepository + Clone,
@@ -55,6 +112,7 @@ pub struct CalendarEntryViewRefreshService<
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
 {
     views: Views,
     planned_workouts: Planned,
@@ -63,6 +121,7 @@ pub struct CalendarEntryViewRefreshService<
     races: Races,
     special_days: SpecialDays,
     sync_states: SyncStates,
+    planned_completed_links: PlannedCompletedLinks,
 }
 
 impl<Views, Planned, PlannedSyncs, Completed, Races, SpecialDays, SyncStates>
@@ -74,6 +133,7 @@ impl<Views, Planned, PlannedSyncs, Completed, Races, SpecialDays, SyncStates>
         Races,
         SpecialDays,
         SyncStates,
+        NoopPlannedCompletedWorkoutLinkRepository,
     >
 where
     Views: CalendarEntryViewRepository + Clone,
@@ -101,13 +161,12 @@ where
             races,
             special_days,
             sync_states,
+            planned_completed_links: NoopPlannedCompletedWorkoutLinkRepository,
         }
     }
 }
 
-impl<Views, Planned, PlannedSyncs, Completed, Races, SpecialDays, SyncStates>
-    CalendarEntryViewRefreshPort
-    for CalendarEntryViewRefreshService<
+impl<
         Views,
         Planned,
         PlannedSyncs,
@@ -115,6 +174,17 @@ impl<Views, Planned, PlannedSyncs, Completed, Races, SpecialDays, SyncStates>
         Races,
         SpecialDays,
         SyncStates,
+        PlannedCompletedLinks,
+    >
+    CalendarEntryViewRefreshService<
+        Views,
+        Planned,
+        PlannedSyncs,
+        Completed,
+        Races,
+        SpecialDays,
+        SyncStates,
+        PlannedCompletedLinks,
     >
 where
     Views: CalendarEntryViewRepository + Clone,
@@ -124,6 +194,66 @@ where
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
+{
+    pub fn with_planned_completed_links<NewPlannedCompletedLinks>(
+        self,
+        planned_completed_links: NewPlannedCompletedLinks,
+    ) -> CalendarEntryViewRefreshService<
+        Views,
+        Planned,
+        PlannedSyncs,
+        Completed,
+        Races,
+        SpecialDays,
+        SyncStates,
+        NewPlannedCompletedLinks,
+    >
+    where
+        NewPlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
+    {
+        CalendarEntryViewRefreshService {
+            views: self.views,
+            planned_workouts: self.planned_workouts,
+            planned_workout_syncs: self.planned_workout_syncs,
+            completed_workouts: self.completed_workouts,
+            races: self.races,
+            special_days: self.special_days,
+            sync_states: self.sync_states,
+            planned_completed_links,
+        }
+    }
+}
+
+impl<
+        Views,
+        Planned,
+        PlannedSyncs,
+        Completed,
+        Races,
+        SpecialDays,
+        SyncStates,
+        PlannedCompletedLinks,
+    > CalendarEntryViewRefreshPort
+    for CalendarEntryViewRefreshService<
+        Views,
+        Planned,
+        PlannedSyncs,
+        Completed,
+        Races,
+        SpecialDays,
+        SyncStates,
+        PlannedCompletedLinks,
+    >
+where
+    Views: CalendarEntryViewRepository + Clone,
+    Planned: PlannedWorkoutRepository + Clone,
+    PlannedSyncs: PlannedWorkoutSyncRepository + Clone,
+    Completed: CompletedWorkoutRepository + Clone,
+    Races: RaceRepository + Clone,
+    SpecialDays: SpecialDayRepository + Clone,
+    SyncStates: ExternalSyncStateRepository + Clone,
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
 {
     fn refresh_range_for_user(
         &self,
@@ -138,14 +268,57 @@ where
         let races = self.races.clone();
         let special_days = self.special_days.clone();
         let sync_states = self.sync_states.clone();
+        let planned_completed_links = self.planned_completed_links.clone();
         let user_id = user_id.to_string();
         let oldest = oldest.to_string();
         let newest = newest.to_string();
         Box::pin(async move {
+            let all_planned_ids = planned_workouts
+                .list_by_user_id(&user_id)
+                .await
+                .map_err(map_planned_error)?
+                .into_iter()
+                .map(|workout| workout.planned_workout_id)
+                .collect::<std::collections::HashSet<_>>();
             let planned = planned_workouts
                 .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
                 .map_err(map_planned_error)?;
+            let completed = completed_workouts
+                .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
+                .await
+                .map_err(map_completed_error)?;
+            for workout in &completed {
+                let Some(planned_workout_id) = workout.planned_workout_id.as_deref() else {
+                    continue;
+                };
+                if all_planned_ids.contains(planned_workout_id) {
+                    continue;
+                }
+                let link = planned_completed_links
+                    .find_by_completed_workout_id(&user_id, &workout.completed_workout_id)
+                    .await
+                    .map_err(map_planned_completed_link_error)?;
+                if matches!(
+                    link.as_ref().map(|link| &link.match_source),
+                    Some(source) if source != &PlannedCompletedWorkoutLinkMatchSource::Heuristic
+                ) {
+                    continue;
+                }
+
+                if link.is_some() {
+                    planned_completed_links
+                        .delete_by_completed_workout_id(&user_id, &workout.completed_workout_id)
+                        .await
+                        .map_err(map_planned_completed_link_error)?;
+                }
+                let mut updated = workout.clone();
+                updated.planned_workout_id = None;
+                completed_workouts
+                    .upsert(updated)
+                    .await
+                    .map_err(map_completed_error)?;
+            }
             let completed = completed_workouts
                 .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
@@ -300,6 +473,16 @@ fn map_sync_error(
         | crate::domain::external_sync::ExternalSyncRepositoryError::CorruptData(message) => {
             CalendarEntryViewError::Repository(message)
         }
+    }
+}
+
+fn map_planned_completed_link_error(
+    error: crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+) -> CalendarEntryViewError {
+    match error {
+        crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError::Repository(
+            message,
+        ) => CalendarEntryViewError::Repository(message),
     }
 }
 

@@ -6,6 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use tracing::warn;
 
 use crate::{
     config::AppState,
@@ -27,7 +28,10 @@ use super::{
         UpdateOptionsRequest,
     },
     error::{map_admin_identity_error, map_connection_error_to_response, map_settings_error},
-    intervals_connection::merge_connection_credentials,
+    intervals_connection::{
+        build_persisted_intervals_config, can_persist_tested_credentials,
+        merge_connection_credentials, should_persist_tested_credentials,
+    },
     mapping::{
         map_ai_agents_update, map_availability_update, map_cycling_update, map_intervals_update,
         map_options_update, map_settings_to_dto,
@@ -296,13 +300,40 @@ pub async fn test_intervals_connection(
         .test_connection(&credentials.api_key, &credentials.athlete_id)
         .await
     {
-        Ok(_) => Json(test_connection_response(
-            true,
-            "Connection successful.",
-            credentials.used_saved_api_key,
-            credentials.used_saved_athlete_id,
-        ))
-        .into_response(),
+        Ok(_) => {
+            let latest_current = match load_settings(settings_service, &user_id).await {
+                Ok(settings) => settings,
+                Err(response) => return response,
+            };
+            let persisted_status_updated =
+                if should_persist_tested_credentials(&credentials, &latest_current)
+                    && can_persist_tested_credentials(&current, &latest_current)
+                {
+                    let config = build_persisted_intervals_config(&credentials);
+                    match settings_service.update_intervals(&user_id, config).await {
+                        Ok(_) => true,
+                        Err(err) => {
+                            warn!(
+                                user_id = %user_id,
+                                error = %err,
+                                "successful intervals connection test could not persist credentials"
+                            );
+                            false
+                        }
+                    }
+                } else {
+                    false
+                };
+
+            Json(test_connection_response(
+                true,
+                "Connection successful.",
+                credentials.used_saved_api_key,
+                credentials.used_saved_athlete_id,
+                persisted_status_updated,
+            ))
+            .into_response()
+        }
         Err(err) => map_connection_error_to_response(
             err,
             credentials.used_saved_api_key,

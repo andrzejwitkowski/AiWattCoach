@@ -652,7 +652,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use mongodb::{
-        bson::{doc, oid::ObjectId},
+        bson::{doc, oid::ObjectId, to_document, Document},
         Client,
     };
 
@@ -973,11 +973,11 @@ mod tests {
         let repository = MongoUserSettingsRepository::new(client.clone(), &database_name);
         let collection = client
             .database(&database_name)
-            .collection::<SettingsDocument>("user_settings");
+            .collection::<Document>("user_settings");
 
         collection
             .insert_many([
-                SettingsDocument {
+                to_document(&SettingsDocument {
                     intervals: super::IntervalsDocument {
                         api_key: Some("api-key".to_string()),
                         athlete_id: Some("athlete-1".to_string()),
@@ -985,8 +985,9 @@ mod tests {
                         updated_at_epoch_seconds: Some(10),
                     },
                     ..build_settings_document("connected-user", 10)
-                },
-                SettingsDocument {
+                })
+                .unwrap(),
+                to_document(&SettingsDocument {
                     intervals: super::IntervalsDocument {
                         api_key: Some("legacy-key".to_string()),
                         athlete_id: Some("legacy-athlete".to_string()),
@@ -994,8 +995,9 @@ mod tests {
                         updated_at_epoch_seconds: Some(20),
                     },
                     ..build_settings_document("connected-user-2", 20)
-                },
-                SettingsDocument {
+                })
+                .unwrap(),
+                to_document(&SettingsDocument {
                     intervals: super::IntervalsDocument {
                         api_key: Some("old-key".to_string()),
                         athlete_id: Some("old-athlete".to_string()),
@@ -1003,8 +1005,9 @@ mod tests {
                         updated_at_epoch_seconds: Some(30),
                     },
                     ..build_settings_document("explicitly-disconnected-user", 30)
-                },
-                serde_json::from_value::<SettingsDocument>(serde_json::json!({
+                })
+                .unwrap(),
+                doc! {
                     "user_id": "legacy-missing-connected",
                     "ai_agents": {},
                     "intervals": {
@@ -1019,9 +1022,8 @@ mod tests {
                     "cycling": {},
                     "created_at_epoch_seconds": 1,
                     "updated_at_epoch_seconds": 40
-                }))
-                .unwrap(),
-                serde_json::from_value::<SettingsDocument>(serde_json::json!({
+                },
+                doc! {
                     "user_id": "poll-only-user",
                     "ai_agents": {},
                     "intervals": {},
@@ -1033,9 +1035,8 @@ mod tests {
                     "cycling": {},
                     "created_at_epoch_seconds": 1,
                     "updated_at_epoch_seconds": 60
-                }))
-                .unwrap(),
-                SettingsDocument {
+                },
+                to_document(&SettingsDocument {
                     intervals: super::IntervalsDocument {
                         api_key: Some("   ".to_string()),
                         athlete_id: Some("athlete-2".to_string()),
@@ -1043,8 +1044,9 @@ mod tests {
                         updated_at_epoch_seconds: Some(50),
                     },
                     ..build_settings_document("invalid-connected-user", 50)
-                },
-                serde_json::from_value::<SettingsDocument>(serde_json::json!({
+                })
+                .unwrap(),
+                doc! {
                     "user_id": "blank-legacy-user",
                     "ai_agents": {},
                     "intervals": {
@@ -1061,9 +1063,8 @@ mod tests {
                     "cycling": {},
                     "created_at_epoch_seconds": 1,
                     "updated_at_epoch_seconds": 55
-                }))
-                .unwrap(),
-                build_settings_document("disconnected-user", 40),
+                },
+                to_document(&build_settings_document("disconnected-user", 40)).unwrap(),
             ])
             .await
             .unwrap();
@@ -1093,7 +1094,7 @@ mod tests {
                 IntervalsPollBootstrapUser {
                     user_id: "disconnected-user".to_string(),
                     desired_active: false,
-                    intervals_updated_at_epoch_seconds: None,
+                    intervals_updated_at_epoch_seconds: Some(40),
                 },
                 IntervalsPollBootstrapUser {
                     user_id: "explicitly-disconnected-user".to_string(),
@@ -1108,7 +1109,7 @@ mod tests {
                 IntervalsPollBootstrapUser {
                     user_id: "poll-only-user".to_string(),
                     desired_active: false,
-                    intervals_updated_at_epoch_seconds: None,
+                    intervals_updated_at_epoch_seconds: Some(60),
                 },
             ]
         );

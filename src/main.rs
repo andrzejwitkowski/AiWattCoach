@@ -9,6 +9,7 @@ use aiwattcoach::{
         },
         intervals_icu::{
             adapter::IntervalsApiAdapter,
+            backfill::IntervalsCompletedWorkoutBackfillService,
             client::IntervalsIcuClient,
             dev_client::DevIntervalsClient,
             dev_settings_adapter::DevIntervalsSettingsProvider,
@@ -258,7 +259,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         race_repository.clone(),
         special_day_repository.clone(),
         external_sync_state_repository.clone(),
-    );
+    )
+    .with_planned_completed_links(planned_completed_link_repository.clone());
     let intervals_api_client = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
     } else {
@@ -285,7 +287,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         intervals_api_client.clone(),
         intervals_settings_provider.clone(),
         provider_poll_state_repository.clone(),
-        external_import_service,
+        external_import_service.clone(),
         SystemClock,
         UuidIdGenerator,
     )
@@ -293,8 +295,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let activity_identity_extractor = ActivityFileIdentityExtractor;
     let intervals_service = Arc::new(
         IntervalsService::new(
-            intervals_api_client,
-            intervals_settings_provider,
+            intervals_api_client.clone(),
+            intervals_settings_provider.clone(),
             activity_repository.clone(),
             upload_operation_repository,
             activity_identity_extractor,
@@ -386,6 +388,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
         completed_workout_repository.clone(),
     ));
+    let completed_workout_admin_service = Arc::new(IntervalsCompletedWorkoutBackfillService::new(
+        completed_workout_repository.clone(),
+        intervals_settings_provider.clone(),
+        intervals_api_client.clone(),
+        external_import_service.clone(),
+    ));
     let calendar_service = Arc::new(
         CalendarService::new(
             (*intervals_service).clone(),
@@ -425,6 +433,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .with_calendar_service(calendar_service)
             .with_calendar_labels_service(calendar_labels_service)
             .with_completed_workout_service(completed_workout_service)
+            .with_completed_workout_admin_service(completed_workout_admin_service)
             .with_athlete_summary_service(athlete_summary_service)
             .with_llm_services(llm_adapter, llm_config_provider)
             .with_workout_summary_service(workout_summary_service)

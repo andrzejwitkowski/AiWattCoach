@@ -534,6 +534,25 @@ impl PlannedCompletedWorkoutLinkRepository for InMemoryPlannedCompletedWorkoutLi
             Ok(link)
         })
     }
+
+    fn delete_by_completed_workout_id(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<(), PlannedCompletedWorkoutLinkError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            stored.lock().unwrap().retain(|existing| {
+                !(existing.user_id == user_id
+                    && existing.completed_workout_id == completed_workout_id)
+            });
+            Ok(())
+        })
+    }
 }
 
 impl InMemoryObservationRepository {
@@ -857,6 +876,18 @@ pub(super) fn sample_planned_workout_on_date(
     )
 }
 
+pub(super) fn sample_planned_workout_named_on_date(
+    planned_workout_id: &str,
+    date: &str,
+    name: &str,
+) -> PlannedWorkout {
+    sample_planned_workout_on_date(planned_workout_id, date).with_event_metadata(
+        Some(name.to_string()),
+        Some("Strong over-unders".to_string()),
+        Some("Ride".to_string()),
+    )
+}
+
 pub(super) fn sample_completed_workout() -> CompletedWorkout {
     sample_completed_workout_with_id("completed-imported-1")
 }
@@ -867,6 +898,12 @@ pub(super) fn sample_completed_workout_with_id(completed_workout_id: &str) -> Co
         completed_workout_id,
         Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310])),
     )
+}
+
+pub(super) fn sample_completed_workout_named(name: &str) -> CompletedWorkout {
+    let mut workout = sample_completed_workout();
+    workout.name = Some(name.to_string());
+    workout
 }
 
 pub(super) fn sample_completed_workout_for_provider(

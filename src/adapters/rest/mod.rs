@@ -65,6 +65,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         ))
         .route("/api/admin/system-info", get(admin::system_info))
         .route(
+            "/api/admin/completed-workouts/{user_id}/backfill-details",
+            post(admin::backfill_completed_workout_details),
+        )
+        .route(
             "/api/admin/settings/{user_id}",
             get(settings::admin_get_user_settings),
         )
