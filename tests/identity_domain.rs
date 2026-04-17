@@ -26,6 +26,7 @@ fn is_valid_email_rejects_invalid_shapes() {
     assert!(!is_valid_email("athlete@example."));
     assert!(!is_valid_email("athlete@exa..mple.com"));
     assert!(!is_valid_email("athle\u{0001}te@example.com"));
+    assert!(!is_valid_email("athlete test@example.com"));
 }
 
 #[test]

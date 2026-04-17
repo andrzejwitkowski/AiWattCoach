@@ -192,7 +192,11 @@ pub fn normalize_email(email: &str) -> String {
 
 pub fn is_valid_email(email: &str) -> bool {
     let trimmed = email.trim();
-    if trimmed.is_empty() || trimmed.chars().any(|character| character.is_control()) {
+    if trimmed.is_empty()
+        || trimmed
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+    {
         return false;
     }
 
