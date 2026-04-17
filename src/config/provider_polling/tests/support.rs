@@ -201,6 +201,10 @@ impl RecordingIntervalsApi {
     pub(super) fn activity_ranges(&self) -> Vec<(String, String)> {
         self.activity_ranges.lock().unwrap().clone()
     }
+
+    pub(super) fn activity_lookups(&self) -> Vec<String> {
+        self.activity_lookups.lock().unwrap().clone()
+    }
 }
 
 impl IntervalsApiPort for FakeIntervalsApi {

@@ -119,6 +119,7 @@ describe('SettingsPage', () => {
       await Promise.resolve();
     });
 
+    expect(document.querySelector('.animate-spin')).toBeNull();
     expect(screen.getByText('ai-agents-card')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^test connection$/i })).toBeInTheDocument();
 
@@ -127,6 +128,7 @@ describe('SettingsPage', () => {
       await Promise.resolve();
     });
 
+    expect(document.querySelector('.animate-spin')).toBeNull();
     expect(screen.getByText('ai-agents-card')).toBeInTheDocument();
     expect(intervalsCardMock).toHaveBeenCalled();
   });

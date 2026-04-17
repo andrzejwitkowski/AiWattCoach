@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use crate::config::AppState;
+use crate::domain::completed_workouts::CompletedWorkoutError;
 use crate::domain::identity::IdentityError;
 
 use super::cookies::read_cookie;
@@ -71,13 +72,6 @@ pub async fn backfill_completed_workout_details(
     Path(path): Path<CompletedWorkoutBackfillPath>,
     Query(query): Query<CompletedWorkoutBackfillQuery>,
 ) -> impl IntoResponse {
-    if !super::intervals::is_valid_date(&query.oldest)
-        || !super::intervals::is_valid_date(&query.newest)
-        || query.oldest > query.newest
-    {
-        return StatusCode::BAD_REQUEST.into_response();
-    }
-
     let Some(identity_service) = state.identity_service.clone() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
@@ -91,22 +85,39 @@ pub async fn backfill_completed_workout_details(
     };
 
     match identity_service.require_admin(&session_id).await {
-        Ok(_) => match service
-            .backfill_missing_details(&path.user_id, &query.oldest, &query.newest)
-            .await
-        {
-            Ok(result) => Json(CompletedWorkoutBackfillResponse {
-                scanned: result.scanned,
-                enriched: result.enriched,
-                skipped: result.skipped,
-                failed: result.failed,
-            })
-            .into_response(),
-            Err(error) => {
-                error!(user_id = %path.user_id, error = %error, "backfill_missing_details failed");
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        Ok(_) => {
+            if !super::intervals::is_valid_date(&query.oldest)
+                || !super::intervals::is_valid_date(&query.newest)
+                || query.oldest > query.newest
+            {
+                return StatusCode::BAD_REQUEST.into_response();
             }
-        },
+
+            match service
+                .backfill_missing_details(&path.user_id, &query.oldest, &query.newest)
+                .await
+            {
+                Ok(result) => Json(CompletedWorkoutBackfillResponse {
+                    scanned: result.scanned,
+                    enriched: result.enriched,
+                    skipped: result.skipped,
+                    failed: result.failed,
+                })
+                .into_response(),
+                Err(error) => {
+                    let status = map_backfill_error_status(&error);
+                    error!(
+                        user_id = %path.user_id,
+                        oldest = %query.oldest,
+                        newest = %query.newest,
+                        error = %error,
+                        status = status.as_u16(),
+                        "backfill_missing_details failed"
+                    );
+                    status.into_response()
+                }
+            }
+        }
         Err(IdentityError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
         Err(crate::domain::identity::IdentityError::Forbidden) => {
             StatusCode::FORBIDDEN.into_response()
@@ -115,5 +126,11 @@ pub async fn backfill_completed_workout_details(
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+fn map_backfill_error_status(error: &CompletedWorkoutError) -> StatusCode {
+    match error {
+        CompletedWorkoutError::Repository(_) => StatusCode::SERVICE_UNAVAILABLE,
     }
 }

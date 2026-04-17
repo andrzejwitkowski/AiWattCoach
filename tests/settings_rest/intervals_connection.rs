@@ -11,6 +11,7 @@ use tower::util::ServiceExt;
 use crate::shared::{
     get_json, session_cookie, settings_test_app_with_intervals, MockIntervalsConnectionTester,
     RepositoryErrorSettingsService, TestIdentityServiceWithSession, TestSettingsService,
+    UpdateIntervalsErrorSettingsService,
 };
 
 #[tokio::test]
@@ -139,6 +140,44 @@ async fn test_intervals_connection_persists_successful_draft_credentials() {
         "athlete-123"
     );
     assert!(intervals.get("connected").unwrap().as_bool().unwrap());
+}
+
+#[tokio::test]
+async fn test_intervals_connection_reports_success_even_when_persisting_status_fails() {
+    let settings = UserSettings::new_defaults("user-1".to_string(), 1000);
+    let app = settings_test_app_with_intervals(
+        TestIdentityServiceWithSession::default(),
+        UpdateIntervalsErrorSettingsService::new("settings repository unavailable", settings),
+        Some(std::sync::Arc::new(
+            MockIntervalsConnectionTester::returning_ok(),
+        )),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/intervals/test")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"apiKey":"valid-key","athleteId":"athlete-123"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = get_json(response).await;
+    assert!(body.get("connected").unwrap().as_bool().unwrap());
+    assert!(!body
+        .get("persistedStatusUpdated")
+        .unwrap()
+        .as_bool()
+        .unwrap());
 }
 
 #[tokio::test]

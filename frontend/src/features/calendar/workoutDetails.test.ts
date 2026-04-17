@@ -770,6 +770,56 @@ describe('workoutDetails', () => {
     expect(buildPlannedWorkoutPowerSeries(event, 300)).toEqual([65, 65, 100]);
   });
 
+  it('falls back when raw workout section steps do not match parsed intervals', () => {
+    const event: IntervalEvent = {
+      id: 404,
+      startDateLocal: '2026-04-10',
+      name: 'Mismatch Workout',
+      category: 'WORKOUT',
+      description: null,
+      indoor: true,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: 'Mismatch Workout\nWarmup\n- 10m 55%\nMain Set\n- 5m 105%\n- 3m 55%',
+        intervals: [
+          {
+            definition: '- 10m 55%',
+            repeatCount: 1,
+            durationSeconds: 600,
+            targetPercentFtp: 55,
+            zoneId: 1,
+          },
+        ],
+        segments: [],
+        summary: {
+          totalSegments: 0,
+          totalDurationSeconds: 600,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: null,
+          estimatedTrainingStressScore: null,
+        },
+      },
+      actualWorkout: null,
+    };
+
+    expect(buildPlannedWorkoutStructureSections(event)).toEqual([
+      {
+        id: 'interval-0',
+        label: '10m 55% FTP',
+        durationSeconds: 600,
+        steps: [
+          {
+            id: 'interval-0-detail',
+            label: '10m 55% FTP',
+            detail: '10m • 55% FTP',
+            durationSeconds: 600,
+          },
+        ],
+      },
+    ]);
+  });
+
   it('expands repeated interval definitions in planned power series and chart intervals', () => {
     const event: IntervalEvent = {
       id: 102,

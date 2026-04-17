@@ -371,8 +371,21 @@ where
             .find_by_completed_workout_id(&workout.user_id, &workout.completed_workout_id)
             .await
             .map_err(map_planned_completed_link_error)?;
+        if existing_link.is_none() {
+            persist_legacy_planned_workout_link(
+                &self.planned_completed_links,
+                &workout,
+                self.clock.now_epoch_seconds(),
+            )
+            .await?;
+        }
+        let existing_link = self
+            .planned_completed_links
+            .find_by_completed_workout_id(&workout.user_id, &workout.completed_workout_id)
+            .await
+            .map_err(map_planned_completed_link_error)?;
         let selected_link = choose_preferred_planned_workout_link(
-            existing_link_candidate(existing_link.as_ref(), &workout),
+            existing_link_candidate(existing_link.as_ref()),
             resolved_link,
         );
         workout.planned_workout_id = selected_link
@@ -686,22 +699,48 @@ fn normalize_workout_name(value: Option<&str>) -> Option<String> {
         return None;
     }
 
-    Some(normalized.to_ascii_lowercase())
+    Some(
+        normalized
+            .to_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
 }
 
 fn existing_link_candidate(
     existing_link: Option<&PlannedCompletedWorkoutLink>,
-    workout: &CompletedWorkout,
 ) -> Option<ResolvedPlannedWorkoutLink> {
-    if let Some(link) = existing_link {
-        return Some(ResolvedPlannedWorkoutLink {
-            planned_workout_id: link.planned_workout_id.clone(),
-            match_source: link.match_source.clone(),
-        });
-    }
+    existing_link.map(|link| ResolvedPlannedWorkoutLink {
+        planned_workout_id: link.planned_workout_id.clone(),
+        match_source: link.match_source.clone(),
+    })
+}
 
-    let _ = workout;
-    None
+async fn persist_legacy_planned_workout_link<PlannedCompletedLinks>(
+    planned_completed_links: &PlannedCompletedLinks,
+    workout: &CompletedWorkout,
+    linked_at_epoch_seconds: i64,
+) -> Result<(), ExternalImportError>
+where
+    PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository,
+{
+    let Some(planned_workout_id) = workout.planned_workout_id.as_ref() else {
+        return Ok(());
+    };
+
+    planned_completed_links
+        .upsert(PlannedCompletedWorkoutLink::new(
+            workout.user_id.clone(),
+            planned_workout_id.clone(),
+            workout.completed_workout_id.clone(),
+            PlannedCompletedWorkoutLinkMatchSource::Explicit,
+            linked_at_epoch_seconds,
+        ))
+        .await
+        .map_err(map_planned_completed_link_error)?;
+
+    Ok(())
 }
 
 fn choose_preferred_planned_workout_link(

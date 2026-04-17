@@ -144,6 +144,60 @@ async fn completed_stream_enriches_activity_details_before_import() {
 }
 
 #[tokio::test]
+async fn completed_stream_imports_listed_activity_when_detail_enrichment_is_not_found() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let imports = RecordingImportService::default();
+    let listed = sample_activity("activity-1");
+    let api = RecordingIntervalsApi::default();
+    let service = ProviderPollingService::new(
+        api.clone(),
+        FakeIntervalsSettings,
+        poll_states,
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_windows(7, 14, 7);
+
+    let listed_service = ProviderPollingService::new(
+        FakeIntervalsApi::with_activities(vec![listed]),
+        FakeIntervalsSettings,
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]),
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_windows(7, 14, 7);
+
+    service.poll_due_once().await.unwrap();
+    listed_service.poll_due_once().await.unwrap();
+
+    assert_eq!(api.activity_lookups(), Vec::<String>::new());
+
+    let commands = imports.commands();
+    assert_eq!(commands.len(), 1);
+
+    let ExternalImportCommand::UpsertCompletedWorkout(import) = &commands[0] else {
+        panic!("expected completed workout import");
+    };
+
+    assert!(import.workout.details.streams.is_empty());
+    assert!(import.workout.details.intervals.is_empty());
+    assert!(import.workout.details.interval_groups.is_empty());
+}
+
+#[tokio::test]
 async fn completed_stream_fails_poll_when_detail_enrichment_has_transient_error() {
     let poll_states =
         RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(

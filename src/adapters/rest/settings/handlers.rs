@@ -6,6 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use tracing::warn;
 
 use crate::{
     config::AppState,
@@ -311,7 +312,14 @@ pub async fn test_intervals_connection(
                     let config = build_persisted_intervals_config(&credentials);
                     match settings_service.update_intervals(&user_id, config).await {
                         Ok(_) => true,
-                        Err(err) => return map_settings_error(&err),
+                        Err(err) => {
+                            warn!(
+                                user_id = %user_id,
+                                error = %err,
+                                "successful intervals connection test could not persist credentials"
+                            );
+                            false
+                        }
                     }
                 } else {
                     false

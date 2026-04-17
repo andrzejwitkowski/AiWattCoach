@@ -472,6 +472,10 @@ function buildGroupedPlannedWorkoutSections(
 
   const normalizedEventName = normalizeWorkoutText(event.name).toLocaleLowerCase();
   const stepIntervals = event.eventDefinition.intervals.filter((interval) => interval.durationSeconds !== null);
+  const rawStepLines = lines.filter((line) => isWorkoutStepLine(line)).length;
+  if (rawStepLines !== stepIntervals.length) {
+    return [];
+  }
   const sections: PlannedWorkoutSectionModel[] = [];
   let currentSection: {
     label: string;

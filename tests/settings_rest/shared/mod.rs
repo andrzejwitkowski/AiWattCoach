@@ -15,7 +15,9 @@ pub(crate) use completed_workouts::TestCompletedWorkoutAdminService;
 pub(crate) use identity::{AdminIdentityErrorService, TestIdentityServiceWithSession};
 pub(crate) use intervals::MockIntervalsConnectionTester;
 pub(crate) use llm::{MockLlmChatService, TestLlmConfigProvider};
-pub(crate) use settings::{RepositoryErrorSettingsService, TestSettingsService};
+pub(crate) use settings::{
+    RepositoryErrorSettingsService, TestSettingsService, UpdateIntervalsErrorSettingsService,
+};
 
 mod athlete_summary;
 

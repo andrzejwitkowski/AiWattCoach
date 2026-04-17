@@ -280,7 +280,7 @@ async fn update_intervals_preserves_saved_credentials_when_fields_are_missing() 
 }
 
 #[tokio::test]
-async fn update_intervals_reactivates_saved_credentials_when_user_is_disconnected() {
+async fn update_intervals_keeps_saved_credentials_disconnected_until_retested() {
     let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
     settings.intervals.api_key = Some("saved-api-key".to_string());
     settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
@@ -315,7 +315,7 @@ async fn update_intervals_reactivates_saved_credentials_when_user_is_disconnecte
         intervals.get("athleteId").unwrap().as_str().unwrap(),
         "saved-athlete-id"
     );
-    assert!(intervals.get("connected").unwrap().as_bool().unwrap());
+    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -355,7 +355,7 @@ async fn update_intervals_does_not_activate_incomplete_saved_credentials() {
 }
 
 #[tokio::test]
-async fn update_intervals_keeps_connection_active_when_complete_credentials_are_saved() {
+async fn update_intervals_marks_connection_inactive_when_credentials_change() {
     let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
     settings.intervals.api_key = Some("saved-api-key".to_string());
     settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
@@ -389,7 +389,7 @@ async fn update_intervals_keeps_connection_active_when_complete_credentials_are_
     let response_body: Value = get_json(response).await;
     let intervals = response_body.get("intervals").unwrap();
 
-    assert!(intervals.get("connected").unwrap().as_bool().unwrap());
+    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
     assert_eq!(
         intervals.get("athleteId").unwrap().as_str().unwrap(),
         "saved-athlete-id"

@@ -26,6 +26,7 @@ export function SettingsProvider({
 
   const refreshSettings = useCallback(async (options?: { background?: boolean }) => {
     const background = options?.background ?? false;
+    const managesLoadingState = !background;
     if (!background) {
       setIsLoading(true);
     }
@@ -40,7 +41,9 @@ export function SettingsProvider({
       }
       setError(err instanceof Error ? err.message : 'Failed to load settings');
     } finally {
-      setIsLoading(false);
+      if (managesLoadingState) {
+        setIsLoading(false);
+      }
     }
   }, [apiBaseUrl]);
 

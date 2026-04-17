@@ -174,11 +174,7 @@ pub(super) fn map_intervals_update(
     let has_complete_credentials = api_key.is_some() && athlete_id.is_some();
 
     IntervalsConfig {
-        connected: if credentials_changed {
-            false
-        } else {
-            has_complete_credentials
-        },
+        connected: current.intervals.connected && !credentials_changed && has_complete_credentials,
         api_key,
         athlete_id,
     }

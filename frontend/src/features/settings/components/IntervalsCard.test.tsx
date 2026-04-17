@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { IntervalsCard } from './IntervalsCard';
-import type { UserSettingsResponse } from '../types';
+import type { TestIntervalsConnectionResponse, UserSettingsResponse } from '../types';
 import { testIntervalsConnection, updateIntervals } from '../api/settings';
 
 vi.mock('../api/settings', () => ({
@@ -12,6 +12,7 @@ vi.mock('../api/settings', () => ({
 
 const updateIntervalsMock = vi.mocked(updateIntervals);
 const testIntervalsConnectionMock = vi.mocked(testIntervalsConnection);
+type TestResolver = (value: TestIntervalsConnectionResponse) => void;
 
 function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): UserSettingsResponse {
   return {
@@ -291,14 +292,22 @@ describe('IntervalsCard', () => {
     });
   });
 
-  it('allows reconnecting saved credentials for a disconnected user without editing fields', async () => {
-    updateIntervalsMock.mockResolvedValue(buildSettings({ connected: true }));
+  it('re-tests saved credentials for a disconnected user without editing fields', async () => {
+    testIntervalsConnectionMock.mockResolvedValue({
+      connected: true,
+      message: 'Connection successful.',
+      usedSavedApiKey: true,
+      usedSavedAthleteId: true,
+      persistedStatusUpdated: true,
+    });
+
+    const onSave = vi.fn();
 
     render(
       <IntervalsCard
         settings={buildSettings({ connected: false, apiKeySet: true, athleteId: 'athlete-123' })}
         apiBaseUrl=""
-        onSave={() => {}}
+        onSave={onSave}
       />,
     );
 
@@ -308,8 +317,11 @@ describe('IntervalsCard', () => {
     fireEvent.click(connectButton);
 
     await waitFor(() => {
-      expect(updateIntervalsMock).toHaveBeenCalledWith('', {});
+      expect(testIntervalsConnectionMock).toHaveBeenCalledWith('', {});
     });
+
+    expect(updateIntervalsMock).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 
   it('does not allow reconnecting when saved credentials are incomplete', () => {
@@ -325,15 +337,7 @@ describe('IntervalsCard', () => {
   });
 
   it('ignores stale in-flight test results after the draft changes', async () => {
-    let resolveTest:
-      | ((value: {
-          connected: boolean;
-          message: string;
-          usedSavedApiKey: boolean;
-          usedSavedAthleteId: boolean;
-          persistedStatusUpdated: boolean;
-        }) => void)
-      | undefined;
+    let resolveTest: TestResolver | undefined;
 
     testIntervalsConnectionMock.mockImplementation(
       () =>
@@ -367,15 +371,7 @@ describe('IntervalsCard', () => {
   });
 
   it('refreshes settings for stale persisted test results without showing stale status', async () => {
-    let resolveTest:
-      | ((value: {
-          connected: boolean;
-          message: string;
-          usedSavedApiKey: boolean;
-          usedSavedAthleteId: boolean;
-          persistedStatusUpdated: boolean;
-        }) => void)
-      | undefined;
+    let resolveTest: TestResolver | undefined;
 
     testIntervalsConnectionMock.mockImplementation(
       () =>
@@ -407,15 +403,7 @@ describe('IntervalsCard', () => {
   });
 
   it('keeps only later field edits dirty after a stale persisted api key test refresh', async () => {
-    let resolveTest:
-      | ((value: {
-          connected: boolean;
-          message: string;
-          usedSavedApiKey: boolean;
-          usedSavedAthleteId: boolean;
-          persistedStatusUpdated: boolean;
-        }) => void)
-      | undefined;
+    let resolveTest: TestResolver | undefined;
 
     testIntervalsConnectionMock.mockImplementation(
       () =>

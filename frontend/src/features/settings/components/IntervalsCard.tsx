@@ -116,6 +116,12 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
 
   const handleSave = async () => {
     if (!canSave) return;
+
+    if (canReconnectSavedCredentials) {
+      await handleTest();
+      return;
+    }
+
     setIsSaving(true);
     setStatus({
       tone: 'neutral',
@@ -157,10 +163,12 @@ export function IntervalsCard({ settings, apiBaseUrl, onSave }: IntervalsCardPro
       const result = await testIntervalsConnection(apiBaseUrl, submittedTestRequest);
       if (testRunId !== testRunIdRef.current) {
         if (result.persistedStatusUpdated) {
-          setCleanDraft((current) => ({
-            apiKey: submittedTestRequest.apiKey ?? current.apiKey,
-            athleteId: submittedTestRequest.athleteId ?? current.athleteId,
-          }));
+          if (submittedTestRequest.apiKey !== undefined || submittedTestRequest.athleteId !== undefined) {
+            setCleanDraft((current) => ({
+              apiKey: submittedTestRequest.apiKey ?? current.apiKey,
+              athleteId: submittedTestRequest.athleteId ?? current.athleteId,
+            }));
+          }
           onSave();
         }
         return;
