@@ -8,7 +8,8 @@ use std::collections::BTreeMap;
 use tower::util::ServiceExt;
 
 use crate::shared::{
-    auth_test_app, auth_test_app_with_custom_settings, TestIdentityService, RESPONSE_LIMIT_BYTES,
+    auth_test_app, auth_test_app_with_custom_settings, auth_test_app_with_limited_whitelist_rate,
+    TestIdentityService, RESPONSE_LIMIT_BYTES,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -345,6 +346,47 @@ async fn join_whitelist_surfaces_service_errors_as_service_unavailable() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("athlete@example.com")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_rate_limits_repeated_requests_from_same_ip() {
+    let service = TestIdentityService::default();
+    let captured = service.last_join_whitelist_email.clone();
+    let app = auth_test_app_with_limited_whitelist_rate(service, 1).await;
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-forwarded-for", "203.0.113.7")
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let second_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-forwarded-for", "203.0.113.7")
+                .body(Body::from(r#"{"email":"second@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(
         captured.lock().unwrap().as_deref(),
         Some("athlete@example.com")

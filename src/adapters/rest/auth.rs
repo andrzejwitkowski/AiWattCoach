@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use tokio::time::{sleep, Duration, Instant};
 
 use crate::{
     config::AppState,
@@ -178,18 +179,25 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
 
 pub async fn join_whitelist(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<JoinWhitelistRequest>,
 ) -> Response {
+    let started_at = Instant::now();
     let Some(identity_service) = state.identity_service.clone() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
+
+    let client_ip = extract_client_ip(&headers).unwrap_or("unknown");
+    if !state.whitelist_rate_limiter.check(client_ip) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
 
     let trimmed_email = payload.email.trim();
     if !is_valid_email(trimmed_email) {
         return StatusCode::BAD_REQUEST.into_response();
     }
 
-    match identity_service
+    let response = match identity_service
         .join_whitelist(trimmed_email.to_string())
         .await
     {
@@ -199,6 +207,37 @@ pub async fn join_whitelist(
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    sleep_until_minimum_response_time(started_at).await;
+    response
+}
+
+fn extract_client_ip(headers: &HeaderMap) -> Option<&str> {
+    ["x-forwarded-for", "x-real-ip", "forwarded"]
+        .into_iter()
+        .find_map(|header_name| {
+            headers
+                .get(header_name)
+                .and_then(|value| value.to_str().ok())
+                .and_then(parse_client_ip_header)
+        })
+}
+
+fn parse_client_ip_header(value: &str) -> Option<&str> {
+    value
+        .split(',')
+        .next()
+        .map(str::trim)
+        .filter(|candidate| !candidate.is_empty())
+}
+
+async fn sleep_until_minimum_response_time(started_at: Instant) {
+    const MIN_WHITELIST_RESPONSE_TIME: Duration = Duration::from_millis(40);
+
+    let elapsed = started_at.elapsed();
+    if elapsed < MIN_WHITELIST_RESPONSE_TIME {
+        sleep(MIN_WHITELIST_RESPONSE_TIME - elapsed).await;
     }
 }
 

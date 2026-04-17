@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use mongodb::Client;
 
@@ -34,10 +38,48 @@ pub struct AppState {
     pub llm_chat_service: Option<Arc<dyn LlmChatPort>>,
     pub llm_config_provider: Option<Arc<dyn UserLlmConfigProvider>>,
     pub intervals_connection_tester: Option<Arc<dyn IntervalsConnectionTester>>,
+    pub whitelist_rate_limiter: WhitelistRateLimiter,
     pub session_cookie_name: String,
     pub session_cookie_same_site: String,
     pub secure_session_cookie: bool,
     pub session_ttl_hours: u64,
+}
+
+#[derive(Clone)]
+pub struct WhitelistRateLimiter {
+    max_attempts: usize,
+    window: Duration,
+    attempts_by_ip: Arc<Mutex<HashMap<String, Vec<Instant>>>>,
+}
+
+impl Default for WhitelistRateLimiter {
+    fn default() -> Self {
+        Self::new(5, Duration::from_secs(60))
+    }
+}
+
+impl WhitelistRateLimiter {
+    pub fn new(max_attempts: usize, window: Duration) -> Self {
+        Self {
+            max_attempts: max_attempts.max(1),
+            window,
+            attempts_by_ip: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub fn check(&self, client_ip: &str) -> bool {
+        let now = Instant::now();
+        let mut attempts_by_ip = self.attempts_by_ip.lock().unwrap();
+        let attempts = attempts_by_ip.entry(client_ip.to_string()).or_default();
+        attempts.retain(|attempt| now.duration_since(*attempt) < self.window);
+
+        if attempts.len() >= self.max_attempts {
+            return false;
+        }
+
+        attempts.push(now);
+        true
+    }
 }
 
 impl AppState {
@@ -64,6 +106,7 @@ impl AppState {
             llm_chat_service: None,
             llm_config_provider: None,
             intervals_connection_tester: None,
+            whitelist_rate_limiter: WhitelistRateLimiter::default(),
             session_cookie_name: "aiwattcoach_session".to_string(),
             session_cookie_same_site: "lax".to_string(),
             secure_session_cookie: false,
@@ -152,6 +195,14 @@ impl AppState {
 
     pub fn with_client_log_ingestion(mut self, enabled: bool) -> Self {
         self.client_log_ingestion_enabled = enabled;
+        self
+    }
+
+    pub fn with_whitelist_rate_limiter(
+        mut self,
+        whitelist_rate_limiter: WhitelistRateLimiter,
+    ) -> Self {
+        self.whitelist_rate_limiter = whitelist_rate_limiter;
         self
     }
 
