@@ -1,6 +1,8 @@
 use std::{future::Future, pin::Pin};
 
-use super::{AppUser, AuthSession, GoogleIdentity, IdentityError, LoginState, Role};
+use super::{
+    AppUser, AuthSession, GoogleIdentity, IdentityError, LoginState, Role, WhitelistEntry,
+};
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -41,6 +43,14 @@ pub trait LoginStateRepository: Clone + Send + Sync + 'static {
     fn find_by_id(&self, state_id: &str) -> BoxFuture<Result<Option<LoginState>, IdentityError>>;
     fn delete(&self, state_id: &str) -> BoxFuture<Result<(), IdentityError>>;
     fn consume(&self, state_id: &str) -> BoxFuture<Result<Option<LoginState>, IdentityError>>;
+}
+
+pub trait WhitelistRepository: Clone + Send + Sync + 'static {
+    fn find_by_normalized_email(
+        &self,
+        normalized_email: &str,
+    ) -> BoxFuture<Result<Option<WhitelistEntry>, IdentityError>>;
+    fn save(&self, entry: WhitelistEntry) -> BoxFuture<Result<WhitelistEntry, IdentityError>>;
 }
 
 pub trait GoogleOAuthPort: Clone + Send + Sync + 'static {

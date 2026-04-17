@@ -1,5 +1,6 @@
 import { getJsonResponse } from '../../../lib/api/client';
-import type { CurrentUserResponse } from '../types';
+import { post } from '../../../lib/httpClient';
+import type { CurrentUserResponse, JoinWhitelistResponse } from '../types';
 
 function buildAuthUrl(apiBaseUrl: string, path: string): string {
   if (!apiBaseUrl) {
@@ -26,6 +27,12 @@ export async function logout(apiBaseUrl: string): Promise<void> {
   await fetch(buildAuthUrl(apiBaseUrl, '/api/auth/logout'), {
     method: 'POST',
     credentials: 'include'
+  });
+}
+
+export async function joinWhitelist(apiBaseUrl: string, email: string): Promise<JoinWhitelistResponse> {
+  return post<{ email: string }, JoinWhitelistResponse>(apiBaseUrl, '/api/auth/whitelist', {
+    email
   });
 }
 

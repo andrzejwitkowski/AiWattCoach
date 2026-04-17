@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use aiwattcoach::domain::identity::{
-    AppUser, AuthSession, GoogleLoginStart, GoogleLoginSuccess, IdentityError, IdentityUseCases,
-    Role,
+    AppUser, AuthSession, GoogleLoginOutcome, GoogleLoginStart, GoogleLoginSuccess, IdentityError,
+    IdentityUseCases, Role, WhitelistEntry,
 };
 
 use crate::test_support::BoxFuture;
@@ -56,20 +56,24 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
         })
     }
 
+    fn join_whitelist(&self, email: String) -> BoxFuture<Result<WhitelistEntry, IdentityError>> {
+        Box::pin(async move { Ok(WhitelistEntry::new(email, false, 100, 100)) })
+    }
+
     fn handle_google_callback(
         &self,
         _state: &str,
         _code: &str,
-    ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>> {
+    ) -> BoxFuture<Result<GoogleLoginOutcome, IdentityError>> {
         let user_id = self.user_id.clone();
         let session_id = self.session_id.clone();
         let user = self.build_user();
         Box::pin(async move {
-            Ok(GoogleLoginSuccess {
+            Ok(GoogleLoginOutcome::SignedIn(Box::new(GoogleLoginSuccess {
                 user,
                 session: AuthSession::new(session_id, user_id, 999999, 100),
                 redirect_to: "/app".to_string(),
-            })
+            })))
         })
     }
 
@@ -160,11 +164,15 @@ impl IdentityUseCases for SessionMappedIdentityService {
         })
     }
 
+    fn join_whitelist(&self, email: String) -> BoxFuture<Result<WhitelistEntry, IdentityError>> {
+        Box::pin(async move { Ok(WhitelistEntry::new(email, false, 100, 100)) })
+    }
+
     fn handle_google_callback(
         &self,
         _state: &str,
         _code: &str,
-    ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>> {
+    ) -> BoxFuture<Result<GoogleLoginOutcome, IdentityError>> {
         Box::pin(async { Err(IdentityError::External("not used in test".to_string())) })
     }
 

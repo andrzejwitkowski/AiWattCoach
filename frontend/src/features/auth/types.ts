@@ -12,4 +12,8 @@ export type CurrentUserResponse =
   | { authenticated: false }
   | { authenticated: true; user: CurrentUser };
 
+export type JoinWhitelistResponse = {
+  success: boolean;
+};
+
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';

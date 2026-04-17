@@ -1,7 +1,7 @@
 use super::{
-    assign_roles, authorize_admin_access, AppUser, AuthSession, BoxFuture, Clock, GoogleOAuthPort,
-    IdGenerator, IdentityError, LoginState, LoginStateRepository, SessionRepository,
-    UserRepository,
+    assign_roles, authorize_admin_access, is_valid_email, normalize_email, AppUser, AuthSession,
+    BoxFuture, Clock, GoogleOAuthPort, IdGenerator, IdentityError, LoginState,
+    LoginStateRepository, SessionRepository, UserRepository, WhitelistEntry, WhitelistRepository,
 };
 
 pub trait IdentityUseCases: Send + Sync {
@@ -9,11 +9,12 @@ pub trait IdentityUseCases: Send + Sync {
         &self,
         return_to: Option<String>,
     ) -> BoxFuture<Result<GoogleLoginStart, IdentityError>>;
+    fn join_whitelist(&self, email: String) -> BoxFuture<Result<WhitelistEntry, IdentityError>>;
     fn handle_google_callback(
         &self,
         state: &str,
         code: &str,
-    ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>>;
+    ) -> BoxFuture<Result<GoogleLoginOutcome, IdentityError>>;
     fn get_current_user(
         &self,
         session_id: &str,
@@ -57,9 +58,52 @@ pub struct GoogleLoginSuccess {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GoogleLoginOutcome {
+    SignedIn(Box<GoogleLoginSuccess>),
+    PendingApproval { redirect_to: String },
+}
+
+fn build_pending_approval_redirect(return_to: Option<String>) -> String {
+    let Some(return_to) = sanitize_return_to(return_to) else {
+        return "/?auth=pending-approval".to_string();
+    };
+
+    format!(
+        "/?auth=pending-approval&returnTo={}",
+        urlencoding::encode(&return_to)
+    )
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentityServiceConfig {
     pub admin_emails: Vec<String>,
     pub session_ttl_hours: u64,
+}
+
+pub struct IdentityServiceDependencies<
+    Users,
+    Sessions,
+    LoginStates,
+    Whitelist,
+    GoogleOAuth,
+    Time,
+    Ids,
+> where
+    Users: UserRepository,
+    Sessions: SessionRepository,
+    LoginStates: LoginStateRepository,
+    Whitelist: WhitelistRepository,
+    GoogleOAuth: GoogleOAuthPort,
+    Time: Clock,
+    Ids: IdGenerator,
+{
+    pub users: Users,
+    pub sessions: Sessions,
+    pub login_states: LoginStates,
+    pub whitelist: Whitelist,
+    pub google_oauth: GoogleOAuth,
+    pub clock: Time,
+    pub ids: Ids,
 }
 
 pub const MAX_BSON_EPOCH_SECONDS: i64 = i64::MAX / 1000;
@@ -74,11 +118,12 @@ impl IdentityServiceConfig {
 }
 
 #[derive(Clone)]
-pub struct IdentityService<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids>
+pub struct IdentityService<Users, Sessions, LoginStates, Whitelist, GoogleOAuth, Time, Ids>
 where
     Users: UserRepository,
     Sessions: SessionRepository,
     LoginStates: LoginStateRepository,
+    Whitelist: WhitelistRepository,
     GoogleOAuth: GoogleOAuthPort,
     Time: Clock,
     Ids: IdGenerator,
@@ -86,6 +131,7 @@ where
     users: Users,
     sessions: Sessions,
     login_states: LoginStates,
+    whitelist: Whitelist,
     google_oauth: GoogleOAuth,
     clock: Time,
     ids: Ids,
@@ -93,32 +139,37 @@ where
     session_ttl_hours: u64,
 }
 
-impl<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids>
-    IdentityService<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids>
+impl<Users, Sessions, LoginStates, Whitelist, GoogleOAuth, Time, Ids>
+    IdentityService<Users, Sessions, LoginStates, Whitelist, GoogleOAuth, Time, Ids>
 where
     Users: UserRepository,
     Sessions: SessionRepository,
     LoginStates: LoginStateRepository,
+    Whitelist: WhitelistRepository,
     GoogleOAuth: GoogleOAuthPort,
     Time: Clock,
     Ids: IdGenerator,
 {
     pub fn new(
-        users: Users,
-        sessions: Sessions,
-        login_states: LoginStates,
-        google_oauth: GoogleOAuth,
-        clock: Time,
-        ids: Ids,
+        dependencies: IdentityServiceDependencies<
+            Users,
+            Sessions,
+            LoginStates,
+            Whitelist,
+            GoogleOAuth,
+            Time,
+            Ids,
+        >,
         config: IdentityServiceConfig,
     ) -> Self {
         Self {
-            users,
-            sessions,
-            login_states,
-            google_oauth,
-            clock,
-            ids,
+            users: dependencies.users,
+            sessions: dependencies.sessions,
+            login_states: dependencies.login_states,
+            whitelist: dependencies.whitelist,
+            google_oauth: dependencies.google_oauth,
+            clock: dependencies.clock,
+            ids: dependencies.ids,
             admin_emails: config.admin_emails,
             session_ttl_hours: config.session_ttl_hours,
         }
@@ -161,11 +212,32 @@ where
         })
     }
 
+    pub async fn join_whitelist(&self, email: String) -> Result<WhitelistEntry, IdentityError> {
+        if !is_valid_email(&email) {
+            return Err(IdentityError::External("invalid email address".to_string()));
+        }
+
+        let now = self.clock.now_epoch_seconds();
+        let normalized_email = normalize_email(&email);
+
+        if let Some(existing) = self
+            .whitelist
+            .find_by_normalized_email(&normalized_email)
+            .await?
+        {
+            return Ok(existing);
+        }
+
+        self.whitelist
+            .save(WhitelistEntry::new(email, false, now, now))
+            .await
+    }
+
     pub async fn handle_google_callback(
         &self,
         state: &str,
         code: &str,
-    ) -> Result<GoogleLoginSuccess, IdentityError> {
+    ) -> Result<GoogleLoginOutcome, IdentityError> {
         let now = self.clock.now_epoch_seconds();
         let login_state = self
             .login_states
@@ -175,6 +247,44 @@ where
             .ok_or(IdentityError::InvalidLoginState)?;
 
         let google_identity = self.google_oauth.exchange_code_for_identity(code).await?;
+
+        let existing_user = self
+            .users
+            .find_by_google_subject(&google_identity.subject)
+            .await?
+            .or(self
+                .users
+                .find_by_normalized_email(&google_identity.email_normalized)
+                .await?);
+
+        if existing_user.is_none() {
+            let whitelist_entry = self
+                .whitelist
+                .find_by_normalized_email(&google_identity.email_normalized)
+                .await?;
+
+            match whitelist_entry {
+                Some(entry) if entry.allowed => {}
+                Some(_) => {
+                    return Ok(GoogleLoginOutcome::PendingApproval {
+                        redirect_to: build_pending_approval_redirect(login_state.return_to.clone()),
+                    });
+                }
+                None => {
+                    self.whitelist
+                        .save(WhitelistEntry::new(
+                            google_identity.email.clone(),
+                            false,
+                            now,
+                            now,
+                        ))
+                        .await?;
+                    return Ok(GoogleLoginOutcome::PendingApproval {
+                        redirect_to: build_pending_approval_redirect(login_state.return_to.clone()),
+                    });
+                }
+            }
+        }
 
         let roles = assign_roles(&google_identity.email, &self.admin_emails);
         let user = self
@@ -192,12 +302,12 @@ where
             ))
             .await?;
 
-        Ok(GoogleLoginSuccess {
+        Ok(GoogleLoginOutcome::SignedIn(Box::new(GoogleLoginSuccess {
             user,
             session,
             redirect_to: sanitize_return_to(login_state.return_to)
                 .unwrap_or_else(|| "/calendar".to_string()),
-        })
+        })))
     }
 
     pub async fn logout(&self, session_id: &str) -> Result<(), IdentityError> {
@@ -256,12 +366,13 @@ pub fn validate_session_ttl_against_current_time(
     compute_session_expiry(now_epoch_seconds, session_ttl_hours).map(|_| ())
 }
 
-impl<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids> IdentityUseCases
-    for IdentityService<Users, Sessions, LoginStates, GoogleOAuth, Time, Ids>
+impl<Users, Sessions, LoginStates, Whitelist, GoogleOAuth, Time, Ids> IdentityUseCases
+    for IdentityService<Users, Sessions, LoginStates, Whitelist, GoogleOAuth, Time, Ids>
 where
     Users: UserRepository,
     Sessions: SessionRepository,
     LoginStates: LoginStateRepository,
+    Whitelist: WhitelistRepository,
     GoogleOAuth: GoogleOAuthPort,
     Time: Clock,
     Ids: IdGenerator,
@@ -274,11 +385,16 @@ where
         Box::pin(async move { service.begin_google_login(return_to).await })
     }
 
+    fn join_whitelist(&self, email: String) -> BoxFuture<Result<WhitelistEntry, IdentityError>> {
+        let service = self.clone();
+        Box::pin(async move { service.join_whitelist(email).await })
+    }
+
     fn handle_google_callback(
         &self,
         state: &str,
         code: &str,
-    ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>> {
+    ) -> BoxFuture<Result<GoogleLoginOutcome, IdentityError>> {
         let service = self.clone();
         let state = state.to_string();
         let code = code.to_string();

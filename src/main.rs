@@ -50,6 +50,7 @@ use aiwattcoach::{
             training_plan_projections::MongoTrainingPlanProjectionRepository,
             training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
             users::MongoUserRepository,
+            whitelist::MongoWhitelistRepository,
             workout_summary::MongoWorkoutSummaryRepository,
         },
         support::{SystemClock, UuidIdGenerator},
@@ -66,6 +67,7 @@ use aiwattcoach::{
     domain::external_sync::ExternalImportService,
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
+        IdentityServiceDependencies,
     },
     domain::intervals::IntervalsService,
     domain::races::RaceService,
@@ -110,9 +112,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let session_repository = MongoSessionRepository::new(mongo_client.clone(), &mongo_database);
     let login_state_repository =
         MongoLoginStateRepository::new(mongo_client.clone(), &mongo_database);
+    let whitelist_repository = MongoWhitelistRepository::new(mongo_client.clone(), &mongo_database);
     user_repository.ensure_indexes().await?;
     session_repository.ensure_indexes().await?;
     login_state_repository.ensure_indexes().await?;
+    whitelist_repository.ensure_indexes().await?;
     let google_oauth_client = if auth.dev.enabled {
         GoogleOAuthAdapter::Dev(DevGoogleOAuthClient::new(
             auth.dev.google_subject,
@@ -136,12 +140,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         auth.session.ttl_hours,
     )?;
     let identity_service = IdentityService::new(
-        user_repository,
-        session_repository,
-        login_state_repository,
-        google_oauth_client,
-        SystemClock,
-        UuidIdGenerator,
+        IdentityServiceDependencies {
+            users: user_repository,
+            sessions: session_repository,
+            login_states: login_state_repository,
+            whitelist: whitelist_repository,
+            google_oauth: google_oauth_client,
+            clock: SystemClock,
+            ids: UuidIdGenerator,
+        },
         IdentityServiceConfig::new(auth.admin_emails, auth.session.ttl_hours),
     );
 

@@ -2,16 +2,45 @@ import { useState } from 'react';
 
 type LoginPanelProps = {
   onLogin: () => void;
-  onContinue?: (athleteId: string) => void;
+  onJoinWhitelist: (email: string) => Promise<void>;
   devAuthEnabled?: boolean;
+  authMessage?: string | null;
+  whitelistMessage?: string | null;
 };
 
 /**
  * Centered glass-panel login card for the Wattly landing page.
- * Offers Google OAuth sign-in and an optional Athlete ID fallback.
+ * Offers Google OAuth sign-in and a waitlist request flow.
  */
-export function LoginPanel({ onLogin, onContinue, devAuthEnabled = false }: LoginPanelProps) {
-  const [athleteId, setAthleteId] = useState('');
+export function LoginPanel({
+  onLogin,
+  onJoinWhitelist,
+  devAuthEnabled = false,
+  authMessage = null,
+  whitelistMessage = null
+}: LoginPanelProps) {
+  const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  async function handleJoinWhitelist() {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      await onJoinWhitelist(trimmedEmail);
+      setEmail('');
+    } catch {
+      setErrorMessage('Nie udalo sie zapisac na whitelist. Sprobuj ponownie.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <div className="glass-panel w-full max-w-md p-10 rounded-xl shadow-2xl border border-white/5 flex flex-col items-center text-center">
@@ -39,6 +68,24 @@ export function LoginPanel({ onLogin, onContinue, devAuthEnabled = false }: Logi
           </div>
         ) : null}
 
+        {authMessage ? (
+          <div className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-left" role="status">
+            <p className="text-sm font-['Inter'] text-amber-100">{authMessage}</p>
+          </div>
+        ) : null}
+
+        {whitelistMessage ? (
+          <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-left" role="status">
+            <p className="text-sm font-['Inter'] text-emerald-100">{whitelistMessage}</p>
+          </div>
+        ) : null}
+
+        {errorMessage ? (
+          <div className="rounded-lg border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-left" role="alert">
+            <p className="text-sm font-['Inter'] text-rose-100">{errorMessage}</p>
+          </div>
+        ) : null}
+
         <button
           className="w-full flex items-center justify-center gap-3 bg-[#23262a] border border-[#46484b]/30 py-4 px-6 rounded-lg text-[#f9f9fd] font-['Inter'] font-semibold hover:bg-[#292c31] transition-all duration-300"
           onClick={onLogin}
@@ -61,32 +108,34 @@ export function LoginPanel({ onLogin, onContinue, devAuthEnabled = false }: Logi
 
         <div className="space-y-3">
           <div className="text-left">
-            <label className="block text-[10px] font-['Inter'] uppercase tracking-widest text-[#747579] mb-1 ml-1" htmlFor="athlete-id">
-              Athlete ID
+            <label className="block text-[10px] font-['Inter'] uppercase tracking-widest text-[#747579] mb-1 ml-1" htmlFor="waitlist-email">
+              Email
             </label>
             <input
               className="w-full bg-[#111417] border-none rounded-lg focus:ring-1 focus:ring-[#d2ff9a]/50 text-[#f9f9fd] placeholder:text-[#747579]/50 py-3 px-4 font-['Inter']"
-              id="athlete-id"
-              placeholder="username@performance.lab"
-              type="text"
-              value={athleteId}
-              onChange={(e) => setAthleteId(e.target.value)}
+              id="waitlist-email"
+              placeholder="you@example.com"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
             />
           </div>
           <button
             className="w-full bg-[#292c31] text-[#d2ff9a] border border-[#d2ff9a]/20 py-3 px-6 rounded-lg font-['Inter'] font-bold hover:bg-[#d2ff9a] hover:text-[#3d6500] transition-all duration-300 disabled:opacity-40"
             type="button"
-            onClick={() => onContinue?.(athleteId.trim())}
-            disabled={!athleteId.trim() || !onContinue}
+            onClick={() => {
+              void handleJoinWhitelist();
+            }}
+            disabled={!email.trim() || isSubmitting}
           >
-            Continue
+            {isSubmitting ? 'Sending...' : 'Join whitelist'}
           </button>
         </div>
       </div>
 
       <div className="mt-8">
         <p className="text-[10px] font-['Inter'] text-[#747579] uppercase tracking-wider">
-          New to the lab? <a className="text-[#d2ff9a] hover:underline" href="#">Request Access</a>
+          Google sign-in is enabled after manual approval.
         </p>
       </div>
     </div>

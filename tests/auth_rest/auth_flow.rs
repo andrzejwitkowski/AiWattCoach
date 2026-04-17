@@ -1,12 +1,15 @@
-use aiwattcoach::Settings;
+use aiwattcoach::{domain::identity::IdentityError, Settings};
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     http::{header, Request, StatusCode},
 };
+use serde_json::Value;
 use std::collections::BTreeMap;
 use tower::util::ServiceExt;
 
-use crate::shared::{auth_test_app, auth_test_app_with_custom_settings, TestIdentityService};
+use crate::shared::{
+    auth_test_app, auth_test_app_with_custom_settings, TestIdentityService, RESPONSE_LIMIT_BYTES,
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn google_start_redirects_to_provider() {
@@ -79,6 +82,60 @@ async fn google_callback_sets_cookie_and_redirects_into_calendar() {
     assert!(cookie.contains("aiwattcoach_session=session-1"));
     assert!(cookie.contains("HttpOnly"));
     assert!(cookie.contains("SameSite=Lax"));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn google_callback_redirects_to_landing_without_cookie_when_pending_approval() {
+    let app = auth_test_app(TestIdentityService {
+        callback_error: Some(IdentityError::PendingApproval),
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/google/callback?state=state-1&code=oauth-code")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/?auth=pending-approval"
+    );
+    assert!(response.headers().get(header::SET_COOKIE).is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn google_callback_redirects_to_pending_approval_result_without_cookie() {
+    let app = auth_test_app(TestIdentityService {
+        pending_approval_redirect_to: Some(
+            "/?auth=pending-approval&returnTo=%2Fsettings%3Ftab%3Dsecurity".to_string(),
+        ),
+        ..Default::default()
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/google/callback?state=state-1&code=oauth-code")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "/?auth=pending-approval&returnTo=%2Fsettings%3Ftab%3Dsecurity"
+    );
+    assert!(response.headers().get(header::SET_COOKIE).is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -194,4 +251,72 @@ async fn google_callback_forwards_state_and_code_to_identity_service() {
         captured.lock().unwrap().clone(),
         Some(("state-1".to_string(), "oauth-code".to_string()))
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_returns_success_and_forwards_email() {
+    let service = TestIdentityService::default();
+    let captured = service.last_join_whitelist_email.clone();
+    let app = auth_test_app(service).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), RESPONSE_LIMIT_BYTES)
+        .await
+        .unwrap();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["success"], true);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("athlete@example.com")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_rejects_invalid_email_payload() {
+    let app = auth_test_app(TestIdentityService::default()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"email":"not-an-email"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_rejects_email_with_multiple_at_symbols() {
+    let app = auth_test_app(TestIdentityService::default()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"email":"athlete@@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

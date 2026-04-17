@@ -12,8 +12,8 @@ use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
     domain::identity::{
-        AppUser, AuthSession, GoogleLoginStart, GoogleLoginSuccess, IdentityError,
-        IdentityUseCases, Role,
+        AppUser, AuthSession, GoogleLoginOutcome, GoogleLoginStart, GoogleLoginSuccess,
+        IdentityError, IdentityUseCases, Role, WhitelistEntry,
     },
     domain::settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
@@ -183,7 +183,10 @@ pub(crate) struct TestIdentityService {
     pub(crate) admin_cookie_role: Role,
     pub(crate) callback_error: Option<IdentityError>,
     pub(crate) current_user_error: Option<IdentityError>,
+    pub(crate) join_whitelist_error: Option<IdentityError>,
+    pub(crate) last_join_whitelist_email: Arc<Mutex<Option<String>>>,
     pub(crate) last_callback_input: Arc<Mutex<Option<(String, String)>>>,
+    pub(crate) pending_approval_redirect_to: Option<String>,
     pub(crate) last_logout_session_id: Arc<Mutex<Option<String>>>,
     pub(crate) last_return_to: Arc<Mutex<Option<String>>>,
     pub(crate) logout_error: Option<IdentityError>,
@@ -196,7 +199,10 @@ impl Default for TestIdentityService {
             admin_cookie_role: Role::Admin,
             callback_error: None,
             current_user_error: None,
+            join_whitelist_error: None,
+            last_join_whitelist_email: Arc::new(Mutex::new(None)),
             last_callback_input: Arc::new(Mutex::new(None)),
+            pending_approval_redirect_to: None,
             last_logout_session_id: Arc::new(Mutex::new(None)),
             last_return_to: Arc::new(Mutex::new(None)),
             logout_error: None,
@@ -220,19 +226,33 @@ impl IdentityUseCases for TestIdentityService {
         })
     }
 
+    fn join_whitelist(&self, email: String) -> BoxFuture<Result<WhitelistEntry, IdentityError>> {
+        *self.last_join_whitelist_email.lock().unwrap() = Some(email.clone());
+        if let Some(error) = self.join_whitelist_error.clone() {
+            return Box::pin(async move { Err(error) });
+        }
+
+        Box::pin(async move { Ok(WhitelistEntry::new(email, false, 100, 100)) })
+    }
+
     fn handle_google_callback(
         &self,
         state: &str,
         code: &str,
-    ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>> {
+    ) -> BoxFuture<Result<GoogleLoginOutcome, IdentityError>> {
         *self.last_callback_input.lock().unwrap() = Some((state.to_string(), code.to_string()));
         if let Some(error) = self.callback_error.clone() {
             return Box::pin(async move { Err(error) });
         }
+        if let Some(redirect_to) = self.pending_approval_redirect_to.clone() {
+            return Box::pin(
+                async move { Ok(GoogleLoginOutcome::PendingApproval { redirect_to }) },
+            );
+        }
 
         let role = self.admin_cookie_role.clone();
         Box::pin(async move {
-            Ok(GoogleLoginSuccess {
+            Ok(GoogleLoginOutcome::SignedIn(Box::new(GoogleLoginSuccess {
                 user: AppUser::new(
                     "user-1".to_string(),
                     "google-subject-1".to_string(),
@@ -249,7 +269,7 @@ impl IdentityUseCases for TestIdentityService {
                     100,
                 ),
                 redirect_to: "/calendar".to_string(),
-            })
+            })))
         })
     }
 

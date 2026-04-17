@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { AuthenticatedLayout } from './app/AuthenticatedLayout';
 import { PublicLayout } from './app/PublicLayout';
 import { getApiBaseUrl, isDevAuthEnabled } from './config/env';
-import { buildGoogleLoginUrl } from './features/auth/api/auth';
+import { buildGoogleLoginUrl, joinWhitelist } from './features/auth/api/auth';
 import { AuthProvider } from './features/auth/context/AuthProvider';
 import { RequireAuth } from './features/auth/guards/RequireAuth';
 import { RequireRole } from './features/auth/guards/RequireRole';
@@ -118,17 +118,46 @@ export function App() {
 
 function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
   const searchReturnTo = searchParams.get('returnTo');
+  const authStatus = searchParams.get('auth');
+  const whitelistStatus = searchParams.get('whitelist');
   const stateValue = (location.state as { from?: unknown } | null)?.from;
   const stateReturnTo = typeof stateValue === 'string' && stateValue.length > 0 ? stateValue : null;
   const returnTo = (typeof searchReturnTo === 'string' && searchReturnTo.length > 0 ? searchReturnTo : null) || stateReturnTo || '/calendar';
+  const [whitelistMessage, setWhitelistMessage] = useState<string | null>(
+    whitelistStatus === 'requested' ? 'Dodalismy Twoj email do whitelisty. Damy znac po akceptacji.' : null
+  );
+  const authMessage = authStatus === 'pending-approval' ? 'Nie jestes jeszcze przyjety. Zapisz mail do whitelisty albo poczekaj na akceptacje.' : null;
+
+  useEffect(() => {
+    setWhitelistMessage(
+      whitelistStatus === 'requested' ? 'Dodalismy Twoj email do whitelisty. Damy znac po akceptacji.' : null
+    );
+  }, [whitelistStatus]);
 
   return (
     <LandingPage
       devAuthEnabled={DEV_AUTH_ENABLED}
+      authMessage={authMessage}
+      whitelistMessage={whitelistMessage}
       onLogin={() => {
         window.location.assign(buildGoogleLoginUrl(apiBaseUrl, returnTo));
+      }}
+      onJoinWhitelist={async (email) => {
+        await joinWhitelist(apiBaseUrl, email);
+        setWhitelistMessage('Dodalismy Twoj email do whitelisty. Damy znac po akceptacji.');
+        const params = new URLSearchParams(location.search);
+        params.delete('auth');
+        params.set('whitelist', 'requested');
+        void navigate({
+          pathname: location.pathname,
+          search: `?${params.toString()}`
+        }, {
+          replace: true,
+          state: location.state
+        });
       }}
     />
   );

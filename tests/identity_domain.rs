@@ -1,6 +1,6 @@
 use aiwattcoach::domain::identity::{
-    assign_roles, authorize_admin_access, normalize_email, AppUser, AuthSession, GoogleIdentity,
-    IdentityError, LoginState, Role,
+    assign_roles, authorize_admin_access, is_valid_email, normalize_email, AppUser, AuthSession,
+    GoogleIdentity, IdentityError, LoginState, Role,
 };
 
 #[test]
@@ -9,6 +9,19 @@ fn normalize_email_trims_and_lowercases_values() {
         normalize_email("  Athlete@Example.COM "),
         "athlete@example.com"
     );
+}
+
+#[test]
+fn is_valid_email_accepts_simple_address() {
+    assert!(is_valid_email("athlete@example.com"));
+}
+
+#[test]
+fn is_valid_email_rejects_invalid_shapes() {
+    assert!(!is_valid_email("not-an-email"));
+    assert!(!is_valid_email("athlete@@example.com"));
+    assert!(!is_valid_email("athlete@example"));
+    assert!(!is_valid_email("athlete@.example.com"));
 }
 
 #[test]

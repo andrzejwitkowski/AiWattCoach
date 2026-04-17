@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::AppState,
-    domain::identity::{AppUser, IdentityError, Role},
+    domain::identity::{is_valid_email, AppUser, GoogleLoginOutcome, IdentityError, Role},
 };
 
 use super::cookies::read_cookie;
@@ -23,6 +23,16 @@ pub struct StartGoogleLoginQuery {
 pub struct GoogleCallbackQuery {
     state: String,
     code: String,
+}
+
+#[derive(Deserialize)]
+pub struct JoinWhitelistRequest {
+    email: String,
+}
+
+#[derive(Serialize)]
+struct JoinWhitelistResponse {
+    success: bool,
 }
 
 #[derive(Serialize)]
@@ -77,7 +87,7 @@ pub async fn finish_google_login(
         .handle_google_callback(&query.state, &query.code)
         .await
     {
-        Ok(result) => {
+        Ok(GoogleLoginOutcome::SignedIn(result)) => {
             let mut response = Redirect::to(&result.redirect_to).into_response();
             let cookie = match build_session_cookie(
                 &state.session_cookie_name,
@@ -92,9 +102,15 @@ pub async fn finish_google_login(
             response.headers_mut().insert(header::SET_COOKIE, cookie);
             response
         }
+        Ok(GoogleLoginOutcome::PendingApproval { redirect_to }) => {
+            Redirect::to(&redirect_to).into_response()
+        }
         Err(IdentityError::InvalidLoginState) => StatusCode::BAD_REQUEST.into_response(),
         Err(IdentityError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
         Err(IdentityError::EmailNotVerified) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(IdentityError::PendingApproval) => {
+            Redirect::to("/?auth=pending-approval").into_response()
+        }
         Err(IdentityError::Repository(_) | IdentityError::External(_)) => {
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
@@ -158,6 +174,34 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
         .headers_mut()
         .insert(header::SET_COOKIE, clear_cookie);
     response
+}
+
+pub async fn join_whitelist(
+    State(state): State<AppState>,
+    Json(payload): Json<JoinWhitelistRequest>,
+) -> Response {
+    let Some(identity_service) = state.identity_service.clone() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+
+    let trimmed_email = payload.email.trim();
+    if !is_valid_email(trimmed_email) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    match identity_service
+        .join_whitelist(trimmed_email.to_string())
+        .await
+    {
+        Ok(_) => Json(JoinWhitelistResponse { success: true }).into_response(),
+        Err(IdentityError::External(message)) if message == "invalid email address" => {
+            StatusCode::BAD_REQUEST.into_response()
+        }
+        Err(IdentityError::Repository(_) | IdentityError::External(_)) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 fn build_session_cookie(
