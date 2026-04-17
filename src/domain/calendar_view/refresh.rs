@@ -273,6 +273,13 @@ where
         let oldest = oldest.to_string();
         let newest = newest.to_string();
         Box::pin(async move {
+            let all_planned_ids = planned_workouts
+                .list_by_user_id(&user_id)
+                .await
+                .map_err(map_planned_error)?
+                .into_iter()
+                .map(|workout| workout.planned_workout_id)
+                .collect::<std::collections::HashSet<_>>();
             let planned = planned_workouts
                 .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
@@ -281,15 +288,11 @@ where
                 .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
                 .map_err(map_completed_error)?;
-            let planned_ids = planned
-                .iter()
-                .map(|workout| workout.planned_workout_id.clone())
-                .collect::<std::collections::HashSet<_>>();
             for workout in &completed {
                 let Some(planned_workout_id) = workout.planned_workout_id.as_deref() else {
                     continue;
                 };
-                if planned_ids.contains(planned_workout_id) {
+                if all_planned_ids.contains(planned_workout_id) {
                     continue;
                 }
                 let link = planned_completed_links

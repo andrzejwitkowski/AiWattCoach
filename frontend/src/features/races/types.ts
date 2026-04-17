@@ -27,9 +27,9 @@ export const raceDtoSchema = z.object({
   distanceMeters: z.number().int(),
   discipline: raceDisciplineSchema,
   priority: racePrioritySchema,
-  syncStatus: raceSyncStatusSchema,
-  linkedIntervalsEventId: z.number().int().nullable(),
-  lastError: z.string().nullable(),
+  syncStatus: raceSyncStatusSchema.optional().default('pending'),
+  linkedIntervalsEventId: z.number().int().nullable().optional().default(null),
+  lastError: z.string().nullable().optional().default(null),
   result: raceResultSchema.optional(),
 });
 

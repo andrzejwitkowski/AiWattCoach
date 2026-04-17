@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-17)
 
 ## Corpus Check
-- 575 files · ~307,715 words
+- 575 files · ~308,239 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5342 nodes · 6542 edges · 677 communities detected
+- 5348 nodes · 6557 edges · 677 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -723,11 +723,11 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.02
-Nodes (37): capture_request(), CapturedRequest, CapturingChatPort, FailingReusableCacheRepository, FixedClock, FixedGeminiConfigProvider, gemini_cache_handler(), gemini_generate_handler() (+29 more)
+Nodes (39): capture_request(), CapturedRequest, CapturingChatPort, FailingReusableCacheRepository, FixedClock, FixedGeminiConfigProvider, gemini_cache_handler(), gemini_generate_handler() (+31 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.06
-Nodes (36): calendar_entry_view_service_lists_mixed_entries_by_date_range(), completed_workout_projection_carries_local_summary(), completed_workout_projection_handles_short_start_date_local_without_panicking(), planned_workout_projection_builds_local_entry(), race_projection_keeps_label_shape_and_sync_metadata(), race_projection_panics_when_intervals_external_id_is_not_numeric(), rebuild_for_user_keeps_sync_on_merged_planned_entry_without_standalone_completed_entry(), rebuild_for_user_preserves_existing_sync_metadata() (+28 more)
+Nodes (37): calendar_entry_view_service_lists_mixed_entries_by_date_range(), completed_workout_projection_carries_local_summary(), completed_workout_projection_handles_short_start_date_local_without_panicking(), planned_workout_projection_builds_local_entry(), race_projection_keeps_label_shape_and_sync_metadata(), race_projection_panics_when_intervals_external_id_is_not_numeric(), rebuild_for_user_keeps_sync_on_merged_planned_entry_without_standalone_completed_entry(), rebuild_for_user_preserves_existing_sync_metadata() (+29 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.04
@@ -803,7 +803,7 @@ Nodes (19): AlwaysFailingCoach, CapturingAthleteSummaryCoach, CountingCoach, Fai
 
 ### Community 20 - "Community 20"
 Cohesion: 0.08
-Nodes (19): choose_preferred_planned_workout_link(), completed_workout_refresh_dates(), existing_link_candidate(), ExternalCompletedWorkoutImport, ExternalImportCommand, ExternalImportError, ExternalImportOutcome, ExternalImportService (+11 more)
+Nodes (21): choose_preferred_planned_workout_link(), completed_workout_refresh_dates(), existing_link_candidate(), ExternalCompletedWorkoutImport, ExternalImportCommand, ExternalImportError, ExternalImportOutcome, ExternalImportService (+13 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.1
@@ -1072,26 +1072,30 @@ Cohesion: 0.18
 Nodes (13): compress_encoded_runs(), compress_power_stream(), compress_stream_chunks(), encode_power_level(), EncodedPowerRun, extract_and_average_stream(), extract_raw_stream(), format_encoded_runs() (+5 more)
 
 ### Community 83 - "Community 83"
+Cohesion: 0.11
+Nodes (0): 
+
+### Community 84 - "Community 84"
 Cohesion: 0.15
 Nodes (2): AdminIdentityErrorService, TestIdentityServiceWithSession
 
-### Community 84 - "Community 84"
+### Community 85 - "Community 85"
 Cohesion: 0.29
 Nodes (16): add_days(), date_epoch(), plan_with_invalid_day(), single_invalid_day(), single_rest_day(), snapshot_for_first_day(), snapshot_projected_days_for_first_day(), stale_pending_operation_with_checkpoints() (+8 more)
 
-### Community 85 - "Community 85"
+### Community 86 - "Community 86"
 Cohesion: 0.12
 Nodes (9): AuthSettings, AuthSettingsParts, DevAuthSettings, GoogleOAuthSettings, MongoSettings, ServerSettings, SessionSettings, Settings (+1 more)
 
-### Community 86 - "Community 86"
+### Community 87 - "Community 87"
 Cohesion: 0.13
 Nodes (10): map_legacy_projection_to_document(), map_record_to_document(), map_summary_to_document(), MongoPestParserPocWorkoutRepository, ParsedWorkoutDocDocument, PestParserPocParsedPayloadDocument, PestParserPocWorkoutDocument, WorkoutIntervalDefinitionDocument (+2 more)
 
-### Community 87 - "Community 87"
+### Community 88 - "Community 88"
 Cohesion: 0.12
 Nodes (8): CalendarError, CalendarEvent, CalendarEventCategory, CalendarEventSource, CalendarProjectedWorkout, PlannedWorkoutSyncRecord, PlannedWorkoutSyncStatus, SyncPlannedWorkout
 
-### Community 88 - "Community 88"
+### Community 89 - "Community 89"
 Cohesion: 0.14
 Nodes (6): CalendarEntryViewService, CalendarEntryViewService<
         Repository,
@@ -1099,17 +1103,13 @@ Nodes (6): CalendarEntryViewService, CalendarEntryViewService<
         NoopExternalSyncStateRepository,
     >, CalendarEntryViewService<Repository, PlannedSyncs, SyncStates>, linked_intervals_event_id(), map_external_sync_state(), map_planned_sync_record_to_calendar_entry_sync()
 
-### Community 89 - "Community 89"
+### Community 90 - "Community 90"
 Cohesion: 0.12
 Nodes (7): CreateRace, Race, RaceDiscipline, RaceError, RacePriority, RaceResult, UpdateRace
 
-### Community 90 - "Community 90"
-Cohesion: 0.12
-Nodes (6): ExternalObservationRepository, ExternalSyncStateRepository, NoopExternalObservationRepository, NoopExternalSyncStateRepository, NoopProviderPollStateRepository, ProviderPollStateRepository
-
 ### Community 91 - "Community 91"
 Cohesion: 0.12
-Nodes (0): 
+Nodes (6): ExternalObservationRepository, ExternalSyncStateRepository, NoopExternalObservationRepository, NoopExternalSyncStateRepository, NoopProviderPollStateRepository, ProviderPollStateRepository
 
 ### Community 92 - "Community 92"
 Cohesion: 0.12
@@ -1240,10 +1240,6 @@ Cohesion: 0.22
 Nodes (11): binary_body_preview_format(), body_preview_truncates(), format_binary_body_preview(), format_body_preview(), header_redaction(), is_sensitive_header(), redact_headers(), redact_sensitive_child_value() (+3 more)
 
 ### Community 124 - "Community 124"
-Cohesion: 0.19
-Nodes (5): completed_workout_repository_finds_by_source_activity_id(), completed_workout_repository_finds_latest_by_user(), completed_workout_repository_lists_by_user_and_date_range(), planned_workout_repository_lists_by_user_and_date_range(), sample_workout()
-
-### Community 125 - "Community 125"
 Cohesion: 0.25
 Nodes (2): TrainingPlanGenerationService<
         Snapshots,
@@ -1261,6 +1257,10 @@ Nodes (2): TrainingPlanGenerationService<
         Time,
         Refresh,
     >
+
+### Community 125 - "Community 125"
+Cohesion: 0.19
+Nodes (5): completed_workout_repository_finds_by_source_activity_id(), completed_workout_repository_finds_latest_by_user(), completed_workout_repository_lists_by_user_and_date_range(), planned_workout_repository_lists_by_user_and_date_range(), sample_workout()
 
 ### Community 126 - "Community 126"
 Cohesion: 0.25

@@ -638,8 +638,14 @@ where
             .list_by_user_id_and_date_range(user_id, &workout_date, &workout_date)
             .await
             .map_err(map_planned_workout_error)?;
+        let matching_name_planned_workouts = same_day_planned_workouts
+            .into_iter()
+            .filter(|planned_workout| {
+                same_workout_name(planned_workout.name.as_deref(), workout.name.as_deref())
+            })
+            .collect::<Vec<_>>();
 
-        match same_day_planned_workouts.as_slice() {
+        match matching_name_planned_workouts.as_slice() {
             [] => Ok(None),
             [planned_workout] => Ok(Some(ResolvedPlannedWorkoutLink {
                 planned_workout_id: planned_workout.planned_workout_id.clone(),
@@ -661,6 +667,26 @@ fn completed_workout_refresh_dates(
     dates.sort();
     dates.dedup();
     dates
+}
+
+fn same_workout_name(left: Option<&str>, right: Option<&str>) -> bool {
+    let Some(left) = normalize_workout_name(left) else {
+        return false;
+    };
+    let Some(right) = normalize_workout_name(right) else {
+        return false;
+    };
+
+    left == right
+}
+
+fn normalize_workout_name(value: Option<&str>) -> Option<String> {
+    let normalized = value?.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+
+    Some(normalized.to_ascii_lowercase())
 }
 
 fn existing_link_candidate(

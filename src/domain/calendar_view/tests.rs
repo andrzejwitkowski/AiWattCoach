@@ -844,6 +844,80 @@ async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
 }
 
 #[tokio::test]
+async fn refresh_range_for_user_preserves_heuristic_link_when_planned_workout_exists_outside_range()
+{
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+    let planned_completed_links = TestPlannedCompletedWorkoutLinkRepository::default();
+
+    let mut planned_workout = sample_planned_workout();
+    planned_workout.date = "2026-05-11".to_string();
+    planned.upsert(planned_workout).await.unwrap();
+
+    let mut workout = sample_completed_workout();
+    workout.start_date_local = "2026-05-10T08:00:00".to_string();
+    completed.upsert(workout).await.unwrap();
+    planned_completed_links
+        .upsert(PlannedCompletedWorkoutLink::new(
+            "user-1".to_string(),
+            "planned-1".to_string(),
+            "completed-1".to_string(),
+            PlannedCompletedWorkoutLinkMatchSource::Heuristic,
+            1_700_000_000,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        planned_syncs,
+        completed.clone(),
+        races,
+        special_days,
+        sync_states,
+    )
+    .with_planned_completed_links(planned_completed_links.clone());
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+    assert_eq!(
+        refreshed[0].planned_workout_id.as_deref(),
+        Some("planned-1")
+    );
+
+    let stored_workout = completed
+        .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("completed workout remains stored");
+    assert_eq!(
+        stored_workout.planned_workout_id.as_deref(),
+        Some("planned-1")
+    );
+
+    let stored_link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("heuristic link remains stored");
+    assert_eq!(
+        stored_link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Heuristic
+    );
+}
+
+#[tokio::test]
 async fn refresh_range_for_user_clears_legacy_orphaned_planned_id_without_link_row() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();

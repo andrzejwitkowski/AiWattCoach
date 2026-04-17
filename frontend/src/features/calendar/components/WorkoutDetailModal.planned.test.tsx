@@ -65,7 +65,7 @@ describe('WorkoutDetailModal planned mode', () => {
     expect(within(metricCard('Duration')).getByText('24m')).toBeInTheDocument();
     expect(screen.getByText(/0.95 IF/i)).toBeInTheDocument();
     expect(screen.getByText(/workout structure/i)).toBeInTheDocument();
-    expect(screen.getByText('3 x 8min 95% FTP')).toBeInTheDocument();
+    expect(screen.getAllByText('3 x 8min 95% FTP').length).toBeGreaterThan(0);
   });
 
   it('keeps planned workout details visible when activity loading fails', async () => {
@@ -236,9 +236,51 @@ describe('WorkoutDetailModal planned mode', () => {
     await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
 
     expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(1);
     expect(screen.getByText('120% FTP max target')).toBeInTheDocument();
-    expect(screen.getByText('4 x 120% FTP 2min and 2min of rest 50% FTP')).toBeInTheDocument();
+    expect(screen.getAllByText('4 x 120% FTP 2min and 2min of rest 50% FTP').length).toBeGreaterThan(0);
     expect(within(metricCard('Duration')).getByText('16m')).toBeInTheDocument();
+  });
+
+  it('renders grouped section headings for structured raw workout text', async () => {
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 88,
+        name: 'Mixed Intervals',
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: 'Mixed Intervals\nWarmup\n- 20m ramp 50-75%\nMain Set 4x\n- 5m 105%\n- 3m 55%\nMain Set 2 10x\n- 30s 130%\n- 30s 50%\nCooldown\n- 10m 50%',
+          intervals: [
+            makeIntervalDefinition({ definition: '- 20m ramp 50-75%', durationSeconds: 1200, targetPercentFtp: 62.5, zoneId: 2 }),
+            makeIntervalDefinition({ definition: '- 5m 105%', durationSeconds: 300, targetPercentFtp: 105, zoneId: 4 }),
+            makeIntervalDefinition({ definition: '- 3m 55%', durationSeconds: 180, targetPercentFtp: 55, zoneId: 1 }),
+            makeIntervalDefinition({ definition: '- 30s 130%', durationSeconds: 30, targetPercentFtp: 130, zoneId: 6 }),
+            makeIntervalDefinition({ definition: '- 30s 50%', durationSeconds: 30, targetPercentFtp: 50, zoneId: 1 }),
+            makeIntervalDefinition({ definition: '- 10m 50%', durationSeconds: 600, targetPercentFtp: 50, zoneId: 1 }),
+          ],
+          segments: [makeWorkoutSegment({ order: 0, label: 'Mixed Intervals', durationSeconds: 1, endOffsetSeconds: 1, targetPercentFtp: null, zoneId: null })],
+          summary: makeWorkoutSummary({ totalDurationSeconds: 4320 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          event: makeEvent({ id: 88, name: 'Mixed Intervals' }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByText('Warmup').length).toBeGreaterThan(0));
+
+    expect(screen.getAllByText('Main Set 4x').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Main Set 2 10x').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Cooldown').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Mixed Intervals' })).toBeInTheDocument();
+    expect(screen.queryByText('1s')).not.toBeInTheDocument();
   });
 
   it('preserves predicted sync metadata when linked event details are loaded', async () => {
@@ -340,7 +382,7 @@ describe('WorkoutDetailModal planned mode', () => {
     expect(within(metricCard('Duration')).getByText('19m')).toBeInTheDocument();
     expect(within(metricCard('IF')).getByText('0.55 IF')).toBeInTheDocument();
     expect(within(metricCard('TSS')).getByText('16 TSS')).toBeInTheDocument();
-    expect(screen.getByText('19min 55% FTP')).toBeInTheDocument();
+    expect(screen.getAllByText('19min 55% FTP').length).toBeGreaterThan(0);
   });
 
   it('keeps selected parsed workout details when the loaded event only has raw workout text', async () => {
@@ -391,7 +433,7 @@ describe('WorkoutDetailModal planned mode', () => {
     expect(within(metricCard('Duration')).getByText('19m')).toBeInTheDocument();
     expect(within(metricCard('IF')).getByText('0.55 IF')).toBeInTheDocument();
     expect(within(metricCard('TSS')).getByText('16 TSS')).toBeInTheDocument();
-    expect(screen.getByText('19min 55% FTP')).toBeInTheDocument();
+    expect(screen.getAllByText('19min 55% FTP').length).toBeGreaterThan(0);
     expect(screen.queryByText('opener notes only')).not.toBeInTheDocument();
   });
 
@@ -440,7 +482,7 @@ describe('WorkoutDetailModal planned mode', () => {
 
     await waitFor(() => expect(within(metricCard('Duration')).getByText('19m')).toBeInTheDocument());
 
-    expect(screen.getByText('19min 55% FTP')).toBeInTheDocument();
+    expect(screen.getAllByText('19min 55% FTP').length).toBeGreaterThan(0);
     expect(screen.getByText('Warmup')).toBeInTheDocument();
     expect(screen.getByText('Openers')).toBeInTheDocument();
     expect(screen.getByText('Cooldown')).toBeInTheDocument();

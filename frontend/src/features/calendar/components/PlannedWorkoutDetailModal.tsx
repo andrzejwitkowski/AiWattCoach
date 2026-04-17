@@ -8,7 +8,7 @@ import {
   buildPlannedWorkoutBars,
   buildPlannedWorkoutChartIntervals,
   buildPlannedWorkoutPowerSeries,
-  buildPlannedWorkoutStructureItems,
+  buildPlannedWorkoutStructureSections,
   formatDurationLabel,
 } from '../workoutDetails';
 import {MetricCard, WorkoutBars} from './WorkoutDetailPanelPrimitives';
@@ -33,7 +33,7 @@ export function PlannedWorkoutDetailModal({
 }: PlannedWorkoutDetailModalProps) {
   const {t} = useTranslation();
   const bars = buildPlannedWorkoutBars(event);
-  const structureItems = buildPlannedWorkoutStructureItems(event);
+  const structureSections = buildPlannedWorkoutStructureSections(event);
   const rawWorkoutNoteLines = buildRawWorkoutNoteLines(event.eventDefinition.rawWorkoutDoc);
   const summary = event.eventDefinition.summary;
   const powerSeries = buildPlannedWorkoutPowerSeries(event);
@@ -143,25 +143,41 @@ export function PlannedWorkoutDetailModal({
           value={summary.estimatedNormalizedPowerWatts !== null ? `${summary.estimatedNormalizedPowerWatts} W` : '--'}
         />
       </div>
-      {structureItems.length > 0 ? (
+      {structureSections.length > 0 ? (
         <div className="rounded-2xl border border-white/6 bg-[#171a1d] p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">{t('calendar.workoutStructure')}</p>
           <div className="mt-4 space-y-3">
-            {structureItems.map((item) => (
+            {structureSections.map((section) => (
               <div
-                key={item.id}
+                key={section.id}
                 className="rounded-xl border border-white/6 bg-white/[0.03] px-4 py-3"
               >
                 <div className="flex items-center justify-between gap-4">
-                  <p className="text-sm font-bold text-[#f9f9fd]">{item.label}</p>
-                  {item.durationSeconds ? (
+                  <p className="text-sm font-bold text-[#f9f9fd]">{section.label}</p>
+                  {section.durationSeconds ? (
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d2ff9a]">
-                      {formatDurationLabel(item.durationSeconds)}
+                      {formatDurationLabel(section.durationSeconds)}
                     </p>
                   ) : null}
                 </div>
-                {item.detail ? (
-                  <p className="mt-1 text-xs text-slate-400">{item.detail}</p>
+                {section.steps.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    {section.steps.map((step) => (
+                      <div key={step.id} className="rounded-lg border border-white/6 bg-[#1d2125] px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-100">{step.label}</p>
+                          {step.durationSeconds ? (
+                            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
+                              {formatDurationLabel(step.durationSeconds)}
+                            </p>
+                          ) : null}
+                        </div>
+                        {step.detail ? (
+                          <p className="mt-1 text-xs text-slate-400">{step.detail}</p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
                 ) : null}
               </div>
             ))}

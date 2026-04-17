@@ -876,6 +876,18 @@ pub(super) fn sample_planned_workout_on_date(
     )
 }
 
+pub(super) fn sample_planned_workout_named_on_date(
+    planned_workout_id: &str,
+    date: &str,
+    name: &str,
+) -> PlannedWorkout {
+    sample_planned_workout_on_date(planned_workout_id, date).with_event_metadata(
+        Some(name.to_string()),
+        Some("Strong over-unders".to_string()),
+        Some("Ride".to_string()),
+    )
+}
+
 pub(super) fn sample_completed_workout() -> CompletedWorkout {
     sample_completed_workout_with_id("completed-imported-1")
 }
@@ -886,6 +898,12 @@ pub(super) fn sample_completed_workout_with_id(completed_workout_id: &str) -> Co
         completed_workout_id,
         Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310])),
     )
+}
+
+pub(super) fn sample_completed_workout_named(name: &str) -> CompletedWorkout {
+    let mut workout = sample_completed_workout();
+    workout.name = Some(name.to_string());
+    workout
 }
 
 pub(super) fn sample_completed_workout_for_provider(

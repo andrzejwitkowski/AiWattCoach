@@ -527,9 +527,10 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
 async fn import_completed_workout_links_single_same_day_planned_workout_as_heuristic() {
     let planned_workouts = InMemoryPlannedWorkoutRepository::default();
     planned_workouts
-        .upsert(sample_planned_workout_on_date(
+        .upsert(sample_planned_workout_named_on_date(
             "planned-same-day",
             "2026-05-11",
+            "Threshold Ride",
         ))
         .await
         .unwrap();
@@ -553,7 +554,7 @@ async fn import_completed_workout_links_single_same_day_planned_workout_as_heuri
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-heuristic".to_string(),
                 marker_sources: Vec::new(),
-                workout: sample_completed_workout(),
+                workout: sample_completed_workout_named("Threshold Ride"),
             },
         )))
         .await
@@ -575,6 +576,53 @@ async fn import_completed_workout_links_single_same_day_planned_workout_as_heuri
         link.match_source,
         PlannedCompletedWorkoutLinkMatchSource::Heuristic
     );
+}
+
+#[tokio::test]
+async fn import_completed_workout_does_not_link_same_day_planned_workout_when_name_differs() {
+    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(sample_planned_workout_named_on_date(
+            "planned-same-day",
+            "2026-05-11",
+            "Priming Session",
+        ))
+        .await
+        .unwrap();
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let service = external_import_service_without_refresh(
+        planned_workouts,
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        planned_completed_links.clone(),
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-completed-no-heuristic".to_string(),
+                marker_sources: Vec::new(),
+                workout: sample_completed_workout_named("Blue Top"),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(stored[0].planned_workout_id, None);
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-imported-1")
+        .await
+        .unwrap();
+    assert!(link.is_none());
 }
 
 #[tokio::test]
@@ -704,14 +752,19 @@ async fn import_completed_workout_does_not_downgrade_existing_explicit_link_matc
 async fn import_completed_workout_does_not_inherit_explicit_match_source_from_different_pair() {
     let planned_workouts = InMemoryPlannedWorkoutRepository::default();
     planned_workouts
-        .upsert(sample_planned_workout_on_date(
+        .upsert(sample_planned_workout_named_on_date(
             "planned-original",
             "2026-05-10",
+            "Original Ride",
         ))
         .await
         .unwrap();
     planned_workouts
-        .upsert(sample_planned_workout_on_date("planned-new", "2026-05-11"))
+        .upsert(sample_planned_workout_named_on_date(
+            "planned-new",
+            "2026-05-11",
+            "Threshold Ride",
+        ))
         .await
         .unwrap();
     let completed_workouts = InMemoryCompletedWorkoutRepository::default();
@@ -744,7 +797,7 @@ async fn import_completed_workout_does_not_inherit_explicit_match_source_from_di
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-new-pair".to_string(),
                 marker_sources: Vec::new(),
-                workout: sample_completed_workout(),
+                workout: sample_completed_workout_named("Threshold Ride"),
             },
         )))
         .await
@@ -840,9 +893,10 @@ async fn import_completed_workout_preserves_existing_completed_workout_link_over
 async fn import_completed_workout_does_not_preserve_legacy_planned_id_without_link_row() {
     let planned_workouts = InMemoryPlannedWorkoutRepository::default();
     planned_workouts
-        .upsert(sample_planned_workout_on_date(
+        .upsert(sample_planned_workout_named_on_date(
             "planned-fallback",
             "2026-05-11",
+            "Threshold Ride",
         ))
         .await
         .unwrap();
@@ -869,7 +923,7 @@ async fn import_completed_workout_does_not_preserve_legacy_planned_id_without_li
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-drop-legacy-planned-id".to_string(),
                 marker_sources: Vec::new(),
-                workout: sample_completed_workout(),
+                workout: sample_completed_workout_named("Threshold Ride"),
             },
         )))
         .await
