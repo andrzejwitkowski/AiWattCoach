@@ -50,6 +50,9 @@ const loadingFallback: BackendStatus = {
   checkedAtLabel: 'pending',
 };
 
+export const WHITELIST_REQUESTED_MESSAGE = 'Requested whitelist access. We will reach out after approval.';
+export const PENDING_APPROVAL_MESSAGE = 'Your account is pending approval. Join the whitelist or wait for approval before signing in.';
+
 export function App() {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>(loadingFallback);
   const [isRefreshing, setIsRefreshing] = useState(true);
@@ -126,16 +129,8 @@ function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
   const stateValue = (location.state as { from?: unknown } | null)?.from;
   const stateReturnTo = typeof stateValue === 'string' && stateValue.length > 0 ? stateValue : null;
   const returnTo = (typeof searchReturnTo === 'string' && searchReturnTo.length > 0 ? searchReturnTo : null) || stateReturnTo || '/calendar';
-  const [whitelistMessage, setWhitelistMessage] = useState<string | null>(
-    whitelistStatus === 'requested' ? 'Dodalismy Twoj email do whitelisty. Damy znac po akceptacji.' : null
-  );
-  const authMessage = authStatus === 'pending-approval' ? 'Nie jestes jeszcze przyjety. Zapisz mail do whitelisty albo poczekaj na akceptacje.' : null;
-
-  useEffect(() => {
-    setWhitelistMessage(
-      whitelistStatus === 'requested' ? 'Dodalismy Twoj email do whitelisty. Damy znac po akceptacji.' : null
-    );
-  }, [whitelistStatus]);
+  const whitelistMessage = whitelistStatus === 'requested' ? WHITELIST_REQUESTED_MESSAGE : null;
+  const authMessage = authStatus === 'pending-approval' ? PENDING_APPROVAL_MESSAGE : null;
 
   return (
     <LandingPage
@@ -147,7 +142,6 @@ function PublicLandingRoute({ apiBaseUrl }: { apiBaseUrl: string }) {
       }}
       onJoinWhitelist={async (email) => {
         await joinWhitelist(apiBaseUrl, email);
-        setWhitelistMessage('Dodalismy Twoj email do whitelisty. Damy znac po akceptacji.');
         const params = new URLSearchParams(location.search);
         params.delete('auth');
         params.set('whitelist', 'requested');

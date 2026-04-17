@@ -61,9 +61,19 @@ impl WhitelistRepository for MongoWhitelistRepository {
         let document = WhitelistEntryDocument::from_entry(&entry);
         Box::pin(async move {
             collection
-                .replace_one(
+                .update_one(
                     doc! { "email_normalized": &document.email_normalized },
-                    &document,
+                    doc! {
+                        "$set": {
+                            "email": &document.email,
+                            "email_normalized": &document.email_normalized,
+                            "allowed": document.allowed,
+                            "updated_at_epoch_seconds": document.updated_at_epoch_seconds,
+                        },
+                        "$setOnInsert": {
+                            "created_at_epoch_seconds": document.created_at_epoch_seconds,
+                        }
+                    },
                 )
                 .upsert(true)
                 .await

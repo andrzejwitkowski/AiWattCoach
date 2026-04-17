@@ -194,9 +194,7 @@ pub async fn join_whitelist(
         .await
     {
         Ok(_) => Json(JoinWhitelistResponse { success: true }).into_response(),
-        Err(IdentityError::External(message)) if message == "invalid email address" => {
-            StatusCode::BAD_REQUEST.into_response()
-        }
+        Err(IdentityError::InvalidEmail) => StatusCode::BAD_REQUEST.into_response(),
         Err(IdentityError::Repository(_) | IdentityError::External(_)) => {
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }

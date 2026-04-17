@@ -214,7 +214,7 @@ where
 
     pub async fn join_whitelist(&self, email: String) -> Result<WhitelistEntry, IdentityError> {
         if !is_valid_email(&email) {
-            return Err(IdentityError::External("invalid email address".to_string()));
+            return Err(IdentityError::InvalidEmail);
         }
 
         let now = self.clock.now_epoch_seconds();
@@ -248,16 +248,21 @@ where
 
         let google_identity = self.google_oauth.exchange_code_for_identity(code).await?;
 
-        let existing_user = self
+        let existing_user = match self
             .users
             .find_by_google_subject(&google_identity.subject)
             .await?
-            .or(self
-                .users
-                .find_by_normalized_email(&google_identity.email_normalized)
-                .await?);
+        {
+            Some(user) => Some(user),
+            None => {
+                self.users
+                    .find_by_normalized_email(&google_identity.email_normalized)
+                    .await?
+            }
+        };
 
         if existing_user.is_none() {
+            let redirect_to = build_pending_approval_redirect(login_state.return_to.clone());
             let whitelist_entry = self
                 .whitelist
                 .find_by_normalized_email(&google_identity.email_normalized)
@@ -265,10 +270,16 @@ where
 
             match whitelist_entry {
                 Some(entry) if entry.allowed => {}
-                Some(_) => {
-                    return Ok(GoogleLoginOutcome::PendingApproval {
-                        redirect_to: build_pending_approval_redirect(login_state.return_to.clone()),
-                    });
+                Some(entry) => {
+                    self.whitelist
+                        .save(WhitelistEntry::new(
+                            entry.email,
+                            false,
+                            entry.created_at_epoch_seconds,
+                            now,
+                        ))
+                        .await?;
+                    return Ok(GoogleLoginOutcome::PendingApproval { redirect_to });
                 }
                 None => {
                     self.whitelist
@@ -279,9 +290,7 @@ where
                             now,
                         ))
                         .await?;
-                    return Ok(GoogleLoginOutcome::PendingApproval {
-                        redirect_to: build_pending_approval_redirect(login_state.return_to.clone()),
-                    });
+                    return Ok(GoogleLoginOutcome::PendingApproval { redirect_to });
                 }
             }
         }

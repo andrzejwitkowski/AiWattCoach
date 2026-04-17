@@ -1,6 +1,10 @@
 import { getJsonResponse } from '../../../lib/api/client';
 import { post } from '../../../lib/httpClient';
-import type { CurrentUserResponse, JoinWhitelistResponse } from '../types';
+import {
+  JoinWhitelistResponseSchema,
+  type CurrentUserResponse,
+  type JoinWhitelistResponse
+} from '../types';
 
 function buildAuthUrl(apiBaseUrl: string, path: string): string {
   if (!apiBaseUrl) {
@@ -31,9 +35,11 @@ export async function logout(apiBaseUrl: string): Promise<void> {
 }
 
 export async function joinWhitelist(apiBaseUrl: string, email: string): Promise<JoinWhitelistResponse> {
-  return post<{ email: string }, JoinWhitelistResponse>(apiBaseUrl, '/api/auth/whitelist', {
+  const response = await post<{ email: string }, unknown>(apiBaseUrl, '/api/auth/whitelist', {
     email
   });
+
+  return JoinWhitelistResponseSchema.parse(response);
 }
 
 export type AdminSystemInfo = {

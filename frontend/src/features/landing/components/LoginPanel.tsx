@@ -36,7 +36,7 @@ export function LoginPanel({
       await onJoinWhitelist(trimmedEmail);
       setEmail('');
     } catch {
-      setErrorMessage('Nie udalo sie zapisac na whitelist. Sprobuj ponownie.');
+      setErrorMessage('Failed to join the whitelist. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

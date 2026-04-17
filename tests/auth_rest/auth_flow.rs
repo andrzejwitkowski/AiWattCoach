@@ -320,3 +320,33 @@ async fn join_whitelist_rejects_email_with_multiple_at_symbols() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_surfaces_service_errors_as_service_unavailable() {
+    let service = TestIdentityService {
+        join_whitelist_error: Some(IdentityError::External(
+            "whitelist repository down".to_string(),
+        )),
+        ..Default::default()
+    };
+    let captured = service.last_join_whitelist_email.clone();
+    let app = auth_test_app(service).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("athlete@example.com")
+    );
+}

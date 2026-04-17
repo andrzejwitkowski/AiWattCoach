@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { App } from './App';
+import { App, PENDING_APPROVAL_MESSAGE, WHITELIST_REQUESTED_MESSAGE } from './App';
 
 const originalLocation = window.location;
 
@@ -166,7 +166,7 @@ describe('App', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/nie jestes jeszcze przyjety/i)).toBeInTheDocument();
+      expect(screen.getByText(PENDING_APPROVAL_MESSAGE)).toBeInTheDocument();
     });
   });
 
@@ -209,7 +209,7 @@ describe('App', () => {
     fireEvent.click(buttons.at(-1)!);
 
     await waitFor(() => {
-      expect(screen.getByText(/dodalismy twoj email do whitelisty/i)).toBeInTheDocument();
+      expect(screen.getByText(WHITELIST_REQUESTED_MESSAGE)).toBeInTheDocument();
     });
 
     expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/auth/whitelist', {
@@ -267,7 +267,7 @@ describe('App', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /join whitelist/i }).at(-1)!);
 
     await waitFor(() => {
-      expect(screen.getByText(/dodalismy twoj email do whitelisty/i)).toBeInTheDocument();
+      expect(screen.getByText(WHITELIST_REQUESTED_MESSAGE)).toBeInTheDocument();
     });
 
     const assignMock = vi.fn();

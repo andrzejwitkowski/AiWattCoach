@@ -19,9 +19,13 @@ fn is_valid_email_accepts_simple_address() {
 #[test]
 fn is_valid_email_rejects_invalid_shapes() {
     assert!(!is_valid_email("not-an-email"));
+    assert!(!is_valid_email("@example.com"));
     assert!(!is_valid_email("athlete@@example.com"));
     assert!(!is_valid_email("athlete@example"));
     assert!(!is_valid_email("athlete@.example.com"));
+    assert!(!is_valid_email("athlete@example."));
+    assert!(!is_valid_email("athlete@exa..mple.com"));
+    assert!(!is_valid_email("athle\u{0001}te@example.com"));
 }
 
 #[test]

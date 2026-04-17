@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { PENDING_APPROVAL_MESSAGE, WHITELIST_REQUESTED_MESSAGE } from '../App';
 import { LandingPage } from './LandingPage';
 
 describe('LandingPage', () => {
@@ -54,12 +55,12 @@ describe('LandingPage', () => {
       <LandingPage
         onLogin={vi.fn()}
         onJoinWhitelist={vi.fn()}
-        authMessage="Nie jestes jeszcze przyjety"
-        whitelistMessage="Dodalismy Cie do whitelisty"
+        authMessage={PENDING_APPROVAL_MESSAGE}
+        whitelistMessage={WHITELIST_REQUESTED_MESSAGE}
       />
     );
 
-    expect(screen.getByText(/nie jestes jeszcze przyjety/i)).toBeInTheDocument();
-    expect(screen.getByText(/dodalismy cie do whitelisty/i)).toBeInTheDocument();
+    expect(screen.getByText(PENDING_APPROVAL_MESSAGE)).toBeInTheDocument();
+    expect(screen.getByText(WHITELIST_REQUESTED_MESSAGE)).toBeInTheDocument();
   });
 });

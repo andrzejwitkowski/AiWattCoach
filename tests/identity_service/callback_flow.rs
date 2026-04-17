@@ -310,7 +310,7 @@ async fn handle_google_callback_adds_missing_user_to_whitelist_and_returns_pendi
 }
 
 #[tokio::test]
-async fn handle_google_callback_keeps_existing_pending_whitelist_entry_unchanged() {
+async fn handle_google_callback_refreshes_existing_pending_whitelist_entry_timestamp() {
     let login_states = Arc::new(Mutex::new(vec![LoginState::new(
         "state-1".to_string(),
         Some("/app".to_string()),
@@ -348,7 +348,7 @@ async fn handle_google_callback_keeps_existing_pending_whitelist_entry_unchanged
         .unwrap();
     assert_eq!(whitelist_entry.email, "Admin@Example.com");
     assert_eq!(whitelist_entry.created_at_epoch_seconds, 10);
-    assert_eq!(whitelist_entry.updated_at_epoch_seconds, 10);
+    assert_eq!(whitelist_entry.updated_at_epoch_seconds, 100);
 }
 
 #[tokio::test]
