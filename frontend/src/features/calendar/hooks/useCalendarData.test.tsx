@@ -324,6 +324,8 @@ describe('useCalendarData', () => {
         name: 'Threshold Builder',
         category: 'WORKOUT',
         description: null,
+        restDay: false,
+        restDayReason: null,
         indoor: true,
         color: null,
         eventDefinition: {
@@ -370,6 +372,8 @@ describe('useCalendarData', () => {
         name: 'Active Recovery',
         category: 'WORKOUT',
         description: null,
+        restDay: false,
+        restDayReason: null,
         indoor: false,
         color: null,
         eventDefinition: {
@@ -398,6 +402,7 @@ describe('useCalendarData', () => {
           operationKey: 'training-plan:user-1:w1:1775719860',
           date: workoutDateKey,
           sourceWorkoutId: 'w1',
+          restDay: false,
         },
       },
     ] satisfies IntervalEvent[]);

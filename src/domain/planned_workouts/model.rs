@@ -45,6 +45,8 @@ pub struct PlannedWorkout {
     pub planned_workout_id: String,
     pub user_id: String,
     pub date: String,
+    pub rest_day: bool,
+    pub rest_day_reason: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
     pub event_type: Option<String>,
@@ -77,6 +79,8 @@ impl PlannedWorkout {
             planned_workout_id,
             user_id,
             date,
+            rest_day: false,
+            rest_day_reason: None,
             name: None,
             description: None,
             event_type: None,
@@ -93,6 +97,12 @@ impl PlannedWorkout {
         self.name = name;
         self.description = description;
         self.event_type = event_type;
+        self
+    }
+
+    pub fn as_rest_day(mut self, reason: Option<String>) -> Self {
+        self.rest_day = true;
+        self.rest_day_reason = reason;
         self
     }
 }

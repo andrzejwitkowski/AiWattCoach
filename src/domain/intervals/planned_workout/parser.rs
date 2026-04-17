@@ -92,8 +92,10 @@ fn parse_day(date: &str, lines: &[String]) -> Result<PlannedWorkoutDay, PlannedW
         )));
     }
 
-    if lines.len() == 1 && lines[0].eq_ignore_ascii_case("rest day") {
-        return Ok(PlannedWorkoutDay::rest(date.to_string()));
+    if lines.len() == 1 {
+        if let Some(rest_day_reason) = parse_rest_day_reason(&lines[0]) {
+            return Ok(PlannedWorkoutDay::rest(date.to_string(), rest_day_reason));
+        }
     }
 
     let workout_input = lines.join("\n");
@@ -102,6 +104,24 @@ fn parse_day(date: &str, lines: &[String]) -> Result<PlannedWorkoutDay, PlannedW
     })?;
 
     Ok(PlannedWorkoutDay::workout(date.to_string(), workout))
+}
+
+fn parse_rest_day_reason(line: &str) -> Option<Option<String>> {
+    if line.eq_ignore_ascii_case("rest day") {
+        return Some(None);
+    }
+
+    let (prefix, reason) = line.split_once(':')?;
+    if !prefix.trim().eq_ignore_ascii_case("rest day") {
+        return None;
+    }
+
+    let reason = normalize_spaces(reason.trim());
+    if reason.is_empty() {
+        return Some(None);
+    }
+
+    Some(Some(reason))
 }
 
 fn parse_step(line: &str) -> Result<Option<PlannedWorkoutStep>, PlannedWorkoutParseError> {

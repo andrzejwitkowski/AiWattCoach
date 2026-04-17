@@ -228,4 +228,5 @@ pub struct ProjectedWorkoutContext {
     pub interval_blocks: Vec<PlannedWorkoutBlockContext>,
     pub raw_workout_doc: Option<String>,
     pub rest_day: bool,
+    pub rest_day_reason: Option<String>,
 }

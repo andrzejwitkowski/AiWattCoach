@@ -657,6 +657,7 @@ fn projected_day(
         operation_key: operation_key.to_string(),
         date: date.to_string(),
         rest_day: false,
+        rest_day_reason: None,
         workout: Some(build_planned_workout(workout_name)),
         superseded_at_epoch_seconds: None,
         created_at_epoch_seconds: 1_700_000_000,

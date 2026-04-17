@@ -24,7 +24,10 @@ use aiwattcoach::{
     Settings,
 };
 use futures::TryStreamExt;
-use mongodb::{bson::doc, Client};
+use mongodb::{
+    bson::{doc, Document},
+    Client,
+};
 
 static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -151,6 +154,63 @@ async fn training_plan_snapshot_repository_finds_snapshot_by_operation_key() {
 }
 
 #[tokio::test]
+async fn training_plan_snapshot_repository_reads_legacy_days_without_rest_day_fields() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoTrainingPlanSnapshotRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    fixture
+        .client
+        .database(&fixture.database)
+        .collection::<Document>("training_plan_snapshots")
+        .insert_one(doc! {
+            "user_id": "user-1",
+            "workout_id": "workout-1",
+            "operation_key": "training-plan:user-1:legacy-snapshot",
+            "saved_at_epoch_seconds": 1_700_000_000_i64,
+            "start_date": "2026-04-06",
+            "end_date": "2026-04-19",
+            "days": [
+                {
+                    "date": "2026-04-06",
+                    "workout": {
+                        "lines": [
+                            { "kind": "text", "text": "AI Threshold" },
+                            {
+                                "kind": "step",
+                                "duration_seconds": 600,
+                                "step_kind": "steady",
+                                "percent_min": 92.0,
+                                "percent_max": 97.0,
+                                "watts_min": mongodb::bson::Bson::Null,
+                                "watts_max": mongodb::bson::Bson::Null,
+                            },
+                        ],
+                    },
+                },
+            ],
+            "created_at_epoch_seconds": 1_700_000_000_i64,
+        })
+        .await
+        .unwrap();
+
+    let found = repository
+        .find_by_operation_key("training-plan:user-1:legacy-snapshot")
+        .await
+        .unwrap()
+        .expect("expected stored snapshot");
+
+    assert_eq!(found.days.len(), 1);
+    assert!(!found.days[0].rest_day);
+    assert_eq!(found.days[0].rest_day_reason, None);
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
 async fn training_plan_projection_repository_replaces_window_and_supersedes_overlapping_future_days(
 ) {
     let Some(fixture) = mongo_fixture_or_skip().await else {
@@ -215,6 +275,68 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
         .await
         .unwrap();
     assert!(first_active.is_empty());
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn training_plan_projection_repository_reads_legacy_projected_days_without_rest_day_fields() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoTrainingPlanProjectionRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    fixture
+        .client
+        .database(&fixture.database)
+        .collection::<Document>("training_plan_snapshots")
+        .insert_one(doc! {
+            "user_id": "user-1",
+            "workout_id": "workout-1",
+            "operation_key": "training-plan:user-1:legacy-projection",
+            "saved_at_epoch_seconds": 1_700_000_000_i64,
+            "start_date": "2026-04-06",
+            "end_date": "2026-04-19",
+            "days": [
+                { "date": "2026-04-06", "workout": mongodb::bson::Bson::Null },
+                { "date": "2026-04-07", "workout": mongodb::bson::Bson::Null },
+            ],
+            "created_at_epoch_seconds": 1_700_000_000_i64,
+        })
+        .await
+        .unwrap();
+
+    fixture
+        .client
+        .database(&fixture.database)
+        .collection::<Document>("training_plan_projected_days")
+        .insert_one(doc! {
+            "user_id": "user-1",
+            "workout_id": "workout-1",
+            "operation_key": "training-plan:user-1:legacy-projection",
+            "date": "2026-04-07",
+            "workout": {
+                "lines": [
+                    { "kind": "text", "text": "AI Threshold" },
+                ],
+            },
+            "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+            "created_at_epoch_seconds": 1_700_000_000_i64,
+            "updated_at_epoch_seconds": 1_700_000_000_i64,
+        })
+        .await
+        .unwrap();
+
+    let found = repository
+        .find_active_by_operation_key("training-plan:user-1:legacy-projection")
+        .await
+        .unwrap();
+
+    assert_eq!(found.len(), 1);
+    assert!(!found[0].rest_day);
+    assert_eq!(found[0].rest_day_reason, None);
 
     fixture.cleanup().await;
 }
@@ -484,6 +606,8 @@ fn sample_snapshot_for_user(
             TrainingPlanDay {
                 date,
                 rest_day: offset == 0,
+                rest_day_reason: (offset == 0)
+                    .then(|| "Need recovery after prior block".to_string()),
                 workout: (offset != 0).then(sample_planned_workout),
             }
         })
@@ -513,6 +637,7 @@ fn sample_projected_days(
             operation_key: snapshot.operation_key.clone(),
             date: day.date.clone(),
             rest_day: day.rest_day,
+            rest_day_reason: day.rest_day_reason.clone(),
             workout: day.workout.clone(),
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: snapshot.created_at_epoch_seconds,

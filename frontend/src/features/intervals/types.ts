@@ -93,6 +93,8 @@ export const intervalEventSchema = z.object({
   name: z.string().nullable(),
   category: z.string(),
   description: z.string().nullable(),
+  restDay: z.boolean().optional().default(false),
+  restDayReason: z.string().nullable().optional(),
   indoor: z.boolean(),
   color: z.string().nullable(),
   eventDefinition: eventDefinitionSchema,
@@ -105,6 +107,8 @@ export const intervalEventSchema = z.object({
     operationKey: z.string(),
     date: z.string(),
     sourceWorkoutId: z.string(),
+    restDay: z.boolean().optional().default(false),
+    restDayReason: z.string().nullable().optional(),
   }).nullable().optional(),
 });
 

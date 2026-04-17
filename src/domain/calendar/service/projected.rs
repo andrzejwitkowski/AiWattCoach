@@ -26,16 +26,24 @@ pub(super) fn build_projected_calendar_event(
         start_date_local: day.date.clone(),
         name: projected_workout_name(&day),
         category: CalendarEventCategory::Workout,
-        description: None,
+        description: day.rest_day_reason.clone(),
+        rest_day: day.rest_day,
+        rest_day_reason: day.rest_day_reason.clone(),
         indoor: false,
         color: None,
-        raw_workout_doc: day.workout.as_ref().map(serialize_projected_workout),
+        raw_workout_doc: if day.rest_day {
+            None
+        } else {
+            day.workout.as_ref().map(serialize_projected_workout)
+        },
         source: CalendarEventSource::Predicted,
         projected_workout: Some(CalendarProjectedWorkout {
             projected_workout_id,
             operation_key: day.operation_key.clone(),
             date: day.date.clone(),
             source_workout_id: day.workout_id,
+            rest_day: day.rest_day,
+            rest_day_reason: day.rest_day_reason,
         }),
         sync_status: Some(status),
         linked_intervals_event_id,
@@ -69,6 +77,10 @@ pub(super) fn build_update_event(
 }
 
 pub(super) fn projected_workout_name(day: &TrainingPlanProjectedDay) -> Option<String> {
+    if day.rest_day {
+        return Some("Rest Day".to_string());
+    }
+
     day.workout.as_ref().and_then(|workout| {
         workout
             .lines

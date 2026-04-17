@@ -75,9 +75,14 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       : primaryEvent && !primaryEvent.actualWorkout && isPlannedWorkoutEvent(primaryEvent)
         ? primaryEvent
         : null;
+  const isPlannedRestDay = Boolean(primaryPlannedWorkoutEvent?.restDay);
   const isPlannedOnly = Boolean(!visibleActivity && !raceLabel && primaryPlannedWorkoutEvent);
   const isMissedPlannedOnly = Boolean(isPastDay && isPlannedOnly);
-  const isPredictedPlannedOnly = Boolean(isPlannedOnly && primaryPlannedWorkoutEvent?.plannedSource === 'predicted');
+  const isPredictedPlannedOnly = Boolean(
+    isPlannedOnly
+      && !isPlannedRestDay
+      && primaryPlannedWorkoutEvent?.plannedSource === 'predicted',
+  );
   const hasCompactRacePrep = Boolean(raceLabel && primaryPlannedWorkoutEvent && !visibleActivity);
   const plannedSyncStatus = primaryPlannedWorkoutEvent?.syncStatus ?? null;
   const hasTraining = Boolean(visibleActivity || primaryEvent || raceLabel);
@@ -145,6 +150,8 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     hasTraining
       ? raceLabel
         ? 'bg-[linear-gradient(180deg,rgba(34,24,16,0.96),rgba(18,14,10,0.94))] border-[#cda56b]/30 shadow-[0_0_0_1px_rgba(205,165,107,0.08)]'
+        : isPlannedRestDay
+          ? 'bg-[#20181a] border-[#ff7351]/60 shadow-[0_0_0_1px_rgba(255,115,81,0.1)]'
         : isMissedPlannedOnly
           ? plannedSyncVisual
             ? `bg-[#191c1f] opacity-70 ${plannedSyncVisual.borderClass}`
@@ -157,6 +164,8 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
     isSelectable
       ? raceLabel
         ? 'cursor-pointer hover:border-[#e2ba7d]/45 hover:bg-[linear-gradient(180deg,rgba(39,28,19,0.98),rgba(22,17,13,0.96))]'
+        : isPlannedRestDay
+          ? 'cursor-default'
         : isMissedPlannedOnly && plannedSyncVisual
           ? `cursor-pointer hover:bg-[#20242a] ${plannedSyncVisual.hoverBorderClass}`
         : plannedSyncVisual
@@ -230,6 +239,12 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
                 </p>
               ) : null}
             </div>
+          ) : isPlannedRestDay ? (
+            <div className="mb-2 flex flex-wrap gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ff9b85]">
+                {t('calendar.restDay')}
+              </p>
+            </div>
           ) : isPlannedOnly ? (
             <div className="mb-2 flex flex-wrap gap-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#00e3fd]">
@@ -301,6 +316,10 @@ function buildTitle(
   }
 
   if (dayEvent) {
+    if (dayEvent.restDay) {
+      return dayEvent.name ?? 'Rest Day';
+    }
+
     return dayEvent.name ?? mapEventCategory(dayEvent.category, labels);
   }
 
@@ -320,6 +339,10 @@ function buildSubtitle(
     unknown: string;
   },
 ): string {
+  if (dayEvent?.restDay) {
+    return dayEvent.restDayReason ?? 'Rest Day';
+  }
+
   const eventSummary = dayEvent?.eventDefinition.summary ?? null;
   const durationSeconds = dayActivity?.movingTimeSeconds ?? eventSummary?.totalDurationSeconds ?? 0;
   const durationMinutes = durationSeconds > 0
@@ -414,6 +437,10 @@ function mapActivityType(
 }
 
 function getTone(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Tone {
+  if (dayEvent?.restDay) {
+    return 'error';
+  }
+
   const normalized = dayActivity ? (dayActivity.activityType ?? '').toLowerCase() : `${dayEvent?.category ?? ''}`.toLowerCase();
 
   if (normalized.includes('swim')) {
@@ -440,6 +467,10 @@ function getRaceIcon(discipline: CalendarRaceLabel['payload']['discipline']) {
 }
 
 function getIcon(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null) {
+  if (dayEvent?.restDay) {
+    return BedDouble;
+  }
+
   const normalized = dayActivity ? (dayActivity.activityType ?? '').toLowerCase() : `${dayEvent?.category ?? ''}`.toLowerCase();
 
   if (normalized.includes('swim')) {
@@ -477,6 +508,10 @@ function buildCompactPlannedBars(dayEvent: CalendarDayEvent): WorkoutBar[] {
 }
 
 function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Array<number | WorkoutBar> {
+  if (dayEvent?.restDay) {
+    return [18, 12, 20];
+  }
+
   if (dayActivity) {
     const bars = buildCompletedWorkoutPreviewBars(dayActivity);
     if (bars.length > 0) {

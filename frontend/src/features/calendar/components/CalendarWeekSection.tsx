@@ -54,10 +54,11 @@ export function CalendarWeekSection({
           });
           const interactiveDayItems = dayItems.filter(isInteractiveDayItem);
           const hasInteractiveDayItem = interactiveDayItems.length > 0;
+          const hasSelectableDayItem = hasInteractiveDayItem;
           const hasActualWorkoutEvent = day.events.some((event) => Boolean(event.actualWorkout));
           const canOpenPicker = dayItems.length > 1 && interactiveDayItems.length > 0 && Boolean(onSelectDayItems);
           const selectionHandler = (onSelectWorkout || onSelectDayItems || onSelectRace)
-            && (hasInteractiveDayItem || day.activities.length > 0 || hasActualWorkoutEvent || canOpenPicker)
+            && (hasSelectableDayItem || day.activities.length > 0 || hasActualWorkoutEvent || canOpenPicker)
             ? () => {
               if (dayItems.length > 1 && interactiveDayItems.length > 0 && onSelectDayItems) {
                 onSelectDayItems?.({

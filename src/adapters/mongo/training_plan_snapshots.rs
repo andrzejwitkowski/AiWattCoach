@@ -30,7 +30,10 @@ pub(super) struct TrainingPlanSnapshotDocument {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct TrainingPlanDayDocument {
     date: String,
+    #[serde(default)]
     rest_day: bool,
+    #[serde(default)]
+    rest_day_reason: Option<String>,
     workout: Option<PlannedWorkoutDocument>,
 }
 
@@ -125,6 +128,7 @@ fn map_day_to_document(
     Ok(TrainingPlanDayDocument {
         date: day.date.clone(),
         rest_day: day.rest_day,
+        rest_day_reason: day.rest_day_reason.clone(),
         workout: day
             .workout
             .as_ref()
@@ -139,6 +143,7 @@ fn map_document_to_day(
     Ok(TrainingPlanDay {
         date: document.date,
         rest_day: document.rest_day,
+        rest_day_reason: document.rest_day_reason,
         workout: document
             .workout
             .map(map_document_to_planned_workout)

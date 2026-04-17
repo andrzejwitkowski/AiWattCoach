@@ -116,6 +116,15 @@ async fn llm_workout_coach_describes_power_compression_in_system_prompt() {
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);
     assert!(requests[0].system_prompt.contains("pc"));
+    assert!(requests[0]
+        .system_prompt
+        .contains("Be direct, adult, and concise."));
+    assert!(requests[0]
+        .system_prompt
+        .contains("Do not flatter, hedge, or act like a yes-man."));
+    assert!(requests[0]
+        .system_prompt
+        .contains("ready to regenerate workouts"));
     assert!(requests[0].system_prompt.contains("level:seconds"));
     assert!(requests[0]
         .system_prompt

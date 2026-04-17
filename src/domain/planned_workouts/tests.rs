@@ -54,6 +54,25 @@ fn planned_workout_can_store_reader_metadata() {
     assert_eq!(workout.event_type.as_deref(), Some("Ride"));
 }
 
+#[test]
+fn planned_workout_can_represent_rest_day() {
+    let workout = PlannedWorkout::new(
+        "planned-1".to_string(),
+        "user-1".to_string(),
+        "2026-05-01".to_string(),
+        PlannedWorkoutContent { lines: Vec::new() },
+    )
+    .as_rest_day(Some(
+        "Need recovery before next quality session".to_string(),
+    ));
+
+    assert!(workout.rest_day);
+    assert_eq!(
+        workout.rest_day_reason.as_deref(),
+        Some("Need recovery before next quality session")
+    );
+}
+
 fn assert_planned_workout_repository<T: PlannedWorkoutRepository>() {}
 
 #[test]

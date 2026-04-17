@@ -71,6 +71,7 @@ fn parses_dated_outer_format_with_multiple_days_and_rest_day() {
     assert!(parsed.days[0].planned_workout().is_some());
     assert_eq!(parsed.days[1].date, "2026-04-02");
     assert!(parsed.days[1].is_rest_day());
+    assert_eq!(parsed.days[1].rest_day_reason(), None);
     assert!(parsed.days[1].planned_workout().is_none());
     assert_eq!(parsed.days[2].date, "2026-04-03");
     assert_eq!(
@@ -79,6 +80,21 @@ fn parses_dated_outer_format_with_multiple_days_and_rest_day() {
             .map(|workout| workout.lines.len()),
         Some(2)
     );
+}
+
+#[test]
+fn parses_rest_day_with_reason() {
+    let parsed =
+        parse_planned_workout_days("2026-04-02\nRest Day: accumulated fatigue after race block")
+            .expect("planned workout days should parse");
+
+    assert_eq!(parsed.days.len(), 1);
+    assert!(parsed.days[0].is_rest_day());
+    assert_eq!(
+        parsed.days[0].rest_day_reason(),
+        Some("accumulated fatigue after race block")
+    );
+    assert!(parsed.days[0].planned_workout().is_none());
 }
 
 #[test]

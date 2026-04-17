@@ -396,6 +396,8 @@ fn sample_entry_for_user(
         title: format!("Entry {entry_id}"),
         subtitle: Some("subtitle".to_string()),
         description: Some("description".to_string()),
+        rest_day: false,
+        rest_day_reason: None,
         raw_workout_doc: Some("- 10m 55%".to_string()),
         planned_workout_id: entry_id
             .starts_with("planned:")

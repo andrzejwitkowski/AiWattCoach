@@ -15,6 +15,12 @@ pub fn project_planned_workout_entry(
     workout: &PlannedWorkout,
     sync_state: Option<&ExternalSyncState>,
 ) -> CalendarEntryView {
+    let raw_workout_doc = if workout.rest_day {
+        None
+    } else {
+        Some(serialize_planned_workout(workout))
+    };
+
     CalendarEntryView {
         entry_id: format!("planned:{}", workout.planned_workout_id),
         user_id: workout.user_id.clone(),
@@ -26,9 +32,15 @@ pub fn project_planned_workout_entry(
             .clone()
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| planned_workout_title(workout)),
-        subtitle: Some(format!("{} lines", workout.workout.lines.len())),
+        subtitle: if workout.rest_day {
+            None
+        } else {
+            Some(format!("{} lines", workout.workout.lines.len()))
+        },
         description: workout.description.clone(),
-        raw_workout_doc: Some(serialize_planned_workout(workout)),
+        rest_day: workout.rest_day,
+        rest_day_reason: workout.rest_day_reason.clone(),
+        raw_workout_doc,
         planned_workout_id: Some(workout.planned_workout_id.clone()),
         completed_workout_id: None,
         race_id: None,
@@ -58,6 +70,8 @@ pub fn project_completed_workout_entry(workout: &CompletedWorkout) -> CalendarEn
             .description
             .clone()
             .or_else(|| workout.details.interval_summary.first().cloned()),
+        rest_day: false,
+        rest_day_reason: None,
         raw_workout_doc: None,
         planned_workout_id: workout.planned_workout_id.clone(),
         completed_workout_id: Some(workout.completed_workout_id.clone()),
@@ -86,6 +100,8 @@ pub fn project_race_entry(
         title: race.label_title(),
         subtitle: Some(race.label_subtitle()),
         description: None,
+        rest_day: false,
+        rest_day_reason: None,
         raw_workout_doc: None,
         planned_workout_id: None,
         completed_workout_id: None,
@@ -114,6 +130,8 @@ pub fn project_special_day_entry(special_day: &SpecialDay) -> CalendarEntryView 
             .unwrap_or_else(|| special_day_title(&special_day.kind)),
         subtitle: None,
         description: special_day.description.clone(),
+        rest_day: false,
+        rest_day_reason: None,
         raw_workout_doc: None,
         planned_workout_id: None,
         completed_workout_id: None,
@@ -126,6 +144,10 @@ pub fn project_special_day_entry(special_day: &SpecialDay) -> CalendarEntryView 
 }
 
 fn planned_workout_title(workout: &PlannedWorkout) -> String {
+    if workout.rest_day {
+        return "Rest Day".to_string();
+    }
+
     workout
         .workout
         .lines

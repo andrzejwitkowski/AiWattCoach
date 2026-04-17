@@ -601,6 +601,7 @@ where
                         .unwrap_or_default(),
                     raw_workout_doc: day.workout.as_ref().map(projected_raw_workout_doc),
                     rest_day: day.rest_day,
+                    rest_day_reason: day.rest_day_reason,
                 });
         }
 

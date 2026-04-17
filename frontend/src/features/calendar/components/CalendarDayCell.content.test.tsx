@@ -172,6 +172,79 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByText('60 min • 64 TSS')).toBeInTheDocument();
   });
 
+  it('renders a planned rest day with red border and reason text', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 28),
+      dateKey: '2026-03-28',
+      events: [
+        makeEvent({
+          id: 51,
+          name: 'Rest Day',
+          description: 'Need recovery before next block',
+          restDay: true,
+          restDayReason: 'Need recovery before next block',
+          plannedSource: 'predicted',
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-28',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-03-28',
+            sourceWorkoutId: 'w1',
+            restDay: true,
+            restDayReason: 'Need recovery before next block',
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 0,
+              estimatedTrainingStressScore: null,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getAllByText('Rest Day')).toHaveLength(2);
+    expect(within(dayCell).getByText('Need recovery before next block')).toBeInTheDocument();
+    expect(dayCell.className).toContain('border-[#ff7351]/60');
+    expect(within(dayCell).queryByTestId('planned-sync-status')).not.toBeInTheDocument();
+  });
+
+  it('renders a planned rest day without falling back to the workout label', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 2, 29),
+      dateKey: '2026-03-29',
+      events: [
+        makeEvent({
+          id: 52,
+          name: 'Rest Day',
+          restDay: true,
+          plannedSource: 'predicted',
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-29',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-03-29',
+            sourceWorkoutId: 'w1',
+            restDay: true,
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 0,
+              estimatedTrainingStressScore: null,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).queryByText('Workout')).not.toBeInTheDocument();
+    expect(within(dayCell).getAllByText('Rest Day').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('shows modified label for predicted workouts with pending schedule changes', () => {
     const day = makeCalendarDay({
       date: new Date(2026, 2, 27),

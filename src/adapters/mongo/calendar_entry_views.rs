@@ -26,6 +26,10 @@ struct CalendarEntryViewDocument {
     title: String,
     subtitle: Option<String>,
     description: Option<String>,
+    #[serde(default)]
+    rest_day: bool,
+    #[serde(default)]
+    rest_day_reason: Option<String>,
     raw_workout_doc: Option<String>,
     planned_workout_id: Option<String>,
     completed_workout_id: Option<String>,
@@ -310,6 +314,8 @@ fn map_entry_to_document(
         title: entry.title.clone(),
         subtitle: entry.subtitle.clone(),
         description: entry.description.clone(),
+        rest_day: entry.rest_day,
+        rest_day_reason: entry.rest_day_reason.clone(),
         raw_workout_doc: entry.raw_workout_doc.clone(),
         planned_workout_id: entry.planned_workout_id.clone(),
         completed_workout_id: entry.completed_workout_id.clone(),
@@ -347,6 +353,8 @@ fn map_document_to_entry(
         title: document.title,
         subtitle: document.subtitle,
         description: document.description,
+        rest_day: document.rest_day,
+        rest_day_reason: document.rest_day_reason,
         raw_workout_doc: document.raw_workout_doc,
         planned_workout_id: document.planned_workout_id,
         completed_workout_id: document.completed_workout_id,

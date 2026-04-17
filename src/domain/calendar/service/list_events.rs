@@ -103,7 +103,12 @@ fn map_calendar_entry_to_event(
                 .planned_workout_id
                 .as_ref()
                 .and_then(|planned_workout_id| {
-                    parse_projected_workout(planned_workout_id, &entry.date)
+                    parse_projected_workout(
+                        planned_workout_id,
+                        &entry.date,
+                        entry.rest_day,
+                        entry.rest_day_reason.as_deref(),
+                    )
                 })
         }
         _ => None,
@@ -137,6 +142,8 @@ fn map_calendar_entry_to_event(
         name,
         category,
         description: entry.description,
+        rest_day: entry.rest_day,
+        rest_day_reason: entry.rest_day_reason,
         indoor: false,
         color: None,
         raw_workout_doc,
@@ -272,6 +279,8 @@ fn legacy_activity_id(completed_workout_id: &str) -> &str {
 fn parse_projected_workout(
     planned_workout_id: &str,
     date: &str,
+    rest_day: bool,
+    rest_day_reason: Option<&str>,
 ) -> Option<CalendarProjectedWorkout> {
     let (operation_key, projected_date) = planned_workout_id.rsplit_once(':')?;
     if projected_date != date {
@@ -283,5 +292,7 @@ fn parse_projected_workout(
         operation_key: operation_key.to_string(),
         date: projected_date.to_string(),
         source_workout_id: planned_workout_id.to_string(),
+        rest_day,
+        rest_day_reason: rest_day_reason.map(ToString::to_string),
     })
 }

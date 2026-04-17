@@ -211,10 +211,12 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
     assert!(initial_prompt.contains("YYYY-MM-DD"));
     assert!(initial_prompt.contains("One dated section per day"));
     assert!(initial_prompt.contains("Rest Day"));
+    assert!(initial_prompt.contains("Rest Day: <reason>"));
     assert!(initial_prompt.contains("- [Duration] [Target]"));
     assert!(initial_prompt.contains("- [Duration] ramp [Start Target]-[End Target]"));
     assert!(initial_prompt.contains("Supported durations"));
     assert!(initial_prompt.contains("Supported targets"));
+    assert!(initial_prompt.contains("backend can persist the reason"));
     assert!(initial_prompt.contains("Do not use cadence"));
     assert!(initial_prompt.contains("- 45m 65%"));
 
