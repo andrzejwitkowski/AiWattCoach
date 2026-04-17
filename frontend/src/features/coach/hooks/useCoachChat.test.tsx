@@ -120,6 +120,7 @@ describe('useCoachChat', () => {
     expect(FakeWebSocket.instances[0]?.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'send_message', content: 'Legs felt strong' }),
     );
+    expect(result.current.progressState).toBe('awaiting-reply');
   });
 
   it('loads existing summary after create conflict', async () => {
@@ -196,8 +197,82 @@ describe('useCoachChat', () => {
       expect(result.current.error).toBe(availabilityRequiredChatError);
     });
 
+    expect(result.current.progressState).toBe('idle');
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0]?.content).toBe('Need feedback');
+  });
+
+  it('keeps awaiting reply state active after a system message until coach reply arrives', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Need feedback');
+    });
+
+    expect(result.current.progressState).toBe('awaiting-reply');
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'system_message',
+            content: 'Generating summary context.',
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages.at(-1)?.content).toBe('Generating summary context.');
+    });
+
+    expect(result.current.progressState).toBe('awaiting-reply');
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'coach_message',
+            message: {
+              id: 'message-2',
+              role: 'coach',
+              content: 'Coach reply',
+              createdAtEpochSeconds: 3,
+            },
+            summary: {
+              ...summaryFixture,
+              messages: [
+                {
+                  id: 'temp-user',
+                  role: 'user',
+                  content: 'Need feedback',
+                  createdAtEpochSeconds: 2,
+                },
+                {
+                  id: 'message-2',
+                  role: 'coach',
+                  content: 'Coach reply',
+                  createdAtEpochSeconds: 3,
+                },
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.progressState).toBe('idle');
+    });
   });
 
   it('recognizes the backend availability error sentinel', () => {
@@ -264,6 +339,86 @@ describe('useCoachChat', () => {
     expect(result.current.messages.at(-2)?.content).toBe('Workout recap generated.');
     expect(result.current.messages.at(-1)?.role).toBe('system');
     expect(result.current.messages.at(-1)?.content).toBe('14-day schedule skipped because this is not the latest completed activity.');
+  });
+
+  it('shows saving summary progress for the whole save workflow request', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+
+    let resolveSave: ((value: Awaited<ReturnType<typeof saveWorkoutSummary>>) => void) | undefined;
+
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+    vi.mocked(saveWorkoutSummary).mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('101');
+    });
+
+    let savePromise: Promise<Awaited<ReturnType<typeof result.current.saveSummary>>> | undefined;
+
+    await act(async () => {
+      savePromise = result.current.saveSummary();
+    });
+
+    expect(result.current.isSaving).toBe(true);
+    expect(result.current.progressState).toBe('saving-summary');
+
+    act(() => {
+      resolveSave?.({
+        summary: { ...summaryFixture, savedAtEpochSeconds: 3 },
+        workflow: {
+          recapStatus: 'generated',
+          planStatus: 'generated',
+          messages: ['Workout recap generated.', '14-day schedule generated.'],
+        },
+      });
+    });
+
+    await act(async () => {
+      await savePromise;
+    });
+
+    expect(result.current.isSaving).toBe(false);
+    expect(result.current.progressState).toBe('idle');
+  });
+
+  it('resets saving progress when save workflow fails', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    let rejectSave: ((reason?: unknown) => void) | undefined;
+
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+    vi.mocked(saveWorkoutSummary).mockImplementationOnce(() => new Promise((_, reject) => {
+      rejectSave = reject;
+    }));
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.summary?.workoutId).toBe('101');
+    });
+
+    let savePromise: Promise<Awaited<ReturnType<typeof result.current.saveSummary>>> | undefined;
+
+    await act(async () => {
+      savePromise = result.current.saveSummary();
+    });
+
+    expect(result.current.isSaving).toBe(true);
+    expect(result.current.progressState).toBe('saving-summary');
+
+    act(() => {
+      rejectSave?.(new HttpError(500, 'save failed'));
+    });
+
+    await act(async () => {
+      await savePromise;
+    });
+
+    expect(result.current.isSaving).toBe(false);
+    expect(result.current.progressState).toBe('idle');
   });
 
   it('reopens a saved summary for editing', async () => {

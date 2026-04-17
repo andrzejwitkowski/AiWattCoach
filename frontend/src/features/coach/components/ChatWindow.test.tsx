@@ -37,6 +37,48 @@ describe('ChatWindow', () => {
     expect(screen.getByText(/coach is typing/i)).toBeInTheDocument();
   });
 
+  it('shows awaiting reply progress immediately after sending a message', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        progressState="awaiting-reply"
+        error={null}
+        inputDisabled
+        onSendMessage={async () => true}
+      />,
+    );
+
+    expect(screen.getAllByText(/coach is preparing your reply/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByPlaceholderText(/describe your muscle state/i)[0]).toBeDisabled();
+  });
+
+  it('shows saving workflow progress inside the chat', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        progressState="saving-summary"
+        error={null}
+        inputDisabled
+        onSendMessage={async () => true}
+      />,
+    );
+
+    expect(screen.getAllByText(/finalizing the workout summary/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/keep this page open/i)).toBeInTheDocument();
+  });
+
   it('renders system messages with a distinct marker from coach replies', () => {
     const { container } = render(
       <ChatWindow

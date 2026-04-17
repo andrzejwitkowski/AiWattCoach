@@ -81,6 +81,7 @@ export type SendMessageResponse = z.infer<typeof sendMessageResponseSchema>;
 export type SaveWorkoutSummaryResponse = z.infer<typeof saveWorkoutSummaryResponseSchema>;
 export type ClientWsMessage = z.infer<typeof clientWsMessageSchema>;
 export type ServerWsMessage = z.infer<typeof serverWsMessageSchema>;
+export type CoachChatProgressState = 'idle' | 'awaiting-reply' | 'saving-summary';
 
 export type CoachWorkoutListItem = {
   id: string;

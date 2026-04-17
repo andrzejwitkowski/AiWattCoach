@@ -10,6 +10,7 @@ import {
 } from '../api/workoutSummary';
 import {
   clientWsMessageSchema,
+  type CoachChatProgressState,
   serverWsMessageSchema,
   type ConversationMessage,
   type WorkoutSummary,
@@ -28,6 +29,7 @@ type UseCoachChatResult = {
   isSaving: boolean;
   isConnected: boolean;
   isCoachTyping: boolean;
+  progressState: CoachChatProgressState;
   error: string | null;
   hasConversation: boolean;
   isSaved: boolean;
@@ -106,6 +108,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
   const [isSaving, setIsSaving] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isCoachTyping, setIsCoachTyping] = useState(false);
+  const [progressState, setProgressState] = useState<CoachChatProgressState>('idle');
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const socketWorkoutIdRef = useRef<string | null>(null);
@@ -118,12 +121,17 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     currentWorkoutIdRef.current = workoutId;
     savingRequestIdRef.current += 1;
     setIsSaving(false);
+    setProgressState('idle');
   }, [workoutId]);
 
   const assertCurrentWorkout = useCallback((expectedWorkoutId: string) => {
     if (currentWorkoutIdRef.current !== expectedWorkoutId) {
       throw new StaleWorkoutSelectionError();
     }
+  }, []);
+
+  const clearReplyProgress = useCallback(() => {
+    setProgressState((current) => (current === 'awaiting-reply' ? 'idle' : current));
   }, []);
 
   const applySummaryState = useCallback((nextSummary: WorkoutSummary, expectedWorkoutId: string) => {
@@ -159,6 +167,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
 
     setIsConnected(false);
     setIsCoachTyping(false);
+    setProgressState('idle');
   }, []);
 
   const ensureSummaryExists = useCallback(async (): Promise<WorkoutSummary> => {
@@ -253,6 +262,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
             setMessages(parsed.summary.messages);
             setDraftRpe(parsed.summary.rpe);
             setIsCoachTyping(false);
+            clearReplyProgress();
             return;
           }
 
@@ -273,9 +283,11 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
 
           setError(parsed.error);
           setIsCoachTyping(false);
+          clearReplyProgress();
         } catch {
           setError('Received an invalid coach response.');
           setIsCoachTyping(false);
+          clearReplyProgress();
         }
       });
 
@@ -289,6 +301,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
           pendingSocketRef.current = null;
         }
         setIsCoachTyping(false);
+        clearReplyProgress();
       });
 
       socket.addEventListener('error', () => {
@@ -302,6 +315,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
         setError('Unable to connect to the coach chat right now.');
         setIsConnected(false);
         setIsCoachTyping(false);
+        clearReplyProgress();
         reject(new Error('WebSocket connection failed'));
       }, { once: true });
     });
@@ -315,7 +329,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
         pendingSocketRef.current = null;
       }
     }
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, clearReplyProgress]);
 
   useEffect(() => {
     closeSocket();
@@ -323,6 +337,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     setMessages([]);
     setDraftRpe(null);
     setError(null);
+    setProgressState('idle');
 
     if (!workoutId) {
       setIsLoading(false);
@@ -386,6 +401,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     savingRequestIdRef.current = requestId;
 
     setIsSaving(true);
+    setProgressState('saving-summary');
     setError(null);
 
     try {
@@ -436,6 +452,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     } finally {
       if (savingRequestIdRef.current === requestId && currentWorkoutIdRef.current === requestedWorkoutId) {
         setIsSaving(false);
+        setProgressState('idle');
       }
     }
   }, [apiBaseUrl, applySummaryState, assertCurrentWorkout, draftRpe, ensureSummaryExists, workoutId, summary]);
@@ -450,6 +467,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     savingRequestIdRef.current = requestId;
 
     setIsSaving(true);
+    setProgressState('saving-summary');
     setError(null);
 
     try {
@@ -471,6 +489,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     } finally {
       if (savingRequestIdRef.current === requestId && currentWorkoutIdRef.current === requestedWorkoutId) {
         setIsSaving(false);
+        setProgressState('idle');
       }
     }
   }, [apiBaseUrl, applySummaryState, workoutId]);
@@ -507,6 +526,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
       const socket = await connectSocket(requestedWorkoutId);
       assertCurrentWorkout(requestedWorkoutId);
       const payload = clientWsMessageSchema.parse({ type: 'send_message', content: trimmed });
+      setProgressState('awaiting-reply');
       socket.send(JSON.stringify(payload));
       setMessages((current) => {
         if (currentWorkoutIdRef.current !== requestedWorkoutId) {
@@ -527,9 +547,10 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
       }
 
       setError(sendError instanceof Error ? sendError.message : 'Unable to send your message.');
+      clearReplyProgress();
       return false;
     }
-  }, [apiBaseUrl, applySummaryState, assertCurrentWorkout, connectSocket, draftRpe, ensureSummaryExists, summary?.savedAtEpochSeconds, workoutId]);
+  }, [apiBaseUrl, applySummaryState, assertCurrentWorkout, clearReplyProgress, connectSocket, draftRpe, ensureSummaryExists, summary?.savedAtEpochSeconds, workoutId]);
 
   const hasConversation = useMemo(
     () => messages.some((message) => message.role === 'coach'),
@@ -546,6 +567,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
     isSaving,
     isConnected,
     isCoachTyping,
+    progressState,
     error,
     hasConversation,
     isSaved,

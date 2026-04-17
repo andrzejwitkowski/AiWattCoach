@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-import type { ConversationMessage } from '../types';
+import type { CoachChatProgressState, ConversationMessage } from '../types';
 import { ChatHeader } from './ChatHeader';
 import { ChatInput } from './ChatInput';
 import { ChatMessageList } from './ChatMessageList';
@@ -14,6 +14,7 @@ type ChatWindowProps = {
   requiresRpe?: boolean;
   requiresAvailability?: boolean;
   availabilityMessage?: string | null;
+  progressState?: CoachChatProgressState;
   error: string | null;
   inputDisabled?: boolean;
   onSendMessage: (content: string) => Promise<boolean>;
@@ -28,6 +29,7 @@ export function ChatWindow({
   requiresRpe = false,
   requiresAvailability = false,
   availabilityMessage = null,
+  progressState = 'idle',
   error,
   inputDisabled = false,
   onSendMessage,
@@ -42,6 +44,7 @@ export function ChatWindow({
         isSaved={isSaved}
         requiresRpe={requiresRpe}
         requiresAvailability={requiresAvailability}
+        progressState={progressState}
       />
       {requiresAvailability && availabilityMessage ? (
         <div className="mx-6 mt-6 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
@@ -55,7 +58,7 @@ export function ChatWindow({
       ) : null}
       {hasSelectedWorkout ? (
         <>
-          <ChatMessageList messages={messages} isCoachTyping={isCoachTyping} />
+          <ChatMessageList messages={messages} isCoachTyping={isCoachTyping} progressState={progressState} />
           <ChatInput disabled={inputDisabled} onSend={onSendMessage} />
         </>
       ) : (

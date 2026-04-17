@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-17)
 
 ## Corpus Check
-- 575 files · ~310,687 words
+- 575 files · ~311,297 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5373 nodes · 6599 edges · 677 communities detected
+- 5374 nodes · 6600 edges · 677 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -2426,6 +2426,10 @@ Nodes (0):
 
 ### Community 405 - "Community 405"
 Cohesion: 1.0
+Nodes (0): 
+
+### Community 406 - "Community 406"
+Cohesion: 1.0
 Nodes (1): ProviderPollingService<
         Api,
         Settings,
@@ -2436,21 +2440,17 @@ Nodes (1): ProviderPollingService<
         NoopCalendarEntryViewRefresh,
     >
 
-### Community 406 - "Community 406"
-Cohesion: 1.0
-Nodes (0): 
-
 ### Community 407 - "Community 407"
 Cohesion: 1.0
-Nodes (1): CompletedWorkoutTargetAdapter
+Nodes (0): 
 
 ### Community 408 - "Community 408"
 Cohesion: 1.0
-Nodes (1): LatestCompletedActivityAdapter
+Nodes (1): CompletedWorkoutTargetAdapter
 
 ### Community 409 - "Community 409"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): LatestCompletedActivityAdapter
 
 ### Community 410 - "Community 410"
 Cohesion: 1.0
@@ -2458,11 +2458,11 @@ Nodes (0):
 
 ### Community 411 - "Community 411"
 Cohesion: 1.0
-Nodes (1): IntervalsIcuClient
+Nodes (0): 
 
 ### Community 412 - "Community 412"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): IntervalsIcuClient
 
 ### Community 413 - "Community 413"
 Cohesion: 1.0
@@ -2474,15 +2474,15 @@ Nodes (0):
 
 ### Community 415 - "Community 415"
 Cohesion: 1.0
-Nodes (1): AthleteSummaryDto
+Nodes (0): 
 
 ### Community 416 - "Community 416"
 Cohesion: 1.0
-Nodes (1): CreateRace
+Nodes (1): AthleteSummaryDto
 
 ### Community 417 - "Community 417"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): CreateRace
 
 ### Community 418 - "Community 418"
 Cohesion: 1.0
@@ -2490,17 +2490,21 @@ Nodes (0):
 
 ### Community 419 - "Community 419"
 Cohesion: 1.0
-Nodes (1): UserSettingsRepository
+Nodes (0): 
 
 ### Community 420 - "Community 420"
 Cohesion: 1.0
-Nodes (1): CalendarLabelsService
+Nodes (1): UserSettingsRepository
 
 ### Community 421 - "Community 421"
 Cohesion: 1.0
-Nodes (1): CalendarService
+Nodes (1): CalendarLabelsService
 
 ### Community 422 - "Community 422"
+Cohesion: 1.0
+Nodes (1): CalendarService
+
+### Community 423 - "Community 423"
 Cohesion: 1.0
 Nodes (1): CalendarService<
         Intervals,
@@ -2514,15 +2518,15 @@ Nodes (1): CalendarService<
         (),
     >
 
-### Community 423 - "Community 423"
+### Community 424 - "Community 424"
 Cohesion: 1.0
 Nodes (1): SpecialDayService
 
-### Community 424 - "Community 424"
+### Community 425 - "Community 425"
 Cohesion: 1.0
 Nodes (1): SpecialDayService<Repository>
 
-### Community 425 - "Community 425"
+### Community 426 - "Community 426"
 Cohesion: 1.0
 Nodes (1): IntervalsService<
         Api,
@@ -2535,73 +2539,69 @@ Nodes (1): IntervalsService<
         NoopCalendarEntryViewRefresh,
     >
 
-### Community 426 - "Community 426"
+### Community 427 - "Community 427"
 Cohesion: 1.0
 Nodes (1): IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>
 
-### Community 427 - "Community 427"
+### Community 428 - "Community 428"
 Cohesion: 1.0
 Nodes (1): PlannedCompletedWorkoutLinkRepository
 
-### Community 428 - "Community 428"
+### Community 429 - "Community 429"
 Cohesion: 1.0
 Nodes (1): VolatilePayload<'a>
 
-### Community 429 - "Community 429"
+### Community 430 - "Community 430"
 Cohesion: 1.0
 Nodes (1): CompactRecentDay<'a>
 
-### Community 430 - "Community 430"
+### Community 431 - "Community 431"
 Cohesion: 1.0
 Nodes (1): CompactRecentWorkout<'a>
 
-### Community 431 - "Community 431"
+### Community 432 - "Community 432"
 Cohesion: 1.0
 Nodes (1): CompactPlannedWorkoutRef<'a>
 
-### Community 432 - "Community 432"
+### Community 433 - "Community 433"
 Cohesion: 1.0
 Nodes (1): CompactPlannedWorkout<'a>
 
-### Community 433 - "Community 433"
+### Community 434 - "Community 434"
 Cohesion: 1.0
 Nodes (1): CompactSpecialDay<'a>
 
-### Community 434 - "Community 434"
+### Community 435 - "Community 435"
 Cohesion: 1.0
 Nodes (1): CompactUpcomingDay<'a>
 
-### Community 435 - "Community 435"
+### Community 436 - "Community 436"
 Cohesion: 1.0
 Nodes (1): CompactProjectedDay<'a>
 
-### Community 436 - "Community 436"
+### Community 437 - "Community 437"
 Cohesion: 1.0
 Nodes (1): CompactProjectedWorkout<'a>
 
-### Community 437 - "Community 437"
+### Community 438 - "Community 438"
 Cohesion: 1.0
 Nodes (1): CompactRace<'a>
 
-### Community 438 - "Community 438"
+### Community 439 - "Community 439"
 Cohesion: 1.0
 Nodes (1): CompactFuturePlannedEvent<'a>
 
-### Community 439 - "Community 439"
+### Community 440 - "Community 440"
 Cohesion: 1.0
 Nodes (1): CompactAvailabilityDay<'a>
 
-### Community 440 - "Community 440"
+### Community 441 - "Community 441"
 Cohesion: 1.0
 Nodes (1): CompactHistoricalLoadTrend<'a>
 
-### Community 441 - "Community 441"
-Cohesion: 1.0
-Nodes (1): CompactHistoricalWorkout<'a>
-
 ### Community 442 - "Community 442"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): CompactHistoricalWorkout<'a>
 
 ### Community 443 - "Community 443"
 Cohesion: 1.0
@@ -3584,53 +3584,55 @@ Nodes (1): Outdoor road training context
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 381`** (2 nodes): `WorkoutCategoryTag.tsx`, `WorkoutCategoryTag()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 382`** (2 nodes): `handleSend()`, `ChatInput.tsx`
+- **Thin community `Community 382`** (2 nodes): `ChatTypingIndicator()`, `ChatTypingIndicator.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 383`** (2 nodes): `RpeButton.tsx`, `RpeButton()`
+- **Thin community `Community 383`** (2 nodes): `handleSend()`, `ChatInput.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 384`** (2 nodes): `handleKeyDown()`, `ConfirmWithoutChatModal.tsx`
+- **Thin community `Community 384`** (2 nodes): `RpeButton.tsx`, `RpeButton()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 385`** (2 nodes): `useWorkoutList.test.tsx`, `formatWeekLabel()`
+- **Thin community `Community 385`** (2 nodes): `handleKeyDown()`, `ConfirmWithoutChatModal.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 386`** (2 nodes): `BackendStatusCard()`, `BackendStatusCard.tsx`
+- **Thin community `Community 386`** (2 nodes): `useWorkoutList.test.tsx`, `formatWeekLabel()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 387`** (2 nodes): `ApiConfigCard()`, `ApiConfigCard.tsx`
+- **Thin community `Community 387`** (2 nodes): `BackendStatusCard()`, `BackendStatusCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 388`** (2 nodes): `SystemStatusHero.tsx`, `SystemStatusHero()`
+- **Thin community `Community 388`** (2 nodes): `ApiConfigCard()`, `ApiConfigCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 389`** (2 nodes): `ProtectedSystemInfoCard.tsx`, `ProtectedSystemInfoCard()`
+- **Thin community `Community 389`** (2 nodes): `SystemStatusHero.tsx`, `SystemStatusHero()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 390`** (2 nodes): `RacesPageLayout.test.tsx`, `makeRace()`
+- **Thin community `Community 390`** (2 nodes): `ProtectedSystemInfoCard.tsx`, `ProtectedSystemInfoCard()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 391`** (2 nodes): `RaceCard.tsx`, `switch()`
+- **Thin community `Community 391`** (2 nodes): `RacesPageLayout.test.tsx`, `makeRace()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 392`** (2 nodes): `CalendarPage()`, `CalendarPage.tsx`
+- **Thin community `Community 392`** (2 nodes): `RaceCard.tsx`, `switch()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 393`** (2 nodes): `AdminSystemInfoPage()`, `AdminSystemInfoPage.tsx`
+- **Thin community `Community 393`** (2 nodes): `CalendarPage()`, `CalendarPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 394`** (2 nodes): `AppHomePage()`, `AppHomePage.tsx`
+- **Thin community `Community 394`** (2 nodes): `AdminSystemInfoPage()`, `AdminSystemInfoPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 395`** (2 nodes): `LandingPage.tsx`, `LandingPage()`
+- **Thin community `Community 395`** (2 nodes): `AppHomePage()`, `AppHomePage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 396`** (2 nodes): `RacesPage.tsx`, `RacesPage()`
+- **Thin community `Community 396`** (2 nodes): `LandingPage.tsx`, `LandingPage()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 397`** (2 nodes): `AICoachPage()`, `AICoachPage.tsx`
+- **Thin community `Community 397`** (2 nodes): `RacesPage.tsx`, `RacesPage()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 398`** (2 nodes): `assert_log_entry_contains()`, `mod.rs`
+- **Thin community `Community 398`** (2 nodes): `AICoachPage()`, `AICoachPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 399`** (2 nodes): `assert_valid_traceparent()`, `assertions.rs`
+- **Thin community `Community 399`** (2 nodes): `assert_log_entry_contains()`, `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 400`** (2 nodes): `assert_log_entry_contains()`, `test_support.rs`
+- **Thin community `Community 400`** (2 nodes): `assert_valid_traceparent()`, `assertions.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 401`** (2 nodes): `assert_event_order()`, `assertions.rs`
+- **Thin community `Community 401`** (2 nodes): `assert_log_entry_contains()`, `test_support.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 402`** (2 nodes): `ttl_validation.rs`, `validate_session_ttl_against_current_time_rejects_bson_overflowing_ttl()`
+- **Thin community `Community 402`** (2 nodes): `assert_event_order()`, `assertions.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 403`** (2 nodes): `settings_request_logs_authenticated_user_id_on_request_span()`, `observability.rs`
+- **Thin community `Community 403`** (2 nodes): `ttl_validation.rs`, `validate_session_ttl_against_current_time_rejects_bson_overflowing_ttl()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 404`** (2 nodes): `main()`, `main.rs`
+- **Thin community `Community 404`** (2 nodes): `settings_request_logs_authenticated_user_id_on_request_span()`, `observability.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 405`** (2 nodes): `ProviderPollingService<
+- **Thin community `Community 405`** (2 nodes): `main()`, `main.rs`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 406`** (2 nodes): `ProviderPollingService<
         Api,
         Settings,
         PollStates,
@@ -3640,39 +3642,39 @@ Nodes (1): Outdoor road training context
         NoopCalendarEntryViewRefresh,
     >`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 406`** (2 nodes): `poll_due_once_persists_attempt_before_calling_intervals()`, `persistence.rs`
+- **Thin community `Community 407`** (2 nodes): `poll_due_once_persists_attempt_before_calling_intervals()`, `persistence.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 407`** (2 nodes): `workout_summary_completed_target.rs`, `CompletedWorkoutTargetAdapter`
+- **Thin community `Community 408`** (2 nodes): `workout_summary_completed_target.rs`, `CompletedWorkoutTargetAdapter`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 408`** (2 nodes): `workout_summary_latest_activity.rs`, `LatestCompletedActivityAdapter`
+- **Thin community `Community 409`** (2 nodes): `workout_summary_latest_activity.rs`, `LatestCompletedActivityAdapter`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 409`** (2 nodes): `non_empty_context_parts()`, `context_prelude.rs`
+- **Thin community `Community 410`** (2 nodes): `non_empty_context_parts()`, `context_prelude.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 410`** (2 nodes): `context_hash()`, `cache.rs`
+- **Thin community `Community 411`** (2 nodes): `context_hash()`, `cache.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 411`** (2 nodes): `IntervalsIcuClient`, `.test_connection()`
+- **Thin community `Community 412`** (2 nodes): `IntervalsIcuClient`, `.test_connection()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 412`** (2 nodes): `is_duplicate_key_error()`, `error.rs`
+- **Thin community `Community 413`** (2 nodes): `is_duplicate_key_error()`, `error.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 413`** (2 nodes): `read_cookie()`, `cookies.rs`
+- **Thin community `Community 414`** (2 nodes): `read_cookie()`, `cookies.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 414`** (2 nodes): `map_summary_state_to_dto()`, `mapping.rs`
+- **Thin community `Community 415`** (2 nodes): `map_summary_state_to_dto()`, `mapping.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 415`** (2 nodes): `AthleteSummaryDto`, `dto.rs`
+- **Thin community `Community 416`** (2 nodes): `AthleteSummaryDto`, `dto.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 416`** (2 nodes): `CreateRace`, `.from()`
+- **Thin community `Community 417`** (2 nodes): `CreateRace`, `.from()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 417`** (2 nodes): `map_race_to_dto()`, `mapping.rs`
+- **Thin community `Community 418`** (2 nodes): `map_race_to_dto()`, `mapping.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 418`** (2 nodes): `status_class.rs`, `status_class()`
+- **Thin community `Community 419`** (2 nodes): `status_class.rs`, `status_class()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 419`** (2 nodes): `UserSettingsRepository`, `ports.rs`
+- **Thin community `Community 420`** (2 nodes): `UserSettingsRepository`, `ports.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 420`** (2 nodes): `CalendarLabelsService`, `service.rs`
+- **Thin community `Community 421`** (2 nodes): `CalendarLabelsService`, `service.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 421`** (2 nodes): `CalendarService`, `mod.rs`
+- **Thin community `Community 422`** (2 nodes): `CalendarService`, `mod.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 422`** (2 nodes): `CalendarService<
+- **Thin community `Community 423`** (2 nodes): `CalendarService<
         Intervals,
         Entries,
         Projections,
@@ -3684,11 +3686,11 @@ Nodes (1): Outdoor road training context
         (),
     >`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 423`** (2 nodes): `SpecialDayService`, `service.rs`
+- **Thin community `Community 424`** (2 nodes): `SpecialDayService`, `service.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 424`** (2 nodes): `SpecialDayService<Repository>`, `.new()`
+- **Thin community `Community 425`** (2 nodes): `SpecialDayService<Repository>`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 425`** (2 nodes): `IntervalsService<
+- **Thin community `Community 426`** (2 nodes): `IntervalsService<
         Api,
         Settings,
         Activities,
@@ -3699,149 +3701,147 @@ Nodes (1): Outdoor road training context
         NoopCalendarEntryViewRefresh,
     >`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 426`** (2 nodes): `IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>`, `.get_enriched_event_impl()`
+- **Thin community `Community 427`** (2 nodes): `IntervalsService<Api, Settings, Activities, UploadOperations, Extractor, PocRepo, Time, Refresh>`, `.get_enriched_event_impl()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 427`** (2 nodes): `PlannedCompletedWorkoutLinkRepository`, `ports.rs`
+- **Thin community `Community 428`** (2 nodes): `PlannedCompletedWorkoutLinkRepository`, `ports.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 428`** (2 nodes): `VolatilePayload<'a>`, `.from_context()`
+- **Thin community `Community 429`** (2 nodes): `VolatilePayload<'a>`, `.from_context()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 429`** (2 nodes): `CompactRecentDay<'a>`, `.from_recent_day()`
+- **Thin community `Community 430`** (2 nodes): `CompactRecentDay<'a>`, `.from_recent_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 430`** (2 nodes): `CompactRecentWorkout<'a>`, `.from_workout()`
+- **Thin community `Community 431`** (2 nodes): `CompactRecentWorkout<'a>`, `.from_workout()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 431`** (2 nodes): `CompactPlannedWorkoutRef<'a>`, `.from_reference()`
+- **Thin community `Community 432`** (2 nodes): `CompactPlannedWorkoutRef<'a>`, `.from_reference()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 432`** (2 nodes): `CompactPlannedWorkout<'a>`, `.from_planned()`
+- **Thin community `Community 433`** (2 nodes): `CompactPlannedWorkout<'a>`, `.from_planned()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 433`** (2 nodes): `CompactSpecialDay<'a>`, `.from_special()`
+- **Thin community `Community 434`** (2 nodes): `CompactSpecialDay<'a>`, `.from_special()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 434`** (2 nodes): `CompactUpcomingDay<'a>`, `.from_upcoming_day()`
+- **Thin community `Community 435`** (2 nodes): `CompactUpcomingDay<'a>`, `.from_upcoming_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 435`** (2 nodes): `CompactProjectedDay<'a>`, `.from_projected_day()`
+- **Thin community `Community 436`** (2 nodes): `CompactProjectedDay<'a>`, `.from_projected_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 436`** (2 nodes): `CompactProjectedWorkout<'a>`, `.from_projected_workout()`
+- **Thin community `Community 437`** (2 nodes): `CompactProjectedWorkout<'a>`, `.from_projected_workout()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 437`** (2 nodes): `CompactRace<'a>`, `.from_race()`
+- **Thin community `Community 438`** (2 nodes): `CompactRace<'a>`, `.from_race()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 438`** (2 nodes): `CompactFuturePlannedEvent<'a>`, `.from_event()`
+- **Thin community `Community 439`** (2 nodes): `CompactFuturePlannedEvent<'a>`, `.from_event()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 439`** (2 nodes): `CompactAvailabilityDay<'a>`, `.from_day()`
+- **Thin community `Community 440`** (2 nodes): `CompactAvailabilityDay<'a>`, `.from_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 440`** (2 nodes): `CompactHistoricalLoadTrend<'a>`, `.from_point()`
+- **Thin community `Community 441`** (2 nodes): `CompactHistoricalLoadTrend<'a>`, `.from_point()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 441`** (2 nodes): `CompactHistoricalWorkout<'a>`, `.from_workout()`
+- **Thin community `Community 442`** (2 nodes): `CompactHistoricalWorkout<'a>`, `.from_workout()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 442`** (1 nodes): `vite.config.ts`
+- **Thin community `Community 443`** (1 nodes): `vite.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 443`** (1 nodes): `App.tsx`
+- **Thin community `Community 444`** (1 nodes): `App.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 444`** (1 nodes): `main.tsx`
+- **Thin community `Community 445`** (1 nodes): `main.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 445`** (1 nodes): `App.test.tsx`
+- **Thin community `Community 446`** (1 nodes): `App.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 446`** (1 nodes): `i18n.ts`
+- **Thin community `Community 447`** (1 nodes): `i18n.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 447`** (1 nodes): `vite-env.d.ts`
+- **Thin community `Community 448`** (1 nodes): `vite-env.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 448`** (1 nodes): `setup.ts`
+- **Thin community `Community 449`** (1 nodes): `setup.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 449`** (1 nodes): `env.test.ts`
+- **Thin community `Community 450`** (1 nodes): `env.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 450`** (1 nodes): `mockData.ts`
+- **Thin community `Community 451`** (1 nodes): `mockData.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 451`** (1 nodes): `settings.test.ts`
+- **Thin community `Community 452`** (1 nodes): `settings.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 452`** (1 nodes): `LoginPanel.tsx`
+- **Thin community `Community 453`** (1 nodes): `LoginPanel.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 453`** (1 nodes): `workoutDetails.test.ts`
+- **Thin community `Community 454`** (1 nodes): `workoutDetails.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 454`** (1 nodes): `types.ts`
+- **Thin community `Community 455`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 455`** (1 nodes): `constants.ts`
+- **Thin community `Community 456`** (1 nodes): `constants.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 456`** (1 nodes): `dateUtils.test.ts`
+- **Thin community `Community 457`** (1 nodes): `dateUtils.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 457`** (1 nodes): `WorkoutDetailPanelPrimitives.tsx`
+- **Thin community `Community 458`** (1 nodes): `WorkoutDetailPanelPrimitives.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 458`** (1 nodes): `DayItemsModal.test.tsx`
+- **Thin community `Community 459`** (1 nodes): `DayItemsModal.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 459`** (1 nodes): `WorkoutDetailModal.intervals.test.tsx`
+- **Thin community `Community 460`** (1 nodes): `WorkoutDetailModal.intervals.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 460`** (1 nodes): `CalendarWeekSection.tsx`
+- **Thin community `Community 461`** (1 nodes): `CalendarWeekSection.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 461`** (1 nodes): `RaceDayDetailModal.test.tsx`
+- **Thin community `Community 462`** (1 nodes): `RaceDayDetailModal.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 462`** (1 nodes): `WorkoutDetailModal.actions.test.tsx`
+- **Thin community `Community 463`** (1 nodes): `WorkoutDetailModal.actions.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 463`** (1 nodes): `CalendarPerformanceCards.test.tsx`
+- **Thin community `Community 464`** (1 nodes): `CalendarPerformanceCards.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 464`** (1 nodes): `WorkoutDetailModal.completed.test.tsx`
+- **Thin community `Community 465`** (1 nodes): `WorkoutDetailModal.completed.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 465`** (1 nodes): `CalendarGrid.tsx`
+- **Thin community `Community 466`** (1 nodes): `CalendarGrid.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 466`** (1 nodes): `CalendarDayCell.charts.test.tsx`
+- **Thin community `Community 467`** (1 nodes): `CalendarDayCell.charts.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 467`** (1 nodes): `CalendarErrorRow.tsx`
+- **Thin community `Community 468`** (1 nodes): `CalendarErrorRow.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 468`** (1 nodes): `CalendarPerformanceCards.tsx`
+- **Thin community `Community 469`** (1 nodes): `CalendarPerformanceCards.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 469`** (1 nodes): `CalendarLoadingRow.test.tsx`
+- **Thin community `Community 470`** (1 nodes): `CalendarLoadingRow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 470`** (1 nodes): `WorkoutDetailModalPanels.tsx`
+- **Thin community `Community 471`** (1 nodes): `WorkoutDetailModalPanels.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 471`** (1 nodes): `CalendarDayCell.content.test.tsx`
+- **Thin community `Community 472`** (1 nodes): `CalendarDayCell.content.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 472`** (1 nodes): `WorkoutDetailModal.planned.test.tsx`
+- **Thin community `Community 473`** (1 nodes): `WorkoutDetailModal.planned.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 473`** (1 nodes): `CalendarMiniChart.tsx`
+- **Thin community `Community 474`** (1 nodes): `CalendarMiniChart.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 474`** (1 nodes): `CalendarWeekSummary.tsx`
+- **Thin community `Community 475`** (1 nodes): `CalendarWeekSummary.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 475`** (1 nodes): `WorkoutDetailModal.charts.test.tsx`
+- **Thin community `Community 476`** (1 nodes): `WorkoutDetailModal.charts.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 476`** (1 nodes): `CalendarErrorRow.test.tsx`
+- **Thin community `Community 477`** (1 nodes): `CalendarErrorRow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 477`** (1 nodes): `calendar.test.ts`
+- **Thin community `Community 478`** (1 nodes): `calendar.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 478`** (1 nodes): `types.ts`
+- **Thin community `Community 479`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 479`** (1 nodes): `auth.test.ts`
+- **Thin community `Community 480`** (1 nodes): `auth.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 480`** (1 nodes): `RequireRole.test.tsx`
+- **Thin community `Community 481`** (1 nodes): `RequireRole.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 481`** (1 nodes): `RequireAuth.test.tsx`
+- **Thin community `Community 482`** (1 nodes): `RequireAuth.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 482`** (1 nodes): `types.ts`
+- **Thin community `Community 483`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 483`** (1 nodes): `intervals.activities.test.ts`
+- **Thin community `Community 484`** (1 nodes): `intervals.activities.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 484`** (1 nodes): `intervals.events.test.ts`
+- **Thin community `Community 485`** (1 nodes): `intervals.events.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 485`** (1 nodes): `types.ts`
+- **Thin community `Community 486`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 486`** (1 nodes): `RpeSelector.tsx`
+- **Thin community `Community 487`** (1 nodes): `RpeSelector.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 487`** (1 nodes): `WorkoutHistorySidebar.tsx`
+- **Thin community `Community 488`** (1 nodes): `WorkoutHistorySidebar.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 488`** (1 nodes): `WorkoutActionButtons.test.tsx`
+- **Thin community `Community 489`** (1 nodes): `WorkoutActionButtons.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 489`** (1 nodes): `RpeScaleLabels.tsx`
+- **Thin community `Community 490`** (1 nodes): `RpeScaleLabels.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 490`** (1 nodes): `EmptyWorkoutState.tsx`
+- **Thin community `Community 491`** (1 nodes): `EmptyWorkoutState.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 491`** (1 nodes): `ChatWindow.tsx`
+- **Thin community `Community 492`** (1 nodes): `ChatWindow.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 492`** (1 nodes): `ChatHeader.tsx`
+- **Thin community `Community 493`** (1 nodes): `ChatHeader.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 493`** (1 nodes): `ChatWindow.test.tsx`
+- **Thin community `Community 494`** (1 nodes): `ChatWindow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 494`** (1 nodes): `ConfirmWithoutChatModal.test.tsx`
+- **Thin community `Community 495`** (1 nodes): `ConfirmWithoutChatModal.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 495`** (1 nodes): `WorkoutHistorySidebar.test.tsx`
+- **Thin community `Community 496`** (1 nodes): `WorkoutHistorySidebar.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 496`** (1 nodes): `ChatMessageList.tsx`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 497`** (1 nodes): `ChatTypingIndicator.tsx`
+- **Thin community `Community 497`** (1 nodes): `ChatMessageList.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 498`** (1 nodes): `WorkoutHistoryPagination.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

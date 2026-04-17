@@ -1,12 +1,15 @@
 import { Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import type { CoachChatProgressState } from '../types';
+
 type ChatHeaderProps = {
   isConnected: boolean;
   hasSelectedWorkout: boolean;
   isSaved?: boolean;
   requiresRpe?: boolean;
   requiresAvailability?: boolean;
+  progressState?: CoachChatProgressState;
 };
 
 export function ChatHeader({
@@ -15,10 +18,15 @@ export function ChatHeader({
   isSaved = false,
   requiresRpe = false,
   requiresAvailability = false,
+  progressState = 'idle',
 }: ChatHeaderProps) {
   const { t } = useTranslation();
   const statusLabel = !hasSelectedWorkout
     ? t('coach.selectWorkoutPrompt')
+    : progressState === 'saving-summary'
+      ? t('coach.chatSavingSummary')
+    : progressState === 'awaiting-reply'
+      ? t('coach.chatAwaitingReply')
     : requiresAvailability
       ? t('coach.chatRequiresAvailability')
     : requiresRpe
