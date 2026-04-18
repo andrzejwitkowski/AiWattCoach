@@ -34,6 +34,14 @@ pub(super) fn map_admin_identity_error(err: &IdentityError) -> Response {
             log_identity_error(Level::WARN, StatusCode::UNAUTHORIZED, err);
             StatusCode::UNAUTHORIZED.into_response()
         }
+        IdentityError::InvalidEmail => {
+            log_identity_error(Level::WARN, StatusCode::BAD_REQUEST, err);
+            StatusCode::BAD_REQUEST.into_response()
+        }
+        IdentityError::PendingApproval => {
+            log_identity_error(Level::WARN, StatusCode::FORBIDDEN, err);
+            StatusCode::FORBIDDEN.into_response()
+        }
     }
 }
 
@@ -169,6 +177,8 @@ fn log_identity_error(level: Level, status: StatusCode, error: &IdentityError) {
         IdentityError::External(_) => "external_error",
         IdentityError::EmailNotVerified => "email_not_verified",
         IdentityError::InvalidLoginState => "invalid_login_state",
+        IdentityError::InvalidEmail => "invalid_email",
+        IdentityError::PendingApproval => "pending_approval",
     };
 
     match level {

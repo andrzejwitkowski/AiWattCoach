@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildGoogleLoginUrl, loadCurrentUser } from './auth';
+import { buildGoogleLoginUrl, joinWhitelist, loadCurrentUser } from './auth';
 
 const originalFetch = global.fetch;
 
@@ -53,5 +53,33 @@ describe('loadCurrentUser', () => {
 describe('buildGoogleLoginUrl', () => {
   it('defaults returnTo to the calendar page', () => {
     expect(buildGoogleLoginUrl('')).toBe('/api/auth/google/start?returnTo=%2Fcalendar');
+  });
+});
+
+describe('joinWhitelist', () => {
+  it('posts email to whitelist endpoint', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await joinWhitelist('', 'athlete@example.com');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/whitelist', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
+      },
+      body: JSON.stringify({ email: 'athlete@example.com' })
+    });
+    expect(result.success).toBe(true);
   });
 });

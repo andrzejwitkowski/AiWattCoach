@@ -57,6 +57,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/ready", get(health::readiness_check))
         .route("/api/auth/google/start", get(auth::start_google_login))
         .route("/api/auth/google/callback", get(auth::finish_google_login))
+        .route(
+            "/api/auth/whitelist",
+            post(auth::join_whitelist).layer(DefaultBodyLimit::max(4 * 1024)),
+        )
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
         .merge(Router::new().route(

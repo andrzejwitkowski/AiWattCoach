@@ -5,8 +5,8 @@ use std::{
 
 use aiwattcoach::domain::identity::{
     AppUser, AuthSession, BoxFuture, Clock, GoogleIdentity, GoogleOAuthPort, IdGenerator,
-    IdentityError, IdentityService, IdentityServiceConfig, LoginState, LoginStateRepository,
-    SessionRepository, UserRepository,
+    IdentityError, IdentityService, IdentityServiceConfig, IdentityServiceDependencies, LoginState,
+    LoginStateRepository, SessionRepository, UserRepository, WhitelistEntry, WhitelistRepository,
 };
 
 #[derive(Clone)]
@@ -295,16 +295,62 @@ impl LoginStateRepository for InMemoryLoginStates {
     }
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct InMemoryWhitelist {
+    pub(crate) items: Arc<Mutex<BTreeMap<String, WhitelistEntry>>>,
+}
+
+impl WhitelistRepository for InMemoryWhitelist {
+    fn find_by_normalized_email(
+        &self,
+        normalized_email: &str,
+    ) -> BoxFuture<Result<Option<WhitelistEntry>, IdentityError>> {
+        let normalized_email = normalized_email.to_string();
+        let data = self.items.clone();
+        Box::pin(async move { Ok(data.lock().unwrap().get(&normalized_email).cloned()) })
+    }
+
+    fn save(&self, entry: WhitelistEntry) -> BoxFuture<Result<WhitelistEntry, IdentityError>> {
+        let data = self.items.clone();
+        Box::pin(async move {
+            data.lock()
+                .unwrap()
+                .insert(entry.email_normalized.clone(), entry.clone());
+            Ok(entry)
+        })
+    }
+
+    fn touch_pending(
+        &self,
+        normalized_email: &str,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), IdentityError>> {
+        let normalized_email = normalized_email.to_string();
+        let data = self.items.clone();
+        Box::pin(async move {
+            if let Some(entry) = data.lock().unwrap().get_mut(&normalized_email) {
+                if !entry.allowed {
+                    entry.updated_at_epoch_seconds = updated_at_epoch_seconds;
+                }
+            }
+
+            Ok(())
+        })
+    }
+}
+
 pub(crate) struct TestIdentityService {
     inner: IdentityService<
         InMemoryUsers,
         InMemorySessions,
         InMemoryLoginStates,
+        InMemoryWhitelist,
         TestGoogleOAuthAdapter,
         TestClock,
         TestIdGenerator,
     >,
     pub(crate) sessions: InMemorySessions,
+    pub(crate) whitelist: InMemoryWhitelist,
 }
 
 pub(crate) fn test_service(
@@ -316,20 +362,25 @@ pub(crate) fn test_service(
     let states = InMemoryLoginStates {
         items: login_states,
     };
+    let whitelist = InMemoryWhitelist::default();
 
     let service = IdentityService::new(
-        users,
-        sessions.clone(),
-        states,
-        TestGoogleOAuthAdapter,
-        TestClock,
-        TestIdGenerator,
+        IdentityServiceDependencies {
+            users,
+            sessions: sessions.clone(),
+            login_states: states,
+            whitelist: whitelist.clone(),
+            google_oauth: TestGoogleOAuthAdapter,
+            clock: TestClock,
+            ids: TestIdGenerator,
+        },
         IdentityServiceConfig::new(admin_emails, 24),
     );
 
     TestIdentityService {
         inner: service,
         sessions,
+        whitelist,
     }
 }
 
@@ -338,6 +389,7 @@ impl std::ops::Deref for TestIdentityService {
         InMemoryUsers,
         InMemorySessions,
         InMemoryLoginStates,
+        InMemoryWhitelist,
         TestGoogleOAuthAdapter,
         TestClock,
         TestIdGenerator,

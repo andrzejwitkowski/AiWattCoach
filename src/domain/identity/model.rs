@@ -9,6 +9,8 @@ pub enum IdentityError {
     Unauthenticated,
     EmailNotVerified,
     InvalidLoginState,
+    InvalidEmail,
+    PendingApproval,
     Forbidden,
     Repository(String),
     External(String),
@@ -20,6 +22,8 @@ impl std::fmt::Display for IdentityError {
             Self::Unauthenticated => write!(f, "Authentication is required"),
             Self::EmailNotVerified => write!(f, "Google account email must be verified"),
             Self::InvalidLoginState => write!(f, "Login state is invalid or expired"),
+            Self::InvalidEmail => write!(f, "Email address is invalid"),
+            Self::PendingApproval => write!(f, "Account is pending approval"),
             Self::Forbidden => write!(f, "User does not have the required role"),
             Self::Repository(message) | Self::External(message) => write!(f, "{message}"),
         }
@@ -156,8 +160,62 @@ impl LoginState {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WhitelistEntry {
+    pub email: String,
+    pub email_normalized: String,
+    pub allowed: bool,
+    pub created_at_epoch_seconds: i64,
+    pub updated_at_epoch_seconds: i64,
+}
+
+impl WhitelistEntry {
+    pub fn new(
+        email: String,
+        allowed: bool,
+        created_at_epoch_seconds: i64,
+        updated_at_epoch_seconds: i64,
+    ) -> Self {
+        Self {
+            email_normalized: normalize_email(&email),
+            email,
+            allowed,
+            created_at_epoch_seconds,
+            updated_at_epoch_seconds,
+        }
+    }
+}
+
 pub fn normalize_email(email: &str) -> String {
     email.trim().to_ascii_lowercase()
+}
+
+pub fn is_valid_email(email: &str) -> bool {
+    let trimmed = email.trim();
+    if trimmed.is_empty()
+        || trimmed
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+    {
+        return false;
+    }
+
+    let mut parts = trimmed.split('@');
+    let Some(local_part) = parts.next() else {
+        return false;
+    };
+    let Some(domain_part) = parts.next() else {
+        return false;
+    };
+
+    if parts.next().is_some() || local_part.is_empty() || domain_part.is_empty() {
+        return false;
+    }
+
+    domain_part.contains('.')
+        && !domain_part.starts_with('.')
+        && !domain_part.ends_with('.')
+        && !domain_part.contains("..")
 }
 
 pub fn assign_roles(email: &str, admin_emails: &[String]) -> Vec<Role> {

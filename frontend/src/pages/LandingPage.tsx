@@ -3,6 +3,9 @@ import { BackgroundGlow } from '../features/landing/components/BackgroundGlow';
 
 type LandingPageProps = {
   onLogin: () => void;
+  onJoinWhitelist: (email: string) => Promise<void>;
+  authMessage?: string | null;
+  whitelistMessage?: string | null;
   devAuthEnabled?: boolean;
 };
 
@@ -10,7 +13,13 @@ type LandingPageProps = {
  * Wattly public landing page — centered glass-panel login card over a full-screen
  * cyclist background, with a fixed navbar and footer.
  */
-export function LandingPage({ onLogin, devAuthEnabled = false }: LandingPageProps) {
+export function LandingPage({
+  onLogin,
+  onJoinWhitelist,
+  authMessage = null,
+  whitelistMessage = null,
+  devAuthEnabled = false
+}: LandingPageProps) {
   return (
     <div className="relative min-h-screen overflow-y-auto bg-[#0c0e11] text-slate-100">
       <BackgroundGlow />
@@ -36,7 +45,13 @@ export function LandingPage({ onLogin, devAuthEnabled = false }: LandingPageProp
       </header>
 
       <main className="relative z-10 flex items-center justify-center min-h-screen px-4 pt-16 pb-24">
-        <LoginPanel onLogin={onLogin} devAuthEnabled={devAuthEnabled} />
+        <LoginPanel
+          onLogin={onLogin}
+          onJoinWhitelist={onJoinWhitelist}
+          authMessage={authMessage}
+          whitelistMessage={whitelistMessage}
+          devAuthEnabled={devAuthEnabled}
+        />
       </main>
 
       <footer className="fixed bottom-0 w-full z-50 px-4 py-8">

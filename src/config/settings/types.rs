@@ -15,6 +15,7 @@ pub struct Settings {
     pub dev_llm_coach_enabled: bool,
     pub client_log_ingestion_enabled: bool,
     pub legacy_time_stream_cleanup_enabled: bool,
+    pub trust_proxy_headers: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
