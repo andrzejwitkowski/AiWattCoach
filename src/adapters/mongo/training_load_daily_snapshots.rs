@@ -1,5 +1,9 @@
 use futures::TryStreamExt;
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::doc,
+    options::{FindOneOptions, IndexOptions},
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::training_load::{
@@ -29,6 +33,11 @@ struct TrainingLoadDailySnapshotDocument {
     recomputed_at_epoch_seconds: i64,
     created_at_epoch_seconds: i64,
     updated_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct TrainingLoadDailySnapshotDateOnlyDocument {
+    date: String,
 }
 
 impl MongoTrainingLoadDailySnapshotRepository {
@@ -122,18 +131,21 @@ impl TrainingLoadDailySnapshotRepository for MongoTrainingLoadDailySnapshotRepos
         &self,
         user_id: &str,
     ) -> BoxFuture<Result<Option<String>, TrainingLoadError>> {
-        let collection = self.collection.clone();
+        let collection = self
+            .collection
+            .clone_with_type::<TrainingLoadDailySnapshotDateOnlyDocument>();
         let user_id = user_id.to_string();
         Box::pin(async move {
             let oldest = collection
-                .find(doc! {
+                .find_one(doc! {
                     "user_id": &user_id,
                 })
-                .sort(doc! { "date": 1 })
-                .limit(1)
-                .await
-                .map_err(|error| TrainingLoadError::Repository(error.to_string()))?
-                .try_next()
+                .with_options(
+                    FindOneOptions::builder()
+                        .sort(doc! { "date": 1 })
+                        .projection(doc! { "_id": 0, "date": 1 })
+                        .build(),
+                )
                 .await
                 .map_err(|error| TrainingLoadError::Repository(error.to_string()))?
                 .map(|document| document.date);

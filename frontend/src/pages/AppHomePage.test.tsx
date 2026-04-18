@@ -134,6 +134,57 @@ describe('AppHomePage', () => {
     expect(tsbQueries.getAllByText('-23.5')).toHaveLength(2);
   });
 
+  it('keeps the load chart marker and narration on fatigue when latest ctl is unavailable', async () => {
+    useFetchMock(
+      createFetchMock().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            range: '90d',
+            windowStart: '2026-01-19',
+            windowEnd: '2026-04-18',
+            hasTrainingLoad: true,
+            summary: {
+              currentCtl: null,
+              currentAtl: 53.4,
+              currentTsb: -23.5,
+              ftpWatts: 340,
+              averageIf28d: 72.95,
+              averageEf28d: null,
+              loadDeltaCtl14d: null,
+              tsbZone: 'optimal_training',
+            },
+            points: [
+              {
+                date: '2026-04-01',
+                dailyTss: 44,
+                currentCtl: 20.0,
+                currentAtl: 30.0,
+                currentTsb: -10.0,
+              },
+              {
+                date: '2026-04-18',
+                dailyTss: 97,
+                currentCtl: null,
+                currentAtl: 53.4,
+                currentTsb: -23.5,
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const { container } = render(<AppHomePage apiBaseUrl="" />);
+
+    const loadChart = await within(container).findByLabelText(/fitness and fatigue chart/i);
+    expect(loadChart).toHaveAttribute('aria-label', expect.stringContaining('highlighted dot follows fatigue'));
+
+    const marker = loadChart.querySelector('circle');
+    expect(marker).not.toBeNull();
+    expect(marker).toHaveAttribute('fill', '#ff7a45');
+  });
+
   it('renders empty state when report has no snapshots', async () => {
     useFetchMock(
       createFetchMock().mockResolvedValueOnce(

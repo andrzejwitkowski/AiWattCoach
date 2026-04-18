@@ -4,7 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 
 use crate::{config::AppState, domain::training_load::TrainingLoadDashboardRange};
 
@@ -27,14 +27,7 @@ pub(crate) async fn get_training_load_dashboard(
         Some(range) => range,
         None => return StatusCode::BAD_REQUEST.into_response(),
     };
-    let today = DateTime::<Utc>::from_timestamp(Utc::now().timestamp(), 0)
-        .map(|value| value.date_naive().format("%Y-%m-%d").to_string())
-        .unwrap_or_else(|| {
-            DateTime::<Utc>::UNIX_EPOCH
-                .date_naive()
-                .format("%Y-%m-%d")
-                .to_string()
-        });
+    let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
 
     match service.build_report(&user_id, range, &today).await {
         Ok(report) => Json(map_dashboard_report_to_dto(report)).into_response(),

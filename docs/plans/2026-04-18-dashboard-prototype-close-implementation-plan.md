@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Lock the expected prototype-close UI in a failing test
+## Task 1: Lock the expected prototype-close UI in a failing test
 
 **Files:**
 - Modify: `frontend/src/pages/AppHomePage.test.tsx`
@@ -28,7 +28,7 @@ Run: `bun run --cwd frontend test src/pages/AppHomePage.test.tsx`
 
 Expected: FAIL because the current dashboard UI does not render the new structure yet.
 
-### Task 2: Restyle the dashboard report shell and range switch
+## Task 2: Restyle the dashboard report shell and range switch
 
 **Files:**
 - Modify: `frontend/src/features/dashboard/components/TrainingLoadReport.tsx`
@@ -46,7 +46,7 @@ Run: `bun run --cwd frontend test src/pages/AppHomePage.test.tsx`
 
 Expected: still failing until the chart and insight components are updated.
 
-### Task 3: Restyle the chart cards with clearer axes, zones, and latest-point context
+## Task 3: Restyle the chart cards with clearer axes, zones, and latest-point context
 
 **Files:**
 - Modify: `frontend/src/features/dashboard/components/TrainingLoadCharts.tsx`
@@ -64,7 +64,7 @@ Run: `bun run --cwd frontend test src/pages/AppHomePage.test.tsx`
 
 Expected: may still fail until the right-hand panel is updated.
 
-### Task 4: Replace the summary card feel with the prototype-close insight/explainer panel
+## Task 4: Replace the summary card feel with the prototype-close insight/explainer panel
 
 **Files:**
 - Modify: `frontend/src/features/dashboard/components/TrainingLoadInsightCard.tsx`
@@ -81,7 +81,7 @@ Run: `bun run --cwd frontend test src/pages/AppHomePage.test.tsx`
 
 Expected: PASS.
 
-### Task 5: Run targeted and broader verification
+## Task 5: Run targeted and broader verification
 
 **Files:**
 - No code changes expected
@@ -100,7 +100,7 @@ Run:
 
 Expected: PASS.
 
-### Task 6: Run graph refresh and the required review loop
+## Task 6: Run graph refresh and the required review loop
 
 **Files:**
 - No code changes expected unless review finds issues

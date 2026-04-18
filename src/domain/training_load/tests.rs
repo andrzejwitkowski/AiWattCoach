@@ -309,7 +309,7 @@ async fn dashboard_report_for_last_90_days_uses_latest_snapshot_summary() {
     repository
         .upsert(sample_snapshot_with_values(
             "user-1",
-            "2026-04-05",
+            "2026-04-04",
             SnapshotValues {
                 daily_tss: Some(82),
                 ctl: Some(49.5),
@@ -404,6 +404,54 @@ async fn dashboard_report_for_season_starts_on_first_day_of_year() {
     assert_eq!(report.window_start, "2026-01-01");
     assert_eq!(report.points.len(), 1);
     assert_eq!(report.points[0].date, "2026-01-01");
+}
+
+#[tokio::test]
+async fn dashboard_report_requires_full_14_day_history_for_ctl_delta() {
+    let repository = InMemoryTrainingLoadDailySnapshotRepository::default();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2026-04-16",
+            SnapshotValues {
+                daily_tss: Some(55),
+                ctl: Some(30.0),
+                atl: Some(42.0),
+                tsb: Some(-12.0),
+                ftp_effective_watts: Some(285),
+                average_if_28d: Some(0.84),
+                average_ef_28d: Some(1.22),
+            },
+        ))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2026-04-18",
+            SnapshotValues {
+                daily_tss: Some(70),
+                ctl: Some(33.0),
+                atl: Some(45.0),
+                tsb: Some(-12.0),
+                ftp_effective_watts: Some(290),
+                average_if_28d: Some(0.86),
+                average_ef_28d: Some(1.25),
+            },
+        ))
+        .await
+        .unwrap();
+
+    let report = TrainingLoadDashboardReadService::new(repository)
+        .build_report(
+            "user-1",
+            TrainingLoadDashboardRange::Last90Days,
+            "2026-04-18",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(report.summary.load_delta_ctl_14d, None);
 }
 
 #[tokio::test]

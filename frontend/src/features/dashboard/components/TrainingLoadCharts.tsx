@@ -181,14 +181,16 @@ export function TrainingLoadCharts({ report }: TrainingLoadChartsProps) {
   const latestTsbPoint = latestSeriesPoint(tsbPoints);
   const latestLoadSnapshot = latestLoadPoint ? report.points[latestLoadPoint.index] : null;
   const latestTsbSnapshot = latestTsbPoint ? report.points[latestTsbPoint.index] : null;
-  const latestLoadMarkerColor = latestLoadSnapshot?.currentCtl !== null ? '#22d3ee' : '#ff7a45';
+  const latestLoadMarkerColor = latestLoadSnapshot && latestLoadSnapshot.currentCtl === null ? '#ff7a45' : '#22d3ee';
   const hoveredLoadPoint = seriesPointAtIndex(ctlPoints, activeLoadIndex) ?? seriesPointAtIndex(atlPoints, activeLoadIndex);
   const hoveredTsbPoint = seriesPointAtIndex(tsbPoints, activeTsbIndex);
   const hoveredLoadSnapshot = activeLoadIndex === null ? null : report.points[activeLoadIndex] ?? null;
   const hoveredTsbSnapshot = activeTsbIndex === null ? null : report.points[activeTsbIndex] ?? null;
   const loadFocusPoint = hoveredLoadPoint ?? latestLoadPoint;
   const tsbFocusPoint = hoveredTsbPoint ?? latestTsbPoint;
-  const loadFocusMarkerColor = hoveredLoadSnapshot?.currentCtl !== null ? '#22d3ee' : latestLoadMarkerColor;
+  const loadFocusMarkerColor = hoveredLoadSnapshot
+    ? (hoveredLoadSnapshot.currentCtl === null ? '#ff7a45' : '#22d3ee')
+    : latestLoadMarkerColor;
   const hoveredLoadTooltipTop = hoveredLoadPoint ? clamp(hoveredLoadPoint.y - 20, 7, 60) : 7;
   const hoveredTsbTooltipTop = hoveredTsbPoint ? clamp(hoveredTsbPoint.y - 18, 7, 62) : 7;
   const tsbRange = Math.max(tsbMax - tsbMin, 1);
@@ -262,7 +264,7 @@ export function TrainingLoadCharts({ report }: TrainingLoadChartsProps) {
               preserveAspectRatio="none"
               className="relative h-full w-full"
               role="img"
-              aria-label={`Fitness and fatigue chart from ${timelineLabels[0]?.label ?? 'start'} to ${timelineLabels[timelineLabels.length - 1]?.label ?? 'latest'}. Latest load snapshot ${latestLoadSnapshot ? `${formatShortDate(latestLoadSnapshot.date)} with CTL ${formatMetricValue(latestLoadSnapshot.currentCtl)} and ATL ${formatMetricValue(latestLoadSnapshot.currentAtl)}` : 'is unavailable'}. The highlighted dot follows ${latestLoadSnapshot?.currentCtl !== null ? 'fitness' : 'fatigue'} because that is the latest available load series point.`}
+              aria-label={`Fitness and fatigue chart from ${timelineLabels[0]?.label ?? 'start'} to ${timelineLabels[timelineLabels.length - 1]?.label ?? 'latest'}. Latest load snapshot ${latestLoadSnapshot ? `${formatShortDate(latestLoadSnapshot.date)} with CTL ${formatMetricValue(latestLoadSnapshot.currentCtl)} and ATL ${formatMetricValue(latestLoadSnapshot.currentAtl)}` : 'is unavailable'}. The highlighted dot follows ${latestLoadSnapshot && latestLoadSnapshot.currentCtl === null ? 'fatigue' : 'fitness'} because that is the latest available load series point.`}
               onMouseEnter={handleLoadHover}
               onMouseMove={handleLoadHover}
               onMouseLeave={() => setActiveLoadIndex(null)}

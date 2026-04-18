@@ -204,13 +204,11 @@ where
                 )
                 .await?;
             let latest_snapshot = snapshots.last();
+            let reference_ctl_cutoff = (today - Duration::days(14)).format("%Y-%m-%d").to_string();
             let reference_ctl = snapshots
                 .iter()
                 .rev()
-                .find(|snapshot| {
-                    snapshot.date <= (today - Duration::days(14)).format("%Y-%m-%d").to_string()
-                })
-                .or_else(|| snapshots.first())
+                .find(|snapshot| snapshot.date <= reference_ctl_cutoff)
                 .and_then(|snapshot| snapshot.ctl);
 
             Ok(TrainingLoadDashboardReport {

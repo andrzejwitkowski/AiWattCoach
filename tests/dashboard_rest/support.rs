@@ -2,7 +2,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
-    sync::Arc,
+    sync::{Arc, Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -21,30 +21,40 @@ use aiwattcoach::{
 use mongodb::Client;
 
 static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static KEPT_FRONTEND_FIXTURES: OnceLock<Mutex<Vec<FrontendFixture>>> = OnceLock::new();
 
 pub(crate) async fn dashboard_test_app(
     identity_service: impl IdentityUseCases + 'static,
     snapshots: impl TrainingLoadDailySnapshotRepository + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
+    let app_name = settings.app_name.clone();
+    let mongo_database = settings.mongo.database.clone();
+    let mongo_uri = settings.mongo.uri.clone();
+    let session_name = settings.auth.session.cookie_name.clone();
+    let session_same_site = settings.auth.session.same_site.clone();
+    let session_secure = settings.auth.session.secure;
+    let session_ttl_hours = settings.auth.session.ttl_hours;
     let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
     let dashboard_service = Arc::new(TrainingLoadDashboardReadService::new(snapshots));
 
     build_app_with_frontend_dist(
         AppState::new(
-            settings.app_name,
-            settings.mongo.database,
-            test_mongo_client(&settings.mongo.uri).await,
+            app_name,
+            mongo_database,
+            test_mongo_client(&mongo_uri).await,
         )
         .with_identity_service(
             Arc::new(identity_service),
-            "aiwattcoach_session",
-            "lax",
-            false,
-            24,
+            session_name,
+            session_same_site,
+            session_secure,
+            session_ttl_hours,
         )
         .with_training_load_dashboard_service(dashboard_service),
-        fixture.dist_dir(),
+        dist_dir,
     )
 }
 
@@ -110,6 +120,14 @@ impl FrontendFixture {
     fn dist_dir(&self) -> PathBuf {
         self.root.join("dist")
     }
+}
+
+fn keep_frontend_fixture(fixture: FrontendFixture) {
+    KEPT_FRONTEND_FIXTURES
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .unwrap()
+        .push(fixture);
 }
 
 async fn test_mongo_client(uri: &str) -> Client {
