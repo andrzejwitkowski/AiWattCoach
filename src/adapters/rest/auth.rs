@@ -255,11 +255,7 @@ fn extract_client_ip(
 }
 
 fn parse_forwarded_header_ip(value: &str) -> Option<String> {
-    if value.contains("for=") {
-        return parse_forwarded_for(value);
-    }
-
-    value.split(',').next().and_then(normalize_ip_candidate)
+    parse_forwarded_for(value).or_else(|| value.split(',').next().and_then(normalize_ip_candidate))
 }
 
 fn parse_forwarded_for(value: &str) -> Option<String> {
@@ -267,9 +263,12 @@ fn parse_forwarded_for(value: &str) -> Option<String> {
 
     for part in first.split(';') {
         let trimmed = part.trim();
-        let Some(raw) = trimmed.strip_prefix("for=") else {
+        let Some((name, raw)) = trimmed.split_once('=') else {
             continue;
         };
+        if !name.trim().eq_ignore_ascii_case("for") {
+            continue;
+        }
         return normalize_ip_candidate(raw.trim().trim_matches('"'));
     }
 

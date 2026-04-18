@@ -51,6 +51,11 @@ pub trait WhitelistRepository: Clone + Send + Sync + 'static {
         normalized_email: &str,
     ) -> BoxFuture<Result<Option<WhitelistEntry>, IdentityError>>;
     fn save(&self, entry: WhitelistEntry) -> BoxFuture<Result<WhitelistEntry, IdentityError>>;
+    fn touch_pending(
+        &self,
+        normalized_email: &str,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), IdentityError>>;
 }
 
 pub trait GoogleOAuthPort: Clone + Send + Sync + 'static {

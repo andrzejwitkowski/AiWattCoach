@@ -532,6 +532,52 @@ async fn join_whitelist_normalizes_forwarded_ipv6_port_when_trusted() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_recognizes_case_insensitive_forwarded_for_parameter_when_trusted() {
+    let mut settings = Settings::test_defaults();
+    settings.trust_proxy_headers = true;
+    let service = TestIdentityService::default();
+    let captured = service.last_join_whitelist_email.clone();
+    let app =
+        auth_test_app_with_custom_settings_and_limited_whitelist_rate(settings, service, 1).await;
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("forwarded", r#"For="[2001:db8::1]:41001";proto=https"#)
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let second_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("forwarded", r#"For="[2001:db8::1]:41002";proto=https"#)
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 2], 41001))))
+                .body(Body::from(r#"{"email":"second@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("athlete@example.com")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn join_whitelist_rejects_invalid_bracketed_forwarded_identifier_when_trusted() {
     let mut settings = Settings::test_defaults();
     settings.trust_proxy_headers = true;

@@ -82,6 +82,33 @@ impl WhitelistRepository for MongoWhitelistRepository {
             Ok(entry)
         })
     }
+
+    fn touch_pending(
+        &self,
+        normalized_email: &str,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), IdentityError>> {
+        let collection = self.collection.clone();
+        let normalized_email = normalized_email.to_string();
+        Box::pin(async move {
+            collection
+                .update_one(
+                    doc! {
+                        "email_normalized": &normalized_email,
+                        "allowed": false,
+                    },
+                    doc! {
+                        "$set": {
+                            "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                        },
+                    },
+                )
+                .await
+                .map_err(|error| IdentityError::Repository(error.to_string()))?;
+
+            Ok(())
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

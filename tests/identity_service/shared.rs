@@ -319,6 +319,24 @@ impl WhitelistRepository for InMemoryWhitelist {
             Ok(entry)
         })
     }
+
+    fn touch_pending(
+        &self,
+        normalized_email: &str,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), IdentityError>> {
+        let normalized_email = normalized_email.to_string();
+        let data = self.items.clone();
+        Box::pin(async move {
+            if let Some(entry) = data.lock().unwrap().get_mut(&normalized_email) {
+                if !entry.allowed {
+                    entry.updated_at_epoch_seconds = updated_at_epoch_seconds;
+                }
+            }
+
+            Ok(())
+        })
+    }
 }
 
 pub(crate) struct TestIdentityService {

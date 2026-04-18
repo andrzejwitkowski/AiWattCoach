@@ -283,12 +283,7 @@ where
                 }
                 Some(entry) => {
                     self.whitelist
-                        .save(WhitelistEntry::new(
-                            entry.email,
-                            false,
-                            entry.created_at_epoch_seconds,
-                            now,
-                        ))
+                        .touch_pending(&entry.email_normalized, now)
                         .await?;
                     return Ok(GoogleLoginOutcome::PendingApproval { redirect_to });
                 }
