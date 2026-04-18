@@ -1,6 +1,6 @@
 use crate::domain::external_sync::{
-    ExternalImportCommand, ExternalProvider, ProviderPollState, ProviderPollStateRepository,
-    ProviderPollStream,
+    ExternalImportCommand, ExternalImportError, ExternalImportUseCases, ExternalProvider,
+    ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
 };
 use crate::domain::intervals::IntervalsError;
 
@@ -37,6 +37,33 @@ async fn first_completed_sync_without_activities_advances_cursor_to_window_end()
         .unwrap()
         .unwrap();
     assert_eq!(stored.cursor.as_deref(), Some("2023-11-14"));
+}
+
+#[tokio::test]
+async fn first_completed_sync_uses_two_year_bootstrap_window() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let api = RecordingIntervalsApi::default();
+    let service = ProviderPollingService::new(
+        api.clone(),
+        FakeIntervalsSettings,
+        poll_states,
+        RecordingImportService::default(),
+        FixedClock,
+        FixedIdGenerator,
+    );
+
+    service.poll_due_once().await.unwrap();
+
+    assert_eq!(
+        api.activity_ranges(),
+        vec![("2021-11-14".to_string(), "2023-11-14".to_string())]
+    );
 }
 
 #[tokio::test]
@@ -144,6 +171,85 @@ async fn completed_stream_enriches_activity_details_before_import() {
 }
 
 #[tokio::test]
+async fn completed_stream_recomputes_training_load_once_per_successful_batch() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let imports = RecordingImportService::default();
+    let recompute = std::sync::Arc::new(RecordingTrainingLoadRecomputeService::default());
+    let service = ProviderPollingService::new(
+        FakeIntervalsApi::with_activities(vec![
+            sample_activity("activity-2"),
+            sample_activity("activity-1"),
+        ]),
+        FakeIntervalsSettings,
+        poll_states,
+        imports,
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_training_load_recompute_service(recompute.clone())
+    .with_windows(7, 14, 7);
+
+    service.poll_due_once().await.unwrap();
+
+    assert_eq!(
+        recompute.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2023-11-14".to_string(),
+            1_700_000_000
+        )]
+    );
+}
+
+#[tokio::test]
+async fn completed_stream_recomputes_from_successful_imports_even_if_later_enrichment_fails() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let imports = RecordingImportService::default();
+    let recompute = std::sync::Arc::new(RecordingTrainingLoadRecomputeService::default());
+    let service = ProviderPollingService::new(
+        FakeIntervalsApi::with_activities_and_detail_errors(
+            vec![sample_activity("activity-1"), sample_activity("activity-2")],
+            vec![(
+                "activity-2".to_string(),
+                IntervalsError::ConnectionError("timeout".to_string()),
+            )],
+        ),
+        FakeIntervalsSettings,
+        poll_states,
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_training_load_recompute_service(recompute.clone())
+    .with_windows(7, 14, 7);
+
+    let processed = service.poll_due_once().await.unwrap();
+
+    assert_eq!(processed, 1);
+    assert_eq!(imports.commands().len(), 1);
+    assert_eq!(
+        recompute.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2023-11-14".to_string(),
+            1_700_000_000
+        )]
+    );
+}
+
+#[tokio::test]
 async fn completed_stream_imports_listed_activity_when_detail_enrichment_is_not_found() {
     let poll_states =
         RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
@@ -242,4 +348,113 @@ async fn completed_stream_fails_poll_when_detail_enrichment_has_transient_error(
     assert_eq!(stored.last_successful_at_epoch_seconds, None);
     assert_eq!(stored.last_error.as_deref(), Some("completed workout enrichment failed for activity activity-1: Connection error: timeout"));
     assert_eq!(stored.backoff_until_epoch_seconds, Some(1_700_000_120));
+}
+
+#[tokio::test]
+async fn completed_stream_skips_recompute_when_import_fails() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let recompute = std::sync::Arc::new(RecordingTrainingLoadRecomputeService::default());
+    let service = ProviderPollingService::new(
+        FakeIntervalsApi::with_activities(vec![sample_activity("activity-1")]),
+        FakeIntervalsSettings,
+        poll_states,
+        RecordingImportService::failing("import exploded"),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_training_load_recompute_service(recompute.clone())
+    .with_timing(300, 120)
+    .with_windows(7, 14, 7);
+
+    service.poll_due_once().await.unwrap();
+
+    assert!(recompute.calls().is_empty());
+}
+
+#[tokio::test]
+async fn completed_stream_recomputes_from_successful_imports_when_later_import_fails() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let recompute = std::sync::Arc::new(RecordingTrainingLoadRecomputeService::default());
+    let service = ProviderPollingService::new(
+        FakeIntervalsApi::with_activities(vec![
+            sample_activity("activity-1"),
+            sample_activity("activity-2"),
+        ]),
+        FakeIntervalsSettings,
+        poll_states,
+        RecordingImportService::failing_on_call("import exploded", 2),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_training_load_recompute_service(recompute.clone())
+    .with_timing(300, 120)
+    .with_windows(7, 14, 7);
+
+    service.poll_due_once().await.unwrap();
+
+    assert_eq!(
+        recompute.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2023-11-14".to_string(),
+            1_700_000_000
+        )]
+    );
+}
+
+#[tokio::test]
+async fn recording_import_service_failing_on_call_only_fails_configured_invocation() {
+    let imports = RecordingImportService::failing_on_call("import exploded", 2);
+
+    let first = imports
+        .import(sample_completed_workout_import_command("activity-1"))
+        .await;
+    let second = imports
+        .import(sample_completed_workout_import_command("activity-2"))
+        .await;
+    let third = imports
+        .import(sample_completed_workout_import_command("activity-3"))
+        .await;
+
+    assert!(first.is_ok());
+    assert!(matches!(
+        second.map_err(IntervalsErrorWrapper::from),
+        Err(IntervalsErrorWrapper::Repository(ref message)) if message == "import exploded"
+    ));
+    assert!(third.is_ok());
+}
+
+enum IntervalsErrorWrapper {
+    Repository(String),
+}
+
+impl From<ExternalImportError> for IntervalsErrorWrapper {
+    fn from(error: ExternalImportError) -> Self {
+        match error {
+            ExternalImportError::Repository(message)
+            | ExternalImportError::PlannedWorkout(message)
+            | ExternalImportError::CompletedWorkout(message)
+            | ExternalImportError::Race(message)
+            | ExternalImportError::SpecialDay(message) => Self::Repository(message),
+        }
+    }
+}
+
+fn sample_completed_workout_import_command(activity_id: &str) -> ExternalImportCommand {
+    crate::config::provider_polling::map_activity_to_import_command(
+        "user-1",
+        &sample_activity(activity_id),
+    )
 }

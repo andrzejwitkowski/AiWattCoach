@@ -16,6 +16,9 @@ use crate::domain::{
         Activity, ActivityDetails, ActivityMetrics, DateRange, Event, IntervalsApiPort,
         IntervalsCredentials, IntervalsError, IntervalsSettingsPort,
     },
+    training_load::{
+        BoxFuture as TrainingLoadBoxFuture, TrainingLoadError, TrainingLoadRecomputeUseCases,
+    },
 };
 
 #[derive(Clone)]
@@ -40,6 +43,19 @@ impl IdGenerator for FixedIdGenerator {
 pub(super) struct RecordingImportService {
     commands: Arc<Mutex<Vec<ExternalImportCommand>>>,
     failure: Option<String>,
+    failure_on_call: Option<usize>,
+    call_count: Arc<Mutex<usize>>,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct RecordingTrainingLoadRecomputeService {
+    calls: Arc<Mutex<Vec<(String, String, i64)>>>,
+}
+
+impl RecordingTrainingLoadRecomputeService {
+    pub(super) fn calls(&self) -> Vec<(String, String, i64)> {
+        self.calls.lock().unwrap().clone()
+    }
 }
 
 impl RecordingImportService {
@@ -47,6 +63,17 @@ impl RecordingImportService {
         Self {
             commands: Arc::new(Mutex::new(Vec::new())),
             failure: Some(message.to_string()),
+            failure_on_call: None,
+            call_count: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    pub(super) fn failing_on_call(message: &str, call_number: usize) -> Self {
+        Self {
+            commands: Arc::new(Mutex::new(Vec::new())),
+            failure: Some(message.to_string()),
+            failure_on_call: Some(call_number),
+            call_count: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -62,9 +89,20 @@ impl ExternalImportUseCases for RecordingImportService {
     ) -> SyncBoxFuture<Result<ExternalImportOutcome, ExternalImportError>> {
         let commands = self.commands.clone();
         let failure = self.failure.clone();
+        let failure_on_call = self.failure_on_call;
+        let call_count = self.call_count.clone();
         Box::pin(async move {
             commands.lock().unwrap().push(command.clone());
-            if let Some(message) = failure {
+            let current_call = {
+                let mut count = call_count.lock().unwrap();
+                *count += 1;
+                *count
+            };
+            if let Some(message) = failure.filter(|_| {
+                failure_on_call
+                    .map(|call_number| current_call == call_number)
+                    .unwrap_or(true)
+            }) {
                 return Err(ExternalImportError::Repository(message));
             }
 
@@ -108,6 +146,26 @@ impl ExternalImportUseCases for RecordingImportService {
                 provider,
                 external_id,
             })
+        })
+    }
+}
+
+impl TrainingLoadRecomputeUseCases for RecordingTrainingLoadRecomputeService {
+    fn recompute_from(
+        &self,
+        user_id: &str,
+        oldest_date: &str,
+        now_epoch_seconds: i64,
+    ) -> TrainingLoadBoxFuture<Result<(), TrainingLoadError>> {
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let oldest_date = oldest_date.to_string();
+        Box::pin(async move {
+            calls
+                .lock()
+                .unwrap()
+                .push((user_id, oldest_date, now_epoch_seconds));
+            Ok(())
         })
     }
 }

@@ -2,6 +2,8 @@ use super::{
     AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
     SettingsError, UserSettings, UserSettingsRepository,
 };
+use chrono::{DateTime, Utc};
+
 use crate::domain::llm::LlmContextCacheRepository;
 use crate::domain::settings::{ports::BoxFuture, validation};
 use crate::domain::{
@@ -10,8 +12,48 @@ use crate::domain::{
         ProviderPollStateRepository, ProviderPollStream,
     },
     identity::Clock,
+    training_load::{FtpHistoryEntry, FtpHistoryRepository, TrainingLoadRecomputeUseCases},
 };
 use std::sync::Arc;
+
+trait FtpHistoryWritePort: Send + Sync {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::training_load::BoxFuture<
+        Result<Vec<FtpHistoryEntry>, crate::domain::training_load::TrainingLoadError>,
+    >;
+
+    fn upsert(
+        &self,
+        entry: FtpHistoryEntry,
+    ) -> crate::domain::training_load::BoxFuture<
+        Result<FtpHistoryEntry, crate::domain::training_load::TrainingLoadError>,
+    >;
+}
+
+impl<Repository> FtpHistoryWritePort for Repository
+where
+    Repository: FtpHistoryRepository,
+{
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::training_load::BoxFuture<
+        Result<Vec<FtpHistoryEntry>, crate::domain::training_load::TrainingLoadError>,
+    > {
+        FtpHistoryRepository::list_by_user_id(self, user_id)
+    }
+
+    fn upsert(
+        &self,
+        entry: FtpHistoryEntry,
+    ) -> crate::domain::training_load::BoxFuture<
+        Result<FtpHistoryEntry, crate::domain::training_load::TrainingLoadError>,
+    > {
+        FtpHistoryRepository::upsert(self, entry)
+    }
+}
 
 pub trait UserSettingsUseCases: Send + Sync {
     fn find_settings(
@@ -57,6 +99,8 @@ where
     clock: Time,
     poll_states: PollStates,
     llm_context_cache_repository: Option<Arc<dyn LlmContextCacheRepository>>,
+    ftp_history_repository: Option<Arc<dyn FtpHistoryWritePort>>,
+    training_load_recompute_service: Option<Arc<dyn TrainingLoadRecomputeUseCases>>,
 }
 
 impl<Repo, Time> UserSettingsService<Repo, Time>
@@ -70,6 +114,8 @@ where
             clock,
             poll_states: NoopProviderPollStateRepository,
             llm_context_cache_repository: None,
+            ftp_history_repository: None,
+            training_load_recompute_service: None,
         }
     }
 }
@@ -92,6 +138,8 @@ where
             clock: self.clock,
             poll_states,
             llm_context_cache_repository: self.llm_context_cache_repository,
+            ftp_history_repository: self.ftp_history_repository,
+            training_load_recompute_service: self.training_load_recompute_service,
         }
     }
 
@@ -100,6 +148,22 @@ where
         llm_context_cache_repository: Arc<dyn LlmContextCacheRepository>,
     ) -> Self {
         self.llm_context_cache_repository = Some(llm_context_cache_repository);
+        self
+    }
+
+    pub fn with_ftp_history_repository(
+        mut self,
+        ftp_history_repository: impl FtpHistoryRepository,
+    ) -> Self {
+        self.ftp_history_repository = Some(Arc::new(ftp_history_repository));
+        self
+    }
+
+    pub fn with_training_load_recompute_service(
+        mut self,
+        training_load_recompute_service: Arc<dyn TrainingLoadRecomputeUseCases>,
+    ) -> Self {
+        self.training_load_recompute_service = Some(training_load_recompute_service);
         self
     }
 
@@ -244,19 +308,80 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
-            service.get_or_create(&user_id).await?;
+            let previous = service.get_or_create(&user_id).await?;
             let now = service.clock.now_epoch_seconds();
+            let recompute_from_date = epoch_seconds_to_utc_date(previous.created_at_epoch_seconds);
+            let ftp_changed = previous.cycling.ftp_watts != cycling.ftp_watts;
             service
                 .repository
-                .update_cycling(&user_id, cycling, now)
+                .update_cycling(&user_id, cycling.clone(), now)
                 .await?;
-            service
+            let updated = service
                 .repository
                 .find_by_user_id(&user_id)
                 .await?
                 .ok_or_else(|| {
                     SettingsError::Repository("settings disappeared after update".to_string())
-                })
+                })?;
+
+            if ftp_changed {
+                if let Some(repository) = &service.ftp_history_repository {
+                    if let Err(error) =
+                        seed_initial_ftp_history_if_needed(repository.as_ref(), &previous).await
+                    {
+                        tracing::warn!(
+                            user_id = %user_id,
+                            error = %error,
+                            "cycling settings were saved but initial ftp history seed failed"
+                        );
+                    }
+
+                    let history_ftp_watts =
+                        updated.cycling.ftp_watts.map(|ftp| ftp as i32).unwrap_or(0);
+                    if let Err(error) = repository
+                        .upsert(FtpHistoryEntry {
+                            user_id: user_id.clone(),
+                            effective_from_date: epoch_seconds_to_utc_date(now),
+                            ftp_watts: history_ftp_watts,
+                            source: crate::domain::training_load::FtpSource::Settings,
+                            created_at_epoch_seconds: now,
+                            updated_at_epoch_seconds: now,
+                        })
+                        .await
+                    {
+                        tracing::warn!(
+                            user_id = %user_id,
+                            error = %error,
+                            "cycling settings were saved but ftp history update failed"
+                        );
+                    }
+                }
+
+                if let Some(recompute_service) = &service.training_load_recompute_service {
+                    if let Err(error) = recompute_service
+                        .recompute_from(&user_id, &recompute_from_date, now)
+                        .await
+                    {
+                        tracing::warn!(
+                            user_id = %user_id,
+                            error = %error,
+                            "cycling settings were saved but training load recompute failed"
+                        );
+                    }
+                }
+
+                if let Some(repository) = &service.llm_context_cache_repository {
+                    if let Err(error) = repository.delete_by_user_id(&user_id).await {
+                        tracing::warn!(
+                            user_id = %user_id,
+                            error = %error,
+                            "failed to invalidate llm context cache after settings update"
+                        );
+                    }
+                }
+            }
+
+            Ok(updated)
         })
     }
 
@@ -381,6 +506,53 @@ fn map_poll_state_error(
     SettingsError::Repository(error.to_string())
 }
 
+fn map_training_load_error(
+    error: crate::domain::training_load::TrainingLoadError,
+) -> SettingsError {
+    SettingsError::Repository(error.to_string())
+}
+
+async fn seed_initial_ftp_history_if_needed(
+    repository: &dyn FtpHistoryWritePort,
+    settings: &UserSettings,
+) -> Result<(), SettingsError> {
+    let Some(initial_ftp) = settings.cycling.ftp_watts else {
+        return Ok(());
+    };
+    let existing = repository
+        .list_by_user_id(&settings.user_id)
+        .await
+        .map_err(map_training_load_error)?;
+    if !existing.is_empty() {
+        return Ok(());
+    }
+
+    repository
+        .upsert(FtpHistoryEntry {
+            user_id: settings.user_id.clone(),
+            effective_from_date: epoch_seconds_to_utc_date(settings.created_at_epoch_seconds),
+            ftp_watts: initial_ftp as i32,
+            source: crate::domain::training_load::FtpSource::Settings,
+            created_at_epoch_seconds: settings.created_at_epoch_seconds,
+            updated_at_epoch_seconds: settings.created_at_epoch_seconds,
+        })
+        .await
+        .map_err(map_training_load_error)?;
+
+    Ok(())
+}
+
+fn epoch_seconds_to_utc_date(epoch_seconds: i64) -> String {
+    DateTime::<Utc>::from_timestamp(epoch_seconds, 0)
+        .map(|value| value.date_naive().format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| {
+            DateTime::<Utc>::UNIX_EPOCH
+                .date_naive()
+                .format("%Y-%m-%d")
+                .to_string()
+        })
+}
+
 fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConfig) -> bool {
     previous.selected_provider != updated.selected_provider
         || previous.selected_model != updated.selected_model
@@ -399,6 +571,10 @@ mod tests {
         },
         identity::Clock,
         llm::{BoxFuture as LlmBoxFuture, LlmContextCache, LlmContextCacheRepository, LlmError},
+        training_load::{
+            BoxFuture as TrainingLoadBoxFuture, FtpHistoryEntry, FtpHistoryRepository, FtpSource,
+            TrainingLoadError, TrainingLoadRecomputeUseCases,
+        },
     };
     use std::sync::{Arc, Mutex};
 
@@ -489,10 +665,19 @@ mod tests {
         fn update_cycling(
             &self,
             _user_id: &str,
-            _cycling: CyclingSettings,
-            _updated_at_epoch_seconds: i64,
+            cycling: CyclingSettings,
+            updated_at_epoch_seconds: i64,
         ) -> BoxFuture<Result<(), SettingsError>> {
-            Box::pin(async move { unreachable!("not used in test") })
+            let settings = self.settings.clone();
+            Box::pin(async move {
+                let mut guard = settings.lock().unwrap();
+                let current = guard
+                    .as_mut()
+                    .ok_or_else(|| SettingsError::Repository("settings not found".to_string()))?;
+                current.cycling = cycling;
+                current.updated_at_epoch_seconds = updated_at_epoch_seconds;
+                Ok(())
+            })
         }
 
         fn update_availability(
@@ -518,6 +703,19 @@ mod tests {
     struct RecordingCacheRepository {
         deleted_users: Arc<Mutex<Vec<String>>>,
     }
+
+    #[derive(Clone, Default)]
+    struct RecordingFtpHistoryRepository {
+        entries: Arc<Mutex<Vec<FtpHistoryEntry>>>,
+    }
+
+    #[derive(Clone, Default)]
+    struct RecordingTrainingLoadRecomputeService {
+        calls: Arc<Mutex<Vec<(String, String, i64)>>>,
+    }
+
+    #[derive(Clone, Default)]
+    struct FailingFtpHistoryRepository;
 
     #[derive(Clone, Default)]
     struct InMemoryProviderPollStateRepository {
@@ -593,6 +791,20 @@ mod tests {
         }
     }
 
+    impl RecordingFtpHistoryRepository {
+        fn stored(&self) -> Vec<FtpHistoryEntry> {
+            let mut entries = self.entries.lock().unwrap().clone();
+            entries.sort_by(|left, right| left.effective_from_date.cmp(&right.effective_from_date));
+            entries
+        }
+    }
+
+    impl RecordingTrainingLoadRecomputeService {
+        fn calls(&self) -> Vec<(String, String, i64)> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
     impl LlmContextCacheRepository for RecordingCacheRepository {
         fn find_reusable(
             &self,
@@ -619,6 +831,116 @@ mod tests {
             Box::pin(async move {
                 deleted_users.lock().unwrap().push(user_id);
                 Ok(())
+            })
+        }
+    }
+
+    impl FtpHistoryRepository for RecordingFtpHistoryRepository {
+        fn list_by_user_id(
+            &self,
+            user_id: &str,
+        ) -> TrainingLoadBoxFuture<Result<Vec<FtpHistoryEntry>, TrainingLoadError>> {
+            let entries = self.entries.clone();
+            let user_id = user_id.to_string();
+            Box::pin(async move {
+                Ok(entries
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|entry| entry.user_id == user_id)
+                    .cloned()
+                    .collect())
+            })
+        }
+
+        fn find_effective_for_date(
+            &self,
+            user_id: &str,
+            date: &str,
+        ) -> TrainingLoadBoxFuture<Result<Option<FtpHistoryEntry>, TrainingLoadError>> {
+            let entries = self.entries.clone();
+            let user_id = user_id.to_string();
+            let date = date.to_string();
+            Box::pin(async move {
+                Ok(entries
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|entry| entry.user_id == user_id && entry.effective_from_date <= date)
+                    .cloned()
+                    .max_by_key(|entry| entry.effective_from_date.clone()))
+            })
+        }
+
+        fn upsert(
+            &self,
+            entry: FtpHistoryEntry,
+        ) -> TrainingLoadBoxFuture<Result<FtpHistoryEntry, TrainingLoadError>> {
+            let entries = self.entries.clone();
+            Box::pin(async move {
+                let mut entries = entries.lock().unwrap();
+                entries.retain(|existing| {
+                    !(existing.user_id == entry.user_id
+                        && existing.effective_from_date == entry.effective_from_date)
+                });
+                entries.push(entry.clone());
+                Ok(entry)
+            })
+        }
+    }
+
+    impl TrainingLoadRecomputeUseCases for RecordingTrainingLoadRecomputeService {
+        fn recompute_from(
+            &self,
+            user_id: &str,
+            oldest_date: &str,
+            now_epoch_seconds: i64,
+        ) -> TrainingLoadBoxFuture<Result<(), TrainingLoadError>> {
+            let calls = self.calls.clone();
+            let user_id = user_id.to_string();
+            let oldest_date = oldest_date.to_string();
+            Box::pin(async move {
+                calls
+                    .lock()
+                    .unwrap()
+                    .push((user_id, oldest_date, now_epoch_seconds));
+                Ok(())
+            })
+        }
+    }
+
+    impl FtpHistoryRepository for FailingFtpHistoryRepository {
+        fn list_by_user_id(
+            &self,
+            _user_id: &str,
+        ) -> TrainingLoadBoxFuture<Result<Vec<FtpHistoryEntry>, TrainingLoadError>> {
+            Box::pin(async move {
+                Err(TrainingLoadError::Repository(
+                    "ftp history unavailable".to_string(),
+                ))
+            })
+        }
+
+        fn find_effective_for_date(
+            &self,
+            _user_id: &str,
+            _date: &str,
+        ) -> TrainingLoadBoxFuture<Result<Option<FtpHistoryEntry>, TrainingLoadError>> {
+            Box::pin(async move {
+                Err(TrainingLoadError::Repository(
+                    "ftp history unavailable".to_string(),
+                ))
+            })
+        }
+
+        fn upsert(
+            &self,
+            _entry: FtpHistoryEntry,
+        ) -> TrainingLoadBoxFuture<Result<FtpHistoryEntry, TrainingLoadError>> {
+            Box::pin(async move {
+                Err(TrainingLoadError::Repository(
+                    "ftp history unavailable".to_string(),
+                ))
             })
         }
     }
@@ -684,6 +1006,168 @@ mod tests {
             .unwrap();
 
         assert!(cache_repository.deleted_users().is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_cycling_seeds_initial_ftp_history_and_recomputes_from_settings_created_date() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_315_200);
+        settings.cycling.ftp_watts = Some(280);
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let cache_repository = Arc::new(RecordingCacheRepository::default());
+        let ftp_history_repository = RecordingFtpHistoryRepository::default();
+        let recompute_service = Arc::new(RecordingTrainingLoadRecomputeService::default());
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_llm_context_cache_repository(cache_repository.clone())
+            .with_ftp_history_repository(ftp_history_repository.clone())
+            .with_training_load_recompute_service(recompute_service.clone());
+
+        service
+            .update_cycling(
+                "user-1",
+                CyclingSettings {
+                    ftp_watts: Some(290),
+                    ..CyclingSettings::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        let history = ftp_history_repository.stored();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].effective_from_date, "2023-11-07");
+        assert_eq!(history[0].ftp_watts, 280);
+        assert_eq!(history[1].effective_from_date, "2023-11-14");
+        assert_eq!(history[1].ftp_watts, 290);
+        assert_eq!(history[1].source, FtpSource::Settings);
+        assert_eq!(
+            recompute_service.calls(),
+            vec![(
+                "user-1".to_string(),
+                "2023-11-07".to_string(),
+                1_700_000_000
+            )]
+        );
+        assert_eq!(cache_repository.deleted_users(), vec!["user-1".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn update_cycling_skips_ftp_history_when_ftp_is_unchanged() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_315_200);
+        settings.cycling.ftp_watts = Some(280);
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let ftp_history_repository = RecordingFtpHistoryRepository::default();
+        FtpHistoryRepository::upsert(
+            &ftp_history_repository,
+            FtpHistoryEntry {
+                user_id: "user-1".to_string(),
+                effective_from_date: "2023-11-07".to_string(),
+                ftp_watts: 280,
+                source: FtpSource::Settings,
+                created_at_epoch_seconds: 1_699_315_200,
+                updated_at_epoch_seconds: 1_699_315_200,
+            },
+        )
+        .await
+        .unwrap();
+        let recompute_service = Arc::new(RecordingTrainingLoadRecomputeService::default());
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_ftp_history_repository(ftp_history_repository.clone())
+            .with_training_load_recompute_service(recompute_service.clone());
+
+        service
+            .update_cycling(
+                "user-1",
+                CyclingSettings {
+                    ftp_watts: Some(280),
+                    ..CyclingSettings::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(ftp_history_repository.stored().len(), 1);
+        assert!(recompute_service.calls().is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_cycling_keeps_saved_settings_when_ftp_history_write_fails() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_315_200);
+        settings.cycling.ftp_watts = Some(280);
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let service = UserSettingsService::new(repository.clone(), TestClock)
+            .with_ftp_history_repository(FailingFtpHistoryRepository);
+
+        let updated = service
+            .update_cycling(
+                "user-1",
+                CyclingSettings {
+                    ftp_watts: Some(290),
+                    ..CyclingSettings::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(updated.cycling.ftp_watts, Some(290));
+        assert_eq!(
+            repository
+                .find_by_user_id("user-1")
+                .await
+                .unwrap()
+                .and_then(|settings| settings.cycling.ftp_watts),
+            Some(290)
+        );
+    }
+
+    #[tokio::test]
+    async fn update_cycling_clears_effective_ftp_history_and_recomputes() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_315_200);
+        settings.cycling.ftp_watts = Some(280);
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let ftp_history_repository = RecordingFtpHistoryRepository::default();
+        FtpHistoryRepository::upsert(
+            &ftp_history_repository,
+            FtpHistoryEntry {
+                user_id: "user-1".to_string(),
+                effective_from_date: "2023-11-07".to_string(),
+                ftp_watts: 280,
+                source: FtpSource::Settings,
+                created_at_epoch_seconds: 1_699_315_200,
+                updated_at_epoch_seconds: 1_699_315_200,
+            },
+        )
+        .await
+        .unwrap();
+        let recompute_service = Arc::new(RecordingTrainingLoadRecomputeService::default());
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_ftp_history_repository(ftp_history_repository.clone())
+            .with_training_load_recompute_service(recompute_service.clone());
+
+        let updated = service
+            .update_cycling(
+                "user-1",
+                CyclingSettings {
+                    ftp_watts: None,
+                    ..CyclingSettings::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(updated.cycling.ftp_watts, None);
+        let history = ftp_history_repository.stored();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].ftp_watts, 280);
+        assert_eq!(history[1].effective_from_date, "2023-11-14");
+        assert_eq!(history[1].ftp_watts, 0);
+        assert_eq!(
+            recompute_service.calls(),
+            vec![(
+                "user-1".to_string(),
+                "2023-11-07".to_string(),
+                1_700_000_000,
+            )]
+        );
     }
 
     #[tokio::test]

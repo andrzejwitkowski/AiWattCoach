@@ -35,6 +35,7 @@ use aiwattcoach::{
             completed_workouts::MongoCompletedWorkoutRepository,
             external_observations::MongoExternalObservationRepository,
             external_sync_states::MongoExternalSyncStateRepository,
+            ftp_history::MongoFtpHistoryRepository,
             llm_context_cache::MongoLlmContextCacheRepository,
             login_state::MongoLoginStateRepository,
             planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
@@ -46,6 +47,7 @@ use aiwattcoach::{
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
             special_days::MongoSpecialDayRepository,
+            training_load_daily_snapshots::MongoTrainingLoadDailySnapshotRepository,
             training_plan_generation_operations::MongoTrainingPlanGenerationOperationRepository,
             training_plan_projections::MongoTrainingPlanProjectionRepository,
             training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
@@ -73,6 +75,7 @@ use aiwattcoach::{
     domain::races::RaceService,
     domain::settings::UserSettingsService,
     domain::training_context::DefaultTrainingContextBuilder,
+    domain::training_load::TrainingLoadRecomputeService,
     domain::training_plan::TrainingPlanGenerationService,
     domain::workout_summary::WorkoutSummaryService,
     telemetry::setup_telemetry,
@@ -213,18 +216,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let provider_poll_state_repository =
         MongoProviderPollStateRepository::new(mongo_client.clone(), &mongo_database);
     provider_poll_state_repository.ensure_indexes().await?;
+    let ftp_history_repository =
+        MongoFtpHistoryRepository::new(mongo_client.clone(), &mongo_database);
+    ftp_history_repository.ensure_indexes().await?;
+    let training_load_daily_snapshot_repository =
+        MongoTrainingLoadDailySnapshotRepository::new(mongo_client.clone(), &mongo_database);
+    training_load_daily_snapshot_repository
+        .ensure_indexes()
+        .await?;
     reconcile_intervals_poll_states(
         &settings_repository,
         &provider_poll_state_repository,
         &SystemClock,
     )
     .await?;
-    let settings_service = Arc::new(
-        UserSettingsService::new(settings_repository, SystemClock)
-            .with_provider_poll_states(provider_poll_state_repository.clone())
-            .with_llm_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
-    );
-    let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let race_repository = MongoRaceRepository::new(mongo_client.clone(), &mongo_database);
     race_repository.ensure_indexes().await?;
     let planned_workout_repository =
@@ -239,6 +244,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let completed_workout_repository =
         MongoCompletedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
     completed_workout_repository.ensure_indexes().await?;
+    let training_load_recompute_service = Arc::new(TrainingLoadRecomputeService::new(
+        completed_workout_repository.clone(),
+        ftp_history_repository.clone(),
+        training_load_daily_snapshot_repository.clone(),
+        settings_repository.clone(),
+    ));
+    let settings_service = Arc::new(
+        UserSettingsService::new(settings_repository, SystemClock)
+            .with_provider_poll_states(provider_poll_state_repository.clone())
+            .with_llm_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
+            .with_ftp_history_repository(ftp_history_repository.clone())
+            .with_training_load_recompute_service(training_load_recompute_service.clone()),
+    );
+    let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let special_day_repository =
         MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);
     special_day_repository.ensure_indexes().await?;
@@ -299,7 +318,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         SystemClock,
         UuidIdGenerator,
     )
-    .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone());
+    .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone())
+    .with_training_load_recompute_service(training_load_recompute_service.clone());
     let activity_identity_extractor = ActivityFileIdentityExtractor;
     let intervals_service = Arc::new(
         IntervalsService::new(
@@ -321,6 +341,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_completed_workout_repository(completed_workout_repository.clone())
         .with_planned_workout_repository(planned_workout_repository.clone())
         .with_special_day_repository(special_day_repository.clone())
+        .with_ftp_history_repository(ftp_history_repository.clone())
+        .with_training_load_daily_snapshot_repository(
+            training_load_daily_snapshot_repository.clone(),
+        )
         .with_race_repository(Arc::new(race_repository.clone()))
         .with_training_plan_projection_repository(Arc::new(
             training_plan_projection_repository.clone(),

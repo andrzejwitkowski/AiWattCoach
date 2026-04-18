@@ -27,6 +27,11 @@ use crate::domain::{
         SpecialDayRepository,
     },
     training_context::{model::*, packing::render_training_context},
+    training_load::{
+        BoxFuture as TrainingLoadBoxFuture, FtpHistoryEntry, FtpHistoryRepository,
+        TrainingLoadDailySnapshot, TrainingLoadDailySnapshotRepository, TrainingLoadError,
+        TrainingLoadSnapshotRange,
+    },
     training_plan::TrainingPlanProjectionRepository,
     workout_summary::WorkoutSummaryRepository,
 };
@@ -43,7 +48,7 @@ use context::{
     build_event_activity_matches, build_future_planned_event_contexts, build_historical_context,
     build_recent_day_contexts, build_upcoming_day_contexts, infer_focus_kind,
     projected_interval_blocks, projected_raw_workout_doc, projected_workout_name,
-    RecentWorkoutSummaryLookup,
+    HistoricalLoadSources, HistoricalWorkoutSources, RecentWorkoutSummaryLookup,
 };
 use dates::{activity_date, epoch_seconds_to_date, event_date};
 use history::build_recent_interval_blocks_by_activity_id;
@@ -135,6 +140,46 @@ where
     }
 }
 
+trait FtpHistoryReadPort: Send + Sync {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> TrainingLoadBoxFuture<Result<Vec<FtpHistoryEntry>, TrainingLoadError>>;
+}
+
+impl<Repository> FtpHistoryReadPort for Repository
+where
+    Repository: FtpHistoryRepository,
+{
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> TrainingLoadBoxFuture<Result<Vec<FtpHistoryEntry>, TrainingLoadError>> {
+        FtpHistoryRepository::list_by_user_id(self, user_id)
+    }
+}
+
+trait TrainingLoadDailySnapshotReadPort: Send + Sync {
+    fn list_by_user_id_and_range(
+        &self,
+        user_id: &str,
+        range: &TrainingLoadSnapshotRange,
+    ) -> TrainingLoadBoxFuture<Result<Vec<TrainingLoadDailySnapshot>, TrainingLoadError>>;
+}
+
+impl<Repository> TrainingLoadDailySnapshotReadPort for Repository
+where
+    Repository: TrainingLoadDailySnapshotRepository,
+{
+    fn list_by_user_id_and_range(
+        &self,
+        user_id: &str,
+        range: &TrainingLoadSnapshotRange,
+    ) -> TrainingLoadBoxFuture<Result<Vec<TrainingLoadDailySnapshot>, TrainingLoadError>> {
+        TrainingLoadDailySnapshotRepository::list_by_user_id_and_range(self, user_id, range)
+    }
+}
+
 trait SpecialDayReadPort: Send + Sync {
     fn list_by_user_id(
         &self,
@@ -180,6 +225,8 @@ where
     completed_workout_repository: Option<Arc<dyn CompletedWorkoutReadPort>>,
     planned_workout_repository: Option<Arc<dyn PlannedWorkoutReadPort>>,
     special_day_repository: Option<Arc<dyn SpecialDayReadPort>>,
+    ftp_history_repository: Option<Arc<dyn FtpHistoryReadPort>>,
+    training_load_daily_snapshot_repository: Option<Arc<dyn TrainingLoadDailySnapshotReadPort>>,
     race_repository: Option<Arc<dyn RaceRepository>>,
     training_plan_projection_repository: Option<Arc<dyn TrainingPlanProjectionRepository>>,
     clock: Time,
@@ -200,6 +247,8 @@ where
             completed_workout_repository: None,
             planned_workout_repository: None,
             special_day_repository: None,
+            ftp_history_repository: None,
+            training_load_daily_snapshot_repository: None,
             race_repository: None,
             training_plan_projection_repository: None,
             clock,
@@ -227,6 +276,25 @@ where
         Repository: SpecialDayRepository,
     {
         self.special_day_repository = Some(Arc::new(repository));
+        self
+    }
+
+    pub fn with_ftp_history_repository<Repository>(mut self, repository: Repository) -> Self
+    where
+        Repository: FtpHistoryRepository,
+    {
+        self.ftp_history_repository = Some(Arc::new(repository));
+        self
+    }
+
+    pub fn with_training_load_daily_snapshot_repository<Repository>(
+        mut self,
+        repository: Repository,
+    ) -> Self
+    where
+        Repository: TrainingLoadDailySnapshotRepository,
+    {
+        self.training_load_daily_snapshot_repository = Some(Arc::new(repository));
         self
     }
 
@@ -321,6 +389,15 @@ where
             .iter()
             .map(map_completed_workout_to_activity)
             .collect::<Vec<_>>();
+        let history_snapshot_range = TrainingLoadSnapshotRange {
+            oldest: history_start.format("%Y-%m-%d").to_string(),
+            newest: focus_date.format("%Y-%m-%d").to_string(),
+        };
+        let history_daily_snapshots = self
+            .list_training_load_daily_snapshots(user_id, &history_snapshot_range)
+            .await
+            .unwrap_or_default();
+        let ftp_history = self.list_ftp_history(user_id).await.unwrap_or_default();
 
         let (planned_workouts, special_days, events_status) = match self
             .load_event_sources(
@@ -447,10 +524,16 @@ where
             history_start,
             focus_date,
             &history_activities,
-            &detailed_recent_activities_by_id,
-            &workout_recaps_by_id,
+            HistoricalLoadSources {
+                daily_snapshots: &history_daily_snapshots,
+                ftp_history: &ftp_history,
+            },
+            HistoricalWorkoutSources {
+                detailed_activities_by_id: &detailed_recent_activities_by_id,
+                workout_recaps_by_id: &workout_recaps_by_id,
+                recent_interval_blocks_by_activity_id: &recent_interval_blocks_by_activity_id,
+            },
             configured_ftp,
-            &recent_interval_blocks_by_activity_id,
         );
         let recent_days = build_recent_day_contexts(
             recent_start,
@@ -728,6 +811,29 @@ where
         };
 
         Ok((planned_workouts, special_days))
+    }
+
+    async fn list_training_load_daily_snapshots(
+        &self,
+        user_id: &str,
+        range: &TrainingLoadSnapshotRange,
+    ) -> Result<Vec<TrainingLoadDailySnapshot>, TrainingLoadError> {
+        let Some(repository) = &self.training_load_daily_snapshot_repository else {
+            return Ok(Vec::new());
+        };
+
+        repository.list_by_user_id_and_range(user_id, range).await
+    }
+
+    async fn list_ftp_history(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<FtpHistoryEntry>, TrainingLoadError> {
+        let Some(repository) = &self.ftp_history_repository else {
+            return Ok(Vec::new());
+        };
+
+        repository.list_by_user_id(user_id).await
     }
 }
 

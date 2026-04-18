@@ -16,6 +16,7 @@ use crate::{
         },
         identity::{Clock, IdGenerator},
         intervals::{DateRange, IntervalsApiPort, IntervalsSettingsPort},
+        training_load::TrainingLoadRecomputeUseCases,
     },
 };
 
@@ -23,7 +24,7 @@ const DEFAULT_SUCCESS_INTERVAL_SECONDS: i64 = 5 * 60;
 const DEFAULT_FAILURE_BACKOFF_SECONDS: i64 = 5 * 60;
 const DEFAULT_CALENDAR_PAST_DAYS: i64 = 30;
 const DEFAULT_CALENDAR_FUTURE_DAYS: i64 = 30;
-const DEFAULT_COMPLETED_PAST_DAYS: i64 = 30;
+const DEFAULT_COMPLETED_PAST_DAYS: i64 = 365 * 2;
 const DEFAULT_INCREMENTAL_LOOKBACK_DAYS: i64 = 2;
 const DEFAULT_LOOP_INTERVAL_SECONDS: u64 = 60;
 
@@ -52,6 +53,7 @@ pub struct ProviderPollingService<
     clock: Time,
     ids: Ids,
     refresh: Refresh,
+    training_load_recompute_service: Option<std::sync::Arc<dyn TrainingLoadRecomputeUseCases>>,
     success_interval_seconds: i64,
     failure_backoff_seconds: i64,
     calendar_past_days: i64,
@@ -94,6 +96,7 @@ where
             clock,
             ids,
             refresh: NoopCalendarEntryViewRefresh,
+            training_load_recompute_service: None,
             success_interval_seconds: DEFAULT_SUCCESS_INTERVAL_SECONDS,
             failure_backoff_seconds: DEFAULT_FAILURE_BACKOFF_SECONDS,
             calendar_past_days: DEFAULT_CALENDAR_PAST_DAYS,
@@ -130,6 +133,7 @@ where
             clock: self.clock,
             ids: self.ids,
             refresh,
+            training_load_recompute_service: self.training_load_recompute_service,
             success_interval_seconds: self.success_interval_seconds,
             failure_backoff_seconds: self.failure_backoff_seconds,
             calendar_past_days: self.calendar_past_days,
@@ -137,6 +141,14 @@ where
             completed_past_days: self.completed_past_days,
             incremental_lookback_days: self.incremental_lookback_days,
         }
+    }
+
+    pub fn with_training_load_recompute_service(
+        mut self,
+        training_load_recompute_service: std::sync::Arc<dyn TrainingLoadRecomputeUseCases>,
+    ) -> Self {
+        self.training_load_recompute_service = Some(training_load_recompute_service);
+        self
     }
 
     #[cfg(test)]
@@ -333,6 +345,7 @@ where
             .list_activities(credentials, &range)
             .await
             .map_err(|error| error.to_string())?;
+        let mut earliest_imported_date = None::<String>;
         for activity in &activities {
             let import_activity = match self
                 .intervals_api
@@ -371,17 +384,68 @@ where
                         error = %error,
                         "completed workout enrichment failed"
                     );
+                    if let (Some(service), Some(oldest_date)) = (
+                        &self.training_load_recompute_service,
+                        earliest_imported_date.as_deref(),
+                    ) {
+                        if let Err(recompute_error) = service
+                            .recompute_from(&state.user_id, oldest_date, now_epoch_seconds)
+                            .await
+                        {
+                            warn!(
+                                user_id = %state.user_id,
+                                oldest_date,
+                                error = %recompute_error,
+                                "training load recompute failed after partial completed workout import"
+                            );
+                        }
+                    }
                     return Err(format!(
                         "completed workout enrichment failed for activity {}: {}",
                         activity.id, error
                     ));
                 }
             };
-            self.imports
+            if let Err(error) = self
+                .imports
                 .import(map_activity_to_import_command(
                     &state.user_id,
                     &import_activity,
                 ))
+                .await
+            {
+                if let (Some(service), Some(oldest_date)) = (
+                    &self.training_load_recompute_service,
+                    earliest_imported_date.as_deref(),
+                ) {
+                    if let Err(recompute_error) = service
+                        .recompute_from(&state.user_id, oldest_date, now_epoch_seconds)
+                        .await
+                    {
+                        warn!(
+                            user_id = %state.user_id,
+                            oldest_date,
+                            error = %recompute_error,
+                            "training load recompute failed after partial completed workout import"
+                        );
+                    }
+                }
+                return Err(error.to_string());
+            }
+
+            if let Some(date) = import_activity.start_date_local.get(..10) {
+                earliest_imported_date = match earliest_imported_date {
+                    Some(current) => Some(std::cmp::min(current, date.to_string())),
+                    None => Some(date.to_string()),
+                };
+            }
+        }
+        if let (Some(service), Some(oldest_date)) = (
+            &self.training_load_recompute_service,
+            earliest_imported_date.as_deref(),
+        ) {
+            service
+                .recompute_from(&state.user_id, oldest_date, now_epoch_seconds)
                 .await
                 .map_err(|error| error.to_string())?;
         }
