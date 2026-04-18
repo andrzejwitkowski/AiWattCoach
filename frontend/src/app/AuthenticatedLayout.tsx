@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Bell,
   Bot,
@@ -19,22 +20,24 @@ type AuthenticatedLayoutProps = {
   backendStatus?: { state: string; health: { service: string; status: string }; readiness: { status: string } };
 };
 
-const PAGE_TITLES: Record<string, string> = {
-  '/app': 'Dashboard',
-  '/settings': 'Settings',
-  '/calendar': 'Calendar',
-  '/races': 'Races',
-  '/ai-coach': 'AI Coach',
-  '/admin/system-info': 'System Info',
+const PAGE_TITLE_KEYS: Record<string, string> = {
+  '/app': 'appShell.pageTitles.dashboard',
+  '/settings': 'appShell.pageTitles.settings',
+  '/calendar': 'appShell.pageTitles.calendar',
+  '/races': 'appShell.pageTitles.races',
+  '/ai-coach': 'appShell.pageTitles.aiCoach',
+  '/admin/system-info': 'appShell.pageTitles.systemInfo',
 };
 
 export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
+  const { t } = useTranslation();
   const auth = useAuth();
   const location = useLocation();
   const settingsCtx = useSettings();
   const currentUser = auth.user;
 
-  const pageTitle = PAGE_TITLES[location.pathname] ?? 'WATTLY';
+  const pageTitleKey = PAGE_TITLE_KEYS[location.pathname];
+  const pageTitle = pageTitleKey ? t(pageTitleKey) : 'WATTLY';
   const cycling = settingsCtx.settings?.cycling ?? null;
 
   return (
@@ -43,18 +46,18 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
         <div className="p-5">
           <p className="text-lg font-bold text-white tracking-wide">WATTLY</p>
           <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 mt-0.5">
-            Elite Performance
+            {t('appShell.brand.subtitle')}
           </p>
         </div>
 
         <nav className="mt-4 flex-1 px-3 space-y-1">
-          <NavItem to="/app" icon={LayoutDashboard} label="Dashboard" />
-          <NavItem to="/calendar" icon={Calendar} label="Calendar" />
-          <NavItem to="/races" icon={Flag} label="Races" />
-          <NavItem to="/ai-coach" icon={Bot} label="AI Coach" />
-          <NavItem to="/settings" icon={Settings} label="Settings" />
+          <NavItem to="/app" icon={LayoutDashboard} label={t('nav.dashboard')} />
+          <NavItem to="/calendar" icon={Calendar} label={t('nav.calendar')} />
+          <NavItem to="/races" icon={Flag} label={t('nav.races')} />
+          <NavItem to="/ai-coach" icon={Bot} label={t('nav.aiCoach')} />
+          <NavItem to="/settings" icon={Settings} label={t('nav.settings')} />
           {currentUser && currentUser.roles.includes('admin') && (
-            <NavItem to="/admin/system-info" icon={ShieldCheck} label="System Info" />
+            <NavItem to="/admin/system-info" icon={ShieldCheck} label={t('nav.systemInfo')} />
           )}
         </nav>
       </aside>
@@ -73,7 +76,7 @@ export function AuthenticatedLayout({ apiBaseUrl }: AuthenticatedLayoutProps) {
             <button
               className="text-slate-400 hover:text-slate-200 transition"
               type="button"
-              aria-label="Notifications"
+              aria-label={t('appShell.notifications')}
             >
               <Bell size={18} />
             </button>

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import type { DashboardRange } from '../types';
 
 type TrainingLoadRangeSwitchProps = {
@@ -5,16 +7,18 @@ type TrainingLoadRangeSwitchProps = {
   onChange: (next: DashboardRange) => void;
 };
 
-const OPTIONS: Array<{ value: DashboardRange; label: string }> = [
-  { value: '90d', label: '90 DAYS' },
-  { value: 'season', label: 'SEASON' },
-  { value: 'all-time', label: 'ALL TIME' },
+const OPTIONS: Array<{ value: DashboardRange; labelKey: string }> = [
+  { value: '90d', labelKey: 'dashboard.range.options.90d' },
+  { value: 'season', labelKey: 'dashboard.range.options.season' },
+  { value: 'all-time', labelKey: 'dashboard.range.options.allTime' },
 ];
 
 export function TrainingLoadRangeSwitch({ value, onChange }: TrainingLoadRangeSwitchProps) {
+  const { t } = useTranslation();
+
   return (
     <fieldset className="flex w-full flex-wrap rounded-2xl border border-white/8 bg-[#0d131a] p-1.5 shadow-[0_20px_50px_rgba(2,8,23,0.35)] sm:inline-flex sm:w-auto">
-      <legend className="sr-only">Dashboard time range</legend>
+      <legend className="sr-only">{t('dashboard.range.legend')}</legend>
       {OPTIONS.map((option) => {
         const active = option.value === value;
         const optionId = `dashboard-range-${option.value}`;
@@ -39,7 +43,7 @@ export function TrainingLoadRangeSwitch({ value, onChange }: TrainingLoadRangeSw
                 'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-cyan-300/70'
               ].join(' ')}
             >
-              {option.label}
+              {t(option.labelKey)}
             </label>
           </div>
         );

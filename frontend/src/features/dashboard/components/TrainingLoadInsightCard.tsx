@@ -1,27 +1,28 @@
+import { Trans, useTranslation } from 'react-i18next';
+
 import type { TrainingLoadDashboardResponse } from '../types';
+import { formatMetricValue, formatSignedMetricValue, formatTwoDecimalValue, formatWattsValue, formatWindowDate } from './trainingLoadFormatters';
 
 type TrainingLoadInsightCardProps = {
   report: TrainingLoadDashboardResponse;
 };
 
-function formatWindowDate(date: string) {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  return Number.isNaN(parsed.getTime())
-    ? date
-    : new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(parsed);
-}
-
 export function TrainingLoadInsightCard({ report }: TrainingLoadInsightCardProps) {
+  const { i18n, t } = useTranslation();
+  const language = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const delta = report.summary.loadDeltaCtl14d;
   const zone = report.summary.tsbZone;
   const headline = zone === 'freshness_peak'
-    ? 'Trending towards peak'
+    ? t('dashboard.insights.coachInsight.headlines.freshnessPeak')
     : zone === 'high_risk'
-      ? 'Fatigue is accumulating'
-      : 'Productive load block';
+      ? t('dashboard.insights.coachInsight.headlines.highRisk')
+      : t('dashboard.insights.coachInsight.headlines.optimalTraining');
   const detail = delta === null
-    ? 'Not enough history yet to compare the current load trend with the last two weeks.'
-    : `CTL changed by ${delta > 0 ? '+' : ''}${delta.toFixed(1)} over the last 14 days while TSB sits at ${report.summary.currentTsb ?? '-'}. Keep translating this load into adaptation without reintroducing unnecessary fatigue.`;
+    ? t('dashboard.insights.coachInsight.details.insufficientHistory')
+    : t('dashboard.insights.coachInsight.details.trend', {
+        delta: formatSignedMetricValue(delta, language),
+        tsb: formatMetricValue(report.summary.currentTsb, language),
+      });
 
   return (
     <div className="space-y-6">
@@ -31,32 +32,55 @@ export function TrainingLoadInsightCard({ report }: TrainingLoadInsightCardProps
             <span className="text-lg font-black">i</span>
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Form Breakdown</p>
-            <h3 className="mt-1 text-2xl font-black tracking-tight text-white">Understanding Form (TSB)</h3>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">{t('dashboard.insights.formBreakdown.eyebrow')}</p>
+            <h3 className="mt-1 text-2xl font-black tracking-tight text-white">{t('dashboard.insights.formBreakdown.title')}</h3>
           </div>
         </div>
 
         <p className="mt-5 text-sm leading-7 text-slate-300">
-          Training Stress Balance is the relationship between <span className="font-bold text-cyan-300">Fitness (CTL)</span> and <span className="font-bold text-orange-300">Fatigue (ATL)</span>.
-          It helps frame whether you are carrying useful training load, approaching peak freshness, or drifting into excessive risk.
+          <Trans
+            i18nKey="dashboard.insights.formBreakdown.description"
+            components={{
+              fitness: <span className="font-bold text-cyan-300" />,
+              fatigue: <span className="font-bold text-orange-300" />,
+            }}
+          />
         </p>
 
         <div className="mt-7 grid gap-4 md:grid-cols-3">
-          <ZoneCard title="Freshness / Peak" tone="cyan" detail="Positive TSB. Fatigue has dropped while fitness is still present, so readiness is improving." />
-          <ZoneCard title="Optimal Training" tone="lime" detail="TSB sits in the productive band where adaptation is possible without excessive cost." />
-          <ZoneCard title="High Risk" tone="red" detail="TSB is too negative. Load may be outpacing recovery, which raises overreaching risk." />
+          <ZoneCard
+            title={t('dashboard.insights.formBreakdown.zones.freshnessPeak.title')}
+            tone="cyan"
+            detail={t('dashboard.insights.formBreakdown.zones.freshnessPeak.detail')}
+          />
+          <ZoneCard
+            title={t('dashboard.insights.formBreakdown.zones.optimalTraining.title')}
+            tone="lime"
+            detail={t('dashboard.insights.formBreakdown.zones.optimalTraining.detail')}
+          />
+          <ZoneCard
+            title={t('dashboard.insights.formBreakdown.zones.highRisk.title')}
+            tone="red"
+            detail={t('dashboard.insights.formBreakdown.zones.highRisk.detail')}
+          />
         </div>
       </section>
 
       <section className="rounded-[2rem] border border-lime-300/12 bg-[radial-gradient(circle_at_top,rgba(190,242,100,0.14),transparent_45%),#0f151b] p-7 shadow-[0_24px_70px_rgba(8,47,73,0.32)]">
-        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-lime-300">Coach Insight</p>
+        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-lime-300">{t('dashboard.insights.coachInsight.eyebrow')}</p>
         <h3 className="mt-3 text-3xl font-black tracking-tight text-white">{headline}</h3>
         <p className="mt-4 text-sm leading-7 text-slate-300">{detail}</p>
         <dl className="mt-6 grid grid-cols-2 gap-4 text-sm">
-          <Metric label="FTP" value={report.summary.ftpWatts !== null ? `${report.summary.ftpWatts} W` : '-'} />
-          <Metric label="IF 28d" value={report.summary.averageIf28d !== null ? report.summary.averageIf28d.toFixed(2) : '-'} />
-          <Metric label="EF 28d" value={report.summary.averageEf28d !== null ? report.summary.averageEf28d.toFixed(2) : '-'} />
-          <Metric label="Window" value={`${formatWindowDate(report.windowStart)} to ${formatWindowDate(report.windowEnd)}`} />
+          <Metric label={t('dashboard.insights.coachInsight.metrics.ftp')} value={formatWattsValue(report.summary.ftpWatts, language)} />
+          <Metric label={t('dashboard.insights.coachInsight.metrics.if28d')} value={formatTwoDecimalValue(report.summary.averageIf28d, language)} />
+          <Metric label={t('dashboard.insights.coachInsight.metrics.ef28d')} value={formatTwoDecimalValue(report.summary.averageEf28d, language)} />
+          <Metric
+            label={t('dashboard.insights.coachInsight.metrics.window')}
+            value={t('dashboard.insights.coachInsight.metrics.windowRange', {
+              start: formatWindowDate(report.windowStart, language),
+              end: formatWindowDate(report.windowEnd, language),
+            })}
+          />
         </dl>
       </section>
     </div>

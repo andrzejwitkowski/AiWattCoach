@@ -1,8 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { createFetchMock, useFetchMock } from '../features/intervals/api/testHelpers';
+import i18n from '../i18n';
 import { AppHomePage } from './AppHomePage';
 
 function buildResponse(range: '90d' | 'season' | 'all-time') {
@@ -57,6 +58,10 @@ function buildResponse(range: '90d' | 'season' | 'all-time') {
 }
 
 describe('AppHomePage', () => {
+  afterEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
   it('loads dashboard and switches ranges', async () => {
     const fetchMock = useFetchMock(
       createFetchMock()
@@ -68,8 +73,9 @@ describe('AppHomePage', () => {
 
     expect(screen.getByText(/loading dashboard/i)).toBeInTheDocument();
     await screen.findByRole('heading', { name: /training stress and recovery/i });
+    expect(screen.getByText(/performance management/i)).toBeInTheDocument();
     expect(screen.getByText('29.9')).toBeInTheDocument();
-    expect(screen.getByText(/understanding form \(tsb\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/understanding form/i)).toBeInTheDocument();
     expect(screen.getByText(/coach insight/i)).toBeInTheDocument();
     expect(screen.getAllByText(/latest snapshot/i).length).toBeGreaterThan(0);
 
@@ -125,13 +131,48 @@ describe('AppHomePage', () => {
 
     const tsbQueries = within(tsbSection!);
 
-    expect(tsbQueries.queryByText(/^latest snapshot$/i)).not.toBeInTheDocument();
-    expect(tsbQueries.getAllByText('-23.5')).toHaveLength(1);
+    expect(tsbQueries.getByText(/^latest snapshot$/i)).toBeInTheDocument();
+    expect(tsbQueries.getAllByText('-23.5')).toHaveLength(2);
 
     await user.hover(tsbChart);
 
-    expect(await tsbQueries.findByText(/^latest snapshot$/i)).toBeInTheDocument();
-    expect(tsbQueries.getAllByText('-23.5')).toHaveLength(2);
+    expect(await tsbQueries.findByText(/^snapshot$/i)).toBeInTheDocument();
+    expect(tsbQueries.getAllByText('-23.5')).toHaveLength(3);
+  });
+
+  it('renders dashboard copy and metrics in Polish', async () => {
+    await i18n.changeLanguage('pl');
+
+    const user = userEvent.setup();
+
+    useFetchMock(
+      createFetchMock().mockResolvedValueOnce(buildResponse('90d')),
+    );
+
+    const { container } = render(<AppHomePage apiBaseUrl="" />);
+
+    await within(container).findByRole('heading', { name: /obciążenie treningowe i regeneracja/i });
+
+    expect(within(container).getByText(/zarządzanie formą/i)).toBeInTheDocument();
+    expect(within(container).getByText('29,9')).toBeInTheDocument();
+    expect(within(container).getByText('CAŁY OKRES')).toBeInTheDocument();
+
+    const tsbChart = within(container).getByLabelText(/wykres formy ze strefami świeżości, optymalnego treningu i wysokiego ryzyka/i);
+    const tsbSection = tsbChart.closest('section');
+    const loadChart = within(container).getByLabelText(/wykres sprawności i zmęczenia/i);
+    const loadSection = loadChart.closest('section');
+
+    expect(tsbSection).not.toBeNull();
+    expect(loadSection).not.toBeNull();
+    expect(within(tsbSection!).getByText(/^Najnowszy odczyt$/i)).toBeInTheDocument();
+
+    await user.hover(loadChart);
+
+    expect(await within(loadSection!).findByText(/^Odczyt punktu$/i)).toBeInTheDocument();
+
+    await user.hover(tsbChart);
+
+    expect(await within(tsbSection!).findByText(/^Odczyt punktu$/i)).toBeInTheDocument();
   });
 
   it('keeps the load chart marker and narration on fatigue when latest ctl is unavailable', async () => {

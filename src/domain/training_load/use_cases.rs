@@ -244,10 +244,13 @@ where
     }
 }
 
+const TSB_FRESHNESS_PEAK_THRESHOLD: f64 = 0.0;
+const TSB_HIGH_RISK_THRESHOLD: f64 = -30.0;
+
 fn classify_tsb_zone(tsb: Option<f64>) -> TrainingLoadTsbZone {
     match tsb {
-        Some(value) if value > 0.0 => TrainingLoadTsbZone::FreshnessPeak,
-        Some(value) if value < -30.0 => TrainingLoadTsbZone::HighRisk,
+        Some(value) if value > TSB_FRESHNESS_PEAK_THRESHOLD => TrainingLoadTsbZone::FreshnessPeak,
+        Some(value) if value < TSB_HIGH_RISK_THRESHOLD => TrainingLoadTsbZone::HighRisk,
         _ => TrainingLoadTsbZone::OptimalTraining,
     }
 }
