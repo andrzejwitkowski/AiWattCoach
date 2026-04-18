@@ -98,7 +98,9 @@ where
             let Some(oldest_date) =
                 chrono::NaiveDate::parse_from_str(&oldest_date, "%Y-%m-%d").ok()
             else {
-                return Ok(());
+                return Err(TrainingLoadError::Repository(format!(
+                    "invalid oldest_date '{oldest_date}' for training load recompute; expected format %Y-%m-%d"
+                )));
             };
             let warmup_start = oldest_date - Duration::days(service.warmup_days);
             let newest = DateTime::<Utc>::from_timestamp(now_epoch_seconds, 0)

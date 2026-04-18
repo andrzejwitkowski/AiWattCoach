@@ -1,7 +1,5 @@
 # Training Load History Design
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Persist historically correct FTP changes and daily training-load projections so charts and LLM context can use domain-derived `TSS`, `CTL`, `ATL`, `TSB`, and related metrics.
 
 **Architecture:** `completed_workouts` stays the durable source of workout facts, `ftp_history` stores UTC-effective FTP changes, and `training_load_daily_snapshots` stores per-day computed read models. Snapshot recompute runs after completed-workout import batches and after FTP changes in settings, so the app does not recalculate two years of history per imported workout.

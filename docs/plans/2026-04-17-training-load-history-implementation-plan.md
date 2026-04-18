@@ -1,7 +1,5 @@
 # Training Load History Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Persist 2 years of completed workouts, introduce durable FTP history plus daily training-load snapshots, and switch `training_context` to consume domain-derived historical metrics that are correct against FTP changes over time.
 
 **Architecture:** `completed_workouts` remains the durable workout source of truth, `ftp_history` becomes the durable source of effective FTP by date, and `training_load_daily_snapshots` becomes a read model for charts and LLM context. Recompute runs in batch after completed-workout polling and after FTP changes in settings, so we avoid recalculating 2 years of history once per imported workout.

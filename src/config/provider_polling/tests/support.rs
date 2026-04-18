@@ -100,7 +100,7 @@ impl ExternalImportUseCases for RecordingImportService {
             };
             if let Some(message) = failure.filter(|_| {
                 failure_on_call
-                    .map(|call_number| current_call >= call_number)
+                    .map(|call_number| current_call == call_number)
                     .unwrap_or(true)
             }) {
                 return Err(ExternalImportError::Repository(message));

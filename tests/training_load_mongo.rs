@@ -116,6 +116,18 @@ async fn training_load_daily_snapshot_repository_replaces_days_and_deletes_from_
     fixture.cleanup().await;
 }
 
+#[test]
+fn redact_uri_credentials_hides_mongo_userinfo() {
+    assert_eq!(
+        redact_uri_credentials("mongodb://user:secret@example.com:27017/aiwattcoach"),
+        "mongodb://<redacted>@example.com:27017/aiwattcoach"
+    );
+    assert_eq!(
+        redact_uri_credentials("mongodb://localhost:27017/aiwattcoach"),
+        "mongodb://localhost:27017/aiwattcoach"
+    );
+}
+
 struct MongoFixture {
     client: Client,
     database: String,
@@ -138,18 +150,19 @@ impl MongoFixture {
     async fn new() -> Result<Self, String> {
         let settings = Settings::test_defaults();
         let mongo_uri = settings.mongo.uri.clone();
+        let mongo_uri_for_log = redact_uri_credentials(&mongo_uri);
         let client = Client::with_uri_str(&settings.mongo.uri)
             .await
             .map_err(|error| {
-                format!("failed to create test mongo client for {mongo_uri}: {error}")
+                format!("failed to create test mongo client for {mongo_uri_for_log}: {error}")
             })?;
         tokio::time::timeout(
             Duration::from_secs(1),
             client.database("admin").run_command(doc! { "ping": 1 }),
         )
         .await
-        .map_err(|_| format!("timed out connecting to Mongo at {mongo_uri}"))?
-        .map_err(|error| format!("failed to connect to Mongo at {mongo_uri}: {error}"))?;
+        .map_err(|_| format!("timed out connecting to Mongo at {mongo_uri_for_log}"))?
+        .map_err(|error| format!("failed to connect to Mongo at {mongo_uri_for_log}: {error}"))?;
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -161,6 +174,18 @@ impl MongoFixture {
 
     async fn cleanup(self) {
         let _ = self.client.database(&self.database).drop().await;
+    }
+}
+
+fn redact_uri_credentials(uri: &str) -> String {
+    let Some((scheme, rest)) = uri.split_once("://") else {
+        return "<redacted-mongo-uri>".to_string();
+    };
+
+    if let Some((_, host_and_path)) = rest.split_once('@') {
+        format!("{scheme}://<redacted>@{host_and_path}")
+    } else {
+        uri.to_string()
     }
 }
 

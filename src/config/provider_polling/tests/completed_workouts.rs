@@ -1,6 +1,6 @@
 use crate::domain::external_sync::{
-    ExternalImportCommand, ExternalProvider, ProviderPollState, ProviderPollStateRepository,
-    ProviderPollStream,
+    ExternalImportCommand, ExternalImportError, ExternalImportUseCases, ExternalProvider,
+    ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
 };
 use crate::domain::intervals::IntervalsError;
 
@@ -412,4 +412,49 @@ async fn completed_stream_recomputes_from_successful_imports_when_later_import_f
             1_700_000_000
         )]
     );
+}
+
+#[tokio::test]
+async fn recording_import_service_failing_on_call_only_fails_configured_invocation() {
+    let imports = RecordingImportService::failing_on_call("import exploded", 2);
+
+    let first = imports
+        .import(sample_completed_workout_import_command("activity-1"))
+        .await;
+    let second = imports
+        .import(sample_completed_workout_import_command("activity-2"))
+        .await;
+    let third = imports
+        .import(sample_completed_workout_import_command("activity-3"))
+        .await;
+
+    assert!(first.is_ok());
+    assert!(matches!(
+        second.map_err(IntervalsErrorWrapper::from),
+        Err(IntervalsErrorWrapper::Repository(ref message)) if message == "import exploded"
+    ));
+    assert!(third.is_ok());
+}
+
+enum IntervalsErrorWrapper {
+    Repository(String),
+}
+
+impl From<ExternalImportError> for IntervalsErrorWrapper {
+    fn from(error: ExternalImportError) -> Self {
+        match error {
+            ExternalImportError::Repository(message)
+            | ExternalImportError::PlannedWorkout(message)
+            | ExternalImportError::CompletedWorkout(message)
+            | ExternalImportError::Race(message)
+            | ExternalImportError::SpecialDay(message) => Self::Repository(message),
+        }
+    }
+}
+
+fn sample_completed_workout_import_command(activity_id: &str) -> ExternalImportCommand {
+    crate::config::provider_polling::map_activity_to_import_command(
+        "user-1",
+        &sample_activity(activity_id),
+    )
 }

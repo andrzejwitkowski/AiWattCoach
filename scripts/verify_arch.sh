@@ -42,4 +42,4 @@ if [ "${INSTALLED_CARGO_PUP_VERSION}" != "0.1.7" ]; then
   exit 1
 fi
 
-RUSTC=rustc cargo pup check
+RUSTUP_TOOLCHAIN="${TOOLCHAIN}" RUSTC=rustc cargo pup check

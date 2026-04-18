@@ -23,6 +23,69 @@ struct StaticSettingsRepository {
     settings: UserSettings,
 }
 
+#[derive(Clone, Default)]
+struct EmptyCompletedWorkoutRepository;
+
+impl CompletedWorkoutRepository for EmptyCompletedWorkoutRepository {
+    fn find_by_user_id_and_completed_workout_id(
+        &self,
+        _user_id: &str,
+        _completed_workout_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_user_id_and_source_activity_id(
+        &self,
+        _user_id: &str,
+        _source_activity_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_latest_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Option<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn list_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Vec<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        _user_id: &str,
+        _oldest: &str,
+        _newest: &str,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<Vec<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn upsert(
+        &self,
+        workout: CompletedWorkout,
+    ) -> crate::domain::completed_workouts::BoxFuture<
+        Result<CompletedWorkout, crate::domain::completed_workouts::CompletedWorkoutError>,
+    > {
+        Box::pin(async move { Ok(workout) })
+    }
+}
+
 impl UserSettingsRepository for StaticSettingsRepository {
     fn find_by_user_id(
         &self,
@@ -530,78 +593,6 @@ async fn recompute_from_rebuilds_snapshots_from_warmup_start() {
 #[tokio::test]
 async fn recompute_from_keeps_existing_snapshots_when_upsert_fails() {
     #[derive(Clone, Default)]
-    struct EmptyCompletedWorkoutRepository;
-
-    impl CompletedWorkoutRepository for EmptyCompletedWorkoutRepository {
-        fn find_by_user_id_and_completed_workout_id(
-            &self,
-            _user_id: &str,
-            _completed_workout_id: &str,
-        ) -> crate::domain::completed_workouts::BoxFuture<
-            Result<
-                Option<CompletedWorkout>,
-                crate::domain::completed_workouts::CompletedWorkoutError,
-            >,
-        > {
-            Box::pin(async { Ok(None) })
-        }
-
-        fn find_by_user_id_and_source_activity_id(
-            &self,
-            _user_id: &str,
-            _source_activity_id: &str,
-        ) -> crate::domain::completed_workouts::BoxFuture<
-            Result<
-                Option<CompletedWorkout>,
-                crate::domain::completed_workouts::CompletedWorkoutError,
-            >,
-        > {
-            Box::pin(async { Ok(None) })
-        }
-
-        fn find_latest_by_user_id(
-            &self,
-            _user_id: &str,
-        ) -> crate::domain::completed_workouts::BoxFuture<
-            Result<
-                Option<CompletedWorkout>,
-                crate::domain::completed_workouts::CompletedWorkoutError,
-            >,
-        > {
-            Box::pin(async { Ok(None) })
-        }
-
-        fn list_by_user_id(
-            &self,
-            _user_id: &str,
-        ) -> crate::domain::completed_workouts::BoxFuture<
-            Result<Vec<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
-        > {
-            Box::pin(async { Ok(Vec::new()) })
-        }
-
-        fn list_by_user_id_and_date_range(
-            &self,
-            _user_id: &str,
-            _oldest: &str,
-            _newest: &str,
-        ) -> crate::domain::completed_workouts::BoxFuture<
-            Result<Vec<CompletedWorkout>, crate::domain::completed_workouts::CompletedWorkoutError>,
-        > {
-            Box::pin(async { Ok(Vec::new()) })
-        }
-
-        fn upsert(
-            &self,
-            workout: CompletedWorkout,
-        ) -> crate::domain::completed_workouts::BoxFuture<
-            Result<CompletedWorkout, crate::domain::completed_workouts::CompletedWorkoutError>,
-        > {
-            Box::pin(async move { Ok(workout) })
-        }
-    }
-
-    #[derive(Clone, Default)]
     struct DeleteTrackingSnapshotRepository {
         stored: std::sync::Arc<std::sync::Mutex<Vec<TrainingLoadDailySnapshot>>>,
         delete_calls: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
@@ -700,6 +691,28 @@ async fn recompute_from_keeps_existing_snapshots_when_upsert_fails() {
     assert!(snapshots.delete_calls().is_empty());
     assert_eq!(snapshots.stored().len(), 1);
     assert_eq!(snapshots.stored()[0].date, "2026-04-01");
+}
+
+#[tokio::test]
+async fn recompute_from_rejects_invalid_oldest_date() {
+    let service = TrainingLoadRecomputeService::new(
+        EmptyCompletedWorkoutRepository,
+        InMemoryFtpHistoryRepository::default(),
+        InMemoryTrainingLoadDailySnapshotRepository::default(),
+        StaticSettingsRepository {
+            settings: UserSettings::new_defaults("user-1".to_string(), 1_699_315_200),
+        },
+    );
+
+    let result = service
+        .recompute_from("user-1", "not-a-date", 1_775_174_400)
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(TrainingLoadError::Repository(message))
+            if message.contains("invalid oldest_date 'not-a-date'")
+    ));
 }
 
 fn sample_workout(
