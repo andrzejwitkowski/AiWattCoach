@@ -1,23 +1,24 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { PENDING_APPROVAL_MESSAGE, WHITELIST_REQUESTED_MESSAGE } from '../App';
 import { LandingPage } from './LandingPage';
 
 describe('LandingPage', () => {
   it('renders all login UI elements', () => {
     const onLogin = vi.fn();
-    render(<LandingPage onLogin={onLogin} />);
+    render(<LandingPage onLogin={onLogin} onJoinWhitelist={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /get started/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/username@performance.lab/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /join whitelist/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/you@example.com/i)).toBeInTheDocument();
     expect(screen.queryByText(/dev auth enabled/i)).not.toBeInTheDocument();
   });
 
   it('shows a visible hint when dev auth is enabled', () => {
-    render(<LandingPage onLogin={vi.fn()} devAuthEnabled />);
+    render(<LandingPage onLogin={vi.fn()} onJoinWhitelist={vi.fn()} devAuthEnabled />);
 
     expect(screen.getByText(/dev auth enabled/i)).toBeInTheDocument();
     expect(
@@ -27,7 +28,7 @@ describe('LandingPage', () => {
 
   it('calls onLogin when Google sign-in or Get Started buttons are clicked', () => {
     const onLogin = vi.fn();
-    const { container } = render(<LandingPage onLogin={onLogin} />);
+    const { container } = render(<LandingPage onLogin={onLogin} onJoinWhitelist={vi.fn()} />);
 
     const buttons = container.querySelectorAll('button');
     let googleButton: Element | null = null;
@@ -47,5 +48,19 @@ describe('LandingPage', () => {
 
     if (getStartedButton) fireEvent.click(getStartedButton);
     expect(onLogin).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders auth and whitelist messages when provided', () => {
+    render(
+      <LandingPage
+        onLogin={vi.fn()}
+        onJoinWhitelist={vi.fn()}
+        authMessage={PENDING_APPROVAL_MESSAGE}
+        whitelistMessage={WHITELIST_REQUESTED_MESSAGE}
+      />
+    );
+
+    expect(screen.getByText(PENDING_APPROVAL_MESSAGE)).toBeInTheDocument();
+    expect(screen.getByText(WHITELIST_REQUESTED_MESSAGE)).toBeInTheDocument();
   });
 });

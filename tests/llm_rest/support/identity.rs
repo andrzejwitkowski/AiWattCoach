@@ -1,5 +1,6 @@
 use aiwattcoach::domain::identity::{
-    AppUser, GoogleLoginStart, GoogleLoginSuccess, IdentityError, IdentityUseCases, Role,
+    AppUser, GoogleLoginOutcome, GoogleLoginStart, IdentityError, IdentityUseCases, Role,
+    WhitelistEntry,
 };
 
 type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'static>>;
@@ -21,11 +22,15 @@ impl IdentityUseCases for TestIdentityServiceWithSession {
         })
     }
 
+    fn join_whitelist(&self, email: String) -> BoxFuture<Result<WhitelistEntry, IdentityError>> {
+        Box::pin(async move { Ok(WhitelistEntry::new(email, false, 100, 100)) })
+    }
+
     fn handle_google_callback(
         &self,
         _state: &str,
         _code: &str,
-    ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>> {
+    ) -> BoxFuture<Result<GoogleLoginOutcome, IdentityError>> {
         Box::pin(async { Err(IdentityError::External("not used in test".to_string())) })
     }
 

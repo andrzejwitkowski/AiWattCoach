@@ -52,6 +52,7 @@ use aiwattcoach::{
             training_plan_projections::MongoTrainingPlanProjectionRepository,
             training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
             users::MongoUserRepository,
+            whitelist::MongoWhitelistRepository,
             workout_summary::MongoWorkoutSummaryRepository,
         },
         support::{SystemClock, UuidIdGenerator},
@@ -68,6 +69,7 @@ use aiwattcoach::{
     domain::external_sync::ExternalImportService,
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
+        IdentityServiceDependencies,
     },
     domain::intervals::IntervalsService,
     domain::races::RaceService,
@@ -101,6 +103,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         dev_llm_coach_enabled,
         client_log_ingestion_enabled,
         legacy_time_stream_cleanup_enabled,
+        trust_proxy_headers,
     } = settings;
     let mut telemetry = setup_telemetry(&app_name)?;
     let address: SocketAddr = server.address().parse()?;
@@ -113,9 +116,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let session_repository = MongoSessionRepository::new(mongo_client.clone(), &mongo_database);
     let login_state_repository =
         MongoLoginStateRepository::new(mongo_client.clone(), &mongo_database);
+    let whitelist_repository = MongoWhitelistRepository::new(mongo_client.clone(), &mongo_database);
     user_repository.ensure_indexes().await?;
     session_repository.ensure_indexes().await?;
     login_state_repository.ensure_indexes().await?;
+    whitelist_repository.ensure_indexes().await?;
     let google_oauth_client = if auth.dev.enabled {
         GoogleOAuthAdapter::Dev(DevGoogleOAuthClient::new(
             auth.dev.google_subject,
@@ -139,12 +144,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         auth.session.ttl_hours,
     )?;
     let identity_service = IdentityService::new(
-        user_repository,
-        session_repository,
-        login_state_repository,
-        google_oauth_client,
-        SystemClock,
-        UuidIdGenerator,
+        IdentityServiceDependencies {
+            users: user_repository,
+            sessions: session_repository,
+            login_states: login_state_repository,
+            whitelist: whitelist_repository,
+            google_oauth: google_oauth_client,
+            clock: SystemClock,
+            ids: UuidIdGenerator,
+        },
         IdentityServiceConfig::new(auth.admin_emails, auth.session.ttl_hours),
     );
 
@@ -446,6 +454,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let app = build_app(
         AppState::new(app_name, mongo_database, mongo_client)
             .with_client_log_ingestion(client_log_ingestion_enabled)
+            .with_trust_proxy_headers(trust_proxy_headers)
             .with_identity_service(
                 Arc::new(identity_service),
                 auth.session.cookie_name,
@@ -468,9 +477,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let listener = TcpListener::bind(address).await?;
     spawn_provider_polling_loop(provider_polling_service);
 
-    let serve_result = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await;
+    let serve_result = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await;
     let telemetry_shutdown_result = telemetry.shutdown();
 
     finish_server_shutdown(serve_result, telemetry_shutdown_result)

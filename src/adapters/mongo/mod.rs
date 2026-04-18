@@ -30,4 +30,5 @@ pub mod training_plan_projections;
 mod training_plan_shared;
 pub mod training_plan_snapshots;
 pub mod users;
+pub mod whitelist;
 pub mod workout_summary;

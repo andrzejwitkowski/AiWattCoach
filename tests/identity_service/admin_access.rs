@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
 use aiwattcoach::domain::identity::{
-    AppUser, AuthSession, IdentityError, IdentityService, IdentityServiceConfig, SessionRepository,
-    UserRepository,
+    AppUser, AuthSession, IdentityError, IdentityService, IdentityServiceConfig,
+    IdentityServiceDependencies, SessionRepository, UserRepository,
 };
 
 use crate::shared::{
-    test_service, InMemoryLoginStates, InMemorySessions, InMemoryUsers, TestClock,
-    TestGoogleOAuthAdapter, TestIdGenerator,
+    test_service, InMemoryLoginStates, InMemorySessions, InMemoryUsers, InMemoryWhitelist,
+    TestClock, TestGoogleOAuthAdapter, TestIdGenerator,
 };
 
 #[tokio::test]
@@ -17,6 +17,7 @@ async fn require_admin_rejects_non_admin_user() {
     let login_states = InMemoryLoginStates {
         items: Arc::new(Mutex::new(Vec::new())),
     };
+    let whitelist = InMemoryWhitelist::default();
 
     let user = AppUser::new(
         "user-1".to_string(),
@@ -40,12 +41,15 @@ async fn require_admin_rejects_non_admin_user() {
         .unwrap();
 
     let service = IdentityService::new(
-        users,
-        sessions,
-        login_states,
-        TestGoogleOAuthAdapter,
-        TestClock,
-        TestIdGenerator,
+        IdentityServiceDependencies {
+            users,
+            sessions,
+            login_states,
+            whitelist,
+            google_oauth: TestGoogleOAuthAdapter,
+            clock: TestClock,
+            ids: TestIdGenerator,
+        },
         IdentityServiceConfig::new(Vec::new(), 24),
     );
 

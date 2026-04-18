@@ -10,10 +10,10 @@ use std::{
 
 use aiwattcoach::{
     build_app_with_frontend_dist,
-    config::AppState,
+    config::{AppState, WhitelistRateLimiter},
     domain::identity::{
-        AppUser, AuthSession, GoogleLoginStart, GoogleLoginSuccess, IdentityError,
-        IdentityUseCases, Role,
+        AppUser, AuthSession, GoogleLoginOutcome, GoogleLoginStart, GoogleLoginSuccess,
+        IdentityError, IdentityUseCases, Role, WhitelistEntry,
     },
     domain::settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
@@ -42,6 +42,11 @@ pub(crate) async fn auth_test_app(identity_service: TestIdentityService) -> axum
             settings.mongo.database,
             test_mongo_client(&settings.mongo.uri).await,
         )
+        .with_trust_proxy_headers(settings.trust_proxy_headers)
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            usize::MAX,
+            std::time::Duration::from_secs(60),
+        ))
         .with_identity_service(
             std::sync::Arc::new(identity_service),
             "aiwattcoach_session",
@@ -67,6 +72,42 @@ pub(crate) async fn auth_test_app_with_custom_settings(
             settings.mongo.database,
             test_mongo_client(&settings.mongo.uri).await,
         )
+        .with_trust_proxy_headers(settings.trust_proxy_headers)
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            usize::MAX,
+            std::time::Duration::from_secs(60),
+        ))
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            settings.auth.session.cookie_name,
+            settings.auth.session.same_site,
+            settings.auth.session.secure,
+            settings.auth.session.ttl_hours,
+        ),
+        dist_dir,
+    )
+}
+
+pub(crate) async fn auth_test_app_with_custom_settings_and_limited_whitelist_rate(
+    settings: Settings,
+    identity_service: TestIdentityService,
+    max_attempts: usize,
+) -> axum::Router {
+    let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_trust_proxy_headers(settings.trust_proxy_headers)
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            max_attempts,
+            std::time::Duration::from_secs(60),
+        ))
         .with_identity_service(
             std::sync::Arc::new(identity_service),
             settings.auth.session.cookie_name,
@@ -109,6 +150,10 @@ pub(crate) async fn auth_test_app_with_settings(
             settings.mongo.database,
             test_mongo_client(&settings.mongo.uri).await,
         )
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            usize::MAX,
+            std::time::Duration::from_secs(60),
+        ))
         .with_identity_service(
             std::sync::Arc::new(identity_service),
             "aiwattcoach_session",
@@ -117,6 +162,36 @@ pub(crate) async fn auth_test_app_with_settings(
             24,
         )
         .with_settings_service(std::sync::Arc::new(settings_service)),
+        dist_dir,
+    )
+}
+
+pub(crate) async fn auth_test_app_with_limited_whitelist_rate(
+    identity_service: TestIdentityService,
+    max_attempts: usize,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            max_attempts,
+            std::time::Duration::from_secs(60),
+        ))
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        ),
         dist_dir,
     )
 }
@@ -183,7 +258,10 @@ pub(crate) struct TestIdentityService {
     pub(crate) admin_cookie_role: Role,
     pub(crate) callback_error: Option<IdentityError>,
     pub(crate) current_user_error: Option<IdentityError>,
+    pub(crate) join_whitelist_error: Option<IdentityError>,
+    pub(crate) last_join_whitelist_email: Arc<Mutex<Option<String>>>,
     pub(crate) last_callback_input: Arc<Mutex<Option<(String, String)>>>,
+    pub(crate) pending_approval_redirect_to: Option<String>,
     pub(crate) last_logout_session_id: Arc<Mutex<Option<String>>>,
     pub(crate) last_return_to: Arc<Mutex<Option<String>>>,
     pub(crate) logout_error: Option<IdentityError>,
@@ -196,7 +274,10 @@ impl Default for TestIdentityService {
             admin_cookie_role: Role::Admin,
             callback_error: None,
             current_user_error: None,
+            join_whitelist_error: None,
+            last_join_whitelist_email: Arc::new(Mutex::new(None)),
             last_callback_input: Arc::new(Mutex::new(None)),
+            pending_approval_redirect_to: None,
             last_logout_session_id: Arc::new(Mutex::new(None)),
             last_return_to: Arc::new(Mutex::new(None)),
             logout_error: None,
@@ -220,19 +301,33 @@ impl IdentityUseCases for TestIdentityService {
         })
     }
 
+    fn join_whitelist(&self, email: String) -> BoxFuture<Result<WhitelistEntry, IdentityError>> {
+        *self.last_join_whitelist_email.lock().unwrap() = Some(email.clone());
+        if let Some(error) = self.join_whitelist_error.clone() {
+            return Box::pin(async move { Err(error) });
+        }
+
+        Box::pin(async move { Ok(WhitelistEntry::new(email, false, 100, 100)) })
+    }
+
     fn handle_google_callback(
         &self,
         state: &str,
         code: &str,
-    ) -> BoxFuture<Result<GoogleLoginSuccess, IdentityError>> {
+    ) -> BoxFuture<Result<GoogleLoginOutcome, IdentityError>> {
         *self.last_callback_input.lock().unwrap() = Some((state.to_string(), code.to_string()));
         if let Some(error) = self.callback_error.clone() {
             return Box::pin(async move { Err(error) });
         }
+        if let Some(redirect_to) = self.pending_approval_redirect_to.clone() {
+            return Box::pin(
+                async move { Ok(GoogleLoginOutcome::PendingApproval { redirect_to }) },
+            );
+        }
 
         let role = self.admin_cookie_role.clone();
         Box::pin(async move {
-            Ok(GoogleLoginSuccess {
+            Ok(GoogleLoginOutcome::SignedIn(Box::new(GoogleLoginSuccess {
                 user: AppUser::new(
                     "user-1".to_string(),
                     "google-subject-1".to_string(),
@@ -249,7 +344,7 @@ impl IdentityUseCases for TestIdentityService {
                     100,
                 ),
                 redirect_to: "/calendar".to_string(),
-            })
+            })))
         })
     }
 
