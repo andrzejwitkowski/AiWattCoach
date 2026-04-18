@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
 
 use crate::domain::{
     completed_workouts::CompletedWorkoutRepository, settings::UserSettingsRepository,
@@ -6,7 +6,9 @@ use crate::domain::{
 
 use super::{
     build_daily_training_load_snapshots, BoxFuture, FtpHistoryRepository,
-    TrainingLoadDailySnapshotRepository, TrainingLoadError, TrainingLoadSnapshotRange,
+    TrainingLoadDailySnapshotRepository, TrainingLoadDashboardPoint, TrainingLoadDashboardRange,
+    TrainingLoadDashboardReport, TrainingLoadDashboardSummary, TrainingLoadError,
+    TrainingLoadSnapshotRange, TrainingLoadTsbZone,
 };
 
 pub trait TrainingLoadRecomputeUseCases: Send + Sync {
@@ -16,6 +18,32 @@ pub trait TrainingLoadRecomputeUseCases: Send + Sync {
         oldest_date: &str,
         now_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), TrainingLoadError>>;
+}
+
+pub trait TrainingLoadDashboardReadUseCases: Send + Sync {
+    fn build_report(
+        &self,
+        user_id: &str,
+        range: TrainingLoadDashboardRange,
+        today: &str,
+    ) -> BoxFuture<Result<TrainingLoadDashboardReport, TrainingLoadError>>;
+}
+
+#[derive(Clone)]
+pub struct TrainingLoadDashboardReadService<Snapshots>
+where
+    Snapshots: TrainingLoadDailySnapshotRepository,
+{
+    snapshots: Snapshots,
+}
+
+impl<Snapshots> TrainingLoadDashboardReadService<Snapshots>
+where
+    Snapshots: TrainingLoadDailySnapshotRepository,
+{
+    pub fn new(snapshots: Snapshots) -> Self {
+        Self { snapshots }
+    }
 }
 
 #[derive(Clone)]
@@ -132,4 +160,100 @@ where
             Ok(())
         })
     }
+}
+
+impl<Snapshots> TrainingLoadDashboardReadUseCases for TrainingLoadDashboardReadService<Snapshots>
+where
+    Snapshots: TrainingLoadDailySnapshotRepository,
+{
+    fn build_report(
+        &self,
+        user_id: &str,
+        range: TrainingLoadDashboardRange,
+        today: &str,
+    ) -> BoxFuture<Result<TrainingLoadDashboardReport, TrainingLoadError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        let today = today.to_string();
+        Box::pin(async move {
+            let today = NaiveDate::parse_from_str(&today, "%Y-%m-%d").map_err(|_| {
+                TrainingLoadError::Repository(format!(
+                    "invalid dashboard report date '{today}'; expected format %Y-%m-%d"
+                ))
+            })?;
+            let window_start = match range {
+                TrainingLoadDashboardRange::Last90Days => {
+                    (today - Duration::days(89)).format("%Y-%m-%d").to_string()
+                }
+                TrainingLoadDashboardRange::Season => format!("{:04}-01-01", today.year()),
+                TrainingLoadDashboardRange::AllTime => service
+                    .snapshots
+                    .find_oldest_date_by_user_id(&user_id)
+                    .await?
+                    .unwrap_or_else(|| today.format("%Y-%m-%d").to_string()),
+            };
+            let window_end = today.format("%Y-%m-%d").to_string();
+            let snapshots = service
+                .snapshots
+                .list_by_user_id_and_range(
+                    &user_id,
+                    &TrainingLoadSnapshotRange {
+                        oldest: window_start.clone(),
+                        newest: window_end.clone(),
+                    },
+                )
+                .await?;
+            let latest_snapshot = snapshots.last();
+            let reference_ctl = snapshots
+                .iter()
+                .rev()
+                .find(|snapshot| {
+                    snapshot.date <= (today - Duration::days(14)).format("%Y-%m-%d").to_string()
+                })
+                .or_else(|| snapshots.first())
+                .and_then(|snapshot| snapshot.ctl);
+
+            Ok(TrainingLoadDashboardReport {
+                range,
+                window_start,
+                window_end,
+                has_training_load: !snapshots.is_empty(),
+                summary: TrainingLoadDashboardSummary {
+                    current_ctl: latest_snapshot.and_then(|snapshot| snapshot.ctl),
+                    current_atl: latest_snapshot.and_then(|snapshot| snapshot.atl),
+                    current_tsb: latest_snapshot.and_then(|snapshot| snapshot.tsb),
+                    ftp_watts: latest_snapshot.and_then(|snapshot| snapshot.ftp_effective_watts),
+                    average_if_28d: latest_snapshot.and_then(|snapshot| snapshot.average_if_28d),
+                    average_ef_28d: latest_snapshot.and_then(|snapshot| snapshot.average_ef_28d),
+                    load_delta_ctl_14d: latest_snapshot
+                        .and_then(|snapshot| snapshot.ctl)
+                        .zip(reference_ctl)
+                        .map(|(current, previous)| round_to_2(current - previous)),
+                    tsb_zone: classify_tsb_zone(latest_snapshot.and_then(|snapshot| snapshot.tsb)),
+                },
+                points: snapshots
+                    .into_iter()
+                    .map(|snapshot| TrainingLoadDashboardPoint {
+                        date: snapshot.date,
+                        daily_tss: snapshot.daily_tss,
+                        ctl: snapshot.ctl,
+                        atl: snapshot.atl,
+                        tsb: snapshot.tsb,
+                    })
+                    .collect(),
+            })
+        })
+    }
+}
+
+fn classify_tsb_zone(tsb: Option<f64>) -> TrainingLoadTsbZone {
+    match tsb {
+        Some(value) if value > 0.0 => TrainingLoadTsbZone::FreshnessPeak,
+        Some(value) if value < -30.0 => TrainingLoadTsbZone::HighRisk,
+        _ => TrainingLoadTsbZone::OptimalTraining,
+    }
+}
+
+fn round_to_2(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
 }

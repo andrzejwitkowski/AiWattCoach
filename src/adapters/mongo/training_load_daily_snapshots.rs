@@ -118,6 +118,29 @@ impl TrainingLoadDailySnapshotRepository for MongoTrainingLoadDailySnapshotRepos
         })
     }
 
+    fn find_oldest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<String>, TrainingLoadError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let oldest = collection
+                .find(doc! {
+                    "user_id": &user_id,
+                })
+                .sort(doc! { "date": 1 })
+                .limit(1)
+                .await
+                .map_err(|error| TrainingLoadError::Repository(error.to_string()))?
+                .try_next()
+                .await
+                .map_err(|error| TrainingLoadError::Repository(error.to_string()))?
+                .map(|document| document.date);
+            Ok(oldest)
+        })
+    }
+
     fn delete_by_user_id_from_date(
         &self,
         user_id: &str,

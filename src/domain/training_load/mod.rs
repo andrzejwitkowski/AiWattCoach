@@ -7,8 +7,9 @@ mod use_cases;
 mod tests;
 
 pub use model::{
-    FtpHistoryEntry, FtpSource, TrainingLoadDailySnapshot, TrainingLoadError,
-    TrainingLoadSnapshotRange,
+    FtpHistoryEntry, FtpSource, TrainingLoadDailySnapshot, TrainingLoadDashboardPoint,
+    TrainingLoadDashboardRange, TrainingLoadDashboardReport, TrainingLoadDashboardSummary,
+    TrainingLoadError, TrainingLoadSnapshotRange, TrainingLoadTsbZone,
 };
 pub use ports::{
     BoxFuture, FtpHistoryRepository, NoopFtpHistoryRepository,
@@ -17,4 +18,7 @@ pub use ports::{
 #[cfg(test)]
 pub use ports::{InMemoryFtpHistoryRepository, InMemoryTrainingLoadDailySnapshotRepository};
 pub use service::build_daily_training_load_snapshots;
-pub use use_cases::{TrainingLoadRecomputeService, TrainingLoadRecomputeUseCases};
+pub use use_cases::{
+    TrainingLoadDashboardReadService, TrainingLoadDashboardReadUseCases,
+    TrainingLoadRecomputeService, TrainingLoadRecomputeUseCases,
+};

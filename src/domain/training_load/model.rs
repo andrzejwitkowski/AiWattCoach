@@ -3,6 +3,20 @@ pub enum TrainingLoadError {
     Repository(String),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrainingLoadDashboardRange {
+    Last90Days,
+    Season,
+    AllTime,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrainingLoadTsbZone {
+    FreshnessPeak,
+    OptimalTraining,
+    HighRisk,
+}
+
 impl std::fmt::Display for TrainingLoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -52,4 +66,35 @@ pub struct TrainingLoadDailySnapshot {
     pub recomputed_at_epoch_seconds: i64,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrainingLoadDashboardPoint {
+    pub date: String,
+    pub daily_tss: Option<i32>,
+    pub ctl: Option<f64>,
+    pub atl: Option<f64>,
+    pub tsb: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrainingLoadDashboardSummary {
+    pub current_ctl: Option<f64>,
+    pub current_atl: Option<f64>,
+    pub current_tsb: Option<f64>,
+    pub ftp_watts: Option<i32>,
+    pub average_if_28d: Option<f64>,
+    pub average_ef_28d: Option<f64>,
+    pub load_delta_ctl_14d: Option<f64>,
+    pub tsb_zone: TrainingLoadTsbZone,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrainingLoadDashboardReport {
+    pub range: TrainingLoadDashboardRange,
+    pub window_start: String,
+    pub window_end: String,
+    pub has_training_load: bool,
+    pub summary: TrainingLoadDashboardSummary,
+    pub points: Vec<TrainingLoadDashboardPoint>,
 }

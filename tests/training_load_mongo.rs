@@ -116,6 +116,38 @@ async fn training_load_daily_snapshot_repository_replaces_days_and_deletes_from_
     fixture.cleanup().await;
 }
 
+#[tokio::test]
+async fn training_load_daily_snapshot_repository_finds_oldest_date_for_user() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoTrainingLoadDailySnapshotRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .upsert(sample_snapshot("user-1", "2026-04-03", Some(80), Some(285)))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_snapshot("user-1", "2026-04-01", Some(50), Some(280)))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_snapshot("user-2", "2026-03-20", Some(60), Some(300)))
+        .await
+        .unwrap();
+
+    let oldest = repository
+        .find_oldest_date_by_user_id("user-1")
+        .await
+        .unwrap();
+
+    assert_eq!(oldest.as_deref(), Some("2026-04-01"));
+
+    fixture.cleanup().await;
+}
+
 #[test]
 fn redact_uri_credentials_hides_mongo_userinfo() {
     assert_eq!(

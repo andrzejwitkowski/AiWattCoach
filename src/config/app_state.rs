@@ -17,6 +17,7 @@ use crate::domain::intervals::{IntervalsConnectionTester, IntervalsUseCases};
 use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
 use crate::domain::races::RaceUseCases;
 use crate::domain::settings::UserSettingsUseCases;
+use crate::domain::training_load::TrainingLoadDashboardReadUseCases;
 use crate::domain::workout_summary::WorkoutSummaryUseCases;
 
 #[derive(Clone)]
@@ -33,6 +34,7 @@ pub struct AppState {
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub race_service: Option<Arc<dyn RaceUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
+    pub training_load_dashboard_service: Option<Arc<dyn TrainingLoadDashboardReadUseCases>>,
     pub athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
     pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
     pub llm_chat_service: Option<Arc<dyn LlmChatPort>>,
@@ -108,6 +110,7 @@ impl AppState {
             intervals_service: None,
             race_service: None,
             settings_service: None,
+            training_load_dashboard_service: None,
             athlete_summary_service: None,
             workout_summary_service: None,
             llm_chat_service: None,
@@ -143,6 +146,14 @@ impl AppState {
         settings_service: Arc<dyn UserSettingsUseCases>,
     ) -> Self {
         self.settings_service = Some(settings_service);
+        self
+    }
+
+    pub fn with_training_load_dashboard_service(
+        mut self,
+        training_load_dashboard_service: Arc<dyn TrainingLoadDashboardReadUseCases>,
+    ) -> Self {
+        self.training_load_dashboard_service = Some(training_load_dashboard_service);
         self
     }
 

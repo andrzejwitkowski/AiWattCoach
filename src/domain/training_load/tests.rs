@@ -1,6 +1,8 @@
 use super::{
-    FtpHistoryEntry, FtpSource, TrainingLoadDailySnapshot, TrainingLoadError,
+    FtpHistoryEntry, FtpSource, TrainingLoadDailySnapshot, TrainingLoadDashboardRange,
+    TrainingLoadDashboardReadService, TrainingLoadDashboardReadUseCases, TrainingLoadError,
     TrainingLoadRecomputeService, TrainingLoadRecomputeUseCases, TrainingLoadSnapshotRange,
+    TrainingLoadTsbZone,
 };
 use crate::domain::{
     completed_workouts::{
@@ -14,7 +16,7 @@ use crate::domain::{
     },
     training_load::{
         build_daily_training_load_snapshots, FtpHistoryRepository, InMemoryFtpHistoryRepository,
-        InMemoryTrainingLoadDailySnapshotRepository,
+        InMemoryTrainingLoadDailySnapshotRepository, TrainingLoadDailySnapshotRepository,
     },
 };
 
@@ -220,6 +222,250 @@ fn training_load_snapshot_range_uses_inclusive_boundaries() {
 
     assert_eq!(range.oldest, "2026-04-01");
     assert_eq!(range.newest, "2026-04-30");
+}
+
+#[test]
+fn in_memory_training_load_daily_snapshot_repository_finds_oldest_date_for_user() {
+    let repository = InMemoryTrainingLoadDailySnapshotRepository::default();
+
+    futures::executor::block_on(async {
+        repository
+            .upsert(sample_snapshot_with_values(
+                "user-1",
+                "2026-04-05",
+                SnapshotValues {
+                    daily_tss: Some(40),
+                    ctl: Some(30.0),
+                    atl: Some(45.0),
+                    tsb: Some(-15.0),
+                    ftp_effective_watts: Some(280),
+                    average_if_28d: Some(0.82),
+                    average_ef_28d: Some(1.25),
+                },
+            ))
+            .await
+            .unwrap();
+        repository
+            .upsert(sample_snapshot_with_values(
+                "user-1",
+                "2026-04-01",
+                SnapshotValues {
+                    daily_tss: Some(50),
+                    ctl: Some(28.0),
+                    atl: Some(50.0),
+                    tsb: Some(-22.0),
+                    ftp_effective_watts: Some(280),
+                    average_if_28d: None,
+                    average_ef_28d: None,
+                },
+            ))
+            .await
+            .unwrap();
+        repository
+            .upsert(sample_snapshot_with_values(
+                "user-2",
+                "2026-03-20",
+                SnapshotValues {
+                    daily_tss: Some(60),
+                    ctl: Some(40.0),
+                    atl: Some(55.0),
+                    tsb: Some(-15.0),
+                    ftp_effective_watts: Some(300),
+                    average_if_28d: Some(0.91),
+                    average_ef_28d: Some(1.31),
+                },
+            ))
+            .await
+            .unwrap();
+
+        let oldest = repository
+            .find_oldest_date_by_user_id("user-1")
+            .await
+            .unwrap();
+
+        assert_eq!(oldest.as_deref(), Some("2026-04-01"));
+    });
+}
+
+#[tokio::test]
+async fn dashboard_report_for_last_90_days_uses_latest_snapshot_summary() {
+    let repository = InMemoryTrainingLoadDailySnapshotRepository::default();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2026-01-15",
+            SnapshotValues {
+                daily_tss: Some(65),
+                ctl: Some(40.0),
+                atl: Some(55.0),
+                tsb: Some(-15.0),
+                ftp_effective_watts: Some(290),
+                average_if_28d: Some(0.86),
+                average_ef_28d: Some(1.28),
+            },
+        ))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2026-04-05",
+            SnapshotValues {
+                daily_tss: Some(82),
+                ctl: Some(49.5),
+                atl: Some(63.4),
+                tsb: Some(-13.9),
+                ftp_effective_watts: Some(300),
+                average_if_28d: Some(0.89),
+                average_ef_28d: Some(1.33),
+            },
+        ))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2026-04-18",
+            SnapshotValues {
+                daily_tss: Some(97),
+                ctl: Some(62.0),
+                atl: Some(37.0),
+                tsb: Some(25.0),
+                ftp_effective_watts: Some(340),
+                average_if_28d: Some(0.92),
+                average_ef_28d: Some(1.41),
+            },
+        ))
+        .await
+        .unwrap();
+
+    let report = TrainingLoadDashboardReadService::new(repository)
+        .build_report(
+            "user-1",
+            TrainingLoadDashboardRange::Last90Days,
+            "2026-04-18",
+        )
+        .await
+        .unwrap();
+
+    assert!(report.has_training_load);
+    assert_eq!(report.window_start, "2026-01-19");
+    assert_eq!(report.window_end, "2026-04-18");
+    assert_eq!(report.points.len(), 2);
+    assert_eq!(report.summary.current_ctl, Some(62.0));
+    assert_eq!(report.summary.current_atl, Some(37.0));
+    assert_eq!(report.summary.current_tsb, Some(25.0));
+    assert_eq!(report.summary.ftp_watts, Some(340));
+    assert_eq!(report.summary.load_delta_ctl_14d, Some(12.5));
+    assert_eq!(report.summary.tsb_zone, TrainingLoadTsbZone::FreshnessPeak);
+}
+
+#[tokio::test]
+async fn dashboard_report_for_season_starts_on_first_day_of_year() {
+    let repository = InMemoryTrainingLoadDailySnapshotRepository::default();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2025-12-31",
+            SnapshotValues {
+                daily_tss: Some(50),
+                ctl: Some(25.0),
+                atl: Some(40.0),
+                tsb: Some(-15.0),
+                ftp_effective_watts: Some(280),
+                average_if_28d: None,
+                average_ef_28d: None,
+            },
+        ))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2026-01-01",
+            SnapshotValues {
+                daily_tss: Some(55),
+                ctl: Some(26.0),
+                atl: Some(38.0),
+                tsb: Some(-12.0),
+                ftp_effective_watts: Some(282),
+                average_if_28d: None,
+                average_ef_28d: None,
+            },
+        ))
+        .await
+        .unwrap();
+
+    let report = TrainingLoadDashboardReadService::new(repository)
+        .build_report("user-1", TrainingLoadDashboardRange::Season, "2026-04-18")
+        .await
+        .unwrap();
+
+    assert_eq!(report.window_start, "2026-01-01");
+    assert_eq!(report.points.len(), 1);
+    assert_eq!(report.points[0].date, "2026-01-01");
+}
+
+#[tokio::test]
+async fn dashboard_report_for_all_time_uses_oldest_snapshot_date() {
+    let repository = InMemoryTrainingLoadDailySnapshotRepository::default();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2025-12-03",
+            SnapshotValues {
+                daily_tss: Some(0),
+                ctl: Some(0.0),
+                atl: Some(0.0),
+                tsb: Some(0.0),
+                ftp_effective_watts: None,
+                average_if_28d: None,
+                average_ef_28d: None,
+            },
+        ))
+        .await
+        .unwrap();
+    repository
+        .upsert(sample_snapshot_with_values(
+            "user-1",
+            "2026-04-18",
+            SnapshotValues {
+                daily_tss: Some(97),
+                ctl: Some(29.9),
+                atl: Some(53.4),
+                tsb: Some(-23.5),
+                ftp_effective_watts: Some(340),
+                average_if_28d: Some(72.95),
+                average_ef_28d: None,
+            },
+        ))
+        .await
+        .unwrap();
+
+    let report = TrainingLoadDashboardReadService::new(repository)
+        .build_report("user-1", TrainingLoadDashboardRange::AllTime, "2026-04-18")
+        .await
+        .unwrap();
+
+    assert_eq!(report.window_start, "2025-12-03");
+    assert_eq!(report.points.len(), 2);
+}
+
+#[tokio::test]
+async fn dashboard_report_returns_empty_state_when_user_has_no_snapshots() {
+    let report = TrainingLoadDashboardReadService::new(
+        InMemoryTrainingLoadDailySnapshotRepository::default(),
+    )
+    .build_report("user-1", TrainingLoadDashboardRange::AllTime, "2026-04-18")
+    .await
+    .unwrap();
+
+    assert!(!report.has_training_load);
+    assert!(report.points.is_empty());
+    assert_eq!(
+        report.summary.tsb_zone,
+        TrainingLoadTsbZone::OptimalTraining
+    );
 }
 
 #[test]
@@ -766,4 +1012,38 @@ fn sample_workout(
         },
         None,
     )
+}
+
+struct SnapshotValues {
+    daily_tss: Option<i32>,
+    ctl: Option<f64>,
+    atl: Option<f64>,
+    tsb: Option<f64>,
+    ftp_effective_watts: Option<i32>,
+    average_if_28d: Option<f64>,
+    average_ef_28d: Option<f64>,
+}
+
+fn sample_snapshot_with_values(
+    user_id: &str,
+    date: &str,
+    values: SnapshotValues,
+) -> TrainingLoadDailySnapshot {
+    TrainingLoadDailySnapshot {
+        user_id: user_id.to_string(),
+        date: date.to_string(),
+        daily_tss: values.daily_tss,
+        rolling_tss_7d: None,
+        rolling_tss_28d: None,
+        ctl: values.ctl,
+        atl: values.atl,
+        tsb: values.tsb,
+        average_if_28d: values.average_if_28d,
+        average_ef_28d: values.average_ef_28d,
+        ftp_effective_watts: values.ftp_effective_watts,
+        ftp_source: values.ftp_effective_watts.map(|_| FtpSource::Settings),
+        recomputed_at_epoch_seconds: 100,
+        created_at_epoch_seconds: 100,
+        updated_at_epoch_seconds: 100,
+    }
 }
