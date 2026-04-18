@@ -59,6 +59,11 @@ impl Settings {
                 "ENABLE_LEGACY_TIME_STREAM_CLEANUP",
                 false,
             )?,
+            trust_proxy_headers: parse::optional_bool_setting(
+                values.get("TRUST_PROXY_HEADERS"),
+                "TRUST_PROXY_HEADERS",
+                false,
+            )?,
         })
         .and_then(parse::validate_session_cookie_settings)
     }
@@ -73,12 +78,13 @@ impl Settings {
             dev_llm_coach_enabled: false,
             client_log_ingestion_enabled: false,
             legacy_time_stream_cleanup_enabled: false,
+            trust_proxy_headers: false,
         }
     }
 }
 
 fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
-    const KEYS: [&str; 22] = [
+    const KEYS: [&str; 23] = [
         "APP_NAME",
         "SERVER_HOST",
         "SERVER_PORT",
@@ -101,6 +107,7 @@ fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
         "ADMIN_EMAILS",
         "ENABLE_CLIENT_LOG_INGESTION",
         "ENABLE_LEGACY_TIME_STREAM_CLEANUP",
+        "TRUST_PROXY_HEADERS",
     ];
 
     let mut values = BTreeMap::new();

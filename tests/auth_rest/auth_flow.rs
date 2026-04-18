@@ -1,15 +1,18 @@
+use std::{collections::BTreeMap, net::SocketAddr};
+
 use aiwattcoach::{domain::identity::IdentityError, Settings};
 use axum::{
     body::{to_bytes, Body},
+    extract::ConnectInfo,
     http::{header, Request, StatusCode},
 };
 use serde_json::Value;
-use std::collections::BTreeMap;
 use tower::util::ServiceExt;
 
 use crate::shared::{
-    auth_test_app, auth_test_app_with_custom_settings, auth_test_app_with_limited_whitelist_rate,
-    TestIdentityService, RESPONSE_LIMIT_BYTES,
+    auth_test_app, auth_test_app_with_custom_settings,
+    auth_test_app_with_custom_settings_and_limited_whitelist_rate,
+    auth_test_app_with_limited_whitelist_rate, TestIdentityService, RESPONSE_LIMIT_BYTES,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -365,7 +368,7 @@ async fn join_whitelist_rate_limits_repeated_requests_from_same_ip() {
                 .method("POST")
                 .uri("/api/auth/whitelist")
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-forwarded-for", "203.0.113.7")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
                 .body(Body::from(r#"{"email":"athlete@example.com"}"#))
                 .unwrap(),
         )
@@ -378,7 +381,7 @@ async fn join_whitelist_rate_limits_repeated_requests_from_same_ip() {
                 .method("POST")
                 .uri("/api/auth/whitelist")
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-forwarded-for", "203.0.113.7")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
                 .body(Body::from(r#"{"email":"second@example.com"}"#))
                 .unwrap(),
         )
@@ -390,5 +393,227 @@ async fn join_whitelist_rate_limits_repeated_requests_from_same_ip() {
     assert_eq!(
         captured.lock().unwrap().as_deref(),
         Some("athlete@example.com")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_ignores_spoofed_proxy_headers_when_not_trusted() {
+    let service = TestIdentityService::default();
+    let captured = service.last_join_whitelist_email.clone();
+    let app = auth_test_app_with_limited_whitelist_rate(service, 1).await;
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-forwarded-for", "203.0.113.7")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let second_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-forwarded-for", "198.51.100.99")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"second@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("athlete@example.com")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_uses_proxy_headers_when_trusted() {
+    let mut settings = Settings::test_defaults();
+    settings.trust_proxy_headers = true;
+    let service = TestIdentityService::default();
+    let captured = service.last_join_whitelist_email.clone();
+    let app =
+        auth_test_app_with_custom_settings_and_limited_whitelist_rate(settings, service, 1).await;
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-forwarded-for", "203.0.113.7")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let second_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-forwarded-for", "198.51.100.99")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"second@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::OK);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("second@example.com")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_normalizes_forwarded_ipv6_port_when_trusted() {
+    let mut settings = Settings::test_defaults();
+    settings.trust_proxy_headers = true;
+    let service = TestIdentityService::default();
+    let captured = service.last_join_whitelist_email.clone();
+    let app =
+        auth_test_app_with_custom_settings_and_limited_whitelist_rate(settings, service, 1).await;
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("forwarded", r#"for="[2001:db8::1]:41001";proto=https"#)
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let second_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("forwarded", r#"for="[2001:db8::1]:41002";proto=https"#)
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 2], 41001))))
+                .body(Body::from(r#"{"email":"second@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("athlete@example.com")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_rejects_invalid_bracketed_forwarded_identifier_when_trusted() {
+    let mut settings = Settings::test_defaults();
+    settings.trust_proxy_headers = true;
+    let service = TestIdentityService::default();
+    let captured = service.last_join_whitelist_email.clone();
+    let app =
+        auth_test_app_with_custom_settings_and_limited_whitelist_rate(settings, service, 1).await;
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("forwarded", r#"for="[not-an-ip]:41001";proto=https"#)
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let second_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("forwarded", r#"for="[still-not-an-ip]:41002";proto=https"#)
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"second@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("athlete@example.com")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn join_whitelist_uses_distinct_runtime_connect_info_peers_when_headers_are_not_trusted() {
+    let service = TestIdentityService::default();
+    let captured = service.last_join_whitelist_email.clone();
+    let app = auth_test_app_with_limited_whitelist_rate(service, 1).await;
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 41001))))
+                .body(Body::from(r#"{"email":"athlete@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let second_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/whitelist")
+                .header(header::CONTENT_TYPE, "application/json")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 2], 41001))))
+                .body(Body::from(r#"{"email":"second@example.com"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::OK);
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("second@example.com")
     );
 }

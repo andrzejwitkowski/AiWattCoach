@@ -1,10 +1,12 @@
 use axum::{
-    extract::{Query, State},
+    extract::{ConnectInfo, FromRequestParts, Query, State},
+    http::request::Parts,
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use tokio::time::{sleep, Duration, Instant};
 
 use crate::{
@@ -179,7 +181,7 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
 
 pub async fn join_whitelist(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    client_metadata: ClientMetadata,
     Json(payload): Json<JoinWhitelistRequest>,
 ) -> Response {
     let started_at = Instant::now();
@@ -187,8 +189,13 @@ pub async fn join_whitelist(
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
 
-    let client_ip = extract_client_ip(&headers).unwrap_or("unknown");
-    if !state.whitelist_rate_limiter.check(client_ip) {
+    let client_ip = extract_client_ip(
+        &client_metadata.headers,
+        client_metadata.peer_addr,
+        state.trust_proxy_headers,
+    )
+    .unwrap_or_else(|| "unknown".to_string());
+    if !state.whitelist_rate_limiter.check(&client_ip) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
 
@@ -213,31 +220,134 @@ pub async fn join_whitelist(
     response
 }
 
-fn extract_client_ip(headers: &HeaderMap) -> Option<&str> {
-    ["x-forwarded-for", "x-real-ip", "forwarded"]
-        .into_iter()
-        .find_map(|header_name| {
-            headers
-                .get(header_name)
-                .and_then(|value| value.to_str().ok())
-                .and_then(parse_client_ip_header)
-        })
+fn extract_client_ip(
+    headers: &HeaderMap,
+    peer_addr: Option<SocketAddr>,
+    trust_proxy_headers: bool,
+) -> Option<String> {
+    if trust_proxy_headers {
+        if let Some(candidate) = headers
+            .get("x-forwarded-for")
+            .and_then(|value| value.to_str().ok())
+            .and_then(parse_forwarded_header_ip)
+        {
+            return Some(candidate);
+        }
+
+        if let Some(candidate) = headers
+            .get("x-real-ip")
+            .and_then(|value| value.to_str().ok())
+            .and_then(normalize_ip_candidate)
+        {
+            return Some(candidate);
+        }
+
+        if let Some(candidate) = headers
+            .get("forwarded")
+            .and_then(|value| value.to_str().ok())
+            .and_then(parse_forwarded_for)
+        {
+            return Some(candidate);
+        }
+    }
+
+    peer_addr.map(|addr| addr.ip().to_string())
 }
 
-fn parse_client_ip_header(value: &str) -> Option<&str> {
-    value
-        .split(',')
-        .next()
-        .map(str::trim)
-        .filter(|candidate| !candidate.is_empty())
+fn parse_forwarded_header_ip(value: &str) -> Option<String> {
+    if value.contains("for=") {
+        return parse_forwarded_for(value);
+    }
+
+    value.split(',').next().and_then(normalize_ip_candidate)
+}
+
+fn parse_forwarded_for(value: &str) -> Option<String> {
+    let first = value.split(',').next()?.trim();
+
+    for part in first.split(';') {
+        let trimmed = part.trim();
+        let Some(raw) = trimmed.strip_prefix("for=") else {
+            continue;
+        };
+        return normalize_ip_candidate(raw.trim().trim_matches('"'));
+    }
+
+    None
+}
+
+fn normalize_ip_candidate(candidate: &str) -> Option<String> {
+    let trimmed = candidate.trim();
+
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") {
+        return None;
+    }
+
+    if let Some(rest) = trimmed.strip_prefix('[') {
+        let (host, remainder) = rest.split_once(']')?;
+        let parsed_host = host.parse::<std::net::IpAddr>().ok()?;
+
+        if remainder.is_empty() {
+            return Some(parsed_host.to_string());
+        }
+
+        if let Some(port) = remainder.strip_prefix(':') {
+            if port.chars().all(|character| character.is_ascii_digit()) {
+                return Some(parsed_host.to_string());
+            }
+        }
+
+        return None;
+    }
+
+    if let Ok(ip) = trimmed.parse::<std::net::IpAddr>() {
+        return Some(ip.to_string());
+    }
+
+    if let Some((host, port)) = trimmed.rsplit_once(':') {
+        if !host.contains(':') && port.chars().all(|character| character.is_ascii_digit()) {
+            return host
+                .parse::<std::net::IpAddr>()
+                .ok()
+                .map(|ip| ip.to_string());
+        }
+    }
+
+    None
 }
 
 async fn sleep_until_minimum_response_time(started_at: Instant) {
+    // This is only a small abuse-resistance floor for common fast paths, not a strict side-channel guarantee.
     const MIN_WHITELIST_RESPONSE_TIME: Duration = Duration::from_millis(40);
 
     let elapsed = started_at.elapsed();
     if elapsed < MIN_WHITELIST_RESPONSE_TIME {
         sleep(MIN_WHITELIST_RESPONSE_TIME - elapsed).await;
+    }
+}
+
+pub(super) struct ClientMetadata {
+    headers: HeaderMap,
+    peer_addr: Option<SocketAddr>,
+}
+
+impl<S> FromRequestParts<S> for ClientMetadata
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let peer_addr = parts
+            .extensions
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|info| info.0)
+            .or_else(|| parts.extensions.get::<SocketAddr>().copied());
+
+        Ok(Self {
+            headers: parts.headers.clone(),
+            peer_addr,
+        })
     }
 }
 

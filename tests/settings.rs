@@ -67,6 +67,7 @@ fn settings_load_required_values_from_map() {
     assert!(!settings.auth.dev.enabled);
     assert!(!settings.dev_intervals_enabled);
     assert!(!settings.dev_llm_coach_enabled);
+    assert!(!settings.trust_proxy_headers);
 }
 
 #[test]
@@ -256,6 +257,16 @@ fn settings_allow_dev_llm_coach_toggle() {
     let settings = Settings::from_map(&values).unwrap();
 
     assert!(settings.dev_llm_coach_enabled);
+}
+
+#[test]
+fn settings_allow_trust_proxy_headers_toggle() {
+    let mut values = required_settings_map();
+    values.insert("TRUST_PROXY_HEADERS".to_string(), "true".to_string());
+
+    let settings = Settings::from_map(&values).unwrap();
+
+    assert!(settings.trust_proxy_headers);
 }
 
 #[test]

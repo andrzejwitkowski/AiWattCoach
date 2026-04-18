@@ -100,6 +100,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         dev_llm_coach_enabled,
         client_log_ingestion_enabled,
         legacy_time_stream_cleanup_enabled,
+        trust_proxy_headers,
     } = settings;
     let mut telemetry = setup_telemetry(&app_name)?;
     let address: SocketAddr = server.address().parse()?;
@@ -429,6 +430,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let app = build_app(
         AppState::new(app_name, mongo_database, mongo_client)
             .with_client_log_ingestion(client_log_ingestion_enabled)
+            .with_trust_proxy_headers(trust_proxy_headers)
             .with_identity_service(
                 Arc::new(identity_service),
                 auth.session.cookie_name,
@@ -451,9 +453,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let listener = TcpListener::bind(address).await?;
     spawn_provider_polling_loop(provider_polling_service);
 
-    let serve_result = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await;
+    let serve_result = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await;
     let telemetry_shutdown_result = telemetry.shutdown();
 
     finish_server_shutdown(serve_result, telemetry_shutdown_result)

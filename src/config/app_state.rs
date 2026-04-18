@@ -39,6 +39,7 @@ pub struct AppState {
     pub llm_config_provider: Option<Arc<dyn UserLlmConfigProvider>>,
     pub intervals_connection_tester: Option<Arc<dyn IntervalsConnectionTester>>,
     pub whitelist_rate_limiter: WhitelistRateLimiter,
+    pub trust_proxy_headers: bool,
     pub session_cookie_name: String,
     pub session_cookie_same_site: String,
     pub secure_session_cookie: bool,
@@ -113,6 +114,7 @@ impl AppState {
             llm_config_provider: None,
             intervals_connection_tester: None,
             whitelist_rate_limiter: WhitelistRateLimiter::default(),
+            trust_proxy_headers: false,
             session_cookie_name: "aiwattcoach_session".to_string(),
             session_cookie_same_site: "lax".to_string(),
             secure_session_cookie: false,
@@ -209,6 +211,11 @@ impl AppState {
         whitelist_rate_limiter: WhitelistRateLimiter,
     ) -> Self {
         self.whitelist_rate_limiter = whitelist_rate_limiter;
+        self
+    }
+
+    pub fn with_trust_proxy_headers(mut self, trust_proxy_headers: bool) -> Self {
+        self.trust_proxy_headers = trust_proxy_headers;
         self
     }
 

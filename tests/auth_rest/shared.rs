@@ -42,6 +42,7 @@ pub(crate) async fn auth_test_app(identity_service: TestIdentityService) -> axum
             settings.mongo.database,
             test_mongo_client(&settings.mongo.uri).await,
         )
+        .with_trust_proxy_headers(settings.trust_proxy_headers)
         .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
             usize::MAX,
             std::time::Duration::from_secs(60),
@@ -71,8 +72,40 @@ pub(crate) async fn auth_test_app_with_custom_settings(
             settings.mongo.database,
             test_mongo_client(&settings.mongo.uri).await,
         )
+        .with_trust_proxy_headers(settings.trust_proxy_headers)
         .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
             usize::MAX,
+            std::time::Duration::from_secs(60),
+        ))
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            settings.auth.session.cookie_name,
+            settings.auth.session.same_site,
+            settings.auth.session.secure,
+            settings.auth.session.ttl_hours,
+        ),
+        dist_dir,
+    )
+}
+
+pub(crate) async fn auth_test_app_with_custom_settings_and_limited_whitelist_rate(
+    settings: Settings,
+    identity_service: TestIdentityService,
+    max_attempts: usize,
+) -> axum::Router {
+    let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_trust_proxy_headers(settings.trust_proxy_headers)
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            max_attempts,
             std::time::Duration::from_secs(60),
         ))
         .with_identity_service(
