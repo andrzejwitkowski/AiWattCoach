@@ -69,9 +69,15 @@ impl WhitelistRateLimiter {
 
     pub fn check(&self, client_ip: &str) -> bool {
         let now = Instant::now();
-        let mut attempts_by_ip = self.attempts_by_ip.lock().unwrap();
+        let mut attempts_by_ip = self
+            .attempts_by_ip
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        attempts_by_ip.retain(|_, attempts| {
+            attempts.retain(|attempt| now.duration_since(*attempt) < self.window);
+            !attempts.is_empty()
+        });
         let attempts = attempts_by_ip.entry(client_ip.to_string()).or_default();
-        attempts.retain(|attempt| now.duration_since(*attempt) < self.window);
 
         if attempts.len() >= self.max_attempts {
             return false;
@@ -222,5 +228,22 @@ impl AppState {
     ) -> Self {
         self.intervals_connection_tester = Some(intervals_connection_tester);
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::WhitelistRateLimiter;
+
+    #[test]
+    fn whitelist_rate_limiter_prunes_empty_ip_buckets() {
+        let limiter = WhitelistRateLimiter::new(1, Duration::from_millis(1));
+
+        assert!(limiter.check("198.51.100.1"));
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(limiter.check("198.51.100.2"));
+        assert!(limiter.check("198.51.100.1"));
     }
 }

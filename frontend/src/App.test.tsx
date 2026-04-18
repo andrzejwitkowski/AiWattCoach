@@ -282,4 +282,59 @@ describe('App', () => {
       '/api/auth/google/start?returnTo=%2Fsettings%3Ftab%3Dsecurity'
     );
   });
+
+  it('cancels async auth and backend status updates after unmount', async () => {
+    let resolveAuth: ((value: Response) => void) | undefined;
+    let resolveHealth: ((value: Response) => void) | undefined;
+    let resolveReady: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveAuth = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveHealth = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveReady = resolve;
+          })
+      );
+    global.fetch = fetchMock as typeof fetch;
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount } = render(<App />);
+
+    unmount();
+
+    resolveAuth?.(
+      new Response(JSON.stringify({ authenticated: false }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+    resolveHealth?.(
+      new Response(JSON.stringify({ status: 'ok', service: 'AiWattCoach' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+    resolveReady?.(
+      new Response(JSON.stringify({ status: 'ok', reason: null }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
 });

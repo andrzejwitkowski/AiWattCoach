@@ -96,6 +96,31 @@ async fn handle_google_callback_rejects_missing_state() {
 }
 
 #[tokio::test]
+async fn join_whitelist_refreshes_existing_entry_timestamp() {
+    let service = test_service(Arc::new(Mutex::new(Vec::new())), Vec::new());
+
+    service
+        .whitelist
+        .save(WhitelistEntry::new(
+            "athlete@example.com".to_string(),
+            false,
+            90,
+            90,
+        ))
+        .await
+        .unwrap();
+
+    let entry = service
+        .join_whitelist("athlete@example.com".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(entry.created_at_epoch_seconds, 90);
+    assert_eq!(entry.updated_at_epoch_seconds, 100);
+    assert_eq!(entry.email, "athlete@example.com");
+}
+
+#[tokio::test]
 async fn handle_google_callback_rejects_conflicting_subject_and_email_matches() {
     let login_states = Arc::new(Mutex::new(vec![LoginState::new(
         "state-1".to_string(),

@@ -225,7 +225,15 @@ where
             .find_by_normalized_email(&normalized_email)
             .await?
         {
-            return Ok(existing);
+            return self
+                .whitelist
+                .save(WhitelistEntry::new(
+                    existing.email,
+                    existing.allowed,
+                    existing.created_at_epoch_seconds,
+                    now,
+                ))
+                .await;
         }
 
         self.whitelist
@@ -269,7 +277,10 @@ where
                 .await?;
 
             match whitelist_entry {
-                Some(entry) if entry.allowed => {}
+                Some(entry) if entry.allowed => {
+                    // Allowed whitelisted first-time user: proceed to account creation below.
+                    let _ = entry;
+                }
                 Some(entry) => {
                     self.whitelist
                         .save(WhitelistEntry::new(

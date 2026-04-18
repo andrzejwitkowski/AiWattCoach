@@ -71,8 +71,33 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    void refreshBackendStatus();
-  }, [refreshBackendStatus]);
+    let isActive = true;
+
+    void (async () => {
+      setIsRefreshing(true);
+
+      try {
+        const status = await loadBackendStatus(API_BASE_URL);
+        if (!isActive) {
+          return;
+        }
+        setBackendStatus(status);
+      } catch {
+        if (!isActive) {
+          return;
+        }
+        setBackendStatus(offlineFallback);
+      } finally {
+        if (isActive) {
+          setIsRefreshing(false);
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   return (
     <AuthProvider apiBaseUrl={API_BASE_URL}>

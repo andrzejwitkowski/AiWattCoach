@@ -48,8 +48,40 @@ export function AuthProvider({ apiBaseUrl, children }: AuthProviderProps) {
   }, [apiBaseUrl]);
 
   useEffect(() => {
-    void refreshAuth();
-  }, [refreshAuth]);
+    let isActive = true;
+
+    void (async () => {
+      setStatus('loading');
+
+      try {
+        const response = await loadCurrentUser(apiBaseUrl);
+
+        if (!isActive) {
+          return;
+        }
+
+        if (response.authenticated) {
+          setUser(response.user);
+          setStatus('authenticated');
+          return;
+        }
+
+        setUser(null);
+        setStatus('unauthenticated');
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        setUser(null);
+        setStatus('unauthenticated');
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [apiBaseUrl]);
 
   const value = useMemo(
     () => ({
