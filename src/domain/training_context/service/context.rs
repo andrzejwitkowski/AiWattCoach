@@ -12,6 +12,7 @@ use crate::domain::{
         PlannedWorkoutBlockContext, PlannedWorkoutContext, PlannedWorkoutReference,
         RecentDayContext, RecentWorkoutContext, SpecialDayContext, UpcomingDayContext,
     },
+    training_load::{FtpHistoryEntry, TrainingLoadDailySnapshot},
 };
 
 use super::{
@@ -27,15 +28,18 @@ pub(super) fn build_historical_context(
     start: NaiveDate,
     end: NaiveDate,
     activities: &[Activity],
-    detailed_activities_by_id: &HashMap<String, Activity>,
-    workout_recaps_by_id: &HashMap<String, String>,
+    load_sources: HistoricalLoadSources<'_>,
+    workout_sources: HistoricalWorkoutSources<'_>,
     configured_ftp: Option<i32>,
-    recent_interval_blocks_by_activity_id: &HashMap<String, Vec<PlannedWorkoutBlockContext>>,
 ) -> HistoricalTrainingContext {
+    let complete_snapshot_coverage =
+        has_complete_snapshot_coverage(load_sources.daily_snapshots, start, end);
+    let ftp_history_in_window = ftp_history_through_date(load_sources.ftp_history, end);
     let workouts = activities
         .iter()
         .map(|activity| {
-            let compressed_power_levels = detailed_activities_by_id
+            let compressed_power_levels = workout_sources
+                .detailed_activities_by_id
                 .get(&activity.id)
                 .map(|detailed| {
                     compress_power_stream(
@@ -58,10 +62,14 @@ pub(super) fn build_historical_context(
                 efficiency_factor: activity.metrics.efficiency_factor,
                 normalized_power_watts: activity.metrics.normalized_power_watts,
                 ftp_watts: activity.metrics.ftp_watts,
-                workout_recap: workout_recaps_by_id.get(&activity.id).cloned(),
+                workout_recap: workout_sources
+                    .workout_recaps_by_id
+                    .get(&activity.id)
+                    .cloned(),
                 variability_index: activity.metrics.variability_index,
                 compressed_power_levels,
-                interval_blocks: recent_interval_blocks_by_activity_id
+                interval_blocks: workout_sources
+                    .recent_interval_blocks_by_activity_id
                     .get(&activity.id)
                     .cloned()
                     .unwrap_or_default(),
@@ -69,51 +77,100 @@ pub(super) fn build_historical_context(
         })
         .collect::<Vec<_>>();
 
-    let total_tss = activities
-        .iter()
-        .filter_map(|activity| activity.metrics.training_stress_score)
-        .sum::<i32>();
-    let daily_tss = build_daily_tss_map(start, end, activities);
-    let load_trend = build_load_trend(&daily_tss, 42, 42);
-    let ctl = ewma_latest(&daily_tss, 42);
-    let atl = ewma_latest(&daily_tss, 7);
-    let tsb = match (ctl, atl) {
-        (Some(ctl), Some(atl)) => Some(round_to_2(ctl - atl)),
-        _ => None,
+    let total_tss = if !complete_snapshot_coverage {
+        activities
+            .iter()
+            .filter_map(|activity| activity.metrics.training_stress_score)
+            .sum::<i32>()
+    } else {
+        load_sources
+            .daily_snapshots
+            .iter()
+            .filter_map(|snapshot| snapshot.daily_tss)
+            .sum::<i32>()
     };
-    let ftp_samples = activities
+    let daily_tss = build_daily_tss_map(start, end, activities);
+    let load_trend = if !complete_snapshot_coverage {
+        build_load_trend(&daily_tss, 42, 42)
+    } else {
+        build_load_trend_from_snapshots(load_sources.daily_snapshots, 42)
+    };
+    let latest_snapshot = complete_snapshot_coverage
+        .then(|| load_sources.daily_snapshots.last())
+        .flatten();
+    let ctl = latest_snapshot
+        .and_then(|snapshot| snapshot.ctl)
+        .or_else(|| ewma_latest(&daily_tss, 42));
+    let atl = latest_snapshot
+        .and_then(|snapshot| snapshot.atl)
+        .or_else(|| ewma_latest(&daily_tss, 7));
+    let tsb = latest_snapshot
+        .and_then(|snapshot| snapshot.tsb)
+        .or_else(|| match (ctl, atl) {
+            (Some(ctl), Some(atl)) => Some(round_to_2(ctl - atl)),
+            _ => None,
+        });
+    let latest_history_entry = ftp_history_in_window
         .iter()
-        .filter_map(|activity| {
-            activity
-                .metrics
-                .ftp_watts
-                .map(|ftp| (date_key(&activity.start_date_local), ftp))
-        })
-        .collect::<Vec<_>>();
-    let ftp_current = ftp_samples
-        .iter()
-        .max_by_key(|(date, _)| date.as_str())
-        .map(|(_, ftp)| *ftp);
-    let ftp_earliest = ftp_samples
-        .iter()
-        .min_by_key(|(date, _)| date.as_str())
-        .map(|(_, ftp)| *ftp);
-    let ftp_change = ftp_current
-        .zip(ftp_earliest)
-        .map(|(latest, earliest)| latest - earliest);
-    let average_tss_7d = average_recent_tss(&daily_tss, 7);
-    let average_tss_28d = average_recent_tss(&daily_tss, 28);
+        .max_by_key(|entry| entry.effective_from_date.as_str());
+    let ftp_current = latest_history_entry
+        .and_then(|entry| (entry.ftp_watts > 0).then_some(entry.ftp_watts))
+        .or_else(|| latest_snapshot.and_then(|snapshot| snapshot.ftp_effective_watts))
+        .or_else(|| {
+            activities
+                .iter()
+                .filter_map(|activity| {
+                    activity
+                        .metrics
+                        .ftp_watts
+                        .map(|ftp| (date_key(&activity.start_date_local), ftp))
+                })
+                .max_by_key(|(date, _)| date.clone())
+                .map(|(_, ftp)| ftp)
+        });
+    let ftp_change = ftp_change_from_history(&ftp_history_in_window).or_else(|| {
+        let ftp_samples = activities
+            .iter()
+            .filter_map(|activity| {
+                activity
+                    .metrics
+                    .ftp_watts
+                    .map(|ftp| (date_key(&activity.start_date_local), ftp))
+            })
+            .collect::<Vec<_>>();
+        let ftp_earliest = ftp_samples
+            .iter()
+            .min_by_key(|(date, _)| date.as_str())
+            .map(|(_, ftp)| *ftp);
+        ftp_current
+            .zip(ftp_earliest)
+            .map(|(latest, earliest)| latest - earliest)
+    });
+    let average_tss_7d = latest_snapshot
+        .and_then(|snapshot| snapshot.rolling_tss_7d)
+        .or_else(|| average_recent_tss(&daily_tss, 7));
+    let average_tss_28d = latest_snapshot
+        .and_then(|snapshot| snapshot.rolling_tss_28d)
+        .or_else(|| average_recent_tss(&daily_tss, 28));
     let recent_28 = recent_slice(activities, end - Duration::days(27));
-    let average_if_28d = average_metric(
-        recent_28
-            .iter()
-            .filter_map(|activity| activity.metrics.intensity_factor),
-    );
-    let average_ef_28d = average_metric(
-        recent_28
-            .iter()
-            .filter_map(|activity| activity.metrics.efficiency_factor),
-    );
+    let average_if_28d = latest_snapshot
+        .and_then(|snapshot| snapshot.average_if_28d)
+        .or_else(|| {
+            average_metric(
+                recent_28
+                    .iter()
+                    .filter_map(|activity| activity.metrics.intensity_factor),
+            )
+        });
+    let average_ef_28d = latest_snapshot
+        .and_then(|snapshot| snapshot.average_ef_28d)
+        .or_else(|| {
+            average_metric(
+                recent_28
+                    .iter()
+                    .filter_map(|activity| activity.metrics.efficiency_factor),
+            )
+        });
 
     HistoricalTrainingContext {
         window_start: start.format("%Y-%m-%d").to_string(),
@@ -132,6 +189,88 @@ pub(super) fn build_historical_context(
         load_trend,
         workouts,
     }
+}
+
+pub(super) struct HistoricalLoadSources<'a> {
+    pub(super) daily_snapshots: &'a [TrainingLoadDailySnapshot],
+    pub(super) ftp_history: &'a [FtpHistoryEntry],
+}
+
+pub(super) struct HistoricalWorkoutSources<'a> {
+    pub(super) detailed_activities_by_id: &'a HashMap<String, Activity>,
+    pub(super) workout_recaps_by_id: &'a HashMap<String, String>,
+    pub(super) recent_interval_blocks_by_activity_id:
+        &'a HashMap<String, Vec<PlannedWorkoutBlockContext>>,
+}
+
+fn build_load_trend_from_snapshots(
+    daily_snapshots: &[TrainingLoadDailySnapshot],
+    trend_days: usize,
+) -> Vec<crate::domain::training_context::model::HistoricalLoadTrendPoint> {
+    let start_index = daily_snapshots.len().saturating_sub(trend_days);
+    daily_snapshots[start_index..]
+        .iter()
+        .map(
+            |snapshot| crate::domain::training_context::model::HistoricalLoadTrendPoint {
+                date: snapshot.date.clone(),
+                sample_days: 1,
+                period_tss: snapshot.daily_tss.unwrap_or_default(),
+                rolling_tss_7d: snapshot.rolling_tss_7d,
+                rolling_tss_28d: snapshot.rolling_tss_28d,
+                ctl: snapshot.ctl,
+                atl: snapshot.atl,
+                tsb: snapshot.tsb,
+            },
+        )
+        .collect()
+}
+
+fn ftp_change_from_history(ftp_history: &[FtpHistoryEntry]) -> Option<i32> {
+    let earliest = ftp_history
+        .iter()
+        .filter(|entry| entry.ftp_watts > 0)
+        .min_by_key(|entry| entry.effective_from_date.as_str())?;
+    let latest = ftp_history
+        .iter()
+        .max_by_key(|entry| entry.effective_from_date.as_str())?;
+
+    if latest.ftp_watts <= 0 {
+        return None;
+    }
+
+    Some(latest.ftp_watts - earliest.ftp_watts)
+}
+
+fn ftp_history_through_date(
+    ftp_history: &[FtpHistoryEntry],
+    end: NaiveDate,
+) -> Vec<FtpHistoryEntry> {
+    let end = end.format("%Y-%m-%d").to_string();
+    ftp_history
+        .iter()
+        .filter(|entry| entry.effective_from_date <= end)
+        .cloned()
+        .collect()
+}
+
+fn has_complete_snapshot_coverage(
+    daily_snapshots: &[TrainingLoadDailySnapshot],
+    start: NaiveDate,
+    end: NaiveDate,
+) -> bool {
+    let expected_days = (end - start).num_days().max(0) + 1;
+    if daily_snapshots.len() as i64 != expected_days {
+        return false;
+    }
+
+    for (offset, snapshot) in daily_snapshots.iter().enumerate() {
+        let expected_date = start + Duration::days(offset as i64);
+        if snapshot.date != expected_date.format("%Y-%m-%d").to_string() {
+            return false;
+        }
+    }
+
+    true
 }
 
 pub(super) fn build_recent_day_contexts(
