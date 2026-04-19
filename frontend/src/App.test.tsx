@@ -337,4 +337,115 @@ describe('App', () => {
 
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
+
+  it('renders the authenticated /app shell labels for the dashboard route', async () => {
+    window.history.replaceState({}, '', '/app');
+
+    const jsonResponse = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const { pathname } = new URL(requestUrl, 'http://localhost');
+
+      switch (pathname) {
+        case '/api/auth/me':
+          return jsonResponse({
+            authenticated: true,
+            user: {
+              id: 'user-1',
+              email: 'athlete@example.com',
+              displayName: 'Test Athlete',
+              avatarUrl: null,
+              roles: ['user']
+            }
+          });
+        case '/health':
+          return jsonResponse({ status: 'ok', service: 'AiWattCoach' });
+        case '/ready':
+          return jsonResponse({ status: 'ok', reason: null });
+        case '/api/settings':
+          return jsonResponse({
+            aiAgents: {
+              openaiApiKey: null,
+              openaiApiKeySet: false,
+              geminiApiKey: null,
+              geminiApiKeySet: false,
+              openrouterApiKey: null,
+              openrouterApiKeySet: false
+            },
+            intervals: {
+              apiKey: null,
+              apiKeySet: false,
+              athleteId: null,
+              connected: false
+            },
+            options: {
+              analyzeWithoutHeartRate: false
+            },
+            availability: {
+              configured: false,
+              days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((weekday) => ({
+                weekday,
+                available: false,
+                maxDurationMinutes: null
+              }))
+            },
+            cycling: {
+              fullName: null,
+              age: null,
+              heightCm: null,
+              weightKg: null,
+              ftpWatts: null,
+              hrMaxBpm: null,
+              vo2Max: null,
+              athletePrompt: null,
+              medications: null,
+              athleteNotes: null,
+              lastZoneUpdateEpochSeconds: null
+            }
+          });
+        case '/api/dashboard/training-load':
+          return jsonResponse({
+            range: '90d',
+            windowStart: '2026-01-19',
+            windowEnd: '2026-04-18',
+            hasTrainingLoad: true,
+            summary: {
+              currentCtl: 29.9,
+              currentAtl: 53.4,
+              currentTsb: -23.5,
+              ftpWatts: null,
+              averageIf28d: null,
+              averageEf28d: null,
+              loadDeltaCtl14d: null,
+              tsbZone: 'optimal_training'
+            },
+            points: [
+              {
+                date: '2026-04-18',
+                dailyTss: 97,
+                currentCtl: 29.9,
+                currentAtl: 53.4,
+                currentTsb: -23.5
+              }
+            ]
+          });
+        default:
+          throw new Error(`Unexpected fetch for ${pathname}`);
+      }
+    });
+
+    global.fetch = fetchMock as typeof fetch;
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /training stress and recovery/i })).toBeInTheDocument();
+  });
 });

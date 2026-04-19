@@ -4,6 +4,7 @@ mod auth;
 mod calendar;
 mod completed_workouts;
 mod cookies;
+mod dashboard;
 mod health;
 mod intervals;
 mod logging;
@@ -125,6 +126,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route(
             "/api/completed-workouts/{activity_id}",
             get(completed_workouts::get_completed_workout),
+        )
+        .route(
+            "/api/dashboard/training-load",
+            get(dashboard::get_training_load_dashboard),
         )
         .route(
             "/api/calendar/planned-workouts/{operation_key}/{date}/sync",

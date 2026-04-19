@@ -115,7 +115,7 @@ export function App() {
                 </SettingsProvider>
               }
             >
-              <Route element={<AppHomePage />} path="/app" />
+              <Route element={<AppHomePage apiBaseUrl={API_BASE_URL} />} path="/app" />
               <Route element={<SettingsPage apiBaseUrl={API_BASE_URL} />} path="/settings" />
               <Route element={<CalendarPage apiBaseUrl={API_BASE_URL} />} path="/calendar" />
               <Route element={<RacesPage apiBaseUrl={API_BASE_URL} />} path="/races" />

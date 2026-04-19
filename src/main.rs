@@ -75,7 +75,7 @@ use aiwattcoach::{
     domain::races::RaceService,
     domain::settings::UserSettingsService,
     domain::training_context::DefaultTrainingContextBuilder,
-    domain::training_load::TrainingLoadRecomputeService,
+    domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
     domain::training_plan::TrainingPlanGenerationService,
     domain::workout_summary::WorkoutSummaryService,
     telemetry::setup_telemetry,
@@ -249,6 +249,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         ftp_history_repository.clone(),
         training_load_daily_snapshot_repository.clone(),
         settings_repository.clone(),
+    ));
+    let training_load_dashboard_service = Arc::new(TrainingLoadDashboardReadService::new(
+        training_load_daily_snapshot_repository.clone(),
     ));
     let settings_service = Arc::new(
         UserSettingsService::new(settings_repository, SystemClock)
@@ -463,6 +466,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 auth.session.ttl_hours,
             )
             .with_settings_service(settings_service)
+            .with_training_load_dashboard_service(training_load_dashboard_service)
             .with_calendar_service(calendar_service)
             .with_calendar_labels_service(calendar_labels_service)
             .with_completed_workout_service(completed_workout_service)

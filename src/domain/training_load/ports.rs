@@ -34,6 +34,13 @@ pub trait TrainingLoadDailySnapshotRepository: Clone + Send + Sync + 'static {
         range: &TrainingLoadSnapshotRange,
     ) -> BoxFuture<Result<Vec<TrainingLoadDailySnapshot>, TrainingLoadError>>;
 
+    fn find_oldest_date_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<Option<String>, TrainingLoadError>> {
+        Box::pin(async { Ok(None) })
+    }
+
     fn upsert(
         &self,
         snapshot: TrainingLoadDailySnapshot,
@@ -235,6 +242,24 @@ impl TrainingLoadDailySnapshotRepository for InMemoryTrainingLoadDailySnapshotRe
             });
             snapshots.push(snapshot.clone());
             Ok(snapshot)
+        })
+    }
+
+    fn find_oldest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<String>, TrainingLoadError>> {
+        let snapshots = self.snapshots.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let oldest = snapshots
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|snapshot| snapshot.user_id == user_id)
+                .map(|snapshot| snapshot.date.clone())
+                .min();
+            Ok(oldest)
         })
     }
 

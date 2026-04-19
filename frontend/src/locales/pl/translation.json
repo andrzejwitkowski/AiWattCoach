@@ -9,11 +9,28 @@
     "description": "Zarządzaj agentami AI, integracjami, preferencjami analizy i danymi biometrycznymi kolarskimi."
   },
   "nav": {
+    "dashboard": "Dashboard",
     "settings": "Ustawienia",
     "calendar": "Kalendarz",
+    "races": "Wyścigi",
     "aiCoach": "AI Trener",
     "workspace": "Obszar roboczy",
     "systemInfo": "Info systemowe"
+  },
+  "appShell": {
+    "brand": {
+      "subtitle": "Elitarna wydajność"
+    },
+    "notifications": "Powiadomienia",
+    "pageTitles": {
+      "dashboard": "Dashboard",
+      "settings": "Ustawienia",
+      "calendar": "Kalendarz",
+      "races": "Wyścigi",
+      "aiCoach": "AI Trener",
+      "workspace": "Obszar roboczy",
+      "systemInfo": "Info systemowe"
+    }
   },
   "aiAgents": {
     "title": "Agenci AI",
@@ -200,6 +217,123 @@
     "viewItems_few": "Zobacz {{count}} elementy",
     "viewItems_many": "Zobacz {{count}} elementów",
     "viewItems_other": "Zobacz {{count}} elementu"
+  },
+  "dashboard": {
+    "loading": "Ładowanie dashboardu",
+    "unavailable": {
+      "title": "Dashboard jest niedostępny",
+      "fallbackMessage": "Nie udało się załadować dashboardu."
+    },
+    "report": {
+      "eyebrow": "Zarządzanie formą",
+      "title": "Obciążenie treningowe i regeneracja",
+      "subtitle": "Analiza gotowości i obciążenia oparta na snapshotach dla zalogowanego zawodnika",
+      "description": "Dzienne metryki CTL, ATL, TSB, FTP oraz kroczące wskaźniki efektywności renderowane z zapisanych snapshotów obciążenia treningowego."
+    },
+    "range": {
+      "legend": "Zakres czasu dashboardu",
+      "options": {
+        "90d": "90 DNI",
+        "season": "SEZON",
+        "allTime": "CAŁY OKRES"
+      }
+    },
+    "empty": {
+      "eyebrow": "Dashboard",
+      "title": "Obciążenie treningowe pojawi się tutaj",
+      "description": "Gdy pojawią się ukończone treningi i dzienne snapshoty, ten dashboard pokaże CTL, ATL, TSB oraz trend Twojego ostatniego obciążenia."
+    },
+    "charts": {
+      "shared": {
+        "timeline": {
+          "startFallback": "początek",
+          "latestFallback": "najnowszy punkt"
+        }
+      },
+      "load": {
+        "metrics": {
+          "fitness": "Sprawność (CTL)",
+          "fatigue": "Zmęczenie (ATL)"
+        },
+        "latestSnapshot": {
+          "eyebrow": "Najnowszy odczyt",
+          "summary": "CTL {{ctl}} / ATL {{atl}}"
+        },
+        "tooltip": {
+          "eyebrow": "Odczyt punktu",
+          "summary": "CTL {{ctl}} / ATL {{atl}}"
+        },
+        "aria": {
+          "description": "Wykres sprawności i zmęczenia od {{start}} do {{end}}. Najnowszy snapshot obciążenia {{latestSnapshot}}. Wyróżniony punkt podąża za serią {{series}}, ponieważ to najnowszy dostępny punkt serii obciążenia.",
+          "latestSnapshotAvailable": "{{date}} z CTL {{ctl}} i ATL {{atl}}",
+          "latestSnapshotUnavailable": "jest niedostępny",
+          "series": {
+            "fitness": "sprawność",
+            "fatigue": "zmęczenie"
+          }
+        }
+      },
+      "tsb": {
+        "metric": "Forma (TSB)",
+        "legend": {
+          "freshnessPeak": "Świeżość / Szczyt",
+          "optimalTraining": "Optymalny trening",
+          "highRisk": "Wysokie ryzyko"
+        },
+        "latestSnapshot": {
+          "eyebrow": "Najnowszy odczyt"
+        },
+        "tooltip": {
+          "eyebrow": "Odczyt punktu",
+          "metric": "Forma (TSB)"
+        },
+        "aria": {
+          "description": "Wykres formy ze strefami świeżości, optymalnego treningu i wysokiego ryzyka od {{start}} do {{end}}. Najnowszy snapshot formy {{latestSnapshot}}.",
+          "latestSnapshotAvailable": "{{date}} z TSB {{tsb}}",
+          "latestSnapshotUnavailable": "jest niedostępny"
+        }
+      }
+    },
+    "insights": {
+      "formBreakdown": {
+        "eyebrow": "Rozkład formy",
+        "title": "Jak rozumieć formę (TSB)",
+        "description": "Training Stress Balance to relacja między <fitness>Sprawnością (CTL)</fitness> a <fatigue>Zmęczeniem (ATL)</fatigue>. Pomaga ocenić, czy niesiesz użyteczne obciążenie treningowe, zbliżasz się do szczytu świeżości czy wchodzisz w zbyt duże ryzyko.",
+        "zones": {
+          "freshnessPeak": {
+            "title": "Świeżość / Szczyt",
+            "detail": "Dodatni TSB. Zmęczenie spadło, a sprawność nadal jest obecna, więc gotowość rośnie."
+          },
+          "optimalTraining": {
+            "title": "Optymalny trening",
+            "detail": "TSB znajduje się w produktywnym paśmie, gdzie adaptacja jest możliwa bez nadmiernego kosztu."
+          },
+          "highRisk": {
+            "title": "Wysokie ryzyko",
+            "detail": "TSB jest zbyt niski. Obciążenie może wyprzedzać regenerację, co zwiększa ryzyko przetrenowania funkcjonalnego."
+          }
+        }
+      },
+      "coachInsight": {
+        "eyebrow": "Wskazówka trenera",
+        "headlines": {
+          "freshnessPeak": "Trend w stronę szczytu",
+          "highRisk": "Zmęczenie się kumuluje",
+          "optimalTraining": "Produktywny blok obciążenia"
+        },
+        "details": {
+          "insufficientHistory": "Jest jeszcze za mało historii, aby porównać bieżący trend obciążenia z ostatnimi dwoma tygodniami.",
+          "trend": "CTL zmienił się o {{delta}} w ostatnich 14 dniach, a TSB wynosi {{tsb}}. Dalej zamieniaj to obciążenie w adaptację, ale bez dokładania niepotrzebnego zmęczenia."
+        },
+        "metrics": {
+          "ftp": "FTP",
+          "if28d": "IF 28d",
+          "ef28d": "EF 28d",
+          "window": "Okno",
+          "windowRange": "{{start}} do {{end}}"
+        }
+      }
+    }
   },
   "races": {
     "eyebrow": "Kalendarz wyścigów",

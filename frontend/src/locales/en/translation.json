@@ -9,11 +9,28 @@
     "description": "Manage your AI agents, integrations, analysis preferences, and cycling biometrics."
   },
   "nav": {
+    "dashboard": "Dashboard",
     "settings": "Settings",
     "calendar": "Calendar",
+    "races": "Races",
     "aiCoach": "AI Coach",
     "workspace": "Workspace",
     "systemInfo": "System Info"
+  },
+  "appShell": {
+    "brand": {
+      "subtitle": "Elite Performance"
+    },
+    "notifications": "Notifications",
+    "pageTitles": {
+      "dashboard": "Dashboard",
+      "settings": "Settings",
+      "calendar": "Calendar",
+      "races": "Races",
+      "aiCoach": "AI Coach",
+      "workspace": "Workspace",
+      "systemInfo": "System Info"
+    }
   },
   "aiAgents": {
     "title": "AI Agents",
@@ -196,6 +213,123 @@
     "dayItems": "Day items",
     "viewItems_one": "View {{count}} item",
     "viewItems_other": "View {{count}} items"
+  },
+  "dashboard": {
+    "loading": "Loading dashboard",
+    "unavailable": {
+      "title": "Dashboard unavailable",
+      "fallbackMessage": "Failed to load dashboard."
+    },
+    "report": {
+      "eyebrow": "Performance Management",
+      "title": "Training Stress and Recovery",
+      "subtitle": "Snapshot-driven readiness and load analysis for the signed-in athlete",
+      "description": "Daily CTL, ATL, TSB, FTP, and rolling efficiency metrics rendered from persisted training-load snapshots."
+    },
+    "range": {
+      "legend": "Dashboard time range",
+      "options": {
+        "90d": "90 DAYS",
+        "season": "SEASON",
+        "allTime": "ALL TIME"
+      }
+    },
+    "empty": {
+      "eyebrow": "Dashboard",
+      "title": "Training load will appear here",
+      "description": "Once completed workouts and daily snapshots are available, this dashboard will show CTL, ATL, TSB and the trend of your recent load."
+    },
+    "charts": {
+      "shared": {
+        "timeline": {
+          "startFallback": "start",
+          "latestFallback": "latest"
+        }
+      },
+      "load": {
+        "metrics": {
+          "fitness": "Fitness (CTL)",
+          "fatigue": "Fatigue (ATL)"
+        },
+        "latestSnapshot": {
+          "eyebrow": "Latest snapshot",
+          "summary": "CTL {{ctl}} / ATL {{atl}}"
+        },
+        "tooltip": {
+          "eyebrow": "Snapshot",
+          "summary": "CTL {{ctl}} / ATL {{atl}}"
+        },
+        "aria": {
+          "description": "Fitness and fatigue chart from {{start}} to {{end}}. Latest load snapshot {{latestSnapshot}}. The highlighted dot follows {{series}} because that is the latest available load series point.",
+          "latestSnapshotAvailable": "{{date}} with CTL {{ctl}} and ATL {{atl}}",
+          "latestSnapshotUnavailable": "is unavailable",
+          "series": {
+            "fitness": "fitness",
+            "fatigue": "fatigue"
+          }
+        }
+      },
+      "tsb": {
+        "metric": "Form (TSB)",
+        "legend": {
+          "freshnessPeak": "Freshness / Peak",
+          "optimalTraining": "Optimal Training",
+          "highRisk": "High Risk"
+        },
+        "latestSnapshot": {
+          "eyebrow": "Latest snapshot"
+        },
+        "tooltip": {
+          "eyebrow": "Snapshot",
+          "metric": "Form (TSB)"
+        },
+        "aria": {
+          "description": "Form chart with freshness, optimal training, and high risk zones from {{start}} to {{end}}. Latest TSB snapshot {{latestSnapshot}}.",
+          "latestSnapshotAvailable": "{{date}} with TSB {{tsb}}",
+          "latestSnapshotUnavailable": "is unavailable"
+        }
+      }
+    },
+    "insights": {
+      "formBreakdown": {
+        "eyebrow": "Form Breakdown",
+        "title": "Understanding Form (TSB)",
+        "description": "Training Stress Balance is the relationship between <fitness>Fitness (CTL)</fitness> and <fatigue>Fatigue (ATL)</fatigue>. It helps frame whether you are carrying useful training load, approaching peak freshness, or drifting into excessive risk.",
+        "zones": {
+          "freshnessPeak": {
+            "title": "Freshness / Peak",
+            "detail": "Positive TSB. Fatigue has dropped while fitness is still present, so readiness is improving."
+          },
+          "optimalTraining": {
+            "title": "Optimal Training",
+            "detail": "TSB sits in the productive band where adaptation is possible without excessive cost."
+          },
+          "highRisk": {
+            "title": "High Risk",
+            "detail": "TSB is too negative. Load may be outpacing recovery, which raises overreaching risk."
+          }
+        }
+      },
+      "coachInsight": {
+        "eyebrow": "Coach Insight",
+        "headlines": {
+          "freshnessPeak": "Trending towards peak",
+          "highRisk": "Fatigue is accumulating",
+          "optimalTraining": "Productive load block"
+        },
+        "details": {
+          "insufficientHistory": "Not enough history yet to compare the current load trend with the last two weeks.",
+          "trend": "CTL changed by {{delta}} over the last 14 days while TSB sits at {{tsb}}. Keep translating this load into adaptation without reintroducing unnecessary fatigue."
+        },
+        "metrics": {
+          "ftp": "FTP",
+          "if28d": "IF 28d",
+          "ef28d": "EF 28d",
+          "window": "Window",
+          "windowRange": "{{start}} to {{end}}"
+        }
+      }
+    }
   },
   "races": {
     "eyebrow": "Race calendar",
