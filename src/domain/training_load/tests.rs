@@ -517,7 +517,7 @@ async fn dashboard_report_returns_empty_state_when_user_has_no_snapshots() {
 }
 
 #[test]
-fn build_daily_training_load_snapshots_uses_app_ftp_only_on_or_after_app_entry_date() {
+fn build_daily_training_load_snapshots_uses_provider_ftp_before_app_entry_and_app_ftp_after() {
     let snapshots = build_daily_training_load_snapshots(
         "user-1",
         &TrainingLoadSnapshotRange {
@@ -556,12 +556,40 @@ fn build_daily_training_load_snapshots_uses_app_ftp_only_on_or_after_app_entry_d
         1_700_000_000,
     );
 
-    assert_eq!(snapshots[0].daily_tss, Some(80));
+    assert_eq!(snapshots[0].daily_tss, Some(81));
     assert_eq!(snapshots[0].ftp_effective_watts, Some(300));
     assert_eq!(snapshots[0].ftp_source, Some(FtpSource::Provider));
     assert_eq!(snapshots[2].daily_tss, Some(100));
     assert_eq!(snapshots[2].ftp_effective_watts, Some(270));
     assert_eq!(snapshots[2].ftp_source, Some(FtpSource::Settings));
+}
+
+#[test]
+fn build_daily_training_load_snapshots_falls_back_to_provider_tss_before_app_entry_when_provider_ftp_is_missing(
+) {
+    let snapshots = build_daily_training_load_snapshots(
+        "user-1",
+        &TrainingLoadSnapshotRange {
+            oldest: "2026-04-01".to_string(),
+            newest: "2026-04-01".to_string(),
+        },
+        &[sample_workout(
+            "ride-before",
+            "2026-04-01T08:00:00",
+            Some(80),
+            Some(270),
+            None,
+            Some(0.8),
+            Some(1.2),
+        )],
+        &[],
+        "2026-04-02",
+        1_700_000_000,
+    );
+
+    assert_eq!(snapshots[0].daily_tss, Some(80));
+    assert_eq!(snapshots[0].ftp_effective_watts, None);
+    assert_eq!(snapshots[0].ftp_source, None);
 }
 
 #[test]

@@ -423,12 +423,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
         completed_workout_repository.clone(),
     ));
-    let completed_workout_admin_service = Arc::new(IntervalsCompletedWorkoutBackfillService::new(
-        completed_workout_repository.clone(),
-        intervals_settings_provider.clone(),
-        intervals_api_client.clone(),
-        external_import_service.clone(),
-    ));
+    let completed_workout_admin_service = Arc::new(
+        IntervalsCompletedWorkoutBackfillService::new(
+            completed_workout_repository.clone(),
+            intervals_settings_provider.clone(),
+            intervals_api_client.clone(),
+            external_import_service.clone(),
+            SystemClock,
+        )
+        .with_training_load_recompute_service(training_load_recompute_service.clone()),
+    );
     let calendar_service = Arc::new(
         CalendarService::new(
             (*intervals_service).clone(),
