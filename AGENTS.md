@@ -81,6 +81,31 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
   - For multi-step work, keep a short plan with a concrete verification step for each part.
   - Do not call the work done until the relevant commands or checks were actually run and their output was read.
 
+## Agent Execution Rules
+
+- Self-Improvement Loop:
+  - After any correction from the user, update `tasks/lessons.md` with the lesson in a reusable pattern.
+  - Write or refine rules for yourself that would prevent the same mistake next time.
+  - Revisit and iterate on those lessons until the mistake rate drops.
+  - Review relevant lessons at session start before doing similar work.
+  - Maintain the same review-fix loop in `reviewers.md`: after each fix prompted by the user, Copilot, or CodeRabbit, record the problem and the fix that addressed it.
+  - Read `reviewers.md` before writing a plan and before starting implementation so repeated PR and review mistakes are less likely.
+- Verification Before Done:
+  - Never mark a task complete without proving it works.
+  - Diff behavior between `main` and your changes when that comparison is relevant.
+  - Ask yourself whether a staff-level engineer would approve the result.
+  - Run the needed tests, inspect logs when relevant, and demonstrate correctness with evidence.
+- Demand Elegance (Balanced):
+  - For non-trivial changes, pause and ask whether there is a more elegant approach.
+  - If a fix feels hacky, prefer the elegant solution you would choose with full context.
+  - Skip that extra design pass for simple, obvious fixes; do not over-engineer.
+  - Challenge your own work before presenting it.
+- Autonomous Bug Fixing:
+  - When given a bug report, move directly into diagnosis and repair instead of asking for unnecessary hand-holding.
+  - Start from concrete signals such as logs, errors, and failing tests, then resolve the issue.
+  - Minimize context switching required from the user.
+  - If CI is failing and the failure is actionable from the repo context, fix it without waiting for step-by-step instructions.
+
 ## Important Directories
 
 - `src/domain/` - domain models, ports, services.
