@@ -23,6 +23,15 @@ pub struct BackfillCompletedWorkoutDetailsResult {
     pub failed: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackfillCompletedWorkoutMetricsResult {
+    pub scanned: usize,
+    pub enriched: usize,
+    pub skipped: usize,
+    pub failed: usize,
+    pub recomputed_from: Option<String>,
+}
+
 pub trait CompletedWorkoutAdminUseCases: Send + Sync {
     fn backfill_missing_details(
         &self,
@@ -30,6 +39,13 @@ pub trait CompletedWorkoutAdminUseCases: Send + Sync {
         oldest: &str,
         newest: &str,
     ) -> BoxFuture<Result<BackfillCompletedWorkoutDetailsResult, CompletedWorkoutError>>;
+
+    fn backfill_missing_metrics(
+        &self,
+        user_id: &str,
+        oldest: Option<&str>,
+        newest: Option<&str>,
+    ) -> BoxFuture<Result<BackfillCompletedWorkoutMetricsResult, CompletedWorkoutError>>;
 }
 
 #[derive(Clone)]

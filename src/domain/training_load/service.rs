@@ -143,25 +143,24 @@ fn resolve_training_stress_score(
     workout_date: NaiveDate,
 ) -> Option<i32> {
     if workout_date < app_entry_date {
-        return workout.metrics.training_stress_score;
+        return compute_tss_from_ftp(workout, workout.metrics.ftp_watts)
+            .or(workout.metrics.training_stress_score);
     }
 
-    let Some(effective_ftp) = effective_ftp
+    let effective_ftp = effective_ftp
         .map(|entry| entry.ftp_watts)
-        .filter(|ftp| *ftp > 0)
-    else {
-        return workout.metrics.training_stress_score;
-    };
-    let Some(duration_seconds) = workout.duration_seconds.filter(|seconds| *seconds > 0) else {
-        return workout.metrics.training_stress_score;
-    };
-    let Some(normalized_power_watts) = workout
+        .filter(|ftp| *ftp > 0);
+
+    compute_tss_from_ftp(workout, effective_ftp).or(workout.metrics.training_stress_score)
+}
+
+fn compute_tss_from_ftp(workout: &CompletedWorkout, ftp_watts: Option<i32>) -> Option<i32> {
+    let effective_ftp = ftp_watts.filter(|ftp| *ftp > 0)?;
+    let duration_seconds = workout.duration_seconds.filter(|seconds| *seconds > 0)?;
+    let normalized_power_watts = workout
         .metrics
         .normalized_power_watts
-        .filter(|watts| *watts > 0)
-    else {
-        return workout.metrics.training_stress_score;
-    };
+        .filter(|watts| *watts > 0)?;
 
     let intensity_factor = normalized_power_watts as f64 / effective_ftp as f64;
     Some(round_to_i32(

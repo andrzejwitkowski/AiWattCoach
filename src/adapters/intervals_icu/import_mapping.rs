@@ -100,6 +100,58 @@ fn map_special_day_event_import(user_id: &str, event: &Event) -> ExternalImportC
 
 pub fn map_activity_to_import_command(user_id: &str, activity: &Activity) -> ExternalImportCommand {
     let workout = map_activity_to_completed_workout(user_id, activity);
+    build_activity_import_command(user_id, activity, workout)
+}
+
+pub fn map_activity_metrics_to_import_command(
+    user_id: &str,
+    existing: &CompletedWorkout,
+    activity: &Activity,
+) -> ExternalImportCommand {
+    let workout = CompletedWorkout::new(
+        existing.completed_workout_id.clone(),
+        existing.user_id.clone(),
+        activity.start_date_local.clone(),
+        existing
+            .source_activity_id
+            .clone()
+            .or_else(|| Some(activity.id.clone())),
+        existing.planned_workout_id.clone(),
+        existing.name.clone(),
+        existing.description.clone(),
+        existing.activity_type.clone(),
+        existing.external_id.clone(),
+        existing.trainer,
+        existing.duration_seconds,
+        existing.distance_meters,
+        CompletedWorkoutMetrics {
+            training_stress_score: activity.metrics.training_stress_score,
+            normalized_power_watts: activity.metrics.normalized_power_watts,
+            intensity_factor: activity.metrics.intensity_factor,
+            efficiency_factor: activity.metrics.efficiency_factor,
+            variability_index: activity.metrics.variability_index,
+            average_power_watts: activity.metrics.average_power_watts,
+            ftp_watts: activity.metrics.ftp_watts,
+            total_work_joules: activity.metrics.total_work_joules,
+            calories: activity.metrics.calories,
+            trimp: activity.metrics.trimp,
+            power_load: activity.metrics.power_load,
+            heart_rate_load: activity.metrics.heart_rate_load,
+            pace_load: activity.metrics.pace_load,
+            strain_score: activity.metrics.strain_score,
+        },
+        existing.details.clone(),
+        existing.details_unavailable_reason.clone(),
+    );
+
+    build_activity_import_command(user_id, activity, workout)
+}
+
+fn build_activity_import_command(
+    _user_id: &str,
+    activity: &Activity,
+    workout: CompletedWorkout,
+) -> ExternalImportCommand {
     ExternalImportCommand::UpsertCompletedWorkout(Box::new(ExternalCompletedWorkoutImport {
         provider: ExternalProvider::Intervals,
         external_id: activity.id.clone(),

@@ -10,6 +10,7 @@ mod intervals;
 mod logging;
 mod logs;
 mod races;
+mod same_origin;
 mod settings;
 mod user_auth;
 mod workout_summary;
@@ -72,6 +73,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route(
             "/api/admin/completed-workouts/{user_id}/backfill-details",
             post(admin::backfill_completed_workout_details),
+        )
+        .route(
+            "/api/admin/completed-workouts/{user_id}/backfill-metrics",
+            post(admin::backfill_completed_workout_metrics),
         )
         .route(
             "/api/admin/settings/{user_id}",

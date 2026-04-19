@@ -12,6 +12,6 @@ pub use model::{
 pub use ports::{BoxFuture, CompletedWorkoutRepository};
 pub use service::{
     canonical_completed_workout_id, completed_workout_activity_id,
-    BackfillCompletedWorkoutDetailsResult, CompletedWorkoutAdminUseCases,
-    CompletedWorkoutReadService, CompletedWorkoutReadUseCases,
+    BackfillCompletedWorkoutDetailsResult, BackfillCompletedWorkoutMetricsResult,
+    CompletedWorkoutAdminUseCases, CompletedWorkoutReadService, CompletedWorkoutReadUseCases,
 };

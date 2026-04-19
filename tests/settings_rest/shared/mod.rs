@@ -11,7 +11,9 @@ pub(crate) use app::{
     settings_test_app_with_services,
 };
 pub(crate) use athlete_summary::TestAthleteSummaryService;
-pub(crate) use completed_workouts::TestCompletedWorkoutAdminService;
+pub(crate) use completed_workouts::{
+    DetailBackfillCall, MetricsBackfillCall, MetricsBackfillRange, TestCompletedWorkoutAdminService,
+};
 pub(crate) use identity::{AdminIdentityErrorService, TestIdentityServiceWithSession};
 pub(crate) use intervals::MockIntervalsConnectionTester;
 pub(crate) use llm::{MockLlmChatService, TestLlmConfigProvider};
