@@ -16,10 +16,15 @@ pub(super) fn needs_metric_backfill(workout: &CompletedWorkout) -> bool {
             || workout.metrics.normalized_power_watts.is_none())
 }
 
-pub(super) fn has_backfillable_metrics(activity: &Activity) -> bool {
-    activity.metrics.training_stress_score.is_some()
-        || activity.metrics.ftp_watts.is_some()
-        || activity.metrics.normalized_power_watts.is_some()
+pub(super) fn activity_backfills_missing_metrics(
+    workout: &CompletedWorkout,
+    activity: &Activity,
+) -> bool {
+    (workout.metrics.training_stress_score.is_none()
+        && activity.metrics.training_stress_score.is_some())
+        || (workout.metrics.ftp_watts.is_none() && activity.metrics.ftp_watts.is_some())
+        || (workout.metrics.normalized_power_watts.is_none()
+            && activity.metrics.normalized_power_watts.is_some())
 }
 
 pub(super) fn earliest_recompute_date<'a>(

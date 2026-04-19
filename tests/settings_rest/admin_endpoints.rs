@@ -353,6 +353,8 @@ async fn non_admin_cannot_backfill_completed_workout_metrics() {
                 .method("POST")
                 .uri("/api/admin/completed-workouts/user-999/backfill-metrics")
                 .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::HOST, "localhost")
+                .header(header::ORIGIN, "http://localhost")
                 .body(Body::empty())
                 .unwrap(),
         )

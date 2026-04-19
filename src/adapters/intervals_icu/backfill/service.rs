@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use tracing::warn;
+
 use crate::{
     adapters::intervals_icu::import_mapping::{
         map_activity_metrics_to_import_command, map_activity_to_import_command,
@@ -17,7 +19,7 @@ use crate::{
 };
 
 use super::support::{
-    earliest_recompute_date, has_backfillable_activity_details, has_backfillable_metrics,
+    activity_backfills_missing_metrics, earliest_recompute_date, has_backfillable_activity_details,
     needs_detail_backfill, needs_metric_backfill, oldest_workout_date,
 };
 
@@ -215,13 +217,19 @@ where
                 .await
             {
                 Ok(activity) => activity,
-                Err(_) => {
+                Err(error) => {
+                    warn!(
+                        user_id = %self.user_id,
+                        source_activity_id,
+                        error = %error,
+                        "metrics backfill failed to fetch activity"
+                    );
                     progress.failed += 1;
                     continue;
                 }
             };
 
-            if !has_backfillable_metrics(&detailed_activity) {
+            if !activity_backfills_missing_metrics(workout, &detailed_activity) {
                 progress.skipped += 1;
                 continue;
             }
@@ -244,7 +252,15 @@ where
                         };
                     }
                 }
-                Err(_) => progress.failed += 1,
+                Err(error) => {
+                    warn!(
+                        user_id = %self.user_id,
+                        source_activity_id,
+                        error = %error,
+                        "metrics backfill failed to import activity metrics"
+                    );
+                    progress.failed += 1;
+                }
             }
         }
 

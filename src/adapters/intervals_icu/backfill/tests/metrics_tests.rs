@@ -248,3 +248,40 @@ async fn backfill_missing_metrics_skips_activity_without_metrics_to_fill() {
     assert!(imports.commands().is_empty());
     assert!(recompute.calls().is_empty());
 }
+
+#[tokio::test]
+async fn backfill_missing_metrics_skips_activity_that_does_not_fill_any_missing_fields() {
+    let repository = TestCompletedWorkoutRepository::default();
+    repository
+        .upsert(sample_workout_missing_tss())
+        .await
+        .unwrap();
+    let imports = RecordingImports::default();
+    let recompute = Arc::new(RecordingRecomputeService::default());
+    let mut activity = sample_detailed_activity();
+    activity.metrics.training_stress_score = None;
+    let service = IntervalsCompletedWorkoutBackfillService::new(
+        repository,
+        TestSettings,
+        TestApi {
+            activity,
+            lookups: Arc::new(Mutex::new(Vec::new())),
+        },
+        imports.clone(),
+        TestClock,
+    )
+    .with_training_load_recompute_service(recompute.clone());
+
+    let result = service
+        .backfill_missing_metrics("user-1", None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(result.scanned, 1);
+    assert_eq!(result.enriched, 0);
+    assert_eq!(result.skipped, 1);
+    assert_eq!(result.failed, 0);
+    assert_eq!(result.recomputed_from, None);
+    assert!(imports.commands().is_empty());
+    assert!(recompute.calls().is_empty());
+}
