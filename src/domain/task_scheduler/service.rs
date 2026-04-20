@@ -509,7 +509,7 @@ where
         is_leader: bool,
         enabled_task_types: Vec<String>,
     ) -> Result<TaskWorker, TaskSchedulerError> {
-        let active_task_ids = {
+        {
             let mut worker_states = self.worker_states.lock().await;
             let state = worker_states
                 .entry(worker_id.clone())
@@ -520,17 +520,12 @@ where
                 });
             state.is_leader = is_leader;
             state.enabled_task_types = enabled_task_types.clone();
-            state.active_task_ids.clone()
-        };
+            state.active_task_ids.clear();
+        }
 
         self.workers
             .clone()
-            .upsert(self.build_task_worker(
-                &worker_id,
-                is_leader,
-                enabled_task_types,
-                active_task_ids,
-            ))
+            .upsert(self.build_task_worker(&worker_id, is_leader, enabled_task_types, Vec::new()))
             .await
     }
 
