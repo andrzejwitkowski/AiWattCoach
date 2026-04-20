@@ -23,7 +23,7 @@ async fn workout_summary_task_runner_reports_active_task_ids() {
         worker_repository.clone(),
         TestClock,
     );
-    spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_workout_summary_coach_reply_task_runner(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -58,6 +58,8 @@ async fn workout_summary_task_runner_reports_active_task_ids() {
         .worker("worker-1")
         .expect("worker heartbeat should remain recorded");
     assert!(idle_worker.active_task_ids.is_empty());
+
+    worker.abort();
 }
 
 #[tokio::test]
@@ -89,7 +91,8 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
         .await
         .expect("task should enqueue");
 
-    spawn_workout_summary_coach_reply_task_runner(direct, scheduler, "worker-1".to_string());
+    let worker =
+        spawn_workout_summary_coach_reply_task_runner(direct, scheduler, "worker-1".to_string());
 
     tokio::time::timeout(std::time::Duration::from_secs(2), async {
         loop {
@@ -110,4 +113,6 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
     })
     .await
     .expect("runner should fail invalid payload task");
+
+    worker.abort();
 }

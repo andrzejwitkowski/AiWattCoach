@@ -22,7 +22,7 @@ async fn scheduler_backed_send_message_waits_for_background_task_result() {
         InMemoryTaskWorkerRepository::default(),
         TestClock,
     );
-    spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_workout_summary_coach_reply_task_runner(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -41,6 +41,8 @@ async fn scheduler_backed_send_message_waits_for_background_task_result() {
         result.coach_message.content,
         "Coach reply to: Need feedback"
     );
+
+    worker.abort();
 }
 
 #[tokio::test]
@@ -56,7 +58,7 @@ async fn scheduler_backed_generate_coach_reply_waits_for_background_task_result(
         InMemoryTaskWorkerRepository::default(),
         TestClock,
     );
-    spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_workout_summary_coach_reply_task_runner(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -74,6 +76,8 @@ async fn scheduler_backed_generate_coach_reply_waits_for_background_task_result(
         result.coach_message.content,
         "Coach reply to: Need feedback"
     );
+
+    worker.abort();
 }
 
 #[tokio::test]
@@ -89,7 +93,7 @@ async fn scheduler_backed_generate_coach_reply_preserves_athlete_summary_regener
         InMemoryTaskWorkerRepository::default(),
         TestClock,
     );
-    spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_workout_summary_coach_reply_task_runner(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -103,6 +107,8 @@ async fn scheduler_backed_generate_coach_reply_preserves_athlete_summary_regener
         .expect("scheduler-backed coach reply should succeed");
 
     assert!(result.athlete_summary_was_regenerated);
+
+    worker.abort();
 }
 
 #[tokio::test]
@@ -118,7 +124,7 @@ async fn scheduler_backed_send_message_returns_failed_task_error() {
         InMemoryTaskWorkerRepository::default(),
         TestClock,
     );
-    spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_workout_summary_coach_reply_task_runner(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -140,6 +146,8 @@ async fn scheduler_backed_send_message_returns_failed_task_error() {
             "invalid model".to_string()
         ))
     );
+
+    worker.abort();
 }
 
 #[tokio::test]
@@ -159,7 +167,7 @@ async fn scheduler_backed_generate_coach_reply_retries_after_failed_task_on_expl
         InMemoryTaskWorkerRepository::default(),
         TestClock,
     );
-    spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_workout_summary_coach_reply_task_runner(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -190,4 +198,6 @@ async fn scheduler_backed_generate_coach_reply_retries_after_failed_task_on_expl
 
     assert_eq!(reply.coach_message.role, MessageRole::Coach);
     assert_eq!(reply.coach_message.content, "Coach reply to: Need feedback");
+
+    worker.abort();
 }

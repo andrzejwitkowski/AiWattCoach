@@ -73,7 +73,8 @@ pub fn spawn_task_worker<Tasks, Workers, Time>(
     worker_id: String,
     config: TaskWorkerConfig,
     handlers: Vec<SharedTaskHandler>,
-) where
+) -> tokio::task::JoinHandle<()>
+where
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
@@ -91,7 +92,7 @@ pub fn spawn_task_worker<Tasks, Workers, Time>(
             runtime_state,
         )
         .await;
-    });
+    })
 }
 
 fn build_task_handler_registry(handlers: Vec<SharedTaskHandler>) -> TaskHandlerRegistry {

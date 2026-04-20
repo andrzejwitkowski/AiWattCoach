@@ -95,7 +95,8 @@ pub fn spawn_workout_summary_coach_reply_task_runner<Base, Tasks, Workers, Time>
     base: Arc<Base>,
     scheduler: TaskSchedulerService<Tasks, Workers, Time>,
     worker_id: String,
-) where
+) -> tokio::task::JoinHandle<()>
+where
     Base: WorkoutSummaryUseCases + 'static,
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
@@ -112,5 +113,5 @@ pub fn spawn_workout_summary_coach_reply_task_runner<Base, Tasks, Workers, Time>
             max_concurrency: 4,
         },
         vec![workout_summary_coach_reply_task_handler(base)],
-    );
+    )
 }
