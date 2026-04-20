@@ -107,6 +107,60 @@ impl MongoTaskRepository {
             .map_err(storage_error)?;
         Ok(())
     }
+
+    fn timeout_candidate_filter(now_epoch_seconds: i64) -> mongodb::bson::Document {
+        doc! {
+            "status": status_as_str(&TaskStatus::Running),
+            "$or": [
+                {
+                    "lease_expires_at_epoch_seconds": {
+                        "$lte": now_epoch_seconds,
+                    },
+                },
+                {
+                    "$expr": {
+                        "$and": [
+                            { "$ne": ["$started_at_epoch_seconds", Bson::Null] },
+                            {
+                                "$lte": [
+                                    {
+                                        "$add": [
+                                            "$started_at_epoch_seconds",
+                                            "$execution_timeout_seconds",
+                                        ],
+                                    },
+                                    now_epoch_seconds,
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        }
+    }
+
+    async fn reload_existing_after_duplicate_insert(
+        collection: &Collection<TaskDocument>,
+        document: &TaskDocument,
+    ) -> Result<TaskDocument, TaskSchedulerError> {
+        if let Some(existing) = collection
+            .find_one(doc! { "dedupe_key": &document.dedupe_key, "user_id": &document.user_id })
+            .await
+            .map_err(storage_error)?
+        {
+            return Ok(existing);
+        }
+
+        collection
+            .find_one(doc! { "_id": &document.id })
+            .await
+            .map_err(storage_error)?
+            .ok_or_else(|| {
+                TaskSchedulerError::Repository(
+                    "task with duplicate key disappeared before reload".to_string(),
+                )
+            })
+    }
 }
 
 impl TaskRepository for MongoTaskRepository {
@@ -137,15 +191,8 @@ impl TaskRepository for MongoTaskRepository {
                 });
             }
 
-            let existing = collection
-                .find_one(doc! { "dedupe_key": &document.dedupe_key })
-                .await
-                .map_err(storage_error)?
-                .ok_or_else(|| {
-                    TaskSchedulerError::Repository(
-                        "task with duplicate dedupe key disappeared before reload".to_string(),
-                    )
-                })?;
+            let existing =
+                Self::reload_existing_after_duplicate_insert(&collection, &document).await?;
 
             Ok(TaskEnqueueResult {
                 task: map_document_to_task(existing)?,
@@ -242,8 +289,12 @@ impl TaskRepository for MongoTaskRepository {
     {
         let collection = self.collection.clone();
         Box::pin(async move {
+            if limit == 0 {
+                return Ok(Vec::new());
+            }
+
             let documents = collection
-                .find(doc! { "status": status_as_str(&TaskStatus::Running) })
+                .find(Self::timeout_candidate_filter(now_epoch_seconds))
                 .sort(doc! { "lease_expires_at_epoch_seconds": 1, "updated_at_epoch_seconds": 1 })
                 .limit(limit as i64)
                 .await
@@ -256,12 +307,6 @@ impl TaskRepository for MongoTaskRepository {
                 .into_iter()
                 .map(map_document_to_task)
                 .collect::<Result<Vec<_>, _>>()
-                .map(|tasks| {
-                    tasks
-                        .into_iter()
-                        .filter(|task| task.is_timeout_candidate(now_epoch_seconds))
-                        .collect()
-                })
         })
     }
 

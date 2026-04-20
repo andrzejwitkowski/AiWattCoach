@@ -55,6 +55,55 @@ impl RetryStrategy {
     }
 }
 
+fn validate_retry_strategy(strategy: &RetryStrategy) -> Result<(), TaskSchedulerError> {
+    match strategy {
+        RetryStrategy::Never => Ok(()),
+        RetryStrategy::Fixed {
+            max_attempts,
+            delay_seconds,
+        } => {
+            if *max_attempts == 0 {
+                return Err(TaskSchedulerError::Validation(
+                    "fixed retry strategy max_attempts must be positive".to_string(),
+                ));
+            }
+            if *delay_seconds <= 0 {
+                return Err(TaskSchedulerError::Validation(
+                    "fixed retry strategy delay_seconds must be positive".to_string(),
+                ));
+            }
+            Ok(())
+        }
+        RetryStrategy::Exponential {
+            max_attempts,
+            initial_delay_seconds,
+            max_delay_seconds,
+        } => {
+            if *max_attempts == 0 {
+                return Err(TaskSchedulerError::Validation(
+                    "exponential retry strategy max_attempts must be positive".to_string(),
+                ));
+            }
+            if *initial_delay_seconds <= 0 {
+                return Err(TaskSchedulerError::Validation(
+                    "exponential retry strategy initial_delay_seconds must be positive".to_string(),
+                ));
+            }
+            if *max_delay_seconds <= 0 {
+                return Err(TaskSchedulerError::Validation(
+                    "exponential retry strategy max_delay_seconds must be positive".to_string(),
+                ));
+            }
+            if *max_delay_seconds < *initial_delay_seconds {
+                return Err(TaskSchedulerError::Validation(
+                    "exponential retry strategy max_delay_seconds must be greater than or equal to initial_delay_seconds".to_string(),
+                ));
+            }
+            Ok(())
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScheduledTask {
     pub id: String,
@@ -119,6 +168,7 @@ impl ScheduledTask {
                 "task execution timeout must be positive".to_string(),
             ));
         }
+        validate_retry_strategy(&input.retry_strategy)?;
 
         Ok(Self {
             id: input.id,

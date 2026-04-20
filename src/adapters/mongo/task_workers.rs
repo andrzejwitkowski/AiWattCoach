@@ -93,10 +93,8 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                         "$set": {
                             "is_leader": is_leader,
                             "enabled_task_types": &enabled_task_types,
-                            "last_heartbeat_at_epoch_seconds": last_heartbeat_at_epoch_seconds,
-                        },
-                        "$setOnInsert": {
                             "active_task_ids": Vec::<String>::new(),
+                            "last_heartbeat_at_epoch_seconds": last_heartbeat_at_epoch_seconds,
                         },
                     },
                 )

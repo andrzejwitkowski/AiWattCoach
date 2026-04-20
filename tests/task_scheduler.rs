@@ -51,10 +51,9 @@ impl TaskRepository for InMemoryTaskRepository {
         let tasks = self.tasks.clone();
         Box::pin(async move {
             let mut tasks = tasks.lock().expect("task repo mutex poisoned");
-            if let Some(existing) = tasks
-                .values()
-                .find(|existing| existing.dedupe_key == task.dedupe_key)
-            {
+            if let Some(existing) = tasks.values().find(|existing| {
+                existing.user_id == task.user_id && existing.dedupe_key == task.dedupe_key
+            }) {
                 return Ok(TaskEnqueueResult {
                     task: existing.clone(),
                     created: false,
@@ -650,6 +649,110 @@ async fn timeout_sweep_recovers_task_when_worker_restarts_without_active_claim()
     assert_eq!(recovered, 1);
     assert_eq!(reclaimed.id, "task-1");
     assert_eq!(reclaimed.claimed_by.as_deref(), Some("worker-1"));
+}
+
+#[tokio::test]
+async fn touch_worker_heartbeat_clears_stale_active_task_ids_before_recovery() {
+    let clock = TestClock::new(100);
+    let tasks = InMemoryTaskRepository::default();
+    let workers = InMemoryTaskWorkerRepository::default();
+    let service = TaskSchedulerService::new(tasks, workers, clock.clone());
+
+    service
+        .enqueue(task(
+            "task-1",
+            "summary",
+            "dedupe-1",
+            false,
+            clock.now_epoch_seconds(),
+        ))
+        .await
+        .expect("enqueue should succeed");
+    service
+        .claim_next_due("worker-1", vec!["summary".to_string()], false, 5)
+        .await
+        .expect("claim should succeed")
+        .expect("task should be claimed");
+    service
+        .heartbeat_worker(
+            "worker-1",
+            false,
+            vec!["summary".to_string()],
+            vec!["task-1".to_string()],
+        )
+        .await
+        .expect("worker heartbeat should succeed");
+
+    clock.set_now(160);
+    service
+        .touch_worker_heartbeat("worker-1", false, vec!["summary".to_string()])
+        .await
+        .expect("touch heartbeat should succeed");
+
+    let worker = service
+        .heartbeat_worker("worker-1", false, vec!["summary".to_string()], Vec::new())
+        .await
+        .expect("worker heartbeat should reload worker");
+    assert!(worker.active_task_ids.is_empty());
+
+    let recovered = service
+        .sweep_timed_out_tasks(30, 100)
+        .await
+        .expect("timeout sweep should succeed");
+    let reclaimed = service
+        .claim_next_due("worker-1", vec!["summary".to_string()], false, 30)
+        .await
+        .expect("claim should succeed")
+        .expect("task should be reclaimed after stale active ids are cleared");
+
+    assert_eq!(recovered, 1);
+    assert_eq!(reclaimed.id, "task-1");
+}
+
+#[test]
+fn scheduled_task_rejects_invalid_retry_strategies() {
+    let fixed_invalid = ScheduledTask::new(
+        NewTask {
+            id: "task-1".to_string(),
+            user_id: "user-1".to_string(),
+            task_type: "summary".to_string(),
+            payload: json!({}),
+            retry_strategy: RetryStrategy::Fixed {
+                max_attempts: 0,
+                delay_seconds: 30,
+            },
+            dedupe_key: "dedupe-1".to_string(),
+            execution_timeout_seconds: 30,
+            leader_only: false,
+        },
+        100,
+    );
+    let exponential_invalid = ScheduledTask::new(
+        NewTask {
+            id: "task-2".to_string(),
+            user_id: "user-1".to_string(),
+            task_type: "summary".to_string(),
+            payload: json!({}),
+            retry_strategy: RetryStrategy::Exponential {
+                max_attempts: 1,
+                initial_delay_seconds: 60,
+                max_delay_seconds: 30,
+            },
+            dedupe_key: "dedupe-2".to_string(),
+            execution_timeout_seconds: 30,
+            leader_only: false,
+        },
+        100,
+    );
+
+    assert!(matches!(
+        fixed_invalid,
+        Err(TaskSchedulerError::Validation(_))
+    ));
+    assert!(matches!(
+        exponential_invalid,
+        Err(TaskSchedulerError::Validation(_))
+    ));
 }
 
 #[tokio::test]
