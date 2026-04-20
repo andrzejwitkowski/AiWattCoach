@@ -21,6 +21,42 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-20 | user | scheduler worker loop ownership and generic boundaries
+
+- Problem: the dedicated `workout_summary` task runner embedded the whole claim, idle wait, task heartbeat, completion, and failure persistence loop inside feature code, which made the critical scheduler flow hard to read and tied generic worker behavior to one LLM-specific use case.
+- Fix: extracted the shared worker loop into `src/domain/task_scheduler/runner.rs` with a small generic `TaskRunnerHandler` contract and `TaskRunOutcome`, then reduced the workout summary runner to payload parsing and coach-reply-specific success/error mapping only.
+- Prevention: when adding another scheduled workflow, first ask whether the logic is generic worker orchestration or feature-specific task handling; keep claim/lease/heartbeat/complete/fail mechanics in `task_scheduler`, and let feature runners provide only payload parsing plus domain outcome mapping.
+
+### 2026-04-20 | user | scheduler result waiting must stay generic
+
+- Problem: `SchedulerBackedWorkoutSummaryService` still had its own task-status polling loop for waiting on completed/failed/timed-out results, so the scheduler orchestration was split between `task_scheduler` and feature code.
+- Fix: added generic `ResultTaskHandler`, `enqueue_result_task(...)`, `wait_for_result_task(...)`, and `enqueue_no_result_task(...)` to `src/domain/task_scheduler/service.rs`, then rewired the workout summary wrapper to provide only checkpoint/error parsing and final result hydration.
+- Prevention: for background workflows that return a caller-visible result, keep enqueue/retry/poll/result orchestration inside `task_scheduler`; feature wrappers may build the task and map terminal scheduler state into domain output, but must not own custom polling loops.
+
+### 2026-04-20 | user | single scheduler worker loop and smaller service methods
+
+- Problem: the scheduler still had a per-feature worker spawn shape and `TaskSchedulerService` accumulated large orchestration methods that were hard to review; the result path also still looked like a custom loop instead of a generic scheduler-owned mechanism.
+- Fix: replaced the per-feature worker flow with one global worker loop in `src/domain/task_scheduler/runner.rs` that dispatches by registered `task_type` handlers, changed result waiting to event-driven task updates via in-memory watchers instead of polling, and split scheduler service logic into smaller request-building and state-transition helpers.
+- Prevention: keep exactly one worker claim/dispatch loop in the scheduler layer, let handlers only implement task-type-specific execution/result mapping, and split any scheduler/service method as soon as it spans multiple orchestration phases.
+
+### 2026-04-20 | user | scheduler workers need real concurrency and shared active-task state
+
+- Problem: the first global worker loop still awaited a claimed task inline, which effectively serialized task handling, and the initial concurrency refactor briefly used non-shared active-task state that could drop `active_task_ids` updates under parallel work.
+- Fix: introduced bounded worker concurrency via a semaphore-backed task pool in `src/domain/task_scheduler/runner.rs`, kept task execution in spawned task slots, and centralized per-worker active-task tracking so claim/heartbeat/release all update the same shared runtime state.
+- Prevention: when adding concurrency to worker loops, verify both throughput semantics and shared state semantics together; if multiple tasks can run in parallel, any worker-level heartbeat or active-task snapshot must come from one shared source of truth, not per-task local state.
+
+### 2026-04-20 | user | workout summary chat use case method too large
+
+- Problem: `generate_coach_reply_impl` in `src/domain/workout_summary/service/use_cases/chat.rs` had grown into a near-file-sized orchestration method that mixed validation, operation claiming, LLM call execution, checkpoint persistence, message append, and final result hydration in one block.
+- Fix: split the method into small helpers for loading the persisted user message, claiming/recovering the reply operation, requesting and checkpointing the LLM response, appending the coach message, finalizing the completed operation, and building the final `CoachReply`.
+- Prevention: when a use-case method starts spanning the whole file, stop and split it by phase immediately; orchestration methods should read top-to-bottom as a short pipeline, with detailed persistence and recovery logic pushed into named helpers.
+
+### 2026-04-20 | user | workout summary scheduler-backed coach reply PR2 review fixes
+
+- Problem: the dedicated `workout_summary.coach_reply` runner did not publish its own worker heartbeat or `active_task_ids`, the scheduler-backed wait path introduced a new 30-second caller-visible timeout that the direct path never had, and the wrapper dropped `athlete_summary_was_regenerated` from the `generate_coach_reply()` contract.
+- Fix: made the dedicated runner persist its own worker state while idle and while holding a task, removed the wrapper-only 30-second timeout so synchronous callers wait for terminal task state, and stored a structured completed-task checkpoint that preserves both the persisted coach message and the regeneration flag while remaining backward-compatible with older message-only checkpoints.
+- Prevention: when wrapping an existing synchronous flow with the scheduler, verify that the wrapper does not shorten the old success contract, that any worker used for recovery semantics publishes the same lifecycle data the sweeper relies on, and that task checkpoints preserve every field the original return type promised to callers.
+
 ### 2026-04-20 | user | task scheduler restart recovery semantics
 
 - Problem: the first scheduler core version left `running` tasks stuck after process restart unless someone manually retried a later `timed_out` task, which was too weak for instance restarts and docker-style redeploys.

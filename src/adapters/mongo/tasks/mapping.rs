@@ -1,0 +1,165 @@
+use crate::domain::task_scheduler::{RetryStrategy, ScheduledTask, TaskSchedulerError, TaskStatus};
+
+use super::document::{RetryStrategyDocument, TaskDocument};
+
+pub(super) fn storage_error(error: mongodb::error::Error) -> TaskSchedulerError {
+    TaskSchedulerError::Repository(error.to_string())
+}
+
+pub(super) fn status_as_str(status: &TaskStatus) -> &'static str {
+    match status {
+        TaskStatus::Queued => "queued",
+        TaskStatus::Running => "running",
+        TaskStatus::RetryScheduled => "retry_scheduled",
+        TaskStatus::Failed => "failed",
+        TaskStatus::Completed => "completed",
+        TaskStatus::TimedOut => "timed_out",
+        TaskStatus::Cancelled => "cancelled",
+    }
+}
+
+fn map_status(value: &str) -> Result<TaskStatus, TaskSchedulerError> {
+    match value {
+        "queued" => Ok(TaskStatus::Queued),
+        "running" => Ok(TaskStatus::Running),
+        "retry_scheduled" => Ok(TaskStatus::RetryScheduled),
+        "failed" => Ok(TaskStatus::Failed),
+        "completed" => Ok(TaskStatus::Completed),
+        "timed_out" => Ok(TaskStatus::TimedOut),
+        "cancelled" => Ok(TaskStatus::Cancelled),
+        other => Err(TaskSchedulerError::Repository(format!(
+            "unknown task status: {other}",
+        ))),
+    }
+}
+
+fn map_retry_strategy(strategy: &RetryStrategy) -> RetryStrategyDocument {
+    match strategy {
+        RetryStrategy::Never => RetryStrategyDocument {
+            kind: "never".to_string(),
+            max_attempts: Some(1),
+            delay_seconds: None,
+            initial_delay_seconds: None,
+            max_delay_seconds: None,
+        },
+        RetryStrategy::Fixed {
+            max_attempts,
+            delay_seconds,
+        } => RetryStrategyDocument {
+            kind: "fixed".to_string(),
+            max_attempts: Some(i64::from(*max_attempts)),
+            delay_seconds: Some(*delay_seconds),
+            initial_delay_seconds: None,
+            max_delay_seconds: None,
+        },
+        RetryStrategy::Exponential {
+            max_attempts,
+            initial_delay_seconds,
+            max_delay_seconds,
+        } => RetryStrategyDocument {
+            kind: "exponential".to_string(),
+            max_attempts: Some(i64::from(*max_attempts)),
+            delay_seconds: None,
+            initial_delay_seconds: Some(*initial_delay_seconds),
+            max_delay_seconds: Some(*max_delay_seconds),
+        },
+    }
+}
+
+fn map_retry_strategy_document(
+    document: RetryStrategyDocument,
+) -> Result<RetryStrategy, TaskSchedulerError> {
+    match document.kind.as_str() {
+        "never" => Ok(RetryStrategy::Never),
+        "fixed" => Ok(RetryStrategy::Fixed {
+            max_attempts: parse_u32_field(document.max_attempts, "fixed retry max_attempts")?,
+            delay_seconds: document.delay_seconds.ok_or_else(|| {
+                TaskSchedulerError::Repository(
+                    "fixed retry strategy missing delay_seconds".to_string(),
+                )
+            })?,
+        }),
+        "exponential" => Ok(RetryStrategy::Exponential {
+            max_attempts: parse_u32_field(document.max_attempts, "exponential retry max_attempts")?,
+            initial_delay_seconds: document.initial_delay_seconds.ok_or_else(|| {
+                TaskSchedulerError::Repository(
+                    "exponential retry strategy missing initial_delay_seconds".to_string(),
+                )
+            })?,
+            max_delay_seconds: document.max_delay_seconds.ok_or_else(|| {
+                TaskSchedulerError::Repository(
+                    "exponential retry strategy missing max_delay_seconds".to_string(),
+                )
+            })?,
+        }),
+        other => Err(TaskSchedulerError::Repository(format!(
+            "unknown retry strategy kind: {other}",
+        ))),
+    }
+}
+
+fn parse_u32_field(value: Option<i64>, field_name: &str) -> Result<u32, TaskSchedulerError> {
+    let value = value.ok_or_else(|| {
+        TaskSchedulerError::Repository(format!("missing {field_name} in task retry strategy"))
+    })?;
+    u32::try_from(value)
+        .map_err(|_| TaskSchedulerError::Repository(format!("invalid {field_name}: {value}")))
+}
+
+pub(super) fn map_task_to_document(
+    task: &ScheduledTask,
+) -> Result<TaskDocument, TaskSchedulerError> {
+    Ok(TaskDocument {
+        id: task.id.clone(),
+        user_id: task.user_id.clone(),
+        task_type: task.task_type.clone(),
+        status: status_as_str(&task.status).to_string(),
+        payload: task.payload.clone(),
+        checkpoint: task.checkpoint.clone(),
+        retry_strategy: map_retry_strategy(&task.retry_strategy),
+        dedupe_key: task.dedupe_key.clone(),
+        error_message: task.error_message.clone(),
+        attempt_count: i64::from(task.attempt_count),
+        next_attempt_at_epoch_seconds: task.next_attempt_at_epoch_seconds,
+        claimed_by: task.claimed_by.clone(),
+        lease_expires_at_epoch_seconds: task.lease_expires_at_epoch_seconds,
+        last_heartbeat_at_epoch_seconds: task.last_heartbeat_at_epoch_seconds,
+        execution_timeout_seconds: task.execution_timeout_seconds,
+        timed_out_at_epoch_seconds: task.timed_out_at_epoch_seconds,
+        leader_only: task.leader_only,
+        created_at_epoch_seconds: task.created_at_epoch_seconds,
+        updated_at_epoch_seconds: task.updated_at_epoch_seconds,
+        started_at_epoch_seconds: task.started_at_epoch_seconds,
+        finished_at_epoch_seconds: task.finished_at_epoch_seconds,
+    })
+}
+
+pub(super) fn map_document_to_task(
+    document: TaskDocument,
+) -> Result<ScheduledTask, TaskSchedulerError> {
+    Ok(ScheduledTask {
+        id: document.id,
+        user_id: document.user_id,
+        task_type: document.task_type,
+        status: map_status(&document.status)?,
+        payload: document.payload,
+        checkpoint: document.checkpoint,
+        retry_strategy: map_retry_strategy_document(document.retry_strategy)?,
+        dedupe_key: document.dedupe_key,
+        error_message: document.error_message,
+        attempt_count: u32::try_from(document.attempt_count).map_err(|_| {
+            TaskSchedulerError::Repository("invalid task attempt_count".to_string())
+        })?,
+        next_attempt_at_epoch_seconds: document.next_attempt_at_epoch_seconds,
+        claimed_by: document.claimed_by,
+        lease_expires_at_epoch_seconds: document.lease_expires_at_epoch_seconds,
+        last_heartbeat_at_epoch_seconds: document.last_heartbeat_at_epoch_seconds,
+        execution_timeout_seconds: document.execution_timeout_seconds,
+        timed_out_at_epoch_seconds: document.timed_out_at_epoch_seconds,
+        leader_only: document.leader_only,
+        created_at_epoch_seconds: document.created_at_epoch_seconds,
+        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+        started_at_epoch_seconds: document.started_at_epoch_seconds,
+        finished_at_epoch_seconds: document.finished_at_epoch_seconds,
+    })
+}

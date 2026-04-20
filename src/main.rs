@@ -80,11 +80,14 @@ use aiwattcoach::{
     domain::intervals::IntervalsService,
     domain::races::RaceService,
     domain::settings::UserSettingsService,
-    domain::task_scheduler::TaskSchedulerService,
+    domain::task_scheduler::{spawn_task_worker, TaskSchedulerService, TaskWorkerConfig},
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
     domain::training_plan::TrainingPlanGenerationService,
-    domain::workout_summary::WorkoutSummaryService,
+    domain::workout_summary::{
+        workout_summary_coach_reply_task_handler, SchedulerBackedWorkoutSummaryService,
+        WorkoutSummaryService,
+    },
     telemetry::setup_telemetry,
     AppState,
 };
@@ -375,7 +378,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         SystemClock,
     ));
 
-    let workout_summary_service = Arc::new(
+    let workout_summary_direct_service = Arc::new(
         WorkoutSummaryService::with_coach(
             workout_summary_repository.clone(),
             coach_reply_operation_repository.clone(),
@@ -411,7 +414,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 training_context_builder.clone(),
                 SystemClock,
             ),
-            TrainingPlanWorkoutSummaryAdapter::new(workout_summary_service.clone()),
+            TrainingPlanWorkoutSummaryAdapter::new(workout_summary_direct_service.clone()),
             SystemClock,
         )
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
@@ -457,11 +460,35 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_completed_workouts(completed_workout_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
-    let workout_summary_service = Arc::new(
-        (*workout_summary_service)
+    let workout_summary_direct_service = Arc::new(
+        (*workout_summary_direct_service)
             .clone()
             .with_training_plan_service(training_plan_service),
     );
+    let workout_summary_task_scheduler = TaskSchedulerService::new(
+        task_repository.clone(),
+        task_worker_repository.clone(),
+        SystemClock,
+    );
+    spawn_task_worker(
+        workout_summary_task_scheduler.clone(),
+        format!("{}-workout-summary", default_task_scheduler_worker_id()),
+        TaskWorkerConfig {
+            is_leader: false,
+            lease_duration_seconds: 30,
+            heartbeat_interval: Duration::from_secs(10),
+            idle_poll_interval: Duration::from_millis(100),
+            max_concurrency: 4,
+        },
+        vec![workout_summary_coach_reply_task_handler(
+            workout_summary_direct_service.clone(),
+        )],
+    );
+    let workout_summary_service = Arc::new(SchedulerBackedWorkoutSummaryService::new(
+        workout_summary_direct_service,
+        workout_summary_task_scheduler,
+        UuidIdGenerator,
+    ));
 
     let intervals_connection_tester = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)

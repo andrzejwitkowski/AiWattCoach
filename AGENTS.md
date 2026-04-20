@@ -285,6 +285,7 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 
 - Match existing file style before introducing new patterns.
 - Prefer minimal diffs.
+- Treat function size as a hard clean-code rule: aim to keep functions at or below about 100 lines of code. If a function grows past roughly 130 lines, refactor it into smaller logical helpers before adding more behavior.
 - Keep files under 500 lines of code when practical; refactor early into smaller logical modules/components instead of letting one file grow into spaghetti code.
 - Do not keep catch-all support files after a split; move shared helpers into narrowly scoped modules like `app.rs`, `identity.rs`, `settings.rs`, `intervals.rs`, or similar concern-based names.
 - Keep the borrow checker boring; redesign API shapes before introducing extra `clone()`, `Arc`, shared wrappers, or explicit lifetimes.
