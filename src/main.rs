@@ -47,6 +47,8 @@ use aiwattcoach::{
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
             special_days::MongoSpecialDayRepository,
+            task_workers::MongoTaskWorkerRepository,
+            tasks::MongoTaskRepository,
             training_load_daily_snapshots::MongoTrainingLoadDailySnapshotRepository,
             training_plan_generation_operations::MongoTrainingPlanGenerationOperationRepository,
             training_plan_projections::MongoTrainingPlanProjectionRepository,
@@ -60,7 +62,11 @@ use aiwattcoach::{
         workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
     build_app,
-    config::{spawn_provider_polling_loop, ProviderPollingService, Settings},
+    config::{
+        default_task_scheduler_worker_id, spawn_provider_polling_loop,
+        spawn_task_scheduler_maintenance_loop, ProviderPollingService, Settings,
+        TaskSchedulerMaintenanceConfig, TaskSchedulerWorkerConfig,
+    },
     domain::athlete_summary::AthleteSummaryService,
     domain::calendar::CalendarService,
     domain::calendar_labels::CalendarLabelsService,
@@ -74,6 +80,7 @@ use aiwattcoach::{
     domain::intervals::IntervalsService,
     domain::races::RaceService,
     domain::settings::UserSettingsService,
+    domain::task_scheduler::TaskSchedulerService,
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
     domain::training_plan::TrainingPlanGenerationService,
@@ -83,7 +90,6 @@ use aiwattcoach::{
 };
 use tokio::net::TcpListener;
 use tracing::info;
-
 mod main_support;
 
 use main_support::{
@@ -162,6 +168,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let llm_context_cache_repository =
         MongoLlmContextCacheRepository::new(mongo_client.clone(), &mongo_database);
     llm_context_cache_repository.ensure_indexes().await?;
+    let task_repository = MongoTaskRepository::new(mongo_client.clone(), &mongo_database);
+    task_repository.ensure_indexes().await?;
+    let task_worker_repository =
+        MongoTaskWorkerRepository::new(mongo_client.clone(), &mongo_database);
+    task_worker_repository.ensure_indexes().await?;
     let llm_http_client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .build()?;
@@ -484,6 +495,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     );
     let listener = TcpListener::bind(address).await?;
     spawn_provider_polling_loop(provider_polling_service);
+    // Prefer a stable worker id from env or container hostname so a process restart can be
+    // recognized as the same logical worker. If neither exists, fall back to a per-process id.
+    spawn_task_scheduler_maintenance_loop(
+        TaskSchedulerService::new(task_repository, task_worker_repository, SystemClock),
+        TaskSchedulerWorkerConfig::new(default_task_scheduler_worker_id(), false, Vec::new()),
+        TaskSchedulerMaintenanceConfig::default(),
+    );
 
     let serve_result = axum::serve(
         listener,

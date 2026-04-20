@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-20 | user | task scheduler restart recovery semantics
+
+- Problem: the first scheduler core version left `running` tasks stuck after process restart unless someone manually retried a later `timed_out` task, which was too weak for instance restarts and docker-style redeploys.
+- Fix: added explicit task recovery in the scheduler sweep so `running` tasks move back to `retry_scheduled` when their owner worker disappears or restarts without reporting the task as active; `timed_out` now stays for the narrower truly abandoned case.
+- Prevention: when designing worker leases, test restart behavior separately from timeout behavior and verify that a dead or restarted owner leads to automatic reclaim when the state is unambiguous.
+
+### 2026-04-20 | user | task scheduler worker identity and timeout defaults
+
+- Problem: the first PR left `worker_id` lifecycle implicit and used an aggressively low default worker-staleness window that could misclassify long-running LLM tasks as abandoned.
+- Fix: added `default_task_scheduler_worker_id()` so workers prefer a stable `TASK_SCHEDULER_WORKER_ID` or `HOSTNAME` identity before falling back to a per-process UUID, and raised the default `worker_stale_after_seconds` in `src/config/task_scheduler.rs` to a safer 30-minute window.
+- Prevention: when introducing distributed worker coordination, define the worker-id source explicitly and make container-friendly stable identities the default when restart recovery is required; also sanity-check timeout defaults against the slowest expected external operation before sending for review.
+
 ### 2026-04-19 | Copilot | admin metrics backfill test coverage
 
 - Problem: the non-admin metrics backfill REST test omitted same-origin headers, so it could return `403` at the CSRF/same-origin guard before reaching `require_admin`.

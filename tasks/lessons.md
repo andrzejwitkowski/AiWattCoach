@@ -17,3 +17,9 @@
 - In tests, avoid tuple aliases for multi-field call records when the field meaning matters. Use named structs or named sub-structs so assertions stay self-explanatory.
 - When a function grows past a few distinct phases, split it into small helpers named after each phase instead of leaving one long orchestration block.
 - When a test file grows large, split it by behavior group and extract shared fakes/fixtures into a local `support` module.
+
+## Distributed Worker Defaults
+
+- When adding worker registries or claim/lease coordination, decide and document the `worker_id` source explicitly. Prefer stable env- or hostname-based ids when restart recovery should treat a restarted instance as the same logical worker.
+- Before finalizing timeout defaults, compare them against the slowest realistic external operation, especially LLM calls and other long-polling network work.
+- Model restart recovery separately from `timed_out`: if the old owner is gone or restarted and no longer reports the task as active, prefer automatic recovery to a reclaimable queue state instead of forcing manual retry.
