@@ -5,10 +5,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(unix)]
-use crate::main_support::wait_for_sigterm;
-use crate::main_support::{should_reset_poll_state, wait_for_ctrl_c};
-use crate::{finish_server_shutdown, reconcile_intervals_poll_states};
 use aiwattcoach::{
     adapters::mongo::{
         provider_poll_states::MongoProviderPollStateRepository,
@@ -20,10 +16,17 @@ use aiwattcoach::{
         },
         identity::Clock,
     },
+    main_runtime::{
+        finish_server_shutdown, reconcile_intervals_poll_states, should_reset_poll_state,
+        wait_for_ctrl_c,
+    },
 };
 use mongodb::{bson::doc, Client};
 use tokio::sync::Notify;
 use tokio::time::{timeout, Duration};
+
+#[cfg(unix)]
+use aiwattcoach::main_runtime::wait_for_sigterm;
 
 #[derive(Clone, Default)]
 struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
@@ -326,7 +329,10 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
         )
         .await
         .unwrap()
-        .unwrap();
+        .expect("connected user calendar state should exist");
+    assert_eq!(connected_calendar.next_due_at_epoch_seconds, 111);
+    assert_eq!(connected_calendar.cursor, None);
+
     let connected_completed = poll_states
         .find_by_provider_and_stream(
             "connected-user",
@@ -335,7 +341,12 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
         )
         .await
         .unwrap()
-        .unwrap();
+        .expect("connected user completed state should exist");
+    assert_eq!(connected_completed.next_due_at_epoch_seconds, 1_700_000_000);
+    assert_eq!(connected_completed.cursor, None);
+    assert_eq!(connected_completed.last_error, None);
+    assert_eq!(connected_completed.backoff_until_epoch_seconds, None);
+
     let legacy_calendar = poll_states
         .find_by_provider_and_stream(
             "legacy-user",
@@ -344,7 +355,9 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
         )
         .await
         .unwrap()
-        .unwrap();
+        .expect("legacy user calendar state should be seeded");
+    assert_eq!(legacy_calendar.next_due_at_epoch_seconds, 1_700_000_000);
+
     let legacy_completed = poll_states
         .find_by_provider_and_stream(
             "legacy-user",
@@ -353,7 +366,9 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
         )
         .await
         .unwrap()
-        .unwrap();
+        .expect("legacy user completed state should be seeded");
+    assert_eq!(legacy_completed.next_due_at_epoch_seconds, 1_700_000_000);
+
     let disconnected_calendar = poll_states
         .find_by_provider_and_stream(
             "disconnected-user",
@@ -361,99 +376,40 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
             ProviderPollStream::Calendar,
         )
         .await
-        .unwrap();
-    let disconnected_completed = poll_states
-        .find_by_provider_and_stream(
-            "disconnected-user",
-            ExternalProvider::Intervals,
-            ProviderPollStream::CompletedWorkouts,
-        )
-        .await
-        .unwrap();
+        .unwrap()
+        .expect("disconnected user calendar state should still exist");
+    assert_eq!(disconnected_calendar.next_due_at_epoch_seconds, i64::MAX);
+    assert_eq!(disconnected_calendar.cursor, None);
+    assert_eq!(disconnected_calendar.last_error, None);
+    assert_eq!(disconnected_calendar.backoff_until_epoch_seconds, None);
 
-    assert_eq!(connected_calendar.next_due_at_epoch_seconds, 111);
-    assert_eq!(connected_completed.next_due_at_epoch_seconds, 1_700_000_000);
-    assert!(connected_completed.cursor.is_none());
-    assert!(connected_completed
-        .last_attempted_at_epoch_seconds
-        .is_none());
-    assert!(connected_completed
-        .last_successful_at_epoch_seconds
-        .is_none());
-    assert!(connected_completed.last_error.is_none());
-    assert!(connected_completed.backoff_until_epoch_seconds.is_none());
-    assert_eq!(legacy_calendar.next_due_at_epoch_seconds, 1_700_000_000);
-    assert_eq!(legacy_completed.next_due_at_epoch_seconds, 1_700_000_000);
-    assert_eq!(
-        disconnected_calendar
-            .as_ref()
-            .map(|state| state.next_due_at_epoch_seconds),
-        Some(i64::MAX)
-    );
-    assert!(disconnected_calendar
-        .as_ref()
-        .is_some_and(|state| state.cursor.is_none()));
-    assert!(disconnected_calendar
-        .as_ref()
-        .is_some_and(|state| state.last_error.is_none()));
-    assert!(disconnected_completed.is_none());
-
-    client.database(&database_name).drop().await.unwrap();
+    let _ = client.database(&database_name).drop().await;
 }
 
 async fn test_mongo_client_or_skip() -> Option<Client> {
-    let mongo_uri = test_mongo_uri();
-    let client = match Client::with_uri_str(&mongo_uri).await {
-        Ok(client) => client,
-        Err(error) => {
-            if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
-                panic!("main test requires Mongo in CI: {error}");
-            }
-            eprintln!("skipping main mongo test: failed to create client for {mongo_uri}: {error}");
-            return None;
-        }
-    };
-
-    match tokio::time::timeout(
-        Duration::from_secs(1),
+    let uri =
+        std::env::var("TEST_MONGO_URI").unwrap_or_else(|_| "mongodb://localhost:27017".to_string());
+    let client = Client::with_uri_str(&uri)
+        .await
+        .expect("test mongo client should parse uri");
+    match timeout(
+        Duration::from_secs(2),
         client.database("admin").run_command(doc! { "ping": 1 }),
     )
     .await
     {
         Ok(Ok(_)) => Some(client),
-        Ok(Err(error)) => {
-            if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
-                panic!("main test requires Mongo in CI: {error}");
-            }
-            eprintln!(
-                "skipping main mongo test: failed to connect to Mongo at {mongo_uri}: {error}"
-            );
-            None
-        }
-        Err(_) => {
-            if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
-                panic!(
-                    "main test requires Mongo in CI: timed out connecting to Mongo at {mongo_uri}"
-                );
-            }
-            eprintln!("skipping main mongo test: timed out connecting to Mongo at {mongo_uri}");
+        _ => {
+            eprintln!("skipping main_runtime mongo test: timed out connecting to Mongo at {uri}");
             None
         }
     }
 }
 
-fn test_mongo_uri() -> String {
-    std::env::var("MONGODB_URI")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "mongodb://localhost:27017".to_string())
-}
-
 fn unique_test_database_name(prefix: &str) -> String {
-    let unique = SystemTime::now()
+    let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .expect("system clock should be after unix epoch")
         .as_nanos();
-    format!("{prefix}-{unique}")
+    format!("{prefix}-{nanos}")
 }

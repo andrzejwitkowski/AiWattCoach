@@ -88,17 +88,15 @@ use aiwattcoach::{
         workout_summary_coach_reply_task_handler, SchedulerBackedWorkoutSummaryService,
         WorkoutSummaryService,
     },
+    main_runtime::{
+        finish_server_shutdown, reconcile_intervals_poll_states, shutdown_signal,
+        TrainingPlanWorkoutSummaryAdapter,
+    },
     telemetry::setup_telemetry,
     AppState,
 };
 use tokio::net::TcpListener;
 use tracing::info;
-mod main_support;
-
-use main_support::{
-    finish_server_shutdown, reconcile_intervals_poll_states, shutdown_signal,
-    TrainingPlanWorkoutSummaryAdapter,
-};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -540,7 +538,3 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     finish_server_shutdown(serve_result, telemetry_shutdown_result)
 }
-
-#[cfg(test)]
-#[path = "main_tests.rs"]
-mod tests;

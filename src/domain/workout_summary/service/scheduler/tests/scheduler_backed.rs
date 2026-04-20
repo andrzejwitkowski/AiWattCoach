@@ -1,3 +1,4 @@
+use serial_test::serial;
 use std::sync::Arc;
 
 use crate::domain::{
@@ -14,6 +15,7 @@ use super::support::{
 };
 
 #[tokio::test]
+#[serial]
 async fn scheduler_backed_send_message_waits_for_background_task_result() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let direct = direct_service(repository, TestCoach::successful());
@@ -46,6 +48,7 @@ async fn scheduler_backed_send_message_waits_for_background_task_result() {
 }
 
 #[tokio::test]
+#[serial]
 async fn scheduler_backed_generate_coach_reply_waits_for_background_task_result() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let direct = direct_service(repository, TestCoach::successful());
@@ -81,6 +84,7 @@ async fn scheduler_backed_generate_coach_reply_waits_for_background_task_result(
 }
 
 #[tokio::test]
+#[serial]
 async fn scheduler_backed_generate_coach_reply_preserves_athlete_summary_regeneration_flag() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let direct = direct_service_with_athlete_summary(repository, TestCoach::successful(), true);
@@ -112,6 +116,7 @@ async fn scheduler_backed_generate_coach_reply_preserves_athlete_summary_regener
 }
 
 #[tokio::test]
+#[serial]
 async fn scheduler_backed_send_message_returns_failed_task_error() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let direct = direct_service(
@@ -151,6 +156,7 @@ async fn scheduler_backed_send_message_returns_failed_task_error() {
 }
 
 #[tokio::test]
+#[serial]
 async fn scheduler_backed_generate_coach_reply_retries_after_failed_task_on_explicit_retry() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let coach = Arc::new(TestCoach::default());

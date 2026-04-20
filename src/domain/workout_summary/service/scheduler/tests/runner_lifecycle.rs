@@ -1,4 +1,5 @@
 use serde_json::json;
+use serial_test::serial;
 
 use crate::domain::task_scheduler::{NewTask, RetryStrategy, TaskSchedulerService, TaskStatus};
 
@@ -9,6 +10,7 @@ use super::support::{
 };
 
 #[tokio::test]
+#[serial]
 async fn workout_summary_task_runner_reports_active_task_ids() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let coach = BlockingCoach::new();
@@ -63,6 +65,7 @@ async fn workout_summary_task_runner_reports_active_task_ids() {
 }
 
 #[tokio::test]
+#[serial]
 async fn workout_summary_task_runner_fails_invalid_payload_without_feature_specific_loop_logic() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let direct = direct_service(repository, BlockingCoach::new());

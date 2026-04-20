@@ -1,6 +1,7 @@
 pub mod adapters;
 pub mod config;
 pub mod domain;
+pub mod main_runtime;
 pub mod telemetry;
 
 pub use config::{

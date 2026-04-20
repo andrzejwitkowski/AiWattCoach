@@ -1,6 +1,6 @@
 use std::{error::Error, future::Future, sync::Arc};
 
-use aiwattcoach::{
+use crate::{
     adapters::mongo::{
         provider_poll_states::MongoProviderPollStateRepository,
         settings::MongoUserSettingsRepository,
@@ -16,30 +16,30 @@ use aiwattcoach::{
 use tokio::sync::Notify;
 
 #[derive(Clone)]
-pub(crate) struct TrainingPlanWorkoutSummaryAdapter<Service> {
+pub struct TrainingPlanWorkoutSummaryAdapter<Service> {
     workout_summary_service: Arc<Service>,
 }
 
 impl<Service> TrainingPlanWorkoutSummaryAdapter<Service> {
-    pub(crate) fn new(workout_summary_service: Arc<Service>) -> Self {
+    pub fn new(workout_summary_service: Arc<Service>) -> Self {
         Self {
             workout_summary_service,
         }
     }
 }
 
-impl<Service> aiwattcoach::domain::training_plan::TrainingPlanWorkoutSummaryPort
+impl<Service> crate::domain::training_plan::TrainingPlanWorkoutSummaryPort
     for TrainingPlanWorkoutSummaryAdapter<Service>
 where
-    Service: aiwattcoach::domain::workout_summary::WorkoutSummaryUseCases + Send + Sync + 'static,
+    Service: crate::domain::workout_summary::WorkoutSummaryUseCases + Send + Sync + 'static,
 {
     fn persist_workout_recap(
         &self,
         user_id: &str,
         workout_id: &str,
-        recap: aiwattcoach::domain::workout_summary::WorkoutRecap,
-    ) -> aiwattcoach::domain::training_plan::BoxFuture<
-        Result<(), aiwattcoach::domain::training_plan::TrainingPlanError>,
+        recap: crate::domain::workout_summary::WorkoutRecap,
+    ) -> crate::domain::training_plan::BoxFuture<
+        Result<(), crate::domain::training_plan::TrainingPlanError>,
     > {
         let workout_summary_service = self.workout_summary_service.clone();
         let user_id = user_id.to_string();
@@ -56,41 +56,39 @@ where
 
 fn map_workout_summary_error(
     error: WorkoutSummaryError,
-) -> aiwattcoach::domain::training_plan::TrainingPlanError {
+) -> crate::domain::training_plan::TrainingPlanError {
     match error {
         WorkoutSummaryError::Validation(message) => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(message)
+            crate::domain::training_plan::TrainingPlanError::Validation(message)
         }
-        WorkoutSummaryError::Locked => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
-                "workout summary is saved and cannot be edited".to_string(),
-            )
-        }
+        WorkoutSummaryError::Locked => crate::domain::training_plan::TrainingPlanError::Validation(
+            "workout summary is saved and cannot be edited".to_string(),
+        ),
         WorkoutSummaryError::NotFound => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
+            crate::domain::training_plan::TrainingPlanError::Validation(
                 "workout summary not found".to_string(),
             )
         }
         WorkoutSummaryError::AlreadyExists => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Validation(
+            crate::domain::training_plan::TrainingPlanError::Validation(
                 "workout summary already exists".to_string(),
             )
         }
         WorkoutSummaryError::ReplyAlreadyPending => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+            crate::domain::training_plan::TrainingPlanError::Unavailable(
                 "coach reply generation is already pending for this message".to_string(),
             )
         }
         WorkoutSummaryError::Llm(error) => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(error.to_string())
+            crate::domain::training_plan::TrainingPlanError::Unavailable(error.to_string())
         }
         WorkoutSummaryError::Repository(message) => {
-            aiwattcoach::domain::training_plan::TrainingPlanError::Repository(message)
+            crate::domain::training_plan::TrainingPlanError::Repository(message)
         }
     }
 }
 
-pub(crate) async fn reconcile_intervals_poll_states(
+pub async fn reconcile_intervals_poll_states(
     settings_repository: &MongoUserSettingsRepository,
     poll_states: &MongoProviderPollStateRepository,
     clock: &impl Clock,
@@ -147,7 +145,7 @@ pub(crate) async fn reconcile_intervals_poll_states(
     Ok(())
 }
 
-pub(crate) fn should_reset_poll_state(
+pub fn should_reset_poll_state(
     existing: Option<&ProviderPollState>,
     intervals_updated_at_epoch_seconds: Option<i64>,
 ) -> bool {
@@ -174,7 +172,7 @@ pub(crate) fn should_reset_poll_state(
     }
 }
 
-pub(crate) fn finish_server_shutdown(
+pub fn finish_server_shutdown(
     serve_result: std::io::Result<()>,
     telemetry_shutdown_result: Result<(), Box<dyn Error + Send + Sync>>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -188,7 +186,7 @@ pub(crate) fn finish_server_shutdown(
     }
 }
 
-pub(crate) async fn shutdown_signal() {
+pub async fn shutdown_signal() {
     let shutdown = Arc::new(Notify::new());
     let ctrl_c = wait_for_ctrl_c(tokio::signal::ctrl_c(), shutdown.clone());
 
@@ -223,7 +221,7 @@ pub(crate) async fn shutdown_signal() {
     }
 }
 
-pub(crate) async fn wait_for_ctrl_c<F>(ctrl_c: F, shutdown: Arc<Notify>)
+pub async fn wait_for_ctrl_c<F>(ctrl_c: F, shutdown: Arc<Notify>)
 where
     F: Future<Output = std::io::Result<()>>,
 {
@@ -234,7 +232,7 @@ where
 }
 
 #[cfg(unix)]
-pub(crate) async fn wait_for_sigterm(
+pub async fn wait_for_sigterm(
     signal: std::io::Result<tokio::signal::unix::Signal>,
     shutdown: Arc<Notify>,
 ) {
