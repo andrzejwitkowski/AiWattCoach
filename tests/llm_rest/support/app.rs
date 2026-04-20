@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, OnceLock,
     },
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -44,6 +44,7 @@ use super::{
 
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 8 * 1024;
 
+static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) struct LlmRestTestContext {
@@ -250,7 +251,13 @@ impl Drop for FrontendFixture {
 }
 
 async fn test_mongo_client(uri: &str) -> Client {
-    Client::with_uri_str(uri)
+    if let Some(client) = TEST_MONGO_CLIENT.get() {
+        return client.clone();
+    }
+
+    let client = Client::with_uri_str(uri)
         .await
-        .expect("test mongo client should be created")
+        .expect("test mongo client should be created");
+    let _ = TEST_MONGO_CLIENT.set(client.clone());
+    client
 }

@@ -3,6 +3,11 @@ name = "aiwattcoach"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "aiwattcoach"
+path = "src/main.rs"
+test = false
+
 [dependencies]
 axum = { version = "0.8.4", features = ["ws"] }
 base64 = "0.22"

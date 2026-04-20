@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-20 | user | test-suite memory leaks and unstable Rust harnesses
+
+- Problem: several Rust test binaries leaked memory and process resources by retaining frontend fixtures in globals, recreating expensive Mongo clients repeatedly, and spawning Axum test servers with unmanaged `tokio::spawn` tasks that lived until process exit. This made `cargo test -- --nocapture` fail with shifting suite-level `SIGKILL`s.
+- Fix: replaced unbounded retained fixtures with bounded shared fixtures, reused `mongodb::Client` per test binary where safe, disabled the unnecessary bin test harness in `Cargo.toml`, and updated the affected test helpers to own spawned server tasks and abort them in `Drop`.
+- Prevention: when writing tests, treat memory and task lifetime as part of the helper contract: no unbounded globals, no unmanaged spawned servers, prefer bounded per-binary singletons for expensive immutable resources, and diagnose suite-level flakiness only with sequential heavy test runs.
+
 ### 2026-04-20 | user | scheduler worker loop ownership and generic boundaries
 
 - Problem: the dedicated `workout_summary` task runner embedded the whole claim, idle wait, task heartbeat, completion, and failure persistence loop inside feature code, which made the critical scheduler flow hard to read and tied generic worker behavior to one LLM-specific use case.

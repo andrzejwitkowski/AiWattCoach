@@ -1,5 +1,6 @@
 use std::{
     sync::atomic::{AtomicU64, Ordering},
+    sync::OnceLock,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -15,6 +16,7 @@ use futures::TryStreamExt;
 use mongodb::{bson::doc, Client};
 
 static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
+static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 
 #[tokio::test]
 async fn calendar_entry_view_repository_lists_mixed_entries_by_date_range() {
@@ -351,11 +353,17 @@ impl MongoFixture {
     async fn new() -> Result<Self, String> {
         let settings = Settings::test_defaults();
         let mongo_uri = settings.mongo.uri.clone();
-        let client = Client::with_uri_str(&settings.mongo.uri)
-            .await
-            .map_err(|error| {
-                format!("failed to create test mongo client for {mongo_uri}: {error}")
-            })?;
+        let client = if let Some(client) = TEST_MONGO_CLIENT.get() {
+            client.clone()
+        } else {
+            let client = Client::with_uri_str(&settings.mongo.uri)
+                .await
+                .map_err(|error| {
+                    format!("failed to create test mongo client for {mongo_uri}: {error}")
+                })?;
+            let _ = TEST_MONGO_CLIENT.set(client.clone());
+            client
+        };
         tokio::time::timeout(
             Duration::from_secs(1),
             client.database("admin").run_command(doc! { "ping": 1 }),

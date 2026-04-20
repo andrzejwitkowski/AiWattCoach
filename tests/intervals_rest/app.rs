@@ -1,11 +1,7 @@
 use std::{
     fs,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, OnceLock},
 };
 
 use aiwattcoach::{
@@ -39,7 +35,8 @@ use mongodb::Client;
 
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
-static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
+static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 
 pub(crate) async fn intervals_test_app(
     identity_service: impl IdentityUseCases + 'static,
@@ -126,7 +123,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
     completed_workouts: impl CompletedWorkoutRepository + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
+    let fixture = shared_frontend_fixture();
     let completed_workout_repository = completed_workouts;
     let calendar_service = Arc::new(
         CalendarService::new(
@@ -173,7 +170,7 @@ pub(crate) async fn intervals_test_app_with_all_services(
     race_service: impl RaceUseCases + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
+    let fixture = shared_frontend_fixture();
     let calendar_service = Arc::new(
         CalendarService::new(
             intervals_service.clone(),
@@ -589,14 +586,13 @@ struct FrontendFixture {
     root: PathBuf,
 }
 
+fn shared_frontend_fixture() -> &'static FrontendFixture {
+    SHARED_FRONTEND_FIXTURE.get_or_init(frontend_fixture)
+}
+
 fn frontend_fixture() -> FrontendFixture {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let counter = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
-        "aiwattcoach-intervals-spa-fixture-{}-{unique}-{counter}",
+        "aiwattcoach-intervals-spa-fixture-{}",
         std::process::id()
     ));
     let dist_dir = root.join("dist");
@@ -623,7 +619,13 @@ impl Drop for FrontendFixture {
 }
 
 async fn test_mongo_client(uri: &str) -> Client {
-    Client::with_uri_str(uri)
+    if let Some(client) = TEST_MONGO_CLIENT.get() {
+        return client.clone();
+    }
+
+    let client = Client::with_uri_str(uri)
         .await
-        .expect("test mongo client should be created")
+        .expect("test mongo client should be created");
+    let _ = TEST_MONGO_CLIENT.set(client.clone());
+    client
 }

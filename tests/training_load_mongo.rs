@@ -1,5 +1,6 @@
 use std::{
     sync::atomic::{AtomicU64, Ordering},
+    sync::OnceLock,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -17,6 +18,7 @@ use aiwattcoach::{
 use mongodb::{bson::doc, Client};
 
 static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
+static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 
 #[tokio::test]
 async fn ftp_history_repository_upserts_and_resolves_effective_entry() {
@@ -183,11 +185,17 @@ impl MongoFixture {
         let settings = Settings::test_defaults();
         let mongo_uri = settings.mongo.uri.clone();
         let mongo_uri_for_log = redact_uri_credentials(&mongo_uri);
-        let client = Client::with_uri_str(&settings.mongo.uri)
-            .await
-            .map_err(|error| {
-                format!("failed to create test mongo client for {mongo_uri_for_log}: {error}")
-            })?;
+        let client = if let Some(client) = TEST_MONGO_CLIENT.get() {
+            client.clone()
+        } else {
+            let client = Client::with_uri_str(&settings.mongo.uri)
+                .await
+                .map_err(|error| {
+                    format!("failed to create test mongo client for {mongo_uri_for_log}: {error}")
+                })?;
+            let _ = TEST_MONGO_CLIENT.set(client.clone());
+            client
+        };
         tokio::time::timeout(
             Duration::from_secs(1),
             client.database("admin").run_command(doc! { "ping": 1 }),

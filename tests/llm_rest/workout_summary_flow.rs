@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{net::SocketAddr, time::Duration};
 
 use aiwattcoach::domain::athlete_summary::AthleteSummary;
 use aiwattcoach::domain::llm::LlmProvider;
@@ -8,6 +8,7 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
+use tokio::task::JoinHandle;
 use tokio::{net::TcpListener, time::timeout};
 use tokio_tungstenite::{
     connect_async,
@@ -18,6 +19,29 @@ use tower::util::ServiceExt;
 use crate::support::{ai_config, get_json, llm_rest_test_context};
 
 const COMPLETED_WORKOUT_ID: &str = "activity-1";
+
+struct SpawnedApp {
+    address: SocketAddr,
+    task: JoinHandle<()>,
+}
+
+impl SpawnedApp {
+    async fn start(app: axum::Router) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        Self { address, task }
+    }
+}
+
+impl Drop for SpawnedApp {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
 
 #[tokio::test]
 async fn send_message_uses_saved_openrouter_settings_through_live_adapter() {
@@ -110,16 +134,14 @@ async fn workout_summary_websocket_creates_and_reuses_gemini_cache() {
         false,
     );
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let app = context.app.clone();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(context.app.clone()).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws")
-        .into_client_request()
-        .unwrap();
+    let mut request = format!(
+        "ws://{}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws",
+        server.address
+    )
+    .into_client_request()
+    .unwrap();
     request
         .headers_mut()
         .insert("Cookie", context.session_cookie("session-1"));
@@ -196,16 +218,14 @@ async fn workout_summary_websocket_sends_system_message_before_reply_when_summar
     context.seed_activity(context.default_activity("user-1", COMPLETED_WORKOUT_ID));
     context.seed_athlete_summary("user-1", None, true);
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let app = context.app.clone();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(context.app.clone()).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws")
-        .into_client_request()
-        .unwrap();
+    let mut request = format!(
+        "ws://{}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws",
+        server.address
+    )
+    .into_client_request()
+    .unwrap();
     request
         .headers_mut()
         .insert("Cookie", context.session_cookie("session-1"));
@@ -268,16 +288,14 @@ async fn workout_summary_websocket_skips_system_message_when_athlete_summary_is_
         false,
     );
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let app = context.app.clone();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(context.app.clone()).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws")
-        .into_client_request()
-        .unwrap();
+    let mut request = format!(
+        "ws://{}/api/workout-summaries/{COMPLETED_WORKOUT_ID}/ws",
+        server.address
+    )
+    .into_client_request()
+    .unwrap();
     request
         .headers_mut()
         .insert("Cookie", context.session_cookie("session-1"));

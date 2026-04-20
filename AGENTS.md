@@ -240,6 +240,13 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 - Verify user scoping in REST tests whenever endpoints are user-owned.
 - For frontend API tests, mock `fetch` and validate parsed output shapes.
 - For retry-sensitive workflows, test idempotency and recovery behavior, not just happy paths.
+- Treat test memory hygiene as a first-class design constraint. Shared test helpers must not retain unbounded global state across a test binary.
+- If a test starts background work with `tokio::spawn`, `axum::serve`, watches, channels, or timers, wrap that work in an owned helper that aborts or shuts it down in `Drop`. Never leave spawned server tasks unmanaged.
+- Do not store per-test fixtures in global `Vec`s behind `OnceLock`, `Mutex`, or similar globals. If a resource should be shared, share exactly one bounded instance per test binary; otherwise keep it local and clean it up explicitly.
+- For expensive reusable test resources such as `mongodb::Client` or built SPA fixtures, prefer a bounded per-binary singleton via `OnceLock` when isolation does not require per-test instances.
+- Keep per-test database names, collections, and mutable records isolated even when the client is shared.
+- When a test creates temp directories or filesystem fixtures, either reuse one bounded fixture per test binary or guarantee cleanup in `Drop`; do not accumulate unique temp roots without need.
+- When diagnosing suite-level `SIGKILL`, OOM, or memory-pressure failures, rerun heavy test binaries sequentially in failing order. Do not launch multiple heavy `cargo test` targets in parallel because that creates non-diagnostic pressure.
 
 ## Logging / Telemetry Notes
 

@@ -1,11 +1,4 @@
-use std::{
-    fs,
-    future::Future,
-    path::PathBuf,
-    pin::Pin,
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, future::Future, path::PathBuf, pin::Pin, sync::OnceLock};
 
 use aiwattcoach::{
     build_app_with_frontend_dist,
@@ -27,7 +20,8 @@ pub(crate) type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>
 
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
-static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
+static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 
 pub(crate) fn session_cookie(value: &str) -> header::HeaderValue {
     header::HeaderValue::from_str(&format!("aiwattcoach_session={value}; Path=/")).unwrap()
@@ -89,7 +83,7 @@ pub(crate) async fn settings_test_app_with_completed_workout_service(
     completed_workout_service: impl CompletedWorkoutAdminUseCases + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
+    let fixture = shared_frontend_fixture();
 
     let app_state = AppState::new(
         settings.app_name,
@@ -118,7 +112,7 @@ pub(crate) async fn settings_test_app_with_athlete_summary(
     athlete_summary_service: Option<std::sync::Arc<dyn AthleteSummaryUseCases>>,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
+    let fixture = shared_frontend_fixture();
 
     let mut app_state = AppState::new(
         settings.app_name,
@@ -153,14 +147,13 @@ struct FrontendFixture {
     root: PathBuf,
 }
 
+fn shared_frontend_fixture() -> &'static FrontendFixture {
+    SHARED_FRONTEND_FIXTURE.get_or_init(frontend_fixture)
+}
+
 fn frontend_fixture() -> FrontendFixture {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let counter = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
-        "aiwattcoach-settings-spa-fixture-{}-{unique}-{counter}",
+        "aiwattcoach-settings-spa-fixture-{}",
         std::process::id()
     ));
     let dist_dir = root.join("dist");
@@ -187,7 +180,13 @@ impl FrontendFixture {
 }
 
 async fn test_mongo_client(uri: &str) -> Client {
-    Client::with_uri_str(uri)
+    if let Some(client) = TEST_MONGO_CLIENT.get() {
+        return client.clone();
+    }
+
+    let client = Client::with_uri_str(uri)
         .await
-        .expect("test mongo client should be created")
+        .expect("test mongo client should be created");
+    let _ = TEST_MONGO_CLIENT.set(client.clone());
+    client
 }
