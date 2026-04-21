@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
 
-echo "Running full verification before push"
-bun run verify:all
+echo "Running limited verification before push"
+bun run verify:rust

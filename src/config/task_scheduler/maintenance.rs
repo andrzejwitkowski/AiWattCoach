@@ -1,46 +1,20 @@
-use std::{env, time::Duration};
+use std::time::Duration;
 
 use tokio::time::MissedTickBehavior;
 use tracing::warn;
-use uuid::Uuid;
 
-use crate::domain::{
-    identity::Clock,
-    task_scheduler::{TaskRepository, TaskSchedulerService, TaskWorkerRepository},
+use crate::{
+    domain::{
+        identity::Clock,
+        task_scheduler::{TaskRepository, TaskSchedulerService, TaskWorkerRepository},
+    },
+    BackgroundTaskHandle,
 };
 
 const DEFAULT_WORKER_HEARTBEAT_INTERVAL_SECONDS: u64 = 15;
 const DEFAULT_TIMEOUT_SWEEP_INTERVAL_SECONDS: u64 = 30;
 const DEFAULT_WORKER_STALE_AFTER_SECONDS: i64 = 30 * 60;
 const DEFAULT_TIMEOUT_SWEEP_LIMIT: usize = 100;
-
-pub fn default_task_scheduler_worker_id() -> String {
-    resolve_task_scheduler_worker_id(
-        env::var("TASK_SCHEDULER_WORKER_ID").ok(),
-        env::var("HOSTNAME").ok(),
-    )
-}
-
-fn resolve_task_scheduler_worker_id(
-    explicit_worker_id: Option<String>,
-    hostname: Option<String>,
-) -> String {
-    if let Some(worker_id) = explicit_worker_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    {
-        return worker_id;
-    }
-
-    if let Some(hostname) = hostname
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    {
-        return format!("task-scheduler-{hostname}");
-    }
-
-    format!("task-scheduler-{}", Uuid::new_v4())
-}
 
 #[derive(Clone, Debug)]
 pub struct TaskSchedulerWorkerConfig {
@@ -82,12 +56,14 @@ pub fn spawn_task_scheduler_maintenance_loop<Tasks, Workers, Time>(
     service: TaskSchedulerService<Tasks, Workers, Time>,
     worker: TaskSchedulerWorkerConfig,
     config: TaskSchedulerMaintenanceConfig,
-) where
+) -> BackgroundTaskHandle
+where
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
 {
-    tokio::spawn(async move {
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
+    let join_handle = tokio::spawn(async move {
         let mut worker_ticker = tokio::time::interval(Duration::from_secs(
             config.worker_heartbeat_interval_seconds,
         ));
@@ -99,6 +75,9 @@ pub fn spawn_task_scheduler_maintenance_loop<Tasks, Workers, Time>(
 
         loop {
             tokio::select! {
+                _ = shutdown_rx.changed() => {
+                    break;
+                }
                 _ = worker_ticker.tick() => {
                     if let Err(error) = service
                         .touch_worker_heartbeat(
@@ -125,33 +104,6 @@ pub fn spawn_task_scheduler_maintenance_loop<Tasks, Workers, Time>(
             }
         }
     });
-}
 
-#[cfg(test)]
-mod tests {
-    use super::resolve_task_scheduler_worker_id;
-
-    #[test]
-    fn default_worker_id_prefers_explicit_env() {
-        let worker_id = resolve_task_scheduler_worker_id(
-            Some("scheduler-a".to_string()),
-            Some("container-1".to_string()),
-        );
-
-        assert_eq!(worker_id, "scheduler-a");
-    }
-
-    #[test]
-    fn default_worker_id_falls_back_to_hostname() {
-        let worker_id = resolve_task_scheduler_worker_id(None, Some("container-2".to_string()));
-
-        assert_eq!(worker_id, "task-scheduler-container-2");
-    }
-
-    #[test]
-    fn default_worker_id_falls_back_to_uuid_when_env_missing() {
-        let worker_id = resolve_task_scheduler_worker_id(None, None);
-
-        assert!(worker_id.starts_with("task-scheduler-"));
-    }
+    BackgroundTaskHandle::new("task-scheduler-maintenance", shutdown_tx, join_handle)
 }

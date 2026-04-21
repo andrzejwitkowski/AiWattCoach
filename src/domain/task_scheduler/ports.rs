@@ -1,8 +1,9 @@
 use std::{future::Future, pin::Pin};
 
 use super::{
-    ScheduledTask, TaskClaimRequest, TaskEnqueueResult, TaskHeartbeatRequest, TaskListFilter,
-    TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRetryRequest, TaskSchedulerError, TaskWorker,
+    ScheduledTask, TaskCheckpointRequest, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult,
+    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskMarkTimedOutRequest,
+    TaskRecoverRequest, TaskRetryRequest, TaskSchedulerError, TaskWorker,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -21,6 +22,21 @@ pub trait TaskRepository: Clone + Send + Sync + 'static {
     fn heartbeat(
         &self,
         request: TaskHeartbeatRequest,
+    ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>>;
+
+    fn save_checkpoint(
+        &self,
+        request: TaskCheckpointRequest,
+    ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>>;
+
+    fn complete(
+        &self,
+        request: TaskCompleteRequest,
+    ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>>;
+
+    fn fail(
+        &self,
+        request: TaskFailRequest,
     ) -> BoxFuture<Result<Option<ScheduledTask>, TaskSchedulerError>>;
 
     fn list_timeout_candidates(

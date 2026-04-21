@@ -100,9 +100,11 @@ pub(super) fn can_persist_tested_credentials(
 #[cfg(test)]
 mod tests {
     use super::{
-        can_persist_tested_credentials, normalize_optional_input,
-        should_persist_tested_credentials, MergedCredentials,
+        build_persisted_intervals_config, can_persist_tested_credentials,
+        merge_connection_credentials, normalize_optional_input, should_persist_tested_credentials,
+        MergedCredentials,
     };
+    use crate::adapters::rest::settings::dto::TestIntervalsConnectionRequest;
     use crate::domain::settings::UserSettings;
 
     #[test]
@@ -161,5 +163,87 @@ mod tests {
         let latest = initial.clone();
 
         assert!(can_persist_tested_credentials(&initial, &latest));
+    }
+
+    #[test]
+    fn merge_connection_credentials_trims_whitespace_padded_credentials() {
+        let current = UserSettings::new_defaults("user-1".to_string(), 1000);
+
+        let credentials = match merge_connection_credentials(
+            TestIntervalsConnectionRequest {
+                api_key: Some("  valid-key  ".to_string()),
+                athlete_id: Some("  athlete-123  ".to_string()),
+            },
+            &current,
+        ) {
+            Ok(credentials) => credentials,
+            Err(_) => panic!("credentials should merge"),
+        };
+
+        assert_eq!(credentials.api_key, "valid-key");
+        assert_eq!(credentials.athlete_id, "athlete-123");
+        assert!(!credentials.used_saved_api_key);
+        assert!(!credentials.used_saved_athlete_id);
+    }
+
+    #[test]
+    fn merge_connection_credentials_uses_saved_credentials_when_transient_values_are_missing() {
+        let mut current = UserSettings::new_defaults("user-1".to_string(), 1000);
+        current.intervals.api_key = Some("saved-api-key".to_string());
+        current.intervals.athlete_id = Some("saved-athlete-id".to_string());
+
+        let credentials = match merge_connection_credentials(
+            TestIntervalsConnectionRequest {
+                api_key: Some(String::new()),
+                athlete_id: Some(String::new()),
+            },
+            &current,
+        ) {
+            Ok(credentials) => credentials,
+            Err(_) => panic!("saved credentials should be reused"),
+        };
+
+        assert_eq!(credentials.api_key, "saved-api-key");
+        assert_eq!(credentials.athlete_id, "saved-athlete-id");
+        assert!(credentials.used_saved_api_key);
+        assert!(credentials.used_saved_athlete_id);
+    }
+
+    #[test]
+    fn merge_connection_credentials_reports_incomplete_saved_fallback_flags() {
+        let mut current = UserSettings::new_defaults("user-1".to_string(), 1000);
+        current.intervals.api_key = Some("saved-api-key".to_string());
+
+        let error = match merge_connection_credentials(
+            TestIntervalsConnectionRequest {
+                api_key: Some(String::new()),
+                athlete_id: None,
+            },
+            &current,
+        ) {
+            Ok(_) => panic!("partial saved credentials should stay incomplete"),
+            Err(error) => error,
+        };
+
+        assert!(!error.connected);
+        assert!(error.used_saved_api_key);
+        assert!(!error.used_saved_athlete_id);
+        assert!(error
+            .message
+            .contains("Both API key and athlete ID are required."));
+    }
+
+    #[test]
+    fn build_persisted_intervals_config_reactivates_tested_credentials() {
+        let config = build_persisted_intervals_config(&MergedCredentials {
+            api_key: "saved-api-key".to_string(),
+            athlete_id: "saved-athlete-id".to_string(),
+            used_saved_api_key: true,
+            used_saved_athlete_id: true,
+        });
+
+        assert_eq!(config.api_key.as_deref(), Some("saved-api-key"));
+        assert_eq!(config.athlete_id.as_deref(), Some("saved-athlete-id"));
+        assert!(config.connected);
     }
 }

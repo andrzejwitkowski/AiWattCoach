@@ -18,6 +18,7 @@ use crate::{
         intervals::{DateRange, IntervalsApiPort, IntervalsSettingsPort},
         training_load::TrainingLoadRecomputeUseCases,
     },
+    BackgroundTaskHandle,
 };
 
 const DEFAULT_SUCCESS_INTERVAL_SECONDS: i64 = 5 * 60;
@@ -513,7 +514,8 @@ where
 
 pub fn spawn_provider_polling_loop<Api, Settings, PollStates, Imports, Time, Ids, Refresh>(
     service: ProviderPollingService<Api, Settings, PollStates, Imports, Time, Ids, Refresh>,
-) where
+) -> BackgroundTaskHandle
+where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     PollStates: ProviderPollStateRepository,
@@ -522,17 +524,26 @@ pub fn spawn_provider_polling_loop<Api, Settings, PollStates, Imports, Time, Ids
     Ids: IdGenerator,
     Refresh: CalendarEntryViewRefreshPort,
 {
-    tokio::spawn(async move {
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
+    let join_handle = tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(DEFAULT_LOOP_INTERVAL_SECONDS));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
-            ticker.tick().await;
-            if let Err(error) = service.poll_due_once().await {
-                warn!(%error, "provider polling loop failed to list due streams");
+            tokio::select! {
+                _ = shutdown_rx.changed() => {
+                    break;
+                }
+                _ = ticker.tick() => {
+                    if let Err(error) = service.poll_due_once().await {
+                        warn!(%error, "provider polling loop failed to list due streams");
+                    }
+                }
             }
         }
     });
+
+    BackgroundTaskHandle::new("provider-polling", shutdown_tx, join_handle)
 }
 
 fn epoch_seconds_to_date(epoch_seconds: i64) -> NaiveDate {

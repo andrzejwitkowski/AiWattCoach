@@ -9,6 +9,6 @@ pub use http::{build_app, build_app_with_frontend_dist};
 pub use provider_polling::{spawn_provider_polling_loop, ProviderPollingService};
 pub use settings::{AuthSettings, MongoSettings, ServerSettings, Settings};
 pub use task_scheduler::{
-    default_task_scheduler_worker_id, spawn_task_scheduler_maintenance_loop,
+    default_task_scheduler_worker_id, spawn_task_scheduler_maintenance_loop, spawn_task_worker,
     TaskSchedulerMaintenanceConfig, TaskSchedulerWorkerConfig,
 };

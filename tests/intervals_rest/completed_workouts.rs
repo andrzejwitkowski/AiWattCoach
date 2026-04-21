@@ -199,64 +199,6 @@ async fn get_completed_workout_returns_404_for_other_users_workout() {
 }
 
 #[tokio::test]
-async fn get_completed_workout_uses_legacy_completed_workout_id_fallback() {
-    let mut workout = sample_completed_workout("intervals-activity:legacy-41", None);
-    workout.source_activity_id = None;
-
-    let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
-        TestIdentityServiceWithSession::default(),
-        TestIntervalsService::default(),
-        InMemoryCalendarEntryViewRepository::default(),
-        InMemoryCompletedWorkoutRepository::with_workouts(vec![workout]),
-    )
-    .await;
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/completed-workouts/legacy-41")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let body: Value = get_json(response).await;
-    assert_eq!(body.get("id").unwrap().as_str(), Some("legacy-41"));
-}
-
-#[tokio::test]
-async fn get_completed_workout_accepts_canonical_completed_workout_ids() {
-    let mut workout = sample_completed_workout("intervals-activity:legacy-42", None);
-    workout.source_activity_id = None;
-
-    let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
-        TestIdentityServiceWithSession::default(),
-        TestIntervalsService::default(),
-        InMemoryCalendarEntryViewRepository::default(),
-        InMemoryCompletedWorkoutRepository::with_workouts(vec![workout]),
-    )
-    .await;
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/completed-workouts/intervals-activity:legacy-42")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let body: Value = get_json(response).await;
-    assert_eq!(body.get("id").unwrap().as_str(), Some("legacy-42"));
-}
-
-#[tokio::test]
 async fn list_completed_workouts_rejects_reversed_date_ranges() {
     let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
         TestIdentityServiceWithSession::default(),

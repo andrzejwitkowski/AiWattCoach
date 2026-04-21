@@ -5,6 +5,7 @@ use std::{
 
 use axum::http::StatusCode;
 use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
 
 use super::{
     fixtures::{
@@ -83,6 +84,7 @@ impl Default for ServerState {
 pub(crate) struct TestIntervalsServer {
     address: SocketAddr,
     state: ServerState,
+    task: JoinHandle<()>,
 }
 
 impl TestIntervalsServer {
@@ -92,11 +94,15 @@ impl TestIntervalsServer {
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
 
-        Self { address, state }
+        Self {
+            address,
+            state,
+            task,
+        }
     }
 
     pub(crate) fn base_url(&self) -> String {
@@ -196,5 +202,11 @@ impl TestIntervalsServer {
 
     pub(crate) fn requests(&self) -> Vec<CapturedRequest> {
         self.state.requests.lock().unwrap().clone()
+    }
+}
+
+impl Drop for TestIntervalsServer {
+    fn drop(&mut self) {
+        self.task.abort();
     }
 }

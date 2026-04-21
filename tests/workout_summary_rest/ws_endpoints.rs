@@ -1,8 +1,9 @@
-use std::time::Duration;
+use std::{net::SocketAddr, time::Duration};
 
 use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSummaryService};
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
+use tokio::task::JoinHandle;
 use tokio::{net::TcpListener, time::timeout};
 use tokio_tungstenite::{
     connect_async,
@@ -18,6 +19,29 @@ use crate::shared::{
     TestIdentityServiceWithSession, TestWorkoutSummaryService,
 };
 
+struct SpawnedApp {
+    address: SocketAddr,
+    task: JoinHandle<()>,
+}
+
+impl SpawnedApp {
+    async fn start(app: axum::Router) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        Self { address, task }
+    }
+}
+
+impl Drop for SpawnedApp {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
 #[tokio::test]
 async fn websocket_requires_authentication() {
     let app = workout_summary_test_app(
@@ -26,13 +50,13 @@ async fn websocket_requires_authentication() {
     )
     .await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let result = connect_async(format!("ws://{address}/api/workout-summaries/workout-1/ws")).await;
+    let result = connect_async(format!(
+        "ws://{}/api/workout-summaries/workout-1/ws",
+        server.address
+    ))
+    .await;
 
     assert!(result.is_err());
 }
@@ -48,13 +72,9 @@ async fn websocket_rejects_cross_user_session() {
     )
     .await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -74,13 +94,9 @@ async fn websocket_sends_typing_then_coach_message() {
     )
     .await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -122,13 +138,9 @@ async fn websocket_queues_multiple_user_messages_in_order() {
     let app =
         workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -200,13 +212,9 @@ async fn websocket_rejects_messages_when_queue_is_full() {
         .with_coach_reply_delay(Duration::from_millis(250));
     let app = workout_summary_test_app(TestIdentityServiceWithSession::default(), service).await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -254,13 +262,9 @@ async fn websocket_disconnect_does_not_generate_queued_follow_up_replies() {
     let app =
         workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -334,13 +338,9 @@ async fn websocket_rejects_blank_message_content() {
     let app =
         workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -383,13 +383,9 @@ async fn websocket_rejects_messages_for_saved_summary() {
     let app =
         workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -435,13 +431,9 @@ async fn websocket_rejects_messages_when_rpe_is_missing() {
     let app =
         workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -483,13 +475,9 @@ async fn websocket_rejects_messages_when_availability_is_missing() {
     let app =
         workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request
@@ -542,13 +530,9 @@ async fn websocket_rejects_messages_when_real_settings_service_reports_missing_a
     )
     .await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server = SpawnedApp::start(app).await;
 
-    let mut request = format!("ws://{address}/api/workout-summaries/workout-1/ws")
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
         .into_client_request()
         .unwrap();
     request

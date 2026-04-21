@@ -53,6 +53,30 @@ impl RetryStrategy {
             }
         }
     }
+
+    pub fn next_retry_at(&self, attempt_count: u32, now_epoch_seconds: i64) -> Option<i64> {
+        if attempt_count >= self.max_attempts() {
+            return None;
+        }
+
+        let delay_seconds = match self {
+            Self::Never => return None,
+            Self::Fixed { delay_seconds, .. } => *delay_seconds,
+            Self::Exponential {
+                initial_delay_seconds,
+                max_delay_seconds,
+                ..
+            } => {
+                let exponent = attempt_count.saturating_sub(1).min(30);
+                let multiplier = 1_i64.checked_shl(exponent).unwrap_or(i64::MAX);
+                initial_delay_seconds
+                    .saturating_mul(multiplier)
+                    .min(*max_delay_seconds)
+            }
+        };
+
+        Some(now_epoch_seconds.saturating_add(delay_seconds))
+    }
 }
 
 fn validate_retry_strategy(strategy: &RetryStrategy) -> Result<(), TaskSchedulerError> {
@@ -246,6 +270,32 @@ pub struct TaskHeartbeatRequest {
     pub worker_id: String,
     pub last_heartbeat_at_epoch_seconds: i64,
     pub lease_expires_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TaskCheckpointRequest {
+    pub task_id: String,
+    pub worker_id: String,
+    pub checkpoint: Value,
+    pub updated_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TaskCompleteRequest {
+    pub task_id: String,
+    pub worker_id: String,
+    pub checkpoint: Option<Value>,
+    pub completed_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TaskFailRequest {
+    pub task_id: String,
+    pub worker_id: String,
+    pub checkpoint: Option<Value>,
+    pub error_message: String,
+    pub failed_at_epoch_seconds: i64,
+    pub retry_at_epoch_seconds: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
