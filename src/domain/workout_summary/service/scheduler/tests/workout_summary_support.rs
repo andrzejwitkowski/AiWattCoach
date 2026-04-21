@@ -215,6 +215,39 @@ pub(super) struct InMemoryCoachReplyOperationRepository {
     operations: Arc<Mutex<HashMap<ReplyOperationKey, CoachReplyOperation>>>,
 }
 
+impl InMemoryCoachReplyOperationRepository {
+    pub(super) fn seed(&self, operation: CoachReplyOperation) {
+        self.operations
+            .lock()
+            .expect("reply op mutex poisoned")
+            .insert(
+                (
+                    operation.user_id.clone(),
+                    operation.workout_id.clone(),
+                    operation.user_message_id.clone(),
+                ),
+                operation,
+            );
+    }
+
+    pub(super) fn get(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        user_message_id: &str,
+    ) -> Option<CoachReplyOperation> {
+        self.operations
+            .lock()
+            .expect("reply op mutex poisoned")
+            .get(&(
+                user_id.to_string(),
+                workout_id.to_string(),
+                user_message_id.to_string(),
+            ))
+            .cloned()
+    }
+}
+
 impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     fn find_by_user_message_id(
         &self,
@@ -480,7 +513,29 @@ pub(super) fn direct_service(
     Arc::new(WorkoutSummaryService::with_coach(
         repository,
         InMemoryCoachReplyOperationRepository::default(),
+        TestClock::default(),
+        TestIdGenerator::default(),
+        coach,
+    ))
+}
+
+pub(super) fn direct_service_with_operation_repository(
+    repository: InMemoryWorkoutSummaryRepository,
+    reply_operations: InMemoryCoachReplyOperationRepository,
+    clock: TestClock,
+    coach: Arc<dyn WorkoutCoach>,
+) -> Arc<
+    WorkoutSummaryService<
+        InMemoryWorkoutSummaryRepository,
+        InMemoryCoachReplyOperationRepository,
         TestClock,
+        TestIdGenerator,
+    >,
+> {
+    Arc::new(WorkoutSummaryService::with_coach(
+        repository,
+        reply_operations,
+        clock,
         TestIdGenerator::default(),
         coach,
     ))
@@ -502,7 +557,7 @@ pub(super) fn direct_service_with_athlete_summary(
         WorkoutSummaryService::with_coach(
             repository,
             InMemoryCoachReplyOperationRepository::default(),
-            TestClock,
+            TestClock::default(),
             TestIdGenerator::default(),
             coach,
         )

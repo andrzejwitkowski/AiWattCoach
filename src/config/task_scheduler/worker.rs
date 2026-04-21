@@ -450,6 +450,7 @@ async fn fail_unhandled_task<Tasks, Workers, Time>(
                 task.task_type
             ),
             retryable: false,
+            retry_delay_seconds: None,
             retry_strategy: &task.retry_strategy,
             attempt_count: task.attempt_count,
         })
@@ -492,6 +493,7 @@ async fn persist_task_outcome<Tasks, Workers, Time>(
             checkpoint,
             error_message,
             retryable,
+            retry_delay_seconds,
         } => {
             if let Err(error) = scheduler
                 .fail_task(FailTaskInput {
@@ -500,6 +502,7 @@ async fn persist_task_outcome<Tasks, Workers, Time>(
                     checkpoint,
                     error_message,
                     retryable,
+                    retry_delay_seconds,
                     retry_strategy: &task.retry_strategy,
                     attempt_count: task.attempt_count,
                 })

@@ -1,5 +1,6 @@
 use tracing::warn;
 
+use super::super::STALE_PENDING_TIMEOUT_SECONDS;
 use super::checkpoint::serialize_completed_coach_reply_checkpoint;
 use super::*;
 
@@ -16,20 +17,21 @@ where
     Base: WorkoutSummaryUseCases + 'static,
 {
     fn map_task_failure(error: WorkoutSummaryError) -> TaskRunOutcome {
-        let retryable = match &error {
-            WorkoutSummaryError::Llm(llm_error) => llm_error_is_retryable(llm_error),
-            WorkoutSummaryError::Repository(_) => true,
-            WorkoutSummaryError::ReplyAlreadyPending => true,
+        let (retryable, retry_delay_seconds) = match &error {
+            WorkoutSummaryError::Llm(llm_error) => (llm_error_is_retryable(llm_error), None),
+            WorkoutSummaryError::Repository(_) => (true, None),
+            WorkoutSummaryError::ReplyAlreadyPending => (true, Some(STALE_PENDING_TIMEOUT_SECONDS)),
             WorkoutSummaryError::AlreadyExists
             | WorkoutSummaryError::Locked
             | WorkoutSummaryError::NotFound
-            | WorkoutSummaryError::Validation(_) => false,
+            | WorkoutSummaryError::Validation(_) => (false, None),
         };
 
         TaskRunOutcome::Failed {
             checkpoint: serde_json::to_value(serialize_workout_summary_error(&error)).ok(),
             error_message: error.to_string(),
             retryable,
+            retry_delay_seconds,
         }
     }
 
@@ -63,6 +65,7 @@ where
                         checkpoint: None,
                         error_message: error.to_string(),
                         retryable: false,
+                        retry_delay_seconds: None,
                     };
                 }
             };

@@ -172,6 +172,7 @@ async fn fail_task_schedules_retry_for_retryable_task() {
             checkpoint: Some(json!({ "stage": "provider" })),
             error_message: "temporary error".to_string(),
             retryable: true,
+            retry_delay_seconds: None,
             retry_strategy: &claimed.retry_strategy,
             attempt_count: claimed.attempt_count,
         })

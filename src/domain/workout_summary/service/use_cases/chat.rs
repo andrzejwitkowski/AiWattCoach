@@ -151,7 +151,7 @@ where
         let pending_operation =
             self.build_pending_coach_reply_operation(user_id, workout_id, user_message);
         let stale_before_epoch_seconds =
-            self.clock.now_epoch_seconds() - Self::STALE_PENDING_TIMEOUT_SECONDS;
+            self.clock.now_epoch_seconds() - STALE_PENDING_TIMEOUT_SECONDS;
 
         match self
             .reply_operations

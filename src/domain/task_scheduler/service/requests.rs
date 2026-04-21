@@ -76,18 +76,30 @@ where
 
     pub(super) fn build_fail_request(&self, input: FailTaskInput<'_>) -> TaskFailRequest {
         let failed_at_epoch_seconds = self.clock.now_epoch_seconds();
-        let retry_at_epoch_seconds = input.retryable.then(|| {
-            input
-                .retry_strategy
-                .next_retry_at(input.attempt_count, failed_at_epoch_seconds)
-        });
+        let retry_at_epoch_seconds = if input.retryable {
+            if input.attempt_count >= input.retry_strategy.max_attempts() {
+                None
+            } else {
+                input
+                    .retry_delay_seconds
+                    .filter(|delay_seconds| *delay_seconds > 0)
+                    .map(|delay_seconds| failed_at_epoch_seconds.saturating_add(delay_seconds))
+                    .or_else(|| {
+                        input
+                            .retry_strategy
+                            .next_retry_at(input.attempt_count, failed_at_epoch_seconds)
+                    })
+            }
+        } else {
+            None
+        };
         TaskFailRequest {
             task_id: input.task_id.to_string(),
             worker_id: input.worker_id.to_string(),
             checkpoint: input.checkpoint,
             error_message: input.error_message,
             failed_at_epoch_seconds,
-            retry_at_epoch_seconds: retry_at_epoch_seconds.flatten(),
+            retry_at_epoch_seconds,
         }
     }
 }

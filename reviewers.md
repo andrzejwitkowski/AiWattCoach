@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-21 | user | training plan projected-day roots and calendar view refresh
+
+- Problem: after saving a new workout, a fresh training-plan projection was persisted for the new window, but the calendar could still miss the first projected day of that new snapshot. Real Mongo data showed `training_plan_projected_days` already contained an active row for `2026-04-22` while `calendar_entry_views` did not. The root cause was not refresh-range cleanup; the bridge readers for projected plans were still filtering with `date > snapshot.start_date`, so the first day of every snapshot was silently dropped before calendar refresh and other projected-day readers ever saw it.
+- Fix: changed the projected-day root readers to treat `snapshot.start_date` as inclusive in both Mongo adapters and the in-memory training-plan test repository, updated the Mongo regression tests that had encoded the old exclusion behavior, and added an integration regression proving `CalendarEntryViewRefreshService` now writes a planned calendar entry for a projected workout that lands on `snapshot.start_date`.
+- Prevention: when a projection snapshot stores dated `days`, treat `start_date` as the first real day in that window unless there is an explicit separate anchor-day model. Before blaming downstream refresh logic, compare the durable source rows and the first read adapter that reconstructs canonical roots from them.
+
+### 2026-04-21 | user | workout summary scheduler pending-retry recovery
+
+- Problem: scheduler-backed `workout_summary.coach_reply` retries still used the generic 30-second task delay even when the direct coach-reply workflow returned `ReplyAlreadyPending`, but the underlying `CoachReplyOperation` only became reclaimable after the 300-second stale window. That mismatch could exhaust task retries and leave a failed task even though the durable reply operation was still recoverable later.
+- Fix: added a scheduler failure-path retry-delay override so `ReplyAlreadyPending` reschedules the task at the coach-reply stale-operation window instead of the generic fixed delay, kept the direct workflow semantics unchanged, and added a scheduler-backed regression test that proves the delayed retry succeeds once the reclaim window opens.
+- Prevention: whenever a scheduled wrapper sits on top of another durable operation with its own reclaim or stale timeout, compare the scheduler retry cadence against that recovery window explicitly; do not let wrapper retries exhaust before the wrapped durable state can be reclaimed.
+
 ### 2026-04-21 | user | task scheduler review follow-up on PR #120
 
 - Problem: the shared task worker runtime still lived under `src/domain/task_scheduler`, which kept `tokio` runtime orchestration in the domain layer, and both `src/domain/task_scheduler/service.rs` and the scheduler worker file had grown too large to review comfortably. The task storage also lacked a cleanup policy for terminal task records.

@@ -5,6 +5,7 @@ use std::{
 
 use aiwattcoach::{
     adapters::mongo::{
+        calendar_entry_views::MongoCalendarEntryViewRepository,
         completed_workouts::MongoCompletedWorkoutRepository,
         planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
         planned_workout_tokens::MongoPlannedWorkoutTokenRepository,
@@ -12,11 +13,17 @@ use aiwattcoach::{
         training_plan_projections::MongoTrainingPlanProjectionRepository,
     },
     domain::{
+        calendar::NoopPlannedWorkoutSyncRepository,
+        calendar_view::{
+            CalendarEntryKind, CalendarEntryViewRefreshPort, CalendarEntryViewRefreshService,
+            CalendarEntryViewRepository,
+        },
         completed_workouts::{
             CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics,
             CompletedWorkoutRepository, CompletedWorkoutSeries, CompletedWorkoutStream,
             CompletedWorkoutZoneTime,
         },
+        external_sync::NoopExternalSyncStateRepository,
         planned_completed_links::{
             PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkMatchSource,
             PlannedCompletedWorkoutLinkRepository,
@@ -26,6 +33,7 @@ use aiwattcoach::{
             PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutRepository,
             PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
         },
+        races::{Race, RaceError, RaceRepository},
         special_days::{SpecialDay, SpecialDayKind, SpecialDayRepository},
         training_plan::{
             TrainingPlanDay, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
@@ -86,7 +94,7 @@ async fn planned_workout_repository_reads_active_projected_days_as_canonical_wor
 }
 
 #[tokio::test]
-async fn planned_workout_repository_excludes_snapshot_start_date_even_when_it_has_workout() {
+async fn planned_workout_repository_includes_snapshot_start_date_when_it_has_workout() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
     };
@@ -114,8 +122,67 @@ async fn planned_workout_repository_excludes_snapshot_start_date_even_when_it_ha
         .await
         .unwrap();
 
-    assert_eq!(workouts.len(), 13);
-    assert!(!workouts.iter().any(|workout| workout.date == "2026-04-06"));
+    assert_eq!(workouts.len(), 14);
+    assert!(workouts.iter().any(|workout| workout.date == "2026-04-06"));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn calendar_entry_view_refresh_includes_projected_workout_on_snapshot_start_date() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let projection_repository =
+        MongoTrainingPlanProjectionRepository::new(fixture.client.clone(), &fixture.database);
+    projection_repository.ensure_indexes().await.unwrap();
+    let planned_repository =
+        MongoPlannedWorkoutRepository::new(fixture.client.clone(), &fixture.database);
+    let calendar_repository =
+        MongoCalendarEntryViewRepository::new(fixture.client.clone(), &fixture.database);
+    calendar_repository.ensure_indexes().await.unwrap();
+
+    let snapshot = sample_snapshot_with_workout_on_start_date(
+        "training-plan:user-1:workout-4:1700000003",
+        "2026-04-06",
+    );
+    projection_repository
+        .replace_window(
+            snapshot.clone(),
+            sample_projected_days(&snapshot),
+            "2026-04-06",
+            1_700_000_003,
+        )
+        .await
+        .unwrap();
+
+    let refresh = CalendarEntryViewRefreshService::new(
+        calendar_repository.clone(),
+        planned_repository,
+        NoopPlannedWorkoutSyncRepository,
+        (),
+        EmptyRaceRepository,
+        EmptySpecialDayRepository,
+        NoopExternalSyncStateRepository,
+    );
+
+    refresh
+        .refresh_range_for_user("user-1", "2026-04-06", "2026-04-19")
+        .await
+        .unwrap();
+
+    let entries = calendar_repository
+        .list_by_user_id_and_date_range("user-1", "2026-04-06", "2026-04-06")
+        .await
+        .unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].entry_kind, CalendarEntryKind::PlannedWorkout);
+    assert_eq!(entries[0].date, "2026-04-06");
+    assert_eq!(
+        entries[0].planned_workout_id.as_deref(),
+        Some("training-plan:user-1:workout-4:1700000003:2026-04-06")
+    );
 
     fixture.cleanup().await;
 }
@@ -679,4 +746,78 @@ fn sample_special_day(special_day_id: &str, user_id: &str, date: &str) -> Specia
         Some("Recovery day".to_string()),
     )
     .unwrap()
+}
+
+#[derive(Clone, Default)]
+struct EmptyRaceRepository;
+
+impl RaceRepository for EmptyRaceRepository {
+    fn list_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> aiwattcoach::domain::races::BoxFuture<Result<Vec<Race>, RaceError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn list_by_user_id_and_range(
+        &self,
+        _user_id: &str,
+        _range: &aiwattcoach::domain::intervals::DateRange,
+    ) -> aiwattcoach::domain::races::BoxFuture<Result<Vec<Race>, RaceError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn find_by_user_id_and_race_id(
+        &self,
+        _user_id: &str,
+        _race_id: &str,
+    ) -> aiwattcoach::domain::races::BoxFuture<Result<Option<Race>, RaceError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn upsert(&self, race: Race) -> aiwattcoach::domain::races::BoxFuture<Result<Race, RaceError>> {
+        Box::pin(async move { Ok(race) })
+    }
+
+    fn delete(
+        &self,
+        _user_id: &str,
+        _race_id: &str,
+    ) -> aiwattcoach::domain::races::BoxFuture<Result<(), RaceError>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[derive(Clone, Default)]
+struct EmptySpecialDayRepository;
+
+impl SpecialDayRepository for EmptySpecialDayRepository {
+    fn list_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> aiwattcoach::domain::special_days::BoxFuture<
+        Result<Vec<SpecialDay>, aiwattcoach::domain::special_days::SpecialDayError>,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        _user_id: &str,
+        _oldest: &str,
+        _newest: &str,
+    ) -> aiwattcoach::domain::special_days::BoxFuture<
+        Result<Vec<SpecialDay>, aiwattcoach::domain::special_days::SpecialDayError>,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn upsert(
+        &self,
+        special_day: SpecialDay,
+    ) -> aiwattcoach::domain::special_days::BoxFuture<
+        Result<SpecialDay, aiwattcoach::domain::special_days::SpecialDayError>,
+    > {
+        Box::pin(async move { Ok(special_day) })
+    }
 }

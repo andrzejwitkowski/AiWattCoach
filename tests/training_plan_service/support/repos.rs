@@ -95,7 +95,7 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 .filter(|day| {
                     snapshot_start_dates
                         .get(&day.operation_key)
-                        .is_some_and(|start_date| day.date > *start_date)
+                        .is_some_and(|start_date| day.date >= *start_date)
                 })
                 .collect())
         })
@@ -131,7 +131,7 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
             };
             Ok(days
                 .into_iter()
-                .filter(|day| day.date > snapshot_start_date)
+                .filter(|day| day.date >= snapshot_start_date)
                 .collect())
         })
     }
@@ -172,7 +172,7 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
             };
             Ok(days
                 .into_iter()
-                .filter(|day| day.date > snapshot_start_date)
+                .filter(|day| day.date >= snapshot_start_date)
                 .collect())
         })
     }

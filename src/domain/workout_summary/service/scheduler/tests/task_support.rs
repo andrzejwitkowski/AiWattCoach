@@ -28,6 +28,15 @@ impl InMemoryTaskRepository {
             .cloned()
             .expect("expected one task in repo")
     }
+
+    pub(super) fn only_task_if_present(&self) -> Option<ScheduledTask> {
+        self.tasks
+            .lock()
+            .expect("task repo mutex poisoned")
+            .values()
+            .next()
+            .cloned()
+    }
 }
 
 impl TaskRepository for InMemoryTaskRepository {
@@ -327,11 +336,31 @@ impl TaskWorkerRepository for InMemoryTaskWorkerRepository {
 }
 
 #[derive(Clone)]
-pub(super) struct TestClock;
+pub(super) struct TestClock {
+    now_epoch_seconds: Arc<Mutex<i64>>,
+}
+
+impl Default for TestClock {
+    fn default() -> Self {
+        Self::new(1_700_000_000)
+    }
+}
+
+impl TestClock {
+    pub(super) fn new(now_epoch_seconds: i64) -> Self {
+        Self {
+            now_epoch_seconds: Arc::new(Mutex::new(now_epoch_seconds)),
+        }
+    }
+
+    pub(super) fn set_now(&self, now_epoch_seconds: i64) {
+        *self.now_epoch_seconds.lock().expect("clock mutex poisoned") = now_epoch_seconds;
+    }
+}
 
 impl Clock for TestClock {
     fn now_epoch_seconds(&self) -> i64 {
-        1_700_000_000
+        *self.now_epoch_seconds.lock().expect("clock mutex poisoned")
     }
 }
 

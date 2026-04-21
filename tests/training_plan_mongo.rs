@@ -264,10 +264,14 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
     assert_eq!(projected_days.len(), 14);
 
     let active_for_user = repository.list_active_by_user_id("user-1").await.unwrap();
-    assert!(active_for_user
-        .iter()
-        .all(|day| day.operation_key == second_snapshot.operation_key));
-    assert!(!active_for_user.iter().any(|day| day.date == "2026-04-07"));
+    assert!(active_for_user.iter().any(|day| {
+        day.operation_key == first_snapshot.operation_key && day.date == "2026-04-06"
+    }));
+    assert!(active_for_user.iter().any(|day| day.date == "2026-04-07"));
+    assert!(active_for_user.iter().all(|day| {
+        day.operation_key == first_snapshot.operation_key
+            || day.operation_key == second_snapshot.operation_key
+    }));
     assert!(!active_for_user
         .iter()
         .any(|day| day.operation_key == other_user_snapshot.operation_key));
@@ -276,7 +280,8 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
         .find_active_by_operation_key(&first_snapshot.operation_key)
         .await
         .unwrap();
-    assert!(first_active.is_empty());
+    assert_eq!(first_active.len(), 1);
+    assert_eq!(first_active[0].date, "2026-04-06");
 
     fixture.cleanup().await;
 }
@@ -443,7 +448,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
         .find_active_by_operation_key(&snapshot.operation_key)
         .await
         .unwrap();
-    assert_eq!(active_for_operation.len(), 13);
+    assert_eq!(active_for_operation.len(), 14);
 
     fixture.cleanup().await;
 }

@@ -20,6 +20,7 @@ pub enum TaskRunOutcome {
         checkpoint: Option<serde_json::Value>,
         error_message: String,
         retryable: bool,
+        retry_delay_seconds: Option<i64>,
     },
 }
 

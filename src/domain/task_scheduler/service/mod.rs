@@ -23,6 +23,7 @@ pub struct FailTaskInput<'a> {
     pub checkpoint: Option<serde_json::Value>,
     pub error_message: String,
     pub retryable: bool,
+    pub retry_delay_seconds: Option<i64>,
     pub retry_strategy: &'a crate::domain::task_scheduler::RetryStrategy,
     pub attempt_count: u32,
 }

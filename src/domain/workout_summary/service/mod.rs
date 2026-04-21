@@ -23,6 +23,7 @@ mod use_cases;
 mod tests;
 
 const POST_PROVIDER_WRITE_ATTEMPTS: usize = 2;
+pub(super) const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
 
 pub use scheduler::{
     spawn_workout_summary_coach_reply_task_runner, workout_summary_coach_reply_task_handler,
@@ -170,8 +171,6 @@ where
     Time: Clock + Clone,
     Ids: IdGenerator + Clone,
 {
-    const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
-
     pub fn new(repository: Repo, reply_operations: Ops, clock: Time, ids: Ids) -> Self {
         Self::with_coach(
             repository,

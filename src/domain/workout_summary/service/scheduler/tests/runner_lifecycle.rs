@@ -1,6 +1,7 @@
 use serde_json::json;
 use serial_test::serial;
 
+use crate::domain::identity::Clock;
 use crate::domain::task_scheduler::{
     NewTask, RetryStrategy, SharedTaskHandler, TaskSchedulerError, TaskSchedulerService, TaskStatus,
 };
@@ -22,10 +23,11 @@ async fn workout_summary_task_runner_reports_active_task_ids() {
         .await
         .expect("user message should persist");
     let worker_repository = InMemoryTaskWorkerRepository::default();
+    let clock = TestClock::default();
     let scheduler = TaskSchedulerService::new(
         InMemoryTaskRepository::default(),
         worker_repository.clone(),
-        TestClock,
+        clock,
     );
     let worker = spawn_workout_summary_coach_reply_task_runner(
         direct.clone(),
@@ -73,10 +75,11 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let direct = direct_service(repository, BlockingCoach::new());
     let task_repository = InMemoryTaskRepository::default();
+    let clock = TestClock::default();
     let scheduler = TaskSchedulerService::new(
         task_repository.clone(),
         InMemoryTaskWorkerRepository::default(),
-        TestClock,
+        clock.clone(),
     );
     let task = crate::domain::task_scheduler::ScheduledTask::new(
         NewTask {
@@ -89,7 +92,7 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
             execution_timeout_seconds: COACH_REPLY_EXECUTION_TIMEOUT_SECONDS,
             leader_only: false,
         },
-        TestClock.now_epoch_seconds(),
+        clock.now_epoch_seconds(),
     )
     .expect("task should be valid apart from payload shape");
     task_repository
@@ -126,10 +129,11 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
 
 #[test]
 fn spawn_task_worker_rejects_duplicate_task_handlers() {
+    let clock = TestClock::default();
     let scheduler = TaskSchedulerService::new(
         InMemoryTaskRepository::default(),
         InMemoryTaskWorkerRepository::default(),
-        TestClock,
+        clock,
     );
     let handler = workout_summary_coach_reply_task_handler(direct_service(
         InMemoryWorkoutSummaryRepository::with_summary(existing_summary()),
