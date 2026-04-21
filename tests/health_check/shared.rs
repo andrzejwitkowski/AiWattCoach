@@ -1,10 +1,7 @@
 use std::{
     fs,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        OnceLock,
-    },
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -19,7 +16,6 @@ pub(crate) const HTML_CONTENT_TYPE: &str = "text/html";
 pub(crate) const DOCUMENT_ACCEPT: &str = "text/html,application/xhtml+xml";
 pub(crate) const DOCUMENT_DEST: &str = "document";
 
-static TEST_MONGO_CLIENT: OnceLock<mongodb::Client> = OnceLock::new();
 static FRONTEND_FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) struct HealthTestApp {
@@ -156,15 +152,9 @@ pub(crate) fn assert_log_entry_contains(logs: &str, expected_fragments: &[&str])
 }
 
 async fn test_mongo_client(uri: &str) -> mongodb::Client {
-    if let Some(client) = TEST_MONGO_CLIENT.get() {
-        return client.clone();
-    }
-
-    let client = mongodb::Client::with_uri_str(uri)
+    mongodb::Client::with_uri_str(uri)
         .await
-        .expect("test mongo client should be created");
-    let _ = TEST_MONGO_CLIENT.set(client.clone());
-    client
+        .expect("test mongo client should be created")
 }
 
 fn unreachable_mongo_settings() -> Settings {

@@ -26,7 +26,6 @@ pub(crate) type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
 static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
-static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 
 pub(crate) async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
     let settings = Settings::test_defaults();
@@ -405,15 +404,9 @@ impl IdentityUseCases for TestIdentityService {
 }
 
 async fn test_mongo_client(uri: &str) -> Client {
-    if let Some(client) = TEST_MONGO_CLIENT.get() {
-        return client.clone();
-    }
-
-    let client = Client::with_uri_str(uri)
+    Client::with_uri_str(uri)
         .await
-        .expect("test mongo client should be created");
-    let _ = TEST_MONGO_CLIENT.set(client.clone());
-    client
+        .expect("test mongo client should be created")
 }
 
 fn shared_frontend_fixture() -> &'static FrontendFixture {

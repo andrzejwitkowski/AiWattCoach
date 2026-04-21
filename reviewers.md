@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-21 | user | Rust test harness instability follow-up
+
+- Problem: after the earlier memory-hygiene cleanup, the full `cargo test -- --nocapture` run was still failing for harness reasons that looked like flaky suite instability: tracing-capture helpers assumed the global active buffer map must be empty even while parallel tests were still running, and multiple Mongo-backed test helpers reused a `OnceLock<mongodb::Client>` across separate `#[tokio::test]` runtimes, which led to cancelled driver tasks and runtime-shutdown errors.
+- Fix: changed the tracing-capture assertions to verify that the current capture was cleaned up instead of asserting global emptiness, removed the outer `tokio::time::timeout(...)` cancellation pattern from Mongo test availability checks in favor of short driver `server_selection_timeout` settings, and stopped reusing shared Mongo clients across separate test runtimes in the affected helpers.
+- Prevention: when stabilizing Rust test harness code, validate per-test isolation instead of global-emptiness assumptions, and do not share async driver clients across independent `#[tokio::test]` runtimes unless the resource lifetime is guaranteed to outlive every runtime that uses it.
+
 ### 2026-04-21 | user | integration vs unit test boundary cleanup
 
 - Problem: several REST integration suites were asserting domain behavior and adapter helper rules that already belonged below the HTTP layer, which duplicated coverage and made the endpoint suites larger than necessary.

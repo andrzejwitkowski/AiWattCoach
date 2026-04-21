@@ -21,7 +21,7 @@ use aiwattcoach::{
         wait_for_ctrl_c,
     },
 };
-use mongodb::{bson::doc, Client};
+use mongodb::{bson::doc, options::ClientOptions, Client};
 use tokio::sync::Notify;
 use tokio::time::{timeout, Duration};
 
@@ -389,26 +389,19 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
 async fn test_mongo_client_or_skip() -> Option<Client> {
     let uri =
         std::env::var("TEST_MONGO_URI").unwrap_or_else(|_| "mongodb://localhost:27017".to_string());
-    let client = Client::with_uri_str(&uri)
+    let mut options = ClientOptions::parse(&uri)
         .await
         .expect("test mongo client should parse uri");
-    match timeout(
-        Duration::from_secs(2),
-        client.database("admin").run_command(doc! { "ping": 1 }),
-    )
-    .await
+    options.server_selection_timeout = Some(Duration::from_secs(2));
+    let client = Client::with_options(options).expect("test mongo client should be created");
+    match client
+        .database("admin")
+        .run_command(doc! { "ping": 1 })
+        .await
     {
-        Ok(Ok(_)) => Some(client),
-        Ok(Err(error)) => {
+        Ok(_) => Some(client),
+        Err(error) => {
             let message = format!("failed to connect to Mongo at {uri}: {error}");
-            if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
-                panic!("main_runtime test requires Mongo in CI: {message}");
-            }
-            eprintln!("skipping main_runtime mongo test: {message}");
-            None
-        }
-        Err(_) => {
-            let message = format!("timed out connecting to Mongo at {uri}");
             if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
                 panic!("main_runtime test requires Mongo in CI: {message}");
             }

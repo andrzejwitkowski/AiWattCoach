@@ -19,7 +19,6 @@ use aiwattcoach::{
 use mongodb::Client;
 
 static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
-static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 
 pub(crate) async fn dashboard_test_app(
     identity_service: impl IdentityUseCases + 'static,
@@ -118,13 +117,7 @@ impl FrontendFixture {
 }
 
 async fn test_mongo_client(uri: &str) -> Client {
-    if let Some(client) = TEST_MONGO_CLIENT.get() {
-        return client.clone();
-    }
-
-    let client = Client::with_uri_str(uri)
+    Client::with_uri_str(uri)
         .await
-        .expect("test mongo client should be created");
-    let _ = TEST_MONGO_CLIENT.set(client.clone());
-    client
+        .expect("test mongo client should be created")
 }

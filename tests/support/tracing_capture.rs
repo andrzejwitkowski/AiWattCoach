@@ -110,7 +110,7 @@ impl Drop for ActiveLogBufferGuard {
     }
 }
 
-pub async fn capture_tracing_logs<F, Fut, T>(run: F) -> (T, String)
+pub async fn capture_tracing_logs_with_capture_id<F, Fut, T>(run: F) -> (T, String, String)
 where
     F: FnOnce() -> Fut,
     Fut: Future<Output = T>,
@@ -122,21 +122,31 @@ where
         TRACE_CAPTURE_ID.fetch_add(1, Ordering::Relaxed)
     );
     let _active_buffer = ActiveLogBufferGuard::install(capture_id.clone(), logs.clone());
-    let output = CURRENT_CAPTURE_ID.scope(capture_id, run()).await;
+    let output = CURRENT_CAPTURE_ID.scope(capture_id.clone(), run()).await;
     // Stop routing new writes to this capture before reading out the buffered contents.
     drop(_active_buffer);
     let captured = logs.contents();
 
+    (output, captured, capture_id)
+}
+
+#[allow(dead_code)]
+pub async fn capture_tracing_logs<F, Fut, T>(run: F) -> (T, String)
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = T>,
+{
+    let (output, captured, _) = capture_tracing_logs_with_capture_id(run).await;
     (output, captured)
 }
 
 #[cfg(test)]
-pub fn active_log_buffer_count() -> usize {
+pub fn is_capture_active(capture_id: &str) -> bool {
     ACTIVE_LOG_BUFFERS
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
         .expect("active log buffers mutex poisoned")
-        .len()
+        .contains_key(capture_id)
 }
 
 fn init_test_tracing_subscriber() {
@@ -163,8 +173,8 @@ mod tests {
     use tracing_subscriber::fmt::MakeWriter;
 
     use super::{
-        active_log_buffer_count, capture_tracing_logs, ActiveLogBufferGuard, GlobalLogRouter,
-        SharedLogBuffer, CURRENT_CAPTURE_ID,
+        capture_tracing_logs_with_capture_id, is_capture_active, ActiveLogBufferGuard,
+        GlobalLogRouter, SharedLogBuffer, CURRENT_CAPTURE_ID,
     };
 
     #[tokio::test(flavor = "current_thread")]
@@ -219,7 +229,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn capture_tracing_logs_does_not_accumulate_active_buffers() {
         for attempt in 0..100 {
-            let (value, logs) = capture_tracing_logs(|| async move {
+            let (value, logs, capture_id) = capture_tracing_logs_with_capture_id(|| async move {
                 tracing::info!(attempt, "captured test log");
                 attempt
             })
@@ -227,7 +237,7 @@ mod tests {
 
             assert_eq!(value, attempt);
             assert!(logs.contains("captured test log"));
-            assert_eq!(active_log_buffer_count(), 0);
+            assert!(!is_capture_active(&capture_id));
         }
     }
 }

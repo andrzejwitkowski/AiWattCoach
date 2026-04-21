@@ -15,7 +15,6 @@ use crate::support::tracing_capture::capture_tracing_logs;
 
 const RESPONSE_LIMIT_BYTES: usize = 16 * 1024;
 static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
-static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 #[tokio::test(flavor = "current_thread")]
 async fn valid_info_warn_and_error_payloads_are_accepted() {
     let app = logs_test_app().await;
@@ -379,13 +378,7 @@ impl Drop for FrontendFixture {
 }
 
 async fn test_mongo_client(uri: &str) -> Client {
-    if let Some(client) = TEST_MONGO_CLIENT.get() {
-        return client.clone();
-    }
-
-    let client = Client::with_uri_str(uri)
+    Client::with_uri_str(uri)
         .await
-        .expect("test mongo client should be created");
-    let _ = TEST_MONGO_CLIENT.set(client.clone());
-    client
+        .expect("test mongo client should be created")
 }

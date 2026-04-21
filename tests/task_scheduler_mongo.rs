@@ -1,12 +1,12 @@
 use std::{
     sync::atomic::{AtomicU64, Ordering},
-    sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, Document},
+    options::ClientOptions,
     Client,
 };
 
@@ -18,7 +18,7 @@ use aiwattcoach::{
 use serde_json::json;
 
 static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
-static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
+const TEST_MONGO_SERVER_SELECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[tokio::test]
 async fn mongo_task_repository_dedupes_per_user_and_creates_compound_unique_index() {
@@ -113,17 +113,15 @@ impl MongoFixture {
     async fn new() -> Result<Self, String> {
         let settings = Settings::test_defaults();
         let mongo_uri = settings.mongo.uri.clone();
-        let client = if let Some(client) = TEST_MONGO_CLIENT.get() {
-            client.clone()
-        } else {
-            let client = Client::with_uri_str(&settings.mongo.uri)
-                .await
-                .map_err(|error| {
-                    format!("failed to create test mongo client for {mongo_uri}: {error}")
-                })?;
-            let _ = TEST_MONGO_CLIENT.set(client.clone());
-            client
-        };
+        let mut options = ClientOptions::parse(&settings.mongo.uri)
+            .await
+            .map_err(|error| {
+                format!("failed to create test mongo client for {mongo_uri}: {error}")
+            })?;
+        options.server_selection_timeout = Some(TEST_MONGO_SERVER_SELECTION_TIMEOUT);
+        let client = Client::with_options(options).map_err(|error| {
+            format!("failed to create test mongo client for {mongo_uri}: {error}")
+        })?;
         client
             .database("admin")
             .run_command(doc! { "ping": 1 })

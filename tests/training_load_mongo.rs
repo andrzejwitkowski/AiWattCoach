@@ -1,6 +1,5 @@
 use std::{
     sync::atomic::{AtomicU64, Ordering},
-    sync::OnceLock,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -15,10 +14,10 @@ use aiwattcoach::{
     },
     Settings,
 };
-use mongodb::{bson::doc, Client};
+use mongodb::{bson::doc, options::ClientOptions, Client};
 
 static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
-static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
+const TEST_MONGO_SERVER_SELECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[tokio::test]
 async fn ftp_history_repository_upserts_and_resolves_effective_entry() {
@@ -185,24 +184,22 @@ impl MongoFixture {
         let settings = Settings::test_defaults();
         let mongo_uri = settings.mongo.uri.clone();
         let mongo_uri_for_log = redact_uri_credentials(&mongo_uri);
-        let client = if let Some(client) = TEST_MONGO_CLIENT.get() {
-            client.clone()
-        } else {
-            let client = Client::with_uri_str(&settings.mongo.uri)
-                .await
-                .map_err(|error| {
-                    format!("failed to create test mongo client for {mongo_uri_for_log}: {error}")
-                })?;
-            let _ = TEST_MONGO_CLIENT.set(client.clone());
-            client
-        };
-        tokio::time::timeout(
-            Duration::from_secs(1),
-            client.database("admin").run_command(doc! { "ping": 1 }),
-        )
-        .await
-        .map_err(|_| format!("timed out connecting to Mongo at {mongo_uri_for_log}"))?
-        .map_err(|error| format!("failed to connect to Mongo at {mongo_uri_for_log}: {error}"))?;
+        let mut options = ClientOptions::parse(&settings.mongo.uri)
+            .await
+            .map_err(|error| {
+                format!("failed to create test mongo client for {mongo_uri_for_log}: {error}")
+            })?;
+        options.server_selection_timeout = Some(TEST_MONGO_SERVER_SELECTION_TIMEOUT);
+        let client = Client::with_options(options).map_err(|error| {
+            format!("failed to create test mongo client for {mongo_uri_for_log}: {error}")
+        })?;
+        client
+            .database("admin")
+            .run_command(doc! { "ping": 1 })
+            .await
+            .map_err(|error| {
+                format!("failed to connect to Mongo at {mongo_uri_for_log}: {error}")
+            })?;
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

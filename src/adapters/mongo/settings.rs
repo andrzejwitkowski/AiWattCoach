@@ -1269,7 +1269,18 @@ mod tests {
 
     async fn test_mongo_client_or_skip() -> Option<Client> {
         let mongo_uri = test_mongo_uri();
-        let client = match Client::with_uri_str(&mongo_uri).await {
+        let mut options = match mongodb::options::ClientOptions::parse(&mongo_uri).await {
+            Ok(options) => options,
+            Err(error) => {
+                if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
+                    panic!("mongo settings test requires Mongo in CI: {error}");
+                }
+                eprintln!("skipping mongo settings test: failed to parse client options for {mongo_uri}: {error}");
+                return None;
+            }
+        };
+        options.server_selection_timeout = Some(std::time::Duration::from_secs(1));
+        let client = match Client::with_options(options) {
             Ok(client) => client,
             Err(error) => {
                 if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
@@ -1280,27 +1291,17 @@ mod tests {
             }
         };
 
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            client.database("admin").run_command(doc! { "ping": 1 }),
-        )
-        .await
+        match client
+            .database("admin")
+            .run_command(doc! { "ping": 1 })
+            .await
         {
-            Ok(Ok(_)) => Some(client),
-            Ok(Err(error)) => {
+            Ok(_) => Some(client),
+            Err(error) => {
                 if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
                     panic!("mongo settings test requires Mongo in CI: {error}");
                 }
                 eprintln!("skipping mongo settings test: failed to connect to Mongo at {mongo_uri}: {error}");
-                None
-            }
-            Err(_) => {
-                if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
-                    panic!("mongo settings test requires Mongo in CI: timed out connecting to Mongo at {mongo_uri}");
-                }
-                eprintln!(
-                    "skipping mongo settings test: timed out connecting to Mongo at {mongo_uri}"
-                );
                 None
             }
         }

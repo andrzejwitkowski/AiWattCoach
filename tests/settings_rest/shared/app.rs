@@ -21,7 +21,6 @@ pub(crate) type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
 static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
-static TEST_MONGO_CLIENT: OnceLock<Client> = OnceLock::new();
 
 pub(crate) fn session_cookie(value: &str) -> header::HeaderValue {
     header::HeaderValue::from_str(&format!("aiwattcoach_session={value}; Path=/")).unwrap()
@@ -180,13 +179,7 @@ impl FrontendFixture {
 }
 
 async fn test_mongo_client(uri: &str) -> Client {
-    if let Some(client) = TEST_MONGO_CLIENT.get() {
-        return client.clone();
-    }
-
-    let client = Client::with_uri_str(uri)
+    Client::with_uri_str(uri)
         .await
-        .expect("test mongo client should be created");
-    let _ = TEST_MONGO_CLIENT.set(client.clone());
-    client
+        .expect("test mongo client should be created")
 }
