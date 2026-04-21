@@ -1,15 +1,17 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use futures::future::join_all;
 use tokio::sync::Mutex;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{watch, OwnedSemaphorePermit, Semaphore};
 use tokio::time::MissedTickBehavior;
 use tracing::{info, warn};
 
 use crate::domain::identity::Clock;
+use crate::BackgroundTaskHandle;
 
 use super::{
-    BoxFuture, FailTaskInput, ScheduledTask, TaskRepository, TaskSchedulerService,
-    TaskWorkerRepository,
+    BoxFuture, FailTaskInput, ScheduledTask, TaskRepository, TaskSchedulerError,
+    TaskSchedulerService, TaskWorkerRepository,
 };
 
 #[derive(Clone, Debug)]
@@ -59,6 +61,7 @@ where
 {
     scheduler: TaskSchedulerService<Tasks, Workers, Time>,
     worker_id: String,
+    is_leader: bool,
     enabled_task_types: Vec<String>,
     lease_duration_seconds: i64,
     heartbeat_interval: Duration,
@@ -73,16 +76,17 @@ pub fn spawn_task_worker<Tasks, Workers, Time>(
     worker_id: String,
     config: TaskWorkerConfig,
     handlers: Vec<SharedTaskHandler>,
-) -> tokio::task::JoinHandle<()>
+) -> Result<BackgroundTaskHandle, TaskSchedulerError>
 where
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
 {
-    let registry = build_task_handler_registry(handlers);
+    let registry = build_task_handler_registry(handlers)?;
     let concurrency_limit = config.max_concurrency.max(1);
     let runtime_state = Arc::new(WorkerRuntimeState::default());
-    tokio::spawn(async move {
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let join_handle = tokio::spawn(async move {
         run_task_worker_loop(
             scheduler,
             worker_id,
@@ -90,29 +94,39 @@ where
             registry,
             Arc::new(Semaphore::new(concurrency_limit)),
             runtime_state,
+            shutdown_rx,
         )
         .await;
-    })
+    });
+
+    Ok(BackgroundTaskHandle::new(
+        "task-worker",
+        shutdown_tx,
+        join_handle,
+    ))
 }
 
-fn build_task_handler_registry(handlers: Vec<SharedTaskHandler>) -> TaskHandlerRegistry {
+fn build_task_handler_registry(
+    handlers: Vec<SharedTaskHandler>,
+) -> Result<TaskHandlerRegistry, TaskSchedulerError> {
     let mut enabled_task_types = Vec::with_capacity(handlers.len());
     let mut handlers_by_type = HashMap::with_capacity(handlers.len());
 
     for handler in handlers {
         let task_type = handler.task_type().to_string();
         let replaced = handlers_by_type.insert(task_type.clone(), handler);
-        assert!(
-            replaced.is_none(),
-            "duplicate task handler registered for {task_type}"
-        );
+        if replaced.is_some() {
+            return Err(TaskSchedulerError::Conflict(format!(
+                "duplicate task handler registered for {task_type}"
+            )));
+        }
         enabled_task_types.push(task_type);
     }
 
-    TaskHandlerRegistry {
+    Ok(TaskHandlerRegistry {
         enabled_task_types,
         handlers_by_type,
-    }
+    })
 }
 
 async fn run_task_worker_loop<Tasks, Workers, Time>(
@@ -122,6 +136,7 @@ async fn run_task_worker_loop<Tasks, Workers, Time>(
     registry: TaskHandlerRegistry,
     semaphore: Arc<Semaphore>,
     runtime_state: Arc<WorkerRuntimeState>,
+    mut shutdown: watch::Receiver<bool>,
 ) where
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
@@ -129,15 +144,23 @@ async fn run_task_worker_loop<Tasks, Workers, Time>(
 {
     let mut idle_ticker = tokio::time::interval(config.idle_poll_interval);
     idle_ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let active_tasks = Arc::new(Mutex::new(Vec::new()));
 
     persist_worker_state(&scheduler, &worker_id, &config, &registry, &runtime_state).await;
 
     loop {
-        let permit = semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("task worker semaphore should stay alive");
+        if *shutdown.borrow() {
+            break;
+        }
+
+        let permit = tokio::select! {
+            _ = shutdown.changed() => {
+                break;
+            }
+            permit = semaphore.clone().acquire_owned() => {
+                permit.expect("task worker semaphore should stay alive")
+            }
+        };
 
         let Some(claimed_task) = claim_next_task(
             &scheduler,
@@ -147,16 +170,22 @@ async fn run_task_worker_loop<Tasks, Workers, Time>(
             &mut idle_ticker,
             permit,
             runtime_state.clone(),
+            &mut shutdown,
         )
         .await
         else {
             continue;
         };
 
-        tokio::spawn(run_claimed_task(claimed_task));
+        let task_join = tokio::spawn(run_claimed_task(claimed_task));
+        active_tasks.lock().await.push(task_join);
+        reap_finished_background_tasks(&active_tasks).await;
     }
+
+    abort_active_background_tasks(active_tasks).await;
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn claim_next_task<Tasks, Workers, Time>(
     scheduler: &TaskSchedulerService<Tasks, Workers, Time>,
     worker_id: &str,
@@ -165,6 +194,7 @@ async fn claim_next_task<Tasks, Workers, Time>(
     idle_ticker: &mut tokio::time::Interval,
     permit: OwnedSemaphorePermit,
     runtime_state: Arc<WorkerRuntimeState>,
+    shutdown: &mut watch::Receiver<bool>,
 ) -> Option<ClaimedTask<Tasks, Workers, Time>>
 where
     Tasks: TaskRepository,
@@ -199,6 +229,7 @@ where
             Some(ClaimedTask {
                 scheduler: scheduler.clone(),
                 worker_id: worker_id.to_string(),
+                is_leader: config.is_leader,
                 enabled_task_types: registry.enabled_task_types.clone(),
                 lease_duration_seconds: config.lease_duration_seconds,
                 heartbeat_interval: config.heartbeat_interval,
@@ -217,6 +248,7 @@ where
                 registry,
                 idle_ticker,
                 &runtime_state,
+                shutdown,
             )
             .await;
             None
@@ -236,6 +268,7 @@ where
                 registry,
                 idle_ticker,
                 &runtime_state,
+                shutdown,
             )
             .await;
             None
@@ -252,6 +285,7 @@ where
     let ClaimedTask {
         scheduler,
         worker_id,
+        is_leader,
         enabled_task_types,
         lease_duration_seconds,
         heartbeat_interval,
@@ -264,6 +298,7 @@ where
     let heartbeat = spawn_task_heartbeat(
         scheduler.clone(),
         worker_id.clone(),
+        is_leader,
         lease_duration_seconds,
         heartbeat_interval,
         enabled_task_types.clone(),
@@ -280,12 +315,17 @@ where
 
     let outcome = handler.run(task.clone()).await;
     heartbeat.abort();
+    if let Err(error) = heartbeat.await {
+        if !error.is_cancelled() {
+            warn!(task_id = %task.id, worker_id = %worker_id, %error, "task heartbeat exited unexpectedly");
+        }
+    }
 
     persist_task_outcome(&scheduler, &worker_id, &task, outcome).await;
     persist_worker_task_release(
         &scheduler,
         &worker_id,
-        false,
+        is_leader,
         enabled_task_types,
         &task.id,
         &runtime_state,
@@ -300,18 +340,24 @@ async fn wait_for_next_claim_attempt<Tasks, Workers, Time>(
     registry: &TaskHandlerRegistry,
     idle_ticker: &mut tokio::time::Interval,
     runtime_state: &Arc<WorkerRuntimeState>,
+    shutdown: &mut watch::Receiver<bool>,
 ) where
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
 {
     persist_worker_state(scheduler, worker_id, config, registry, runtime_state).await;
-    idle_ticker.tick().await;
+    tokio::select! {
+        _ = shutdown.changed() => {}
+        _ = idle_ticker.tick() => {}
+    }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_task_heartbeat<Tasks, Workers, Time>(
     scheduler: TaskSchedulerService<Tasks, Workers, Time>,
     worker_id: String,
+    is_leader: bool,
     lease_duration_seconds: i64,
     heartbeat_interval: Duration,
     enabled_task_types: Vec<String>,
@@ -330,27 +376,80 @@ where
         loop {
             ticker.tick().await;
 
-            let task_is_still_owned = scheduler
+            match scheduler
                 .heartbeat_task(&task_id, &worker_id, lease_duration_seconds)
                 .await
-                .ok()
-                .flatten()
-                .is_some();
-            if !task_is_still_owned {
-                break;
+            {
+                Ok(Some(_)) => {
+                    persist_worker_task_claim(
+                        &scheduler,
+                        &worker_id,
+                        is_leader,
+                        enabled_task_types.clone(),
+                        &task_id,
+                        &runtime_state,
+                    )
+                    .await;
+                }
+                Ok(None) => break,
+                Err(error) => {
+                    warn!(
+                        task_id = %task_id,
+                        worker_id = %worker_id,
+                        %error,
+                        "task heartbeat failed; keeping task runner alive for retry"
+                    );
+                }
             }
-
-            persist_worker_task_claim(
-                &scheduler,
-                &worker_id,
-                false,
-                enabled_task_types.clone(),
-                &task_id,
-                &runtime_state,
-            )
-            .await;
         }
     })
+}
+
+async fn reap_finished_background_tasks(active_tasks: &Mutex<Vec<tokio::task::JoinHandle<()>>>) {
+    let finished_tasks = {
+        let mut active_tasks = active_tasks.lock().await;
+        let mut finished = Vec::new();
+        let mut index = 0;
+        while index < active_tasks.len() {
+            if active_tasks[index].is_finished() {
+                finished.push(active_tasks.swap_remove(index));
+            } else {
+                index += 1;
+            }
+        }
+        finished
+    };
+
+    for task in finished_tasks {
+        if let Err(error) = task.await {
+            if error.is_cancelled() {
+                continue;
+            }
+
+            warn!(%error, "claimed task runner exited unexpectedly");
+        }
+    }
+}
+
+async fn abort_active_background_tasks(active_tasks: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>) {
+    let active_tasks = {
+        let mut active_tasks = active_tasks.lock().await;
+        std::mem::take(&mut *active_tasks)
+    };
+
+    for task in &active_tasks {
+        task.abort();
+    }
+
+    for result in join_all(active_tasks).await {
+        if let Err(error) = result {
+            if error.is_cancelled() {
+                continue;
+            }
+
+            warn!(%error, "claimed task runner exited unexpectedly during shutdown");
+        }
+    }
 }
 
 async fn fail_unhandled_task<Tasks, Workers, Time>(

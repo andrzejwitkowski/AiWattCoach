@@ -33,6 +33,11 @@
 - When diagnosing suite-level `SIGKILL` or memory-pressure failures, never launch multiple heavy `cargo test` targets in parallel. Those runs create artificial contention and make the results non-diagnostic.
 - For flaky test-harness failures, prefer sequential reruns of the exact binary order from the failing suite, then inspect test helpers for leaked servers, background tasks, or retained global fixtures before changing production code.
 
+## Integration Test Scope
+
+- Keep REST integration tests for transport-boundary behavior only: auth, user scoping, HTTP status mapping, request parsing/validation, body-size limits, and one simple happy path per endpoint.
+- If a REST test is mostly checking domain decisions, DTO masking, normalization, merge logic, or repository fallback behavior, move that coverage into the relevant unit test module with fakes and delete the duplicate integration case.
+
 ## Test Memory Hygiene
 
 - Test helpers must own every spawned background task. If a test starts `tokio::spawn(axum::serve(...))` or similar long-lived async work, keep the `JoinHandle` and abort or shut it down in `Drop`.

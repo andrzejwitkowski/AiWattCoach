@@ -28,7 +28,8 @@ async fn scheduler_backed_send_message_waits_for_background_task_result() {
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
-    );
+    )
+    .expect("worker should spawn");
     let service =
         SchedulerBackedWorkoutSummaryService::new(direct, scheduler, TestIdGenerator::default());
 
@@ -44,7 +45,7 @@ async fn scheduler_backed_send_message_waits_for_background_task_result() {
         "Coach reply to: Need feedback"
     );
 
-    worker.abort();
+    worker.shutdown().await;
 }
 
 #[tokio::test]
@@ -65,7 +66,8 @@ async fn scheduler_backed_generate_coach_reply_waits_for_background_task_result(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
-    );
+    )
+    .expect("worker should spawn");
     let service =
         SchedulerBackedWorkoutSummaryService::new(direct, scheduler, TestIdGenerator::default());
 
@@ -80,7 +82,7 @@ async fn scheduler_backed_generate_coach_reply_waits_for_background_task_result(
         "Coach reply to: Need feedback"
     );
 
-    worker.abort();
+    worker.shutdown().await;
 }
 
 #[tokio::test]
@@ -101,7 +103,8 @@ async fn scheduler_backed_generate_coach_reply_preserves_athlete_summary_regener
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
-    );
+    )
+    .expect("worker should spawn");
     let service =
         SchedulerBackedWorkoutSummaryService::new(direct, scheduler, TestIdGenerator::default());
 
@@ -112,7 +115,7 @@ async fn scheduler_backed_generate_coach_reply_preserves_athlete_summary_regener
 
     assert!(result.athlete_summary_was_regenerated);
 
-    worker.abort();
+    worker.shutdown().await;
 }
 
 #[tokio::test]
@@ -133,7 +136,8 @@ async fn scheduler_backed_send_message_returns_failed_task_error() {
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
-    );
+    )
+    .expect("worker should spawn");
     let service =
         SchedulerBackedWorkoutSummaryService::new(direct, scheduler, TestIdGenerator::default());
 
@@ -152,7 +156,7 @@ async fn scheduler_backed_send_message_returns_failed_task_error() {
         ))
     );
 
-    worker.abort();
+    worker.shutdown().await;
 }
 
 #[tokio::test]
@@ -177,7 +181,8 @@ async fn scheduler_backed_generate_coach_reply_retries_after_failed_task_on_expl
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
-    );
+    )
+    .expect("worker should spawn");
     let service =
         SchedulerBackedWorkoutSummaryService::new(direct, scheduler, TestIdGenerator::default());
 
@@ -205,5 +210,80 @@ async fn scheduler_backed_generate_coach_reply_retries_after_failed_task_on_expl
     assert_eq!(reply.coach_message.role, MessageRole::Coach);
     assert_eq!(reply.coach_message.content, "Coach reply to: Need feedback");
 
-    worker.abort();
+    worker.shutdown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn scheduler_backed_send_message_does_not_accumulate_scheduler_state_across_repeated_runs() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let direct = direct_service(repository, TestCoach::successful());
+    let task_repository = InMemoryTaskRepository::default();
+    let worker_repository = InMemoryTaskWorkerRepository::default();
+    let scheduler = TaskSchedulerService::new(task_repository, worker_repository, TestClock);
+    let worker = spawn_workout_summary_coach_reply_task_runner(
+        direct.clone(),
+        scheduler.clone(),
+        "worker-1".to_string(),
+    )
+    .expect("worker should spawn");
+    let service = SchedulerBackedWorkoutSummaryService::new(
+        direct,
+        scheduler.clone(),
+        TestIdGenerator::default(),
+    );
+
+    for attempt in 0..20 {
+        let result = service
+            .send_message("user-1", "workout-1", format!("Need feedback {attempt}"))
+            .await
+            .expect("scheduler-backed send should succeed repeatedly");
+
+        assert_eq!(result.user_message.role, MessageRole::User);
+        assert_eq!(result.coach_message.role, MessageRole::Coach);
+        assert_eq!(scheduler.test_waiter_count().await, 0);
+        assert_eq!(scheduler.test_worker_state_count().await, 1);
+    }
+
+    worker.shutdown().await;
+    assert_eq!(scheduler.test_waiter_count().await, 0);
+}
+
+#[tokio::test]
+#[serial]
+async fn scheduler_backed_worker_restarts_do_not_accumulate_scheduler_state() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let direct = direct_service(repository, TestCoach::successful());
+    let task_repository = InMemoryTaskRepository::default();
+    let worker_repository = InMemoryTaskWorkerRepository::default();
+    let scheduler = TaskSchedulerService::new(task_repository, worker_repository, TestClock);
+    let service = SchedulerBackedWorkoutSummaryService::new(
+        direct.clone(),
+        scheduler.clone(),
+        TestIdGenerator::default(),
+    );
+
+    for attempt in 0..10 {
+        let worker = spawn_workout_summary_coach_reply_task_runner(
+            direct.clone(),
+            scheduler.clone(),
+            "worker-1".to_string(),
+        )
+        .expect("worker should spawn");
+
+        let result = service
+            .send_message(
+                "user-1",
+                "workout-1",
+                format!("Need feedback restart {attempt}"),
+            )
+            .await
+            .expect("scheduler-backed send should succeed after restart");
+
+        assert_eq!(result.user_message.role, MessageRole::User);
+        assert_eq!(result.coach_message.role, MessageRole::Coach);
+        worker.shutdown().await;
+        assert_eq!(scheduler.test_waiter_count().await, 0);
+        assert_eq!(scheduler.test_worker_state_count().await, 1);
+    }
 }

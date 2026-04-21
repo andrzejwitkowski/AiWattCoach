@@ -29,7 +29,7 @@ impl MongoTaskRepository {
         self.collection
             .create_indexes([
                 IndexModel::builder()
-                    .keys(doc! { "dedupe_key": 1 })
+                    .keys(doc! { "user_id": 1, "dedupe_key": 1 })
                     .options(
                         IndexOptions::builder()
                             .name("tasks_dedupe_key_unique".to_string())

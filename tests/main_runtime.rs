@@ -399,8 +399,20 @@ async fn test_mongo_client_or_skip() -> Option<Client> {
     .await
     {
         Ok(Ok(_)) => Some(client),
-        _ => {
-            eprintln!("skipping main_runtime mongo test: timed out connecting to Mongo at {uri}");
+        Ok(Err(error)) => {
+            let message = format!("failed to connect to Mongo at {uri}: {error}");
+            if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
+                panic!("main_runtime test requires Mongo in CI: {message}");
+            }
+            eprintln!("skipping main_runtime mongo test: {message}");
+            None
+        }
+        Err(_) => {
+            let message = format!("timed out connecting to Mongo at {uri}");
+            if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
+                panic!("main_runtime test requires Mongo in CI: {message}");
+            }
+            eprintln!("skipping main_runtime mongo test: {message}");
             None
         }
     }

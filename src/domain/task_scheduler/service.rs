@@ -351,13 +351,23 @@ where
                     Some(task) => match task.status {
                         TaskStatus::Completed => {
                             let completed = handler.parse_completed(&task)?;
+                            scheduler.cleanup_task_waiter_if_unused(&task_id).await;
                             return handler.finish(completed).await;
                         }
-                        TaskStatus::Failed => return Err(handler.parse_failed(&task)?),
-                        TaskStatus::TimedOut => return Err(handler.task_timed_out(&task_id)),
+                        TaskStatus::Failed => {
+                            scheduler.cleanup_task_waiter_if_unused(&task_id).await;
+                            return Err(handler.parse_failed(&task)?);
+                        }
+                        TaskStatus::TimedOut => {
+                            scheduler.cleanup_task_waiter_if_unused(&task_id).await;
+                            return Err(handler.task_timed_out(&task_id));
+                        }
                         _ => {}
                     },
-                    None => return Err(handler.task_disappeared(&task_id)),
+                    None => {
+                        scheduler.cleanup_task_waiter_if_unused(&task_id).await;
+                        return Err(handler.task_disappeared(&task_id));
+                    }
                 }
 
                 watcher
@@ -662,6 +672,26 @@ where
         if let Some(sender) = sender {
             let _ = sender.send(Some(task));
         }
+    }
+
+    async fn cleanup_task_waiter_if_unused(&self, task_id: &str) {
+        let mut waiters = self.task_waiters.lock().await;
+        let should_remove = waiters
+            .get(task_id)
+            .is_some_and(|sender| sender.receiver_count() == 0);
+        if should_remove {
+            waiters.remove(task_id);
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn test_waiter_count(&self) -> usize {
+        self.task_waiters.lock().await.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn test_worker_state_count(&self) -> usize {
+        self.worker_states.lock().await.len()
     }
 }
 

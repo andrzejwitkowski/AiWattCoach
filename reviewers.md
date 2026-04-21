@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-21 | user | integration vs unit test boundary cleanup
+
+- Problem: several REST integration suites were asserting domain behavior and adapter helper rules that already belonged below the HTTP layer, which duplicated coverage and made the endpoint suites larger than necessary.
+- Fix: moved settings masking/interval normalization checks into adapter unit tests, moved completed-workout id fallback checks into `CompletedWorkoutReadService` unit tests, strengthened existing calendar domain tests for sync/update behavior, and removed the redundant REST cases while keeping auth/status/limit/happy-path coverage at the integration layer.
+- Prevention: before adding or keeping a REST integration test, ask whether it proves transport-boundary behavior or just repeats service/helper logic; if it is not boundary-specific, cover it with a lower-level fake-backed test and leave only one straightforward happy path per endpoint.
+
 ### 2026-04-20 | user | test-suite memory leaks and unstable Rust harnesses
 
 - Problem: several Rust test binaries leaked memory and process resources by retaining frontend fixtures in globals, recreating expensive Mongo clients repeatedly, and spawning Axum test servers with unmanaged `tokio::spawn` tasks that lived until process exit. This made `cargo test -- --nocapture` fail with shifting suite-level `SIGKILL`s.

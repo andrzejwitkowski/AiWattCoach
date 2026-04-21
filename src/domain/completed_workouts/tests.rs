@@ -2,6 +2,9 @@ use super::{
     CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutRepository,
     CompletedWorkoutSeries, CompletedWorkoutStream, CompletedWorkoutZoneTime,
 };
+use crate::domain::completed_workouts::{
+    CompletedWorkoutReadService, CompletedWorkoutReadUseCases,
+};
 
 #[test]
 fn completed_workout_uses_local_canonical_id() {
@@ -237,4 +240,46 @@ async fn completed_workout_repository_finds_latest_by_user() {
             .map(|workout| workout.completed_workout_id.as_str()),
         Some("completed-2")
     );
+}
+
+#[tokio::test]
+async fn completed_workout_read_service_falls_back_to_canonical_completed_workout_id() {
+    let repository = super::ports::NoopCompletedWorkoutRepository::default();
+    let mut workout = sample_workout(
+        "intervals-activity:legacy-41",
+        "user-1",
+        "2026-05-01T08:00:00",
+    );
+    workout.source_activity_id = None;
+    repository.upsert(workout).await.unwrap();
+    let service = CompletedWorkoutReadService::new(repository);
+
+    let workout = service
+        .get_completed_workout("user-1", "legacy-41")
+        .await
+        .unwrap()
+        .expect("fallback workout should exist");
+
+    assert_eq!(workout.completed_workout_id, "intervals-activity:legacy-41");
+}
+
+#[tokio::test]
+async fn completed_workout_read_service_accepts_canonical_completed_workout_ids() {
+    let repository = super::ports::NoopCompletedWorkoutRepository::default();
+    let mut workout = sample_workout(
+        "intervals-activity:legacy-42",
+        "user-1",
+        "2026-05-01T08:00:00",
+    );
+    workout.source_activity_id = None;
+    repository.upsert(workout).await.unwrap();
+    let service = CompletedWorkoutReadService::new(repository);
+
+    let workout = service
+        .get_completed_workout("user-1", "intervals-activity:legacy-42")
+        .await
+        .unwrap()
+        .expect("canonical workout should exist");
+
+    assert_eq!(workout.completed_workout_id, "intervals-activity:legacy-42");
 }

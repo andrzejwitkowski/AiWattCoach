@@ -130,6 +130,15 @@ where
     (output, captured)
 }
 
+#[cfg(test)]
+pub fn active_log_buffer_count() -> usize {
+    ACTIVE_LOG_BUFFERS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("active log buffers mutex poisoned")
+        .len()
+}
+
 fn init_test_tracing_subscriber() {
     TEST_TRACING_INIT.get_or_init(|| {
         let subscriber = tracing_subscriber::fmt()
@@ -153,7 +162,10 @@ mod tests {
 
     use tracing_subscriber::fmt::MakeWriter;
 
-    use super::{ActiveLogBufferGuard, GlobalLogRouter, SharedLogBuffer, CURRENT_CAPTURE_ID};
+    use super::{
+        active_log_buffer_count, capture_tracing_logs, ActiveLogBufferGuard, GlobalLogRouter,
+        SharedLogBuffer, CURRENT_CAPTURE_ID,
+    };
 
     #[tokio::test(flavor = "current_thread")]
     async fn global_log_writer_commits_each_event_atomically() {
@@ -202,5 +214,20 @@ mod tests {
                 .all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok()),
             "expected atomic JSON log lines, got: {captured}"
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn capture_tracing_logs_does_not_accumulate_active_buffers() {
+        for attempt in 0..100 {
+            let (value, logs) = capture_tracing_logs(|| async move {
+                tracing::info!(attempt, "captured test log");
+                attempt
+            })
+            .await;
+
+            assert_eq!(value, attempt);
+            assert!(logs.contains("captured test log"));
+            assert_eq!(active_log_buffer_count(), 0);
+        }
     }
 }

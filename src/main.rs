@@ -468,7 +468,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         task_worker_repository.clone(),
         SystemClock,
     );
-    spawn_task_worker(
+    let workout_summary_task_worker = spawn_task_worker(
         workout_summary_task_scheduler.clone(),
         format!("{}-workout-summary", default_task_scheduler_worker_id()),
         TaskWorkerConfig {
@@ -481,7 +481,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         vec![workout_summary_coach_reply_task_handler(
             workout_summary_direct_service.clone(),
         )],
-    );
+    )?;
     let workout_summary_service = Arc::new(SchedulerBackedWorkoutSummaryService::new(
         workout_summary_direct_service,
         workout_summary_task_scheduler,
@@ -519,10 +519,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .with_intervals_connection_tester(Arc::new(intervals_connection_tester)),
     );
     let listener = TcpListener::bind(address).await?;
-    spawn_provider_polling_loop(provider_polling_service);
+    let provider_polling_loop = spawn_provider_polling_loop(provider_polling_service);
     // Prefer a stable worker id from env or container hostname so a process restart can be
     // recognized as the same logical worker. If neither exists, fall back to a per-process id.
-    spawn_task_scheduler_maintenance_loop(
+    let task_scheduler_maintenance_loop = spawn_task_scheduler_maintenance_loop(
         TaskSchedulerService::new(task_repository, task_worker_repository, SystemClock),
         TaskSchedulerWorkerConfig::new(default_task_scheduler_worker_id(), false, Vec::new()),
         TaskSchedulerMaintenanceConfig::default(),
@@ -534,6 +534,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )
     .with_graceful_shutdown(shutdown_signal())
     .await;
+    workout_summary_task_worker.shutdown().await;
+    provider_polling_loop.shutdown().await;
+    task_scheduler_maintenance_loop.shutdown().await;
     let telemetry_shutdown_result = telemetry.shutdown();
 
     finish_server_shutdown(serve_result, telemetry_shutdown_result)

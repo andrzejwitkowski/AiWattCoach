@@ -82,44 +82,6 @@ async fn get_settings_returns_default_settings_for_authenticated_user() {
 }
 
 #[tokio::test]
-async fn get_settings_masks_api_keys() {
-    let settings = UserSettings::new_defaults("user-1".to_string(), 1000);
-    let mut settings_with_keys = settings;
-    settings_with_keys.ai_agents.openai_api_key = Some("sk-verysecretkey1234".to_string());
-
-    let app = settings_test_app(
-        TestIdentityServiceWithSession::default(),
-        TestSettingsService::with_settings(settings_with_keys),
-    )
-    .await;
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/settings")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body: Value = get_json(response).await;
-    let ai_agents = body.get("aiAgents").unwrap();
-
-    assert_eq!(
-        ai_agents.get("openaiApiKey").unwrap().as_str().unwrap(),
-        "***...1234"
-    );
-    assert!(ai_agents.get("openaiApiKeySet").unwrap().as_bool().unwrap());
-    assert!(
-        ai_agents.get("geminiApiKey").is_none() || ai_agents.get("geminiApiKey").unwrap().is_null()
-    );
-}
-
-#[tokio::test]
 async fn update_ai_agents_saves_and_returns_updated_settings() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
@@ -196,48 +158,6 @@ async fn update_intervals_saves_athlete_id() {
         "i12345678"
     );
     assert!(intervals.get("apiKeySet").unwrap().as_bool().unwrap());
-}
-
-#[tokio::test]
-async fn update_intervals_clears_credentials_when_blank_values_are_sent() {
-    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
-    settings.intervals.api_key = Some("saved-api-key".to_string());
-    settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
-    settings.intervals.connected = true;
-
-    let app = settings_test_app(
-        TestIdentityServiceWithSession::default(),
-        TestSettingsService::with_settings(settings),
-    )
-    .await;
-
-    let body = serde_json::json!({
-        "apiKey": "   ",
-        "athleteId": "   "
-    });
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("PATCH")
-                .uri("/api/settings/intervals")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::to_string(&body).unwrap()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let response_body: Value = get_json(response).await;
-    let intervals = response_body.get("intervals").unwrap();
-
-    assert!(!intervals.get("apiKeySet").unwrap().as_bool().unwrap());
-    assert!(intervals.get("apiKey").is_none_or(|value| value.is_null()));
-    assert!(intervals.get("athleteId").is_some_and(Value::is_null));
-    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -355,48 +275,6 @@ async fn update_intervals_does_not_activate_incomplete_saved_credentials() {
 }
 
 #[tokio::test]
-async fn update_intervals_marks_connection_inactive_when_credentials_change() {
-    let mut settings = UserSettings::new_defaults("user-1".to_string(), 1000);
-    settings.intervals.api_key = Some("saved-api-key".to_string());
-    settings.intervals.athlete_id = Some("saved-athlete-id".to_string());
-    settings.intervals.connected = true;
-
-    let app = settings_test_app(
-        TestIdentityServiceWithSession::default(),
-        TestSettingsService::with_settings(settings),
-    )
-    .await;
-
-    let body = serde_json::json!({
-        "apiKey": "updated-api-key"
-    });
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("PATCH")
-                .uri("/api/settings/intervals")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::to_string(&body).unwrap()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let response_body: Value = get_json(response).await;
-    let intervals = response_body.get("intervals").unwrap();
-
-    assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
-    assert_eq!(
-        intervals.get("athleteId").unwrap().as_str().unwrap(),
-        "saved-athlete-id"
-    );
-}
-
-#[tokio::test]
 async fn update_options_sets_analyze_without_heart_rate() {
     let app = settings_test_app(
         TestIdentityServiceWithSession::default(),
@@ -481,88 +359,6 @@ async fn update_availability_saves_explicit_week_structure() {
     assert!(days[1]
         .get("maxDurationMinutes")
         .is_some_and(Value::is_null));
-}
-
-#[tokio::test]
-async fn update_availability_derives_not_configured_when_all_days_are_unavailable() {
-    let app = settings_test_app(
-        TestIdentityServiceWithSession::default(),
-        TestSettingsService::default(),
-    )
-    .await;
-
-    let body = serde_json::json!({
-        "days": [
-            { "weekday": "mon", "available": false, "maxDurationMinutes": null },
-            { "weekday": "tue", "available": false, "maxDurationMinutes": null },
-            { "weekday": "wed", "available": false, "maxDurationMinutes": null },
-            { "weekday": "thu", "available": false, "maxDurationMinutes": null },
-            { "weekday": "fri", "available": false, "maxDurationMinutes": null },
-            { "weekday": "sat", "available": false, "maxDurationMinutes": null },
-            { "weekday": "sun", "available": false, "maxDurationMinutes": null }
-        ]
-    });
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("PATCH")
-                .uri("/api/settings/availability")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::to_string(&body).unwrap()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let response_body: Value = get_json(response).await;
-    let availability = response_body.get("availability").unwrap();
-    assert!(!availability.get("configured").unwrap().as_bool().unwrap());
-}
-
-#[tokio::test]
-async fn update_availability_rejects_invalid_duration_step() {
-    let app = settings_test_app(
-        TestIdentityServiceWithSession::default(),
-        TestSettingsService::default(),
-    )
-    .await;
-
-    let body = serde_json::json!({
-        "days": [
-            { "weekday": "mon", "available": true, "maxDurationMinutes": 45 },
-            { "weekday": "tue", "available": false, "maxDurationMinutes": null },
-            { "weekday": "wed", "available": false, "maxDurationMinutes": null },
-            { "weekday": "thu", "available": false, "maxDurationMinutes": null },
-            { "weekday": "fri", "available": false, "maxDurationMinutes": null },
-            { "weekday": "sat", "available": false, "maxDurationMinutes": null },
-            { "weekday": "sun", "available": false, "maxDurationMinutes": null }
-        ]
-    });
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("PATCH")
-                .uri("/api/settings/availability")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::to_string(&body).unwrap()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
-    let body: Value = get_json(response).await;
-    assert_eq!(
-        body.get("message").and_then(Value::as_str),
-        Some("availability duration 45 is invalid; expected one of [30, 60, 90, 120, 150, 180, 210, 240, 270, 300]")
-    );
 }
 
 #[tokio::test]

@@ -4,9 +4,12 @@ use tokio::time::MissedTickBehavior;
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::domain::{
-    identity::Clock,
-    task_scheduler::{TaskRepository, TaskSchedulerService, TaskWorkerRepository},
+use crate::{
+    domain::{
+        identity::Clock,
+        task_scheduler::{TaskRepository, TaskSchedulerService, TaskWorkerRepository},
+    },
+    BackgroundTaskHandle,
 };
 
 const DEFAULT_WORKER_HEARTBEAT_INTERVAL_SECONDS: u64 = 15;
@@ -82,12 +85,14 @@ pub fn spawn_task_scheduler_maintenance_loop<Tasks, Workers, Time>(
     service: TaskSchedulerService<Tasks, Workers, Time>,
     worker: TaskSchedulerWorkerConfig,
     config: TaskSchedulerMaintenanceConfig,
-) where
+) -> BackgroundTaskHandle
+where
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
 {
-    tokio::spawn(async move {
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
+    let join_handle = tokio::spawn(async move {
         let mut worker_ticker = tokio::time::interval(Duration::from_secs(
             config.worker_heartbeat_interval_seconds,
         ));
@@ -99,6 +104,9 @@ pub fn spawn_task_scheduler_maintenance_loop<Tasks, Workers, Time>(
 
         loop {
             tokio::select! {
+                _ = shutdown_rx.changed() => {
+                    break;
+                }
                 _ = worker_ticker.tick() => {
                     if let Err(error) = service
                         .touch_worker_heartbeat(
@@ -125,6 +133,8 @@ pub fn spawn_task_scheduler_maintenance_loop<Tasks, Workers, Time>(
             }
         }
     });
+
+    BackgroundTaskHandle::new("task-scheduler-maintenance", shutdown_tx, join_handle)
 }
 
 #[cfg(test)]

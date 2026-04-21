@@ -235,6 +235,8 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 - Write tests before backend behavior changes whenever practical.
 - Add or update tests with behavior changes.
 - Prefer focused integration tests in `tests/*.rs` for HTTP and adapter behavior.
+- Keep integration tests only for behavior that genuinely needs the full boundary: auth, user scoping, HTTP status mapping, body/query validation, request size limits, and one simple happy path per endpoint.
+- If an integration test mainly reasserts domain rules, mapping helpers, or service branching that can be covered with a fake-backed unit test, move that coverage below HTTP and delete the redundant REST test.
 - When an integration test target or shared test helper grows large, split it into a directory-based suite such as `tests/<suite>/main.rs` with focused files for support, fixtures, fakes, observability, and behavior groups.
 - Use fakes/test doubles for domain-service tests.
 - Verify user scoping in REST tests whenever endpoints are user-owned.

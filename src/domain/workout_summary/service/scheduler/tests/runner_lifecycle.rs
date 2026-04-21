@@ -1,7 +1,9 @@
 use serde_json::json;
 use serial_test::serial;
 
-use crate::domain::task_scheduler::{NewTask, RetryStrategy, TaskSchedulerService, TaskStatus};
+use crate::domain::task_scheduler::{
+    NewTask, RetryStrategy, SharedTaskHandler, TaskSchedulerError, TaskSchedulerService, TaskStatus,
+};
 
 use super::super::*;
 use super::support::{
@@ -29,7 +31,8 @@ async fn workout_summary_task_runner_reports_active_task_ids() {
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
-    );
+    )
+    .expect("worker should spawn");
     let service =
         SchedulerBackedWorkoutSummaryService::new(direct, scheduler, TestIdGenerator::default());
 
@@ -61,7 +64,7 @@ async fn workout_summary_task_runner_reports_active_task_ids() {
         .expect("worker heartbeat should remain recorded");
     assert!(idle_worker.active_task_ids.is_empty());
 
-    worker.abort();
+    worker.shutdown().await;
 }
 
 #[tokio::test]
@@ -95,7 +98,8 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
         .expect("task should enqueue");
 
     let worker =
-        spawn_workout_summary_coach_reply_task_runner(direct, scheduler, "worker-1".to_string());
+        spawn_workout_summary_coach_reply_task_runner(direct, scheduler, "worker-1".to_string())
+            .expect("worker should spawn");
 
     tokio::time::timeout(std::time::Duration::from_secs(2), async {
         loop {
@@ -117,5 +121,40 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
     .await
     .expect("runner should fail invalid payload task");
 
-    worker.abort();
+    worker.shutdown().await;
+}
+
+#[test]
+fn spawn_task_worker_rejects_duplicate_task_handlers() {
+    let scheduler = TaskSchedulerService::new(
+        InMemoryTaskRepository::default(),
+        InMemoryTaskWorkerRepository::default(),
+        TestClock,
+    );
+    let handler = workout_summary_coach_reply_task_handler(direct_service(
+        InMemoryWorkoutSummaryRepository::with_summary(existing_summary()),
+        BlockingCoach::new(),
+    ));
+    let duplicate_handlers: Vec<SharedTaskHandler> = vec![handler.clone(), handler];
+
+    let error = spawn_task_worker(
+        scheduler,
+        "worker-1".to_string(),
+        TaskWorkerConfig {
+            is_leader: false,
+            lease_duration_seconds: 30,
+            heartbeat_interval: std::time::Duration::from_secs(10),
+            idle_poll_interval: std::time::Duration::from_millis(10),
+            max_concurrency: 1,
+        },
+        duplicate_handlers,
+    )
+    .expect_err("duplicate handlers should return structured error");
+
+    assert_eq!(
+        error,
+        TaskSchedulerError::Conflict(
+            "duplicate task handler registered for workout_summary.coach_reply".to_string()
+        )
+    );
 }

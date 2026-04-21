@@ -95,7 +95,7 @@ pub fn spawn_workout_summary_coach_reply_task_runner<Base, Tasks, Workers, Time>
     base: Arc<Base>,
     scheduler: TaskSchedulerService<Tasks, Workers, Time>,
     worker_id: String,
-) -> tokio::task::JoinHandle<()>
+) -> Result<crate::BackgroundTaskHandle, TaskSchedulerError>
 where
     Base: WorkoutSummaryUseCases + 'static,
     Tasks: TaskRepository,
