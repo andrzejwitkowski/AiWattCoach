@@ -3,6 +3,7 @@ use mongodb::{
     options::IndexOptions,
     Collection, IndexModel,
 };
+use std::time::Duration;
 
 use crate::domain::task_scheduler::{TaskSchedulerError, TaskStatus};
 
@@ -64,6 +65,15 @@ impl MongoTaskRepository {
                     .options(
                         IndexOptions::builder()
                             .name("tasks_claimed_by_status_lookup".to_string())
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "cleanup_after": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("tasks_cleanup_after_ttl".to_string())
+                            .expire_after(Duration::from_secs(0))
                             .build(),
                     )
                     .build(),

@@ -1,6 +1,10 @@
+use mongodb::bson::DateTime;
+
 use crate::domain::task_scheduler::{RetryStrategy, ScheduledTask, TaskSchedulerError, TaskStatus};
 
 use super::document::{RetryStrategyDocument, TaskDocument};
+
+const TERMINAL_TASK_TTL_SECONDS: i64 = 60 * 24 * 60 * 60;
 
 pub(super) fn storage_error(error: mongodb::error::Error) -> TaskSchedulerError {
     TaskSchedulerError::Repository(error.to_string())
@@ -131,6 +135,10 @@ pub(super) fn map_task_to_document(
         updated_at_epoch_seconds: task.updated_at_epoch_seconds,
         started_at_epoch_seconds: task.started_at_epoch_seconds,
         finished_at_epoch_seconds: task.finished_at_epoch_seconds,
+        cleanup_after: terminal_task_cleanup_after(
+            task.status.clone(),
+            task.finished_at_epoch_seconds,
+        )?,
     })
 }
 
@@ -162,4 +170,49 @@ pub(super) fn map_document_to_task(
         started_at_epoch_seconds: document.started_at_epoch_seconds,
         finished_at_epoch_seconds: document.finished_at_epoch_seconds,
     })
+}
+
+pub(super) fn terminal_task_cleanup_bson(
+    status: &TaskStatus,
+    finished_at_epoch_seconds: i64,
+) -> Result<mongodb::bson::Bson, TaskSchedulerError> {
+    Ok(mongodb::bson::Bson::DateTime(
+        terminal_task_cleanup_after(status.clone(), Some(finished_at_epoch_seconds))?.ok_or_else(
+            || {
+                TaskSchedulerError::Repository(
+                    "terminal task cleanup date requires a finished_at timestamp".to_string(),
+                )
+            },
+        )?,
+    ))
+}
+
+fn terminal_task_cleanup_after(
+    status: TaskStatus,
+    finished_at_epoch_seconds: Option<i64>,
+) -> Result<Option<DateTime>, TaskSchedulerError> {
+    if !matches!(
+        status,
+        TaskStatus::Completed | TaskStatus::Failed | TaskStatus::TimedOut
+    ) {
+        return Ok(None);
+    }
+
+    let Some(finished_at_epoch_seconds) = finished_at_epoch_seconds else {
+        return Ok(None);
+    };
+    let cleanup_at_epoch_seconds = finished_at_epoch_seconds
+        .checked_add(TERMINAL_TASK_TTL_SECONDS)
+        .ok_or_else(|| {
+            TaskSchedulerError::Repository(
+                "task cleanup timestamp exceeds BSON DateTime range".to_string(),
+            )
+        })?;
+    let cleanup_at_epoch_millis = cleanup_at_epoch_seconds.checked_mul(1000).ok_or_else(|| {
+        TaskSchedulerError::Repository(
+            "task cleanup timestamp exceeds BSON DateTime range".to_string(),
+        )
+    })?;
+
+    Ok(Some(DateTime::from_millis(cleanup_at_epoch_millis)))
 }

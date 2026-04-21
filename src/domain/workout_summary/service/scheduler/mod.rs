@@ -2,12 +2,13 @@ use std::{sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::spawn_task_worker;
 use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::LlmError,
     task_scheduler::{
-        spawn_task_worker, NewTask, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler,
-        TaskRepository, TaskRunOutcome, TaskSchedulerError, TaskSchedulerService, TaskWorkerConfig,
+        NewTask, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler, TaskRepository,
+        TaskRunOutcome, TaskSchedulerError, TaskSchedulerService, TaskWorkerConfig,
         TaskWorkerRepository,
     },
     workout_summary::{

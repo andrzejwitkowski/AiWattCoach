@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-21 | user | task scheduler review follow-up on PR #120
+
+- Problem: the shared task worker runtime still lived under `src/domain/task_scheduler`, which kept `tokio` runtime orchestration in the domain layer, and both `src/domain/task_scheduler/service.rs` and the scheduler worker file had grown too large to review comfortably. The task storage also lacked a cleanup policy for terminal task records.
+- Fix: moved the runtime worker loop into `src/config/task_scheduler/worker.rs`, kept only task handler/config types in `src/domain/task_scheduler`, split the scheduler service into concern-based modules under `src/domain/task_scheduler/service/`, split config scheduler wiring into `maintenance.rs` and `worker.rs`, and added a Mongo TTL cleanup field/index for completed/failed/timed-out tasks.
+- Prevention: when adding scheduler/runtime behavior, keep `tokio` spawning, timers, shutdown handles, and logging orchestration outside `src/domain`; if a scheduler or config file starts exceeding a few phases or a few hundred lines, split it immediately by concern instead of waiting for review to call it out.
+
 ### 2026-04-21 | user | Rust test harness instability follow-up
 
 - Problem: after the earlier memory-hygiene cleanup, the full `cargo test -- --nocapture` run was still failing for harness reasons that looked like flaky suite instability: tracing-capture helpers assumed the global active buffer map must be empty even while parallel tests were still running, and multiple Mongo-backed test helpers reused a `OnceLock<mongodb::Client>` across separate `#[tokio::test]` runtimes, which led to cancelled driver tasks and runtime-shutdown errors.

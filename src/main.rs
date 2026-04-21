@@ -64,7 +64,7 @@ use aiwattcoach::{
     build_app,
     config::{
         default_task_scheduler_worker_id, spawn_provider_polling_loop,
-        spawn_task_scheduler_maintenance_loop, ProviderPollingService, Settings,
+        spawn_task_scheduler_maintenance_loop, spawn_task_worker, ProviderPollingService, Settings,
         TaskSchedulerMaintenanceConfig, TaskSchedulerWorkerConfig,
     },
     domain::athlete_summary::AthleteSummaryService,
@@ -80,7 +80,7 @@ use aiwattcoach::{
     domain::intervals::IntervalsService,
     domain::races::RaceService,
     domain::settings::UserSettingsService,
-    domain::task_scheduler::{spawn_task_worker, TaskSchedulerService, TaskWorkerConfig},
+    domain::task_scheduler::{TaskSchedulerService, TaskWorkerConfig},
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
     domain::training_plan::TrainingPlanGenerationService,

@@ -12,7 +12,9 @@ use mongodb::{
 
 use aiwattcoach::{
     adapters::mongo::tasks::MongoTaskRepository,
-    domain::task_scheduler::{NewTask, RetryStrategy, ScheduledTask, TaskRepository},
+    domain::task_scheduler::{
+        NewTask, RetryStrategy, ScheduledTask, TaskCompleteRequest, TaskRepository,
+    },
     Settings,
 };
 use serde_json::json;
@@ -67,6 +69,62 @@ async fn mongo_task_repository_dedupes_per_user_and_creates_compound_unique_inde
                 .and_then(|options| options.name.as_deref())
                 == Some("tasks_dedupe_key_unique")
     }));
+    assert!(indexes.iter().any(|index| {
+        index.keys == doc! { "cleanup_after": 1 }
+            && index
+                .options
+                .as_ref()
+                .and_then(|options| options.name.as_deref())
+                == Some("tasks_cleanup_after_ttl")
+    }));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn mongo_task_repository_sets_cleanup_after_for_completed_tasks() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTaskRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let task = sample_task("task-1", "user-1", "dedupe-1", 100);
+    repository
+        .enqueue_if_absent(task)
+        .await
+        .expect("enqueue should succeed");
+    repository
+        .claim_next_due(aiwattcoach::domain::task_scheduler::TaskClaimRequest {
+            worker_id: "worker-1".to_string(),
+            enabled_task_types: vec!["summary".to_string()],
+            is_leader: false,
+            now_epoch_seconds: 100,
+            lease_expires_at_epoch_seconds: 130,
+        })
+        .await
+        .expect("claim should succeed")
+        .expect("task should be claimed");
+    repository
+        .complete(TaskCompleteRequest {
+            task_id: "task-1".to_string(),
+            worker_id: "worker-1".to_string(),
+            checkpoint: None,
+            completed_at_epoch_seconds: 200,
+        })
+        .await
+        .expect("complete should succeed");
+
+    let stored = fixture
+        .collection()
+        .find_one(doc! { "_id": "task-1" })
+        .await
+        .unwrap()
+        .unwrap();
+    let cleanup_after = stored
+        .get_datetime("cleanup_after")
+        .expect("completed task should have cleanup_after");
+    assert_eq!(cleanup_after.timestamp_millis(), 5_184_200_000);
 
     fixture.cleanup().await;
 }

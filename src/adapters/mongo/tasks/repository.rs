@@ -2,7 +2,10 @@ use futures::TryStreamExt;
 use mongodb::bson::{doc, Bson};
 
 use super::super::error::is_duplicate_key_error;
-use super::mapping::{map_document_to_task, map_task_to_document, status_as_str, storage_error};
+use super::mapping::{
+    map_document_to_task, map_task_to_document, status_as_str, storage_error,
+    terminal_task_cleanup_bson,
+};
 use super::MongoTaskRepository;
 use crate::domain::task_scheduler::{
     TaskCheckpointRequest, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult,
@@ -87,6 +90,7 @@ impl TaskRepository for MongoTaskRepository {
                             "started_at_epoch_seconds": request.now_epoch_seconds,
                             "finished_at_epoch_seconds": Bson::Null,
                             "timed_out_at_epoch_seconds": Bson::Null,
+                            "cleanup_after": Bson::Null,
                         },
                         "$inc": { "attempt_count": 1_i64 },
                     },
@@ -174,6 +178,7 @@ impl TaskRepository for MongoTaskRepository {
                 "updated_at_epoch_seconds": request.completed_at_epoch_seconds,
                 "finished_at_epoch_seconds": request.completed_at_epoch_seconds,
                 "timed_out_at_epoch_seconds": Bson::Null,
+                "cleanup_after": terminal_task_cleanup_bson(&TaskStatus::Completed, request.completed_at_epoch_seconds)?,
             };
             if let Some(checkpoint) = request.checkpoint {
                 set.insert(
@@ -228,6 +233,7 @@ impl TaskRepository for MongoTaskRepository {
                 "updated_at_epoch_seconds": request.failed_at_epoch_seconds,
                 "next_attempt_at_epoch_seconds": request.retry_at_epoch_seconds.unwrap_or(request.failed_at_epoch_seconds),
                 "finished_at_epoch_seconds": if matches!(next_status, TaskStatus::Failed) { Bson::Int64(request.failed_at_epoch_seconds) } else { Bson::Null },
+                "cleanup_after": if matches!(next_status, TaskStatus::Failed) { terminal_task_cleanup_bson(&TaskStatus::Failed, request.failed_at_epoch_seconds)? } else { Bson::Null },
             };
             if let Some(checkpoint) = request.checkpoint {
                 set.insert(
@@ -329,6 +335,7 @@ impl TaskRepository for MongoTaskRepository {
                             "timed_out_at_epoch_seconds": request.timed_out_at_epoch_seconds,
                             "updated_at_epoch_seconds": request.timed_out_at_epoch_seconds,
                             "finished_at_epoch_seconds": request.timed_out_at_epoch_seconds,
+                            "cleanup_after": terminal_task_cleanup_bson(&TaskStatus::TimedOut, request.timed_out_at_epoch_seconds)?,
                         },
                         "$unset": {
                             "claimed_by": "",
@@ -382,6 +389,7 @@ impl TaskRepository for MongoTaskRepository {
                             "started_at_epoch_seconds": Bson::Null,
                             "finished_at_epoch_seconds": Bson::Null,
                             "timed_out_at_epoch_seconds": Bson::Null,
+                            "cleanup_after": Bson::Null,
                         },
                         "$unset": {
                             "claimed_by": "",
@@ -424,6 +432,7 @@ impl TaskRepository for MongoTaskRepository {
                             "timed_out_at_epoch_seconds": Bson::Null,
                             "started_at_epoch_seconds": Bson::Null,
                             "finished_at_epoch_seconds": Bson::Null,
+                            "cleanup_after": Bson::Null,
                         },
                         "$unset": {
                             "claimed_by": "",

@@ -1,3 +1,4 @@
+use mongodb::bson::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -24,6 +25,7 @@ pub(super) struct TaskDocument {
     pub(super) updated_at_epoch_seconds: i64,
     pub(super) started_at_epoch_seconds: Option<i64>,
     pub(super) finished_at_epoch_seconds: Option<i64>,
+    pub(super) cleanup_after: Option<DateTime>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
