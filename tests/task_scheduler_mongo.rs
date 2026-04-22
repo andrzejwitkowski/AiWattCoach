@@ -76,6 +76,11 @@ async fn mongo_task_repository_dedupes_per_user_and_creates_compound_unique_inde
                 .as_ref()
                 .and_then(|options| options.name.as_deref())
                 == Some("tasks_cleanup_after_ttl")
+            && index
+                .options
+                .as_ref()
+                .and_then(|options| options.expire_after)
+                == Some(std::time::Duration::from_secs(0))
     }));
 
     fixture.cleanup().await;
@@ -170,21 +175,17 @@ async fn mongo_fixture_or_skip() -> Option<MongoFixture> {
 impl MongoFixture {
     async fn new() -> Result<Self, String> {
         let settings = Settings::test_defaults();
-        let mongo_uri = settings.mongo.uri.clone();
         let mut options = ClientOptions::parse(&settings.mongo.uri)
             .await
-            .map_err(|error| {
-                format!("failed to create test mongo client for {mongo_uri}: {error}")
-            })?;
+            .map_err(|error| format!("failed to create test mongo client: {error}"))?;
         options.server_selection_timeout = Some(TEST_MONGO_SERVER_SELECTION_TIMEOUT);
-        let client = Client::with_options(options).map_err(|error| {
-            format!("failed to create test mongo client for {mongo_uri}: {error}")
-        })?;
+        let client = Client::with_options(options)
+            .map_err(|error| format!("failed to create test mongo client: {error}"))?;
         client
             .database("admin")
             .run_command(doc! { "ping": 1 })
             .await
-            .map_err(|error| format!("failed to ping test mongo at {mongo_uri}: {error}"))?;
+            .map_err(|error| format!("failed to ping test mongo: {error}"))?;
 
         Ok(Self {
             client,

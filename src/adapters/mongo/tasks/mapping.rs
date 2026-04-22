@@ -191,15 +191,18 @@ fn terminal_task_cleanup_after(
     status: TaskStatus,
     finished_at_epoch_seconds: Option<i64>,
 ) -> Result<Option<DateTime>, TaskSchedulerError> {
-    if !matches!(
+    let is_terminal = matches!(
         status,
         TaskStatus::Completed | TaskStatus::Failed | TaskStatus::TimedOut
-    ) {
+    );
+    if !is_terminal {
         return Ok(None);
     }
 
     let Some(finished_at_epoch_seconds) = finished_at_epoch_seconds else {
-        return Ok(None);
+        return Err(TaskSchedulerError::Repository(
+            "terminal task cleanup date requires a finished_at timestamp".to_string(),
+        ));
     };
     let cleanup_at_epoch_seconds = finished_at_epoch_seconds
         .checked_add(TERMINAL_TASK_TTL_SECONDS)
@@ -215,4 +218,58 @@ fn terminal_task_cleanup_after(
     })?;
 
     Ok(Some(DateTime::from_millis(cleanup_at_epoch_millis)))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn map_task_to_document_rejects_terminal_task_without_finished_at() {
+        let error = map_task_to_document(&sample_task(TaskStatus::Completed, None))
+            .expect_err("terminal task without finished_at should be rejected");
+
+        assert_eq!(
+            error,
+            TaskSchedulerError::Repository(
+                "terminal task cleanup date requires a finished_at timestamp".to_string(),
+            )
+        );
+    }
+
+    #[test]
+    fn map_task_to_document_skips_cleanup_after_for_non_terminal_task_without_finished_at() {
+        let document = map_task_to_document(&sample_task(TaskStatus::Queued, None))
+            .expect("non-terminal task should map successfully");
+
+        assert_eq!(document.cleanup_after, None);
+    }
+
+    fn sample_task(status: TaskStatus, finished_at_epoch_seconds: Option<i64>) -> ScheduledTask {
+        ScheduledTask {
+            id: "task-1".to_string(),
+            user_id: "user-1".to_string(),
+            task_type: "summary".to_string(),
+            status,
+            payload: json!({"task": "task-1"}),
+            checkpoint: None,
+            retry_strategy: RetryStrategy::Never,
+            dedupe_key: "dedupe-1".to_string(),
+            error_message: None,
+            attempt_count: 0,
+            next_attempt_at_epoch_seconds: 100,
+            claimed_by: None,
+            lease_expires_at_epoch_seconds: None,
+            last_heartbeat_at_epoch_seconds: None,
+            execution_timeout_seconds: 30,
+            timed_out_at_epoch_seconds: None,
+            leader_only: false,
+            created_at_epoch_seconds: 100,
+            updated_at_epoch_seconds: 100,
+            started_at_epoch_seconds: None,
+            finished_at_epoch_seconds,
+        }
+    }
 }

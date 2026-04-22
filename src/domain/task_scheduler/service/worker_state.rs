@@ -48,8 +48,9 @@ where
         let worker_id = worker_id.to_string();
         let task_id = task_id.to_string();
         Box::pin(async move {
-            let active_task_ids = {
-                let mut worker_states = scheduler.worker_states.lock().await;
+            let mut worker_states = scheduler.worker_states.clone().lock_owned().await;
+            let (worker, previous_state) = {
+                let previous_state = worker_states.get(&worker_id).cloned();
                 let state = worker_states
                     .entry(worker_id.clone())
                     .or_insert_with(|| WorkerState {
@@ -66,19 +67,24 @@ where
                 {
                     state.active_task_ids.push(task_id.clone());
                 }
-                state.active_task_ids.clone()
+                (
+                    scheduler.build_task_worker(
+                        &worker_id,
+                        is_leader,
+                        enabled_task_types,
+                        state.active_task_ids.clone(),
+                    ),
+                    previous_state,
+                )
             };
 
-            scheduler
-                .workers
-                .clone()
-                .upsert(scheduler.build_task_worker(
-                    &worker_id,
-                    is_leader,
-                    enabled_task_types,
-                    active_task_ids,
-                ))
-                .await
+            match scheduler.workers.clone().upsert(worker).await {
+                Ok(persisted) => Ok(persisted),
+                Err(error) => {
+                    restore_worker_state(&mut worker_states, worker_id, previous_state);
+                    Err(error)
+                }
+            }
         })
     }
 
@@ -93,8 +99,9 @@ where
         let worker_id = worker_id.to_string();
         let task_id = task_id.to_string();
         Box::pin(async move {
-            let active_task_ids = {
-                let mut worker_states = scheduler.worker_states.lock().await;
+            let mut worker_states = scheduler.worker_states.clone().lock_owned().await;
+            let (worker, previous_state) = {
+                let previous_state = worker_states.get(&worker_id).cloned();
                 let state = worker_states
                     .entry(worker_id.clone())
                     .or_insert_with(|| WorkerState {
@@ -105,19 +112,24 @@ where
                 state.is_leader = is_leader;
                 state.enabled_task_types = enabled_task_types.clone();
                 state.active_task_ids.retain(|active| active != &task_id);
-                state.active_task_ids.clone()
+                (
+                    scheduler.build_task_worker(
+                        &worker_id,
+                        is_leader,
+                        enabled_task_types,
+                        state.active_task_ids.clone(),
+                    ),
+                    previous_state,
+                )
             };
 
-            scheduler
-                .workers
-                .clone()
-                .upsert(scheduler.build_task_worker(
-                    &worker_id,
-                    is_leader,
-                    enabled_task_types,
-                    active_task_ids,
-                ))
-                .await
+            match scheduler.workers.clone().upsert(worker).await {
+                Ok(persisted) => Ok(persisted),
+                Err(error) => {
+                    restore_worker_state(&mut worker_states, worker_id, previous_state);
+                    Err(error)
+                }
+            }
         })
     }
 
@@ -168,8 +180,9 @@ where
         is_leader: bool,
         enabled_task_types: Vec<String>,
     ) -> Result<TaskWorker, TaskSchedulerError> {
-        {
-            let mut worker_states = self.worker_states.lock().await;
+        let mut worker_states = self.worker_states.clone().lock_owned().await;
+        let previous_state = {
+            let previous_state = worker_states.get(&worker_id).cloned();
             let state = worker_states
                 .entry(worker_id.clone())
                 .or_insert_with(|| WorkerState {
@@ -180,11 +193,32 @@ where
             state.is_leader = is_leader;
             state.enabled_task_types = enabled_task_types.clone();
             state.active_task_ids.clear();
-        }
+            previous_state
+        };
 
-        self.workers
+        match self
+            .workers
             .clone()
             .upsert(self.build_task_worker(&worker_id, is_leader, enabled_task_types, Vec::new()))
             .await
+        {
+            Ok(persisted) => Ok(persisted),
+            Err(error) => {
+                restore_worker_state(&mut worker_states, worker_id, previous_state);
+                Err(error)
+            }
+        }
+    }
+}
+
+fn restore_worker_state(
+    worker_states: &mut tokio::sync::OwnedMutexGuard<HashMap<String, WorkerState>>,
+    worker_id: String,
+    previous_state: Option<WorkerState>,
+) {
+    if let Some(previous_state) = previous_state {
+        worker_states.insert(worker_id, previous_state);
+    } else {
+        worker_states.remove(&worker_id);
     }
 }

@@ -205,7 +205,8 @@ where
                     existing_coach_message.id.clone(),
                     self.clock.now_epoch_seconds(),
                 );
-                self.reply_operations.upsert(completed).await?;
+                self.persist_post_provider_operation(completed, "recover_existing_coach_message")
+                    .await?;
                 let summary = self.get_existing_summary(user_id, workout_id).await?;
                 info!(
                     workout_id = %workout_id,
@@ -241,7 +242,8 @@ where
                 coach_message.id.clone(),
                 self.clock.now_epoch_seconds(),
             );
-            self.reply_operations.upsert(completed).await?;
+            self.persist_post_provider_operation(completed, "replay_persisted_coach_reply")
+                .await?;
             let summary = self.get_existing_summary(user_id, workout_id).await?;
             info!(
                 workout_id = %workout_id,

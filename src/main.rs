@@ -535,7 +535,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         TaskSchedulerService::new(task_repository, task_worker_repository, SystemClock),
         TaskSchedulerWorkerConfig::new(default_task_scheduler_worker_id(), false, Vec::new()),
         TaskSchedulerMaintenanceConfig::default(),
-    );
+    )?;
 
     let serve_result = axum::serve(
         listener,

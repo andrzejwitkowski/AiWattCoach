@@ -360,7 +360,7 @@ impl WorkoutCoach for TestCoach {
         user_message: &str,
         _athlete_summary_text: Option<&str>,
     ) -> crate::domain::llm::BoxFuture<Result<LlmChatResponse, LlmError>> {
-        let error = self.fail_with.lock().expect("coach mutex poisoned").clone();
+        let error = self.fail_with.lock().expect("coach mutex poisoned").take();
         let user_message = user_message.to_string();
         Box::pin(async move {
             if let Some(error) = error {
