@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-22 | Copilot/Qodo | PR #126 athlete summary scheduler review follow-up
+
+- Problem: new `src/domain/athlete_summary/...` scheduler tests called `crate::config::spawn_task_worker(...)`, which pulled composition-root wiring into domain tests, and the shared `workout_summary.coach_reply` task timeout was narrowed to a single LLM request even though one task attempt can also regenerate athlete summary before requesting the coach reply.
+- Fix: replaced the `athlete_summary` test dependency on `crate::config` with a local test worker helper built from domain scheduler primitives only, and raised `COACH_REPLY_EXECUTION_TIMEOUT_SECONDS` to cover two LLM requests plus a small buffer for context-building and checkpoint writes.
+- Prevention: keep `src/domain/**` tests on domain-owned scheduler primitives or local test helpers instead of importing startup/config wiring, and for scheduler-owned LLM tasks size execution timeouts to the full end-to-end attempt path rather than the inner provider HTTP timeout alone.
+
+### 2026-04-22 | user | LLM-backed scheduler timeout alignment
+
+- Problem: the new `athlete_summary.generate` scheduler task kept a hard-coded execution timeout that was not explicitly aligned with the real LLM request timeout policy, and the branch still encoded model-name-based adapter timeouts separately from scheduler task timeouts.
+- Fix: introduced a shared `domain::llm` timeout constant/helper with a uniform 3-minute request timeout, switched the LLM adapter to use that shared timeout for all models, and aligned scheduler execution timeouts to that same baseline instead of separate adapter-specific literals.
+- Prevention: for any LLM-backed scheduler task, compare task execution timeout against the actual provider request timeout source before shipping, then add explicit buffer for non-HTTP work or nested LLM calls when the end-to-end task path needs more than one request window.
+
 ### 2026-04-22 | user | scheduler panic regression test follow-up
 
 - Problem: the new panic-path regression test assumed the worker heartbeat row already existed and used `expect(...)` on an eventually updated worker projection, so it could fail before the worker finished startup even though the runtime behavior was correct.
