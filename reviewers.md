@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-22 | user | scheduler panic regression test follow-up
+
+- Problem: the new panic-path regression test assumed the worker heartbeat row already existed and used `expect(...)` on an eventually updated worker projection, so it could fail before the worker finished startup even though the runtime behavior was correct.
+- Fix: changed the first phase of the test to wait on the owned handler-start signal plus primary task state (`Running` with `claimed_by = worker-1`) instead of the worker repository, and changed the cleanup wait to poll the worker projection with `is_some_and(...)` until `active_task_ids` becomes empty.
+- Prevention: in async worker tests, synchronize early assertions on direct control signals or primary task state, not on lagging heartbeat/projection writes; when polling eventually updated projections, avoid `expect(...)` until the phase that guarantees the row exists.
+
 ### 2026-04-22 | Copilot | PR #115 task worker and workout summary review follow-up
 
 - Problem: the shared task worker still accepted zero-valued timing config that could panic at runtime when creating Tokio intervals, a panicking task handler could outlive the parent cleanup path and leave heartbeats/worker activity detached, coach-reply failure logs omitted `user_id`, and the save workflow treated any historical coach message as a finished conversation even if the latest message was still from the user.

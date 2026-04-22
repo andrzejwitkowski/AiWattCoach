@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use serde_json::json;
 use serial_test::serial;
+use tokio::sync::Notify;
 
 use crate::domain::identity::Clock;
 use crate::domain::task_scheduler::{
@@ -226,6 +229,7 @@ async fn task_worker_clears_active_task_ids_when_handler_panics() {
     let task_repository = InMemoryTaskRepository::default();
     let worker_repository = InMemoryTaskWorkerRepository::default();
     let clock = TestClock::default();
+    let panic_handler = PanicTaskHandler::new();
     let scheduler = TaskSchedulerService::new(
         task_repository.clone(),
         worker_repository.clone(),
@@ -263,29 +267,29 @@ async fn task_worker_clears_active_task_ids_when_handler_panics() {
             idle_poll_interval: std::time::Duration::from_millis(10),
             max_concurrency: 1,
         },
-        vec![std::sync::Arc::new(PanicTaskHandler)],
+        vec![panic_handler.clone()],
     )
     .expect("panic worker should spawn");
+
+    panic_handler.started.notified().await;
 
     tokio::time::timeout(std::time::Duration::from_secs(2), async {
         loop {
             let task = task_repository.only_task();
-            let worker = worker_repository
-                .worker("worker-1")
-                .expect("worker heartbeat should be recorded");
-            if task.status == TaskStatus::Running
-                && worker.active_task_ids == vec!["task-panic".to_string()]
+            if task.status == TaskStatus::Running && task.claimed_by.as_deref() == Some("worker-1")
             {
                 break;
             }
             tokio::task::yield_now().await;
         }
 
+        panic_handler.release.notify_one();
+
         loop {
-            let worker = worker_repository
+            if worker_repository
                 .worker("worker-1")
-                .expect("worker heartbeat should remain recorded");
-            if worker.active_task_ids.is_empty() {
+                .is_some_and(|worker| worker.active_task_ids.is_empty())
+            {
                 break;
             }
             tokio::task::yield_now().await;
@@ -301,10 +305,20 @@ async fn task_worker_clears_active_task_ids_when_handler_panics() {
     worker.shutdown().await;
 }
 
-struct PanicTaskHandler;
+struct PanicTaskHandler {
+    started: Arc<Notify>,
+    release: Arc<Notify>,
+}
 
 impl PanicTaskHandler {
     const TASK_TYPE: &'static str = "panic.task";
+
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            started: Arc::new(Notify::new()),
+            release: Arc::new(Notify::new()),
+        })
+    }
 }
 
 impl TaskHandler for PanicTaskHandler {
@@ -313,7 +327,11 @@ impl TaskHandler for PanicTaskHandler {
     }
 
     fn run(&self, _task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
+        let started = self.started.clone();
+        let release = self.release.clone();
         Box::pin(async move {
+            started.notify_one();
+            release.notified().await;
             panic!("panic task handler boom");
         })
     }
