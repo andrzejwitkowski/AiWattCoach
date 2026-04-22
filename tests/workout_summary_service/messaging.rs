@@ -16,6 +16,7 @@ use crate::shared::{
     test_service_with_coach_and_athlete_summary, InMemoryCoachReplyOperationRepository,
     InMemoryWorkoutSummaryRepository, StubAthleteSummaryService,
 };
+use crate::support::tracing_capture::capture_tracing_logs;
 
 #[derive(Clone, Default)]
 struct CountingCoach {
@@ -468,6 +469,43 @@ async fn generate_coach_reply_preserves_structured_llm_errors() {
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
             format!("upsert:workout-1:{}:Failed", persisted.user_message.id),
         ]
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn generate_coach_reply_logs_user_id_when_llm_call_fails() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let service =
+        test_service_with_coach(repository, reply_operations, Arc::new(AlwaysFailingCoach));
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    let (error, logs) = capture_tracing_logs(|| async {
+        service
+            .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+            .await
+            .unwrap_err()
+    })
+    .await;
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::workout_summary::WorkoutSummaryError::Llm(LlmError::RateLimited(
+            "provider throttled".to_string()
+        ))
+    );
+    assert!(
+        logs.contains("workout summary coach reply failed"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"user_id\":\"user-1\""), "logs were: {logs}");
+    assert!(
+        logs.contains("\"workout_id\":\"workout-1\""),
+        "logs were: {logs}"
     );
 }
 

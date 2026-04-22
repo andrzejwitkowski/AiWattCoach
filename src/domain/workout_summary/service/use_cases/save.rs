@@ -22,8 +22,8 @@ impl RecapSnapshot {
 fn has_finished_conversation(summary: &WorkoutSummary) -> bool {
     summary
         .messages
-        .iter()
-        .any(|message| message.role == MessageRole::Coach)
+        .last()
+        .is_some_and(|message| message.role == MessageRole::Coach)
 }
 
 fn status_message(

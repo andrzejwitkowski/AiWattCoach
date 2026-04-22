@@ -303,6 +303,7 @@ where
                 self.persist_post_provider_operation(failed, "persist_failed_checkpoint")
                     .await?;
                 warn!(
+                    user_id = %user_id,
                     workout_id = %workout_id,
                     user_message_id = %user_message.id,
                     retryable = error.is_retryable(),

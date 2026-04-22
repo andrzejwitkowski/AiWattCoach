@@ -229,6 +229,35 @@ async fn mark_saved_skips_recap_and_plan_without_finished_conversation() {
 }
 
 #[tokio::test]
+async fn mark_saved_skips_recap_and_plan_when_latest_message_is_from_user() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary
+        .messages
+        .push(aiwattcoach::domain::workout_summary::ConversationMessage {
+            id: "message-user-latest".to_string(),
+            role: aiwattcoach::domain::workout_summary::MessageRole::User,
+            content: "One more thought before saving".to_string(),
+            created_at_epoch_seconds: 1_700_000_060,
+        });
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    let service = test_service_with_training_plan(
+        repository.clone(),
+        std::sync::Arc::new(training_plan.clone()),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "skipped");
+    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
+    assert_eq!(
+        result.workflow.messages,
+        vec!["No finished coach conversation to process.".to_string()]
+    );
+    assert_eq!(training_plan.calls(), Vec::<String>::new());
+}
+
+#[tokio::test]
 async fn mark_saved_generates_recap_only_for_finished_conversation_on_non_latest_activity() {
     let mut summary = existing_summary_with_finished_conversation();
     summary.workout_id = "workout-older".to_string();

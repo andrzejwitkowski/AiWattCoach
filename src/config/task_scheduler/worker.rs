@@ -16,6 +16,32 @@ use crate::{
     BackgroundTaskHandle,
 };
 
+struct AbortOnDropHandle<T>(Option<tokio::task::JoinHandle<T>>);
+
+impl<T> AbortOnDropHandle<T> {
+    fn new(handle: tokio::task::JoinHandle<T>) -> Self {
+        Self(Some(handle))
+    }
+
+    fn abort(&self) {
+        if let Some(handle) = &self.0 {
+            handle.abort();
+        }
+    }
+
+    async fn join(mut self) -> Result<T, tokio::task::JoinError> {
+        self.0.take().expect("join handle should be present").await
+    }
+}
+
+impl<T> Drop for AbortOnDropHandle<T> {
+    fn drop(&mut self) {
+        if let Some(handle) = &self.0 {
+            handle.abort();
+        }
+    }
+}
+
 struct TaskHandlerRegistry {
     enabled_task_types: Vec<String>,
     handlers_by_type: HashMap<String, SharedTaskHandler>,
@@ -55,6 +81,7 @@ where
     Workers: TaskWorkerRepository,
     Time: Clock,
 {
+    validate_task_worker_config(&config)?;
     let registry = build_task_handler_registry(handlers)?;
     let concurrency_limit = config.max_concurrency.max(1);
     let runtime_state = Arc::new(WorkerRuntimeState::default());
@@ -77,6 +104,28 @@ where
         shutdown_tx,
         join_handle,
     ))
+}
+
+fn validate_task_worker_config(config: &TaskWorkerConfig) -> Result<(), TaskSchedulerError> {
+    if config.lease_duration_seconds <= 0 {
+        return Err(TaskSchedulerError::Validation(
+            "task worker lease_duration_seconds must be positive".to_string(),
+        ));
+    }
+
+    if config.heartbeat_interval.is_zero() {
+        return Err(TaskSchedulerError::Validation(
+            "task worker heartbeat_interval must be positive".to_string(),
+        ));
+    }
+
+    if config.idle_poll_interval.is_zero() {
+        return Err(TaskSchedulerError::Validation(
+            "task worker idle_poll_interval must be positive".to_string(),
+        ));
+    }
+
+    Ok(())
 }
 
 fn build_task_handler_registry(
@@ -268,42 +317,64 @@ where
         _permit,
     } = claimed_task;
 
-    let heartbeat = spawn_task_heartbeat(
+    let task_id = task.id.clone();
+
+    let heartbeat = AbortOnDropHandle::new(spawn_task_heartbeat(
         scheduler.clone(),
         worker_id.clone(),
         is_leader,
         lease_duration_seconds,
         heartbeat_interval,
         enabled_task_types.clone(),
-        task.id.clone(),
+        task_id.clone(),
         runtime_state.clone(),
-    );
+    ));
 
     tracing::info!(
-        task_id = %task.id,
+        task_id = %task_id,
         task_type = %task.task_type,
         worker_id = %worker_id,
         "running scheduled task"
     );
 
-    let outcome = handler.run(task.clone()).await;
+    let run_result = run_task_handler(handler, task.clone()).await;
     heartbeat.abort();
-    if let Err(error) = heartbeat.await {
+    if let Err(error) = heartbeat.join().await {
         if !error.is_cancelled() {
-            warn!(task_id = %task.id, worker_id = %worker_id, %error, "task heartbeat exited unexpectedly");
+            warn!(task_id = %task_id, worker_id = %worker_id, %error, "task heartbeat exited unexpectedly");
         }
     }
 
-    persist_task_outcome(&scheduler, &worker_id, &task, outcome).await;
+    if let TaskHandlerRunResult::Panicked(join_error) = &run_result {
+        warn!(task_id = %task_id, worker_id = %worker_id, %join_error, "scheduled task handler panicked");
+    }
+
+    if let TaskHandlerRunResult::Completed(outcome) = run_result {
+        persist_task_outcome(&scheduler, &worker_id, &task, outcome).await;
+    }
+
     persist_worker_task_release(
         &scheduler,
         &worker_id,
         is_leader,
         enabled_task_types,
-        &task.id,
+        &task_id,
         &runtime_state,
     )
     .await;
+}
+
+enum TaskHandlerRunResult {
+    Completed(TaskRunOutcome),
+    Panicked(tokio::task::JoinError),
+}
+
+async fn run_task_handler(handler: SharedTaskHandler, task: ScheduledTask) -> TaskHandlerRunResult {
+    let task = AbortOnDropHandle::new(tokio::spawn(async move { handler.run(task).await }));
+    match task.join().await {
+        Ok(outcome) => TaskHandlerRunResult::Completed(outcome),
+        Err(join_error) => TaskHandlerRunResult::Panicked(join_error),
+    }
 }
 
 async fn wait_for_next_claim_attempt<Tasks, Workers, Time>(

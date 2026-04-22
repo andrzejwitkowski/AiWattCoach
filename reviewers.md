@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-22 | Copilot | PR #115 task worker and workout summary review follow-up
+
+- Problem: the shared task worker still accepted zero-valued timing config that could panic at runtime when creating Tokio intervals, a panicking task handler could outlive the parent cleanup path and leave heartbeats/worker activity detached, coach-reply failure logs omitted `user_id`, and the save workflow treated any historical coach message as a finished conversation even if the latest message was still from the user.
+- Fix: validated `lease_duration_seconds`, `heartbeat_interval`, and `idle_poll_interval` before spawning the worker; wrapped worker child tasks so handler and heartbeat tasks are aborted on drop while still clearing worker activity after panics; added `user_id` to the coach-reply failure `warn!`; and changed the save workflow conversation-finished check to require the last message to be from the coach, with focused regressions for each path.
+- Prevention: any runtime loop that constructs `tokio::interval` or similar timers must fail fast on non-positive config before spawning, any spawned child task created only for orchestration should be owned by an abort-on-drop guard so panics and shutdown cannot detach it, failure logs at workflow boundaries should include user/workout identifiers needed for recovery, and conversation-complete predicates must inspect the terminal message state instead of searching the whole history for any matching role.
+
 ### 2026-04-22 | Copilot | training plan conversation context review follow-up
 
 - Problem: the first review version treated missing workout summaries as `Ok(None)` when loading planning context, cloned the full planning context unnecessarily during retries, and embedded raw conversation text into `stable_context`, which is transported as system-role context for some LLM providers.
