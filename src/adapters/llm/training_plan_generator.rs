@@ -12,7 +12,10 @@ use crate::domain::{
         UserLlmConfigProvider,
     },
     training_context::TrainingContextBuilder,
-    training_plan::{TrainingPlanError, TrainingPlanGenerator, TrainingPlanPlanningContext},
+    training_plan::{
+        TrainingPlanConversationRole, TrainingPlanError, TrainingPlanGenerator,
+        TrainingPlanPlanningContext,
+    },
     workout_summary::WorkoutRecap,
 };
 
@@ -21,7 +24,7 @@ const TRAINING_PLAN_INITIAL_WINDOW_SYSTEM_PROMPT_BASE: &str = "You are an expert
 const TRAINING_PLAN_CORRECTION_SYSTEM_PROMPT_BASE: &str = "You are an expert cycling coach and a strict syntax generator for Intervals.icu planned workouts. Help correct invalid dated workout sections using only the backend-supported workout grammar. Only rewrite the invalid dated sections provided.";
 const TRAINING_PLAN_OUTPUT_GRAMMAR: &str = "Critical rules: Output ONLY the raw workout text. Do not include commentary, greetings, markdown fences, or prose before/after the dated sections. Every actionable workout step MUST begin with a hyphen followed by a space (`- `). Do not invent syntax. Output grammar: One dated section per day. Start each section with a YYYY-MM-DD line. Follow with either `Rest Day`, `Rest Day: <reason>`, or workout-builder text lines. Use `Rest Day: <reason>` when you intentionally prescribe full rest so the backend can persist the reason. Block titles and descriptions are allowed on lines that do not start with `- ` and do not end with `x`. Step syntax: `- [Duration] [Target]`. Ramp syntax: `- [Duration] ramp [Start Target]-[End Target]`. Repeat headers must end with `x`, such as `Main Set 4x`. Supported durations: `30s`, `5m`, `45m`. Supported targets: `65%`, `95-105%`, `120-160W`. Example step: `- 45m 65%`. Example output: `2026-04-06\nWarmup\n- 15m ramp 100-270W\n2026-04-07\nRest Day: accumulated fatigue after race block`. Do not use cadence, zone targets, inline text cues, hour units, or distance units because the current backend parser does not accept them. For correction prompts, Only output corrected dated sections for the invalid dates you are fixing.";
 const TRAINING_PLAN_PLANNING_GUIDELINES_BASE: &str = "Planning guidelines: Follow a durability-first approach. Road cycling, especially masters racing, is stochastic; prioritize power repeatability and lactate clearance over pure steady-state aerobic work. Treat athlete age 45+, body-weight changes, and medications such as beta-blockers as fixed environmental constraints, not pathologies. Metric hierarchy: RPE over power over TSS/TSB over heart rate. If RPE stays low or moderate despite high fatigue metrics, trust recovery capacity and maintain load. Ignore heart rate for intensity pacing when beta-blockers are present. Never prescribe more than 2 consecutive Rest Day entries unless the athlete explicitly reports illness or injury. During build phases, TSB/Form may sit in the -15 to -25 range without forcing emergency rest. Prevent detraining by preferring Active Recovery or Z1 over total inactivity when extra recovery is needed. If the athlete reports fatigue or low freshness, first choose a short Z1 ride when availability allows a safe low-load session; prescribe Rest Day only when availability blocks even an easy ride or the context clearly supports full rest, and include a short concrete reason after `Rest Day:`. Plan beyond isolated days: shape the 14-day window as part of a coherent mesocycle with a clear phase progression, not a pile of disconnected sessions. Weekly load progression should be intentional. Treat races as Category C by default unless the context explicitly says otherwise. For Category C races, do not taper: treat the race like a high-intensity stochastic interval session, keep normal training load during race week, keep Tuesday and Wednesday interval sessions before a Sunday race when the context supports it, allow at most one light spinning or Rest Day on Friday or Saturday before the race, and schedule recovery or light endurance the day after the race before returning to structured intervals within 48 hours. When race time is materially earlier than normal training time, gradually shift key sessions toward the race start window to support circadian rhythm and heat adaptation.";
-const TRAINING_PLAN_CONVERSATION_GUIDANCE: &str = "If stable context includes `planning_conversation`, treat it as the exact conversation that led to this plan. Messages with role `coach` are your own earlier coach statements. If those coach messages promised specific workouts, sequencing, or an easy/recovery/rest week structure, return a plan that stays consistent with those promises unless the packed training context clearly makes them unsafe or impossible. When you must override an earlier promise for safety, availability, or hard context constraints, stay as close as possible to the original intent and preserve any easy/recovery character of the block.";
+const TRAINING_PLAN_CONVERSATION_GUIDANCE: &str = "If earlier conversation messages are present, treat them as the exact conversation that led to this plan. Earlier assistant-role messages are your own earlier coach statements. If those earlier coach statements promised specific workouts, sequencing, or an easy/recovery/rest week structure, return a plan that stays consistent with those promises unless the packed training context clearly makes them unsafe or impossible. When you must override an earlier promise for safety, availability, or hard context constraints, stay as close as possible to the original intent and preserve any easy/recovery character of the block.";
 const TRAINING_PLAN_FORWARD_LOAD_GUIDANCE: &str = "Forecast load sequentially before choosing each next day. Start from the current historical CTL, ATL, and TSB in the packed training context. Treat previously projected planned days (`pd`) as already planned/completed inputs when they exist, then simulate the effect of each newly planned workout before choosing the following day. Do not plan all 14 days from one static CTL/ATL/TSB snapshot. If the conversation or context says rest week, easy week, or recovery block, keep the forward simulation aligned with that low-load intent and avoid hard sessions unless they are truly necessary.";
 const TRAINING_PLAN_AVAILABILITY_CONFIGURED_GUIDANCE: &str = "Weekly availability is mandatory and must be respected: only schedule workouts on weekdays marked available, keep unavailable days as Rest Day with a reason when full rest is intentional, and never exceed the configured max duration minutes for each available weekday.";
 const TRAINING_PLAN_AVAILABILITY_UNCONFIGURED_GUIDANCE: &str = "Weekly availability is not configured in this context. Do not infer unavailable days or extra rest constraints from missing availability data. Plan a sensible 14-day cycling window from the training context alone, and avoid claiming that weekly availability is configured.";
@@ -160,6 +163,11 @@ where
                 context.rendered.volatile_context
             );
             let user_prompt = "Generate the next 14 dated days starting the day after the completed workout. Return only dated sections in parser-friendly workout-builder text. Include rest days explicitly when needed, and use `Rest Day: <reason>` when you prescribe full rest.";
+            let mut conversation = planning_conversation_messages(planning_context.as_ref());
+            conversation.push(LlmChatMessage {
+                role: LlmMessageRole::User,
+                content: user_prompt.to_string(),
+            });
 
             let response = llm_chat_port
                 .chat(
@@ -171,10 +179,7 @@ where
                         ),
                         stable_context,
                         volatile_context,
-                        conversation: vec![LlmChatMessage {
-                            role: LlmMessageRole::User,
-                            content: user_prompt.to_string(),
-                        }],
+                        conversation,
                         cache_scope_key: None,
                         cache_key: None,
                         reusable_cache_id: None,
@@ -234,6 +239,11 @@ where
             let user_prompt = format!(
                 "Correct only these invalid dated sections. Keep valid days untouched.\n\nInvalid sections:\n{invalid_day_sections}\n\nValidation issues:\n{issues_text}"
             );
+            let mut conversation = planning_conversation_messages(planning_context.as_ref());
+            conversation.push(LlmChatMessage {
+                role: LlmMessageRole::User,
+                content: user_prompt,
+            });
 
             let response = llm_chat_port
                 .chat(
@@ -245,10 +255,7 @@ where
                         ),
                         stable_context,
                         volatile_context,
-                        conversation: vec![LlmChatMessage {
-                            role: LlmMessageRole::User,
-                            content: user_prompt,
-                        }],
+                        conversation,
                         cache_scope_key: None,
                         cache_key: None,
                         reusable_cache_id: None,
@@ -313,10 +320,8 @@ fn training_plan_stable_context(
         "saved_at_epoch_seconds={saved_at_epoch_seconds}\nworkout_recap={workout_recap_json}"
     );
 
-    if let Some(planning_conversation_json) = planning_context_json(planning_context) {
-        stable_context.push_str(&format!(
-            "\nplanning_conversation={planning_conversation_json}"
-        ));
+    if let Some(planning_rpe) = planning_context.and_then(|context| context.rpe) {
+        stable_context.push_str(&format!("\nplanning_rpe={planning_rpe}"));
     }
 
     stable_context.push_str(&format!(
@@ -325,30 +330,20 @@ fn training_plan_stable_context(
     stable_context
 }
 
-fn planning_context_json(planning_context: Option<&TrainingPlanPlanningContext>) -> Option<String> {
-    let planning_context = planning_context?;
-    if planning_context.rpe.is_none() && planning_context.messages.is_empty() {
-        return None;
-    }
-
-    let messages = planning_context
-        .messages
-        .iter()
-        .map(|message| {
-            json!({
-                "role": message.role.as_str(),
-                "content": message.content,
-            })
+fn planning_conversation_messages(
+    planning_context: Option<&TrainingPlanPlanningContext>,
+) -> Vec<LlmChatMessage> {
+    planning_context
+        .into_iter()
+        .flat_map(|planning_context| planning_context.messages.iter())
+        .map(|message| LlmChatMessage {
+            role: match message.role {
+                TrainingPlanConversationRole::Coach => LlmMessageRole::Assistant,
+                TrainingPlanConversationRole::User => LlmMessageRole::User,
+            },
+            content: message.content.clone(),
         })
-        .collect::<Vec<_>>();
-
-    Some(
-        json!({
-            "rpe": planning_context.rpe,
-            "messages": messages,
-        })
-        .to_string(),
-    )
+        .collect()
 }
 
 #[cfg(test)]
@@ -373,12 +368,8 @@ mod tests {
             assert!(prompt.contains("include a short concrete reason after `Rest Day:`"));
             assert!(prompt.contains("part of a coherent mesocycle with a clear phase progression"));
             assert!(prompt.contains("Treat races as Category C by default unless the context explicitly says otherwise."));
-            assert!(
-                prompt.contains("Messages with role `coach` are your own earlier coach statements")
-                    || prompt.contains(
-                        "Messages with role `coach` are your own earlier coach statements."
-                    )
-            );
+            assert!(prompt
+                .contains("Earlier assistant-role messages are your own earlier coach statements"));
             assert!(
                 prompt.contains("Do not plan all 14 days from one static CTL/ATL/TSB snapshot.")
             );

@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-22 | Copilot | training plan conversation context review follow-up
+
+- Problem: the first review version treated missing workout summaries as `Ok(None)` when loading planning context, cloned the full planning context unnecessarily during retries, and embedded raw conversation text into `stable_context`, which is transported as system-role context for some LLM providers.
+- Fix: changed `get_planning_context` to propagate `WorkoutSummaryError::NotFound` through the existing training-plan error mapping, switched training-plan prompt assembly to send prior coach/user planning history as role-correct `conversation` messages while keeping only `planning_rpe` in `stable_context`, and changed planning-context caching in the generation service to load once without cloning on each correction call.
+- Prevention: when threading user-originated history into LLM requests, check every provider mapping before putting that data into `stable_context` or any system-role field; prefer role-correct conversation messages for conversational history, and do not silently downgrade missing prerequisite state into `None` unless the flow is explicitly optional.
+
 ### 2026-04-22 | user | verification strategy for heavy Rust test binaries
 
 - Problem: I launched multiple heavy `cargo test --test ...` binaries in parallel while verifying the training-plan conversation-context change. In this repo that produced non-diagnostic `SIGKILL` failures under host pressure, which obscured whether the code itself was actually broken.

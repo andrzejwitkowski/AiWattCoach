@@ -67,14 +67,11 @@ where
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
-            match workout_summary_service
+            workout_summary_service
                 .get_summary(&user_id, &workout_id)
                 .await
-            {
-                Ok(summary) => Ok(map_workout_summary_to_planning_context(summary)),
-                Err(WorkoutSummaryError::NotFound) => Ok(None),
-                Err(error) => Err(map_workout_summary_error(error)),
-            }
+                .map(map_workout_summary_to_planning_context)
+                .map_err(map_workout_summary_error)
         })
     }
 }
@@ -297,5 +294,126 @@ pub async fn wait_for_sigterm(
             shutdown.notify_waiters();
         }
         Err(error) => tracing::error!(%error, "Failed to listen for SIGTERM"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TrainingPlanWorkoutSummaryAdapter;
+    use crate::domain::{
+        training_plan::TrainingPlanWorkoutSummaryPort,
+        workout_summary::{
+            BoxFuture, CoachReply, PersistedUserMessage, SaveSummaryResult, SendMessageResult,
+            WorkoutRecap, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+        },
+    };
+
+    #[derive(Clone)]
+    struct NotFoundWorkoutSummaryService;
+
+    impl WorkoutSummaryUseCases for NotFoundWorkoutSummaryService {
+        fn get_summary(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            Box::pin(async { Err(WorkoutSummaryError::NotFound) })
+        }
+
+        fn create_summary(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn list_summaries(
+            &self,
+            _user_id: &str,
+            _workout_ids: Vec<String>,
+        ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn update_rpe(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _rpe: u8,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn mark_saved(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> BoxFuture<Result<SaveSummaryResult, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn reopen_summary(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn persist_workout_recap(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _recap: WorkoutRecap,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn send_message(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _content: String,
+        ) -> BoxFuture<Result<SendMessageResult, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn append_user_message(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _content: String,
+        ) -> BoxFuture<Result<PersistedUserMessage, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn generate_coach_reply(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _user_message_id: String,
+        ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
+            unreachable!()
+        }
+    }
+
+    #[tokio::test]
+    async fn planning_context_not_found_maps_to_validation_error() {
+        let adapter = TrainingPlanWorkoutSummaryAdapter::new(std::sync::Arc::new(
+            NotFoundWorkoutSummaryService,
+        ));
+
+        let error = adapter
+            .get_planning_context("user-1", "workout-1")
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            crate::domain::training_plan::TrainingPlanError::Validation(
+                "workout summary not found".to_string()
+            )
+        );
     }
 }

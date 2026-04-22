@@ -272,7 +272,7 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
     assert!(correction_prompt.contains("One dated section per day"));
     assert!(correction_prompt.contains("Only output corrected dated sections"));
     assert!(correction_prompt
-        .contains("Messages with role `coach` are your own earlier coach statements"));
+        .contains("Earlier assistant-role messages are your own earlier coach statements"));
     assert!(
         correction_prompt.contains("Do not plan all 14 days from one static CTL/ATL/TSB snapshot.")
     );
@@ -314,14 +314,23 @@ async fn training_plan_generator_builds_initial_window_request_with_recap() {
     assert!(requests[0]
         .stable_context
         .contains("workout_recap={\"text\":\"Recovered well and handled threshold steadily\""));
-    assert!(requests[0]
+    assert!(requests[0].stable_context.contains("planning_rpe=7"));
+    assert!(!requests[0]
         .stable_context
         .contains("planning_conversation="));
-    assert!(requests[0].stable_context.contains("\"role\":\"coach\""));
-    assert!(requests[0]
-        .stable_context
-        .contains("\"I am planning a recovery week with easy endurance only"));
+    assert_eq!(requests[0].conversation.len(), 3);
+    assert_eq!(
+        requests[0].conversation[0].role,
+        aiwattcoach::domain::llm::LlmMessageRole::Assistant
+    );
+    assert_eq!(
+        requests[0].conversation[1].role,
+        aiwattcoach::domain::llm::LlmMessageRole::User
+    );
     assert!(requests[0].conversation[0]
+        .content
+        .contains("I am planning a recovery week with easy endurance only"));
+    assert!(requests[0].conversation[2]
         .content
         .contains("Generate the next 14 dated days"));
 }
@@ -398,14 +407,19 @@ async fn training_plan_generator_builds_correction_request_with_issues_and_inval
     assert!(requests[0]
         .stable_context
         .contains("workout_recap={\"text\":\"Recovered well and handled threshold steadily\""));
-    assert!(requests[0]
+    assert!(requests[0].stable_context.contains("planning_rpe=7"));
+    assert!(!requests[0]
         .stable_context
         .contains("planning_conversation="));
-    assert!(requests[0].stable_context.contains("\"role\":\"coach\""));
-    assert!(requests[0].conversation[0]
+    assert_eq!(requests[0].conversation.len(), 3);
+    assert_eq!(
+        requests[0].conversation[0].role,
+        aiwattcoach::domain::llm::LlmMessageRole::Assistant
+    );
+    assert!(requests[0].conversation[2]
         .content
         .contains("2026-04-05\n- 10m nonsense"));
-    assert!(requests[0].conversation[0]
+    assert!(requests[0].conversation[2]
         .content
         .contains("invalid planned workout step"));
 }
