@@ -36,6 +36,7 @@
 - For flaky test-harness failures, prefer sequential reruns of the exact binary order from the failing suite, then inspect test helpers for leaked servers, background tasks, or retained global fixtures before changing production code.
 - In parallel Rust test binaries, do not assert that a shared global capture registry is completely empty unless the helper truly owns every concurrent capture. Assert that the current test's capture was deregistered instead.
 - Do not reuse `mongodb::Client` or similar async driver clients across separate `#[tokio::test]` runtimes via `OnceLock` or other process-global singletons. A client tied to a runtime that has already shut down can fail later with cancelled-task or runtime-shutdown errors.
+- If this repo's broad Rust suites hit host-level `SIGKILL`s during verification, do not treat that alone as a product failure. Stop parallel test launches, switch to sequential targeted test filters for the touched behavior, and keep `cargo fmt --check`, `cargo clippy -D warnings`, and `bun run verify:arch` as the reliable completion gates.
 
 ## Projection Window Semantics
 

@@ -465,9 +465,11 @@ async fn repeat_mark_saved_retries_training_plan_generation_for_already_saved_su
     summary.saved_at_epoch_seconds = Some(1_700_000_000);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
-    let service = test_service_with_training_plan(
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -523,9 +525,11 @@ async fn repeat_mark_saved_reports_generated_recap_when_retry_persists_recap_bef
             "plan generation failed after recap persisted".to_string(),
         ),
     );
-    let service = test_service_with_training_plan(
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -555,9 +559,11 @@ async fn repeat_mark_saved_keeps_recap_unchanged_when_retry_fails_after_existing
     summary.workout_recap_generated_at_epoch_seconds = Some(1_700_000_010);
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let training_plan = RecordingTrainingPlanService::default();
-    let service = test_service_with_training_plan(
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -594,9 +600,11 @@ async fn repeat_mark_saved_reloads_summary_after_successful_training_plan_retry(
         active_projected_days: Vec::new(),
         was_generated: false,
     });
-    let service = test_service_with_training_plan(
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -649,9 +657,11 @@ async fn repeat_mark_saved_does_not_report_generated_recap_for_timestamp_only_re
         active_projected_days: Vec::new(),
         was_generated: false,
     });
-    let service = test_service_with_training_plan(
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
         repository.clone(),
         std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
     );
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
@@ -659,6 +669,54 @@ async fn repeat_mark_saved_does_not_report_generated_recap_for_timestamp_only_re
     assert_eq!(result.workflow.recap_status.as_str(), "unchanged");
     assert_eq!(result.workflow.plan_status.as_str(), "unchanged");
     assert_eq!(result.workflow.messages, Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn repeat_mark_saved_skips_retry_when_summary_has_no_finished_conversation() {
+    let mut summary = existing_summary();
+    summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
+        repository,
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity.clone()),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "unchanged");
+    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
+    assert_eq!(result.workflow.messages, Vec::<String>::new());
+    assert!(training_plan.calls().is_empty());
+    assert!(latest_activity.calls().is_empty());
+}
+
+#[tokio::test]
+async fn repeat_mark_saved_skips_retry_when_summary_is_not_latest_completed_activity() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "workout-older".to_string();
+    summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-latest"));
+    let service = test_service_with_training_plan_and_latest_activity(
+        repository,
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity.clone()),
+    );
+
+    let result = service.mark_saved("user-1", "workout-older").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "unchanged");
+    assert_eq!(result.workflow.plan_status.as_str(), "skipped");
+    assert_eq!(result.workflow.messages, Vec::<String>::new());
+    assert!(training_plan.calls().is_empty());
+    assert_eq!(
+        latest_activity.calls(),
+        vec!["latest_completed_activity_id:user-1".to_string()]
+    );
 }
 
 #[tokio::test]

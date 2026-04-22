@@ -19,6 +19,13 @@ impl RecapSnapshot {
     }
 }
 
+fn has_finished_conversation(summary: &WorkoutSummary) -> bool {
+    summary
+        .messages
+        .iter()
+        .any(|message| message.role == MessageRole::Coach)
+}
+
 fn status_message(
     status: &SaveWorkflowStatus,
     generated: &str,
@@ -39,6 +46,23 @@ where
     Time: Clock + Clone,
     Ids: IdGenerator + Clone,
 {
+    async fn is_latest_completed_activity(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Result<bool, WorkoutSummaryError> {
+        let Some(latest_completed_activity_service) = &self.latest_completed_activity_service
+        else {
+            return Ok(false);
+        };
+
+        Ok(latest_completed_activity_service
+            .latest_completed_activity_id(user_id)
+            .await?
+            .as_deref()
+            == Some(workout_id))
+    }
+
     pub(super) async fn mark_saved_impl(
         &self,
         user_id: &str,
@@ -64,12 +88,7 @@ where
             .set_saved_state(user_id, workout_id, Some(now), now)
             .await?;
 
-        let has_finished_conversation = existing
-            .messages
-            .iter()
-            .any(|message| message.role == MessageRole::Coach);
-
-        if !has_finished_conversation {
+        if !has_finished_conversation(&existing) {
             let summary = self.get_existing_summary(user_id, workout_id).await?;
             return Ok(SaveSummaryResult {
                 summary,
@@ -81,17 +100,9 @@ where
             });
         }
 
-        let is_latest_completed_activity = if let Some(latest_completed_activity_service) =
-            &self.latest_completed_activity_service
-        {
-            latest_completed_activity_service
-                .latest_completed_activity_id(user_id)
-                .await?
-                .as_deref()
-                == Some(workout_id)
-        } else {
-            false
-        };
+        let is_latest_completed_activity = self
+            .is_latest_completed_activity(user_id, workout_id)
+            .await?;
 
         let recap_status = if let Some(training_plan_service) = &self.training_plan_service {
             match training_plan_service
@@ -182,6 +193,31 @@ where
         workout_id: &str,
         existing: WorkoutSummary,
     ) -> Result<SaveSummaryResult, WorkoutSummaryError> {
+        if !has_finished_conversation(&existing) {
+            return Ok(SaveSummaryResult {
+                summary: existing,
+                workflow: SaveWorkflowResult {
+                    recap_status: SaveWorkflowStatus::Unchanged,
+                    plan_status: SaveWorkflowStatus::Skipped,
+                    messages: Vec::new(),
+                },
+            });
+        }
+
+        let is_latest_completed_activity = self
+            .is_latest_completed_activity(user_id, workout_id)
+            .await?;
+        if !is_latest_completed_activity {
+            return Ok(SaveSummaryResult {
+                summary: existing,
+                workflow: SaveWorkflowResult {
+                    recap_status: SaveWorkflowStatus::Unchanged,
+                    plan_status: SaveWorkflowStatus::Skipped,
+                    messages: Vec::new(),
+                },
+            });
+        }
+
         let recap_before_retry = RecapSnapshot::from_summary(&existing);
 
         if let (Some(training_plan_service), Some(saved_at_epoch_seconds)) =

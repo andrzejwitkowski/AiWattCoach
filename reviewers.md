@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-22 | Copilot | training plan conversation context review follow-up
+
+- Problem: the first review version treated missing workout summaries as `Ok(None)` when loading planning context, cloned the full planning context unnecessarily during retries, and embedded raw conversation text into `stable_context`, which is transported as system-role context for some LLM providers.
+- Fix: changed `get_planning_context` to propagate `WorkoutSummaryError::NotFound` through the existing training-plan error mapping, switched training-plan prompt assembly to send prior coach/user planning history as role-correct `conversation` messages while keeping only `planning_rpe` in `stable_context`, and changed planning-context caching in the generation service to load once without cloning on each correction call.
+- Prevention: when threading user-originated history into LLM requests, check every provider mapping before putting that data into `stable_context` or any system-role field; prefer role-correct conversation messages for conversational history, and do not silently downgrade missing prerequisite state into `None` unless the flow is explicitly optional.
+
+### 2026-04-22 | user | verification strategy for heavy Rust test binaries
+
+- Problem: I launched multiple heavy `cargo test --test ...` binaries in parallel while verifying the training-plan conversation-context change. In this repo that produced non-diagnostic `SIGKILL` failures under host pressure, which obscured whether the code itself was actually broken.
+- Fix: switched verification to sequential, narrowly filtered Rust tests for the touched behavior, kept `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `bun run verify:arch` as the reliable completion gates, and stopped treating the parallel-suite `SIGKILL`s as actionable product failures.
+- Prevention: never parallelize heavy Rust test binaries in this repo. If broad suites hit host-level `SIGKILL`s, verify the changed behavior with sequential targeted filters and explicitly report the broader suites as skipped for environment reasons instead of chasing a fake code regression.
+
 ### 2026-04-21 | user | training plan projected-day roots and calendar view refresh
 
 - Problem: after saving a new workout, a fresh training-plan projection was persisted for the new window, but the calendar could still miss the first projected day of that new snapshot. Real Mongo data showed `training_plan_projected_days` already contained an active row for `2026-04-22` while `calendar_entry_views` did not. The root cause was not refresh-range cleanup; the bridge readers for projected plans were still filtering with `date > snapshot.start_date`, so the first day of every snapshot was silently dropped before calendar refresh and other projected-day readers ever saw it.
