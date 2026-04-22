@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-22 | user | LLM-backed scheduler timeout alignment
+
+- Problem: the new `athlete_summary.generate` scheduler task kept a hard-coded execution timeout that was not explicitly aligned with the real LLM request timeout policy, and the branch still encoded model-name-based adapter timeouts separately from scheduler task timeouts.
+- Fix: introduced a shared `domain::llm` timeout constant/helper with a uniform 3-minute request timeout, switched the LLM adapter to use that shared timeout for all models, and aligned both `athlete_summary.generate` and `workout_summary.coach_reply` scheduler execution timeouts to the same value.
+- Prevention: for any LLM-backed scheduler task, compare task execution timeout against the actual provider request timeout source before shipping; do not leave duplicated timeout literals or model-name heuristics split across adapter and scheduler layers.
+
 ### 2026-04-22 | user | scheduler panic regression test follow-up
 
 - Problem: the new panic-path regression test assumed the worker heartbeat row already existed and used `expect(...)` on an eventually updated worker projection, so it could fail before the worker finished startup even though the runtime behavior was correct.
