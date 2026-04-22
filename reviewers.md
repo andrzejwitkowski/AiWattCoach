@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-22 | CodeRabbit/Copilot | PR #128 release workflow follow-up
+
+- Problem: the first registry-release version left version-resolution logic embedded inline in GitHub Actions without tests, pushed release tags before image publication could fail, kept cache permissions too narrow for `rust-cache` and Buildx `type=gha`, and let the fallback publish script depend on the caller's current working directory.
+- Fix: extracted release version resolution into `scripts/resolve-release-version.mjs` with unit tests, refactored the fallback publish helper into testable functions with unit tests and repo-root-based Docker context, moved git tag creation/push to after the image publish step succeeds, and added `actions: write` where the workflow uses GitHub Actions cache APIs.
+- Prevention: when a workflow introduces custom versioning or release orchestration, move the logic into a testable script instead of inline bash; if a release tag is meant to imply a deployable artifact, publish the artifact first and push the tag only after success; any workflow using `rust-cache` or Buildx `type=gha` must keep `actions` token permissions explicit; CLI helpers that shell out should anchor filesystem context to known paths instead of assuming the caller's cwd.
+
 ### 2026-04-19 | Copilot | admin metrics backfill test coverage
 
 - Problem: the non-admin metrics backfill REST test omitted same-origin headers, so it could return `403` at the CSRF/same-origin guard before reaching `require_admin`.

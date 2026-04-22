@@ -118,6 +118,7 @@ GitHub Actions runs:
 - `cargo fmt -- --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test`
+- `bun run verify:scripts`
 - `bun run --cwd frontend test`
 - `bun run --cwd frontend build`
 - `docker build -t aiwattcoach:ci .` on pull requests and non-`main` pushes
@@ -126,9 +127,9 @@ on pull requests and pushes to `main` or `feature/**` branches.
 
 On every successful push to `main`, the same workflow also:
 - reuses the existing `vX.Y.Z` tag on `HEAD`, or creates the next patch tag from the highest existing release tag
-- pushes that git tag to the repository
 - publishes `registry.wattly.pl/aiwattcoach:vX.Y.Z`
 - publishes `registry.wattly.pl/aiwattcoach:latest`
+- pushes the git tag to the repository only after the image publish succeeds
 
 For local end-to-end verification, run:
 
