@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import { listActivities } from '../api/intervals';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
@@ -40,7 +40,8 @@ export function CompletedWorkoutsProvider({
 }) {
   const cacheRef = useRef<Map<string, CachedRange>>(new Map());
   const inflightRef = useRef<Map<string, InflightRequest>>(new Map());
-  const [isLoading, setIsLoading] = useState(false);
+  const invalidationRef = useRef<Map<string, number>>(new Map());
+  const [inflightCount, setInflightCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const fetchRange = useCallback(async (oldest: string, newest: string): Promise<IntervalActivity[]> => {
@@ -48,6 +49,7 @@ export function CompletedWorkoutsProvider({
     const cached = cacheRef.current.get(key);
 
     if (cached && !isStale(cached.loadedAt)) {
+      setError(null);
       return cached.activities;
     }
 
@@ -56,31 +58,40 @@ export function CompletedWorkoutsProvider({
       return existingInflight;
     }
 
-    setIsLoading(true);
-    setError(null);
+    const invalidationToken = (invalidationRef.current.get(key) ?? 0) + 1;
+    invalidationRef.current.set(key, invalidationToken);
+
+    setInflightCount((c) => c + 1);
 
     const promise = listActivities(apiBaseUrl, { oldest, newest })
       .then((activities) => {
+        if (invalidationRef.current.get(key) !== invalidationToken) {
+          return [] as IntervalActivity[];
+        }
+
         cacheRef.current.set(key, { activities, loadedAt: Date.now() });
+        setError(null);
         return activities;
       })
       .catch((err) => {
         if (err instanceof AuthenticationError) {
           window.location.href = '/';
-          return [] as IntervalActivity[];
+          throw err;
         }
 
-        if (err instanceof HttpError && err.status === 422) {
-          setError('credentials-required');
-        } else {
-          setError(err instanceof Error ? err.message : 'Failed to load completed workouts');
+        const message = err instanceof HttpError && err.status === 422
+          ? 'credentials-required'
+          : (err instanceof Error ? err.message : 'Failed to load completed workouts');
+
+        if (invalidationRef.current.get(key) === invalidationToken) {
+          setError(message);
         }
 
-        return [] as IntervalActivity[];
+        throw err;
       })
       .finally(() => {
         inflightRef.current.delete(key);
-        setIsLoading(false);
+        setInflightCount((c) => c - 1);
       });
 
     inflightRef.current.set(key, promise);
@@ -92,11 +103,12 @@ export function CompletedWorkoutsProvider({
     const cached = cacheRef.current.get(key);
 
     if (cached && !isStale(cached.loadedAt)) {
+      setError(null);
       return cached.activities;
     }
 
     if (cached && isStale(cached.loadedAt)) {
-      void fetchRange(oldest, newest);
+      void fetchRange(oldest, newest).catch(() => {});
       return cached.activities;
     }
 
@@ -106,14 +118,19 @@ export function CompletedWorkoutsProvider({
   const invalidateRange = useCallback((oldest: string, newest: string) => {
     const key = buildCacheKey(oldest, newest);
     cacheRef.current.delete(key);
+    const current = invalidationRef.current.get(key) ?? 0;
+    invalidationRef.current.set(key, current + 1);
   }, []);
 
   const invalidateAll = useCallback(() => {
     cacheRef.current.clear();
+    const nextToken = Date.now();
+    invalidationRef.current.clear();
+    invalidationRef.current.set('__global__', nextToken);
   }, []);
 
   return (
-    <CompletedWorkoutsContext.Provider value={{ getActivitiesForRange, invalidateRange, invalidateAll, isLoading, error }}>
+    <CompletedWorkoutsContext.Provider value={{ getActivitiesForRange, invalidateRange, invalidateAll, isLoading: inflightCount > 0, error }}>
       {children}
     </CompletedWorkoutsContext.Provider>
   );

@@ -265,7 +265,7 @@ function defaultVisibleWeekStart(items: CoachWorkoutListItem[], currentWeekStart
 }
 
 export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkoutListResult {
-  const { getActivitiesForRange, error: contextError } = useCompletedWorkouts();
+  const { getActivitiesForRange } = useCompletedWorkouts();
   const [currentWeekStart, setCurrentWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [visibleWeekStart, setVisibleWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [allItems, setAllItems] = useState<CoachWorkoutListItem[]>([]);
@@ -274,8 +274,6 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   const [error, setError] = useState<string | null>(null);
   const currentWeekStartRef = useRef(currentWeekStart);
   const requestIdRef = useRef(0);
-  const contextErrorRef = useRef(contextError);
-  contextErrorRef.current = contextError;
 
   const loadRecentWorkouts = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
@@ -291,11 +289,6 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
         listEvents(apiBaseUrl, range),
         getActivitiesForRange(range.oldest, range.newest),
       ]);
-
-      if (contextErrorRef.current === 'credentials-required') {
-        setState('credentials-required');
-        return;
-      }
 
       const workoutEvents = [...events]
         .sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal))

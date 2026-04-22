@@ -16,15 +16,17 @@ following the existing `SettingsProvider` pattern.
 
 ### 1. `frontend/src/features/intervals/context/CompletedWorkoutsContext.tsx`
 - Context provider with range-keyed cache (`Map<string, CachedRange>`)
-- `CachedRange = { activities: IntervalActivity[], loadedAt: Date }`
+- `CachedRange = { activities: IntervalActivity[], loadedAt: number }` — epoch millis timestamp
 - TTL: 5 minutes for automatic staleness
 - Exposed API:
-  - `activities: Map<string, IntervalActivity[]>` — all cached activities (flattened)
-  - `getActivitiesForRange(oldest, newest)` — returns cached or triggers fetch
-  - `invalidateRange(oldest, newest)` — clear specific range
-  - `invalidateAll()` — clear entire cache
-  - `isLoading: boolean`
-  - `error: string | null`
+  - `getActivitiesForRange(oldest, newest)` — returns cached or triggers fetch; throws on non-auth errors
+  - `invalidateRange(oldest, newest)` — clear specific range and bump invalidation token
+  - `invalidateAll()` — clear entire cache and bump global invalidation token
+  - `isLoading: boolean` — derived from active inflight request count
+  - `error: string | null` — global error state, cleared on cache hits
+- In-flight request deduplication via `inflightRef` map
+- Invalidation tokens prevent late responses from repopulating cleared cache entries
+- Non-auth errors are rethrown after setting context error; auth errors redirect to `/`
 
 ### 2. `frontend/src/features/intervals/context/index.ts`
 - Re-export provider and hook

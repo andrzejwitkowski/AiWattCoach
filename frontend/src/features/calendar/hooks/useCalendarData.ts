@@ -51,9 +51,7 @@ type WeekStore = Map<string, CalendarWeek>;
 type PaginationDirection = 'past' | 'future';
 
 export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCalendarDataResult {
-  const { getActivitiesForRange, error: contextError } = useCompletedWorkouts();
-  const contextErrorRef = useRef(contextError);
-  contextErrorRef.current = contextError;
+  const { getActivitiesForRange } = useCompletedWorkouts();
   const [state, setState] = useState<CalendarDataState>('loading');
   const [store, setStore] = useState<WeekStore>(new Map());
   const [windowStart, setWindowStart] = useState<Date>(() => getMondayOfWeek(new Date()));
@@ -167,33 +165,6 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
       try {
         const { events, activities, labels } = await loadRange(batchStart, batchCount);
-
-        if (contextErrorRef.current === 'credentials-required') {
-          setState('credentials-required');
-          return;
-        }
-
-        if (contextErrorRef.current !== null) {
-          setStore((current) => {
-            const retainedWeekKeys = createRetainedWeekKeySet(windowStartRef.current);
-            const next = new Map(current);
-            for (let index = 0; index < batchCount; index += 1) {
-              const mondayDate = addWeeks(batchStart, index);
-              const weekKey = toDateKey(mondayDate);
-              if (retainedWeekKeys.has(weekKey)) {
-                next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
-              } else {
-                next.delete(weekKey);
-              }
-              inflightWeekKeysRef.current.delete(weekKey);
-              loadedWeekKeysRef.current.delete(weekKey);
-            }
-            return next;
-          });
-
-          setState((current) => (current === 'loading' ? 'error' : current));
-          return;
-        }
 
         hydrateWeeks(batchStart, batchCount, events, activities, labels.labelsByDate, 'loaded');
         setState('ready');
