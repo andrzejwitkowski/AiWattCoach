@@ -86,7 +86,10 @@ use aiwattcoach::{
     domain::task_scheduler::{TaskSchedulerService, TaskWorkerConfig},
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
-    domain::training_plan::TrainingPlanGenerationService,
+    domain::training_plan::{
+        training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
+        TrainingPlanGenerationService,
+    },
     domain::workout_summary::{
         workout_summary_coach_reply_task_handler, SchedulerBackedWorkoutSummaryService,
         WorkoutSummaryService,
@@ -177,6 +180,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let task_worker_repository =
         MongoTaskWorkerRepository::new(mongo_client.clone(), &mongo_database);
     task_worker_repository.ensure_indexes().await?;
+    let shared_task_scheduler = TaskSchedulerService::new(
+        task_repository.clone(),
+        task_worker_repository.clone(),
+        SystemClock,
+    );
     let llm_http_client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .build()?;
@@ -404,7 +412,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             LatestCompletedActivityAdapter::new(completed_workout_repository.clone()),
         )),
     );
-    let training_plan_service = Arc::new(
+    let training_plan_direct_service = Arc::new(
         TrainingPlanGenerationService::new(
             training_plan_snapshot_repository,
             training_plan_projection_repository.clone(),
@@ -420,6 +428,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
+    let training_plan_service = Arc::new(SchedulerBackedTrainingPlanService::new(
+        training_plan_direct_service.clone(),
+        shared_task_scheduler.clone(),
+        UuidIdGenerator,
+    ));
     let race_service = Arc::new(
         RaceService::new(
             race_repository.clone(),
@@ -464,20 +477,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let workout_summary_direct_service = Arc::new(
         (*workout_summary_direct_service)
             .clone()
-            .with_training_plan_service(training_plan_service),
-    );
-    let workout_summary_task_scheduler = TaskSchedulerService::new(
-        task_repository.clone(),
-        task_worker_repository.clone(),
-        SystemClock,
+            .with_training_plan_service(training_plan_service.clone()),
     );
     let athlete_summary_service = Arc::new(SchedulerBackedAthleteSummaryService::new(
         athlete_summary_direct_service.clone(),
-        workout_summary_task_scheduler.clone(),
+        shared_task_scheduler.clone(),
         UuidIdGenerator,
     ));
     let workout_summary_task_worker = spawn_task_worker(
-        workout_summary_task_scheduler.clone(),
+        shared_task_scheduler.clone(),
         format!("{}-workout-summary", default_task_scheduler_worker_id()),
         TaskWorkerConfig {
             is_leader: false,
@@ -488,12 +496,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         },
         vec![
             workout_summary_coach_reply_task_handler(workout_summary_direct_service.clone()),
-            athlete_summary_generate_task_handler(athlete_summary_direct_service),
+            athlete_summary_generate_task_handler(athlete_summary_direct_service.clone()),
+            training_plan_generate_task_handler(training_plan_direct_service),
         ],
     )?;
     let workout_summary_service = Arc::new(SchedulerBackedWorkoutSummaryService::new(
         workout_summary_direct_service,
-        workout_summary_task_scheduler,
+        shared_task_scheduler,
         UuidIdGenerator,
     ));
 
