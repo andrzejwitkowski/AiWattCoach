@@ -52,6 +52,61 @@ where
                 .map_err(map_workout_summary_error)
         })
     }
+
+    fn get_planning_context(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> crate::domain::training_plan::BoxFuture<
+        Result<
+            Option<crate::domain::training_plan::TrainingPlanPlanningContext>,
+            crate::domain::training_plan::TrainingPlanError,
+        >,
+    > {
+        let workout_summary_service = self.workout_summary_service.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            match workout_summary_service
+                .get_summary(&user_id, &workout_id)
+                .await
+            {
+                Ok(summary) => Ok(map_workout_summary_to_planning_context(summary)),
+                Err(WorkoutSummaryError::NotFound) => Ok(None),
+                Err(error) => Err(map_workout_summary_error(error)),
+            }
+        })
+    }
+}
+
+fn map_workout_summary_to_planning_context(
+    summary: crate::domain::workout_summary::WorkoutSummary,
+) -> Option<crate::domain::training_plan::TrainingPlanPlanningContext> {
+    let messages = summary
+        .messages
+        .into_iter()
+        .map(
+            |message| crate::domain::training_plan::TrainingPlanConversationMessage {
+                role: match message.role {
+                    crate::domain::workout_summary::MessageRole::Coach => {
+                        crate::domain::training_plan::TrainingPlanConversationRole::Coach
+                    }
+                    crate::domain::workout_summary::MessageRole::User => {
+                        crate::domain::training_plan::TrainingPlanConversationRole::User
+                    }
+                },
+                content: message.content,
+            },
+        )
+        .collect::<Vec<_>>();
+    if summary.rpe.is_none() && messages.is_empty() {
+        return None;
+    }
+
+    Some(crate::domain::training_plan::TrainingPlanPlanningContext {
+        rpe: summary.rpe,
+        messages,
+    })
 }
 
 fn map_workout_summary_error(

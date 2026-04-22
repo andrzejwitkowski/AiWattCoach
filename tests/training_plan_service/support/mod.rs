@@ -7,11 +7,12 @@ pub(crate) use aiwattcoach::domain::{
     ai_workflow::{AttemptRecord, ValidationIssue, WorkflowPhase, WorkflowStatus},
     identity::Clock,
     training_plan::{
-        TrainingPlanError, TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
+        TrainingPlanConversationMessage, TrainingPlanConversationRole, TrainingPlanError,
+        TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
         TrainingPlanGenerationOperationRepository, TrainingPlanGenerationService,
-        TrainingPlanGenerator, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
-        TrainingPlanSnapshot, TrainingPlanSnapshotRepository, TrainingPlanUseCases,
-        TrainingPlanWorkoutSummaryPort,
+        TrainingPlanGenerator, TrainingPlanPlanningContext, TrainingPlanProjectedDay,
+        TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
+        TrainingPlanUseCases, TrainingPlanWorkoutSummaryPort,
     },
     workout_summary::WorkoutRecap,
 };
@@ -31,6 +32,7 @@ pub(crate) use repos::*;
 
 pub(crate) type CallLog = Arc<Mutex<Vec<String>>>;
 pub(crate) type CorrectionInputs = Arc<Mutex<Vec<(String, Vec<ValidationIssue>)>>>;
+pub(crate) type PlanningContexts = Arc<Mutex<Vec<Option<TrainingPlanPlanningContext>>>>;
 
 #[derive(Clone)]
 pub(crate) struct FixedClock {
@@ -46,6 +48,7 @@ impl Clock for FixedClock {
 #[derive(Clone)]
 pub(crate) struct StubWorkoutSummaryPort {
     persisted_recaps: Arc<Mutex<Vec<WorkoutRecap>>>,
+    planning_context: Arc<Mutex<Option<TrainingPlanPlanningContext>>>,
     call_log: CallLog,
 }
 
@@ -53,12 +56,20 @@ impl StubWorkoutSummaryPort {
     pub(crate) fn new(call_log: CallLog) -> Self {
         Self {
             persisted_recaps: Arc::new(Mutex::new(Vec::new())),
+            planning_context: Arc::new(Mutex::new(None)),
             call_log,
         }
     }
 
     pub(crate) fn persisted_recaps(&self) -> Vec<WorkoutRecap> {
         self.persisted_recaps.lock().unwrap().clone()
+    }
+
+    pub(crate) fn set_planning_context(
+        &self,
+        planning_context: Option<TrainingPlanPlanningContext>,
+    ) {
+        *self.planning_context.lock().unwrap() = planning_context;
     }
 }
 
@@ -76,6 +87,18 @@ impl TrainingPlanWorkoutSummaryPort for StubWorkoutSummaryPort {
             Ok(())
         })
     }
+
+    fn get_planning_context(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<Option<TrainingPlanPlanningContext>, TrainingPlanError>,
+    > {
+        push_call(&self.call_log, "workout_summary.get_planning_context");
+        let planning_context = self.planning_context.lock().unwrap().clone();
+        Box::pin(async move { Ok(planning_context) })
+    }
 }
 
 #[derive(Clone)]
@@ -87,6 +110,8 @@ pub(crate) struct StubTrainingPlanGenerator {
     initial_plan_calls: Arc<Mutex<u32>>,
     correction_calls: Arc<Mutex<u32>>,
     correction_inputs: CorrectionInputs,
+    initial_planning_contexts: PlanningContexts,
+    correction_planning_contexts: PlanningContexts,
     call_log: CallLog,
 }
 
@@ -105,6 +130,8 @@ impl StubTrainingPlanGenerator {
             initial_plan_calls: Arc::new(Mutex::new(0)),
             correction_calls: Arc::new(Mutex::new(0)),
             correction_inputs: Arc::new(Mutex::new(Vec::new())),
+            initial_planning_contexts: Arc::new(Mutex::new(Vec::new())),
+            correction_planning_contexts: Arc::new(Mutex::new(Vec::new())),
             call_log,
         }
     }
@@ -123,6 +150,14 @@ impl StubTrainingPlanGenerator {
 
     pub(crate) fn correction_inputs(&self) -> Vec<(String, Vec<ValidationIssue>)> {
         self.correction_inputs.lock().unwrap().clone()
+    }
+
+    pub(crate) fn initial_planning_contexts(&self) -> Vec<Option<TrainingPlanPlanningContext>> {
+        self.initial_planning_contexts.lock().unwrap().clone()
+    }
+
+    pub(crate) fn correction_planning_contexts(&self) -> Vec<Option<TrainingPlanPlanningContext>> {
+        self.correction_planning_contexts.lock().unwrap().clone()
     }
 }
 
@@ -151,8 +186,13 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
         _workout_id: &str,
         _saved_at_epoch_seconds: i64,
         _workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
         *self.initial_plan_calls.lock().unwrap() += 1;
+        self.initial_planning_contexts
+            .lock()
+            .unwrap()
+            .push(planning_context.cloned());
         push_call(&self.call_log, "generator.generate_initial_plan_window");
         let response = self
             .initial_plan_responses
@@ -169,10 +209,15 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
         _workout_id: &str,
         _saved_at_epoch_seconds: i64,
         _workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
         raw_plan_response: &str,
         issues: Vec<ValidationIssue>,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
         *self.correction_calls.lock().unwrap() += 1;
+        self.correction_planning_contexts
+            .lock()
+            .unwrap()
+            .push(planning_context.cloned());
         self.correction_inputs
             .lock()
             .unwrap()
@@ -198,4 +243,20 @@ pub(crate) fn push_call(call_log: &CallLog, call: &str) {
 
 pub(crate) fn recorded_calls(call_log: &CallLog) -> Vec<String> {
     call_log.lock().unwrap().clone()
+}
+
+pub(crate) fn sample_planning_context() -> TrainingPlanPlanningContext {
+    TrainingPlanPlanningContext {
+        rpe: Some(6),
+        messages: vec![
+            TrainingPlanConversationMessage {
+                role: TrainingPlanConversationRole::Coach,
+                content: "Coach promised an easy recovery week with only light Z1 rides and no hard sessions unless truly necessary.".to_string(),
+            },
+            TrainingPlanConversationMessage {
+                role: TrainingPlanConversationRole::User,
+                content: "That easy week structure sounds good.".to_string(),
+            },
+        ],
+    }
 }

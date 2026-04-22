@@ -16,7 +16,7 @@ use crate::domain::{
 use super::{
     BoxFuture, GeneratedTrainingPlan, TrainingPlanDay, TrainingPlanError,
     TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
+    TrainingPlanGenerationOperationRepository, TrainingPlanGenerator, TrainingPlanPlanningContext,
     TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
     TrainingPlanWorkoutSummaryPort,
 };
@@ -272,6 +272,24 @@ where
         ))
     }
 
+    async fn load_planning_context(
+        &self,
+        planning_context: &mut Option<TrainingPlanPlanningContext>,
+        planning_context_loaded: &mut bool,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Result<Option<TrainingPlanPlanningContext>, TrainingPlanError> {
+        if !*planning_context_loaded {
+            *planning_context = self
+                .workout_summary
+                .get_planning_context(user_id, workout_id)
+                .await?;
+            *planning_context_loaded = true;
+        }
+
+        Ok(planning_context.clone())
+    }
+
     async fn persist_projection(
         &self,
         snapshot: TrainingPlanSnapshot,
@@ -461,10 +479,33 @@ where
                 recap
             };
 
+            let mut planning_context = None;
+            let mut planning_context_loaded = false;
             let raw_plan_response =
                 if let Some(raw_plan_response) = operation.raw_plan_response.clone() {
                     raw_plan_response
                 } else {
+                    let planning_context = match service
+                        .load_planning_context(
+                            &mut planning_context,
+                            &mut planning_context_loaded,
+                            &user_id,
+                            &workout_id,
+                        )
+                        .await
+                    {
+                        Ok(planning_context) => planning_context,
+                        Err(error) => {
+                            return Err(service
+                                .fail_operation(
+                                    &operation,
+                                    WorkflowPhase::InitialGeneration,
+                                    error,
+                                    operation.validation_issues.clone(),
+                                )
+                                .await?)
+                        }
+                    };
                     let raw_plan_response = match service
                         .generator
                         .generate_initial_plan_window(
@@ -472,6 +513,7 @@ where
                             &workout_id,
                             saved_at_epoch_seconds,
                             &recap,
+                            planning_context.as_ref(),
                         )
                         .await
                     {
@@ -599,6 +641,27 @@ where
                         break;
                     }
 
+                    let planning_context = match service
+                        .load_planning_context(
+                            &mut planning_context,
+                            &mut planning_context_loaded,
+                            &user_id,
+                            &workout_id,
+                        )
+                        .await
+                    {
+                        Ok(planning_context) => planning_context,
+                        Err(error) => {
+                            return Err(service
+                                .fail_operation(
+                                    &operation,
+                                    WorkflowPhase::Correction,
+                                    error,
+                                    operation.validation_issues.clone(),
+                                )
+                                .await?)
+                        }
+                    };
                     let correction_response = match service
                         .generator
                         .correct_invalid_days(
@@ -606,6 +669,7 @@ where
                             &workout_id,
                             saved_at_epoch_seconds,
                             &recap,
+                            planning_context.as_ref(),
                             &invalid_day_sections.join("\n\n"),
                             issues.clone(),
                         )

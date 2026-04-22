@@ -10,6 +10,33 @@ pub enum TrainingPlanError {
     Validation(String),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrainingPlanConversationRole {
+    Coach,
+    User,
+}
+
+impl TrainingPlanConversationRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Coach => "coach",
+            Self::User => "user",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrainingPlanConversationMessage {
+    pub role: TrainingPlanConversationRole,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct TrainingPlanPlanningContext {
+    pub rpe: Option<u8>,
+    pub messages: Vec<TrainingPlanConversationMessage>,
+}
+
 impl std::fmt::Display for TrainingPlanError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

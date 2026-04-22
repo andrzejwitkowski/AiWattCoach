@@ -8,7 +8,10 @@ use aiwattcoach::{
         IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
         TrainingContextBuildResult, TrainingContextBuilder,
     },
-    domain::training_plan::TrainingPlanGenerator,
+    domain::training_plan::{
+        TrainingPlanConversationMessage, TrainingPlanConversationRole, TrainingPlanGenerator,
+        TrainingPlanPlanningContext,
+    },
     domain::workout_summary::WorkoutRecap,
 };
 
@@ -109,6 +112,22 @@ impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
     }
 }
 
+fn sample_planning_context() -> TrainingPlanPlanningContext {
+    TrainingPlanPlanningContext {
+        rpe: Some(7),
+        messages: vec![
+            TrainingPlanConversationMessage {
+                role: TrainingPlanConversationRole::Coach,
+                content: "I am planning a recovery week with easy endurance only and no hard sessions unless they become truly necessary.".to_string(),
+            },
+            TrainingPlanConversationMessage {
+                role: TrainingPlanConversationRole::User,
+                content: "Please keep it light because I feel stale.".to_string(),
+            },
+        ],
+    }
+}
+
 #[tokio::test]
 async fn training_plan_generator_builds_workout_recap_request_from_training_context() {
     let chat_port = Arc::new(CapturingChatPort::default());
@@ -137,6 +156,9 @@ async fn training_plan_generator_builds_workout_recap_request_from_training_cont
     assert!(requests[0]
         .stable_context
         .contains("training_plan_source_stable={\"stable\":true}"));
+    assert!(!requests[0]
+        .stable_context
+        .contains("planning_conversation="));
     assert!(requests[0]
         .volatile_context
         .contains("training_plan_source_volatile={\"volatile\":true}"));
@@ -198,6 +220,7 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
                 "gemini-3.1-pro",
                 1_700_000_000,
             ),
+            Some(&sample_planning_context()),
         )
         .await
         .unwrap();
@@ -231,6 +254,7 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
                 "gemini-3.1-pro",
                 1_700_000_000,
             ),
+            Some(&sample_planning_context()),
             "2026-04-05\n- 10m nonsense",
             vec![ValidationIssue {
                 scope: "2026-04-05".to_string(),
@@ -247,6 +271,11 @@ async fn training_plan_generator_explains_dated_output_grammar_in_plan_prompts()
     assert!(correction_prompt.contains("YYYY-MM-DD"));
     assert!(correction_prompt.contains("One dated section per day"));
     assert!(correction_prompt.contains("Only output corrected dated sections"));
+    assert!(correction_prompt
+        .contains("Messages with role `coach` are your own earlier coach statements"));
+    assert!(
+        correction_prompt.contains("Do not plan all 14 days from one static CTL/ATL/TSB snapshot.")
+    );
 }
 
 #[tokio::test]
@@ -270,6 +299,7 @@ async fn training_plan_generator_builds_initial_window_request_with_recap() {
                 "gemini-3.1-pro",
                 1_700_000_000,
             ),
+            Some(&sample_planning_context()),
         )
         .await
         .unwrap();
@@ -284,6 +314,13 @@ async fn training_plan_generator_builds_initial_window_request_with_recap() {
     assert!(requests[0]
         .stable_context
         .contains("workout_recap={\"text\":\"Recovered well and handled threshold steadily\""));
+    assert!(requests[0]
+        .stable_context
+        .contains("planning_conversation="));
+    assert!(requests[0].stable_context.contains("\"role\":\"coach\""));
+    assert!(requests[0]
+        .stable_context
+        .contains("\"I am planning a recovery week with easy endurance only"));
     assert!(requests[0].conversation[0]
         .content
         .contains("Generate the next 14 dated days"));
@@ -310,6 +347,7 @@ async fn training_plan_generator_uses_unconfigured_availability_guidance_when_ne
                 "gemini-3.1-pro",
                 1_700_000_000,
             ),
+            Some(&sample_planning_context()),
         )
         .await
         .unwrap();
@@ -340,6 +378,7 @@ async fn training_plan_generator_builds_correction_request_with_issues_and_inval
                 "gemini-3.1-pro",
                 1_700_000_000,
             ),
+            Some(&sample_planning_context()),
             "2026-04-05\n- 10m nonsense",
             vec![ValidationIssue {
                 scope: "2026-04-05".to_string(),
@@ -359,6 +398,10 @@ async fn training_plan_generator_builds_correction_request_with_issues_and_inval
     assert!(requests[0]
         .stable_context
         .contains("workout_recap={\"text\":\"Recovered well and handled threshold steadily\""));
+    assert!(requests[0]
+        .stable_context
+        .contains("planning_conversation="));
+    assert!(requests[0].stable_context.contains("\"role\":\"coach\""));
     assert!(requests[0].conversation[0]
         .content
         .contains("2026-04-05\n- 10m nonsense"));
