@@ -14,7 +14,7 @@ use super::super::super::core::{
     GENERATION_ALREADY_PENDING_MESSAGE, STALE_PENDING_TIMEOUT_SECONDS,
 };
 use super::support::{
-    llm_response, summary, InMemoryAthleteSummaryOperationRepository,
+    llm_response, spawn_test_task_worker, summary, InMemoryAthleteSummaryOperationRepository,
     InMemoryAthleteSummaryRepository, InMemoryTaskRepository, InMemoryTaskWorkerRepository,
     StubGenerator, TestClock, TestIdGenerator, LAST_WEEK_EPOCH_SECONDS, NOW_EPOCH_SECONDS,
     THIS_WEEK_EPOCH_SECONDS, USER_ID,
@@ -52,7 +52,7 @@ async fn scheduler_backed_generate_summary_runs_through_shared_worker() {
         clock.clone(),
     ));
     let (scheduler, _) = test_scheduler_with_clock(clock.clone());
-    let worker = crate::config::spawn_task_worker(
+    let worker = spawn_test_task_worker(
         scheduler.clone(),
         "worker-1".to_string(),
         worker_config(),
@@ -83,7 +83,7 @@ async fn scheduler_backed_generate_summary_retries_retryable_llm_failure_before_
         clock.clone(),
     ));
     let (scheduler, tasks) = test_scheduler_with_clock(clock.clone());
-    let worker = crate::config::spawn_task_worker(
+    let worker = spawn_test_task_worker(
         scheduler.clone(),
         "worker-1".to_string(),
         worker_config(),
@@ -141,7 +141,7 @@ async fn scheduler_backed_generate_summary_returns_non_retryable_llm_failure() {
         clock.clone(),
     ));
     let (scheduler, tasks) = test_scheduler_with_clock(clock.clone());
-    let worker = crate::config::spawn_task_worker(
+    let worker = spawn_test_task_worker(
         scheduler.clone(),
         "worker-1".to_string(),
         worker_config(),
@@ -192,7 +192,7 @@ async fn scheduler_backed_generate_summary_waits_for_pending_operation_reclaim_w
         clock.clone(),
     ));
     let (scheduler, tasks) = test_scheduler_with_clock(clock.clone());
-    let worker = crate::config::spawn_task_worker(
+    let worker = spawn_test_task_worker(
         scheduler.clone(),
         "worker-1".to_string(),
         worker_config(),
@@ -248,7 +248,7 @@ async fn scheduler_backed_generate_summary_allows_repeated_force_requests() {
         clock.clone(),
     ));
     let (scheduler, _) = test_scheduler_with_clock(clock.clone());
-    let worker = crate::config::spawn_task_worker(
+    let worker = spawn_test_task_worker(
         scheduler.clone(),
         "worker-1".to_string(),
         worker_config(),
@@ -277,7 +277,7 @@ async fn scheduler_backed_ensure_fresh_summary_state_reports_regeneration() {
         clock.clone(),
     ));
     let (scheduler, _) = test_scheduler_with_clock(clock.clone());
-    let worker = crate::config::spawn_task_worker(
+    let worker = spawn_test_task_worker(
         scheduler.clone(),
         "worker-1".to_string(),
         worker_config(),

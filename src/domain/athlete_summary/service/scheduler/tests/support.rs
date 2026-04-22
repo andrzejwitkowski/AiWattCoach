@@ -3,6 +3,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use tokio::sync::watch;
+
 use crate::domain::{
     athlete_summary::{
         AthleteSummary, AthleteSummaryError, AthleteSummaryGenerationClaimResult,
@@ -12,10 +14,11 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::{LlmCacheUsage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
     task_scheduler::{
-        ScheduledTask, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult, TaskFailRequest,
-        TaskHeartbeatRequest, TaskListFilter, TaskMarkTimedOutRequest, TaskRecoverRequest,
-        TaskRepository, TaskRetryRequest, TaskSchedulerError, TaskStatus, TaskWorker,
-        TaskWorkerRepository,
+        FailTaskInput, ScheduledTask, SharedTaskHandler, TaskClaimRequest, TaskCompleteRequest,
+        TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest, TaskListFilter,
+        TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRepository, TaskRetryRequest,
+        TaskRunOutcome, TaskSchedulerError, TaskSchedulerService, TaskStatus, TaskWorker,
+        TaskWorkerConfig, TaskWorkerRepository,
     },
 };
 
@@ -485,6 +488,145 @@ impl TaskWorkerRepository for InMemoryTaskWorkerRepository {
         let workers = self.workers.clone();
         let worker_id = worker_id.to_string();
         Box::pin(async move { Ok(workers.lock().unwrap().get(&worker_id).cloned()) })
+    }
+}
+
+pub(super) fn spawn_test_task_worker<Tasks, Workers, Time>(
+    scheduler: TaskSchedulerService<Tasks, Workers, Time>,
+    worker_id: String,
+    config: TaskWorkerConfig,
+    handlers: Vec<SharedTaskHandler>,
+) -> Result<TestTaskWorkerHandle, TaskSchedulerError>
+where
+    Tasks: TaskRepository,
+    Workers: TaskWorkerRepository,
+    Time: Clock,
+{
+    let mut enabled_task_types = Vec::with_capacity(handlers.len());
+    let mut handlers_by_type = HashMap::with_capacity(handlers.len());
+    for handler in handlers {
+        let task_type = handler.task_type().to_string();
+        if handlers_by_type
+            .insert(task_type.clone(), handler)
+            .is_some()
+        {
+            return Err(TaskSchedulerError::Conflict(format!(
+                "duplicate task handler registered for {task_type}"
+            )));
+        }
+        enabled_task_types.push(task_type);
+    }
+
+    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
+    let join_handle = tokio::spawn(async move {
+        loop {
+            if *shutdown_rx.borrow() {
+                break;
+            }
+
+            match scheduler
+                .claim_next_due(
+                    &worker_id,
+                    enabled_task_types.clone(),
+                    config.is_leader,
+                    config.lease_duration_seconds,
+                )
+                .await
+            {
+                Ok(Some(task)) => {
+                    let handler = handlers_by_type.get(&task.task_type).cloned();
+                    run_test_task(&scheduler, &worker_id, task, handler).await;
+                }
+                Ok(None) | Err(_) => {
+                    let should_stop = tokio::select! {
+                        _ = shutdown_rx.changed() => true,
+                        _ = tokio::time::sleep(config.idle_poll_interval) => *shutdown_rx.borrow(),
+                    };
+                    if should_stop {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(TestTaskWorkerHandle {
+        shutdown: shutdown_tx,
+        join_handle: Some(join_handle),
+    })
+}
+
+pub(super) struct TestTaskWorkerHandle {
+    shutdown: watch::Sender<bool>,
+    join_handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl TestTaskWorkerHandle {
+    pub(super) async fn shutdown(mut self) {
+        let _ = self.shutdown.send(true);
+        if let Some(join_handle) = self.join_handle.take() {
+            let _ = join_handle.await;
+        }
+    }
+}
+
+impl Drop for TestTaskWorkerHandle {
+    fn drop(&mut self) {
+        let _ = self.shutdown.send(true);
+        if let Some(join_handle) = self.join_handle.take() {
+            join_handle.abort();
+        }
+    }
+}
+
+async fn run_test_task<Tasks, Workers, Time>(
+    scheduler: &TaskSchedulerService<Tasks, Workers, Time>,
+    worker_id: &str,
+    task: ScheduledTask,
+    handler: Option<SharedTaskHandler>,
+) where
+    Tasks: TaskRepository,
+    Workers: TaskWorkerRepository,
+    Time: Clock,
+{
+    let outcome = match handler {
+        Some(handler) => handler.run(task.clone()).await,
+        None => TaskRunOutcome::Failed {
+            checkpoint: None,
+            error_message: format!(
+                "no task handler registered for task type {}",
+                task.task_type
+            ),
+            retryable: false,
+            retry_delay_seconds: None,
+        },
+    };
+
+    match outcome {
+        TaskRunOutcome::Completed { checkpoint } => {
+            let _ = scheduler
+                .complete_task(&task.id, worker_id, checkpoint)
+                .await;
+        }
+        TaskRunOutcome::Failed {
+            checkpoint,
+            error_message,
+            retryable,
+            retry_delay_seconds,
+        } => {
+            let _ = scheduler
+                .fail_task(FailTaskInput {
+                    task_id: &task.id,
+                    worker_id,
+                    checkpoint,
+                    error_message,
+                    retryable,
+                    retry_delay_seconds,
+                    retry_strategy: &task.retry_strategy,
+                    attempt_count: task.attempt_count,
+                })
+                .await;
+        }
     }
 }
 

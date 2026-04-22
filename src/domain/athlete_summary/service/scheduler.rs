@@ -21,8 +21,9 @@ use super::core::{
 };
 
 pub(crate) const ATHLETE_SUMMARY_GENERATE_TASK_TYPE: &str = "athlete_summary.generate";
+pub(crate) const ATHLETE_SUMMARY_EXECUTION_TIMEOUT_BUFFER_SECONDS: i64 = 30;
 pub(crate) const ATHLETE_SUMMARY_EXECUTION_TIMEOUT_SECONDS: i64 =
-    LLM_REQUEST_TIMEOUT_SECONDS as i64;
+    LLM_REQUEST_TIMEOUT_SECONDS as i64 + ATHLETE_SUMMARY_EXECUTION_TIMEOUT_BUFFER_SECONDS;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct AthleteSummaryTaskPayload {

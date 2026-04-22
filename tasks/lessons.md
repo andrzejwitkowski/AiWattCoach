@@ -23,6 +23,8 @@
 - Treat function size as a hard clean-code rule: aim to stay at or below about 100 lines of code, and if a function grows past roughly 130 lines, refactor it into smaller logical helpers before continuing. Do not keep adding behavior to oversized functions.
 - When runtime orchestration for a domain workflow needs `tokio` tasks, timers, channels, or shutdown handles, keep the task handler contract in `src/domain` but move the runtime loop and background-task wiring into `src/config` or another adapter/wiring layer. Do not leave runtime-specific loops in domain modules just because the workflow is domain-owned.
 - When a scheduled task wraps another durable operation with its own stale or reclaim timeout, align the scheduler retry delay with that durable reclaim window. Otherwise the wrapper can burn through retries and mark a task dead before the underlying operation is actually recoverable.
+- Do not let `src/domain/**` tests depend on `crate::config` or other composition-root wiring just to start background workers. If domain tests need worker execution, add a domain-owned test helper or exercise the scheduler via domain primitives only.
+- For LLM-backed scheduled tasks, size `execution_timeout_seconds` to the whole attempt path, not just the inner HTTP request timeout. Include any preceding nested LLM calls, context building, and post-provider checkpoint writes when choosing the scheduler timeout budget.
 
 ## Distributed Worker Defaults
 
