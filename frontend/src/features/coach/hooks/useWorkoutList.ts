@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { listActivities, listEvents } from '../../intervals/api/intervals';
+import { listEvents } from '../../intervals/api/intervals';
+import { useCompletedWorkouts } from '../../intervals/context';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import { addDays, addWeeks, extractDateKey, formatDateRange, getMondayOfWeek, toDateKey } from '../../calendar/utils/dateUtils';
 import { listWorkoutSummaries } from '../api/workoutSummary';
@@ -264,6 +265,7 @@ function defaultVisibleWeekStart(items: CoachWorkoutListItem[], currentWeekStart
 }
 
 export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkoutListResult {
+  const { getActivitiesForRange, error: contextError } = useCompletedWorkouts();
   const [currentWeekStart, setCurrentWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [visibleWeekStart, setVisibleWeekStart] = useState(() => getMondayOfWeek(new Date()));
   const [allItems, setAllItems] = useState<CoachWorkoutListItem[]>([]);
@@ -272,6 +274,8 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
   const [error, setError] = useState<string | null>(null);
   const currentWeekStartRef = useRef(currentWeekStart);
   const requestIdRef = useRef(0);
+  const contextErrorRef = useRef(contextError);
+  contextErrorRef.current = contextError;
 
   const loadRecentWorkouts = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
@@ -285,8 +289,14 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
       const range = formatDateRange(lookbackStart, WORKOUT_LOOKBACK_WEEKS);
       const [events, activities] = await Promise.all([
         listEvents(apiBaseUrl, range),
-        listActivities(apiBaseUrl, range),
+        getActivitiesForRange(range.oldest, range.newest),
       ]);
+
+      if (contextErrorRef.current === 'credentials-required') {
+        setState('credentials-required');
+        return;
+      }
+
       const workoutEvents = [...events]
         .sort((left, right) => right.startDateLocal.localeCompare(left.startDateLocal))
         .slice(0, WORKOUT_LOOKBACK_WEEKS * WORKOUT_PAGE_SIZE);
@@ -334,7 +344,7 @@ export function useWorkoutList({ apiBaseUrl }: UseWorkoutListOptions): UseWorkou
       setState('error');
       setError(loadError instanceof Error ? loadError.message : 'Unknown error');
     }
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, getActivitiesForRange]);
 
   useEffect(() => {
     void loadRecentWorkouts();
