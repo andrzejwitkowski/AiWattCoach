@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
 
 import { listActivities } from '../api/intervals';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
