@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::training_plan::{
     BoxFuture, TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
-    TrainingPlanSnapshot,
+    TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
 
 use super::{
@@ -231,21 +231,17 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         projected_days: Vec<TrainingPlanProjectedDay>,
         today: &str,
         replaced_at_epoch_seconds: i64,
-    ) -> BoxFuture<Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>>
-    {
+    ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>> {
         let collection = self.collection.clone();
         let snapshot_collection = self.snapshot_repository.collection();
-        let snapshot_document =
-            MongoTrainingPlanSnapshotRepository::map_snapshot_to_document(&snapshot);
-        let projected_day_documents = projected_days
-            .iter()
-            .map(map_projected_day_to_document)
-            .collect::<Result<Vec<_>, _>>();
         let today = today.to_string();
-        let snapshot_clone = snapshot.clone();
         Box::pin(async move {
-            let snapshot_document = snapshot_document?;
-            let projected_day_documents = projected_day_documents?;
+            let snapshot_document =
+                MongoTrainingPlanSnapshotRepository::map_snapshot_to_document(&snapshot)?;
+            let projected_day_documents = projected_days
+                .iter()
+                .map(map_projected_day_to_document)
+                .collect::<Result<Vec<_>, _>>()?;
             validate_replacement_scope(&snapshot, &projected_days)?;
             if projected_day_documents.is_empty() {
                 return Err(TrainingPlanError::Validation(
@@ -253,14 +249,41 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                         .to_string(),
                 ));
             }
-            collection
+
+            let superseded_range_start =
+                std::cmp::max(today.as_str(), snapshot.start_date.as_str());
+
+            let max_active_date: Option<String> = collection
+                .clone()
+                .clone_with_type::<mongodb::bson::Document>()
+                .find(doc! {
+                    "user_id": &snapshot.user_id,
+                    "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                })
+                .sort(doc! { "date": -1 })
+                .limit(1)
+                .projection(doc! { "date": 1, "_id": 0 })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+                .try_next()
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+                .and_then(|doc| doc.get_str("date").ok().map(String::from));
+
+            let superseded_range_end = max_active_date
+                .as_ref()
+                .map(|date| std::cmp::max(snapshot.end_date.as_str(), date.as_str()))
+                .unwrap_or(snapshot.end_date.as_str())
+                .to_string();
+
+            let update_result = collection
                 .update_many(
                     doc! {
                         "user_id": &snapshot.user_id,
                         "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
                         "date": {
-                            "$gte": std::cmp::max(today.as_str(), snapshot.start_date.as_str()),
-                            "$lte": &snapshot.end_date,
+                            "$gte": superseded_range_start,
+                            "$lte": &superseded_range_end,
                         },
                     },
                     doc! {
@@ -272,6 +295,15 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 )
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+
+            let superseded_date_range = if update_result.matched_count == 0 {
+                None
+            } else {
+                Some((
+                    superseded_range_start.to_string(),
+                    superseded_range_end.clone(),
+                ))
+            };
 
             snapshot_collection
                 .replace_one(
@@ -297,7 +329,11 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                     .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
             }
 
-            Ok((snapshot_clone, projected_days))
+            Ok(TrainingPlanReplacementResult {
+                snapshot,
+                projected_days,
+                superseded_date_range,
+            })
         })
     }
 }

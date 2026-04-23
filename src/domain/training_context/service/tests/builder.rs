@@ -427,7 +427,7 @@ async fn builder_anchors_windows_to_focus_activity_date() {
             _today: &str,
             _replaced_at_epoch_seconds: i64,
         ) -> crate::domain::training_plan::BoxFuture<
-            Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>,
+            Result<crate::domain::training_plan::TrainingPlanReplacementResult, TrainingPlanError>,
         > {
             unreachable!()
         }

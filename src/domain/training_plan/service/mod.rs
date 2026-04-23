@@ -280,7 +280,7 @@ where
         let today = self.today_string();
         let operation = operation.with_projection_update(self.clock.now_epoch_seconds());
         let operation = self.operations.upsert(operation).await?;
-        let (snapshot, projected_days) = self
+        let replacement = self
             .projections
             .replace_window(
                 snapshot.clone(),
@@ -289,7 +289,8 @@ where
                 self.clock.now_epoch_seconds(),
             )
             .await?;
-        let active_projected_days = projected_days
+        let active_projected_days = replacement
+            .projected_days
             .into_iter()
             .filter(|day| day.is_active_on(&today))
             .collect::<Vec<_>>();
@@ -297,20 +298,34 @@ where
             .operations
             .upsert(operation.mark_projection_persisted(self.clock.now_epoch_seconds()))
             .await?;
-        if !self.is_projection_persisted(&snapshot, &active_projected_days) {
+        if !self.is_projection_persisted(&replacement.snapshot, &active_projected_days) {
             return Err(TrainingPlanError::Repository(
                 "training plan projection persistence incomplete after replace_window".to_string(),
             ));
         }
+        let refresh_start = replacement
+            .superseded_date_range
+            .as_ref()
+            .map(|(start, _)| {
+                std::cmp::min(start.as_str(), replacement.snapshot.start_date.as_str())
+            })
+            .unwrap_or(&replacement.snapshot.start_date)
+            .to_string();
+        let refresh_end = replacement
+            .superseded_date_range
+            .as_ref()
+            .map(|(_, end)| std::cmp::max(end.as_str(), replacement.snapshot.end_date.as_str()))
+            .unwrap_or(&replacement.snapshot.end_date)
+            .to_string();
         self.refresh
-            .refresh_range_for_user(&snapshot.user_id, &snapshot.start_date, &snapshot.end_date)
+            .refresh_range_for_user(&replacement.snapshot.user_id, &refresh_start, &refresh_end)
             .await
             .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
         let completed = operation.mark_completed(self.clock.now_epoch_seconds());
         self.operations.upsert(completed).await?;
 
         Ok(GeneratedTrainingPlan {
-            snapshot,
+            snapshot: replacement.snapshot,
             active_projected_days,
             was_generated: true,
         })
