@@ -15,10 +15,10 @@ pub(super) fn map_connection_error(error: reqwest::Error) -> IntervalsError {
 pub(super) fn map_error_response_from_logged_response(response: LoggedResponse) -> ApiFailure {
     let status = response.status;
     let url = sanitize_error_url(&response.url);
-    let known_strava_activity_details_unavailable = std::str::from_utf8(&response.body)
-        .ok()
+    let response_body_utf8 = std::str::from_utf8(&response.body).ok();
+    let known_strava_activity_details_unavailable = response_body_utf8
         .is_some_and(|body| is_known_strava_activity_details_unavailable(status, body));
-    let response_body = std::str::from_utf8(&response.body).ok().and_then(|body| {
+    let response_body = response_body_utf8.and_then(|body| {
         let trimmed = body.trim();
         if trimmed.is_empty() {
             None
@@ -56,13 +56,12 @@ fn is_known_strava_activity_details_unavailable(status: StatusCode, body: &str) 
 
     serde_json::from_str::<Value>(body)
         .ok()
-        .and_then(|value| {
+        .is_some_and(|value| {
             value
                 .get("error")
                 .and_then(Value::as_str)
-                .map(str::to_owned)
+                .is_some_and(|error| error == STRAVA_ACTIVITY_API_UNAVAILABLE_ERROR)
         })
-        .is_some_and(|error| error == STRAVA_ACTIVITY_API_UNAVAILABLE_ERROR)
 }
 
 fn sanitize_error_url(url: &reqwest::Url) -> String {
