@@ -570,5 +570,4 @@ describe('useCalendarData', () => {
       expect(raceDay.labels[0].payload.priority).toBe('A');
     }
   });
-
 });

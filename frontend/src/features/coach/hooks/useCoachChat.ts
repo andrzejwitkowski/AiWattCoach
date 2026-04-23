@@ -13,6 +13,7 @@ import {
   type CoachChatProgressState,
   serverWsMessageSchema,
   type ConversationMessage,
+  type SaveWorkoutSummaryResponse,
   type WorkoutSummary,
 } from '../types';
 
@@ -35,7 +36,7 @@ type UseCoachChatResult = {
   isSaved: boolean;
   setDraftRpe: (rpe: number) => void;
   sendMessage: (content: string) => Promise<boolean>;
-  saveSummary: () => Promise<WorkoutSummary | null>;
+  saveSummary: () => Promise<SaveWorkoutSummaryResponse | null>;
   reopenSummary: () => Promise<WorkoutSummary | null>;
 };
 
@@ -436,7 +437,7 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
           ];
         });
       }
-      return nextSummary;
+      return saveResult;
     } catch (saveError) {
       if (saveError instanceof StaleWorkoutSelectionError) {
         return null;
