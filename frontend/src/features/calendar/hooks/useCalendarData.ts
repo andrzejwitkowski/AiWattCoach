@@ -30,6 +30,48 @@ import {
   toDateKey,
 } from '../utils/dateUtils';
 
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+type CachedRange<T> = {
+  data: T;
+  loadedAt: number;
+};
+
+type LabelsResponse = { labelsByDate: Record<string, Record<string, CalendarLabel>> };
+
+const eventsCacheRef: Map<string, CachedRange<IntervalEvent[]>> = new Map();
+const labelsCacheRef: Map<string, CachedRange<LabelsResponse>> = new Map();
+
+function isStale(loadedAt: number): boolean {
+  return Date.now() - loadedAt > CACHE_TTL_MS;
+}
+
+async function fetchEventsWithCache(apiBaseUrl: string, range: { oldest: string; newest: string }): Promise<IntervalEvent[]> {
+  const key = `${range.oldest}|${range.newest}`;
+  const cached = eventsCacheRef.get(key);
+
+  if (cached && !isStale(cached.loadedAt)) {
+    return cached.data;
+  }
+
+  const data = await listCalendarEvents(apiBaseUrl, range);
+  eventsCacheRef.set(key, { data, loadedAt: Date.now() });
+  return data;
+}
+
+async function fetchLabelsWithCache(apiBaseUrl: string, range: { oldest: string; newest: string }): Promise<LabelsResponse> {
+  const key = `${range.oldest}|${range.newest}`;
+  const cached = labelsCacheRef.get(key);
+
+  if (cached && !isStale(cached.loadedAt)) {
+    return cached.data;
+  }
+
+  const data = await listCalendarLabels(apiBaseUrl, range);
+  labelsCacheRef.set(key, { data, loadedAt: Date.now() });
+  return data;
+}
+
 type UseCalendarDataOptions = {
   apiBaseUrl: string;
 };
@@ -91,9 +133,9 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const loadRange = useCallback(async (startMonday: Date, count: number) => {
     const range = formatDateRange(startMonday, count);
     const [events, activities, labels] = await Promise.all([
-      listCalendarEvents(apiBaseUrl, range),
+      fetchEventsWithCache(apiBaseUrl, range),
       getActivitiesForRange(range.oldest, range.newest),
-      listCalendarLabels(apiBaseUrl, range),
+      fetchLabelsWithCache(apiBaseUrl, range),
     ]);
 
     return { events, activities, labels };
