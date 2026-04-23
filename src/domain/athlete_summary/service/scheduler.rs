@@ -258,8 +258,16 @@ where
             };
 
             match base.generate_summary(&payload.user_id, payload.force).await {
-                Ok(summary) => TaskRunOutcome::Completed {
-                    checkpoint: build_completed_checkpoint(&summary.user_id).ok(),
+                Ok(summary) => match build_completed_checkpoint(&summary.user_id) {
+                    Ok(checkpoint) => TaskRunOutcome::Completed {
+                        checkpoint: Some(checkpoint),
+                    },
+                    Err(error) => TaskRunOutcome::Failed {
+                        checkpoint: None,
+                        error_message: error.to_string(),
+                        retryable: false,
+                        retry_delay_seconds: None,
+                    },
                 },
                 Err(error) => Self::map_task_failure(error),
             }

@@ -184,7 +184,7 @@ impl TrainingPlanProjectionRepository for SaveFlowProjectionRepository {
         _replaced_at_epoch_seconds: i64,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<
-            (TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>),
+            aiwattcoach::domain::training_plan::TrainingPlanReplacementResult,
             aiwattcoach::domain::training_plan::TrainingPlanError,
         >,
     > {
@@ -193,7 +193,13 @@ impl TrainingPlanProjectionRepository for SaveFlowProjectionRepository {
         Box::pin(async move {
             *days.lock().unwrap() = projected_days.clone();
             *snapshot_store.lock().unwrap() = Some(snapshot.clone());
-            Ok((snapshot, projected_days))
+            Ok(
+                aiwattcoach::domain::training_plan::TrainingPlanReplacementResult {
+                    snapshot,
+                    projected_days,
+                    superseded_date_range: None,
+                },
+            )
         })
     }
 }

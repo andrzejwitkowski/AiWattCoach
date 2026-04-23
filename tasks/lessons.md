@@ -25,6 +25,9 @@
 - When a scheduled task wraps another durable operation with its own stale or reclaim timeout, align the scheduler retry delay with that durable reclaim window. Otherwise the wrapper can burn through retries and mark a task dead before the underlying operation is actually recoverable.
 - Do not let `src/domain/**` tests depend on `crate::config` or other composition-root wiring just to start background workers. If domain tests need worker execution, add a domain-owned test helper or exercise the scheduler via domain primitives only.
 - For LLM-backed scheduled tasks, size `execution_timeout_seconds` to the whole attempt path, not just the inner HTTP request timeout. Include any preceding nested LLM calls, context building, and post-provider checkpoint writes when choosing the scheduler timeout budget.
+- If a worker heartbeat persists the full active-task snapshot while other code mutates active-task ids incrementally, hold the same cache lock through persistence and roll back on failure. Otherwise a stale heartbeat can erase active tasks from the worker projection.
+- In recovery-path tests, assert idempotent repository writes, not just the returned result, so duplicate side effects cannot hide behind the same final response.
+- When a scheduled-task success path must serialize a persisted checkpoint, do not swallow serialization failures with `.ok()`. Convert them into explicit task failure so result handlers surface the real cause.
 
 ## Distributed Worker Defaults
 
@@ -55,7 +58,14 @@
 
 - Test helpers must own every spawned background task. If a test starts `tokio::spawn(axum::serve(...))` or similar long-lived async work, keep the `JoinHandle` and abort or shut it down in `Drop`.
 - Global test state must stay bounded. Never keep app fixtures, temp directories, or other per-test resources in an ever-growing `Vec` behind `OnceLock`, `Mutex`, or similar globals.
-- If a test resource is expensive but safe to share, prefer a single per-binary singleton such as `OnceLock<Client>` or `OnceLock<FrontendFixture>` instead of recreating one instance per test.
+- If a test resource is expensive but safe to share and is not tied to a per-test async runtime, prefer a bounded per-binary singleton such as `OnceLock<FrontendFixture>` instead of recreating one instance per test. For async driver clients like `mongodb::Client`, first verify runtime safety; otherwise keep the client scoped to the test runtime.
 - Sharing a client is not the same as sharing mutable data: keep per-test database names and mutable test records isolated even when the underlying client is reused.
 - When a suite starts many HTTP mock servers or websocket apps, centralize that startup in a helper with cleanup semantics instead of open-coded `tokio::spawn` blocks in each test.
 - When a suite gets `SIGKILL` only after many earlier test binaries pass, suspect retained test infrastructure first and inspect the binaries that run immediately before the failure point.
+
+## Release Workflow Reliability
+
+- When a GitHub Actions workflow grows bespoke version/tagging logic, extract it into a repository script with unit tests instead of leaving the logic inline in YAML.
+- If a git tag is intended to mean "artifact is available", publish the artifact first and push the tag only after the publish step succeeds.
+- Any workflow that uses `Swatinem/rust-cache` or Docker Buildx `cache-to/from: type=gha` must keep `actions` permission enabled explicitly when permissions are restricted.
+- Scripts that shell out to `docker build` or similar filesystem-sensitive commands must anchor their working paths to the repo/script location instead of assuming the caller launched them from the repo root.

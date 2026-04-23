@@ -463,14 +463,19 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
         _replaced_at_epoch_seconds: i64,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<
-            (
-                aiwattcoach::domain::training_plan::TrainingPlanSnapshot,
-                Vec<TrainingPlanProjectedDay>,
-            ),
+            aiwattcoach::domain::training_plan::TrainingPlanReplacementResult,
             TrainingPlanError,
         >,
     > {
-        Box::pin(async move { Ok((snapshot, projected_days)) })
+        Box::pin(async move {
+            Ok(
+                aiwattcoach::domain::training_plan::TrainingPlanReplacementResult {
+                    snapshot,
+                    projected_days,
+                    superseded_date_range: None,
+                },
+            )
+        })
     }
 }
 

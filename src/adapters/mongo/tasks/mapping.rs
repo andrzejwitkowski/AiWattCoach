@@ -73,7 +73,7 @@ fn map_retry_strategy(strategy: &RetryStrategy) -> RetryStrategyDocument {
 fn map_retry_strategy_document(
     document: RetryStrategyDocument,
 ) -> Result<RetryStrategy, TaskSchedulerError> {
-    match document.kind.as_str() {
+    let strategy = match document.kind.as_str() {
         "never" => Ok(RetryStrategy::Never),
         "fixed" => Ok(RetryStrategy::Fixed {
             max_attempts: parse_u32_field(document.max_attempts, "fixed retry max_attempts")?,
@@ -99,6 +99,53 @@ fn map_retry_strategy_document(
         other => Err(TaskSchedulerError::Repository(format!(
             "unknown retry strategy kind: {other}",
         ))),
+    }?;
+
+    validate_retry_strategy(&strategy)?;
+    Ok(strategy)
+}
+
+fn validate_retry_strategy(strategy: &RetryStrategy) -> Result<(), TaskSchedulerError> {
+    match strategy {
+        RetryStrategy::Never => Ok(()),
+        RetryStrategy::Fixed {
+            max_attempts,
+            delay_seconds,
+        } => {
+            if *max_attempts == 0 {
+                return Err(TaskSchedulerError::Repository(
+                    "fixed retry strategy max_attempts must be positive".to_string(),
+                ));
+            }
+            if *delay_seconds <= 0 {
+                return Err(TaskSchedulerError::Repository(
+                    "fixed retry strategy delay_seconds must be positive".to_string(),
+                ));
+            }
+            Ok(())
+        }
+        RetryStrategy::Exponential {
+            max_attempts,
+            initial_delay_seconds,
+            max_delay_seconds,
+        } => {
+            if *max_attempts == 0 {
+                return Err(TaskSchedulerError::Repository(
+                    "exponential retry strategy max_attempts must be positive".to_string(),
+                ));
+            }
+            if *initial_delay_seconds <= 0 {
+                return Err(TaskSchedulerError::Repository(
+                    "exponential retry strategy initial_delay_seconds must be positive".to_string(),
+                ));
+            }
+            if *max_delay_seconds <= 0 || *max_delay_seconds < *initial_delay_seconds {
+                return Err(TaskSchedulerError::Repository(
+                    "exponential retry strategy max_delay_seconds must be positive and >= initial_delay_seconds".to_string(),
+                ));
+            }
+            Ok(())
+        }
     }
 }
 
@@ -145,6 +192,12 @@ pub(super) fn map_task_to_document(
 pub(super) fn map_document_to_task(
     document: TaskDocument,
 ) -> Result<ScheduledTask, TaskSchedulerError> {
+    if document.execution_timeout_seconds <= 0 {
+        return Err(TaskSchedulerError::Repository(
+            "task execution timeout must be positive".to_string(),
+        ));
+    }
+
     Ok(ScheduledTask {
         id: document.id,
         user_id: document.user_id,
@@ -245,6 +298,97 @@ mod tests {
             .expect("non-terminal task should map successfully");
 
         assert_eq!(document.cleanup_after, None);
+    }
+
+    #[test]
+    fn map_document_to_task_rejects_non_positive_execution_timeout() {
+        let mut document = sample_task_document();
+        document.execution_timeout_seconds = 0;
+
+        let error = map_document_to_task(document)
+            .expect_err("non-positive execution timeout should be rejected");
+
+        assert_eq!(
+            error,
+            TaskSchedulerError::Repository("task execution timeout must be positive".to_string())
+        );
+    }
+
+    #[test]
+    fn map_document_to_task_rejects_invalid_fixed_retry_strategy() {
+        let mut document = sample_task_document();
+        document.retry_strategy = RetryStrategyDocument {
+            kind: "fixed".to_string(),
+            max_attempts: Some(0),
+            delay_seconds: Some(30),
+            initial_delay_seconds: None,
+            max_delay_seconds: None,
+        };
+
+        let error = map_document_to_task(document)
+            .expect_err("invalid fixed retry strategy should be rejected");
+
+        assert_eq!(
+            error,
+            TaskSchedulerError::Repository(
+                "fixed retry strategy max_attempts must be positive".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn map_document_to_task_rejects_invalid_exponential_retry_strategy() {
+        let mut document = sample_task_document();
+        document.retry_strategy = RetryStrategyDocument {
+            kind: "exponential".to_string(),
+            max_attempts: Some(2),
+            delay_seconds: None,
+            initial_delay_seconds: Some(60),
+            max_delay_seconds: Some(30),
+        };
+
+        let error = map_document_to_task(document)
+            .expect_err("invalid exponential retry strategy should be rejected");
+
+        assert_eq!(
+            error,
+            TaskSchedulerError::Repository(
+                "exponential retry strategy max_delay_seconds must be positive and >= initial_delay_seconds".to_string()
+            )
+        );
+    }
+
+    fn sample_task_document() -> TaskDocument {
+        TaskDocument {
+            id: "task-1".to_string(),
+            user_id: "user-1".to_string(),
+            task_type: "summary".to_string(),
+            status: "queued".to_string(),
+            payload: json!({"task": "task-1"}),
+            checkpoint: None,
+            retry_strategy: RetryStrategyDocument {
+                kind: "never".to_string(),
+                max_attempts: Some(1),
+                delay_seconds: None,
+                initial_delay_seconds: None,
+                max_delay_seconds: None,
+            },
+            dedupe_key: "dedupe-1".to_string(),
+            error_message: None,
+            attempt_count: 0,
+            next_attempt_at_epoch_seconds: 100,
+            claimed_by: None,
+            lease_expires_at_epoch_seconds: None,
+            last_heartbeat_at_epoch_seconds: None,
+            execution_timeout_seconds: 30,
+            timed_out_at_epoch_seconds: None,
+            leader_only: false,
+            created_at_epoch_seconds: 100,
+            updated_at_epoch_seconds: 100,
+            started_at_epoch_seconds: None,
+            finished_at_epoch_seconds: None,
+            cleanup_after: None,
+        }
     }
 
     fn sample_task(status: TaskStatus, finished_at_epoch_seconds: Option<i64>) -> ScheduledTask {

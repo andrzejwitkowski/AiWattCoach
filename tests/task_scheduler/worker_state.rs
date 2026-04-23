@@ -106,6 +106,52 @@ async fn worker_active_task_update_rolls_back_cache_when_persist_fails() {
 }
 
 #[tokio::test]
+async fn worker_heartbeat_rolls_back_cache_when_persist_fails() {
+    let clock = TestClock::new(100);
+    let workers = RecordingTaskWorkerRepository::default();
+    let service = aiwattcoach::domain::task_scheduler::TaskSchedulerService::new(
+        crate::support::InMemoryTaskRepository::default(),
+        workers.clone(),
+        clock,
+    );
+
+    service
+        .heartbeat_worker("worker-1", true, vec!["summary".to_string()], Vec::new())
+        .await
+        .expect("initial worker heartbeat should succeed");
+    workers.fail_next_upsert();
+
+    let error = service
+        .heartbeat_worker(
+            "worker-1",
+            true,
+            vec!["summary".to_string()],
+            vec!["task-1".to_string()],
+        )
+        .await
+        .expect_err("persist failure should bubble up");
+
+    assert_eq!(
+        error,
+        TaskSchedulerError::Repository("worker upsert failed".to_string())
+    );
+
+    let persisted = service
+        .add_worker_active_task("worker-1", true, vec!["summary".to_string()], "task-2")
+        .await
+        .expect("next update should succeed");
+
+    assert_eq!(persisted.active_task_ids, vec!["task-2".to_string()]);
+    assert_eq!(
+        workers
+            .find_by_worker_id_blocking("worker-1")
+            .expect("worker should exist after successful retry")
+            .active_task_ids,
+        vec!["task-2".to_string()]
+    );
+}
+
+#[tokio::test]
 async fn worker_active_task_updates_are_serialized_before_persist() {
     let clock = TestClock::new(100);
     let workers = BlockingTaskWorkerRepository::default();
@@ -156,6 +202,56 @@ async fn worker_active_task_updates_are_serialized_before_persist() {
             .expect("worker should be persisted")
             .active_task_ids,
         vec!["task-1".to_string(), "task-2".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn worker_heartbeat_is_serialized_with_active_task_updates() {
+    let clock = TestClock::new(100);
+    let workers = BlockingTaskWorkerRepository::default();
+    let service = aiwattcoach::domain::task_scheduler::TaskSchedulerService::new(
+        crate::support::InMemoryTaskRepository::default(),
+        workers.clone(),
+        clock,
+    );
+
+    let heartbeat_service = service.clone();
+    let heartbeat = tokio::spawn(async move {
+        heartbeat_service
+            .heartbeat_worker("worker-1", true, vec!["summary".to_string()], Vec::new())
+            .await
+    });
+    workers.wait_until_first_upsert_starts().await;
+
+    let active_task_service = service.clone();
+    let active_task = tokio::spawn(async move {
+        active_task_service
+            .add_worker_active_task("worker-1", true, vec!["summary".to_string()], "task-1")
+            .await
+    });
+
+    tokio::task::yield_now().await;
+    assert_eq!(workers.upsert_calls(), 1);
+
+    workers.release_first_upsert();
+
+    heartbeat
+        .await
+        .expect("heartbeat task should join")
+        .expect("heartbeat persist should succeed");
+    let persisted = active_task
+        .await
+        .expect("active task should join")
+        .expect("active task persist should succeed");
+
+    assert_eq!(persisted.active_task_ids, vec!["task-1".to_string()]);
+    assert_eq!(workers.upsert_calls(), 2);
+    assert_eq!(
+        workers
+            .find_by_worker_id_blocking("worker-1")
+            .expect("worker should be persisted")
+            .active_task_ids,
+        vec!["task-1".to_string()]
     );
 }
 

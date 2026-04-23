@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-23 | user/CodeRabbit | PR #115 merge and review follow-up
+
+- Problem: PR #115 had diverged from `main` and still carried real review gaps after earlier follow-up passes: `heartbeat_worker` still raced with active-task updates because `set_worker_state` updated the cache after the upsert, panicking task handlers were logged but not converted into persisted scheduler failure state, athlete-summary task completion silently downgraded checkpoint serialization errors to `Completed { checkpoint: None }`, recovery tests did not prove repository-write idempotency, and `tasks/lessons.md` contradicted itself about `OnceLock<mongodb::Client>` reuse across separate `#[tokio::test]` runtimes.
+- Fix: merged the branch with `main` while preserving both repo verification script flows, changed `set_worker_state` to hold the worker-state lock across persistence with rollback on failure and added heartbeat-specific regressions, converted panicking task handlers into retryable failed task outcomes before releasing worker activity and updated the panic regression, changed athlete-summary completion to fail explicitly when checkpoint serialization fails, added repository idempotency assertions to the workout-summary recovery tests, and narrowed the lessons guidance so `OnceLock` stays recommended only for runtime-safe per-binary fixtures.
+- Prevention: after review feedback claims a path is fixed, reread the current code and verify the full behavior instead of assuming the earlier patch was enough; any full-snapshot worker heartbeat must share the same lock/persist discipline as incremental worker-state updates; never swallow persisted-checkpoint serialization errors with `.ok()` when downstream result handlers require that checkpoint contract; and recovery tests must assert the absence of duplicate writes, not only the final returned object.
+
 ### 2026-04-22 | CodeRabbit | PR #115 unresolved review follow-up
 
 - Problem: unresolved PR #115 review threads still pointed at three real gaps and several hygiene issues: the maintenance loop accepted zero-second ticker intervals that would panic inside Tokio, terminal task mapping silently dropped `cleanup_after` when a terminal task lacked `finished_at_epoch_seconds`, recovery completion paths in workout-summary bypassed the existing post-provider retry helper, worker-state cache mutations could diverge from the persisted worker row on concurrent active-task updates or failed upserts, test verification still forced `cargo test -- --nocapture`, several Mongo test fixtures still printed connection-string context in failure messages, and the scheduler `TestCoach::failing(...)` fake kept failing forever instead of modeling a transient provider error.
@@ -146,6 +152,12 @@ Read this file before planning and before implementation.
 - Problem: the first PR left `worker_id` lifecycle implicit and used an aggressively low default worker-staleness window that could misclassify long-running LLM tasks as abandoned.
 - Fix: added `default_task_scheduler_worker_id()` so workers prefer a stable `TASK_SCHEDULER_WORKER_ID` or `HOSTNAME` identity before falling back to a per-process UUID, and raised the default `worker_stale_after_seconds` in `src/config/task_scheduler.rs` to a safer 30-minute window.
 - Prevention: when introducing distributed worker coordination, define the worker-id source explicitly and make container-friendly stable identities the default when restart recovery is required; also sanity-check timeout defaults against the slowest expected external operation before sending for review.
+
+### 2026-04-22 | CodeRabbit/Copilot | PR #128 release workflow follow-up
+
+- Problem: the first registry-release version left version-resolution logic embedded inline in GitHub Actions without tests, pushed release tags before image publication could fail, kept cache permissions too narrow for `rust-cache` and Buildx `type=gha`, and let the fallback publish script depend on the caller's current working directory.
+- Fix: extracted release version resolution into `scripts/resolve-release-version.mjs` with unit tests, refactored the fallback publish helper into testable functions with unit tests and repo-root-based Docker context, moved git tag creation/push to after the image publish step succeeds, and added `actions: write` where the workflow uses GitHub Actions cache APIs.
+- Prevention: when a workflow introduces custom versioning or release orchestration, move the logic into a testable script instead of inline bash; if a release tag is meant to imply a deployable artifact, publish the artifact first and push the tag only after success; any workflow using `rust-cache` or Buildx `type=gha` must keep `actions` token permissions explicit; CLI helpers that shell out should anchor filesystem context to known paths instead of assuming the caller's cwd.
 
 ### 2026-04-19 | Copilot | admin metrics backfill test coverage
 

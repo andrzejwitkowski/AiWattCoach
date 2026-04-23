@@ -156,22 +156,25 @@ where
         enabled_task_types: Vec<String>,
         active_task_ids: Vec<String>,
     ) -> Result<TaskWorker, TaskSchedulerError> {
-        let worker = self.build_task_worker(
-            &worker_id,
-            is_leader,
-            enabled_task_types.clone(),
-            active_task_ids.clone(),
-        );
-        let persisted = self.workers.clone().upsert(worker).await?;
-        self.worker_states.lock().await.insert(
-            worker_id,
+        let mut worker_states = self.worker_states.clone().lock_owned().await;
+        let previous_state = worker_states.insert(
+            worker_id.clone(),
             WorkerState {
                 is_leader,
-                enabled_task_types,
-                active_task_ids,
+                enabled_task_types: enabled_task_types.clone(),
+                active_task_ids: active_task_ids.clone(),
             },
         );
-        Ok(persisted)
+        let worker =
+            self.build_task_worker(&worker_id, is_leader, enabled_task_types, active_task_ids);
+
+        match self.workers.clone().upsert(worker).await {
+            Ok(persisted) => Ok(persisted),
+            Err(error) => {
+                restore_worker_state(&mut worker_states, worker_id, previous_state);
+                Err(error)
+            }
+        }
     }
 
     async fn touch_cached_worker_state(

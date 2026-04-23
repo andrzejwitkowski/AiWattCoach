@@ -775,7 +775,8 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let reply_operations = InMemoryCoachReplyOperationRepository::default();
     let coach = Arc::new(CountingCoach::default());
-    let service = test_service_with_coach(repository, reply_operations.clone(), coach.clone());
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations.clone(), coach.clone());
 
     let stale_operation = CoachReplyOperation::pending(
         "user-1".to_string(),
@@ -917,7 +918,8 @@ async fn generate_coach_reply_retries_completion_write_when_recovering_existing_
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let reply_operations = InMemoryCoachReplyOperationRepository::default();
     let coach = Arc::new(CountingCoach::default());
-    let service = test_service_with_coach(repository, reply_operations.clone(), coach.clone());
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations.clone(), coach.clone());
 
     reply_operations.seed(CoachReplyOperation::pending(
         "user-1".to_string(),
@@ -936,6 +938,7 @@ async fn generate_coach_reply_retries_completion_write_when_recovering_existing_
 
     assert_eq!(coach.calls(), Vec::<String>::new());
     assert_eq!(reply.coach_message, coach_message);
+    assert_eq!(repository.calls(), Vec::<String>::new());
 
     let completed_call = format!("upsert:workout-1:{}:Completed", user_message.id);
     assert_eq!(
@@ -990,6 +993,13 @@ async fn generate_coach_reply_retries_completion_write_when_replaying_persisted_
     assert_eq!(coach.calls(), Vec::<String>::new());
     assert_eq!(reply.coach_message.id, "message-replay-retry");
     assert_eq!(reply.coach_message.content, "Persisted before crash");
+    assert_eq!(
+        repository.calls(),
+        vec![
+            "append_message:workout-1:user".to_string(),
+            "append_message:workout-1:coach".to_string(),
+        ]
+    );
 
     let completed_call = format!("upsert:workout-1:{}:Completed", persisted.user_message.id);
     assert_eq!(

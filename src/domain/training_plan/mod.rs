@@ -6,7 +6,8 @@ pub use model::{
     GeneratedTrainingPlan, TrainingPlanConversationMessage, TrainingPlanConversationRole,
     TrainingPlanDay, TrainingPlanError, TrainingPlanFailureState,
     TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanSnapshot,
+    TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanReplacementResult,
+    TrainingPlanSnapshot,
 };
 pub use ports::{
     BoxFuture, TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,

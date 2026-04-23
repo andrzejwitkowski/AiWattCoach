@@ -375,3 +375,10 @@ pub struct GeneratedTrainingPlan {
     pub active_projected_days: Vec<TrainingPlanProjectedDay>,
     pub was_generated: bool,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrainingPlanReplacementResult {
+    pub snapshot: TrainingPlanSnapshot,
+    pub projected_days: Vec<TrainingPlanProjectedDay>,
+    pub superseded_date_range: Option<(String, String)>,
+}

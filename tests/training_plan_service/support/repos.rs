@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+use aiwattcoach::domain::training_plan::TrainingPlanReplacementResult;
+
 use super::{
     push_call, CallLog, TrainingPlanError, TrainingPlanGenerationClaimResult,
     TrainingPlanGenerationOperation, TrainingPlanGenerationOperationRepository,
@@ -184,7 +186,7 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
         today: &str,
         replaced_at_epoch_seconds: i64,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
-        Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>,
+        Result<TrainingPlanReplacementResult, TrainingPlanError>,
     > {
         let store = self.projected_days.clone();
         let snapshots = self.snapshots.clone();
@@ -192,6 +194,24 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
         Box::pin(async move {
             let mut stored = store.lock().unwrap();
 
+            let superseded_range_start =
+                std::cmp::max(today.as_str(), snapshot.start_date.as_str());
+
+            let max_active_date = stored
+                .iter()
+                .filter(|day| {
+                    day.user_id == snapshot.user_id && day.superseded_at_epoch_seconds.is_none()
+                })
+                .map(|day| day.date.clone())
+                .max();
+
+            let superseded_range_end = max_active_date
+                .as_ref()
+                .map(|date| std::cmp::max(snapshot.end_date.as_str(), date.as_str()))
+                .unwrap_or(snapshot.end_date.as_str())
+                .to_string();
+
+            let mut superseded_dates = Vec::new();
             for day in stored.iter_mut() {
                 if day.superseded_at_epoch_seconds.is_some() {
                     continue;
@@ -199,12 +219,12 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 if day.user_id != snapshot.user_id {
                     continue;
                 }
-                if day.date < today
-                    || day.date < snapshot.start_date
-                    || day.date > snapshot.end_date
+                if day.date.as_str() < superseded_range_start
+                    || day.date.as_str() > superseded_range_end.as_str()
                 {
                     continue;
                 }
+                superseded_dates.push(day.date.clone());
                 day.superseded_at_epoch_seconds = Some(replaced_at_epoch_seconds);
                 day.updated_at_epoch_seconds = replaced_at_epoch_seconds;
             }
@@ -231,7 +251,21 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 stored_snapshots.push(snapshot.clone());
             }
 
-            Ok((snapshot, projected_days))
+            let superseded_date_range = if superseded_dates.is_empty() {
+                None
+            } else {
+                superseded_dates.sort();
+                superseded_dates
+                    .first()
+                    .cloned()
+                    .zip(superseded_dates.last().cloned())
+            };
+
+            Ok(TrainingPlanReplacementResult {
+                snapshot: snapshot.clone(),
+                projected_days: projected_days.clone(),
+                superseded_date_range,
+            })
         })
     }
 }
