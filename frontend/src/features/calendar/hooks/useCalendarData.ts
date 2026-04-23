@@ -47,7 +47,7 @@ function isStale(loadedAt: number): boolean {
 }
 
 async function fetchEventsWithCache(apiBaseUrl: string, range: { oldest: string; newest: string }): Promise<IntervalEvent[]> {
-  const key = `${range.oldest}|${range.newest}`;
+  const key = `${apiBaseUrl}|${range.oldest}|${range.newest}`;
   const cached = eventsCacheRef.get(key);
 
   if (cached && !isStale(cached.loadedAt)) {
@@ -60,7 +60,7 @@ async function fetchEventsWithCache(apiBaseUrl: string, range: { oldest: string;
 }
 
 async function fetchLabelsWithCache(apiBaseUrl: string, range: { oldest: string; newest: string }): Promise<LabelsResponse> {
-  const key = `${range.oldest}|${range.newest}`;
+  const key = `${apiBaseUrl}|${range.oldest}|${range.newest}`;
   const cached = labelsCacheRef.get(key);
 
   if (cached && !isStale(cached.loadedAt)) {

@@ -11,7 +11,10 @@ type CachedRange = {
   loadedAt: number;
 };
 
-type InflightRequest = Promise<IntervalActivity[]>;
+type InflightEntry = {
+  promise: Promise<IntervalActivity[]>;
+  token: number;
+};
 
 export type CompletedWorkoutsError =
   | { kind: 'credentials-required' }
@@ -43,7 +46,7 @@ export function CompletedWorkoutsProvider({
   apiBaseUrl: string;
 }) {
   const cacheRef = useRef<Map<string, CachedRange>>(new Map());
-  const inflightRef = useRef<Map<string, InflightRequest>>(new Map());
+  const inflightRef = useRef<Map<string, InflightEntry>>(new Map());
   const invalidationRef = useRef<Map<string, number>>(new Map());
   const [inflightCount, setInflightCount] = useState(0);
   const [error, setError] = useState<CompletedWorkoutsError | null>(null);
@@ -58,8 +61,8 @@ export function CompletedWorkoutsProvider({
     }
 
     const existingInflight = inflightRef.current.get(key);
-    if (existingInflight) {
-      return existingInflight;
+    if (existingInflight && existingInflight.token === (invalidationRef.current.get(key) ?? 0)) {
+      return existingInflight.promise;
     }
 
     const invalidationToken = (invalidationRef.current.get(key) ?? 0) + 1;
@@ -70,7 +73,8 @@ export function CompletedWorkoutsProvider({
     const promise = listActivities(apiBaseUrl, { oldest, newest })
       .then((activities) => {
         if (invalidationRef.current.get(key) !== invalidationToken) {
-          return [] as IntervalActivity[];
+          inflightRef.current.delete(key);
+          throw new Error('Request invalidated');
         }
 
         cacheRef.current.set(key, { activities, loadedAt: Date.now() });
@@ -80,6 +84,10 @@ export function CompletedWorkoutsProvider({
       .catch((err) => {
         if (err instanceof AuthenticationError) {
           window.location.href = '/';
+          throw err;
+        }
+
+        if (err.message === 'Request invalidated') {
           throw err;
         }
 
@@ -94,11 +102,14 @@ export function CompletedWorkoutsProvider({
         throw err;
       })
       .finally(() => {
-        inflightRef.current.delete(key);
+        const entry = inflightRef.current.get(key);
+        if (entry?.token === invalidationToken) {
+          inflightRef.current.delete(key);
+        }
         setInflightCount((c) => c - 1);
       });
 
-    inflightRef.current.set(key, promise);
+    inflightRef.current.set(key, { promise, token: invalidationToken });
     return promise;
   }, [apiBaseUrl]);
 
