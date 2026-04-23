@@ -69,6 +69,7 @@ impl IntervalsIcuClient {
                 status: error.status(),
                 error: map_connection_error(error),
                 response_body: None,
+                known_strava_activity_details_unavailable: false,
             })?;
 
         if logged.status.is_success() {
@@ -130,12 +131,21 @@ impl IntervalsIcuClient {
                 }
             }
             Err(failure) => {
-                tracing::warn!(
-                    activity_id,
-                    %failure.error,
-                    response_body = failure.response_body.as_deref().unwrap_or_default(),
-                    "intervals enrichment failed; returning base activity without intervals"
-                );
+                if failure.is_known_strava_activity_details_unavailable() {
+                    tracing::info!(
+                        activity_id,
+                        %failure.error,
+                        response_body = failure.response_body.as_deref().unwrap_or_default(),
+                        "intervals enrichment unavailable for imported Strava activity; returning base activity without intervals"
+                    );
+                } else {
+                    tracing::warn!(
+                        activity_id,
+                        %failure.error,
+                        response_body = failure.response_body.as_deref().unwrap_or_default(),
+                        "intervals enrichment failed; returning base activity without intervals"
+                    );
+                }
 
                 if failure.is_unprocessable_entity() {
                     intervals_definitively_unavailable = true;
@@ -216,12 +226,21 @@ impl IntervalsIcuClient {
                 }
             }
             Err(failure) => {
-                tracing::warn!(
-                    activity_id,
-                    %failure.error,
-                    response_body = failure.response_body.as_deref().unwrap_or_default(),
-                    "streams enrichment failed; returning base activity without streams"
-                );
+                if failure.is_known_strava_activity_details_unavailable() {
+                    tracing::info!(
+                        activity_id,
+                        %failure.error,
+                        response_body = failure.response_body.as_deref().unwrap_or_default(),
+                        "streams enrichment unavailable for imported Strava activity; returning base activity without streams"
+                    );
+                } else {
+                    tracing::warn!(
+                        activity_id,
+                        %failure.error,
+                        response_body = failure.response_body.as_deref().unwrap_or_default(),
+                        "streams enrichment failed; returning base activity without streams"
+                    );
+                }
 
                 if failure.is_unprocessable_entity() {
                     streams_definitively_unavailable = true;

@@ -346,6 +346,9 @@ async fn get_activity_streams_handler(
     );
     let status = *state.streams_status.lock().unwrap();
     if status != StatusCode::OK {
+        if let Some(payload) = state.streams_raw.lock().unwrap().clone() {
+            return (status, Json(payload)).into_response();
+        }
         return status.into_response();
     }
 
@@ -372,6 +375,9 @@ async fn get_activity_intervals_handler(
 
     let status = *state.activity_intervals_status.lock().unwrap();
     if status != StatusCode::OK {
+        if let Some(payload) = state.activity_intervals_raw.lock().unwrap().clone() {
+            return (status, Json(payload)).into_response();
+        }
         return status.into_response();
     }
 
