@@ -19,18 +19,14 @@ vi.mock('../../calendar/hooks/useCalendarData', () => ({
   invalidateCalendarCache: vi.fn(),
 }));
 
-vi.mock('../hooks/useWorkoutList', () => ({
-  useWorkoutList: vi.fn(),
-}));
+vi.mock('../hooks/useWorkoutList', () => ({ useWorkoutList: vi.fn() }));
 
 vi.mock('../hooks/useCoachChat', () => ({
   useCoachChat: vi.fn(),
-  isAvailabilityRequiredChatError: vi.fn((error: string | null) => false),
+  isAvailabilityRequiredChatError: vi.fn((_error: string | null) => false),
 }));
 
-vi.mock('../../settings/context/SettingsContext', () => ({
-  useSettings: vi.fn(),
-}));
+vi.mock('../../settings/context/SettingsContext', () => ({ useSettings: vi.fn() }));
 
 import { useCompletedWorkouts } from '../../intervals/context';
 import { useSettings } from '../../settings/context/SettingsContext';
@@ -38,43 +34,40 @@ import { useSettings } from '../../settings/context/SettingsContext';
 const originalLocation = window.location;
 const originalOnUnhandledRejection = process.listeners('unhandledRejection');
 
-function createDefaultWorkoutItem(overrides?: Partial<CoachWorkoutListItem>): CoachWorkoutListItem {
-  return {
-    id: 'workout-1',
-    source: 'activity',
-    startDateLocal: '2025-03-10',
-    event: null,
-    activity: {
-      id: 'workout-1',
-      name: 'Test Workout',
-      startDateLocal: '2025-03-10',
-      activityType: 'Ride',
-      durationSeconds: 3600,
-    } as never,
-    summary: null,
-    hasSummary: false,
-    hasConversation: false,
-    ...overrides,
-  };
-}
+const defaultWorkoutItem = (o?: Partial<CoachWorkoutListItem>): CoachWorkoutListItem => ({
+  id: 'workout-1',
+  source: 'activity',
+  startDateLocal: '2025-03-10',
+  event: null,
+  activity: { id: 'workout-1', name: 'Test Workout', startDateLocal: '2025-03-10', activityType: 'Ride', durationSeconds: 3600 } as never,
+  summary: null,
+  hasSummary: false,
+  hasConversation: false,
+  ...o,
+});
 
-function createDefaultSummary(overrides?: Partial<WorkoutSummary>): WorkoutSummary {
-  return {
-    id: 'summary-1',
-    workoutId: 'workout-1',
-    rpe: 6,
-    messages: [],
-    savedAtEpochSeconds: null,
-    createdAtEpochSeconds: 1710000000,
-    updatedAtEpochSeconds: 1710000000,
-    ...overrides,
-  };
-}
+const defaultSummary = (o?: Partial<WorkoutSummary>): WorkoutSummary => ({
+  id: 'summary-1',
+  workoutId: 'workout-1',
+  rpe: 6,
+  messages: [],
+  savedAtEpochSeconds: null,
+  createdAtEpochSeconds: 1710000000,
+  updatedAtEpochSeconds: 1710000000,
+  ...o,
+});
 
-function setupMocks(options?: {
-  planStatus?: 'generated' | 'skipped' | 'failed' | 'unchanged';
-  saveSummaryError?: Error;
-}) {
+const availability = [
+  { weekday: 'mon', available: true, maxDurationMinutes: 60 },
+  { weekday: 'tue', available: true, maxDurationMinutes: 60 },
+  { weekday: 'wed', available: true, maxDurationMinutes: 60 },
+  { weekday: 'thu', available: true, maxDurationMinutes: 60 },
+  { weekday: 'fri', available: true, maxDurationMinutes: 60 },
+  { weekday: 'sat', available: false, maxDurationMinutes: null },
+  { weekday: 'sun', available: false, maxDurationMinutes: null },
+];
+
+function setupMocks(opts?: { planStatus?: 'generated' | 'skipped' | 'failed' | 'unchanged'; saveSummaryError?: Error }) {
   const invalidateCalendarCache = vi.mocked(calendarHooks.invalidateCalendarCache);
   const invalidateAll = vi.fn();
 
@@ -87,38 +80,23 @@ function setupMocks(options?: {
   } as never);
 
   vi.mocked(useSettings).mockReturnValue({
-    settings: {
-      availability: [
-        { weekday: 'mon', available: true, maxDurationMinutes: 60 },
-        { weekday: 'tue', available: true, maxDurationMinutes: 60 },
-        { weekday: 'wed', available: true, maxDurationMinutes: 60 },
-        { weekday: 'thu', available: true, maxDurationMinutes: 60 },
-        { weekday: 'fri', available: true, maxDurationMinutes: 60 },
-        { weekday: 'sat', available: false, maxDurationMinutes: null },
-        { weekday: 'sun', available: false, maxDurationMinutes: null },
-      ],
-    },
+    settings: { availability },
     isLoading: false,
     error: null,
     saveSettings: vi.fn(),
   } as never);
 
-  const refresh = vi.fn().mockResolvedValue(undefined);
-  const replaceSummary = vi.fn();
-
   vi.mocked(useWorkoutListModule.useWorkoutList).mockReturnValue({
-    items: [createDefaultWorkoutItem()],
+    items: [defaultWorkoutItem()],
     state: 'ready',
     error: null,
     weekLabel: 'Mar 10 - Mar 16',
     canGoToNewerWeek: false,
     goToOlderWeek: vi.fn(),
     goToNewerWeek: vi.fn(),
-    refresh,
-    replaceSummary,
+    refresh: vi.fn().mockResolvedValue(undefined),
+    replaceSummary: vi.fn(),
   } as never);
-
-  const planStatus = options?.planStatus ?? 'generated';
 
   vi.mocked(useCoachChatModule.useCoachChat).mockReturnValue({
     summary: null,
@@ -134,20 +112,16 @@ function setupMocks(options?: {
     isSaved: false,
     setDraftRpe: vi.fn(),
     sendMessage: vi.fn().mockResolvedValue(true),
-    saveSummary: options?.saveSummaryError
-      ? vi.fn().mockRejectedValue(options.saveSummaryError)
+    saveSummary: opts?.saveSummaryError
+      ? vi.fn().mockRejectedValue(opts.saveSummaryError)
       : vi.fn().mockResolvedValue({
-          summary: createDefaultSummary({ savedAtEpochSeconds: 1710000100 }),
-          workflow: {
-            recapStatus: 'generated',
-            planStatus,
-            messages: [],
-          },
+          summary: defaultSummary({ savedAtEpochSeconds: 1710000100 }),
+          workflow: { recapStatus: 'generated', planStatus: opts?.planStatus ?? 'generated', messages: [] },
         }),
     reopenSummary: vi.fn().mockResolvedValue(null),
   } as never);
 
-  return { invalidateCalendarCache, invalidateAll, refresh, replaceSummary };
+  return { invalidateCalendarCache, invalidateAll };
 }
 
 beforeEach(() => {
@@ -160,92 +134,43 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   process.removeAllListeners('unhandledRejection');
-  originalOnUnhandledRejection.forEach((listener) => {
-    process.on('unhandledRejection', listener);
-  });
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    value: originalLocation,
-  });
+  originalOnUnhandledRejection.forEach(l => process.on('unhandledRejection', l));
+  Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
 });
 
 describe('CoachPageLayout', () => {
-  it('invalidates calendar and completed workouts cache after successful save with generated plan', async () => {
+  it('invalidates caches after save with generated plan', async () => {
     const { invalidateCalendarCache, invalidateAll } = setupMocks({ planStatus: 'generated' });
 
     render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
+    fireEvent.click(screen.getByRole('button', { name: /save as workout summary/i }));
 
-    const saveButton = screen.getByRole('button', { name: /save as workout summary/i });
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(invalidateCalendarCache).toHaveBeenCalledTimes(1);
-    });
-
+    await waitFor(() => expect(invalidateCalendarCache).toHaveBeenCalledTimes(1));
     expect(invalidateAll).toHaveBeenCalledTimes(1);
   });
 
-  it('does not invalidate caches when plan status is skipped', async () => {
-    const { invalidateCalendarCache, invalidateAll } = setupMocks({ planStatus: 'skipped' });
+  it.each([
+    ['skipped'],
+    ['failed'],
+    ['unchanged'],
+  ])('does not invalidate caches when plan status is %s', async (planStatus) => {
+    const { invalidateCalendarCache, invalidateAll } = setupMocks({ planStatus: planStatus as never });
 
     render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
+    fireEvent.click(screen.getByRole('button', { name: /save as workout summary/i }));
 
-    const saveButton = screen.getByRole('button', { name: /save as workout summary/i });
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(invalidateCalendarCache).not.toHaveBeenCalled();
-    });
-
-    expect(invalidateAll).not.toHaveBeenCalled();
-  });
-
-  it('does not invalidate caches when plan status is failed', async () => {
-    const { invalidateCalendarCache, invalidateAll } = setupMocks({ planStatus: 'failed' });
-
-    render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
-
-    const saveButton = screen.getByRole('button', { name: /save as workout summary/i });
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(invalidateCalendarCache).not.toHaveBeenCalled();
-    });
-
-    expect(invalidateAll).not.toHaveBeenCalled();
-  });
-
-  it('does not invalidate caches when plan status is unchanged', async () => {
-    const { invalidateCalendarCache, invalidateAll } = setupMocks({ planStatus: 'unchanged' });
-
-    render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
-
-    const saveButton = screen.getByRole('button', { name: /save as workout summary/i });
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(invalidateCalendarCache).not.toHaveBeenCalled();
-    });
-
+    await waitFor(() => expect(invalidateCalendarCache).not.toHaveBeenCalled());
     expect(invalidateAll).not.toHaveBeenCalled();
   });
 
   it('does not invalidate caches when save fails', async () => {
-    const { invalidateCalendarCache, invalidateAll } = setupMocks({
-      saveSummaryError: new Error('Network error'),
-    });
+    const { invalidateCalendarCache, invalidateAll } = setupMocks({ saveSummaryError: new Error('Network error') });
 
     render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
+    fireEvent.click(screen.getByRole('button', { name: /save as workout summary/i }));
 
-    const saveButton = screen.getByRole('button', { name: /save as workout summary/i });
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(invalidateCalendarCache).not.toHaveBeenCalled();
-    });
-
+    await waitFor(() => expect(invalidateCalendarCache).not.toHaveBeenCalled());
     expect(invalidateAll).not.toHaveBeenCalled();
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise(r => setTimeout(r, 50));
   });
 });

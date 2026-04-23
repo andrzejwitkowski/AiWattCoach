@@ -88,7 +88,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     const result = await chat.saveSummary();
 
     if (result && isCurrentSelection(workoutId)) {
-      workoutList.replaceSummary(result);
+      workoutList.replaceSummary(result.summary);
       setIsEditing(false);
       setShowConfirmWithoutChat(false);
       await workoutList.refresh();
