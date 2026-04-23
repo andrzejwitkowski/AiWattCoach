@@ -7,7 +7,7 @@ import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import type { CalendarLabel } from '../types';
 import { CALENDAR_BUFFER_WEEKS, CALENDAR_VISIBLE_WEEKS } from '../constants';
 import { addDays, getMondayOfWeek, parseDateKey, toDateKey } from '../utils/dateUtils';
-import { useCalendarData } from './useCalendarData';
+import { useCalendarData, __resetCachesForTesting } from './useCalendarData';
 
 vi.mock('../../intervals/api/intervals', () => ({
   listCalendarEvents: vi.fn(),
@@ -51,6 +51,7 @@ function countRangeCalls(mock: ReturnType<typeof vi.fn>, oldest: string, newest:
 
 afterEach(() => {
   vi.clearAllMocks();
+  __resetCachesForTesting();
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: originalLocation,
