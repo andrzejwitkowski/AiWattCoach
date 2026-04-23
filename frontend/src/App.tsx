@@ -9,6 +9,7 @@ import { AuthProvider } from './features/auth/context/AuthProvider';
 import { RequireAuth } from './features/auth/guards/RequireAuth';
 import { RequireRole } from './features/auth/guards/RequireRole';
 import { SettingsProvider } from './features/settings/context/SettingsContext';
+import { CompletedWorkoutsProvider } from './features/intervals/context';
 import { AppHomePage } from './pages/AppHomePage';
 import { AdminSystemInfoPage } from './pages/AdminSystemInfoPage';
 import { CalendarPage } from './pages/CalendarPage';
@@ -111,7 +112,9 @@ export function App() {
             <Route
               element={
                 <SettingsProvider apiBaseUrl={API_BASE_URL}>
-                  <AuthenticatedLayout apiBaseUrl={API_BASE_URL} backendStatus={backendStatus} />
+                  <CompletedWorkoutsProvider apiBaseUrl={API_BASE_URL}>
+                    <AuthenticatedLayout apiBaseUrl={API_BASE_URL} backendStatus={backendStatus} />
+                  </CompletedWorkoutsProvider>
                 </SettingsProvider>
               }
             >

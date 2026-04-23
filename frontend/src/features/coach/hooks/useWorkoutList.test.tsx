@@ -7,6 +7,17 @@ import { HttpError } from '../../../lib/httpClient';
 import { listWorkoutSummaries } from '../api/workoutSummary';
 import { useWorkoutList } from './useWorkoutList';
 
+vi.mock('../../intervals/api/intervals', () => ({
+  listActivities: vi.fn(),
+  listEvents: vi.fn(),
+}));
+
+vi.mock('../api/workoutSummary', () => ({
+  listWorkoutSummaries: vi.fn(),
+}));
+
+import { CompletedWorkoutsProvider } from '../../intervals/context';
+
 function formatWeekLabel(start: Date, end: Date): string {
   const formatter = new Intl.DateTimeFormat(undefined, {
     month: 'short',
@@ -107,9 +118,15 @@ const activityFixture = {
   },
 };
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
+function renderWorkoutListHook() {
+  return renderHook(() => useWorkoutList({ apiBaseUrl: '' }), {
+    wrapper: ({ children }) => (
+      <CompletedWorkoutsProvider apiBaseUrl="">
+        {children}
+      </CompletedWorkoutsProvider>
+    ),
+  });
+}
 
 describe('useWorkoutList', () => {
   it('loads up to seven workouts and merges summary status', async () => {
@@ -146,7 +163,7 @@ describe('useWorkoutList', () => {
       },
     ]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -178,7 +195,7 @@ describe('useWorkoutList', () => {
     ]);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -209,7 +226,7 @@ describe('useWorkoutList', () => {
     vi.mocked(listEvents).mockResolvedValue(pastEvents);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -251,7 +268,7 @@ describe('useWorkoutList', () => {
     ]);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -303,7 +320,7 @@ describe('useWorkoutList', () => {
     ]);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -316,56 +333,34 @@ describe('useWorkoutList', () => {
     expect(result.current.items[0]?.event?.actualWorkout?.activityId).toBe('activity-linked');
   });
 
-  it('keeps only the newest refresh result when loads overlap', async () => {
-    let resolveFirst: (() => void) | undefined;
-    let resolveSecond: (() => void) | undefined;
-
+  it('reuses cached activities on refresh without re-fetching', async () => {
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
-    vi.mocked(listActivities)
-      .mockImplementationOnce(() => new Promise((resolve) => {
-        resolveFirst = () => resolve([
-          {
-            ...activityFixture,
-            id: 'activity-901',
-            name: 'Older result',
-            startDateLocal: '2026-04-07T09:00:00',
-            startDate: '2026-04-07T08:00:00Z',
-          },
-        ]);
-      }))
-      .mockImplementationOnce(() => new Promise((resolve) => {
-        resolveSecond = () => resolve([
-          {
-            ...activityFixture,
-            id: 'activity-900',
-            name: 'Newer result',
-            startDateLocal: '2026-04-07T09:00:00',
-            startDate: '2026-04-07T08:00:00Z',
-          },
-        ]);
-      }));
+    vi.mocked(listActivities).mockResolvedValue([
+      {
+        ...activityFixture,
+        id: 'activity-900',
+        name: 'Cached result',
+        startDateLocal: '2026-04-07T09:00:00',
+        startDate: '2026-04-07T08:00:00Z',
+      },
+    ]);
     vi.mocked(listEvents).mockResolvedValue([]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
-
-    await act(async () => {
-      const secondRefresh = result.current.refresh();
-      resolveSecond?.();
-      await secondRefresh;
-    });
-
-    await act(async () => {
-      resolveFirst?.();
-      await Promise.resolve();
-    });
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
     });
 
-    await waitFor(() => {
-      expect(result.current.items[0]?.activity?.name).toBe('Newer result');
+    expect(result.current.items[0]?.activity?.name).toBe('Cached result');
+    expect(listActivities).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.refresh();
     });
+
+    expect(result.current.items[0]?.activity?.name).toBe('Cached result');
+    expect(listActivities).toHaveBeenCalledTimes(1);
   });
 
   it('updates the matching item when a summary changes', async () => {
@@ -387,7 +382,7 @@ describe('useWorkoutList', () => {
     ]);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -447,7 +442,7 @@ describe('useWorkoutList', () => {
       },
     ]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -514,7 +509,7 @@ describe('useWorkoutList', () => {
       },
     ]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -548,7 +543,7 @@ describe('useWorkoutList', () => {
       },
     ]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -565,7 +560,7 @@ describe('useWorkoutList', () => {
     vi.mocked(listActivities).mockResolvedValue([]);
     vi.mocked(listEvents).mockRejectedValue(new HttpError(422, 'bad request'));
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('credentials-required');
@@ -584,7 +579,7 @@ describe('useWorkoutList', () => {
     ]);
     vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
-    const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+    const { result } = renderWorkoutListHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -622,7 +617,7 @@ describe('useWorkoutList', () => {
       vi.mocked(listEvents).mockResolvedValue([]);
       vi.mocked(listWorkoutSummaries).mockResolvedValue([]);
 
-      const { result } = renderHook(() => useWorkoutList({ apiBaseUrl: '' }));
+      const { result } = renderWorkoutListHook();
 
       // Advance timers to allow async operations to complete
       await act(async () => {
