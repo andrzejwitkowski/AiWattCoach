@@ -425,3 +425,8 @@ export function __resetCachesForTesting() {
   eventsCacheRef.clear();
   labelsCacheRef.clear();
 }
+
+export function invalidateCalendarCache() {
+  eventsCacheRef.clear();
+  labelsCacheRef.clear();
+}
