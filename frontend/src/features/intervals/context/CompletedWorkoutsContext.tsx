@@ -13,12 +13,16 @@ type CachedRange = {
 
 type InflightRequest = Promise<IntervalActivity[]>;
 
+export type CompletedWorkoutsError =
+  | { kind: 'credentials-required' }
+  | { kind: 'network-error'; message: string };
+
 type CompletedWorkoutsContextValue = {
   getActivitiesForRange: (oldest: string, newest: string) => Promise<IntervalActivity[]>;
   invalidateRange: (oldest: string, newest: string) => void;
   invalidateAll: () => void;
   isLoading: boolean;
-  error: string | null;
+  error: CompletedWorkoutsError | null;
 };
 
 const CompletedWorkoutsContext = createContext<CompletedWorkoutsContextValue | null>(null);
@@ -42,7 +46,7 @@ export function CompletedWorkoutsProvider({
   const inflightRef = useRef<Map<string, InflightRequest>>(new Map());
   const invalidationRef = useRef<Map<string, number>>(new Map());
   const [inflightCount, setInflightCount] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<CompletedWorkoutsError | null>(null);
 
   const fetchRange = useCallback(async (oldest: string, newest: string): Promise<IntervalActivity[]> => {
     const key = buildCacheKey(oldest, newest);
@@ -79,12 +83,12 @@ export function CompletedWorkoutsProvider({
           throw err;
         }
 
-        const message = err instanceof HttpError && err.status === 422
-          ? 'credentials-required'
-          : (err instanceof Error ? err.message : 'Failed to load completed workouts');
+        const completedError: CompletedWorkoutsError = err instanceof HttpError && err.status === 422
+          ? { kind: 'credentials-required' }
+          : { kind: 'network-error', message: err instanceof Error ? err.message : 'Failed to load completed workouts' };
 
         if (invalidationRef.current.get(key) === invalidationToken) {
-          setError(message);
+          setError(completedError);
         }
 
         throw err;
@@ -142,4 +146,7 @@ export function useCompletedWorkouts() {
     throw new Error('useCompletedWorkouts must be used within a CompletedWorkoutsProvider');
   }
   return context;
+}
+
+export function __resetCachesForTesting() {
 }

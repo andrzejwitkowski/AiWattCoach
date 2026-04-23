@@ -1,1 +1,1 @@
-export { CompletedWorkoutsProvider, useCompletedWorkouts } from './CompletedWorkoutsContext';
+export { CompletedWorkoutsProvider, useCompletedWorkouts, __resetCachesForTesting } from './CompletedWorkoutsContext';

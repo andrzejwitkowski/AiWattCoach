@@ -1,12 +1,22 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CompletedWorkoutsProvider } from '../../intervals/context';
 import type { IntervalEvent } from '../../intervals/types';
 import { listActivities, listEvents } from '../../intervals/api/intervals';
 import { HttpError } from '../../../lib/httpClient';
 import { listWorkoutSummaries } from '../api/workoutSummary';
 import { useWorkoutList } from './useWorkoutList';
+
+vi.mock('../../intervals/api/intervals', () => ({
+  listActivities: vi.fn(),
+  listEvents: vi.fn(),
+}));
+
+vi.mock('../api/workoutSummary', () => ({
+  listWorkoutSummaries: vi.fn(),
+}));
+
+import { CompletedWorkoutsProvider } from '../../intervals/context';
 
 function formatWeekLabel(start: Date, end: Date): string {
   const formatter = new Intl.DateTimeFormat(undefined, {

@@ -77,7 +77,7 @@ function renderProvider() {
     return (
       <div>
         <span data-testid="loading">{String(ctx.isLoading)}</span>
-        <span data-testid="error">{ctx.error ?? 'none'}</span>
+        <span data-testid="error">{ctx.error ? `${ctx.error.kind}${ctx.error.kind === 'network-error' ? `: ${ctx.error.message}` : ''}` : 'none'}</span>
         <button data-testid="fetch" onClick={async () => {
           try {
             await ctx.getActivitiesForRange('2026-03-01', '2026-03-31');
@@ -278,7 +278,56 @@ describe('CompletedWorkoutsProvider', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('error').textContent).not.toBe('none');
+      const errorText = screen.getByTestId('error').textContent;
+      expect(errorText).toContain('network-error');
+    });
+  });
+
+  it('clears error on successful cache hit', async () => {
+    const { fetchMock } = renderProvider();
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, { status: 500 }),
+    );
+
+    await act(async () => {
+      screen.getByTestId('fetch').click();
+    });
+
+    await waitFor(() => {
+      const errorText = screen.getByTestId('error').textContent;
+      expect(errorText).toContain('network-error');
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(makeActivityResponse()),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    await act(async () => {
+      screen.getByTestId('fetch').click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toBe('none');
+    });
+  });
+
+  it('surfaces credentials-required error on 422', async () => {
+    const { fetchMock } = renderProvider();
+
+    fetchMock.mockResolvedValue(
+      new Response(null, { status: 422 }),
+    );
+
+    await act(async () => {
+      screen.getByTestId('fetch').click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toContain('credentials-required');
     });
   });
 });
