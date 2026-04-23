@@ -30,7 +30,7 @@ use aiwattcoach::{
         races::RaceUseCases,
         training_plan::{
             BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, TrainingPlanProjectedDay,
-            TrainingPlanProjectionRepository, TrainingPlanSnapshot,
+            TrainingPlanProjectionRepository, TrainingPlanReplacementResult, TrainingPlanSnapshot,
         },
     },
     Settings,
@@ -248,10 +248,14 @@ impl TrainingPlanProjectionRepository for EmptyTrainingPlanProjectionRepository 
         projected_days: Vec<TrainingPlanProjectedDay>,
         _today: &str,
         _replaced_at_epoch_seconds: i64,
-    ) -> TrainingPlanBoxFuture<
-        Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>,
-    > {
-        Box::pin(async move { Ok((snapshot, projected_days)) })
+    ) -> TrainingPlanBoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>> {
+        Box::pin(async move {
+            Ok(TrainingPlanReplacementResult {
+                snapshot,
+                projected_days,
+                superseded_date_range: None,
+            })
+        })
     }
 }
 

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::training_plan::{
     BoxFuture, TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
-    TrainingPlanSnapshot,
+    TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
 
 use super::{
@@ -231,8 +231,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
         projected_days: Vec<TrainingPlanProjectedDay>,
         today: &str,
         replaced_at_epoch_seconds: i64,
-    ) -> BoxFuture<Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>>
-    {
+    ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>> {
         let collection = self.collection.clone();
         let snapshot_collection = self.snapshot_repository.collection();
         let snapshot_document =
@@ -243,6 +242,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
             .collect::<Result<Vec<_>, _>>();
         let today = today.to_string();
         let snapshot_clone = snapshot.clone();
+        let projected_days_clone = projected_days.clone();
         Box::pin(async move {
             let snapshot_document = snapshot_document?;
             let projected_day_documents = projected_day_documents?;
@@ -253,14 +253,19 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                         .to_string(),
                 ));
             }
+
+            let superseded_range_start =
+                std::cmp::max(today.as_str(), snapshot.start_date.as_str());
+            let superseded_range_end = snapshot.end_date.as_str();
+
             collection
                 .update_many(
                     doc! {
                         "user_id": &snapshot.user_id,
                         "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
                         "date": {
-                            "$gte": std::cmp::max(today.as_str(), snapshot.start_date.as_str()),
-                            "$lte": &snapshot.end_date,
+                            "$gte": superseded_range_start,
+                            "$lte": superseded_range_end,
                         },
                     },
                     doc! {
@@ -272,6 +277,11 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 )
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+
+            let superseded_date_range = Some((
+                superseded_range_start.to_string(),
+                superseded_range_end.to_string(),
+            ));
 
             snapshot_collection
                 .replace_one(
@@ -297,7 +307,11 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                     .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
             }
 
-            Ok((snapshot_clone, projected_days))
+            Ok(TrainingPlanReplacementResult {
+                snapshot: snapshot_clone,
+                projected_days: projected_days_clone,
+                superseded_date_range,
+            })
         })
     }
 }

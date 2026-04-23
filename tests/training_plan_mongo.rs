@@ -233,7 +233,7 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
 
     let second_snapshot =
         sample_snapshot("training-plan:user-1:workout-1:1700086400", "2026-04-07");
-    let (_, projected_days) = repository
+    let result = repository
         .replace_window(
             second_snapshot.clone(),
             sample_projected_days(&second_snapshot, "2026-04-07"),
@@ -242,6 +242,7 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
         )
         .await
         .unwrap();
+    let projected_days = result.projected_days;
 
     let other_user_snapshot = sample_snapshot_for_user(
         "user-2",
@@ -413,7 +414,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
         .await
         .unwrap();
 
-    let (_, projected_days) = repository
+    let result = repository
         .replace_window(
             snapshot.clone(),
             sample_projected_days(&snapshot, "2026-04-06"),
@@ -422,6 +423,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
         )
         .await
         .unwrap();
+    let projected_days = result.projected_days;
 
     assert_eq!(projected_days.len(), 14);
 

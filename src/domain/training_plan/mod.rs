@@ -5,7 +5,7 @@ mod service;
 pub use model::{
     GeneratedTrainingPlan, TrainingPlanDay, TrainingPlanError, TrainingPlanFailureState,
     TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation, TrainingPlanProjectedDay,
-    TrainingPlanSnapshot,
+    TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
 pub use ports::{
     BoxFuture, TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,

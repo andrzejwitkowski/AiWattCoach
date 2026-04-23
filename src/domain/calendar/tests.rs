@@ -25,7 +25,7 @@ use crate::domain::{
     planned_workout_tokens::NoopPlannedWorkoutTokenRepository,
     training_plan::{
         BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, TrainingPlanProjectedDay,
-        TrainingPlanProjectionRepository, TrainingPlanSnapshot,
+        TrainingPlanProjectionRepository, TrainingPlanReplacementResult, TrainingPlanSnapshot,
     },
 };
 
@@ -736,10 +736,14 @@ impl TrainingPlanProjectionRepository for FakeProjectionRepository {
         projected_days: Vec<TrainingPlanProjectedDay>,
         _today: &str,
         _replaced_at_epoch_seconds: i64,
-    ) -> TrainingPlanBoxFuture<
-        Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>,
-    > {
-        Box::pin(async move { Ok((snapshot, projected_days)) })
+    ) -> TrainingPlanBoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>> {
+        Box::pin(async move {
+            Ok(TrainingPlanReplacementResult {
+                snapshot,
+                projected_days,
+                superseded_date_range: None,
+            })
+        })
     }
 }
 

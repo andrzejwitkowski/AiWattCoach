@@ -726,7 +726,7 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
         _today: &str,
         _replaced_at_epoch_seconds: i64,
     ) -> crate::domain::training_plan::BoxFuture<
-        Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>,
+        Result<crate::domain::training_plan::TrainingPlanReplacementResult, TrainingPlanError>,
     > {
         unreachable!()
     }
