@@ -30,13 +30,8 @@ type CompletedWorkoutsContextValue = {
 
 const CompletedWorkoutsContext = createContext<CompletedWorkoutsContextValue | null>(null);
 
-function buildCacheKey(oldest: string, newest: string): string {
-  return `${oldest}|${newest}`;
-}
-
-function isStale(loadedAt: number): boolean {
-  return Date.now() - loadedAt > CACHE_TTL_MS;
-}
+const buildCacheKey = (oldest: string, newest: string) => `${oldest}|${newest}`;
+const isStale = (loadedAt: number) => Date.now() - loadedAt > CACHE_TTL_MS;
 
 export function CompletedWorkoutsProvider({
   children,
@@ -61,13 +56,11 @@ export function CompletedWorkoutsProvider({
     }
 
     const existingInflight = inflightRef.current.get(key);
-    if (existingInflight && existingInflight.token === (invalidationRef.current.get(key) ?? 0)) {
+    if (existingInflight && existingInflight.token === (invalidationRef.current.get(key) ?? 0))
       return existingInflight.promise;
-    }
 
     const invalidationToken = (invalidationRef.current.get(key) ?? 0) + 1;
     invalidationRef.current.set(key, invalidationToken);
-
     setInflightCount((c) => c + 1);
 
     const promise = listActivities(apiBaseUrl, { oldest, newest })
@@ -76,7 +69,6 @@ export function CompletedWorkoutsProvider({
           inflightRef.current.delete(key);
           throw new Error('Request invalidated');
         }
-
         cacheRef.current.set(key, { activities, loadedAt: Date.now() });
         setError(null);
         return activities;
@@ -86,26 +78,19 @@ export function CompletedWorkoutsProvider({
           window.location.href = '/';
           throw err;
         }
-
-        if (err.message === 'Request invalidated') {
-          throw err;
-        }
+        if (err.message === 'Request invalidated') throw err;
 
         const completedError: CompletedWorkoutsError = err instanceof HttpError && err.status === 422
           ? { kind: 'credentials-required' }
           : { kind: 'network-error', message: err instanceof Error ? err.message : 'Failed to load completed workouts' };
 
-        if (invalidationRef.current.get(key) === invalidationToken) {
+        if (invalidationRef.current.get(key) === invalidationToken)
           setError(completedError);
-        }
-
         throw err;
       })
       .finally(() => {
-        const entry = inflightRef.current.get(key);
-        if (entry?.token === invalidationToken) {
+        if (inflightRef.current.get(key)?.token === invalidationToken)
           inflightRef.current.delete(key);
-        }
         setInflightCount((c) => c - 1);
       });
 
@@ -121,27 +106,23 @@ export function CompletedWorkoutsProvider({
       setError(null);
       return cached.activities;
     }
-
     if (cached && isStale(cached.loadedAt)) {
       void fetchRange(oldest, newest).catch(() => {});
       return cached.activities;
     }
-
     return fetchRange(oldest, newest);
   }, [fetchRange]);
 
   const invalidateRange = useCallback((oldest: string, newest: string) => {
     const key = buildCacheKey(oldest, newest);
     cacheRef.current.delete(key);
-    const current = invalidationRef.current.get(key) ?? 0;
-    invalidationRef.current.set(key, current + 1);
+    invalidationRef.current.set(key, (invalidationRef.current.get(key) ?? 0) + 1);
   }, []);
 
   const invalidateAll = useCallback(() => {
     cacheRef.current.clear();
-    const nextToken = Date.now();
     invalidationRef.current.clear();
-    invalidationRef.current.set('__global__', nextToken);
+    invalidationRef.current.set('__global__', Date.now());
   }, []);
 
   return (
@@ -153,11 +134,8 @@ export function CompletedWorkoutsProvider({
 
 export function useCompletedWorkouts() {
   const context = useContext(CompletedWorkoutsContext);
-  if (!context) {
-    throw new Error('useCompletedWorkouts must be used within a CompletedWorkoutsProvider');
-  }
+  if (!context) throw new Error('useCompletedWorkouts must be used within a CompletedWorkoutsProvider');
   return context;
 }
 
-export function __resetCachesForTesting() {
-}
+export function __resetCachesForTesting() {}
