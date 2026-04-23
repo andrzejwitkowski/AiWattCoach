@@ -234,18 +234,14 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
     ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>> {
         let collection = self.collection.clone();
         let snapshot_collection = self.snapshot_repository.collection();
-        let snapshot_document =
-            MongoTrainingPlanSnapshotRepository::map_snapshot_to_document(&snapshot);
-        let projected_day_documents = projected_days
-            .iter()
-            .map(map_projected_day_to_document)
-            .collect::<Result<Vec<_>, _>>();
         let today = today.to_string();
-        let snapshot_clone = snapshot.clone();
-        let projected_days_clone = projected_days.clone();
         Box::pin(async move {
-            let snapshot_document = snapshot_document?;
-            let projected_day_documents = projected_day_documents?;
+            let snapshot_document =
+                MongoTrainingPlanSnapshotRepository::map_snapshot_to_document(&snapshot)?;
+            let projected_day_documents = projected_days
+                .iter()
+                .map(map_projected_day_to_document)
+                .collect::<Result<Vec<_>, _>>()?;
             validate_replacement_scope(&snapshot, &projected_days)?;
             if projected_day_documents.is_empty() {
                 return Err(TrainingPlanError::Validation(
@@ -280,7 +276,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .unwrap_or(snapshot.end_date.as_str())
                 .to_string();
 
-            collection
+            let update_result = collection
                 .update_many(
                     doc! {
                         "user_id": &snapshot.user_id,
@@ -300,10 +296,14 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
 
-            let superseded_date_range = Some((
-                superseded_range_start.to_string(),
-                superseded_range_end.clone(),
-            ));
+            let superseded_date_range = if update_result.matched_count == 0 {
+                None
+            } else {
+                Some((
+                    superseded_range_start.to_string(),
+                    superseded_range_end.clone(),
+                ))
+            };
 
             snapshot_collection
                 .replace_one(
@@ -330,8 +330,8 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
             }
 
             Ok(TrainingPlanReplacementResult {
-                snapshot: snapshot_clone,
-                projected_days: projected_days_clone,
+                snapshot,
+                projected_days,
                 superseded_date_range,
             })
         })

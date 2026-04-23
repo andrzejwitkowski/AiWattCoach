@@ -191,8 +191,6 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
         let store = self.projected_days.clone();
         let snapshots = self.snapshots.clone();
         let today = today.to_string();
-        let snapshot_clone = snapshot.clone();
-        let projected_days_clone = projected_days.clone();
         Box::pin(async move {
             let mut stored = store.lock().unwrap();
 
@@ -264,8 +262,8 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
             };
 
             Ok(TrainingPlanReplacementResult {
-                snapshot: snapshot_clone,
-                projected_days: projected_days_clone,
+                snapshot: snapshot.clone(),
+                projected_days: projected_days.clone(),
                 superseded_date_range,
             })
         })
