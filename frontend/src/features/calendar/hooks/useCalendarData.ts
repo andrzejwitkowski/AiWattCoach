@@ -421,12 +421,9 @@ function pruneWeekKeySet(weekKeys: Set<string>, retainedWeekKeys: Set<string>): 
   return next.size === weekKeys.size ? weekKeys : next;
 }
 
-export function __resetCachesForTesting() {
-  eventsCacheRef.clear();
-  labelsCacheRef.clear();
-}
-
 export function invalidateCalendarCache() {
   eventsCacheRef.clear();
   labelsCacheRef.clear();
 }
+
+export const __resetCachesForTesting = invalidateCalendarCache;

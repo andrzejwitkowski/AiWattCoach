@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import '../../../i18n';
@@ -12,7 +13,7 @@ window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
 vi.mock('../../intervals/context', () => ({
   useCompletedWorkouts: vi.fn(),
-  CompletedWorkoutsProvider: ({ children }: { children: React.ReactNode }) => children,
+  CompletedWorkoutsProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
 vi.mock('../../calendar/hooks/useCalendarData', () => ({
@@ -23,7 +24,7 @@ vi.mock('../hooks/useWorkoutList', () => ({ useWorkoutList: vi.fn() }));
 
 vi.mock('../hooks/useCoachChat', () => ({
   useCoachChat: vi.fn(),
-  isAvailabilityRequiredChatError: vi.fn((_error: string | null) => false),
+  isAvailabilityRequiredChatError: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('../../settings/context/SettingsContext', () => ({ useSettings: vi.fn() }));
@@ -32,7 +33,6 @@ import { useCompletedWorkouts } from '../../intervals/context';
 import { useSettings } from '../../settings/context/SettingsContext';
 
 const originalLocation = window.location;
-const originalOnUnhandledRejection = process.listeners('unhandledRejection');
 
 const defaultWorkoutItem = (o?: Partial<CoachWorkoutListItem>): CoachWorkoutListItem => ({
   id: 'workout-1',
@@ -67,9 +67,11 @@ const availability = [
   { weekday: 'sun', available: false, maxDurationMinutes: null },
 ];
 
-function setupMocks(opts?: { planStatus?: 'generated' | 'skipped' | 'failed' | 'unchanged'; saveSummaryError?: Error }) {
+function setupMocks(opts?: { planStatus?: 'generated' | 'skipped' | 'failed' | 'unchanged'; saveSummaryResult?: unknown }) {
   const invalidateCalendarCache = vi.mocked(calendarHooks.invalidateCalendarCache);
   const invalidateAll = vi.fn();
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  const replaceSummary = vi.fn();
 
   vi.mocked(useCompletedWorkouts).mockReturnValue({
     getActivitiesForRange: vi.fn().mockResolvedValue([]),
@@ -94,8 +96,8 @@ function setupMocks(opts?: { planStatus?: 'generated' | 'skipped' | 'failed' | '
     canGoToNewerWeek: false,
     goToOlderWeek: vi.fn(),
     goToNewerWeek: vi.fn(),
-    refresh: vi.fn().mockResolvedValue(undefined),
-    replaceSummary: vi.fn(),
+    refresh,
+    replaceSummary,
   } as never);
 
   vi.mocked(useCoachChatModule.useCoachChat).mockReturnValue({
@@ -112,8 +114,8 @@ function setupMocks(opts?: { planStatus?: 'generated' | 'skipped' | 'failed' | '
     isSaved: false,
     setDraftRpe: vi.fn(),
     sendMessage: vi.fn().mockResolvedValue(true),
-    saveSummary: opts?.saveSummaryError
-      ? vi.fn().mockRejectedValue(opts.saveSummaryError)
+    saveSummary: opts?.saveSummaryResult !== undefined
+      ? vi.fn().mockResolvedValue(opts.saveSummaryResult)
       : vi.fn().mockResolvedValue({
           summary: defaultSummary({ savedAtEpochSeconds: 1710000100 }),
           workflow: { recapStatus: 'generated', planStatus: opts?.planStatus ?? 'generated', messages: [] },
@@ -121,20 +123,16 @@ function setupMocks(opts?: { planStatus?: 'generated' | 'skipped' | 'failed' | '
     reopenSummary: vi.fn().mockResolvedValue(null),
   } as never);
 
-  return { invalidateCalendarCache, invalidateAll };
+  return { invalidateCalendarCache, invalidateAll, refresh, replaceSummary };
 }
 
 beforeEach(() => {
   vi.resetModules();
-  process.removeAllListeners('unhandledRejection');
-  process.on('unhandledRejection', () => {});
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  process.removeAllListeners('unhandledRejection');
-  originalOnUnhandledRejection.forEach(l => process.on('unhandledRejection', l));
   Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
 });
 
@@ -154,23 +152,23 @@ describe('CoachPageLayout', () => {
     ['failed'],
     ['unchanged'],
   ])('does not invalidate caches when plan status is %s', async (planStatus) => {
-    const { invalidateCalendarCache, invalidateAll } = setupMocks({ planStatus: planStatus as never });
+    const { invalidateCalendarCache, invalidateAll, refresh } = setupMocks({ planStatus: planStatus as never });
 
     render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
     fireEvent.click(screen.getByRole('button', { name: /save as workout summary/i }));
 
-    await waitFor(() => expect(invalidateCalendarCache).not.toHaveBeenCalled());
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(invalidateCalendarCache).not.toHaveBeenCalled();
     expect(invalidateAll).not.toHaveBeenCalled();
   });
 
-  it('does not invalidate caches when save fails', async () => {
-    const { invalidateCalendarCache, invalidateAll } = setupMocks({ saveSummaryError: new Error('Network error') });
+  it('does not invalidate caches when save returns null', async () => {
+    const { invalidateCalendarCache, invalidateAll } = setupMocks({ saveSummaryResult: null });
 
     render(<CoachPageLayout apiBaseUrl="http://localhost:3000" />);
     fireEvent.click(screen.getByRole('button', { name: /save as workout summary/i }));
 
     await waitFor(() => expect(invalidateCalendarCache).not.toHaveBeenCalled());
     expect(invalidateAll).not.toHaveBeenCalled();
-    await new Promise(r => setTimeout(r, 50));
   });
 });
