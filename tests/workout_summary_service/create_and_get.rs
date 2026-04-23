@@ -5,9 +5,9 @@ use aiwattcoach::domain::workout_summary::{
 use std::sync::{Arc, Mutex};
 
 use crate::shared::{
-    existing_summary, existing_summary_with_finished_conversation, test_service,
-    test_service_with_settings, test_service_with_training_plan,
-    test_service_with_training_plan_and_latest_activity,
+    existing_summary, existing_summary_with_finished_conversation,
+    scheduler_backed_training_plan_service, test_service, test_service_with_settings,
+    test_service_with_training_plan, test_service_with_training_plan_and_latest_activity,
     test_service_with_training_plan_latest_activity_and_completed_target,
     InMemoryWorkoutSummaryRepository, PersistCheckingTrainingPlanService,
     RecordingCompletedWorkoutTargetService, RecordingLatestCompletedActivityService,
@@ -337,6 +337,35 @@ async fn mark_saved_generates_recap_and_plan_for_latest_completed_activity() {
             "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
         ]
     );
+}
+
+#[tokio::test]
+async fn mark_saved_preserves_visible_workflow_with_scheduler_backed_training_plan_service() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(
+        existing_summary_with_finished_conversation(),
+    );
+    let training_plan = scheduler_backed_training_plan_service(
+        InMemoryWorkoutSummaryRepository::with_summary(existing_summary()),
+    );
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("workout-1"));
+    let service = test_service_with_training_plan_and_latest_activity(
+        repository,
+        training_plan.service.clone(),
+        std::sync::Arc::new(latest_activity),
+    );
+
+    let result = service.mark_saved("user-1", "workout-1").await.unwrap();
+
+    assert_eq!(result.workflow.recap_status.as_str(), "generated");
+    assert_eq!(result.workflow.plan_status.as_str(), "generated");
+    assert_eq!(
+        result.workflow.messages,
+        vec![
+            "Workout recap generated.".to_string(),
+            "14-day schedule generated.".to_string(),
+        ]
+    );
+    training_plan.worker.shutdown().await;
 }
 
 #[tokio::test]
