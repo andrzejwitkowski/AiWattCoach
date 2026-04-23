@@ -251,6 +251,67 @@ async fn completed_activity_detail_does_not_mark_strava_stub_when_streams_fail_t
 }
 
 #[tokio::test]
+async fn completed_activity_detail_logs_known_strava_422s_at_info() {
+    let server = TestIntervalsServer::start().await;
+    server.set_activity(ResponseActivity::sparse_strava_stub(
+        "i210",
+        "Unavailable Ride",
+    ));
+    server.set_activity_intervals_status(StatusCode::UNPROCESSABLE_ENTITY);
+    server.set_activity_intervals_raw(serde_json::json!({
+        "status": 422,
+        "error": "Cannot read Strava activities via the API"
+    }));
+    server.set_streams_status(StatusCode::UNPROCESSABLE_ENTITY);
+    server.set_streams_raw(serde_json::json!({
+        "status": 422,
+        "error": "Cannot read Strava activities via the API"
+    }));
+    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
+
+    let (activity, logs) = capture_tracing_logs(|| async {
+        client
+            .get_activity(&test_credentials(), "i210")
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert_eq!(
+        activity.details_unavailable_reason.as_deref(),
+        Some("Intervals.icu did not provide detailed data for this imported activity.")
+    );
+    assert!(
+        logs.contains("\"level\":\"INFO\"")
+            && logs.contains(
+                "intervals enrichment unavailable for imported Strava activity; returning base activity without intervals"
+            ),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("\"level\":\"INFO\"")
+            && logs.contains(
+                "streams enrichment unavailable for imported Strava activity; returning base activity without streams"
+            ),
+        "logs were: {logs}"
+    );
+    assert!(
+        !logs.contains("intervals enrichment failed; returning base activity without intervals"),
+        "logs were: {logs}"
+    );
+    assert!(
+        !logs.contains("streams enrichment failed; returning base activity without streams"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("payload bytes="), "logs were: {logs}");
+    assert!(logs.contains("hash="), "logs were: {logs}");
+    assert!(
+        !logs.contains("Cannot read Strava activities via the API"),
+        "logs were: {logs}"
+    );
+}
+
+#[tokio::test]
 async fn completed_activity_partial_enrichment_preserves_inline_intervals_when_dedicated_intervals_payload_is_malformed(
 ) {
     let server = TestIntervalsServer::start().await;

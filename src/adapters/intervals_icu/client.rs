@@ -21,11 +21,16 @@ struct ApiFailure {
     status: Option<StatusCode>,
     error: crate::domain::intervals::IntervalsError,
     response_body: Option<String>,
+    known_strava_activity_details_unavailable: bool,
 }
 
 impl ApiFailure {
     fn is_unprocessable_entity(&self) -> bool {
         self.status == Some(StatusCode::UNPROCESSABLE_ENTITY)
+    }
+
+    fn is_known_strava_activity_details_unavailable(&self) -> bool {
+        self.known_strava_activity_details_unavailable
     }
 }
 

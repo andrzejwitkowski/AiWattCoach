@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-23 | Copilot | PR #138 Intervals Strava 422 logging follow-up
+
+- Problem: the first version of the Intervals Strava-422 classifier decoded the same response body to UTF-8 twice inside `map_error_response_from_logged_response(...)` and allocated a temporary `String` just to compare the parsed `error` field with a static message.
+- Fix: reused one decoded `Option<&str>` for both the known-422 classifier and the hashed log-summary path, and changed the parsed JSON `error` extraction to stay borrowed as `&str` so the comparison avoids an unnecessary allocation.
+- Prevention: when a review fix adds lightweight response classification, reread the hot-path helper for duplicate decoding/parsing work and for avoidable temporary allocations before sending it back for review.
+
 ### 2026-04-22 | CodeRabbit/Copilot | PR #128 release workflow follow-up
 
 - Problem: the first registry-release version left version-resolution logic embedded inline in GitHub Actions without tests, pushed release tags before image publication could fail, kept cache permissions too narrow for `rust-cache` and Buildx `type=gha`, and let the fallback publish script depend on the caller's current working directory.
