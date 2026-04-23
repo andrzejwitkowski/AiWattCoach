@@ -137,5 +137,3 @@ export function useCompletedWorkouts() {
   if (!context) throw new Error('useCompletedWorkouts must be used within a CompletedWorkoutsProvider');
   return context;
 }
-
-export function __resetCachesForTesting() {}
