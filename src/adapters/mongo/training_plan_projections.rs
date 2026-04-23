@@ -256,7 +256,29 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
 
             let superseded_range_start =
                 std::cmp::max(today.as_str(), snapshot.start_date.as_str());
-            let superseded_range_end = snapshot.end_date.as_str();
+
+            let max_active_date: Option<String> = collection
+                .clone()
+                .clone_with_type::<mongodb::bson::Document>()
+                .find(doc! {
+                    "user_id": &snapshot.user_id,
+                    "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                })
+                .sort(doc! { "date": -1 })
+                .limit(1)
+                .projection(doc! { "date": 1, "_id": 0 })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+                .try_next()
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+                .and_then(|doc| doc.get_str("date").ok().map(String::from));
+
+            let superseded_range_end = max_active_date
+                .as_ref()
+                .map(|date| std::cmp::max(snapshot.end_date.as_str(), date.as_str()))
+                .unwrap_or(snapshot.end_date.as_str())
+                .to_string();
 
             collection
                 .update_many(
@@ -265,7 +287,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                         "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
                         "date": {
                             "$gte": superseded_range_start,
-                            "$lte": superseded_range_end,
+                            "$lte": &superseded_range_end,
                         },
                     },
                     doc! {
@@ -280,7 +302,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
 
             let superseded_date_range = Some((
                 superseded_range_start.to_string(),
-                superseded_range_end.to_string(),
+                superseded_range_end.clone(),
             ));
 
             snapshot_collection

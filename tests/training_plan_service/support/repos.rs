@@ -198,7 +198,20 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
 
             let superseded_range_start =
                 std::cmp::max(today.as_str(), snapshot.start_date.as_str());
-            let superseded_range_end = snapshot.end_date.as_str();
+
+            let max_active_date = stored
+                .iter()
+                .filter(|day| {
+                    day.user_id == snapshot.user_id && day.superseded_at_epoch_seconds.is_none()
+                })
+                .map(|day| day.date.clone())
+                .max();
+
+            let superseded_range_end = max_active_date
+                .as_ref()
+                .map(|date| std::cmp::max(snapshot.end_date.as_str(), date.as_str()))
+                .unwrap_or(snapshot.end_date.as_str())
+                .to_string();
 
             let mut superseded_dates = Vec::new();
             for day in stored.iter_mut() {
@@ -209,7 +222,7 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                     continue;
                 }
                 if day.date.as_str() < superseded_range_start
-                    || day.date.as_str() > superseded_range_end
+                    || day.date.as_str() > superseded_range_end.as_str()
                 {
                     continue;
                 }
