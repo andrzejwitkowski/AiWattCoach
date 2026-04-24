@@ -162,9 +162,7 @@ pub(crate) async fn auth_test_app_with_wahoo(
     wahoo_service: TestWahooService,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
 
     build_app_with_frontend_dist(
         AppState::new(

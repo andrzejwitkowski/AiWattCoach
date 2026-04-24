@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-24 | user | auth test fixture helper follow-up
+
+- Problem: after the latest merge, `tests/auth_rest/shared.rs` still called a removed `keep_frontend_fixture(...)` helper in the Wahoo auth test app builder, so `cargo clippy --all-targets --all-features -- -D warnings` failed while compiling the `auth_rest` test target.
+- Fix: switched the Wahoo auth test helper to reuse the existing `shared_frontend_fixture()` path just like the neighboring auth test builders and reran clippy.
+- Prevention: when a test fixture strategy is refactored to a shared helper, grep for both the new helper and any removed helper names to catch stale call sites in adjacent test builders before pushing.
+
+### 2026-04-24 | user | settings DTO signature follow-up
+
+- Problem: after extending `map_settings_to_dto(...)` with the new `wahoo_available` argument, I updated the runtime handler call sites but missed the unit test in `src/adapters/rest/settings/mapping.rs`, so CI failed in `cargo clippy --all-targets --all-features -- -D warnings` during the lib test build.
+- Fix: updated the remaining unit-test call site to pass the explicit Wahoo availability flag and reran clippy on the full workspace.
+- Prevention: whenever a helper signature changes, grep all call sites including `#[cfg(test)]` modules in the defining file before treating the refactor as complete; clippy on `--all-targets` builds tests too.
+
 ### 2026-04-24 | user | PR conflict verification
 
 - Problem: I treated the branch as conflict-free after syncing it with `origin/feature/task-scheduler-core-pr1`, but did not verify it against the latest `origin/main`. The base branch had advanced, so the open PR still showed unresolved merge conflicts.

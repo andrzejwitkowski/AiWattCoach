@@ -11,6 +11,14 @@
 
 - When resolving PR conflicts, fetch the current base branch ref and test the merge against that exact `origin/<base>` immediately before calling the PR conflict-free. A branch can be clean and synced with its remote head branch while still conflicting if the base branch advanced.
 
+## Signature Change Verification
+
+- When changing a function signature, grep every call site including local `#[cfg(test)]` modules in the same file before calling the refactor done. `cargo clippy --all-targets` compiles test targets too, so a missed unit-test call site will still fail CI even if the runtime code builds.
+
+## Fixture Refactor Verification
+
+- When converting test helpers to a shared fixture strategy, grep for removed helper names as well as the new shared helper. Adjacent test builders often retain one stale call site that only shows up once `--all-targets` compiles that test binary.
+
 ## Backfill Recompute Ranges
 
 - When a backfill or reimport operation can change canonical record dates, I must derive recompute ranges from the refreshed upstream payload, not from the stale local record.

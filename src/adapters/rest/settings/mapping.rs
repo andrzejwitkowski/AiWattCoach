@@ -264,7 +264,7 @@ mod tests {
         let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_700_000_000);
         settings.ai_agents.openai_api_key = Some("sk-verysecretkey1234".to_string());
 
-        let dto = map_settings_to_dto(&settings);
+        let dto = map_settings_to_dto(&settings, false);
 
         assert_eq!(dto.ai_agents.openai_api_key.as_deref(), Some("***...1234"));
         assert!(dto.ai_agents.openai_api_key_set);
