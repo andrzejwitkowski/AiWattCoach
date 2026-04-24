@@ -11,4 +11,7 @@ pub use ports::{
     AthleteSummaryGenerationOperationRepository, AthleteSummaryGenerator, AthleteSummaryRepository,
     BoxFuture,
 };
-pub use service::{AthleteSummaryService, AthleteSummaryUseCases};
+pub use service::{
+    athlete_summary_generate_task_handler, AthleteSummaryService, AthleteSummaryUseCases,
+    SchedulerBackedAthleteSummaryService,
+};

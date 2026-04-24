@@ -1,5 +1,6 @@
 mod correction;
 mod parsing;
+mod scheduler;
 mod snapshot;
 
 use chrono::{TimeZone, Utc};
@@ -20,6 +21,8 @@ use super::{
     TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
     TrainingPlanWorkoutSummaryPort,
 };
+
+pub use scheduler::{training_plan_generate_task_handler, SchedulerBackedTrainingPlanService};
 
 pub trait TrainingPlanUseCases: Send + Sync {
     fn generate_recap_for_saved_workout(

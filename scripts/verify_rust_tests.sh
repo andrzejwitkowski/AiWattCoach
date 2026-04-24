@@ -2,4 +2,4 @@
 
 set -eu
 
-cargo test -- --nocapture
+cargo test

@@ -56,12 +56,13 @@ pub fn spawn_task_scheduler_maintenance_loop<Tasks, Workers, Time>(
     service: TaskSchedulerService<Tasks, Workers, Time>,
     worker: TaskSchedulerWorkerConfig,
     config: TaskSchedulerMaintenanceConfig,
-) -> BackgroundTaskHandle
+) -> Result<BackgroundTaskHandle, crate::domain::task_scheduler::TaskSchedulerError>
 where
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
 {
+    validate_task_scheduler_maintenance_config(&config)?;
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
     let join_handle = tokio::spawn(async move {
         let mut worker_ticker = tokio::time::interval(Duration::from_secs(
@@ -105,5 +106,77 @@ where
         }
     });
 
-    BackgroundTaskHandle::new("task-scheduler-maintenance", shutdown_tx, join_handle)
+    Ok(BackgroundTaskHandle::new(
+        "task-scheduler-maintenance",
+        shutdown_tx,
+        join_handle,
+    ))
+}
+
+fn validate_task_scheduler_maintenance_config(
+    config: &TaskSchedulerMaintenanceConfig,
+) -> Result<(), crate::domain::task_scheduler::TaskSchedulerError> {
+    if config.worker_heartbeat_interval_seconds == 0 {
+        return Err(
+            crate::domain::task_scheduler::TaskSchedulerError::Validation(
+                "task scheduler worker_heartbeat_interval_seconds must be positive".to_string(),
+            ),
+        );
+    }
+
+    if config.timeout_sweep_interval_seconds == 0 {
+        return Err(
+            crate::domain::task_scheduler::TaskSchedulerError::Validation(
+                "task scheduler timeout_sweep_interval_seconds must be positive".to_string(),
+            ),
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::task_scheduler::TaskSchedulerError;
+
+    #[test]
+    fn maintenance_config_accepts_defaults() {
+        assert!(validate_task_scheduler_maintenance_config(
+            &TaskSchedulerMaintenanceConfig::default()
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn maintenance_config_rejects_zero_worker_heartbeat_interval() {
+        let error = validate_task_scheduler_maintenance_config(&TaskSchedulerMaintenanceConfig {
+            worker_heartbeat_interval_seconds: 0,
+            ..TaskSchedulerMaintenanceConfig::default()
+        })
+        .expect_err("zero worker heartbeat interval should be rejected");
+
+        assert_eq!(
+            error,
+            TaskSchedulerError::Validation(
+                "task scheduler worker_heartbeat_interval_seconds must be positive".to_string(),
+            )
+        );
+    }
+
+    #[test]
+    fn maintenance_config_rejects_zero_timeout_sweep_interval() {
+        let error = validate_task_scheduler_maintenance_config(&TaskSchedulerMaintenanceConfig {
+            timeout_sweep_interval_seconds: 0,
+            ..TaskSchedulerMaintenanceConfig::default()
+        })
+        .expect_err("zero timeout sweep interval should be rejected");
+
+        assert_eq!(
+            error,
+            TaskSchedulerError::Validation(
+                "task scheduler timeout_sweep_interval_seconds must be positive".to_string(),
+            )
+        );
+    }
 }

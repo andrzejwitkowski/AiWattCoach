@@ -1,5 +1,13 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+pub const LLM_REQUEST_TIMEOUT_SECONDS: u64 = 180;
+
+pub fn llm_request_timeout() -> Duration {
+    Duration::from_secs(LLM_REQUEST_TIMEOUT_SECONDS)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LlmProvider {

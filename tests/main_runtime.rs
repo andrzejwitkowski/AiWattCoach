@@ -401,7 +401,7 @@ async fn test_mongo_client_or_skip() -> Option<Client> {
     {
         Ok(_) => Some(client),
         Err(error) => {
-            let message = format!("failed to connect to Mongo at {uri}: {error}");
+            let message = format!("failed to connect to Mongo: {error}");
             if std::env::var("REQUIRE_MONGO_IN_CI").as_deref() == Ok("true") {
                 panic!("main_runtime test requires Mongo in CI: {message}");
             }

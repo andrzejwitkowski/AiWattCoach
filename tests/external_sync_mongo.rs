@@ -242,21 +242,17 @@ async fn mongo_fixture_or_skip() -> Option<MongoFixture> {
 impl MongoFixture {
     async fn new() -> Result<Self, String> {
         let settings = Settings::test_defaults();
-        let mongo_uri = settings.mongo.uri.clone();
         let mut options = ClientOptions::parse(&settings.mongo.uri)
             .await
-            .map_err(|error| {
-                format!("failed to create test mongo client for {mongo_uri}: {error}")
-            })?;
+            .map_err(|error| format!("failed to create test mongo client: {error}"))?;
         options.server_selection_timeout = Some(TEST_MONGO_SERVER_SELECTION_TIMEOUT);
-        let client = Client::with_options(options).map_err(|error| {
-            format!("failed to create test mongo client for {mongo_uri}: {error}")
-        })?;
+        let client = Client::with_options(options)
+            .map_err(|error| format!("failed to create test mongo client: {error}"))?;
         client
             .database("admin")
             .run_command(doc! { "ping": 1 })
             .await
-            .map_err(|error| format!("failed to connect to Mongo at {mongo_uri}: {error}"))?;
+            .map_err(|error| format!("failed to connect to Mongo: {error}"))?;
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

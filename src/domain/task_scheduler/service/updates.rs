@@ -19,16 +19,12 @@ where
 
     pub(super) async fn publish_task_update(&self, task: ScheduledTask) {
         let sender = {
-            let mut waiters = self.task_waiters.lock().await;
-            waiters
-                .entry(task.id.clone())
-                .or_insert_with(|| {
-                    let (sender, _) = watch::channel(None);
-                    sender
-                })
-                .clone()
+            let waiters = self.task_waiters.lock().await;
+            waiters.get(&task.id).cloned()
         };
-        let _ = sender.send(Some(task));
+        if let Some(sender) = sender {
+            let _ = sender.send(Some(task));
+        }
     }
 
     pub(super) async fn publish_terminal_task_update(&self, task: Option<ScheduledTask>) {

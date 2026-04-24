@@ -225,7 +225,7 @@ fn spawn_task_worker_rejects_non_positive_worker_timing() {
 
 #[tokio::test]
 #[serial]
-async fn task_worker_clears_active_task_ids_when_handler_panics() {
+async fn task_worker_retries_and_clears_active_task_ids_when_handler_panics() {
     let task_repository = InMemoryTaskRepository::default();
     let worker_repository = InMemoryTaskWorkerRepository::default();
     let clock = TestClock::default();
@@ -299,8 +299,12 @@ async fn task_worker_clears_active_task_ids_when_handler_panics() {
     .expect("worker should clear active task ids after panic");
 
     let task = task_repository.only_task();
-    assert_eq!(task.status, TaskStatus::Running);
-    assert_eq!(task.claimed_by.as_deref(), Some("worker-1"));
+    assert_eq!(task.status, TaskStatus::RetryScheduled);
+    assert_eq!(task.claimed_by, None);
+    assert_eq!(
+        task.error_message.as_deref(),
+        Some("scheduled task handler panicked")
+    );
 
     worker.shutdown().await;
 }

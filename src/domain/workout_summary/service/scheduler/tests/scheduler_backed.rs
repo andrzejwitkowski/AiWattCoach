@@ -1,12 +1,10 @@
-use serial_test::serial;
-use std::sync::Arc;
-
 use crate::domain::{
     identity::Clock,
     llm::LlmError,
     task_scheduler::{TaskSchedulerService, TaskStatus},
     workout_summary::{CoachReplyOperation, CoachReplyOperationStatus, MessageRole},
 };
+use serial_test::serial;
 
 use super::super::*;
 use super::support::{
@@ -264,9 +262,7 @@ async fn scheduler_backed_generate_coach_reply_waits_for_pending_operation_recla
 #[serial]
 async fn scheduler_backed_generate_coach_reply_retries_after_failed_task_on_explicit_retry() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
-    let coach = Arc::new(TestCoach::default());
-    *coach.fail_with.lock().expect("coach mutex poisoned") =
-        Some(LlmError::ProviderRejected("invalid model".to_string()));
+    let coach = TestCoach::failing(LlmError::ProviderRejected("invalid model".to_string()));
     let direct = direct_service(repository, coach.clone());
     let persisted = direct
         .append_user_message("user-1", "workout-1", "Need feedback".to_string())
@@ -301,8 +297,6 @@ async fn scheduler_backed_generate_coach_reply_retries_after_failed_task_on_expl
             "invalid model".to_string()
         ))
     );
-
-    *coach.fail_with.lock().expect("coach mutex poisoned") = None;
 
     let reply = service
         .generate_coach_reply("user-1", "workout-1", persisted.user_message.id)

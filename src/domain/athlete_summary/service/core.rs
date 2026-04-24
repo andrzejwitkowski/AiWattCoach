@@ -2,34 +2,54 @@ use chrono::{Datelike, TimeZone, Utc, Weekday};
 
 use crate::domain::identity::Clock;
 
-use super::{
+use super::super::{
     AthleteSummary, AthleteSummaryError, AthleteSummaryGenerationClaimResult,
     AthleteSummaryGenerationOperation, AthleteSummaryGenerationOperationRepository,
     AthleteSummaryGenerationOperationStatus, AthleteSummaryGenerator, AthleteSummaryRepository,
     AthleteSummaryState, EnsuredAthleteSummary,
 };
 
+pub(crate) const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
+pub(crate) const GENERATION_ALREADY_PENDING_MESSAGE: &str =
+    "athlete summary generation is already pending";
+
+pub(crate) fn current_week_monday_epoch_seconds(now_epoch_seconds: i64) -> i64 {
+    let Some(now) = Utc.timestamp_opt(now_epoch_seconds, 0).single() else {
+        return 0;
+    };
+    let date = now.date_naive();
+    let offset = match date.weekday() {
+        Weekday::Mon => 0,
+        weekday => weekday.num_days_from_monday() as i64,
+    };
+    let monday = date - chrono::Duration::days(offset);
+    monday
+        .and_hms_opt(0, 0, 0)
+        .map(|datetime| datetime.and_utc().timestamp())
+        .unwrap_or(0)
+}
+
 pub trait AthleteSummaryUseCases: Send + Sync {
     fn get_summary_state(
         &self,
         user_id: &str,
-    ) -> super::BoxFuture<Result<AthleteSummaryState, AthleteSummaryError>>;
+    ) -> super::super::BoxFuture<Result<AthleteSummaryState, AthleteSummaryError>>;
 
     fn generate_summary(
         &self,
         user_id: &str,
         force: bool,
-    ) -> super::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>;
+    ) -> super::super::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>;
 
     fn ensure_fresh_summary(
         &self,
         user_id: &str,
-    ) -> super::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>;
+    ) -> super::super::BoxFuture<Result<AthleteSummary, AthleteSummaryError>>;
 
     fn ensure_fresh_summary_state(
         &self,
         user_id: &str,
-    ) -> super::BoxFuture<Result<EnsuredAthleteSummary, AthleteSummaryError>>;
+    ) -> super::super::BoxFuture<Result<EnsuredAthleteSummary, AthleteSummaryError>>;
 }
 
 #[derive(Clone)]
@@ -63,8 +83,6 @@ where
     Generator: AthleteSummaryGenerator + Clone,
     Time: Clock + Clone,
 {
-    const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
-
     pub fn new(repository: Repo, operations: Ops, generator: Generator, clock: Time) -> Self {
         Self {
             repository,
@@ -74,29 +92,16 @@ where
         }
     }
 
-    fn current_week_monday_epoch_seconds(&self) -> i64 {
-        let now = self.clock.now_epoch_seconds();
-        let Some(now) = Utc.timestamp_opt(now, 0).single() else {
-            return 0;
-        };
-        let date = now.date_naive();
-        let offset = match date.weekday() {
-            Weekday::Mon => 0,
-            weekday => weekday.num_days_from_monday() as i64,
-        };
-        let monday = date - chrono::Duration::days(offset);
-        monday
-            .and_hms_opt(0, 0, 0)
-            .map(|datetime| datetime.and_utc().timestamp())
-            .unwrap_or(0)
+    pub(crate) fn current_week_monday_epoch_seconds(&self) -> i64 {
+        current_week_monday_epoch_seconds(self.clock.now_epoch_seconds())
     }
 
-    fn is_stale(&self, summary: &AthleteSummary) -> bool {
+    pub(crate) fn is_stale(&self, summary: &AthleteSummary) -> bool {
         summary.generated_at_epoch_seconds < self.current_week_monday_epoch_seconds()
     }
 
     fn stale_pending_before_epoch_seconds(&self) -> i64 {
-        self.clock.now_epoch_seconds() - Self::STALE_PENDING_TIMEOUT_SECONDS
+        self.clock.now_epoch_seconds() - STALE_PENDING_TIMEOUT_SECONDS
     }
 
     fn pending_operation(
@@ -272,7 +277,7 @@ where
     fn get_summary_state(
         &self,
         user_id: &str,
-    ) -> super::BoxFuture<Result<AthleteSummaryState, AthleteSummaryError>> {
+    ) -> super::super::BoxFuture<Result<AthleteSummaryState, AthleteSummaryError>> {
         let repository = self.repository.clone();
         let user_id = user_id.to_string();
         let service = self.clone();
@@ -289,7 +294,7 @@ where
         &self,
         user_id: &str,
         force: bool,
-    ) -> super::BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
+    ) -> super::super::BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
         let user_id = user_id.to_string();
         let service = self.clone();
         Box::pin(async move {
@@ -333,7 +338,7 @@ where
                         }
                         AthleteSummaryGenerationOperationStatus::Pending => {
                             return Err(AthleteSummaryError::Unavailable(
-                                "athlete summary generation is already pending".to_string(),
+                                GENERATION_ALREADY_PENDING_MESSAGE.to_string(),
                             ));
                         }
                     }
@@ -349,14 +354,14 @@ where
     fn ensure_fresh_summary(
         &self,
         user_id: &str,
-    ) -> super::BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
+    ) -> super::super::BoxFuture<Result<AthleteSummary, AthleteSummaryError>> {
         self.generate_summary(user_id, false)
     }
 
     fn ensure_fresh_summary_state(
         &self,
         user_id: &str,
-    ) -> super::BoxFuture<Result<EnsuredAthleteSummary, AthleteSummaryError>> {
+    ) -> super::super::BoxFuture<Result<EnsuredAthleteSummary, AthleteSummaryError>> {
         let user_id = user_id.to_string();
         let service = self.clone();
         Box::pin(async move {

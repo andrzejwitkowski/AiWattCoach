@@ -345,13 +345,20 @@ where
         }
     }
 
-    if let TaskHandlerRunResult::Panicked(join_error) = &run_result {
-        warn!(task_id = %task_id, worker_id = %worker_id, %join_error, "scheduled task handler panicked");
-    }
+    let outcome = match run_result {
+        TaskHandlerRunResult::Completed(outcome) => outcome,
+        TaskHandlerRunResult::Panicked(join_error) => {
+            warn!(task_id = %task_id, worker_id = %worker_id, %join_error, "scheduled task handler panicked");
+            TaskRunOutcome::Failed {
+                checkpoint: None,
+                error_message: "scheduled task handler panicked".to_string(),
+                retryable: true,
+                retry_delay_seconds: None,
+            }
+        }
+    };
 
-    if let TaskHandlerRunResult::Completed(outcome) = run_result {
-        persist_task_outcome(&scheduler, &worker_id, &task, outcome).await;
-    }
+    persist_task_outcome(&scheduler, &worker_id, &task, outcome).await;
 
     persist_worker_task_release(
         &scheduler,

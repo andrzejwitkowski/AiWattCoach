@@ -267,6 +267,7 @@ impl TaskRepository for InMemoryTaskRepository {
             task.updated_at_epoch_seconds = request.timed_out_at_epoch_seconds;
             task.claimed_by = None;
             task.lease_expires_at_epoch_seconds = None;
+            task.last_heartbeat_at_epoch_seconds = None;
             Ok(true)
         })
     }
@@ -356,7 +357,7 @@ impl TaskRepository for InMemoryTaskRepository {
     > {
         let tasks = self.tasks.clone();
         Box::pin(async move {
-            Ok(tasks
+            let mut listed = tasks
                 .lock()
                 .expect("task repo mutex poisoned")
                 .values()
@@ -378,7 +379,18 @@ impl TaskRepository for InMemoryTaskRepository {
                         .is_none_or(|user_id| user_id == task.user_id)
                 })
                 .cloned()
-                .collect())
+                .collect::<Vec<_>>();
+            listed.sort_by(|left, right| {
+                right
+                    .updated_at_epoch_seconds
+                    .cmp(&left.updated_at_epoch_seconds)
+                    .then_with(|| {
+                        right
+                            .created_at_epoch_seconds
+                            .cmp(&left.created_at_epoch_seconds)
+                    })
+            });
+            Ok(listed)
         })
     }
 }

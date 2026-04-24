@@ -775,7 +775,8 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
     let reply_operations = InMemoryCoachReplyOperationRepository::default();
     let coach = Arc::new(CountingCoach::default());
-    let service = test_service_with_coach(repository, reply_operations.clone(), coach.clone());
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations.clone(), coach.clone());
 
     let stale_operation = CoachReplyOperation::pending(
         "user-1".to_string(),
@@ -894,6 +895,120 @@ async fn generate_coach_reply_replays_persisted_response_message_after_partial_c
             "append_message:workout-1:user".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
+    );
+}
+
+#[tokio::test]
+async fn generate_coach_reply_retries_completion_write_when_recovering_existing_message() {
+    let mut summary = existing_summary();
+    let user_message = aiwattcoach::domain::workout_summary::ConversationMessage {
+        id: "message-user-recovery".to_string(),
+        role: MessageRole::User,
+        content: "Need feedback".to_string(),
+        created_at_epoch_seconds: 1_699_999_000,
+    };
+    let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
+        id: "message-coach-recovery".to_string(),
+        role: MessageRole::Coach,
+        content: "Recovered coach reply".to_string(),
+        created_at_epoch_seconds: 1_699_999_001,
+    };
+    summary.messages = vec![user_message.clone(), coach_message.clone()];
+
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CountingCoach::default());
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations.clone(), coach.clone());
+
+    reply_operations.seed(CoachReplyOperation::pending(
+        "user-1".to_string(),
+        "workout-1".to_string(),
+        user_message.id.clone(),
+        Some("workout-summary:user-1:workout-1".to_string()),
+        coach_message.id.clone(),
+        1_699_999_000,
+    ));
+    reply_operations.fail_next_completed_upsert("completion write failed during recovery");
+
+    let reply = service
+        .generate_coach_reply("user-1", "workout-1", user_message.id.clone())
+        .await
+        .expect("recovery should retry the completed upsert");
+
+    assert_eq!(coach.calls(), Vec::<String>::new());
+    assert_eq!(reply.coach_message, coach_message);
+    assert_eq!(repository.calls(), Vec::<String>::new());
+
+    let completed_call = format!("upsert:workout-1:{}:Completed", user_message.id);
+    assert_eq!(
+        reply_operations
+            .calls()
+            .into_iter()
+            .filter(|call| call == &completed_call)
+            .count(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn generate_coach_reply_retries_completion_write_when_replaying_persisted_response() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CountingCoach::default());
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations.clone(), coach.clone());
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    let partial = CoachReplyOperation::pending(
+        "user-1".to_string(),
+        "workout-1".to_string(),
+        persisted.user_message.id.clone(),
+        Some("workout-summary:user-1:workout-1".to_string()),
+        "message-replay-retry".to_string(),
+        1_699_999_000,
+    )
+    .record_provider_response(PendingCoachReplyCheckpoint {
+        provider: LlmProvider::OpenAi,
+        model: "gpt-4o-mini".to_string(),
+        provider_request_id: Some("req-replay-retry".to_string()),
+        provider_cache_id: None,
+        token_usage: LlmTokenUsage::default(),
+        cache_usage: LlmCacheUsage::default(),
+        response_message: "Persisted before crash".to_string(),
+        updated_at_epoch_seconds: 1_699_999_001,
+    });
+    reply_operations.seed(partial);
+    reply_operations.fail_next_completed_upsert("completion write failed during replay");
+
+    let reply = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .expect("replay recovery should retry the completed upsert");
+
+    assert_eq!(coach.calls(), Vec::<String>::new());
+    assert_eq!(reply.coach_message.id, "message-replay-retry");
+    assert_eq!(reply.coach_message.content, "Persisted before crash");
+    assert_eq!(
+        repository.calls(),
+        vec![
+            "append_message:workout-1:user".to_string(),
+            "append_message:workout-1:coach".to_string(),
+        ]
+    );
+
+    let completed_call = format!("upsert:workout-1:{}:Completed", persisted.user_message.id);
+    assert_eq!(
+        reply_operations
+            .calls()
+            .into_iter()
+            .filter(|call| call == &completed_call)
+            .count(),
+        2
     );
 }
 

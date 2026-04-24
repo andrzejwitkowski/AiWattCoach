@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::spawn_task_worker;
 use crate::domain::{
     identity::{Clock, IdGenerator},
-    llm::LlmError,
+    llm::{LlmError, LLM_REQUEST_TIMEOUT_SECONDS},
     task_scheduler::{
         NewTask, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler, TaskRepository,
         TaskRunOutcome, TaskSchedulerError, TaskSchedulerService, TaskWorkerConfig,
@@ -27,7 +27,9 @@ mod wrapper;
 mod tests;
 
 pub(crate) const COACH_REPLY_TASK_TYPE: &str = "workout_summary.coach_reply";
-pub(crate) const COACH_REPLY_EXECUTION_TIMEOUT_SECONDS: i64 = 15 * 60;
+pub(crate) const COACH_REPLY_EXECUTION_TIMEOUT_BUFFER_SECONDS: i64 = 30;
+pub(crate) const COACH_REPLY_EXECUTION_TIMEOUT_SECONDS: i64 =
+    (LLM_REQUEST_TIMEOUT_SECONDS as i64 * 2) + COACH_REPLY_EXECUTION_TIMEOUT_BUFFER_SECONDS;
 pub(crate) const COACH_REPLY_LEASE_DURATION_SECONDS: i64 = 30;
 pub(crate) const COACH_REPLY_HEARTBEAT_INTERVAL_SECONDS: u64 = 10;
 pub(crate) const COACH_REPLY_WAIT_POLL_INTERVAL_MILLIS: u64 = 100;

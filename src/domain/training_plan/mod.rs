@@ -14,4 +14,7 @@ pub use ports::{
     TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
     TrainingPlanWorkoutSummaryPort,
 };
-pub use service::{TrainingPlanGenerationService, TrainingPlanUseCases};
+pub use service::{
+    training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
+    TrainingPlanGenerationService, TrainingPlanUseCases,
+};

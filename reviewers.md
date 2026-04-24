@@ -21,11 +21,35 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-23 | user/CodeRabbit | PR #115 merge and review follow-up
+
+- Problem: PR #115 had diverged from `main` and still carried real review gaps after earlier follow-up passes: `heartbeat_worker` still raced with active-task updates because `set_worker_state` updated the cache after the upsert, panicking task handlers were logged but not converted into persisted scheduler failure state, athlete-summary task completion silently downgraded checkpoint serialization errors to `Completed { checkpoint: None }`, recovery tests did not prove repository-write idempotency, and `tasks/lessons.md` contradicted itself about `OnceLock<mongodb::Client>` reuse across separate `#[tokio::test]` runtimes.
+- Fix: merged the branch with `main` while preserving both repo verification script flows, changed `set_worker_state` to hold the worker-state lock across persistence with rollback on failure and added heartbeat-specific regressions, converted panicking task handlers into retryable failed task outcomes before releasing worker activity and updated the panic regression, changed athlete-summary completion to fail explicitly when checkpoint serialization fails, added repository idempotency assertions to the workout-summary recovery tests, and narrowed the lessons guidance so `OnceLock` stays recommended only for runtime-safe per-binary fixtures.
+- Prevention: after review feedback claims a path is fixed, reread the current code and verify the full behavior instead of assuming the earlier patch was enough; any full-snapshot worker heartbeat must share the same lock/persist discipline as incremental worker-state updates; never swallow persisted-checkpoint serialization errors with `.ok()` when downstream result handlers require that checkpoint contract; and recovery tests must assert the absence of duplicate writes, not only the final returned object.
+
 ### 2026-04-23 | Copilot | PR #138 Intervals Strava 422 logging follow-up
 
 - Problem: the first version of the Intervals Strava-422 classifier decoded the same response body to UTF-8 twice inside `map_error_response_from_logged_response(...)` and allocated a temporary `String` just to compare the parsed `error` field with a static message.
 - Fix: reused one decoded `Option<&str>` for both the known-422 classifier and the hashed log-summary path, and changed the parsed JSON `error` extraction to stay borrowed as `&str` so the comparison avoids an unnecessary allocation.
 - Prevention: when a review fix adds lightweight response classification, reread the hot-path helper for duplicate decoding/parsing work and for avoidable temporary allocations before sending it back for review.
+
+### 2026-04-22 | CodeRabbit | PR #115 unresolved review follow-up
+
+- Problem: unresolved PR #115 review threads still pointed at three real gaps and several hygiene issues: the maintenance loop accepted zero-second ticker intervals that would panic inside Tokio, terminal task mapping silently dropped `cleanup_after` when a terminal task lacked `finished_at_epoch_seconds`, recovery completion paths in workout-summary bypassed the existing post-provider retry helper, worker-state cache mutations could diverge from the persisted worker row on concurrent active-task updates or failed upserts, test verification still forced `cargo test -- --nocapture`, several Mongo test fixtures still printed connection-string context in failure messages, and the scheduler `TestCoach::failing(...)` fake kept failing forever instead of modeling a transient provider error.
+- Fix: added upfront validation for maintenance heartbeat/sweep intervals and tests for both zero-valued cases; made terminal-task cleanup mapping reject terminal tasks without `finished_at_epoch_seconds`; routed both coach-reply recovery completion paths through `persist_post_provider_operation(...)` and added focused recovery regressions; serialized worker-state cache mutations across worker upserts with rollback on failure plus targeted worker-state regressions; changed `scripts/verify_rust_tests.sh` to plain `cargo test`, removed raw Mongo URI text from the touched fixture error messages, tightened the task TTL index assertion to check `expire_after = 0`, and changed the scheduler `TestCoach` fake to consume its injected failure once while updating the retry regression to rely on that one-shot behavior.
+- Prevention: if code constructs Tokio intervals or tickers, validate the interval config before spawning; if a mapper computes TTL cleanup metadata for terminal records, missing terminal timestamps should be treated as invariant violations, not silently downgraded to `None`; any post-provider recovery write must go through the dedicated retry wrapper instead of ad hoc repository upserts; if in-memory worker state mirrors durable worker projections, keep mutation and persistence serialized per worker and restore the previous cache state on persist failure; test logs and scripts must not expose connection strings by default, and failure fakes should be one-shot unless a test explicitly needs persistent failure behavior.
+
+### 2026-04-22 | Copilot/Qodo | PR #126 athlete summary scheduler review follow-up
+
+- Problem: new `src/domain/athlete_summary/...` scheduler tests called `crate::config::spawn_task_worker(...)`, which pulled composition-root wiring into domain tests, and the shared `workout_summary.coach_reply` task timeout was narrowed to a single LLM request even though one task attempt can also regenerate athlete summary before requesting the coach reply.
+- Fix: replaced the `athlete_summary` test dependency on `crate::config` with a local test worker helper built from domain scheduler primitives only, and raised `COACH_REPLY_EXECUTION_TIMEOUT_SECONDS` to cover two LLM requests plus a small buffer for context-building and checkpoint writes.
+- Prevention: keep `src/domain/**` tests on domain-owned scheduler primitives or local test helpers instead of importing startup/config wiring, and for scheduler-owned LLM tasks size execution timeouts to the full end-to-end attempt path rather than the inner provider HTTP timeout alone.
+
+### 2026-04-22 | user | LLM-backed scheduler timeout alignment
+
+- Problem: the new `athlete_summary.generate` scheduler task kept a hard-coded execution timeout that was not explicitly aligned with the real LLM request timeout policy, and the branch still encoded model-name-based adapter timeouts separately from scheduler task timeouts.
+- Fix: introduced a shared `domain::llm` timeout constant/helper with a uniform 3-minute request timeout, switched the LLM adapter to use that shared timeout for all models, and aligned scheduler execution timeouts to that same baseline instead of separate adapter-specific literals.
+- Prevention: for any LLM-backed scheduler task, compare task execution timeout against the actual provider request timeout source before shipping, then add explicit buffer for non-HTTP work or nested LLM calls when the end-to-end task path needs more than one request window.
 
 ### 2026-04-22 | CodeRabbit/Copilot | PR #128 release workflow follow-up
 

@@ -1,77 +1,64 @@
-# Task Scheduler PR3: Athlete Summary And Runner Lifecycle
+# Task Scheduler PR3: Athlete Summary Migration On Shared Worker
 
-**Goal:** Close the remaining correctness gaps left by PR2 and migrate `athlete_summary` generation onto the task scheduler without changing current caller-visible behavior.
+**Goal:** Migrate caller-facing `athlete_summary` generation onto the current task-scheduler architecture without changing the durable generation semantics already owned by the direct athlete-summary service.
 
 **Scope:**
-- fix the runner lifecycle gap from PR2 so dedicated task runners participate in worker heartbeat / active-task recovery
-- keep current request-response semantics for scheduler-backed flows honest
-- migrate only athlete-summary generation in this PR
+- verify the current shared task-worker runtime assumptions before building on them
+- add `athlete_summary.generate` as a scheduler-backed workflow on the existing shared worker
+- expose the scheduler-backed wrapper to app callers while keeping the direct service as the executor body
 
 **Non-goals:**
+- do not re-introduce a feature-specific runner lifecycle helper; the shared worker already exists
+- do not re-route `WorkoutSummaryService` internals through the scheduler-backed athlete-summary wrapper in this PR
 - do not migrate training-plan generation yet
-- do not introduce a generic framework for every future task type
-- do not change athlete-summary freshness rules, DTO shape, or REST contract
+- do not change athlete-summary freshness rules, REST DTO shape, or direct durable operation semantics
 
-## Context From PR2 Review
+## Current Branch Context
 
-- PR2 proved the outer-orchestration pattern for `workout_summary.coach_reply`, but the first runner wiring still has a recovery blind spot: the dedicated `...-workout-summary` runner claims tasks, yet no worker heartbeat is persisted for that exact worker id.
-- PR2 also introduced a request-side polling timeout that is too short to be trusted as a business timeout for LLM-backed work.
-- PR3 should fix those two issues before repeating the pattern for the next durable LLM flow.
+- The old PR2-specific runner lifecycle gap is already closed on this branch.
+- Task execution now runs through the shared runtime in `src/config/task_scheduler/worker.rs`, which already persists:
+  - worker heartbeat
+  - enabled task types
+  - `active_task_ids`
+  - cleanup after panic / shutdown
+- Scheduler-backed request waiting now uses `enqueue_result_task(...)` and `wait_for_result_task(...)` in `src/domain/task_scheduler/service/result.rs`, not a fixed 30-second polling timeout.
+- Current runner lifecycle behavior is already covered by `src/domain/workout_summary/service/scheduler/tests/runner_lifecycle.rs`.
 
 ## Architecture Rules
 
-- Keep the existing direct `AthleteSummaryService` as the executor body. It already owns the real durable operation semantics via `AthleteSummaryGenerationOperationRepository`.
-- Use the task scheduler only as the outer orchestration layer: enqueue, claim, heartbeat, complete/fail, and wait for terminal result.
-- Preserve the current semantics of:
-  - `generate_summary(user_id, force)`
-  - `ensure_fresh_summary(user_id)`
-  - `ensure_fresh_summary_state(user_id)`
-- Persist local operation state before side effects exactly as the direct service already does today.
+- Keep the direct `AthleteSummaryService` as the executor body. It already owns:
+  - pending operation claiming
+  - stale/failed reclaim
+  - persist-before-provider-call ordering
+  - durable completion/failure writes
+- Use the task scheduler only as the outer orchestration layer:
+  - enqueue
+  - shared worker dispatch
+  - task retry / timeout handling
+  - wait for terminal result
+- Keep caller-facing `athlete_summary` requests on the scheduler-backed wrapper.
+- Keep nested `workout_summary` coach-reply calls on the direct athlete-summary service for now. A background task waiting synchronously on another task in the same saturated worker pool is a separate design problem and not part of PR3.
 
-## Task 1: Fix dedicated runner lifecycle before another migration
+## Task 1: Verify The Shared Worker Baseline
 
 **Files:**
-- Modify: `src/config/task_scheduler.rs`
-- Modify: `src/main.rs`
-- Modify: `src/domain/workout_summary/service/scheduler.rs`
-- Add tests around worker registration / restart recovery if current coverage is still indirect
+- Reference: `src/config/task_scheduler/worker.rs`
+- Reference: `src/domain/task_scheduler/service/result.rs`
+- Reference: `src/domain/workout_summary/service/scheduler/tests/runner_lifecycle.rs`
 
 **Work:**
-- Introduce a small dedicated runner helper that:
-  - persists worker heartbeat for the exact worker id used by the runner
-  - reports enabled task types honestly
-  - tracks `active_task_ids` while a task is being processed
-- Wire the workout-summary runner through that helper instead of spawning a claim loop that is invisible to the worker registry.
-- Keep the existing maintenance loop for timeout sweep, but stop relying on it as the only worker heartbeat path for dedicated runners.
+- Reconfirm that the current shared worker already provides the lifecycle guarantees the old PR3 draft planned to add.
+- Only change the shared worker runtime if implementation of `athlete_summary.generate` exposes a real missing capability.
 
 **Done when:**
-- a restart of the scheduler-backed workout-summary runner can be recovered by worker-state logic, not only by waiting for stale task heartbeat age-out
-- the stable worker-id work from PR1/PR2 is actually used by the dedicated runner path
+- PR3 builds on the existing shared worker instead of re-solving solved PR2 follow-ups
 
-## Task 2: Make scheduler-backed request semantics honest
-
-**Files:**
-- Modify: `src/domain/workout_summary/service/scheduler.rs`
-- Add targeted tests in the same module or in `tests/workout_summary_service/**`
-
-**Work:**
-- Revisit the PR2 wait strategy so request-response flows do not hide retryable LLM/provider failures behind an arbitrary polling timeout.
-- Preserve the old direct-service behavior for user-visible failures:
-  - retryable LLM failures still surface as structured `WorkoutSummaryError::Llm(...)`
-  - slow-but-valid work should not be turned into a fake terminal timeout unless there is a real business decision to do that
-- If a synchronous caller still waits for task completion, make the wait budget align with the real provider timeout envelope instead of an arbitrary 30-second constant.
-
-**Done when:**
-- scheduler-backed request behavior matches the old direct path for retryable and non-retryable failures
-- there is explicit test coverage for a retryable scheduler-backed failure path
-
-## Task 3: Add `athlete_summary.generate` task orchestration
+## Task 2: Add `athlete_summary.generate` Scheduler Module
 
 **Files:**
-- Create: `src/domain/athlete_summary/service/scheduler.rs`
 - Modify: `src/domain/athlete_summary/service.rs`
+- Create: `src/domain/athlete_summary/service/scheduler.rs`
 - Modify: `src/domain/athlete_summary/mod.rs`
-- Modify: `src/main.rs`
 
 **Task type:**
 - `athlete_summary.generate`
@@ -81,51 +68,82 @@
 - `force`
 
 **Work:**
-- Add a scheduler-backed wrapper service around the direct `AthleteSummaryService`.
-- Keep the direct service unchanged as the executor body used by the runner.
-- Terminal result should let the wrapper reconstruct the exact current return values without guessing:
-  - for `generate_summary` and `ensure_fresh_summary`, reload the final summary from the direct repository after completion
-  - for `ensure_fresh_summary_state`, preserve whether a regeneration actually happened
-- Failed tasks should persist structured `AthleteSummaryError` information, not only a string message.
+- Add a scheduler-backed wrapper around the direct `AthleteSummaryService`.
+- Add a task handler that calls the direct service as the executor body.
+- Persist structured terminal task errors so the wrapper can reconstruct the current `AthleteSummaryError` categories instead of collapsing everything into strings.
+- Reconstruct successful caller-visible results by reloading the final summary from the direct service after task completion.
+- Do not add a second durability layer for athlete-summary generation.
+
+**Dedupe rules:**
+- Non-force refreshes should dedupe within the same freshness window, not forever.
+- The dedupe key for `force = false` should include the current refresh window anchor so a completed task from last week does not block a fresh regeneration this week.
+- `force = true` should use a unique dedupe key per request so repeated forced regenerations remain possible even while old completed tasks still exist.
 
 **Done when:**
-- athlete-summary generation can run through the task scheduler while preserving existing freshness and recovery semantics
+- concurrent non-force callers for the same user and refresh window converge on one task
+- repeated `force = true` calls still regenerate instead of reusing an old completed task forever
+- failed tasks preserve enough structured state to rebuild the original `AthleteSummaryError`
 
-## Task 4: Wire athlete-summary callers through the scheduler-backed wrapper
+## Task 3: Preserve Caller-Facing Semantics
+
+**Files:**
+- Modify: `src/domain/athlete_summary/service/scheduler.rs`
+- Add targeted tests near the scheduler module
+
+**Work:**
+- Preserve current behavior of:
+  - `generate_summary(user_id, force)`
+  - `ensure_fresh_summary(user_id)`
+  - `ensure_fresh_summary_state(user_id)`
+- Keep the fresh-summary fast path honest: if a summary is already fresh and `force = false`, return it directly without enqueuing background work.
+- When background work is required, wait on the scheduler result path instead of introducing a new business timeout.
+- Map retryability honestly:
+  - retryable `LlmError` stays retryable
+  - repository failures stay retryable
+  - `NotConfigured` stays non-retryable
+  - inner durable-operation `already pending` conflicts should retry on the reclaim window, not on a fake short delay
+
+**Done when:**
+- scheduler-backed behavior matches the old direct-service behavior for fresh, forced, retryable, and non-retryable paths
+- `ensure_fresh_summary_state` still reports `was_regenerated` honestly
+
+## Task 4: Main Wiring On The Existing Shared Worker
 
 **Files:**
 - Modify: `src/main.rs`
-- Search and verify all existing `AthleteSummaryUseCases` consumers
 
 **Work:**
-- Keep a direct athlete-summary service for the runner executor.
-- Expose the scheduler-backed wrapper to application callers.
-- Ensure workout-summary chat still calls athlete-summary through the same `AthleteSummaryUseCases` boundary and does not learn any scheduler-specific details.
+- Keep separate direct and caller-facing athlete-summary services:
+  - direct service for task execution internals and nested workout-summary use
+  - scheduler-backed wrapper for REST and other top-level callers
+- Register both task handlers on the existing shared task worker:
+  - `workout_summary.coach_reply`
+  - `athlete_summary.generate`
+- Keep the wiring explicit enough that it is obvious which services are executor bodies and which are wrappers.
 
 **Done when:**
-- app wiring uses the wrapper for caller-facing use cases and the direct service only for task execution internals
+- app startup uses one shared worker for both task types
+- `AppState` gets the scheduler-backed athlete-summary service
+- `WorkoutSummaryService` still depends on the direct athlete-summary service in this PR
 
 ## Task 5: Tests
 
-**Files:**
-- `tests/workout_summary_service/**` if workout-summary integration changes are visible
-- athlete-summary tests near the feature or in `tests/**` depending on existing coverage layout
-
 **Minimum coverage:**
 - scheduler-backed athlete-summary success
-- scheduler-backed athlete-summary non-retryable failure preserves structured error
-- scheduler-backed athlete-summary retryable failure preserves structured error
-- `ensure_fresh_summary_state` still reports `was_regenerated` honestly
-- restart recovery for dedicated runner worker registration
+- fresh non-force request bypasses scheduler work
+- scheduler-backed retryable LLM failure preserves structured error
+- scheduler-backed non-retryable failure preserves structured error category
+- `ensure_fresh_summary_state` still reports `was_regenerated` accurately
+- non-force dedupe stays scoped to the current refresh window
+- completed forced task does not block a later forced regeneration
 
 ## Final Verification
 
 Run at minimum:
 
 ```bash
-cargo test --test task_scheduler -- --nocapture
 cargo test athlete_summary -- --nocapture
-cargo test workout_summary -- --nocapture
+cargo test task_scheduler -- --nocapture
 cargo fmt --all --check
 cargo clippy --all-targets --all-features -- -D warnings
 ./scripts/rebuild_graphify.sh
@@ -133,7 +151,8 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 ## Exit Criteria
 
-- dedicated task runners heartbeat worker state with active task ids
-- PR2 review gaps are closed before the next migration repeats them
-- athlete-summary generation is scheduler-backed without changing current semantics
-- no domain module learns Mongo, Axum, or provider SDK details it did not already own
+- `athlete_summary.generate` runs through the shared task worker
+- the direct athlete-summary service still owns durable local state and provider ordering
+- caller-facing athlete-summary behavior remains compatible
+- PR3 does not re-open already solved shared-worker lifecycle work
+- PR3 does not introduce nested scheduler waits inside background task handlers
