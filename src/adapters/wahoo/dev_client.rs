@@ -8,7 +8,7 @@ pub struct DevWahooOAuthClient;
 impl WahooOAuthPort for DevWahooOAuthClient {
     fn build_authorize_url(&self, state: &str) -> Result<String, WahooError> {
         Ok(format!(
-            "/api/auth/wahoo/callback?state={state}&code={DEV_AUTH_CODE}"
+            "/api/wahoo/callback?state={state}&code={DEV_AUTH_CODE}"
         ))
     }
 
