@@ -54,10 +54,14 @@ use aiwattcoach::{
             training_plan_projections::MongoTrainingPlanProjectionRepository,
             training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
             users::MongoUserRepository,
+            wahoo_connect_state::MongoWahooConnectStateRepository,
             whitelist::MongoWhitelistRepository,
             workout_summary::MongoWorkoutSummaryRepository,
         },
         support::{SystemClock, UuidIdGenerator},
+        wahoo::{
+            adapter::WahooOAuthAdapter, client::WahooOAuthClient, dev_client::DevWahooOAuthClient,
+        },
         workout_summary_completed_target::CompletedWorkoutTargetAdapter,
         workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
@@ -90,6 +94,7 @@ use aiwattcoach::{
         training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
         TrainingPlanGenerationService,
     },
+    domain::wahoo::WahooService,
     domain::workout_summary::{
         workout_summary_coach_reply_task_handler, SchedulerBackedWorkoutSummaryService,
         WorkoutSummaryService,
@@ -130,10 +135,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let login_state_repository =
         MongoLoginStateRepository::new(mongo_client.clone(), &mongo_database);
     let whitelist_repository = MongoWhitelistRepository::new(mongo_client.clone(), &mongo_database);
+    let wahoo_connect_state_repository =
+        MongoWahooConnectStateRepository::new(mongo_client.clone(), &mongo_database);
     user_repository.ensure_indexes().await?;
     session_repository.ensure_indexes().await?;
     login_state_repository.ensure_indexes().await?;
     whitelist_repository.ensure_indexes().await?;
+    wahoo_connect_state_repository.ensure_indexes().await?;
     let google_oauth_client = if auth.dev.enabled {
         GoogleOAuthAdapter::Dev(DevGoogleOAuthClient::new(
             auth.dev.google_subject,
@@ -277,12 +285,42 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         training_load_daily_snapshot_repository.clone(),
     ));
     let settings_service = Arc::new(
-        UserSettingsService::new(settings_repository, SystemClock)
+        UserSettingsService::new(settings_repository.clone(), SystemClock)
             .with_provider_poll_states(provider_poll_state_repository.clone())
             .with_llm_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
             .with_ftp_history_repository(ftp_history_repository.clone())
             .with_training_load_recompute_service(training_load_recompute_service.clone()),
     );
+    let wahoo_service = match auth.wahoo.clone() {
+        Some(wahoo) => {
+            let oauth = if auth.dev.enabled {
+                WahooOAuthAdapter::Dev(DevWahooOAuthClient)
+            } else {
+                WahooOAuthAdapter::Live(WahooOAuthClient::new(
+                    reqwest::Client::builder()
+                        .connect_timeout(Duration::from_secs(5))
+                        .timeout(Duration::from_secs(15))
+                        .build()?,
+                    wahoo.client_id,
+                    wahoo.client_secret,
+                    wahoo.redirect_url,
+                    wahoo.authorize_url,
+                    wahoo.token_url,
+                    wahoo.scope,
+                ))
+            };
+
+            Some(Arc::new(WahooService::new(
+                settings_repository.clone(),
+                wahoo_connect_state_repository.clone(),
+                oauth,
+                SystemClock,
+                UuidIdGenerator,
+            ))
+                as Arc<dyn aiwattcoach::domain::wahoo::WahooUseCases>)
+        }
+        None => None,
+    };
     let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let special_day_repository =
         MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);
@@ -512,30 +550,34 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         IntervalsApiAdapter::Live(IntervalsIcuClient::with_timeouts(5, 15)?)
     };
 
-    let app = build_app(
-        AppState::new(app_name, mongo_database, mongo_client)
-            .with_client_log_ingestion(client_log_ingestion_enabled)
-            .with_trust_proxy_headers(trust_proxy_headers)
-            .with_identity_service(
-                Arc::new(identity_service),
-                auth.session.cookie_name,
-                auth.session.same_site,
-                auth.session.secure,
-                auth.session.ttl_hours,
-            )
-            .with_settings_service(settings_service)
-            .with_training_load_dashboard_service(training_load_dashboard_service)
-            .with_calendar_service(calendar_service)
-            .with_calendar_labels_service(calendar_labels_service)
-            .with_completed_workout_service(completed_workout_service)
-            .with_completed_workout_admin_service(completed_workout_admin_service)
-            .with_athlete_summary_service(athlete_summary_service)
-            .with_llm_services(llm_adapter, llm_config_provider)
-            .with_workout_summary_service(workout_summary_service)
-            .with_intervals_service(intervals_service)
-            .with_race_service(race_service)
-            .with_intervals_connection_tester(Arc::new(intervals_connection_tester)),
-    );
+    let app_state = AppState::new(app_name, mongo_database, mongo_client)
+        .with_client_log_ingestion(client_log_ingestion_enabled)
+        .with_trust_proxy_headers(trust_proxy_headers)
+        .with_identity_service(
+            Arc::new(identity_service),
+            auth.session.cookie_name,
+            auth.session.same_site,
+            auth.session.secure,
+            auth.session.ttl_hours,
+        )
+        .with_settings_service(settings_service)
+        .with_training_load_dashboard_service(training_load_dashboard_service)
+        .with_calendar_service(calendar_service)
+        .with_calendar_labels_service(calendar_labels_service)
+        .with_completed_workout_service(completed_workout_service)
+        .with_completed_workout_admin_service(completed_workout_admin_service)
+        .with_athlete_summary_service(athlete_summary_service)
+        .with_llm_services(llm_adapter, llm_config_provider)
+        .with_workout_summary_service(workout_summary_service)
+        .with_intervals_service(intervals_service)
+        .with_race_service(race_service)
+        .with_intervals_connection_tester(Arc::new(intervals_connection_tester));
+    let app_state = if let Some(wahoo_service) = wahoo_service {
+        app_state.with_wahoo_service(wahoo_service)
+    } else {
+        app_state
+    };
+    let app = build_app(app_state);
     let listener = TcpListener::bind(address).await?;
     let provider_polling_loop = spawn_provider_polling_loop(provider_polling_service);
     // Prefer a stable worker id from env or container hostname so a process restart can be

@@ -25,6 +25,7 @@ pub(super) struct UserSettingsDto {
     #[serde(rename = "aiAgents")]
     pub(super) ai_agents: AiAgentsDto,
     pub(super) intervals: IntervalsDto,
+    pub(super) wahoo: WahooDto,
     pub(super) options: OptionsDto,
     pub(super) availability: AvailabilityDto,
     pub(super) cycling: CyclingDto,
@@ -58,6 +59,20 @@ pub(super) struct IntervalsDto {
     pub(super) api_key_set: bool,
     #[serde(rename = "athleteId")]
     pub(super) athlete_id: Option<String>,
+    pub(super) connected: bool,
+}
+
+#[derive(Serialize)]
+pub(super) struct WahooDto {
+    pub(super) available: bool,
+    #[serde(rename = "accessToken")]
+    pub(super) access_token: Option<String>,
+    #[serde(rename = "accessTokenSet")]
+    pub(super) access_token_set: bool,
+    #[serde(rename = "refreshTokenSet")]
+    pub(super) refresh_token_set: bool,
+    #[serde(rename = "expiresAtEpochSeconds")]
+    pub(super) expires_at_epoch_seconds: Option<i64>,
     pub(super) connected: bool,
 }
 

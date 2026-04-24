@@ -4,7 +4,7 @@ use crate::domain::identity::MAX_BSON_EPOCH_SECONDS;
 
 use super::{
     error::SettingsError,
-    types::{DevAuthSettings, GoogleOAuthSettings, Settings},
+    types::{DevAuthSettings, GoogleOAuthSettings, Settings, WahooOAuthSettings},
 };
 
 pub(super) fn required(
@@ -62,6 +62,39 @@ pub(super) fn parse_google_oauth_settings(
         client_secret: required(values, "GOOGLE_OAUTH_CLIENT_SECRET")?,
         redirect_url: required(values, "GOOGLE_OAUTH_REDIRECT_URL")?,
     })
+}
+
+pub(super) fn parse_wahoo_oauth_settings(
+    values: &BTreeMap<String, String>,
+) -> Result<Option<WahooOAuthSettings>, SettingsError> {
+    const DEFAULT_WAHOO_AUTHORIZE_URL: &str = "https://api.wahooligan.com/oauth/authorize";
+    const DEFAULT_WAHOO_TOKEN_URL: &str = "https://api.wahooligan.com/oauth/token";
+    const DEFAULT_WAHOO_SCOPE: &str = "email user_read user_write power_zones_read power_zones_write workouts_read workouts_write plans_read plans_write routes_read routes_write offline_data";
+
+    let client_id = optional_string_setting(values, "WAHOO_OAUTH_CLIENT_ID");
+    let client_secret = optional_string_setting(values, "WAHOO_OAUTH_CLIENT_SECRET");
+    let redirect_url = optional_string_setting(values, "WAHOO_OAUTH_REDIRECT_URL");
+    let authorize_url = optional_string_setting(values, "WAHOO_OAUTH_AUTHORIZE_URL")
+        .unwrap_or_else(|| DEFAULT_WAHOO_AUTHORIZE_URL.to_string());
+    let token_url = optional_string_setting(values, "WAHOO_OAUTH_TOKEN_URL")
+        .unwrap_or_else(|| DEFAULT_WAHOO_TOKEN_URL.to_string());
+    let scope = optional_string_setting(values, "WAHOO_OAUTH_SCOPE")
+        .unwrap_or_else(|| DEFAULT_WAHOO_SCOPE.to_string());
+
+    match (client_id, client_secret, redirect_url) {
+        (None, None, None) => Ok(None),
+        (Some(client_id), Some(client_secret), Some(redirect_url)) => Ok(Some(WahooOAuthSettings {
+            client_id,
+            client_secret,
+            redirect_url,
+            authorize_url,
+            token_url,
+            scope,
+        })),
+        _ => Err(SettingsError::new(
+            "WAHOO_OAUTH_CLIENT_ID, WAHOO_OAUTH_CLIENT_SECRET, and WAHOO_OAUTH_REDIRECT_URL must be set together",
+        )),
+    }
 }
 
 pub(super) fn parse_dev_auth_settings(

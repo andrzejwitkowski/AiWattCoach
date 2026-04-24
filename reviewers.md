@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-24 | user | PR conflict verification
+
+- Problem: I treated the branch as conflict-free after syncing it with `origin/feature/task-scheduler-core-pr1`, but did not verify it against the latest `origin/main`. The base branch had advanced, so the open PR still showed unresolved merge conflicts.
+- Fix: fetched the latest `origin/main`, reproduced the merge locally, resolved the new conflicts in `src/main.rs`, `reviewers.md`, and `tasks/lessons.md`, and regenerated `graphify-out` from the merged tree.
+- Prevention: when resolving PR conflicts, always fetch the current base branch ref and test the merge against that exact remote ref immediately before calling the PR conflict-free. A clean worktree or synced head branch is not sufficient if the base branch moved.
+
+### 2026-04-24 | CodeRabbit/Copilot | PR #141 Wahoo OAuth review follow-up
+
+- Problem: the first Wahoo OAuth connect version duplicated security-sensitive `returnTo` sanitization, used a misleading `NotConfigured` error for missing per-user Wahoo credentials, built the live reqwest client with `.expect(...)`, leaked Wahoo tokens through Mongo `Debug`, discarded all token-endpoint error detail, and accepted callback state consumption without binding it to the authenticated app user.
+- Fix: extracted shared `returnTo` sanitization into `src/domain/return_to.rs` and loosened it to allow timestamp-style query parameters, renamed the per-user credential error to `NotConnected`, propagated reqwest client build errors from `main`, redacted `WahooDocument` token fields in `Debug`, summarized Wahoo OAuth error payloads via parsed `error`/`error_description` or a size/hash fallback, and changed the callback flow to require the authenticated user and consume connect state scoped to that user.
+- Prevention: when adding another OAuth-style integration, reuse shared redirect sanitization, keep server-config vs per-user credential errors distinct, never use panic-style startup wiring for HTTP clients, redact adapter persistence models as well as domain models, preserve bounded upstream error detail, and make callback state consumption explicitly user-bound if the browser callback returns to an authenticated app session.
+
+### 2026-04-24 | user | Wahoo OAuth endpoint/scope configuration
+
+- Problem: the first Wahoo OAuth client version kept authorize URL, token URL, and scope as hard-coded adapter constants, so the review request to make them env-configurable with defaults was not addressed through the repo's normal config path.
+- Fix: added optional `WAHOO_OAUTH_AUTHORIZE_URL`, `WAHOO_OAUTH_TOKEN_URL`, and `WAHOO_OAUTH_SCOPE` settings with Wahoo defaults in centralized settings parsing, wired those values into `WahooOAuthClient`, updated `.env.example`, and added focused settings tests for both default and override behavior.
+- Prevention: when a review asks for env-driven behavior, first check whether the repo already has a startup settings seam and implement the override there instead of adding ad hoc environment reads in leaf adapters.
+
 ### 2026-04-23 | user/CodeRabbit | PR #115 merge and review follow-up
 
 - Problem: PR #115 had diverged from `main` and still carried real review gaps after earlier follow-up passes: `heartbeat_worker` still raced with active-task updates because `set_worker_state` updated the cache after the upsert, panicking task handlers were logged but not converted into persisted scheduler failure state, athlete-summary task completion silently downgraded checkpoint serialization errors to `Completed { checkpoint: None }`, recovery tests did not prove repository-write idempotency, and `tasks/lessons.md` contradicted itself about `OnceLock<mongodb::Client>` reuse across separate `#[tokio::test]` runtimes.

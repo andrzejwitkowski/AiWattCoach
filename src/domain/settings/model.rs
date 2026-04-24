@@ -35,6 +35,25 @@ pub struct IntervalsConfig {
     pub connected: bool,
 }
 
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct WahooConfig {
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub expires_at_epoch_seconds: Option<i64>,
+    pub connected: bool,
+}
+
+impl std::fmt::Debug for WahooConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WahooConfig")
+            .field("access_token", &RedactedOptionalText(&self.access_token))
+            .field("refresh_token", &RedactedOptionalText(&self.refresh_token))
+            .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
+            .field("connected", &self.connected)
+            .finish()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct AnalysisOptions {
     pub analyze_without_heart_rate: bool,
@@ -163,6 +182,7 @@ pub struct UserSettings {
     pub user_id: String,
     pub ai_agents: AiAgentsConfig,
     pub intervals: IntervalsConfig,
+    pub wahoo: WahooConfig,
     pub options: AnalysisOptions,
     pub availability: AvailabilitySettings,
     pub cycling: CyclingSettings,
@@ -176,6 +196,7 @@ impl UserSettings {
             user_id,
             ai_agents: AiAgentsConfig::default(),
             intervals: IntervalsConfig::default(),
+            wahoo: WahooConfig::default(),
             options: AnalysisOptions::default(),
             availability: AvailabilitySettings::default(),
             cycling: CyclingSettings::default(),
@@ -287,6 +308,7 @@ mod tests {
         assert_eq!(settings.user_id, user_id);
         assert_eq!(settings.ai_agents, AiAgentsConfig::default());
         assert_eq!(settings.intervals, IntervalsConfig::default());
+        assert_eq!(settings.wahoo, WahooConfig::default());
         assert_eq!(settings.options, AnalysisOptions::default());
         assert_eq!(settings.cycling, CyclingSettings::default());
         assert_eq!(settings.created_at_epoch_seconds, now);
@@ -318,6 +340,22 @@ mod tests {
         assert!(!debug_output.contains("prompt details"));
         assert!(!debug_output.contains("medication details"));
         assert!(!debug_output.contains("note details"));
+        assert!(debug_output.contains("<redacted:"));
+    }
+
+    #[test]
+    fn wahoo_settings_debug_redacts_tokens() {
+        let settings = WahooConfig {
+            access_token: Some("access-token".to_string()),
+            refresh_token: Some("refresh-token".to_string()),
+            expires_at_epoch_seconds: Some(1_700_000_000),
+            connected: true,
+        };
+
+        let debug_output = format!("{settings:?}");
+
+        assert!(!debug_output.contains("access-token"));
+        assert!(!debug_output.contains("refresh-token"));
         assert!(debug_output.contains("<redacted:"));
     }
 

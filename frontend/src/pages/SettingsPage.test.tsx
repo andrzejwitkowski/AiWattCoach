@@ -33,6 +33,10 @@ vi.mock('../features/settings/components/IntervalsCard', () => ({
   IntervalsCard: vi.fn(() => <button type="button">Test Connection</button>),
 }));
 
+vi.mock('../features/settings/components/WahooCard', () => ({
+  WahooCard: () => <div>wahoo-card</div>,
+}));
+
 const { loadSettings } = await import('../features/settings/api/settings');
 const { IntervalsCard } = await import('../features/settings/components/IntervalsCard');
 
@@ -54,6 +58,14 @@ const settingsFixture: UserSettingsResponse = {
     apiKey: '***...1234',
     apiKeySet: true,
     athleteId: 'athlete-123',
+    connected: false,
+  },
+  wahoo: {
+    available: true,
+    accessToken: null,
+    accessTokenSet: false,
+    refreshTokenSet: false,
+    expiresAtEpochSeconds: null,
     connected: false,
   },
   options: {
@@ -121,6 +133,7 @@ describe('SettingsPage', () => {
 
     expect(document.querySelector('.animate-spin')).toBeNull();
     expect(screen.getByText('ai-agents-card')).toBeInTheDocument();
+    expect(screen.getByText('wahoo-card')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^test connection$/i })).toBeInTheDocument();
 
     await act(async () => {
@@ -130,6 +143,7 @@ describe('SettingsPage', () => {
 
     expect(document.querySelector('.animate-spin')).toBeNull();
     expect(screen.getByText('ai-agents-card')).toBeInTheDocument();
+    expect(screen.getByText('wahoo-card')).toBeInTheDocument();
     expect(intervalsCardMock).toHaveBeenCalled();
   });
 });

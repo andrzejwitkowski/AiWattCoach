@@ -19,6 +19,14 @@ export const mockSettings: UserSettingsResponse = {
     athleteId: 'i123456',
     connected: true,
   },
+  wahoo: {
+    available: true,
+    accessToken: null,
+    accessTokenSet: false,
+    refreshTokenSet: false,
+    expiresAtEpochSeconds: null,
+    connected: false,
+  },
   options: {
     analyzeWithoutHeartRate: true,
   },

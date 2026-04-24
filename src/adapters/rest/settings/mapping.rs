@@ -6,13 +6,16 @@ use crate::domain::settings::{
 use super::dto::{
     AiAgentsDto, AvailabilityDayDto, AvailabilityDto, CyclingDto, IntervalsDto, OptionsDto,
     UpdateAiAgentsRequest, UpdateAvailabilityRequest, UpdateCyclingRequest, UpdateIntervalsRequest,
-    UpdateOptionsRequest, UserSettingsDto,
+    UpdateOptionsRequest, UserSettingsDto, WahooDto,
 };
 use super::input::{
     apply_field_update, normalize_string_input, parse_provider_settings_input, FieldUpdate,
 };
 
-pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
+pub(super) fn map_settings_to_dto(
+    settings: &UserSettings,
+    wahoo_available: bool,
+) -> UserSettingsDto {
     UserSettingsDto {
         ai_agents: AiAgentsDto {
             openai_api_key: mask_sensitive(&settings.ai_agents.openai_api_key),
@@ -33,6 +36,14 @@ pub(super) fn map_settings_to_dto(settings: &UserSettings) -> UserSettingsDto {
             api_key_set: settings.intervals.api_key.is_some(),
             athlete_id: settings.intervals.athlete_id.clone(),
             connected: settings.intervals.connected,
+        },
+        wahoo: WahooDto {
+            available: wahoo_available,
+            access_token: mask_sensitive(&settings.wahoo.access_token),
+            access_token_set: settings.wahoo.access_token.is_some(),
+            refresh_token_set: settings.wahoo.refresh_token.is_some(),
+            expires_at_epoch_seconds: settings.wahoo.expires_at_epoch_seconds,
+            connected: settings.wahoo.connected,
         },
         options: OptionsDto {
             analyze_without_heart_rate: settings.options.analyze_without_heart_rate,

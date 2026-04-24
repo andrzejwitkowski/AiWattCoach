@@ -27,6 +27,11 @@ export function buildGoogleLoginUrl(apiBaseUrl: string, returnTo = '/calendar'):
   return `${buildAuthUrl(apiBaseUrl, '/api/auth/google/start')}?${params.toString()}`;
 }
 
+export function buildWahooConnectUrl(apiBaseUrl: string, returnTo = '/settings'): string {
+  const params = new URLSearchParams({ returnTo });
+  return `${buildAuthUrl(apiBaseUrl, '/api/auth/wahoo/start')}?${params.toString()}`;
+}
+
 export async function logout(apiBaseUrl: string): Promise<void> {
   await fetch(buildAuthUrl(apiBaseUrl, '/api/auth/logout'), {
     method: 'POST',

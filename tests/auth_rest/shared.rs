@@ -17,11 +17,15 @@ use aiwattcoach::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
         SettingsError, UserSettings, UserSettingsUseCases,
     },
+    domain::wahoo::{WahooAuthExchange, WahooAuthStart, WahooError, WahooToken, WahooUseCases},
     Settings,
 };
 use mongodb::Client;
 
 pub(crate) type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
+
+type BeginConnectInput = (String, Option<String>);
+type FinishConnectInput = (String, String, String);
 
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
@@ -153,6 +157,37 @@ pub(crate) async fn auth_test_app_with_settings(
     )
 }
 
+pub(crate) async fn auth_test_app_with_wahoo(
+    identity_service: TestIdentityService,
+    wahoo_service: TestWahooService,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = frontend_fixture();
+    let dist_dir = fixture.dist_dir();
+    keep_frontend_fixture(fixture);
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            usize::MAX,
+            std::time::Duration::from_secs(60),
+        ))
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_wahoo_service(std::sync::Arc::new(wahoo_service)),
+        dist_dir,
+    )
+}
+
 pub(crate) async fn auth_test_app_with_limited_whitelist_rate(
     identity_service: TestIdentityService,
     max_attempts: usize,
@@ -235,6 +270,74 @@ impl UserSettingsUseCases for TestSettingsService {
         _availability: AvailabilitySettings,
     ) -> BoxFuture<Result<UserSettings, SettingsError>> {
         Box::pin(async { unreachable!("update_availability is not used in auth tests") })
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct TestWahooService {
+    pub(crate) begin_result: Result<WahooAuthStart, WahooError>,
+    pub(crate) finish_result: Result<WahooAuthExchange, WahooError>,
+    pub(crate) ensure_result: Result<WahooToken, WahooError>,
+    pub(crate) last_begin_input: Arc<Mutex<Option<BeginConnectInput>>>,
+    pub(crate) last_finish_input: Arc<Mutex<Option<FinishConnectInput>>>,
+    pub(crate) last_ensure_user_id: Arc<Mutex<Option<String>>>,
+}
+
+impl Default for TestWahooService {
+    fn default() -> Self {
+        Self {
+            begin_result: Ok(WahooAuthStart {
+                state: "wahoo-state-1".to_string(),
+                redirect_url: "https://api.wahooligan.com/oauth/authorize?state=wahoo-state-1"
+                    .to_string(),
+            }),
+            finish_result: Ok(WahooAuthExchange {
+                redirect_to: "/settings?connected=wahoo".to_string(),
+                token: WahooToken {
+                    access_token: "access-token".to_string(),
+                    refresh_token: "refresh-token".to_string(),
+                    expires_at_epoch_seconds: 1_800_000_000,
+                },
+            }),
+            ensure_result: Ok(WahooToken {
+                access_token: "access-token".to_string(),
+                refresh_token: "refresh-token".to_string(),
+                expires_at_epoch_seconds: 1_800_000_000,
+            }),
+            last_begin_input: Arc::new(Mutex::new(None)),
+            last_finish_input: Arc::new(Mutex::new(None)),
+            last_ensure_user_id: Arc::new(Mutex::new(None)),
+        }
+    }
+}
+
+impl WahooUseCases for TestWahooService {
+    fn begin_connect(
+        &self,
+        user_id: &str,
+        return_to: Option<String>,
+    ) -> BoxFuture<Result<WahooAuthStart, WahooError>> {
+        *self.last_begin_input.lock().unwrap() = Some((user_id.to_string(), return_to));
+        let result = self.begin_result.clone();
+        Box::pin(async move { result })
+    }
+
+    fn finish_connect(
+        &self,
+        user_id: &str,
+        state: &str,
+        code: &str,
+    ) -> BoxFuture<Result<WahooAuthExchange, WahooError>> {
+        *self.last_finish_input.lock().unwrap() =
+            Some((user_id.to_string(), state.to_string(), code.to_string()));
+        let result = self.finish_result.clone();
+        Box::pin(async move { result })
+    }
+
+    fn ensure_token(&self, user_id: &str) -> BoxFuture<Result<WahooToken, WahooError>> {
+        *self.last_ensure_user_id.lock().unwrap() = Some(user_id.to_string());
+        let result = self.ensure_result.clone();
+        Box::pin(async move { result })
     }
 }
 

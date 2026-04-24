@@ -7,6 +7,10 @@
 - The purpose of this loop is to reduce repeated PR and review mistakes over time.
 - I must read `reviewers.md` before writing a plan and before starting implementation work.
 
+## PR Conflict Verification
+
+- When resolving PR conflicts, fetch the current base branch ref and test the merge against that exact `origin/<base>` immediately before calling the PR conflict-free. A branch can be clean and synced with its remote head branch while still conflicting if the base branch advanced.
+
 ## Backfill Recompute Ranges
 
 - When a backfill or reimport operation can change canonical record dates, I must derive recompute ranges from the refreshed upstream payload, not from the stale local record.
@@ -40,6 +44,11 @@
 - If a git tag is intended to mean "artifact is available", publish the artifact first and push the tag only after the publish step succeeds.
 - Any workflow that uses `Swatinem/rust-cache` or Docker Buildx `cache-to/from: type=gha` must keep `actions` permission enabled explicitly when permissions are restricted.
 - Scripts that shell out to `docker build` or similar filesystem-sensitive commands must anchor their working paths to the repo/script location instead of assuming the caller launched them from the repo root.
+
+## Review-Driven Config Fixes
+
+- When review feedback asks to make adapter constants environment-configurable, route the values through the centralized startup settings parser with explicit defaults instead of reading `std::env` inside the adapter.
+- After adding new env-backed settings, update the env key loader, sample env file, and focused settings tests in the same change so the new configuration path is actually exercised.
 
 ## Distributed Worker Defaults
 
