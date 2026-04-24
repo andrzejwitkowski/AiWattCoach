@@ -6,11 +6,13 @@
     "prepare": "bun -e \"const { existsSync } = require('node:fs'); if (process.env.HUSKY === '0' || !existsSync('.git')) process.exit(0); const { spawnSync } = require('node:child_process'); const command = process.platform === 'win32' ? 'husky.cmd' : 'husky'; const result = spawnSync(command, { stdio: 'inherit', shell: true }); process.exit(result.status ?? 0);\"",
     "dev:docker": "docker compose -f docker-compose-dev.yml up --build",
     "dev:docker:down": "docker compose -f docker-compose-dev.yml down -v",
+    "docker:publish:registry": "bun ./scripts/publish-registry-image.mjs",
+    "verify:scripts": "bun test scripts/*.test.mjs",
     "verify:rust": "cargo fmt -- --check && cargo clippy --all-targets --all-features -- -D warnings",
     "verify:arch": "sh ./scripts/verify_arch.sh",
     "verify:frontend": "bun run --cwd frontend test && bun run --cwd frontend build",
     "verify:rust-tests": "sh ./scripts/verify_rust_tests.sh",
-    "verify:all": "bun run verify:rust && bun run verify:arch && bun run verify:rust-tests && bun run verify:frontend",
+    "verify:all": "bun run verify:rust && bun run verify:arch && bun run verify:rust-tests && bun run verify:scripts && bun run verify:frontend",
     "test:all": "bun run verify:all"
   },
   "devDependencies": {

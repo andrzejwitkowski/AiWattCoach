@@ -118,11 +118,18 @@ GitHub Actions runs:
 - `cargo fmt -- --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test`
+- `bun run verify:scripts`
 - `bun run --cwd frontend test`
 - `bun run --cwd frontend build`
-- `docker build -t aiwattcoach:ci .`
+- `docker build -t aiwattcoach:ci .` on pull requests and non-`main` pushes
 
 on pull requests and pushes to `main` or `feature/**` branches.
+
+On every successful push to `main`, the same workflow also:
+- reuses the existing `vX.Y.Z` tag on `HEAD`, or creates the next patch tag from the highest existing release tag
+- publishes `registry.wattly.pl/aiwattcoach:vX.Y.Z`
+- publishes `registry.wattly.pl/aiwattcoach:latest`
+- pushes the git tag to the repository only after the image publish succeeds
 
 For local end-to-end verification, run:
 
@@ -144,24 +151,30 @@ Git hooks enforce part of this automatically:
 
 ## Releases
 
-Manual release flow lives in GitHub Actions:
-- run `Release Manual`
-- provide version in format `vX.Y.Z`
-- workflow creates git tag and GitHub Release
+The only supported release flow is `push` to `main`.
+
+After CI passes on `main`, GitHub Actions automatically:
+- allocates the next patch release tag in format `vX.Y.Z`
+- pushes that tag to the repository
+- builds the production image from `Dockerfile`
+- pushes the image to `registry.wattly.pl/aiwattcoach` under both `vX.Y.Z` and `latest`
+
+Required GitHub Actions secrets:
+- `DOCKER_REGISTRY_USERNAME`
+- `DOCKER_REGISTRY_PASSWORD`
+
+For a manual fallback publish from your own machine:
+
+```bash
+docker login registry.wattly.pl
+bun run docker:publish:registry -- v1.0.1
+```
 
 ## Coolify deployment
 
-Deployment is manual for now.
+Deployment stays manual, but Coolify should now pull a prebuilt image from the Docker registry instead of building from GitHub.
 
-`docker-compose.yml` is for local development only. Coolify should build the single `Dockerfile` image that serves both the API and the frontend UI.
-
-Use the `Deploy Coolify Manual` workflow to:
-- validate Docker build for the workflow ref
-- optionally trigger the Coolify webhook configured in `COOLIFY_WEBHOOK_URL`
-
-When webhook triggering is enabled, the workflow also checks `COOLIFY_DEPLOY_REF` so GitHub-side validation matches the branch Coolify is configured to deploy.
-
-If you prefer, you can also deploy directly from Coolify against the branch or tag configured there.
+`docker-compose.yml` is still for local development only.
 
 ### Coolify environment variables
 
@@ -179,7 +192,7 @@ If you want Grafana, Tempo, Loki, and Alloy in the same Coolify environment as a
 
 Use this split model:
 
-- existing app resource: `docker-compose.yml`
+- existing app resource: image service using `registry.wattly.pl/aiwattcoach:latest`
 - logging resource: `docker-compose.logging.yml`
 - same Coolify environment/network for both resources
 - app OTLP endpoint: `http://alloy:4317`
@@ -200,18 +213,13 @@ Notes:
 - If you later want backend logs in Loki in Coolify, add OTLP log export from the app or reintroduce a shared-volume/file-scrape design.
 - Expose Grafana from the logging resource if you want a public dashboard entry point.
 
-### Coolify setup from public GitHub repo
+### Coolify setup from Docker registry
 
-Create the application in Coolify from the public GitHub repository and select `Dockerfile` as the build method.
+Create the application in Coolify as an image-based service that pulls:
 
-Coolify builds one image from the repo. That image compiles the frontend, builds the Rust binary, and runs one container that serves both the API and the SPA on port `3002`.
-
-Use these values in the application settings:
-
-- Branch: the test branch you want to deploy
-- Dockerfile path: `Dockerfile`
-- Port / Exposed port / Public port: `3002`
-- Health check path: `/health`
+- image: `registry.wattly.pl/aiwattcoach:latest`
+- port / exposed port / public port: `3002`
+- health check path: `/health`
 
 Then set these environment variables in the application:
 
@@ -223,7 +231,14 @@ MONGODB_URI=<paste the exact Mongo URL (internal) from Coolify>
 MONGODB_DATABASE=<database name from the Coolify Mongo resource>
 ```
 
-Notes:
+Registry notes:
+
+- configure `registry.wattly.pl` as a private registry in Coolify
+- add the registry pull credentials there before the first deploy
+- after GitHub publishes a new `latest`, trigger redeploy manually in Coolify when you want to roll it out
+- for rollback, pin the image tag to an earlier `vX.Y.Z` instead of `latest`
+
+Runtime notes:
 
 - `MONGODB_URI` should be copied 1:1 from the Mongo resource `Mongo URL (internal)` field.
 - `MONGODB_DATABASE` should match the database name shown in the Mongo resource configuration.
@@ -233,14 +248,9 @@ Notes:
 - The same public origin serves both the frontend UI and the API, so no separate frontend service is needed in Coolify.
 - The runtime image includes `wget`, and the container healthcheck probes `/health` with `wget` for Coolify compatibility.
 
-### GitHub Actions secrets for manual deploy
-
-- `COOLIFY_WEBHOOK_URL=<Coolify deployment webhook>`
-- `COOLIFY_DEPLOY_REF=<branch configured in Coolify>`
-
-### Recommended manual flow
+### Recommended release flow
 
 1. Merge work into `main` when ready.
-2. Run `Release Manual` with a version like `v0.1.0`.
-3. In Coolify, deploy the branch or tag you want.
-4. Optionally run `Deploy Coolify Manual` if you later configure `COOLIFY_WEBHOOK_URL`.
+2. Wait for GitHub Actions to publish the new image tags.
+3. In Coolify, redeploy the service when you want to roll out the newest `latest` image.
+4. If needed, roll back by selecting an older `vX.Y.Z` image tag.

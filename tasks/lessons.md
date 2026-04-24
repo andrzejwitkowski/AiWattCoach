@@ -24,6 +24,18 @@
 - When runtime orchestration for a domain workflow needs `tokio` tasks, timers, channels, or shutdown handles, keep the task handler contract in `src/domain` but move the runtime loop and background-task wiring into `src/config` or another adapter/wiring layer. Do not leave runtime-specific loops in domain modules just because the workflow is domain-owned.
 - When a scheduled task wraps another durable operation with its own stale or reclaim timeout, align the scheduler retry delay with that durable reclaim window. Otherwise the wrapper can burn through retries and mark a task dead before the underlying operation is actually recoverable.
 
+## Small Review Fixes
+
+- In response/body mappers, decode a byte payload to UTF-8 once and reuse the borrowed text across classification and logging helpers instead of repeating `from_utf8(...)` work.
+- If parsed JSON string data is only compared against a static literal, keep it borrowed as `&str` and compare in place instead of allocating an owned `String` first.
+
+## Release Workflow Reliability
+
+- When a GitHub Actions workflow grows bespoke version/tagging logic, extract it into a repository script with unit tests instead of leaving the logic inline in YAML.
+- If a git tag is intended to mean "artifact is available", publish the artifact first and push the tag only after the publish step succeeds.
+- Any workflow that uses `Swatinem/rust-cache` or Docker Buildx `cache-to/from: type=gha` must keep `actions` permission enabled explicitly when permissions are restricted.
+- Scripts that shell out to `docker build` or similar filesystem-sensitive commands must anchor their working paths to the repo/script location instead of assuming the caller launched them from the repo root.
+
 ## Distributed Worker Defaults
 
 - When adding worker registries or claim/lease coordination, decide and document the `worker_id` source explicitly. Prefer stable env- or hostname-based ids when restart recovery should treat a restarted instance as the same logical worker.

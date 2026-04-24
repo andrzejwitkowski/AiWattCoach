@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { invalidateCalendarCache } from '../../calendar/hooks/useCalendarData';
+import { useCompletedWorkouts } from '../../intervals/context';
 import { useSettings } from '../../settings/context/SettingsContext';
 import { isAvailabilityConfigured } from '../../settings/types';
 import { useWorkoutList } from '../hooks/useWorkoutList';
@@ -21,6 +23,7 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
   const { t } = useTranslation();
   const settingsContext = useSettings();
   const workoutList = useWorkoutList({ apiBaseUrl });
+  const completedWorkouts = useCompletedWorkouts();
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [showConfirmWithoutChat, setShowConfirmWithoutChat] = useState(false);
   const [isEditing, setIsEditing] = useState(true);
@@ -85,10 +88,15 @@ export function CoachPageLayout({ apiBaseUrl }: CoachPageLayoutProps) {
     const result = await chat.saveSummary();
 
     if (result && isCurrentSelection(workoutId)) {
-      workoutList.replaceSummary(result);
+      workoutList.replaceSummary(result.summary);
       setIsEditing(false);
       setShowConfirmWithoutChat(false);
       await workoutList.refresh();
+
+      if (result.workflow.planStatus === 'generated') {
+        invalidateCalendarCache();
+        completedWorkouts.invalidateAll();
+      }
     }
   }
 

@@ -5,7 +5,8 @@ use crate::domain::workout_summary::WorkoutRecap;
 
 use super::{
     TrainingPlanError, TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanSnapshot,
+    TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanReplacementResult,
+    TrainingPlanSnapshot,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -40,7 +41,7 @@ pub trait TrainingPlanProjectionRepository: Send + Sync + 'static {
         projected_days: Vec<TrainingPlanProjectedDay>,
         today: &str,
         replaced_at_epoch_seconds: i64,
-    ) -> BoxFuture<Result<(TrainingPlanSnapshot, Vec<TrainingPlanProjectedDay>), TrainingPlanError>>;
+    ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>>;
 }
 
 pub trait TrainingPlanGenerationOperationRepository: Send + Sync + 'static {

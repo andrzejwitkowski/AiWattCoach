@@ -1,12 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { CompletedWorkoutsProvider } from '../../intervals/context';
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import type { CalendarLabel } from '../types';
 import { CALENDAR_BUFFER_WEEKS, CALENDAR_VISIBLE_WEEKS } from '../constants';
 import { addDays, getMondayOfWeek, parseDateKey, toDateKey } from '../utils/dateUtils';
-import { useCalendarData } from './useCalendarData';
+import { useCalendarData, __resetCachesForTesting } from './useCalendarData';
 
 vi.mock('../../intervals/api/intervals', () => ({
   listCalendarEvents: vi.fn(),
@@ -50,6 +51,7 @@ function countRangeCalls(mock: ReturnType<typeof vi.fn>, oldest: string, newest:
 
 afterEach(() => {
   vi.clearAllMocks();
+  __resetCachesForTesting();
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: originalLocation,
@@ -68,6 +70,16 @@ function mockNoCalendarLabels() {
   vi.mocked(listCalendarLabels).mockResolvedValue({ labelsByDate: {} });
 }
 
+function renderCalendarDataHook() {
+  return renderHook(() => useCalendarData({ apiBaseUrl: '' }), {
+    wrapper: ({ children }) => (
+      <CompletedWorkoutsProvider apiBaseUrl="">
+        {children}
+      </CompletedWorkoutsProvider>
+    ),
+  });
+}
+
 describe('useCalendarData', () => {
   it('defaults unresolved weeks to idle placeholders', () => {
     const deferredEvents = createDeferred<IntervalEvent[]>();
@@ -79,7 +91,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result, unmount } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result, unmount } = renderCalendarDataHook();
 
     expect(result.current.weeks.every((week) => week.status === 'idle')).toBe(true);
     expect(result.current.topPreviewWeek.status).toBe('idle');
@@ -98,7 +110,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -114,7 +126,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -139,7 +151,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -173,7 +185,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -217,7 +229,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -274,7 +286,7 @@ describe('useCalendarData', () => {
       value: { ...window.location, href: '/calendar' },
     });
 
-    renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    renderCalendarDataHook();
 
     await waitFor(() => {
       expect(window.location.href).toBe('/');
@@ -288,7 +300,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -349,7 +361,7 @@ describe('useCalendarData', () => {
     mockNoDetailedActivities();
     mockNoDetailedEvents();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -411,7 +423,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -486,7 +498,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -505,7 +517,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -544,7 +556,7 @@ describe('useCalendarData', () => {
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    const { result } = renderHook(() => useCalendarData({ apiBaseUrl: '' }));
+    const { result } = renderCalendarDataHook();
 
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
@@ -558,5 +570,4 @@ describe('useCalendarData', () => {
       expect(raceDay.labels[0].payload.priority).toBe('A');
     }
   });
-
 });

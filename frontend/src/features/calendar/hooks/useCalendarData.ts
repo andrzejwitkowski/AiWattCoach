@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { listCalendarLabels } from '../api/calendar';
-import { listActivities, listCalendarEvents } from '../../intervals/api/intervals';
+import { listCalendarEvents } from '../../intervals/api/intervals';
+import { useCompletedWorkouts } from '../../intervals/context';
 import type { IntervalActivity, IntervalEvent } from '../../intervals/types';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import {
@@ -29,9 +30,35 @@ import {
   toDateKey,
 } from '../utils/dateUtils';
 
-type UseCalendarDataOptions = {
-  apiBaseUrl: string;
-};
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+type CachedRange<T> = { data: T; loadedAt: number };
+type LabelsResponse = { labelsByDate: Record<string, Record<string, CalendarLabel>> };
+
+const eventsCacheRef: Map<string, CachedRange<IntervalEvent[]>> = new Map();
+const labelsCacheRef: Map<string, CachedRange<LabelsResponse>> = new Map();
+
+const isStale = (loadedAt: number) => Date.now() - loadedAt > CACHE_TTL_MS;
+
+async function fetchEventsWithCache(apiBaseUrl: string, range: { oldest: string; newest: string }): Promise<IntervalEvent[]> {
+  const key = `${apiBaseUrl}|${range.oldest}|${range.newest}`;
+  const cached = eventsCacheRef.get(key);
+  if (cached && !isStale(cached.loadedAt)) return cached.data;
+  const data = await listCalendarEvents(apiBaseUrl, range);
+  eventsCacheRef.set(key, { data, loadedAt: Date.now() });
+  return data;
+}
+
+async function fetchLabelsWithCache(apiBaseUrl: string, range: { oldest: string; newest: string }): Promise<LabelsResponse> {
+  const key = `${apiBaseUrl}|${range.oldest}|${range.newest}`;
+  const cached = labelsCacheRef.get(key);
+  if (cached && !isStale(cached.loadedAt)) return cached.data;
+  const data = await listCalendarLabels(apiBaseUrl, range);
+  labelsCacheRef.set(key, { data, loadedAt: Date.now() });
+  return data;
+}
+
+type UseCalendarDataOptions = { apiBaseUrl: string };
 
 type UseCalendarDataResult = {
   state: CalendarDataState;
@@ -50,6 +77,7 @@ type WeekStore = Map<string, CalendarWeek>;
 type PaginationDirection = 'past' | 'future';
 
 export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCalendarDataResult {
+  const { getActivitiesForRange } = useCompletedWorkouts();
   const [state, setState] = useState<CalendarDataState>('loading');
   const [store, setStore] = useState<WeekStore>(new Map());
   const [windowStart, setWindowStart] = useState<Date>(() => getMondayOfWeek(new Date()));
@@ -63,10 +91,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const windowStartRef = useRef(windowStart);
 
   const beginPagination = useCallback((direction: PaginationDirection): boolean => {
-    if (paginationLockRef.current) {
-      return false;
-    }
-
+    if (paginationLockRef.current) return false;
     paginationLockRef.current = true;
     setIsLoadingPast(direction === 'past');
     setIsLoadingFuture(direction === 'future');
@@ -89,13 +114,12 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const loadRange = useCallback(async (startMonday: Date, count: number) => {
     const range = formatDateRange(startMonday, count);
     const [events, activities, labels] = await Promise.all([
-      listCalendarEvents(apiBaseUrl, range),
-      listActivities(apiBaseUrl, range),
-      listCalendarLabels(apiBaseUrl, range),
+      fetchEventsWithCache(apiBaseUrl, range),
+      getActivitiesForRange(range.oldest, range.newest),
+      fetchLabelsWithCache(apiBaseUrl, range),
     ]);
-
     return { events, activities, labels };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, getActivitiesForRange]);
 
   const hydrateWeeks = useCallback((
     startMonday: Date,
@@ -106,14 +130,14 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     status: CalendarWeekStatus,
   ) => {
     const retainedWeekKeys = createRetainedWeekKeySet(windowStartRef.current);
-    const eventsByDateKey = groupItemsByDateKey(events, (event) => extractDateKey(event.startDateLocal));
-    const activitiesByDateKey = groupItemsByDateKey(activities, (activity) => extractDateKey(activity.startDateLocal));
+    const eventsByDateKey = groupItemsByDateKey(events, (e) => extractDateKey(e.startDateLocal));
+    const activitiesByDateKey = groupItemsByDateKey(activities, (a) => extractDateKey(a.startDateLocal));
     const labelsByDateKey = groupLabelsByDateKey(labels);
 
     setStore((current) => {
       const next = new Map(current);
-      for (let index = 0; index < count; index += 1) {
-        const mondayDate = addWeeks(startMonday, index);
+      for (let i = 0; i < count; i += 1) {
+        const mondayDate = addWeeks(startMonday, i);
         const week = buildCalendarWeek(mondayDate, eventsByDateKey, activitiesByDateKey, labelsByDateKey, status);
         if (retainedWeekKeys.has(week.weekKey)) {
           next.set(week.weekKey, week);
@@ -131,8 +155,8 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   const markWeeks = useCallback((startMonday: Date, count: number, status: CalendarWeekStatus) => {
     setStore((current) => {
       const next = new Map(current);
-      for (let index = 0; index < count; index += 1) {
-        const mondayDate = addWeeks(startMonday, index);
+      for (let i = 0; i < count; i += 1) {
+        const mondayDate = addWeeks(startMonday, i);
         const weekKey = toDateKey(mondayDate);
         const existing = next.get(weekKey);
         next.set(weekKey, existing ? { ...existing, status } : createPlaceholderWeek(mondayDate, status));
@@ -143,22 +167,17 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   }, []);
 
   const ensureWeeks = useCallback(async (startMonday: Date, count: number, placeholderStatus: CalendarWeekStatus = 'loading') => {
-    const missingOffsets = Array.from({ length: count }, (_, index) => index).filter((index) => {
-      const weekKey = toDateKey(addWeeks(startMonday, index));
+    const missingOffsets = Array.from({ length: count }, (_, i) => i).filter((i) => {
+      const weekKey = toDateKey(addWeeks(startMonday, i));
       return !loadedWeekKeysRef.current.has(weekKey) && !inflightWeekKeysRef.current.has(weekKey);
     });
 
-    if (missingOffsets.length === 0) {
-      return;
-    }
+    if (missingOffsets.length === 0) return;
 
     reserveWeekOffsets(startMonday, missingOffsets, inflightWeekKeysRef.current);
 
-    const ranges = groupContiguousOffsets(missingOffsets);
-
-    for (const { startOffset, count: batchCount } of ranges) {
+    for (const { startOffset, count: batchCount } of groupContiguousOffsets(missingOffsets)) {
       const batchStart = addWeeks(startMonday, startOffset);
-
       markWeeks(batchStart, batchCount, placeholderStatus);
 
       try {
@@ -169,8 +188,8 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
         setStore((current) => {
           const retainedWeekKeys = createRetainedWeekKeySet(windowStartRef.current);
           const next = new Map(current);
-          for (let index = 0; index < batchCount; index += 1) {
-            const mondayDate = addWeeks(batchStart, index);
+          for (let i = 0; i < batchCount; i += 1) {
+            const mondayDate = addWeeks(batchStart, i);
             const weekKey = toDateKey(mondayDate);
             if (retainedWeekKeys.has(weekKey)) {
               next.set(weekKey, createPlaceholderWeek(mondayDate, 'error'));
@@ -196,15 +215,11 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
   const prefetchBuffer = useCallback(async (startMonday: Date) => {
     const bufferStart = addWeeks(startMonday, -CALENDAR_BUFFER_WEEKS);
-    const total = CALENDAR_VISIBLE_WEEKS + (CALENDAR_BUFFER_WEEKS * 2);
-    await ensureWeeks(bufferStart, total, 'idle');
+    await ensureWeeks(bufferStart, CALENDAR_VISIBLE_WEEKS + CALENDAR_BUFFER_WEEKS * 2, 'idle');
   }, [ensureWeeks]);
 
   useEffect(() => {
-    if (initializedRef.current) {
-      return;
-    }
-
+    if (initializedRef.current) return;
     initializedRef.current = true;
     const initialStart = getMondayOfWeek(new Date());
     setWindowStart(initialStart);
@@ -217,26 +232,17 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   }, [pruneStoredWeeks, windowStart]);
 
   const loadMorePast = useCallback(async () => {
-    if (!beginPagination('past')) {
-      return;
-    }
-
+    if (!beginPagination('past')) return;
     const currentWindowStart = windowStartRef.current;
     const nextWindowStart = addWeeks(currentWindowStart, -CALENDAR_SHIFT_WEEKS);
-    const enteringStart = nextWindowStart;
-    const enteringWeekKey = toDateKey(enteringStart);
+    const enteringWeekKey = toDateKey(nextWindowStart);
 
     try {
-      await ensureWeeks(enteringStart, CALENDAR_SHIFT_WEEKS);
-      if (!loadedWeekKeysRef.current.has(enteringWeekKey)) {
-        return;
-      }
+      await ensureWeeks(nextWindowStart, CALENDAR_SHIFT_WEEKS);
+      if (!loadedWeekKeysRef.current.has(enteringWeekKey)) return;
       windowStartRef.current = nextWindowStart;
       setWindowStart(nextWindowStart);
-      setScrollAdjustment((current) => ({
-        topDelta: CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_SHIFT_WEEKS,
-        version: current.version + 1,
-      }));
+      setScrollAdjustment((c) => ({ topDelta: CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_SHIFT_WEEKS, version: c.version + 1 }));
       void prefetchBuffer(nextWindowStart);
     } finally {
       endPagination();
@@ -244,10 +250,7 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
   }, [beginPagination, endPagination, ensureWeeks, prefetchBuffer]);
 
   const loadMoreFuture = useCallback(async () => {
-    if (!beginPagination('future')) {
-      return;
-    }
-
+    if (!beginPagination('future')) return;
     const currentWindowStart = windowStartRef.current;
     const nextWindowStart = addWeeks(currentWindowStart, CALENDAR_SHIFT_WEEKS);
     const enteringStart = addWeeks(currentWindowStart, CALENDAR_VISIBLE_WEEKS);
@@ -255,61 +258,39 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
     try {
       await ensureWeeks(enteringStart, CALENDAR_SHIFT_WEEKS);
-      if (!loadedWeekKeysRef.current.has(enteringWeekKey)) {
-        return;
-      }
+      if (!loadedWeekKeysRef.current.has(enteringWeekKey)) return;
       windowStartRef.current = nextWindowStart;
       setWindowStart(nextWindowStart);
-      setScrollAdjustment((current) => ({
-        topDelta: -(CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_SHIFT_WEEKS),
-        version: current.version + 1,
-      }));
+      setScrollAdjustment((c) => ({ topDelta: -(CALENDAR_WEEK_BLOCK_HEIGHT * CALENDAR_SHIFT_WEEKS), version: c.version + 1 }));
       void prefetchBuffer(nextWindowStart);
     } finally {
       endPagination();
     }
   }, [beginPagination, endPagination, ensureWeeks, prefetchBuffer]);
 
-  const weeks = useMemo(() => {
-    return Array.from({ length: CALENDAR_VISIBLE_WEEKS }, (_, index) => {
-      const mondayDate = addWeeks(windowStart, index);
-      const weekKey = toDateKey(mondayDate);
-      return store.get(weekKey) ?? createPlaceholderWeek(mondayDate, 'idle');
-    });
-  }, [store, windowStart]);
+  const weeks = useMemo(() =>
+    Array.from({ length: CALENDAR_VISIBLE_WEEKS }, (_, i) => {
+      const mondayDate = addWeeks(windowStart, i);
+      return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'idle');
+    }), [store, windowStart]);
 
   const renderedWeeks = useMemo(() => {
     const renderedStart = addWeeks(windowStart, -CALENDAR_BUFFER_WEEKS);
-
-    return Array.from({ length: CALENDAR_WINDOW_WEEKS }, (_, index) => {
-      const mondayDate = addWeeks(renderedStart, index);
-      const weekKey = toDateKey(mondayDate);
-      return store.get(weekKey) ?? createPlaceholderWeek(mondayDate, 'idle');
+    return Array.from({ length: CALENDAR_WINDOW_WEEKS }, (_, i) => {
+      const mondayDate = addWeeks(renderedStart, i);
+      return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'idle');
     });
   }, [store, windowStart]);
 
-  const topPreviewWeek = useMemo(() => {
-    const mondayDate = addWeeks(windowStart, -1);
-    return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'idle');
-  }, [store, windowStart]);
+  const topPreviewWeek = useMemo(() =>
+    store.get(toDateKey(addWeeks(windowStart, -1))) ?? createPlaceholderWeek(addWeeks(windowStart, -1), 'idle'),
+    [store, windowStart]);
 
-  const bottomPreviewWeek = useMemo(() => {
-    const mondayDate = addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS);
-    return store.get(toDateKey(mondayDate)) ?? createPlaceholderWeek(mondayDate, 'idle');
-  }, [store, windowStart]);
+  const bottomPreviewWeek = useMemo(() =>
+    store.get(toDateKey(addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS))) ?? createPlaceholderWeek(addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS), 'idle'),
+    [store, windowStart]);
 
-  return {
-    state,
-    weeks,
-    renderedWeeks,
-    topPreviewWeek,
-    bottomPreviewWeek,
-    isLoadingPast,
-    isLoadingFuture,
-    scrollAdjustment,
-    loadMorePast,
-    loadMoreFuture,
-  };
+  return { state, weeks, renderedWeeks, topPreviewWeek, bottomPreviewWeek, isLoadingPast, isLoadingFuture, scrollAdjustment, loadMorePast, loadMoreFuture };
 }
 
 function buildCalendarWeek(
@@ -321,21 +302,20 @@ function buildCalendarWeek(
 ): CalendarWeek {
   const weekDates = generateWeekDates(mondayDate);
   const weekDateKeys = weekDates.map(toDateKey);
-  const weekActivities = weekDateKeys.flatMap((dateKey) => activitiesByDateKey.get(dateKey) ?? []);
-  const days = weekDates.map((date) => buildCalendarDay(date, eventsByDateKey, activitiesByDateKey, labelsByDateKey));
+  const weekActivities = weekDateKeys.flatMap((k) => activitiesByDateKey.get(k) ?? []);
 
   return {
     weekNumber: getWeekNumber(mondayDate),
     weekKey: toDateKey(mondayDate),
     mondayDate,
-    days,
+    days: weekDates.map((d) => buildCalendarDay(d, eventsByDateKey, activitiesByDateKey, labelsByDateKey)),
     summary: {
-      totalTss: roundMetric(sumMetric(weekActivities, (activity) => activity.metrics.trainingStressScore)),
+      totalTss: roundMetric(sumMetric(weekActivities, (a) => a.metrics.trainingStressScore)),
       targetTss: null,
-      totalCalories: roundMetric(sumMetric(weekActivities, (activity) => activity.metrics.calories)),
-      totalDurationSeconds: roundMetric(sumMetric(weekActivities, (activity) => activity.movingTimeSeconds)),
+      totalCalories: roundMetric(sumMetric(weekActivities, (a) => a.metrics.calories)),
+      totalDurationSeconds: roundMetric(sumMetric(weekActivities, (a) => a.movingTimeSeconds)),
       targetDurationSeconds: null,
-      totalDistanceMeters: sumMetric(weekActivities, (activity) => activity.distanceMeters),
+      totalDistanceMeters: sumMetric(weekActivities, (a) => a.distanceMeters),
     },
     status,
   };
@@ -348,7 +328,6 @@ function buildCalendarDay(
   labelsByDateKey: Map<string, CalendarLabel[]>,
 ): CalendarDay {
   const dateKey = toDateKey(date);
-
   return {
     date,
     dateKey,
@@ -358,29 +337,21 @@ function buildCalendarDay(
   };
 }
 
-function groupLabelsByDateKey(labelsByDate: Record<string, Record<string, CalendarLabel>>): Map<string, CalendarLabel[]> {
+const groupLabelsByDateKey = (labelsByDate: Record<string, Record<string, CalendarLabel>>): Map<string, CalendarLabel[]> => {
   const grouped = new Map<string, CalendarLabel[]>();
-
-  for (const [dateKey, labels] of Object.entries(labelsByDate)) {
+  for (const [dateKey, labels] of Object.entries(labelsByDate))
     grouped.set(dateKey, Object.values(labels));
-  }
-
   return grouped;
-}
+};
 
 function groupItemsByDateKey<T>(items: T[], getDateKey: (item: T) => string): Map<string, T[]> {
   const grouped = new Map<string, T[]>();
-
   for (const item of items) {
     const dateKey = getDateKey(item);
     const existing = grouped.get(dateKey);
-    if (existing) {
-      existing.push(item);
-    } else {
-      grouped.set(dateKey, [item]);
-    }
+    if (existing) existing.push(item);
+    else grouped.set(dateKey, [item]);
   }
-
   return grouped;
 }
 
@@ -389,93 +360,70 @@ function createPlaceholderWeek(mondayDate: Date, status: CalendarWeekStatus): Ca
     weekNumber: getWeekNumber(mondayDate),
     weekKey: toDateKey(mondayDate),
     mondayDate,
-    days: generateWeekDates(mondayDate).map((date) => ({
-      date,
-      dateKey: toDateKey(date),
+    days: generateWeekDates(mondayDate).map((d) => ({
+      date: d,
+      dateKey: toDateKey(d),
       events: [],
       activities: [],
       labels: [],
     })),
-    summary: {
-      totalTss: 0,
-      targetTss: null,
-      totalCalories: 0,
-      totalDurationSeconds: 0,
-      targetDurationSeconds: null,
-      totalDistanceMeters: 0,
-    },
+    summary: { totalTss: 0, targetTss: null, totalCalories: 0, totalDurationSeconds: 0, targetDurationSeconds: null, totalDistanceMeters: 0 },
     status,
   };
 }
 
-function sumMetric<T>(items: T[], getValue: (item: T) => number | null): number {
-  return items.reduce((total, item) => total + (getValue(item) ?? 0), 0);
-}
+const sumMetric = <T,>(items: T[], getValue: (item: T) => number | null): number =>
+  items.reduce((total, item) => total + (getValue(item) ?? 0), 0);
 
-function roundMetric(value: number): number {
-  return Math.round(value);
-}
+const roundMetric = (value: number): number => Math.round(value);
 
 function groupContiguousOffsets(offsets: number[]): Array<{ startOffset: number; count: number }> {
-  if (offsets.length === 0) {
-    return [];
-  }
+  if (offsets.length === 0) return [];
 
   const ranges: Array<{ startOffset: number; count: number }> = [];
   let rangeStart = offsets[0];
   let previous = offsets[0];
   let count = 1;
 
-  for (let index = 1; index < offsets.length; index += 1) {
-    const offset = offsets[index];
-    if (offset === previous + 1) {
-      count += 1;
-    } else {
+  for (let i = 1; i < offsets.length; i += 1) {
+    if (offsets[i] === previous + 1) count += 1;
+    else {
       ranges.push({ startOffset: rangeStart, count });
-      rangeStart = offset;
+      rangeStart = offsets[i];
       count = 1;
     }
-    previous = offset;
+    previous = offsets[i];
   }
 
   ranges.push({ startOffset: rangeStart, count });
   return ranges;
 }
 
-function reserveWeekOffsets(startMonday: Date, offsets: number[], inflightWeekKeys: Set<string>) {
-  for (const offset of offsets) {
+const reserveWeekOffsets = (startMonday: Date, offsets: number[], inflightWeekKeys: Set<string>) => {
+  for (const offset of offsets)
     inflightWeekKeys.add(toDateKey(addWeeks(startMonday, offset)));
-  }
-}
+};
 
-function createRetainedWeekKeySet(windowStart: Date): Set<string> {
-  const retainedStart = addWeeks(windowStart, -CALENDAR_BUFFER_WEEKS);
-
-  return new Set(
-    Array.from({ length: CALENDAR_WINDOW_WEEKS }, (_, index) => toDateKey(addWeeks(retainedStart, index))),
-  );
-}
+const createRetainedWeekKeySet = (windowStart: Date): Set<string> =>
+  new Set(Array.from({ length: CALENDAR_WINDOW_WEEKS }, (_, i) => toDateKey(addWeeks(windowStart, -CALENDAR_BUFFER_WEEKS + i))));
 
 function pruneWeekStore(store: WeekStore, retainedWeekKeys: Set<string>): WeekStore {
   const next = new Map<string, CalendarWeek>();
-
-  for (const [weekKey, week] of store) {
-    if (retainedWeekKeys.has(weekKey)) {
-      next.set(weekKey, week);
-    }
-  }
-
+  for (const [weekKey, week] of store)
+    if (retainedWeekKeys.has(weekKey)) next.set(weekKey, week);
   return next.size === store.size ? store : next;
 }
 
 function pruneWeekKeySet(weekKeys: Set<string>, retainedWeekKeys: Set<string>): Set<string> {
   const next = new Set<string>();
-
-  for (const weekKey of weekKeys) {
-    if (retainedWeekKeys.has(weekKey)) {
-      next.add(weekKey);
-    }
-  }
-
+  for (const weekKey of weekKeys)
+    if (retainedWeekKeys.has(weekKey)) next.add(weekKey);
   return next.size === weekKeys.size ? weekKeys : next;
 }
+
+export function invalidateCalendarCache() {
+  eventsCacheRef.clear();
+  labelsCacheRef.clear();
+}
+
+export const __resetCachesForTesting = invalidateCalendarCache;
