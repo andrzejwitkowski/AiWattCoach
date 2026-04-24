@@ -51,18 +51,20 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
 
   return (
     <section className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,12fr)_minmax(0,13fr)]">
         <AiAgentsCard
           settings={settings}
           apiBaseUrl={apiBaseUrl}
           onSave={handleSave}
         />
-        <IntervalsCard
-          settings={settings}
-          apiBaseUrl={apiBaseUrl}
-          onSave={handleSave}
-        />
-        <WahooCard settings={settings} apiBaseUrl={apiBaseUrl} />
+        <div className="space-y-6">
+          <IntervalsCard
+            settings={settings}
+            apiBaseUrl={apiBaseUrl}
+            onSave={handleSave}
+          />
+          <WahooCard settings={settings} apiBaseUrl={apiBaseUrl} />
+        </div>
       </div>
       <AthleteSummaryCard settings={settings} apiBaseUrl={apiBaseUrl} />
       <AvailabilityCard
