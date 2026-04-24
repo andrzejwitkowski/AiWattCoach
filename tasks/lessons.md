@@ -34,3 +34,7 @@
 
 - When review feedback asks to make adapter constants environment-configurable, route the values through the centralized startup settings parser with explicit defaults instead of reading `std::env` inside the adapter.
 - After adding new env-backed settings, update the env key loader, sample env file, and focused settings tests in the same change so the new configuration path is actually exercised.
+
+## OAuth Callback Alignment
+
+- For OAuth flows with separate `start` and `callback` endpoints, verify that the configured provider callback URL matches the actual backend router path exactly. Keep the callback route, example env, dev client shortcut, and focused auth/settings tests aligned in the same change.

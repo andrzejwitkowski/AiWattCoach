@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-24 | user | Wahoo OAuth callback route alignment
+
+- Problem: the code still exposed the Wahoo OAuth callback on `/api/auth/wahoo/callback`, while the deployed callback configured for the app was `https://sandbox.wattly.pl/api/wahoo/callback`. That mismatch would let the OAuth start succeed but cause the provider redirect to miss the real backend route unless the env used a legacy path.
+- Fix: changed the backend callback route to `/api/wahoo/callback`, updated the dev Wahoo OAuth client callback URL, updated `.env.example`, and aligned the auth/settings tests with the new callback path while leaving the connect-start endpoint unchanged.
+- Prevention: when an OAuth integration uses separate start and callback endpoints, verify the deployed provider callback against the real router path before shipping; do not assume the callback should stay under the same URL prefix as the start endpoint.
+
 ### 2026-04-24 | CodeRabbit/Copilot | PR #141 Wahoo OAuth review follow-up
 
 - Problem: the first Wahoo OAuth connect version duplicated security-sensitive `returnTo` sanitization, used a misleading `NotConfigured` error for missing per-user Wahoo credentials, built the live reqwest client with `.expect(...)`, leaked Wahoo tokens through Mongo `Debug`, discarded all token-endpoint error detail, and accepted callback state consumption without binding it to the authenticated app user.
