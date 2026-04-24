@@ -18,6 +18,7 @@ use crate::domain::llm::{LlmChatPort, UserLlmConfigProvider};
 use crate::domain::races::RaceUseCases;
 use crate::domain::settings::UserSettingsUseCases;
 use crate::domain::training_load::TrainingLoadDashboardReadUseCases;
+use crate::domain::wahoo::WahooUseCases;
 use crate::domain::workout_summary::WorkoutSummaryUseCases;
 
 #[derive(Clone)]
@@ -32,6 +33,7 @@ pub struct AppState {
     pub completed_workout_service: Option<Arc<dyn CompletedWorkoutReadUseCases>>,
     pub completed_workout_admin_service: Option<Arc<dyn CompletedWorkoutAdminUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
+    pub wahoo_service: Option<Arc<dyn WahooUseCases>>,
     pub race_service: Option<Arc<dyn RaceUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub training_load_dashboard_service: Option<Arc<dyn TrainingLoadDashboardReadUseCases>>,
@@ -108,6 +110,7 @@ impl AppState {
             completed_workout_service: None,
             completed_workout_admin_service: None,
             intervals_service: None,
+            wahoo_service: None,
             race_service: None,
             settings_service: None,
             training_load_dashboard_service: None,
@@ -232,6 +235,11 @@ impl AppState {
 
     pub fn with_intervals_service(mut self, intervals_service: Arc<dyn IntervalsUseCases>) -> Self {
         self.intervals_service = Some(intervals_service);
+        self
+    }
+
+    pub fn with_wahoo_service(mut self, wahoo_service: Arc<dyn WahooUseCases>) -> Self {
+        self.wahoo_service = Some(wahoo_service);
         self
     }
 

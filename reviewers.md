@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-24 | user | Wahoo OAuth endpoint/scope configuration
+
+- Problem: the first Wahoo OAuth client version kept authorize URL, token URL, and scope as hard-coded adapter constants, so the review request to make them env-configurable with defaults was not addressed through the repo's normal config path.
+- Fix: added optional `WAHOO_OAUTH_AUTHORIZE_URL`, `WAHOO_OAUTH_TOKEN_URL`, and `WAHOO_OAUTH_SCOPE` settings with Wahoo defaults in centralized settings parsing, wired those values into `WahooOAuthClient`, updated `.env.example`, and added focused settings tests for both default and override behavior.
+- Prevention: when a review asks for env-driven behavior, first check whether the repo already has a startup settings seam and implement the override there instead of adding ad hoc environment reads in leaf adapters.
+
 ### 2026-04-23 | Copilot | PR #138 Intervals Strava 422 logging follow-up
 
 - Problem: the first version of the Intervals Strava-422 classifier decoded the same response body to UTF-8 twice inside `map_error_response_from_logged_response(...)` and allocated a temporary `String` just to compare the parsed `error` field with a static message.

@@ -7,7 +7,10 @@ pub use types::{AuthSettings, MongoSettings, ServerSettings, Settings};
 use std::{collections::BTreeMap, env, io::ErrorKind};
 
 use error::SettingsError;
-use parse::{parse_admin_emails, parse_dev_auth_settings, parse_google_oauth_settings};
+use parse::{
+    parse_admin_emails, parse_dev_auth_settings, parse_google_oauth_settings,
+    parse_wahoo_oauth_settings,
+};
 use types::{SessionSettings, SettingsParts};
 
 impl Settings {
@@ -35,6 +38,7 @@ impl Settings {
             mongo: parts.mongo,
             auth: AuthSettings {
                 google: parse_google_oauth_settings(values, parts.auth.dev.enabled)?,
+                wahoo: parse_wahoo_oauth_settings(values)?,
                 dev: parts.auth.dev,
                 session: SessionSettings::parse(values)?,
                 admin_emails: parse_admin_emails(values.get("ADMIN_EMAILS")),
@@ -84,7 +88,7 @@ impl Settings {
 }
 
 fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
-    const KEYS: [&str; 23] = [
+    const KEYS: [&str; 29] = [
         "APP_NAME",
         "SERVER_HOST",
         "SERVER_PORT",
@@ -93,6 +97,12 @@ fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
         "GOOGLE_OAUTH_CLIENT_ID",
         "GOOGLE_OAUTH_CLIENT_SECRET",
         "GOOGLE_OAUTH_REDIRECT_URL",
+        "WAHOO_OAUTH_CLIENT_ID",
+        "WAHOO_OAUTH_CLIENT_SECRET",
+        "WAHOO_OAUTH_REDIRECT_URL",
+        "WAHOO_OAUTH_AUTHORIZE_URL",
+        "WAHOO_OAUTH_TOKEN_URL",
+        "WAHOO_OAUTH_SCOPE",
         "DEV_AUTH_ENABLED",
         "DEV_AUTH_GOOGLE_SUBJECT",
         "DEV_AUTH_EMAIL",

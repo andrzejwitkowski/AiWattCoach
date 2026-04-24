@@ -5,6 +5,7 @@ import { AthleteSummaryCard } from '../features/settings/components/AthleteSumma
 import { CyclingSettingsCard } from '../features/settings/components/CyclingSettingsCard';
 import { IntervalsCard } from '../features/settings/components/IntervalsCard';
 import { OptionsCard } from '../features/settings/components/OptionsCard';
+import { WahooCard } from '../features/settings/components/WahooCard';
 
 type SettingsPageProps = {
   apiBaseUrl: string;
@@ -50,7 +51,7 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
 
   return (
     <section className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
         <AiAgentsCard
           settings={settings}
           apiBaseUrl={apiBaseUrl}
@@ -61,6 +62,7 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
           apiBaseUrl={apiBaseUrl}
           onSave={handleSave}
         />
+        <WahooCard settings={settings} apiBaseUrl={apiBaseUrl} />
       </div>
       <AthleteSummaryCard settings={settings} apiBaseUrl={apiBaseUrl} />
       <AvailabilityCard

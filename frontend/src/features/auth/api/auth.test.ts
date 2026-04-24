@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildGoogleLoginUrl, joinWhitelist, loadCurrentUser } from './auth';
+import { buildGoogleLoginUrl, buildWahooConnectUrl, joinWhitelist, loadCurrentUser } from './auth';
 
 const originalFetch = global.fetch;
 
@@ -53,6 +53,12 @@ describe('loadCurrentUser', () => {
 describe('buildGoogleLoginUrl', () => {
   it('defaults returnTo to the calendar page', () => {
     expect(buildGoogleLoginUrl('')).toBe('/api/auth/google/start?returnTo=%2Fcalendar');
+  });
+});
+
+describe('buildWahooConnectUrl', () => {
+  it('defaults returnTo to the settings page', () => {
+    expect(buildWahooConnectUrl('')).toBe('/api/auth/wahoo/start?returnTo=%2Fsettings');
   });
 });
 

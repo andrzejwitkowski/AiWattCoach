@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::domain::llm::LlmProvider;
 use crate::domain::settings::{
     validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, BoxFuture,
-    CyclingSettings, IntervalsConfig, SettingsError, UserSettings, UserSettingsRepository, Weekday,
+    CyclingSettings, IntervalsConfig, SettingsError, UserSettings, UserSettingsRepository,
+    WahooConfig, Weekday,
 };
 
 #[derive(Clone)]
@@ -24,6 +25,8 @@ struct SettingsDocument {
     user_id: String,
     ai_agents: AiAgentsDocument,
     intervals: IntervalsDocument,
+    #[serde(default)]
+    wahoo: WahooDocument,
     options: OptionsDocument,
     #[serde(default = "default_availability_document")]
     availability: AvailabilityDocument,
@@ -48,6 +51,15 @@ struct IntervalsDocument {
     #[serde(default)]
     connected: bool,
     updated_at_epoch_seconds: Option<i64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+struct WahooDocument {
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+    expires_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    connected: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -481,6 +493,12 @@ fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
         options: AnalysisOptions {
             analyze_without_heart_rate: doc.options.analyze_without_heart_rate,
         },
+        wahoo: WahooConfig {
+            access_token: doc.wahoo.access_token,
+            refresh_token: doc.wahoo.refresh_token,
+            expires_at_epoch_seconds: doc.wahoo.expires_at_epoch_seconds,
+            connected: doc.wahoo.connected,
+        },
         availability: map_document_availability_to_domain(doc.availability),
         cycling: map_document_cycling_to_domain(doc.cycling),
         created_at_epoch_seconds: doc.created_at_epoch_seconds,
@@ -508,6 +526,12 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
             athlete_id: settings.intervals.athlete_id.clone(),
             connected: settings.intervals.connected,
             updated_at_epoch_seconds: None,
+        },
+        wahoo: WahooDocument {
+            access_token: settings.wahoo.access_token.clone(),
+            refresh_token: settings.wahoo.refresh_token.clone(),
+            expires_at_epoch_seconds: settings.wahoo.expires_at_epoch_seconds,
+            connected: settings.wahoo.connected,
         },
         options: OptionsDocument {
             analyze_without_heart_rate: settings.options.analyze_without_heart_rate,
@@ -685,6 +709,7 @@ mod tests {
         assert!(!parsed.availability.configured);
         assert_eq!(parsed.availability.days.len(), 7);
         assert!(parsed.availability.days.iter().all(|day| !day.available));
+        assert!(!parsed.wahoo.connected);
     }
 
     #[test]
@@ -1259,6 +1284,7 @@ mod tests {
             user_id: user_id.to_string(),
             ai_agents: AiAgentsDocument::default(),
             intervals: super::IntervalsDocument::default(),
+            wahoo: super::WahooDocument::default(),
             options: OptionsDocument::default(),
             availability: default_availability_document(),
             cycling: super::CyclingDocument::default(),

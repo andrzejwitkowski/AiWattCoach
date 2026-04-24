@@ -29,3 +29,8 @@
 - If a git tag is intended to mean "artifact is available", publish the artifact first and push the tag only after the publish step succeeds.
 - Any workflow that uses `Swatinem/rust-cache` or Docker Buildx `cache-to/from: type=gha` must keep `actions` permission enabled explicitly when permissions are restricted.
 - Scripts that shell out to `docker build` or similar filesystem-sensitive commands must anchor their working paths to the repo/script location instead of assuming the caller launched them from the repo root.
+
+## Review-Driven Config Fixes
+
+- When review feedback asks to make adapter constants environment-configurable, route the values through the centralized startup settings parser with explicit defaults instead of reading `std::env` inside the adapter.
+- After adding new env-backed settings, update the env key loader, sample env file, and focused settings tests in the same change so the new configuration path is actually exercised.

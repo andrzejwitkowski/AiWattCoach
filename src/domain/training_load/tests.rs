@@ -871,6 +871,7 @@ async fn recompute_from_rebuilds_snapshots_from_warmup_start() {
             user_id: "user-1".to_string(),
             ai_agents: AiAgentsConfig::default(),
             intervals: IntervalsConfig::default(),
+            wahoo: crate::domain::settings::WahooConfig::default(),
             options: AnalysisOptions::default(),
             availability: AvailabilitySettings::default(),
             cycling: CyclingSettings {

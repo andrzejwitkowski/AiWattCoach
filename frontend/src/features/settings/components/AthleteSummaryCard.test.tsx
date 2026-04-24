@@ -16,6 +16,7 @@ const generateAthleteSummaryMock = vi.mocked(generateAthleteSummary);
 type SettingsOverrides = {
   aiAgents?: Partial<UserSettingsResponse['aiAgents']>;
   intervals?: Partial<UserSettingsResponse['intervals']>;
+  wahoo?: Partial<UserSettingsResponse['wahoo']>;
   options?: Partial<UserSettingsResponse['options']>;
   availability?: Partial<UserSettingsResponse['availability']>;
   cycling?: Partial<UserSettingsResponse['cycling']>;
@@ -40,6 +41,15 @@ function buildSettings(overrides?: SettingsOverrides): UserSettingsResponse {
       athleteId: 'i248035',
       connected: true,
       ...overrides?.intervals,
+    },
+    wahoo: {
+      available: false,
+      accessToken: null,
+      accessTokenSet: false,
+      refreshTokenSet: false,
+      expiresAtEpochSeconds: null,
+      connected: false,
+      ...overrides?.wahoo,
     },
     options: {
       analyzeWithoutHeartRate: false,

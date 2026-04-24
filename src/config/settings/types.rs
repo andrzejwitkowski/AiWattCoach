@@ -33,6 +33,7 @@ pub struct MongoSettings {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthSettings {
     pub google: GoogleOAuthSettings,
+    pub wahoo: Option<WahooOAuthSettings>,
     pub dev: DevAuthSettings,
     pub session: SessionSettings,
     pub admin_emails: Vec<String>,
@@ -52,6 +53,16 @@ pub struct GoogleOAuthSettings {
     pub client_id: String,
     pub client_secret: String,
     pub redirect_url: String,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct WahooOAuthSettings {
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+    pub authorize_url: String,
+    pub token_url: String,
+    pub scope: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,6 +90,19 @@ impl fmt::Debug for GoogleOAuthSettings {
             .field("client_id", &self.client_id)
             .field("client_secret", &"<redacted>")
             .field("redirect_url", &self.redirect_url)
+            .finish()
+    }
+}
+
+impl fmt::Debug for WahooOAuthSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WahooOAuthSettings")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"<redacted>")
+            .field("redirect_url", &self.redirect_url)
+            .field("authorize_url", &self.authorize_url)
+            .field("token_url", &self.token_url)
+            .field("scope", &self.scope)
             .finish()
     }
 }
@@ -117,6 +141,7 @@ impl AuthSettings {
                 client_secret: "local-google-client-secret".to_string(),
                 redirect_url: "http://localhost:3002/api/auth/google/callback".to_string(),
             },
+            wahoo: None,
             dev: DevAuthSettings {
                 enabled: false,
                 google_subject: "dev-google-subject".to_string(),

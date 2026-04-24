@@ -32,6 +32,14 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['aiAgents']>): U
       athleteId: null,
       connected: false,
     },
+    wahoo: {
+      available: false,
+      accessToken: null,
+      accessTokenSet: false,
+      refreshTokenSet: false,
+      expiresAtEpochSeconds: null,
+      connected: false,
+    },
     options: {
       analyzeWithoutHeartRate: false,
     },
