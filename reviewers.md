@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-24 | CodeRabbit/Copilot | PR #141 Wahoo OAuth review follow-up
+
+- Problem: the first Wahoo OAuth connect version duplicated security-sensitive `returnTo` sanitization, used a misleading `NotConfigured` error for missing per-user Wahoo credentials, built the live reqwest client with `.expect(...)`, leaked Wahoo tokens through Mongo `Debug`, discarded all token-endpoint error detail, and accepted callback state consumption without binding it to the authenticated app user.
+- Fix: extracted shared `returnTo` sanitization into `src/domain/return_to.rs` and loosened it to allow timestamp-style query parameters, renamed the per-user credential error to `NotConnected`, propagated reqwest client build errors from `main`, redacted `WahooDocument` token fields in `Debug`, summarized Wahoo OAuth error payloads via parsed `error`/`error_description` or a size/hash fallback, and changed the callback flow to require the authenticated user and consume connect state scoped to that user.
+- Prevention: when adding another OAuth-style integration, reuse shared redirect sanitization, keep server-config vs per-user credential errors distinct, never use panic-style startup wiring for HTTP clients, redact adapter persistence models as well as domain models, preserve bounded upstream error detail, and make callback state consumption explicitly user-bound if the browser callback returns to an authenticated app session.
+
+### 2026-04-24 | user | Wahoo OAuth endpoint/scope configuration
+
+- Problem: the first Wahoo OAuth client version kept authorize URL, token URL, and scope as hard-coded adapter constants, so the review request to make them env-configurable with defaults was not addressed through the repo's normal config path.
+- Fix: added optional `WAHOO_OAUTH_AUTHORIZE_URL`, `WAHOO_OAUTH_TOKEN_URL`, and `WAHOO_OAUTH_SCOPE` settings with Wahoo defaults in centralized settings parsing, wired those values into `WahooOAuthClient`, updated `.env.example`, and added focused settings tests for both default and override behavior.
+- Prevention: when a review asks for env-driven behavior, first check whether the repo already has a startup settings seam and implement the override there instead of adding ad hoc environment reads in leaf adapters.
+
 ### 2026-04-23 | Copilot | PR #138 Intervals Strava 422 logging follow-up
 
 - Problem: the first version of the Intervals Strava-422 classifier decoded the same response body to UTF-8 twice inside `map_error_response_from_logged_response(...)` and allocated a temporary `String` just to compare the parsed `error` field with a static message.

@@ -5,6 +5,7 @@ import { AthleteSummaryCard } from '../features/settings/components/AthleteSumma
 import { CyclingSettingsCard } from '../features/settings/components/CyclingSettingsCard';
 import { IntervalsCard } from '../features/settings/components/IntervalsCard';
 import { OptionsCard } from '../features/settings/components/OptionsCard';
+import { WahooCard } from '../features/settings/components/WahooCard';
 
 type SettingsPageProps = {
   apiBaseUrl: string;
@@ -50,17 +51,20 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
 
   return (
     <section className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,12fr)_minmax(0,13fr)]">
         <AiAgentsCard
           settings={settings}
           apiBaseUrl={apiBaseUrl}
           onSave={handleSave}
         />
-        <IntervalsCard
-          settings={settings}
-          apiBaseUrl={apiBaseUrl}
-          onSave={handleSave}
-        />
+        <div className="space-y-6">
+          <IntervalsCard
+            settings={settings}
+            apiBaseUrl={apiBaseUrl}
+            onSave={handleSave}
+          />
+          <WahooCard settings={settings} apiBaseUrl={apiBaseUrl} />
+        </div>
       </div>
       <AthleteSummaryCard settings={settings} apiBaseUrl={apiBaseUrl} />
       <AvailabilityCard

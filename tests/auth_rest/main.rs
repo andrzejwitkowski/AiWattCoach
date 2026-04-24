@@ -5,3 +5,4 @@ mod observability;
 mod session_endpoints;
 mod shared;
 mod tracing_capture;
+mod wahoo_flow;

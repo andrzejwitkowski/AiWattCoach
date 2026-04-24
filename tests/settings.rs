@@ -59,6 +59,7 @@ fn settings_load_required_values_from_map() {
         settings.auth.google.redirect_url,
         "http://localhost:3002/api/auth/google/callback"
     );
+    assert!(settings.auth.wahoo.is_none());
     assert_eq!(settings.auth.session.cookie_name, "aiwattcoach_session");
     assert_eq!(settings.auth.session.same_site, "lax");
     assert_eq!(settings.auth.session.ttl_hours, 24);
@@ -182,6 +183,32 @@ fn google_oauth_settings_debug_redacts_client_secret() {
 }
 
 #[test]
+fn wahoo_oauth_settings_debug_redacts_client_secret() {
+    let mut values = required_settings_map();
+    values.insert(
+        "WAHOO_OAUTH_CLIENT_ID".to_string(),
+        "wahoo-client-id".to_string(),
+    );
+    values.insert(
+        "WAHOO_OAUTH_CLIENT_SECRET".to_string(),
+        "wahoo-secret".to_string(),
+    );
+    values.insert(
+        "WAHOO_OAUTH_REDIRECT_URL".to_string(),
+        "http://localhost:3002/api/auth/wahoo/callback".to_string(),
+    );
+
+    let settings = Settings::from_map(&values).unwrap();
+    let debug = format!("{:?}", settings.auth.wahoo.as_ref().unwrap());
+
+    assert!(debug.contains("<redacted>"));
+    assert!(!debug.contains("wahoo-secret"));
+    assert!(debug.contains("authorize_url"));
+    assert!(debug.contains("token_url"));
+    assert!(debug.contains("scope"));
+}
+
+#[test]
 fn settings_reject_invalid_session_cookie_secure_value() {
     let mut values = required_settings_map();
     values.insert("SESSION_COOKIE_SECURE".to_string(), "yes".to_string());
@@ -237,6 +264,60 @@ fn settings_allow_dev_auth_without_google_oauth_credentials() {
     assert!(settings.auth.dev.enabled);
     assert_eq!(settings.auth.dev.email, "coach@example.com");
     assert_eq!(settings.auth.google.client_id, "dev-google-client-id");
+}
+
+#[test]
+fn settings_parse_optional_wahoo_oauth_credentials() {
+    let mut values = required_settings_map();
+    values.insert(
+        "WAHOO_OAUTH_CLIENT_ID".to_string(),
+        "wahoo-client-id".to_string(),
+    );
+    values.insert(
+        "WAHOO_OAUTH_CLIENT_SECRET".to_string(),
+        "wahoo-secret".to_string(),
+    );
+    values.insert(
+        "WAHOO_OAUTH_REDIRECT_URL".to_string(),
+        "http://localhost:3002/api/auth/wahoo/callback".to_string(),
+    );
+
+    let settings = Settings::from_map(&values).unwrap();
+    let wahoo = settings
+        .auth
+        .wahoo
+        .expect("wahoo settings should be present");
+
+    assert_eq!(wahoo.client_id, "wahoo-client-id");
+    assert_eq!(
+        wahoo.redirect_url,
+        "http://localhost:3002/api/auth/wahoo/callback"
+    );
+    assert_eq!(
+        wahoo.authorize_url,
+        "https://api.wahooligan.com/oauth/authorize"
+    );
+    assert_eq!(wahoo.token_url, "https://api.wahooligan.com/oauth/token");
+    assert_eq!(
+        wahoo.scope,
+        "email user_read user_write power_zones_read power_zones_write workouts_read workouts_write plans_read plans_write routes_read routes_write offline_data"
+    );
+}
+
+#[test]
+fn settings_require_complete_wahoo_oauth_credentials_when_present() {
+    let mut values = required_settings_map();
+    values.insert(
+        "WAHOO_OAUTH_CLIENT_ID".to_string(),
+        "wahoo-client-id".to_string(),
+    );
+
+    let error = Settings::from_map(&values).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "WAHOO_OAUTH_CLIENT_ID, WAHOO_OAUTH_CLIENT_SECRET, and WAHOO_OAUTH_REDIRECT_URL must be set together"
+    );
 }
 
 #[test]

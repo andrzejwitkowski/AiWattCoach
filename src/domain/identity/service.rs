@@ -3,6 +3,7 @@ use super::{
     BoxFuture, Clock, GoogleOAuthPort, IdGenerator, IdentityError, LoginState,
     LoginStateRepository, SessionRepository, UserRepository, WhitelistEntry, WhitelistRepository,
 };
+use crate::domain::return_to::sanitize_return_to;
 
 pub trait IdentityUseCases: Send + Sync {
     fn begin_google_login(
@@ -21,27 +22,6 @@ pub trait IdentityUseCases: Send + Sync {
     ) -> BoxFuture<Result<Option<AppUser>, IdentityError>>;
     fn logout(&self, session_id: &str) -> BoxFuture<Result<(), IdentityError>>;
     fn require_admin(&self, session_id: &str) -> BoxFuture<Result<AppUser, IdentityError>>;
-}
-
-fn sanitize_return_to(raw_return_to: Option<String>) -> Option<String> {
-    raw_return_to.and_then(|value| {
-        let trimmed = value.trim();
-        let lower = trimmed.to_ascii_lowercase();
-
-        if trimmed.is_empty()
-            || !trimmed.starts_with('/')
-            || trimmed.starts_with("//")
-            || trimmed.contains(':')
-            || trimmed.contains('\\')
-            || trimmed.chars().any(|character| character.is_control())
-            || lower.contains("%0d")
-            || lower.contains("%0a")
-        {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

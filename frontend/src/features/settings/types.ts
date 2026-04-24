@@ -21,6 +21,15 @@ const intervalsSettingsSchema = z.object({
   connected: z.boolean(),
 });
 
+const wahooSettingsSchema = z.object({
+  available: z.boolean(),
+  accessToken: z.string().nullable(),
+  accessTokenSet: z.boolean(),
+  refreshTokenSet: z.boolean(),
+  expiresAtEpochSeconds: z.number().nullable(),
+  connected: z.boolean(),
+});
+
 export const testIntervalsConnectionResponseSchema = z.object({
   connected: z.boolean(),
   message: z.string(),
@@ -113,6 +122,7 @@ const cyclingSettingsDataSchema = z.object({
 export const userSettingsResponseSchema = z.object({
   aiAgents: aiAgentsSettingsSchema,
   intervals: intervalsSettingsSchema,
+  wahoo: wahooSettingsSchema,
   options: analysisOptionsSettingsSchema,
   availability: availabilitySettingsSchema,
   cycling: cyclingSettingsDataSchema,

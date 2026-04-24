@@ -66,6 +66,10 @@ async fn get_settings_returns_default_settings_for_authenticated_user() {
     let intervals = body.get("intervals").unwrap();
     assert!(!intervals.get("connected").unwrap().as_bool().unwrap());
 
+    let wahoo = body.get("wahoo").unwrap();
+    assert!(!wahoo.get("available").unwrap().as_bool().unwrap());
+    assert!(!wahoo.get("connected").unwrap().as_bool().unwrap());
+
     let options = body.get("options").unwrap();
     assert!(!options
         .get("analyzeWithoutHeartRate")
