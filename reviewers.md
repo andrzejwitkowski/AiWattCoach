@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-24 | CodeRabbit | PR #115 training plan scheduler retry follow-up
+
+- Problem: `training_plan.generate_for_saved_workout` still used `RetryStrategy::Never` even though the wrapped workflow is deduped by durable `operation_key` state and can replay persisted output, so retryable scheduler failures like handler panics became terminal instead of rerunning once the pending operation was reclaimable.
+- Fix: shared the training-plan stale-pending timeout constant, changed the scheduled task to `RetryStrategy::Fixed { max_attempts: 3, delay_seconds: 300 }` aligned to that reclaim window, and added a panic-once scheduler regression that proves the task enters `RetryScheduled` and completes on the second attempt.
+- Prevention: when a scheduler task wraps a durable `claim_pending` workflow, align automatic retry delay with the same stale/reclaim window; otherwise a retry can re-enter too early, hit `already in progress`, and collapse a recoverable scheduler failure into a terminal error.
+
 ### 2026-04-24 | Copilot/CodeRabbit | PR #115 unresolved scheduler review follow-up
 
 - Problem: PR #115 still had unresolved scheduler review gaps after the earlier merge pass: `AbortOnDropHandle::join()` consumed its inner `JoinHandle`, so dropping the wrapper during cancellation could no longer abort the child task; the training-plan task runner still swallowed completed-checkpoint serialization failures with `.ok()`; the maintenance loop rebuilt a fresh `TaskSchedulerService`, which split in-memory task waiters from the shared worker/service instance; Mongo task writes still accepted invalid retry strategies even though reads rejected them; and the existing regressions did not prove clone-shared timeout notifications or worker shutdown abort behavior.

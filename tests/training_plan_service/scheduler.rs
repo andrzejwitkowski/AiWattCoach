@@ -201,6 +201,53 @@ async fn scheduler_backed_generate_for_saved_workout_recovers_after_worker_resta
 }
 
 #[tokio::test]
+async fn scheduler_backed_generate_for_saved_workout_retries_after_panicked_attempt() {
+    let generator = PanicOnceTrainingPlanGenerator::default();
+    let fixture = build_fixture_with_generator(
+        date_epoch(FIRST_DAY),
+        new_call_log(),
+        generator.clone(),
+        NoopCalendarEntryViewRefresh,
+    );
+    let worker = spawn_worker(&fixture, "worker-1");
+    let wrapped = fixture.wrapped.clone();
+    let result_future = tokio::spawn(async move {
+        wrapped
+            .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+            .await
+    });
+
+    let retried_task =
+        wait_for_only_task_status(&fixture.scheduler, TaskStatus::RetryScheduled, Some(1)).await;
+
+    assert_eq!(
+        retried_task.error_message.as_deref(),
+        Some("scheduled task handler panicked")
+    );
+    assert_eq!(
+        retried_task.next_attempt_at_epoch_seconds,
+        date_epoch(FIRST_DAY) + 300
+    );
+
+    fixture
+        .clock
+        .set_now(retried_task.next_attempt_at_epoch_seconds);
+
+    let result = tokio::time::timeout(Duration::from_secs(2), result_future)
+        .await
+        .expect("scheduler-backed training plan should finish after retry")
+        .expect("training plan join should succeed")
+        .expect("training plan should succeed after panic retry");
+    let completed_task =
+        wait_for_only_task_status(&fixture.scheduler, TaskStatus::Completed, Some(2)).await;
+
+    assert!(result.was_generated);
+    assert_eq!(completed_task.status, TaskStatus::Completed);
+    assert_eq!(generator.recap_call_count(), 2);
+    worker.shutdown().await;
+}
+
+#[tokio::test]
 async fn manual_retry_of_failed_task_does_not_duplicate_projected_days() {
     let call_log = new_call_log();
     let generator = StubTrainingPlanGenerator::new(
@@ -387,6 +434,61 @@ impl BlockingTrainingPlanGenerator {
 
     fn recap_call_count(&self) -> usize {
         self.recap_calls.load(Ordering::SeqCst)
+    }
+}
+
+#[derive(Clone, Default)]
+struct PanicOnceTrainingPlanGenerator {
+    recap_calls: Arc<AtomicUsize>,
+}
+
+impl PanicOnceTrainingPlanGenerator {
+    fn recap_call_count(&self) -> usize {
+        self.recap_calls.load(Ordering::SeqCst)
+    }
+}
+
+impl TrainingPlanGenerator for PanicOnceTrainingPlanGenerator {
+    fn generate_workout_recap(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<WorkoutRecap, TrainingPlanError>>
+    {
+        let recap_calls = self.recap_calls.clone();
+        Box::pin(async move {
+            if recap_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                panic!("panic-once training plan generator");
+            }
+            Ok(workout_recap())
+        })
+    }
+
+    fn generate_initial_plan_window(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
+        Box::pin(async move { Ok(valid_plan_window(FIRST_DAY)) })
+    }
+
+    fn correct_invalid_days(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        _invalid_day_sections: &str,
+        _issues: Vec<ValidationIssue>,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
+        Box::pin(
+            async move { unreachable!("correction should not run in panic-once generator test") },
+        )
     }
 }
 

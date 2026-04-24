@@ -24,6 +24,8 @@ use super::{
 
 pub use scheduler::{training_plan_generate_task_handler, SchedulerBackedTrainingPlanService};
 
+const TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
+
 pub trait TrainingPlanUseCases: Send + Sync {
     fn generate_recap_for_saved_workout(
         &self,
@@ -155,7 +157,6 @@ where
     Time: Clock + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
-    const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
     const SNAPSHOT_DAY_COUNT: usize = 14;
     const MAX_CORRECTION_ATTEMPTS: usize = 2;
 
@@ -169,7 +170,7 @@ where
     }
 
     fn stale_pending_before_epoch_seconds(&self) -> i64 {
-        self.clock.now_epoch_seconds() - Self::STALE_PENDING_TIMEOUT_SECONDS
+        self.clock.now_epoch_seconds() - TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS
     }
 
     fn today_string(&self) -> String {

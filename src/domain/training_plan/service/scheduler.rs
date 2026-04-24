@@ -18,6 +18,7 @@ use super::{
     BoxFuture, GeneratedTrainingPlan, TrainingPlanError, TrainingPlanGenerationOperationRepository,
     TrainingPlanGenerationService, TrainingPlanGenerator, TrainingPlanProjectionRepository,
     TrainingPlanSnapshotRepository, TrainingPlanUseCases, TrainingPlanWorkoutSummaryPort,
+    TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS,
 };
 
 pub(crate) const TRAINING_PLAN_GENERATE_TASK_TYPE: &str =
@@ -25,6 +26,11 @@ pub(crate) const TRAINING_PLAN_GENERATE_TASK_TYPE: &str =
 pub(crate) const TRAINING_PLAN_EXECUTION_TIMEOUT_BUFFER_SECONDS: i64 = 30;
 pub(crate) const TRAINING_PLAN_EXECUTION_TIMEOUT_SECONDS: i64 =
     (LLM_REQUEST_TIMEOUT_SECONDS as i64 * 4) + TRAINING_PLAN_EXECUTION_TIMEOUT_BUFFER_SECONDS;
+pub(crate) const TRAINING_PLAN_RETRY_MAX_ATTEMPTS: u32 = 3;
+// Match the stale pending reclaim window so panic/restart retries do not race into
+// a still-pending durable operation and fail with "already in progress".
+pub(crate) const TRAINING_PLAN_RETRY_DELAY_SECONDS: i64 =
+    TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct TrainingPlanTaskPayload {
@@ -407,7 +413,10 @@ where
                         "failed to serialize training plan task payload: {error}"
                     ))
                 })?,
-                retry_strategy: RetryStrategy::Never,
+                retry_strategy: RetryStrategy::Fixed {
+                    max_attempts: TRAINING_PLAN_RETRY_MAX_ATTEMPTS,
+                    delay_seconds: TRAINING_PLAN_RETRY_DELAY_SECONDS,
+                },
                 dedupe_key,
                 execution_timeout_seconds: TRAINING_PLAN_EXECUTION_TIMEOUT_SECONDS,
                 leader_only: false,
