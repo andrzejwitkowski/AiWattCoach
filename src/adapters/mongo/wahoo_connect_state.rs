@@ -65,12 +65,17 @@ impl WahooConnectStateRepository for MongoWahooConnectStateRepository {
         })
     }
 
-    fn consume(&self, state_id: &str) -> BoxFuture<Result<Option<WahooConnectState>, WahooError>> {
+    fn consume(
+        &self,
+        state_id: &str,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<WahooConnectState>, WahooError>> {
         let collection = self.collection.clone();
         let state_id = state_id.to_string();
+        let user_id = user_id.to_string();
         Box::pin(async move {
             let document = collection
-                .find_one_and_delete(doc! { "state_id": state_id })
+                .find_one_and_delete(doc! { "state_id": state_id, "user_id": user_id })
                 .await
                 .map_err(|error| WahooError::Repository(error.to_string()))?;
             Ok(document.map(map_document_to_domain))

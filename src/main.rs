@@ -268,19 +268,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .with_ftp_history_repository(ftp_history_repository.clone())
             .with_training_load_recompute_service(training_load_recompute_service.clone()),
     );
-    let wahoo_service = auth.wahoo.clone().map(|wahoo| {
-        Arc::new(WahooService::new(
-            settings_repository.clone(),
-            wahoo_connect_state_repository.clone(),
-            if auth.dev.enabled {
+    let wahoo_service = match auth.wahoo.clone() {
+        Some(wahoo) => {
+            let oauth = if auth.dev.enabled {
                 WahooOAuthAdapter::Dev(DevWahooOAuthClient)
             } else {
                 WahooOAuthAdapter::Live(WahooOAuthClient::new(
                     reqwest::Client::builder()
                         .connect_timeout(Duration::from_secs(5))
                         .timeout(Duration::from_secs(15))
-                        .build()
-                        .expect("Wahoo OAuth client should build"),
+                        .build()?,
                     wahoo.client_id,
                     wahoo.client_secret,
                     wahoo.redirect_url,
@@ -288,11 +285,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     wahoo.token_url,
                     wahoo.scope,
                 ))
-            },
-            SystemClock,
-            UuidIdGenerator,
-        )) as Arc<dyn aiwattcoach::domain::wahoo::WahooUseCases>
-    });
+            };
+
+            Some(Arc::new(WahooService::new(
+                settings_repository.clone(),
+                wahoo_connect_state_repository.clone(),
+                oauth,
+                SystemClock,
+                UuidIdGenerator,
+            ))
+                as Arc<dyn aiwattcoach::domain::wahoo::WahooUseCases>)
+        }
+        None => None,
+    };
     let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let special_day_repository =
         MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);

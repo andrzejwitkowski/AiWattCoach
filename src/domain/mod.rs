@@ -12,6 +12,7 @@ pub mod planned_completed_links;
 pub mod planned_workout_tokens;
 pub mod planned_workouts;
 pub mod races;
+pub mod return_to;
 pub mod settings;
 pub mod special_days;
 pub mod training_context;

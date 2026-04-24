@@ -151,7 +151,7 @@ pub async fn start_wahoo_connect(
         Err(crate::domain::wahoo::WahooError::Unauthenticated) => {
             StatusCode::UNAUTHORIZED.into_response()
         }
-        Err(crate::domain::wahoo::WahooError::NotConfigured) => {
+        Err(crate::domain::wahoo::WahooError::NotConnected) => {
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
         Err(crate::domain::wahoo::WahooError::InvalidConnectState) => {
@@ -166,14 +166,19 @@ pub async fn start_wahoo_connect(
 
 pub async fn finish_wahoo_connect(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<WahooCallbackQuery>,
 ) -> Response {
     let Some(wahoo_service) = state.wahoo_service.clone() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
+    let user_id = match super::user_auth::resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
 
     match wahoo_service
-        .finish_connect(&query.state, &query.code)
+        .finish_connect(&user_id, &query.state, &query.code)
         .await
     {
         Ok(result) => Redirect::to(&result.redirect_to).into_response(),
@@ -183,7 +188,7 @@ pub async fn finish_wahoo_connect(
         Err(crate::domain::wahoo::WahooError::Unauthenticated) => {
             StatusCode::UNAUTHORIZED.into_response()
         }
-        Err(crate::domain::wahoo::WahooError::NotConfigured) => {
+        Err(crate::domain::wahoo::WahooError::NotConnected) => {
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
         Err(

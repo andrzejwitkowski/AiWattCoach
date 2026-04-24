@@ -31,7 +31,7 @@ impl WahooOAuthPort for DevWahooOAuthClient {
         let refresh_token = refresh_token.to_string();
         Box::pin(async move {
             if refresh_token.trim().is_empty() {
-                return Err(WahooError::NotConfigured);
+                return Err(WahooError::NotConnected);
             }
 
             Ok(WahooToken {

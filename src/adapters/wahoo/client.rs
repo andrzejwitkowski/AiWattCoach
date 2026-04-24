@@ -4,6 +4,7 @@ use opentelemetry::{propagation::TextMapPropagator, trace::TraceContextExt as _}
 use opentelemetry_http::HeaderInjector;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use reqwest::Url;
+use sha2::Digest as _;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
@@ -69,8 +70,9 @@ impl WahooOAuthClient {
         .map_err(|error| WahooError::External(error.to_string()))?;
         if !response.status.is_success() {
             return Err(WahooError::External(format!(
-                "Wahoo OAuth request failed with status {}",
-                response.status
+                "Wahoo OAuth request failed with status {} ({})",
+                response.status,
+                summarize_error_body(&response.body)
             )));
         }
         let payload: WahooTokenResponse = serde_json::from_slice(&response.body)
@@ -83,6 +85,67 @@ impl WahooOAuthClient {
             expires_at_epoch_seconds: now.saturating_add(payload.expires_in),
         })
     }
+}
+
+fn summarize_error_body(body: &[u8]) -> String {
+    let fallback = || {
+        let digest = sha2::Sha256::digest(body);
+        let hash = format!("{digest:x}");
+        format!(
+            "payload bytes={} hash={}",
+            body.len(),
+            &hash[..12.min(hash.len())]
+        )
+    };
+    let trimmed = std::str::from_utf8(body)
+        .ok()
+        .map(str::trim)
+        .filter(|text| !text.is_empty());
+
+    let Some(text) = trimmed else {
+        return fallback();
+    };
+
+    let Ok(error_payload) = serde_json::from_str::<WahooOAuthErrorResponse>(text) else {
+        return fallback();
+    };
+    let Some(error) = error_payload
+        .error
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return fallback();
+    };
+
+    let mut summary = format!("oauth_error={error}");
+    if let Some(description) = error_payload
+        .error_description
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        summary.push_str(" description=");
+        summary.push_str(&normalize_preview(description, 160));
+    }
+
+    summary
+}
+
+#[derive(serde::Deserialize)]
+struct WahooOAuthErrorResponse {
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+fn normalize_preview(text: &str, max_chars: usize) -> String {
+    text.chars()
+        .take(max_chars)
+        .map(|character| match character {
+            '\r' | '\n' => ' ',
+            other => other,
+        })
+        .collect()
 }
 
 impl WahooOAuthPort for WahooOAuthClient {
@@ -143,5 +206,35 @@ impl WahooOAuthPort for WahooOAuthClient {
             )
             .await
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::summarize_error_body;
+
+    #[test]
+    fn summarize_error_body_uses_utf8_preview_when_available() {
+        assert_eq!(
+            summarize_error_body(b"{\"error\":\"invalid_grant\"}\r\n"),
+            "oauth_error=invalid_grant"
+        );
+    }
+
+    #[test]
+    fn summarize_error_body_includes_description_when_present() {
+        assert_eq!(
+            summarize_error_body(
+                b"{\"error\":\"invalid_client\",\"error_description\":\"bad redirect\\nuri\"}",
+            ),
+            "oauth_error=invalid_client description=bad redirect uri"
+        );
+    }
+
+    #[test]
+    fn summarize_error_body_falls_back_to_size_and_hash_for_binary_payloads() {
+        let summary = summarize_error_body(&[0, 159, 146, 150]);
+
+        assert!(summary.starts_with("payload bytes=4 hash="));
     }
 }

@@ -2,7 +2,7 @@
 pub enum WahooError {
     Unauthenticated,
     InvalidConnectState,
-    NotConfigured,
+    NotConnected,
     Repository(String),
     External(String),
 }
@@ -12,7 +12,7 @@ impl std::fmt::Display for WahooError {
         match self {
             Self::Unauthenticated => write!(f, "Authentication is required"),
             Self::InvalidConnectState => write!(f, "Wahoo connect state is invalid or expired"),
-            Self::NotConfigured => write!(f, "Wahoo OAuth is not configured"),
+            Self::NotConnected => write!(f, "Wahoo account is not connected"),
             Self::Repository(message) | Self::External(message) => write!(f, "{message}"),
         }
     }

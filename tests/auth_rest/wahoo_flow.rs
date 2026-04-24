@@ -47,6 +47,7 @@ async fn wahoo_callback_redirects_back_to_settings() {
         .oneshot(
             Request::builder()
                 .uri("/api/auth/wahoo/callback?state=wahoo-state-1&code=oauth-code")
+                .header(header::COOKIE, "aiwattcoach_session=session-1")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -60,6 +61,28 @@ async fn wahoo_callback_redirects_back_to_settings() {
     );
     assert_eq!(
         captured.lock().unwrap().clone(),
-        Some(("wahoo-state-1".to_string(), "oauth-code".to_string()))
+        Some((
+            "user-1".to_string(),
+            "wahoo-state-1".to_string(),
+            "oauth-code".to_string(),
+        ))
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wahoo_callback_requires_authenticated_user() {
+    let app =
+        auth_test_app_with_wahoo(TestIdentityService::default(), TestWahooService::default()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/wahoo/callback?state=wahoo-state-1&code=oauth-code")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

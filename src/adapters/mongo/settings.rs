@@ -53,13 +53,24 @@ struct IntervalsDocument {
     updated_at_epoch_seconds: Option<i64>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 struct WahooDocument {
     access_token: Option<String>,
     refresh_token: Option<String>,
     expires_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     connected: bool,
+}
+
+impl std::fmt::Debug for WahooDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WahooDocument")
+            .field("access_token", &RedactedOptionalText(&self.access_token))
+            .field("refresh_token", &RedactedOptionalText(&self.refresh_token))
+            .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
+            .field("connected", &self.connected)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -710,6 +721,26 @@ mod tests {
         assert_eq!(parsed.availability.days.len(), 7);
         assert!(parsed.availability.days.iter().all(|day| !day.available));
         assert!(!parsed.wahoo.connected);
+    }
+
+    #[test]
+    fn wahoo_document_debug_redacts_tokens() {
+        let document = SettingsDocument {
+            wahoo: super::WahooDocument {
+                access_token: Some("wahoo-access-token".to_string()),
+                refresh_token: Some("wahoo-refresh-token".to_string()),
+                expires_at_epoch_seconds: Some(123),
+                connected: true,
+            },
+            ..build_settings_document("user-1", 1)
+        };
+
+        let debug = format!("{document:?}");
+
+        assert!(debug.contains("<redacted:"));
+        assert!(!debug.contains("wahoo-access-token"));
+        assert!(!debug.contains("wahoo-refresh-token"));
+        assert!(debug.contains("expires_at_epoch_seconds"));
     }
 
     #[test]

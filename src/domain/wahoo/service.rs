@@ -1,5 +1,6 @@
 use crate::domain::{
     identity::{Clock, IdGenerator},
+    return_to::sanitize_return_to,
     settings::{UserSettings, UserSettingsRepository, WahooConfig},
 };
 
@@ -19,6 +20,7 @@ pub trait WahooUseCases: Send + Sync {
 
     fn finish_connect(
         &self,
+        user_id: &str,
         state: &str,
         code: &str,
     ) -> BoxFuture<Result<WahooAuthExchange, WahooError>>;
@@ -130,13 +132,14 @@ where
 
     async fn finish_connect(
         &self,
+        user_id: &str,
         state: &str,
         code: &str,
     ) -> Result<WahooAuthExchange, WahooError> {
         let now = self.clock.now_epoch_seconds();
         let state = self
             .connect_states
-            .consume(state)
+            .consume(state, user_id)
             .await?
             .filter(|saved| !saved.is_expired(now))
             .ok_or(WahooError::InvalidConnectState)?;
@@ -169,7 +172,7 @@ where
             }
         }
 
-        let refresh_token = wahoo.refresh_token.ok_or(WahooError::NotConfigured)?;
+        let refresh_token = wahoo.refresh_token.ok_or(WahooError::NotConnected)?;
         let token = self.oauth.refresh_token(&refresh_token).await?;
         self.persist_token(user_id, token).await
     }
@@ -196,13 +199,15 @@ where
 
     fn finish_connect(
         &self,
+        user_id: &str,
         state: &str,
         code: &str,
     ) -> BoxFuture<Result<WahooAuthExchange, WahooError>> {
         let service = self.clone();
+        let user_id = user_id.to_string();
         let state = state.to_string();
         let code = code.to_string();
-        Box::pin(async move { service.finish_connect(&state, &code).await })
+        Box::pin(async move { service.finish_connect(&user_id, &state, &code).await })
     }
 
     fn ensure_token(&self, user_id: &str) -> BoxFuture<Result<WahooToken, WahooError>> {
@@ -214,25 +219,4 @@ where
 
 fn map_settings_error(error: crate::domain::settings::SettingsError) -> WahooError {
     WahooError::Repository(error.to_string())
-}
-
-fn sanitize_return_to(raw_return_to: Option<String>) -> Option<String> {
-    raw_return_to.and_then(|value| {
-        let trimmed = value.trim();
-        let lower = trimmed.to_ascii_lowercase();
-
-        if trimmed.is_empty()
-            || !trimmed.starts_with('/')
-            || trimmed.starts_with("//")
-            || trimmed.contains(':')
-            || trimmed.contains('\\')
-            || trimmed.chars().any(|character| character.is_control())
-            || lower.contains("%0d")
-            || lower.contains("%0a")
-        {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    })
 }
