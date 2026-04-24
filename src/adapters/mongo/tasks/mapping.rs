@@ -4,6 +4,7 @@ use crate::domain::task_scheduler::{RetryStrategy, ScheduledTask, TaskSchedulerE
 
 use super::document::{RetryStrategyDocument, TaskDocument};
 
+// 60 days
 const TERMINAL_TASK_TTL_SECONDS: i64 = 60 * 24 * 60 * 60;
 
 pub(super) fn storage_error(error: mongodb::error::Error) -> TaskSchedulerError {
@@ -160,6 +161,8 @@ fn parse_u32_field(value: Option<i64>, field_name: &str) -> Result<u32, TaskSche
 pub(super) fn map_task_to_document(
     task: &ScheduledTask,
 ) -> Result<TaskDocument, TaskSchedulerError> {
+    validate_retry_strategy(&task.retry_strategy)?;
+
     Ok(TaskDocument {
         id: task.id.clone(),
         user_id: task.user_id.clone(),
@@ -182,10 +185,7 @@ pub(super) fn map_task_to_document(
         updated_at_epoch_seconds: task.updated_at_epoch_seconds,
         started_at_epoch_seconds: task.started_at_epoch_seconds,
         finished_at_epoch_seconds: task.finished_at_epoch_seconds,
-        cleanup_after: terminal_task_cleanup_after(
-            task.status.clone(),
-            task.finished_at_epoch_seconds,
-        )?,
+        cleanup_after: terminal_task_cleanup_after(&task.status, task.finished_at_epoch_seconds)?,
     })
 }
 
@@ -230,18 +230,16 @@ pub(super) fn terminal_task_cleanup_bson(
     finished_at_epoch_seconds: i64,
 ) -> Result<mongodb::bson::Bson, TaskSchedulerError> {
     Ok(mongodb::bson::Bson::DateTime(
-        terminal_task_cleanup_after(status.clone(), Some(finished_at_epoch_seconds))?.ok_or_else(
-            || {
-                TaskSchedulerError::Repository(
-                    "terminal task cleanup date requires a finished_at timestamp".to_string(),
-                )
-            },
-        )?,
+        terminal_task_cleanup_after(status, Some(finished_at_epoch_seconds))?.ok_or_else(|| {
+            TaskSchedulerError::Repository(
+                "terminal task cleanup date requires a finished_at timestamp".to_string(),
+            )
+        })?,
     ))
 }
 
 fn terminal_task_cleanup_after(
-    status: TaskStatus,
+    status: &TaskStatus,
     finished_at_epoch_seconds: Option<i64>,
 ) -> Result<Option<DateTime>, TaskSchedulerError> {
     let is_terminal = matches!(
@@ -301,6 +299,23 @@ mod tests {
     }
 
     #[test]
+    fn map_task_to_document_sets_cleanup_after_for_terminal_task() {
+        let finished_at_epoch_seconds = 100;
+        let document = map_task_to_document(&sample_task(
+            TaskStatus::Completed,
+            Some(finished_at_epoch_seconds),
+        ))
+        .expect("terminal task should map successfully");
+
+        assert_eq!(
+            document.cleanup_after,
+            Some(DateTime::from_millis(
+                (finished_at_epoch_seconds + TERMINAL_TASK_TTL_SECONDS) * 1000,
+            ))
+        );
+    }
+
+    #[test]
     fn map_document_to_task_rejects_non_positive_execution_timeout() {
         let mut document = sample_task_document();
         document.execution_timeout_seconds = 0;
@@ -327,6 +342,25 @@ mod tests {
 
         let error = map_document_to_task(document)
             .expect_err("invalid fixed retry strategy should be rejected");
+
+        assert_eq!(
+            error,
+            TaskSchedulerError::Repository(
+                "fixed retry strategy max_attempts must be positive".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn map_task_to_document_rejects_invalid_fixed_retry_strategy() {
+        let error = map_task_to_document(&ScheduledTask {
+            retry_strategy: RetryStrategy::Fixed {
+                max_attempts: 0,
+                delay_seconds: 30,
+            },
+            ..sample_task(TaskStatus::Queued, None)
+        })
+        .expect_err("invalid fixed retry strategy should be rejected before persistence");
 
         assert_eq!(
             error,

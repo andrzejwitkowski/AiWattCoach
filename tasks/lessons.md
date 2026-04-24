@@ -64,6 +64,13 @@
 - Before finalizing timeout defaults, compare them against the slowest realistic external operation, especially LLM calls and other long-polling network work.
 - Model restart recovery separately from `timed_out`: if the old owner is gone or restarted and no longer reports the task as active, prefer automatic recovery to a reclaimable queue state instead of forcing manual retry.
 
+## Scheduler Cancellation And Waiters
+
+- If an abort-on-drop helper wraps a `JoinHandle` and also exposes an async `join`, do not `take()` the handle out before `.await`. Await it through `as_mut()` so dropping the wrapper during cancellation still aborts the child task instead of detaching it.
+- If timeout or recovery code publishes in-memory task updates, every producer and waiter must share the same `TaskSchedulerService` instance or clones of it. Reconstructing a fresh service with the same repositories splits `task_waiters` state and breaks notifications.
+- If a Mongo/task mapper validates retry invariants when reading documents back, mirror that validation at the write boundary too so invalid retry strategies cannot be persisted as poison rows.
+- Process-scoped `OnceLock` temp fixtures with deterministic paths should proactively clear stale directories on initialization because `Drop` cleanup will not run at test-binary exit.
+
 ## Test Stability Diagnosis
 
 - When diagnosing suite-level `SIGKILL` or memory-pressure failures, never launch multiple heavy `cargo test` targets in parallel. Those runs create artificial contention and make the results non-diagnostic.

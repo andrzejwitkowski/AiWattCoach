@@ -180,6 +180,20 @@ fn parse_failed_checkpoint(
         .transpose()
 }
 
+fn build_completed_checkpoint(
+    generated: &GeneratedTrainingPlan,
+) -> Result<serde_json::Value, TrainingPlanError> {
+    serde_json::to_value(CompletedTrainingPlanTaskCheckpoint {
+        operation_key: generated.snapshot.operation_key.clone(),
+        was_generated: generated.was_generated,
+    })
+    .map_err(|error| {
+        TrainingPlanError::Repository(format!(
+            "failed to serialize completed training plan checkpoint: {error}"
+        ))
+    })
+}
+
 struct TrainingPlanGenerateTaskHandler<Base> {
     base: Arc<Base>,
 }
@@ -215,12 +229,16 @@ where
                 )
                 .await
             {
-                Ok(generated) => TaskRunOutcome::Completed {
-                    checkpoint: serde_json::to_value(CompletedTrainingPlanTaskCheckpoint {
-                        operation_key: generated.snapshot.operation_key,
-                        was_generated: generated.was_generated,
-                    })
-                    .ok(),
+                Ok(generated) => match build_completed_checkpoint(&generated) {
+                    Ok(checkpoint) => TaskRunOutcome::Completed {
+                        checkpoint: Some(checkpoint),
+                    },
+                    Err(error) => TaskRunOutcome::Failed {
+                        checkpoint: None,
+                        error_message: error.to_string(),
+                        retryable: false,
+                        retry_delay_seconds: None,
+                    },
                 },
                 Err(error) => TaskRunOutcome::Failed {
                     checkpoint: serde_json::to_value(serialize_training_plan_error(&error)).ok(),

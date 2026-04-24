@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use serde_json::json;
 use serial_test::serial;
@@ -307,6 +307,55 @@ async fn task_worker_retries_and_clears_active_task_ids_when_handler_panics() {
     );
 
     worker.shutdown().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn task_worker_shutdown_aborts_inflight_handler_without_detaching_domain_work() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let coach = BlockingCoach::new();
+    let direct = direct_service(repository, coach.clone());
+    let persisted = direct
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .expect("user message should persist");
+    let scheduler = TaskSchedulerService::new(
+        InMemoryTaskRepository::default(),
+        InMemoryTaskWorkerRepository::default(),
+        TestClock::default(),
+    );
+    let worker = spawn_workout_summary_coach_reply_task_runner(
+        direct.clone(),
+        scheduler.clone(),
+        "worker-1".to_string(),
+    )
+    .expect("worker should spawn");
+    let service = SchedulerBackedWorkoutSummaryService::new(
+        direct.clone(),
+        scheduler,
+        TestIdGenerator::default(),
+    );
+
+    let reply_task = tokio::spawn(async move {
+        service
+            .generate_coach_reply("user-1", "workout-1", persisted.user_message.id)
+            .await
+    });
+
+    coach.started.notified().await;
+    worker.shutdown().await;
+
+    coach.release.notify_one();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let summary = direct
+        .get_summary("user-1", "workout-1")
+        .await
+        .expect("summary lookup should succeed");
+    assert_eq!(summary.messages.len(), 1);
+
+    reply_task.abort();
+    let _ = reply_task.await;
 }
 
 struct PanicTaskHandler {

@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-24 | Copilot/CodeRabbit | PR #115 unresolved scheduler review follow-up
+
+- Problem: PR #115 still had unresolved scheduler review gaps after the earlier merge pass: `AbortOnDropHandle::join()` consumed its inner `JoinHandle`, so dropping the wrapper during cancellation could no longer abort the child task; the training-plan task runner still swallowed completed-checkpoint serialization failures with `.ok()`; the maintenance loop rebuilt a fresh `TaskSchedulerService`, which split in-memory task waiters from the shared worker/service instance; Mongo task writes still accepted invalid retry strategies even though reads rejected them; and the existing regressions did not prove clone-shared timeout notifications or worker shutdown abort behavior.
+- Fix: changed `AbortOnDropHandle::join()` to await through `as_mut()`, converted completed training-plan checkpoint serialization failure into explicit non-retryable task failure, reused `shared_task_scheduler.clone()` for the maintenance loop wiring, validated retry strategies in `map_task_to_document(...)`, documented the `was_regenerated` deduplicated-wait semantics and extracted athlete-summary retry constants, cleared the deterministic frontend temp fixture root on init, and added focused regressions for timeout-waiter notifications across scheduler clones plus worker shutdown aborting an in-flight handler.
+- Prevention: if an abort-on-drop wrapper also exposes `join()`, never move the inner handle out before awaiting it; whenever scheduler behavior depends on in-memory waiters or watch channels, all producers and waiters must share the same service instance or clones of it; and if persistence reads validate scheduler invariants, enforce the same invariants at the write boundary so poison rows cannot be stored in the first place.
+
 ### 2026-04-24 | user | auth test fixture helper follow-up
 
 - Problem: after the latest merge, `tests/auth_rest/shared.rs` still called a removed `keep_frontend_fixture(...)` helper in the Wahoo auth test app builder, so `cargo clippy --all-targets --all-features -- -D warnings` failed while compiling the `auth_rest` test target.
@@ -149,7 +155,7 @@ Read this file before planning and before implementation.
 
 ### 2026-04-20 | user | scheduler worker loop ownership and generic boundaries
 
-- Problem: the dedicated `workout_summary` task runner embedded the whole claim, idle wait, task heartbeat, completion, and failure persistence loop inside feature code, which made the critical scheduler flow hard to read and tied generic worker behavior to one LLM-specific use case.
+- Problem: the dedicated `workout_summary` task runner embedded the whole claim, idle wait, task heartbeat, completion, and failure persistence loop inside feature code, which made the critical scheduler flow difficult to reason about and tied generic worker behavior to one LLM-specific use case.
 - Fix: extracted the shared worker loop into `src/domain/task_scheduler/runner.rs` with a small generic `TaskRunnerHandler` contract and `TaskRunOutcome`, then reduced the workout summary runner to payload parsing and coach-reply-specific success/error mapping only.
 - Prevention: when adding another scheduled workflow, first ask whether the logic is generic worker orchestration or feature-specific task handling; keep claim/lease/heartbeat/complete/fail mechanics in `task_scheduler`, and let feature runners provide only payload parsing plus domain outcome mapping.
 
@@ -161,7 +167,7 @@ Read this file before planning and before implementation.
 
 ### 2026-04-20 | user | single scheduler worker loop and smaller service methods
 
-- Problem: the scheduler still had a per-feature worker spawn shape and `TaskSchedulerService` accumulated large orchestration methods that were hard to review; the result path also still looked like a custom loop instead of a generic scheduler-owned mechanism.
+- Problem: the scheduler still had a per-feature worker spawn shape and `TaskSchedulerService` accumulated large orchestration methods that were difficult to review; the result path also still looked like a custom loop instead of a generic scheduler-owned mechanism.
 - Fix: replaced the per-feature worker flow with one global worker loop in `src/domain/task_scheduler/runner.rs` that dispatches by registered `task_type` handlers, changed result waiting to event-driven task updates via in-memory watchers instead of polling, and split scheduler service logic into smaller request-building and state-transition helpers.
 - Prevention: keep exactly one worker claim/dispatch loop in the scheduler layer, let handlers only implement task-type-specific execution/result mapping, and split any scheduler/service method as soon as it spans multiple orchestration phases.
 

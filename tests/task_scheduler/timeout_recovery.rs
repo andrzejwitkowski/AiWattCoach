@@ -1,6 +1,43 @@
-use aiwattcoach::domain::identity::Clock;
+use std::time::Duration;
+
+use aiwattcoach::domain::{
+    identity::Clock,
+    task_scheduler::{BoxFuture, ResultTaskHandler, ScheduledTask, TaskSchedulerError},
+};
 
 use crate::support::{service, task, TestClock};
+
+struct TimeoutResultHandler;
+
+impl ResultTaskHandler for TimeoutResultHandler {
+    type Completed = ();
+    type Output = ();
+    type Error = String;
+
+    fn task_disappeared(&self, task_id: &str) -> Self::Error {
+        format!("task disappeared: {task_id}")
+    }
+
+    fn task_timed_out(&self, task_id: &str) -> Self::Error {
+        format!("task timed out: {task_id}")
+    }
+
+    fn parse_completed(&self, _task: &ScheduledTask) -> Result<Self::Completed, Self::Error> {
+        Ok(())
+    }
+
+    fn parse_failed(&self, _task: &ScheduledTask) -> Result<Self::Error, Self::Error> {
+        Ok("task failed unexpectedly".to_string())
+    }
+
+    fn finish(&self, _completed: Self::Completed) -> BoxFuture<Result<Self::Output, Self::Error>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+fn map_scheduler_error(error: TaskSchedulerError) -> String {
+    error.to_string()
+}
 
 #[tokio::test]
 async fn timeout_sweep_keeps_running_task_when_owner_reports_it_active() {
@@ -49,6 +86,61 @@ async fn timeout_sweep_keeps_running_task_when_owner_reports_it_active() {
         task.status,
         aiwattcoach::domain::task_scheduler::TaskStatus::Running
     );
+}
+
+#[tokio::test]
+async fn timeout_sweep_notifies_result_waiters_across_scheduler_clones() {
+    let clock = TestClock::new(100);
+    let service = service(&clock);
+
+    service
+        .enqueue(task(
+            "task-1",
+            "summary",
+            "dedupe-1",
+            false,
+            clock.now_epoch_seconds(),
+        ))
+        .await
+        .expect("enqueue should succeed");
+    service
+        .claim_next_due("worker-1", vec!["summary".to_string()], false, 5)
+        .await
+        .expect("claim should succeed")
+        .expect("task should be claimed");
+    service
+        .heartbeat_worker(
+            "worker-1",
+            false,
+            vec!["summary".to_string()],
+            vec!["task-1".to_string()],
+        )
+        .await
+        .expect("worker heartbeat should succeed");
+
+    let waiting_service = service.clone();
+    let waiter = tokio::spawn(async move {
+        waiting_service
+            .wait_for_result_task("task-1", map_scheduler_error, TimeoutResultHandler)
+            .await
+    });
+
+    tokio::task::yield_now().await;
+    clock.set_now(160);
+
+    let timed_out = service
+        .clone()
+        .sweep_timed_out_tasks(30, 100)
+        .await
+        .expect("timeout sweep should succeed");
+
+    let wait_result = tokio::time::timeout(Duration::from_secs(2), waiter)
+        .await
+        .expect("waiter should resolve after timeout sweep")
+        .expect("waiter join should succeed");
+
+    assert_eq!(timed_out, 1);
+    assert_eq!(wait_result, Err("task timed out: task-1".to_string()));
 }
 
 #[tokio::test]

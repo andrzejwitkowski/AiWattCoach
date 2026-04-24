@@ -540,7 +540,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )?;
     let workout_summary_service = Arc::new(SchedulerBackedWorkoutSummaryService::new(
         workout_summary_direct_service,
-        shared_task_scheduler,
+        shared_task_scheduler.clone(),
         UuidIdGenerator,
     ));
 
@@ -583,7 +583,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Prefer a stable worker id from env or container hostname so a process restart can be
     // recognized as the same logical worker. If neither exists, fall back to a per-process id.
     let task_scheduler_maintenance_loop = spawn_task_scheduler_maintenance_loop(
-        TaskSchedulerService::new(task_repository, task_worker_repository, SystemClock),
+        shared_task_scheduler.clone(),
         TaskSchedulerWorkerConfig::new(default_task_scheduler_worker_id(), false, Vec::new()),
         TaskSchedulerMaintenanceConfig::default(),
     )?;

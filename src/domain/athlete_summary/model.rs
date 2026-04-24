@@ -69,5 +69,7 @@ pub struct AthleteSummaryState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EnsuredAthleteSummary {
     pub summary: AthleteSummary,
+    // This means a regeneration was needed for the returned fresh summary.
+    // In deduplicated scheduler waits, another in-flight request may have done the work.
     pub was_regenerated: bool,
 }

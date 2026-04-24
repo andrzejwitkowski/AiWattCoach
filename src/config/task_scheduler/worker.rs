@@ -30,7 +30,10 @@ impl<T> AbortOnDropHandle<T> {
     }
 
     async fn join(mut self) -> Result<T, tokio::task::JoinError> {
-        self.0.take().expect("join handle should be present").await
+        self.0
+            .as_mut()
+            .expect("join handle should be present")
+            .await
     }
 }
 

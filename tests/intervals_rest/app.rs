@@ -599,6 +599,7 @@ fn frontend_fixture() -> FrontendFixture {
         std::process::id()
     ));
     let dist_dir = root.join("dist");
+    let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&dist_dir).unwrap();
     fs::write(
         dist_dir.join("index.html"),

@@ -24,6 +24,8 @@ pub(crate) const ATHLETE_SUMMARY_GENERATE_TASK_TYPE: &str = "athlete_summary.gen
 pub(crate) const ATHLETE_SUMMARY_EXECUTION_TIMEOUT_BUFFER_SECONDS: i64 = 30;
 pub(crate) const ATHLETE_SUMMARY_EXECUTION_TIMEOUT_SECONDS: i64 =
     LLM_REQUEST_TIMEOUT_SECONDS as i64 + ATHLETE_SUMMARY_EXECUTION_TIMEOUT_BUFFER_SECONDS;
+pub(crate) const ATHLETE_SUMMARY_RETRY_MAX_ATTEMPTS: u32 = 3;
+pub(crate) const ATHLETE_SUMMARY_RETRY_DELAY_SECONDS: i64 = 30;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct AthleteSummaryTaskPayload {
@@ -419,8 +421,8 @@ where
                     ))
                 })?,
                 retry_strategy: RetryStrategy::Fixed {
-                    max_attempts: 3,
-                    delay_seconds: 30,
+                    max_attempts: ATHLETE_SUMMARY_RETRY_MAX_ATTEMPTS,
+                    delay_seconds: ATHLETE_SUMMARY_RETRY_DELAY_SECONDS,
                 },
                 dedupe_key,
                 execution_timeout_seconds: ATHLETE_SUMMARY_EXECUTION_TIMEOUT_SECONDS,
