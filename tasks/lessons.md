@@ -14,6 +14,7 @@
 ## Signature Change Verification
 
 - When changing a function signature, grep every call site including local `#[cfg(test)]` modules in the same file before calling the refactor done. `cargo clippy --all-targets` compiles test targets too, so a missed unit-test call site will still fail CI even if the runtime code builds.
+- For constructors with many positional arguments of the same type, re-check test fixtures against the canonical signature before treating behavior regressions as product bugs. A misordered fixture can silently move a link/id into the wrong field and produce misleading CI failures.
 
 ## Fixture Refactor Verification
 

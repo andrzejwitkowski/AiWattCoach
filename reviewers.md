@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-25 | user | planned-workout authoritative test fixture regression
+
+- Problem: after the Wahoo-first authoritative-read changes, `src/domain/planned_workouts/authoritative.rs` still had a local test fixture that passed `planned_workout_id` into the wrong `CompletedWorkout::new(...)` argument slot. The test intended to prove hiding a planned workout when an authoritative completed workout linked to it, but the fixture actually left `planned_workout_id = None` and placed the planned id in the `name` field instead, so CI failed with a false-negative regression.
+- Fix: corrected the fixture argument order so the constructed completed workout really carries `planned_workout_id`, then reran the focused planned-workout authoritative test module.
+- Prevention: when a constructor has many same-typed positional arguments, verify the touched test fixtures against the canonical constructor signature after refactors or new wrappers. For link-driven behavior, assert the linking field itself in the fixture path before trusting the final visibility assertion.
+
 ### 2026-04-25 | user | Wahoo review follow-up and polling regression cleanup
 
 - Problem: the follow-up Wahoo review patch still had a compile-risky delegation cleanup in `src/adapters/wahoo/adapter.rs` and the in-progress `ProviderPollingService` edits had accidentally dropped Intervals calendar event imports while wiring the new Wahoo completed-workout path, which would have advanced the calendar cursor without importing planned workouts, races, or special days.
