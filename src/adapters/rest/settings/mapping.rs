@@ -252,3 +252,62 @@ pub(super) fn map_cycling_update(
         last_zone_update_epoch_seconds: current.cycling.last_zone_update_epoch_seconds,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{map_intervals_update, map_settings_to_dto};
+    use crate::adapters::rest::settings::dto::{OptionalStringInput, UpdateIntervalsRequest};
+    use crate::domain::settings::UserSettings;
+
+    #[test]
+    fn map_settings_to_dto_masks_ai_agent_keys() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_700_000_000);
+        settings.ai_agents.openai_api_key = Some("sk-verysecretkey1234".to_string());
+
+        let dto = map_settings_to_dto(&settings, false);
+
+        assert_eq!(dto.ai_agents.openai_api_key.as_deref(), Some("***...1234"));
+        assert!(dto.ai_agents.openai_api_key_set);
+        assert_eq!(dto.ai_agents.gemini_api_key, None);
+    }
+
+    #[test]
+    fn map_intervals_update_clears_credentials_when_blank_values_are_sent() {
+        let mut current = UserSettings::new_defaults("user-1".to_string(), 1_700_000_000);
+        current.intervals.api_key = Some("saved-api-key".to_string());
+        current.intervals.athlete_id = Some("saved-athlete-id".to_string());
+        current.intervals.connected = true;
+
+        let intervals = map_intervals_update(
+            UpdateIntervalsRequest {
+                api_key: OptionalStringInput::Value("   ".to_string()),
+                athlete_id: OptionalStringInput::Value("   ".to_string()),
+            },
+            &current,
+        );
+
+        assert_eq!(intervals.api_key, None);
+        assert_eq!(intervals.athlete_id, None);
+        assert!(!intervals.connected);
+    }
+
+    #[test]
+    fn map_intervals_update_marks_connection_inactive_when_credentials_change() {
+        let mut current = UserSettings::new_defaults("user-1".to_string(), 1_700_000_000);
+        current.intervals.api_key = Some("saved-api-key".to_string());
+        current.intervals.athlete_id = Some("saved-athlete-id".to_string());
+        current.intervals.connected = true;
+
+        let intervals = map_intervals_update(
+            UpdateIntervalsRequest {
+                api_key: OptionalStringInput::Value("updated-api-key".to_string()),
+                athlete_id: OptionalStringInput::Missing,
+            },
+            &current,
+        );
+
+        assert_eq!(intervals.api_key.as_deref(), Some("updated-api-key"));
+        assert_eq!(intervals.athlete_id.as_deref(), Some("saved-athlete-id"));
+        assert!(!intervals.connected);
+    }
+}

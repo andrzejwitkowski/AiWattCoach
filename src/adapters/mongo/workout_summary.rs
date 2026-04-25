@@ -214,7 +214,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
             {
                 return Ok(());
             }
-            if document.saved_at_epoch_seconds.is_some() {
+            if document.saved_at_epoch_seconds.is_some() && message.role == "user" {
                 return Err(WorkoutSummaryError::Locked);
             }
 
@@ -241,7 +241,9 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                     {
                         Ok(())
                     }
-                    Some(document) if document.saved_at_epoch_seconds.is_some() => {
+                    Some(document)
+                        if document.saved_at_epoch_seconds.is_some() && message.role == "user" =>
+                    {
                         Err(WorkoutSummaryError::Locked)
                     }
                     Some(_) => Err(WorkoutSummaryError::NotFound),

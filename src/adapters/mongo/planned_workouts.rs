@@ -247,7 +247,7 @@ async fn load_projected_workouts(
         .filter(|document| {
             snapshot_start_dates
                 .get(&document.operation_key)
-                .map(|start_date| document.date > *start_date)
+                .map(|start_date| document.date >= *start_date)
                 .unwrap_or(false)
         })
         .map(map_projected_document_to_domain)

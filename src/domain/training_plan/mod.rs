@@ -3,13 +3,18 @@ mod ports;
 mod service;
 
 pub use model::{
-    GeneratedTrainingPlan, TrainingPlanDay, TrainingPlanError, TrainingPlanFailureState,
-    TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation, TrainingPlanProjectedDay,
-    TrainingPlanReplacementResult, TrainingPlanSnapshot,
+    GeneratedTrainingPlan, TrainingPlanConversationMessage, TrainingPlanConversationRole,
+    TrainingPlanDay, TrainingPlanError, TrainingPlanFailureState,
+    TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
+    TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanReplacementResult,
+    TrainingPlanSnapshot,
 };
 pub use ports::{
     BoxFuture, TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
     TrainingPlanProjectionRepository, TrainingPlanSnapshotRepository,
     TrainingPlanWorkoutSummaryPort,
 };
-pub use service::{TrainingPlanGenerationService, TrainingPlanUseCases};
+pub use service::{
+    training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
+    TrainingPlanGenerationService, TrainingPlanUseCases,
+};

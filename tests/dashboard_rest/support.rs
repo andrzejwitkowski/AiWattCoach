@@ -1,9 +1,7 @@
 use std::{
     fs,
     path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
-    sync::{Arc, Mutex, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, OnceLock},
 };
 
 use aiwattcoach::{
@@ -20,8 +18,7 @@ use aiwattcoach::{
 };
 use mongodb::Client;
 
-static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
-static KEPT_FRONTEND_FIXTURES: OnceLock<Mutex<Vec<FrontendFixture>>> = OnceLock::new();
+static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
 
 pub(crate) async fn dashboard_test_app(
     identity_service: impl IdentityUseCases + 'static,
@@ -35,9 +32,7 @@ pub(crate) async fn dashboard_test_app(
     let session_same_site = settings.auth.session.same_site.clone();
     let session_secure = settings.auth.session.secure;
     let session_ttl_hours = settings.auth.session.ttl_hours;
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
     let dashboard_service = Arc::new(TrainingLoadDashboardReadService::new(snapshots));
 
     build_app_with_frontend_dist(
@@ -89,14 +84,13 @@ struct FrontendFixture {
     root: PathBuf,
 }
 
+fn shared_frontend_fixture() -> &'static FrontendFixture {
+    SHARED_FRONTEND_FIXTURE.get_or_init(frontend_fixture)
+}
+
 fn frontend_fixture() -> FrontendFixture {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let counter = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
-        "aiwattcoach-dashboard-spa-fixture-{}-{unique}-{counter}",
+        "aiwattcoach-dashboard-spa-fixture-{}",
         std::process::id()
     ));
     let dist_dir = root.join("dist");
@@ -120,14 +114,6 @@ impl FrontendFixture {
     fn dist_dir(&self) -> PathBuf {
         self.root.join("dist")
     }
-}
-
-fn keep_frontend_fixture(fixture: FrontendFixture) {
-    KEPT_FRONTEND_FIXTURES
-        .get_or_init(|| Mutex::new(Vec::new()))
-        .lock()
-        .unwrap()
-        .push(fixture);
 }
 
 async fn test_mongo_client(uri: &str) -> Client {

@@ -387,7 +387,7 @@ async fn sync_planned_workout_preserves_single_marker_when_updating_existing_eve
         name: Some("Build Session".to_string()),
         category: EventCategory::Workout,
         description: Some("Keep this note\n\n[AIWATTCOACH:pw=ABC123EF45]".to_string()),
-        indoor: false,
+        indoor: true,
         color: Some("blue".to_string()),
         workout_doc: None,
     });
@@ -438,12 +438,22 @@ async fn sync_planned_workout_preserves_single_marker_when_updating_existing_eve
 
     let updated_events = intervals.updated_events();
     assert_eq!(updated_events.len(), 1);
+    assert_eq!(updated_events[0].0, 88);
+    assert_eq!(
+        updated_events[0].1.start_date_local.as_deref(),
+        Some("2026-03-26T00:00:00")
+    );
+    assert_eq!(updated_events[0].1.name.as_deref(), Some("Build Session"));
+    assert_eq!(updated_events[0].1.indoor, Some(true));
+    assert_eq!(updated_events[0].1.color.as_deref(), Some("blue"));
+    assert_eq!(updated_events[0].1.workout_doc, None);
     let description = updated_events[0]
         .1
         .description
         .as_deref()
         .expect("updated description");
     assert!(description.contains("Keep this note"));
+    assert!(description.contains("- 60m 70%"));
     assert_eq!(description.matches("[AIWATTCOACH:pw=").count(), 1);
 }
 

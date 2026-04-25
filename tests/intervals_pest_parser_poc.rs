@@ -6,6 +6,7 @@ use std::{
 use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, Document},
+    options::ClientOptions,
     Client,
 };
 
@@ -20,6 +21,7 @@ use aiwattcoach::{
 };
 
 static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
+const TEST_MONGO_SERVER_SELECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[test]
 fn builds_failed_poc_record() {
@@ -202,19 +204,17 @@ async fn mongo_fixture_or_skip() -> Option<MongoFixture> {
 impl MongoFixture {
     async fn new() -> Result<Self, String> {
         let settings = Settings::test_defaults();
-        let mongo_uri = settings.mongo.uri.clone();
-        let client = Client::with_uri_str(&settings.mongo.uri)
+        let mut options = ClientOptions::parse(&settings.mongo.uri)
             .await
-            .map_err(|error| {
-                format!("failed to create test mongo client for {mongo_uri}: {error}")
-            })?;
-        tokio::time::timeout(
-            Duration::from_secs(1),
-            client.database("admin").run_command(doc! { "ping": 1 }),
-        )
-        .await
-        .map_err(|_| format!("timed out connecting to Mongo at {mongo_uri}"))?
-        .map_err(|error| format!("failed to connect to Mongo at {mongo_uri}: {error}"))?;
+            .map_err(|error| format!("failed to create test mongo client: {error}"))?;
+        options.server_selection_timeout = Some(TEST_MONGO_SERVER_SELECTION_TIMEOUT);
+        let client = Client::with_options(options)
+            .map_err(|error| format!("failed to create test mongo client: {error}"))?;
+        client
+            .database("admin")
+            .run_command(doc! { "ping": 1 })
+            .await
+            .map_err(|error| format!("failed to connect to Mongo: {error}"))?;
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

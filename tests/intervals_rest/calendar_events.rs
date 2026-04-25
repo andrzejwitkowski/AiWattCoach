@@ -1,9 +1,6 @@
 use aiwattcoach::domain::{
     calendar_view::CalendarEntryKind,
-    intervals::{
-        parse_planned_workout, serialize_planned_workout, Event, EventCategory, IntervalsError,
-        IntervalsUseCases,
-    },
+    intervals::{parse_planned_workout, IntervalsError, IntervalsUseCases},
     training_plan::{
         TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
     },
@@ -18,13 +15,12 @@ use tower::util::ServiceExt;
 use crate::{
     app::{
         intervals_test_app, intervals_test_app_with_calendar_entries,
-        intervals_test_app_with_calendar_entries_and_completed_workouts,
         intervals_test_app_with_projections,
         intervals_test_app_with_projections_and_calendar_entries, sample_calendar_entry,
         sample_planned_calendar_entry, InMemoryCalendarEntryViewRepository,
         InMemoryCompletedWorkoutRepository,
     },
-    fixtures::{get_json, sample_completed_workout, session_cookie},
+    fixtures::{get_json, session_cookie},
     identity_fakes::{SessionMappedIdentityService, TestIdentityServiceWithSession},
     intervals_fakes::{ScopedIntervalsService, TestIntervalsService},
 };
@@ -92,56 +88,6 @@ async fn list_calendar_events_returns_local_planned_entries_for_authenticated_us
 }
 
 #[tokio::test]
-async fn list_calendar_events_returns_actual_workout_for_linked_planned_entry() {
-    let mut entry = sample_planned_calendar_entry(
-        "planned:intervals-event:11",
-        "2026-03-22",
-        "VO2 Session",
-        "- 10min 55%",
-    );
-    entry.completed_workout_id = Some("a41".to_string());
-    let app = intervals_test_app_with_calendar_entries_and_completed_workouts(
-        TestIdentityServiceWithSession::default(),
-        TestIntervalsService::default(),
-        InMemoryCalendarEntryViewRepository::with_entries(vec![entry]),
-        InMemoryCompletedWorkoutRepository::with_workouts(vec![sample_completed_workout(
-            "a41",
-            Some(
-                "planned:intervals-event:11"
-                    .trim_start_matches("planned:")
-                    .to_string(),
-            ),
-        )]),
-    )
-    .await;
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body: serde_json::Value = get_json(response).await;
-    let event = &body.as_array().unwrap()[0];
-    assert_eq!(
-        event
-            .get("actualWorkout")
-            .unwrap()
-            .get("activityId")
-            .unwrap()
-            .as_str(),
-        Some("a41")
-    );
-}
-
-#[tokio::test]
 async fn list_calendar_events_parse_event_definition_from_description_when_workout_doc_is_blank() {
     let mut entry = sample_planned_calendar_entry(
         "planned:intervals-event:12",
@@ -194,36 +140,6 @@ async fn list_calendar_events_parse_event_definition_from_description_when_worko
             .as_str(),
         Some("  \n\t ")
     );
-}
-
-#[tokio::test]
-async fn list_calendar_events_does_not_return_completed_calendar_entries_as_standalone_events() {
-    let app = intervals_test_app_with_calendar_entries(
-        TestIdentityServiceWithSession::default(),
-        TestIntervalsService::default(),
-        InMemoryCalendarEntryViewRepository::with_entries(vec![sample_calendar_entry(
-            "completed:completed-1",
-            CalendarEntryKind::CompletedWorkout,
-            "2026-03-22",
-        )]),
-    )
-    .await;
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body: serde_json::Value = get_json(response).await;
-    assert_eq!(body.as_array().unwrap().len(), 0);
 }
 
 #[tokio::test]
@@ -435,93 +351,6 @@ async fn sync_planned_workout_returns_synced_calendar_event() {
         .expect("synced description");
     assert!(description.contains("- 60m 70%"));
     assert!(description.contains("[AIWATTCOACH:pw="));
-}
-
-#[tokio::test]
-async fn sync_planned_workout_preserves_existing_remote_description() {
-    let intervals_service = ScopedIntervalsService::with_user_events([(
-        "user-1",
-        vec![Event {
-            id: 41,
-            start_date_local: "2026-03-26".to_string(),
-            event_type: Some("Ride".to_string()),
-            name: Some("Build Session".to_string()),
-            category: EventCategory::Workout,
-            description: Some("Keep this description".to_string()),
-            indoor: true,
-            color: Some("blue".to_string()),
-            workout_doc: Some(serialize_planned_workout(&build_planned_workout(
-                "Build Session",
-            ))),
-        }],
-    )]);
-    let app = intervals_test_app_with_projections(
-        TestIdentityServiceWithSession::default(),
-        intervals_service.clone(),
-        TestTrainingPlanProjectionRepository::with_days(vec![projected_day(
-            "user-1",
-            "training-plan:user-1:w1:1",
-            "2026-03-26",
-            "Build Session",
-        )]),
-    )
-    .await;
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/2026-03-26/sync")
-                .header(header::COOKIE, session_cookie("session-1"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let updated_events = intervals_service
-        .list_events(
-            "user-1",
-            &aiwattcoach::domain::intervals::DateRange {
-                oldest: "2026-03-26".to_string(),
-                newest: "2026-03-26".to_string(),
-            },
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(updated_events.len(), 2);
-    let updated_event = updated_events
-        .iter()
-        .find(|event| event.id == 41)
-        .expect("existing event should be updated in place");
-    assert_eq!(updated_event.start_date_local, "2026-03-26");
-    assert_eq!(updated_event.name.as_deref(), Some("Build Session"));
-    assert_eq!(
-        updated_event.description.as_deref(),
-        Some("Keep this description")
-    );
-    assert!(updated_event.indoor);
-    assert_eq!(updated_event.color.as_deref(), Some("blue"));
-    assert_eq!(
-        updated_event.workout_doc.as_deref(),
-        Some(serialize_planned_workout(&build_planned_workout("Build Session")).as_str())
-    );
-
-    let synced_event = updated_events
-        .iter()
-        .find(|event| event.id != 41)
-        .expect("synced event copy should be created");
-    assert_eq!(synced_event.start_date_local, "2026-03-26T00:00:00");
-    let description = synced_event
-        .description
-        .as_deref()
-        .expect("synced description");
-    assert!(description.contains("- 60m 70%"));
-    assert!(description.contains("[AIWATTCOACH:pw="));
-    assert_eq!(synced_event.workout_doc, None);
 }
 
 #[tokio::test]

@@ -28,6 +28,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
 
 #[derive(Clone, Default)]
 pub(crate) struct MockServerState {
@@ -46,6 +47,7 @@ pub(crate) struct CapturedRequest {
 pub(crate) struct MockServer {
     pub(crate) base_url: String,
     state: MockServerState,
+    task: JoinHandle<()>,
 }
 
 #[derive(Clone, Default)]
@@ -196,18 +198,25 @@ impl MockServer {
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
 
         Self {
             base_url: format!("http://{address}"),
             state,
+            task,
         }
     }
 
     pub(crate) fn requests(&self) -> Vec<CapturedRequest> {
         self.state.requests.lock().unwrap().clone()
+    }
+}
+
+impl Drop for MockServer {
+    fn drop(&mut self) {
+        self.task.abort();
     }
 }
 

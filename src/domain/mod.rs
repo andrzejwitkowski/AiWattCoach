@@ -15,6 +15,7 @@ pub mod races;
 pub mod return_to;
 pub mod settings;
 pub mod special_days;
+pub mod task_scheduler;
 pub mod training_context;
 pub mod training_load;
 pub mod training_plan;

@@ -7,6 +7,18 @@
 - The purpose of this loop is to reduce repeated PR and review mistakes over time.
 - I must read `reviewers.md` before writing a plan and before starting implementation work.
 
+## PR Conflict Verification
+
+- When resolving PR conflicts, fetch the current base branch ref and test the merge against that exact `origin/<base>` immediately before calling the PR conflict-free. A branch can be clean and synced with its remote head branch while still conflicting if the base branch advanced.
+
+## Signature Change Verification
+
+- When changing a function signature, grep every call site including local `#[cfg(test)]` modules in the same file before calling the refactor done. `cargo clippy --all-targets` compiles test targets too, so a missed unit-test call site will still fail CI even if the runtime code builds.
+
+## Fixture Refactor Verification
+
+- When converting test helpers to a shared fixture strategy, grep for removed helper names as well as the new shared helper. Adjacent test builders often retain one stale call site that only shows up once `--all-targets` compiles that test binary.
+
 ## Backfill Recompute Ranges
 
 - When a backfill or reimport operation can change canonical record dates, I must derive recompute ranges from the refreshed upstream payload, not from the stale local record.
@@ -17,6 +29,18 @@
 - In tests, avoid tuple aliases for multi-field call records when the field meaning matters. Use named structs or named sub-structs so assertions stay self-explanatory.
 - When a function grows past a few distinct phases, split it into small helpers named after each phase instead of leaving one long orchestration block.
 - When a test file grows large, split it by behavior group and extract shared fakes/fixtures into a local `support` module.
+- When a service method starts mixing validation, request building, persistence, orchestration, and result interpretation, split it immediately into small helpers. Long public methods in scheduler/service code are hard to review and hide control-flow bugs.
+- When converting a single-task loop into a concurrent worker pool, keep worker-level state in one shared runtime structure. Per-task copies of active-task state lead to lost heartbeats and flaky concurrency behavior.
+- When a use-case orchestration method starts owning validation, claim/recovery, provider I/O, checkpoint writes, persistence completion, and result hydration all at once, split it into named phase helpers before adding more behavior.
+- Treat function size as a hard clean-code rule: aim to stay at or below about 100 lines of code, and if a function grows past roughly 130 lines, refactor it into smaller logical helpers before continuing. Do not keep adding behavior to oversized functions.
+- When runtime orchestration for a domain workflow needs `tokio` tasks, timers, channels, or shutdown handles, keep the task handler contract in `src/domain` but move the runtime loop and background-task wiring into `src/config` or another adapter/wiring layer. Do not leave runtime-specific loops in domain modules just because the workflow is domain-owned.
+- When a scheduled task wraps another durable operation with its own stale or reclaim timeout, align the scheduler retry delay with that durable reclaim window. Otherwise the wrapper can burn through retries and mark a task dead before the underlying operation is actually recoverable.
+- For scheduler-backed wrappers over durable `claim_pending` operations, automatic retries after worker panics or other scheduler-level failures must wait at least until the stale pending window opens. Retrying sooner can bounce straight back into `already in progress` and turn a recoverable scheduler failure into a terminal task.
+- Do not let `src/domain/**` tests depend on `crate::config` or other composition-root wiring just to start background workers. If domain tests need worker execution, add a domain-owned test helper or exercise the scheduler via domain primitives only.
+- For LLM-backed scheduled tasks, size `execution_timeout_seconds` to the whole attempt path, not just the inner HTTP request timeout. Include any preceding nested LLM calls, context building, and post-provider checkpoint writes when choosing the scheduler timeout budget.
+- If a worker heartbeat persists the full active-task snapshot while other code mutates active-task ids incrementally, hold the same cache lock through persistence and roll back on failure. Otherwise a stale heartbeat can erase active tasks from the worker projection.
+- In recovery-path tests, assert idempotent repository writes, not just the returned result, so duplicate side effects cannot hide behind the same final response.
+- When a scheduled-task success path must serialize a persisted checkpoint, do not swallow serialization failures with `.ok()`. Convert them into explicit task failure so result handlers surface the real cause.
 
 ## Small Review Fixes
 
@@ -35,6 +59,53 @@
 - When review feedback asks to make adapter constants environment-configurable, route the values through the centralized startup settings parser with explicit defaults instead of reading `std::env` inside the adapter.
 - After adding new env-backed settings, update the env key loader, sample env file, and focused settings tests in the same change so the new configuration path is actually exercised.
 
+## OpenCode Plugin Wiring
+
+- When a repo-local OpenCode plugin is configured in `opencode.json`, verify that the plugin file exports the module in the shape expected by the installed plugin API, not just a conveniently named helper like `GraphifyPlugin`.
+- If a repo-level reminder is meant to influence normal code exploration, inject it into session/system context instead of relying only on `bash` command rewriting, because many exploration flows start with `glob`, `grep`, or `read`.
+- If the plugin uses ESM syntax, make the tracked repo state explicitly ESM via a committed `.mjs` path or committed package metadata. Do not rely on ignored local files to make the plugin load cleanly.
+
 ## OAuth Callback Alignment
 
 - For OAuth flows with separate `start` and `callback` endpoints, verify that the configured provider callback URL matches the actual backend router path exactly. Keep the callback route, example env, dev client shortcut, and focused auth/settings tests aligned in the same change.
+
+## Distributed Worker Defaults
+
+- When adding worker registries or claim/lease coordination, decide and document the `worker_id` source explicitly. Prefer stable env- or hostname-based ids when restart recovery should treat a restarted instance as the same logical worker.
+- Before finalizing timeout defaults, compare them against the slowest realistic external operation, especially LLM calls and other long-polling network work.
+- Model restart recovery separately from `timed_out`: if the old owner is gone or restarted and no longer reports the task as active, prefer automatic recovery to a reclaimable queue state instead of forcing manual retry.
+
+## Scheduler Cancellation And Waiters
+
+- If an abort-on-drop helper wraps a `JoinHandle` and also exposes an async `join`, do not `take()` the handle out before `.await`. Await it through `as_mut()` so dropping the wrapper during cancellation still aborts the child task instead of detaching it.
+- If timeout or recovery code publishes in-memory task updates, every producer and waiter must share the same `TaskSchedulerService` instance or clones of it. Reconstructing a fresh service with the same repositories splits `task_waiters` state and breaks notifications.
+- If a Mongo/task mapper validates retry invariants when reading documents back, mirror that validation at the write boundary too so invalid retry strategies cannot be persisted as poison rows.
+- Process-scoped `OnceLock` temp fixtures with deterministic paths should proactively clear stale directories on initialization because `Drop` cleanup will not run at test-binary exit.
+
+## Test Stability Diagnosis
+
+- When diagnosing suite-level `SIGKILL` or memory-pressure failures, never launch multiple heavy `cargo test` targets in parallel. Those runs create artificial contention and make the results non-diagnostic.
+- For flaky test-harness failures, prefer sequential reruns of the exact binary order from the failing suite, then inspect test helpers for leaked servers, background tasks, or retained global fixtures before changing production code.
+- In parallel Rust test binaries, do not assert that a shared global capture registry is completely empty unless the helper truly owns every concurrent capture. Assert that the current test's capture was deregistered instead.
+- Do not reuse `mongodb::Client` or similar async driver clients across separate `#[tokio::test]` runtimes via `OnceLock` or other process-global singletons. A client tied to a runtime that has already shut down can fail later with cancelled-task or runtime-shutdown errors.
+- If this repo's broad Rust suites hit host-level `SIGKILL`s during verification, do not treat that alone as a product failure. Stop parallel test launches, switch to sequential targeted test filters for the touched behavior, and keep `cargo fmt --check`, `cargo clippy -D warnings`, and `bun run verify:arch` as the reliable completion gates.
+- In async scheduler or worker tests, do not make the first assertion depend on eventually written worker-heartbeat projections. First synchronize on an owned signal like `Notify` or on primary task state, then poll the projected worker state without `expect(...)` until it catches up.
+
+## Projection Window Semantics
+
+- If a persisted snapshot exposes `start_date`, `end_date`, and a concrete `days` list, verify whether `start_date` is inclusive before writing bridge readers or tests. Do not silently encode `date > start_date` unless the model explicitly defines `start_date` as an anchor outside the visible plan.
+- When a calendar/read-model row is missing, compare the durable source collection with the first canonical reader that reconstructs domain objects from it before changing refresh or cleanup logic. A missing read-model row can be caused upstream by an over-filtering root adapter, not by the projector itself.
+
+## Integration Test Scope
+
+- Keep REST integration tests for transport-boundary behavior only: auth, user scoping, HTTP status mapping, request parsing/validation, body-size limits, and one simple happy path per endpoint.
+- If a REST test is mostly checking domain decisions, DTO masking, normalization, merge logic, or repository fallback behavior, move that coverage into the relevant unit test module with fakes and delete the duplicate integration case.
+
+## Test Memory Hygiene
+
+- Test helpers must own every spawned background task. If a test starts `tokio::spawn(axum::serve(...))` or similar long-lived async work, keep the `JoinHandle` and abort or shut it down in `Drop`.
+- Global test state must stay bounded. Never keep app fixtures, temp directories, or other per-test resources in an ever-growing `Vec` behind `OnceLock`, `Mutex`, or similar globals.
+- If a test resource is expensive but safe to share and is not tied to a per-test async runtime, prefer a bounded per-binary singleton such as `OnceLock<FrontendFixture>` instead of recreating one instance per test. For async driver clients like `mongodb::Client`, first verify runtime safety; otherwise keep the client scoped to the test runtime.
+- Sharing a client is not the same as sharing mutable data: keep per-test database names and mutable test records isolated even when the underlying client is reused.
+- When a suite starts many HTTP mock servers or websocket apps, centralize that startup in a helper with cleanup semantics instead of open-coded `tokio::spawn` blocks in each test.
+- When a suite gets `SIGKILL` only after many earlier test binaries pass, suspect retained test infrastructure first and inspect the binaries that run immediately before the failure point.

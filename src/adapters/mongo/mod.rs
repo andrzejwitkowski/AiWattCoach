@@ -23,6 +23,8 @@ pub mod races;
 pub mod sessions;
 pub mod settings;
 pub mod special_days;
+pub mod task_workers;
+pub mod tasks;
 mod time;
 pub mod training_load_daily_snapshots;
 pub mod training_plan_generation_operations;

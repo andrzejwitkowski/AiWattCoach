@@ -5,7 +5,8 @@ use crate::domain::workout_summary::WorkoutRecap;
 
 use super::{
     TrainingPlanError, TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanProjectedDay, TrainingPlanReplacementResult, TrainingPlanSnapshot,
+    TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanReplacementResult,
+    TrainingPlanSnapshot,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -75,14 +76,20 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
         workout_id: &str,
         saved_at_epoch_seconds: i64,
         workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
     ) -> BoxFuture<Result<String, TrainingPlanError>>;
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "training plan correction needs workout identity, recap context, planning context, and validation payload together"
+    )]
     fn correct_invalid_days(
         &self,
         user_id: &str,
         workout_id: &str,
         saved_at_epoch_seconds: i64,
         workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
         invalid_day_sections: &str,
         issues: Vec<ValidationIssue>,
     ) -> BoxFuture<Result<String, TrainingPlanError>>;
@@ -95,4 +102,10 @@ pub trait TrainingPlanWorkoutSummaryPort: Send + Sync + 'static {
         workout_id: &str,
         recap: WorkoutRecap,
     ) -> BoxFuture<Result<(), TrainingPlanError>>;
+
+    fn get_planning_context(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> BoxFuture<Result<Option<TrainingPlanPlanningContext>, TrainingPlanError>>;
 }

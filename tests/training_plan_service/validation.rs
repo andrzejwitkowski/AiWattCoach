@@ -46,6 +46,9 @@ async fn correction_round_merges_corrected_days_and_succeeds() {
         vec![Ok(single_rest_day("2026-04-10"))],
         FIRST_DAY,
     );
+    built
+        .workout_summary
+        .set_planning_context(Some(sample_planning_context()));
 
     let result = built
         .service
@@ -60,6 +63,15 @@ async fn correction_round_merges_corrected_days_and_succeeds() {
     assert_eq!(
         correction_inputs[0].0,
         "2026-04-10\nBroken session\n- nope".to_string()
+    );
+    let correction_planning_contexts = built.generator.correction_planning_contexts();
+    assert_eq!(correction_planning_contexts.len(), 1);
+    let correction_planning_context = correction_planning_contexts[0]
+        .as_ref()
+        .expect("expected planning context for correction generation");
+    assert_eq!(
+        correction_planning_context.messages[0].role,
+        TrainingPlanConversationRole::Coach
     );
     assert_eq!(correction_inputs[0].1.len(), 1);
     let corrected_day = result

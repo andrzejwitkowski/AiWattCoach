@@ -132,7 +132,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .filter_map(|day| match day {
                     Ok(day) => snapshot_start_dates
                         .get(&day.operation_key)
-                        .filter(|start_date| day.date > **start_date)
+                        .filter(|start_date| day.date >= **start_date)
                         .map(|_| Ok(day)),
                     Err(error) => Some(Err(error)),
                 })
@@ -173,7 +173,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .into_iter()
                 .map(map_document_to_projected_day)
                 .filter_map(|day| match day {
-                    Ok(day) if day.date > snapshot.start_date => Some(Ok(day)),
+                    Ok(day) if day.date >= snapshot.start_date => Some(Ok(day)),
                     Ok(_) => None,
                     Err(error) => Some(Err(error)),
                 })
@@ -217,7 +217,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .into_iter()
                 .map(map_document_to_projected_day)
                 .filter_map(|day| match day {
-                    Ok(day) if day.date > snapshot.start_date => Some(Ok(day)),
+                    Ok(day) if day.date >= snapshot.start_date => Some(Ok(day)),
                     Ok(_) => None,
                     Err(error) => Some(Err(error)),
                 })

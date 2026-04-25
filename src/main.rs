@@ -47,6 +47,8 @@ use aiwattcoach::{
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
             special_days::MongoSpecialDayRepository,
+            task_workers::MongoTaskWorkerRepository,
+            tasks::MongoTaskRepository,
             training_load_daily_snapshots::MongoTrainingLoadDailySnapshotRepository,
             training_plan_generation_operations::MongoTrainingPlanGenerationOperationRepository,
             training_plan_projections::MongoTrainingPlanProjectionRepository,
@@ -64,8 +66,15 @@ use aiwattcoach::{
         workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
     build_app,
-    config::{spawn_provider_polling_loop, ProviderPollingService, Settings},
-    domain::athlete_summary::AthleteSummaryService,
+    config::{
+        default_task_scheduler_worker_id, spawn_provider_polling_loop,
+        spawn_task_scheduler_maintenance_loop, spawn_task_worker, ProviderPollingService, Settings,
+        TaskSchedulerMaintenanceConfig, TaskSchedulerWorkerConfig,
+    },
+    domain::athlete_summary::{
+        athlete_summary_generate_task_handler, AthleteSummaryService,
+        SchedulerBackedAthleteSummaryService,
+    },
     domain::calendar::CalendarService,
     domain::calendar_labels::CalendarLabelsService,
     domain::calendar_view::CalendarEntryViewRefreshService,
@@ -78,23 +87,27 @@ use aiwattcoach::{
     domain::intervals::IntervalsService,
     domain::races::RaceService,
     domain::settings::UserSettingsService,
+    domain::task_scheduler::{TaskSchedulerService, TaskWorkerConfig},
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
-    domain::training_plan::TrainingPlanGenerationService,
+    domain::training_plan::{
+        training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
+        TrainingPlanGenerationService,
+    },
     domain::wahoo::WahooService,
-    domain::workout_summary::WorkoutSummaryService,
+    domain::workout_summary::{
+        workout_summary_coach_reply_task_handler, SchedulerBackedWorkoutSummaryService,
+        WorkoutSummaryService,
+    },
+    main_runtime::{
+        finish_server_shutdown, reconcile_intervals_poll_states, shutdown_signal,
+        TrainingPlanWorkoutSummaryAdapter,
+    },
     telemetry::setup_telemetry,
     AppState,
 };
 use tokio::net::TcpListener;
 use tracing::info;
-
-mod main_support;
-
-use main_support::{
-    finish_server_shutdown, reconcile_intervals_poll_states, shutdown_signal,
-    TrainingPlanWorkoutSummaryAdapter,
-};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -170,6 +183,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let llm_context_cache_repository =
         MongoLlmContextCacheRepository::new(mongo_client.clone(), &mongo_database);
     llm_context_cache_repository.ensure_indexes().await?;
+    let task_repository = MongoTaskRepository::new(mongo_client.clone(), &mongo_database);
+    task_repository.ensure_indexes().await?;
+    let task_worker_repository =
+        MongoTaskWorkerRepository::new(mongo_client.clone(), &mongo_database);
+    task_worker_repository.ensure_indexes().await?;
+    let shared_task_scheduler = TaskSchedulerService::new(
+        task_repository.clone(),
+        task_worker_repository.clone(),
+        SystemClock,
+    );
     let llm_http_client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .build()?;
@@ -391,7 +414,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             training_plan_projection_repository.clone(),
         )),
     );
-    let athlete_summary_service = Arc::new(AthleteSummaryService::new(
+    let athlete_summary_direct_service = Arc::new(AthleteSummaryService::new(
         athlete_summary_repository,
         athlete_summary_generation_operation_repository,
         AthleteSummaryLlmGenerator::new(
@@ -402,7 +425,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         SystemClock,
     ));
 
-    let workout_summary_service = Arc::new(
+    let workout_summary_direct_service = Arc::new(
         WorkoutSummaryService::with_coach(
             workout_summary_repository.clone(),
             coach_reply_operation_repository.clone(),
@@ -418,7 +441,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
             ),
         )
-        .with_athlete_summary_service(athlete_summary_service.clone())
+        .with_athlete_summary_service(athlete_summary_direct_service.clone())
         .with_settings_service(settings_service.clone())
         .with_completed_workout_target_service(Arc::new(CompletedWorkoutTargetAdapter::new(
             completed_workout_repository.clone(),
@@ -427,7 +450,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             LatestCompletedActivityAdapter::new(completed_workout_repository.clone()),
         )),
     );
-    let training_plan_service = Arc::new(
+    let training_plan_direct_service = Arc::new(
         TrainingPlanGenerationService::new(
             training_plan_snapshot_repository,
             training_plan_projection_repository.clone(),
@@ -438,11 +461,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 training_context_builder.clone(),
                 SystemClock,
             ),
-            TrainingPlanWorkoutSummaryAdapter::new(workout_summary_service.clone()),
+            TrainingPlanWorkoutSummaryAdapter::new(workout_summary_direct_service.clone()),
             SystemClock,
         )
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
+    let training_plan_service = Arc::new(SchedulerBackedTrainingPlanService::new(
+        training_plan_direct_service.clone(),
+        shared_task_scheduler.clone(),
+        UuidIdGenerator,
+    ));
     let race_service = Arc::new(
         RaceService::new(
             race_repository.clone(),
@@ -484,11 +512,37 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_completed_workouts(completed_workout_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
-    let workout_summary_service = Arc::new(
-        (*workout_summary_service)
+    let workout_summary_direct_service = Arc::new(
+        (*workout_summary_direct_service)
             .clone()
-            .with_training_plan_service(training_plan_service),
+            .with_training_plan_service(training_plan_service.clone()),
     );
+    let athlete_summary_service = Arc::new(SchedulerBackedAthleteSummaryService::new(
+        athlete_summary_direct_service.clone(),
+        shared_task_scheduler.clone(),
+        UuidIdGenerator,
+    ));
+    let workout_summary_task_worker = spawn_task_worker(
+        shared_task_scheduler.clone(),
+        format!("{}-workout-summary", default_task_scheduler_worker_id()),
+        TaskWorkerConfig {
+            is_leader: false,
+            lease_duration_seconds: 30,
+            heartbeat_interval: Duration::from_secs(10),
+            idle_poll_interval: Duration::from_millis(100),
+            max_concurrency: 4,
+        },
+        vec![
+            workout_summary_coach_reply_task_handler(workout_summary_direct_service.clone()),
+            athlete_summary_generate_task_handler(athlete_summary_direct_service.clone()),
+            training_plan_generate_task_handler(training_plan_direct_service),
+        ],
+    )?;
+    let workout_summary_service = Arc::new(SchedulerBackedWorkoutSummaryService::new(
+        workout_summary_direct_service,
+        shared_task_scheduler.clone(),
+        UuidIdGenerator,
+    ));
 
     let intervals_connection_tester = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
@@ -525,7 +579,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
     let app = build_app(app_state);
     let listener = TcpListener::bind(address).await?;
-    spawn_provider_polling_loop(provider_polling_service);
+    let provider_polling_loop = spawn_provider_polling_loop(provider_polling_service);
+    // Prefer a stable worker id from env or container hostname so a process restart can be
+    // recognized as the same logical worker. If neither exists, fall back to a per-process id.
+    let task_scheduler_maintenance_loop = spawn_task_scheduler_maintenance_loop(
+        shared_task_scheduler.clone(),
+        TaskSchedulerWorkerConfig::new(default_task_scheduler_worker_id(), false, Vec::new()),
+        TaskSchedulerMaintenanceConfig::default(),
+    )?;
 
     let serve_result = axum::serve(
         listener,
@@ -533,11 +594,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )
     .with_graceful_shutdown(shutdown_signal())
     .await;
+    workout_summary_task_worker.shutdown().await;
+    provider_polling_loop.shutdown().await;
+    task_scheduler_maintenance_loop.shutdown().await;
     let telemetry_shutdown_result = telemetry.shutdown();
 
     finish_server_shutdown(serve_result, telemetry_shutdown_result)
 }
-
-#[cfg(test)]
-#[path = "main_tests.rs"]
-mod tests;

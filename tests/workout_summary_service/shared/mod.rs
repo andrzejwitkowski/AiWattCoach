@@ -27,6 +27,7 @@ mod identity;
 mod reply_operations;
 mod services;
 mod summary_repository;
+mod training_plan_scheduler;
 
 pub(crate) use identity::{TestClock, TestIdGenerator};
 pub(crate) use reply_operations::InMemoryCoachReplyOperationRepository;
@@ -41,3 +42,4 @@ pub(crate) use services::{
     RefreshingTrainingPlanService, StubAthleteSummaryService, TestAvailabilitySettingsService,
 };
 pub(crate) use summary_repository::InMemoryWorkoutSummaryRepository;
+pub(crate) use training_plan_scheduler::scheduler_backed_training_plan_service;

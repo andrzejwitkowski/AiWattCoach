@@ -1,5 +1,6 @@
 mod correction;
 mod parsing;
+mod scheduler;
 mod snapshot;
 
 use chrono::{TimeZone, Utc};
@@ -16,10 +17,14 @@ use crate::domain::{
 use super::{
     BoxFuture, GeneratedTrainingPlan, TrainingPlanDay, TrainingPlanError,
     TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanGenerationOperationRepository, TrainingPlanGenerator,
+    TrainingPlanGenerationOperationRepository, TrainingPlanGenerator, TrainingPlanPlanningContext,
     TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
     TrainingPlanWorkoutSummaryPort,
 };
+
+pub use scheduler::{training_plan_generate_task_handler, SchedulerBackedTrainingPlanService};
+
+const TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
 
 pub trait TrainingPlanUseCases: Send + Sync {
     fn generate_recap_for_saved_workout(
@@ -152,7 +157,6 @@ where
     Time: Clock + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
-    const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
     const SNAPSHOT_DAY_COUNT: usize = 14;
     const MAX_CORRECTION_ATTEMPTS: usize = 2;
 
@@ -166,7 +170,7 @@ where
     }
 
     fn stale_pending_before_epoch_seconds(&self) -> i64 {
-        self.clock.now_epoch_seconds() - Self::STALE_PENDING_TIMEOUT_SECONDS
+        self.clock.now_epoch_seconds() - TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS
     }
 
     fn today_string(&self) -> String {
@@ -270,6 +274,24 @@ where
                     )
                 })?,
         ))
+    }
+
+    async fn ensure_planning_context_loaded(
+        &self,
+        planning_context: &mut Option<TrainingPlanPlanningContext>,
+        planning_context_loaded: &mut bool,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Result<(), TrainingPlanError> {
+        if !*planning_context_loaded {
+            *planning_context = self
+                .workout_summary
+                .get_planning_context(user_id, workout_id)
+                .await?;
+            *planning_context_loaded = true;
+        }
+
+        Ok(())
     }
 
     async fn persist_projection(
@@ -476,10 +498,30 @@ where
                 recap
             };
 
+            let mut planning_context = None;
+            let mut planning_context_loaded = false;
             let raw_plan_response =
                 if let Some(raw_plan_response) = operation.raw_plan_response.clone() {
                     raw_plan_response
                 } else {
+                    if let Err(error) = service
+                        .ensure_planning_context_loaded(
+                            &mut planning_context,
+                            &mut planning_context_loaded,
+                            &user_id,
+                            &workout_id,
+                        )
+                        .await
+                    {
+                        return Err(service
+                            .fail_operation(
+                                &operation,
+                                WorkflowPhase::InitialGeneration,
+                                error,
+                                operation.validation_issues.clone(),
+                            )
+                            .await?);
+                    }
                     let raw_plan_response = match service
                         .generator
                         .generate_initial_plan_window(
@@ -487,6 +529,7 @@ where
                             &workout_id,
                             saved_at_epoch_seconds,
                             &recap,
+                            planning_context.as_ref(),
                         )
                         .await
                     {
@@ -614,6 +657,24 @@ where
                         break;
                     }
 
+                    if let Err(error) = service
+                        .ensure_planning_context_loaded(
+                            &mut planning_context,
+                            &mut planning_context_loaded,
+                            &user_id,
+                            &workout_id,
+                        )
+                        .await
+                    {
+                        return Err(service
+                            .fail_operation(
+                                &operation,
+                                WorkflowPhase::Correction,
+                                error,
+                                operation.validation_issues.clone(),
+                            )
+                            .await?);
+                    }
                     let correction_response = match service
                         .generator
                         .correct_invalid_days(
@@ -621,6 +682,7 @@ where
                             &workout_id,
                             saved_at_epoch_seconds,
                             &recap,
+                            planning_context.as_ref(),
                             &invalid_day_sections.join("\n\n"),
                             issues.clone(),
                         )
