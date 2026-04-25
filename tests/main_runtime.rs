@@ -279,30 +279,16 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
         .upsert(ProviderPollState::new(
             "connected-user".to_string(),
             ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-            111,
+            ProviderPollStream::CompletedWorkouts,
+            1_700_000_000,
         ))
-        .await
-        .unwrap();
-    poll_states
-        .upsert(ProviderPollState {
-            user_id: "connected-user".to_string(),
-            provider: ExternalProvider::Intervals,
-            stream: ProviderPollStream::CompletedWorkouts,
-            cursor: Some("2099-01-01".to_string()),
-            next_due_at_epoch_seconds: i64::MAX,
-            last_attempted_at_epoch_seconds: Some(0),
-            last_successful_at_epoch_seconds: Some(0),
-            last_error: Some("stale credentials".to_string()),
-            backoff_until_epoch_seconds: Some(999),
-        })
         .await
         .unwrap();
     poll_states
         .upsert(ProviderPollState {
             user_id: "disconnected-user".to_string(),
             provider: ExternalProvider::Intervals,
-            stream: ProviderPollStream::Calendar,
+            stream: ProviderPollStream::CompletedWorkouts,
             cursor: Some("2026-04-01".to_string()),
             next_due_at_epoch_seconds: 1,
             last_attempted_at_epoch_seconds: Some(1),
@@ -321,18 +307,6 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
     .await
     .unwrap();
 
-    let connected_calendar = poll_states
-        .find_by_provider_and_stream(
-            "connected-user",
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-        )
-        .await
-        .unwrap()
-        .expect("connected user calendar state should exist");
-    assert_eq!(connected_calendar.next_due_at_epoch_seconds, 111);
-    assert_eq!(connected_calendar.cursor, None);
-
     let connected_completed = poll_states
         .find_by_provider_and_stream(
             "connected-user",
@@ -347,17 +321,6 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
     assert_eq!(connected_completed.last_error, None);
     assert_eq!(connected_completed.backoff_until_epoch_seconds, None);
 
-    let legacy_calendar = poll_states
-        .find_by_provider_and_stream(
-            "legacy-user",
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-        )
-        .await
-        .unwrap()
-        .expect("legacy user calendar state should be seeded");
-    assert_eq!(legacy_calendar.next_due_at_epoch_seconds, 1_700_000_000);
-
     let legacy_completed = poll_states
         .find_by_provider_and_stream(
             "legacy-user",
@@ -369,19 +332,29 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
         .expect("legacy user completed state should be seeded");
     assert_eq!(legacy_completed.next_due_at_epoch_seconds, 1_700_000_000);
 
-    let disconnected_calendar = poll_states
+    assert!(poll_states
         .find_by_provider_and_stream(
-            "disconnected-user",
+            "legacy-user",
             ExternalProvider::Intervals,
             ProviderPollStream::Calendar,
         )
         .await
         .unwrap()
-        .expect("disconnected user calendar state should still exist");
-    assert_eq!(disconnected_calendar.next_due_at_epoch_seconds, i64::MAX);
-    assert_eq!(disconnected_calendar.cursor, None);
-    assert_eq!(disconnected_calendar.last_error, None);
-    assert_eq!(disconnected_calendar.backoff_until_epoch_seconds, None);
+        .is_none());
+
+    let disconnected_completed = poll_states
+        .find_by_provider_and_stream(
+            "disconnected-user",
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+        )
+        .await
+        .unwrap()
+        .expect("disconnected user completed state should still exist");
+    assert_eq!(disconnected_completed.next_due_at_epoch_seconds, i64::MAX);
+    assert_eq!(disconnected_completed.cursor, None);
+    assert_eq!(disconnected_completed.last_error, None);
+    assert_eq!(disconnected_completed.backoff_until_epoch_seconds, None);
 
     let _ = client.database(&database_name).drop().await;
 }

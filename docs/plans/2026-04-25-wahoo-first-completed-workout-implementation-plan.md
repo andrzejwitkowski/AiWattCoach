@@ -31,7 +31,7 @@
 - Keep Wahoo provider DTOs inside `src/adapters/wahoo/**` and map them to canonical internal models at the adapter boundary.
 - Use canonical completed-workout ids shaped as `wahoo-workout:<remote_id>`.
 - Store the raw Wahoo workout id in `CompletedWorkout.source_activity_id` so existing calendar and completed-workout detail navigation can keep resolving by activity id.
-- Mark phase-1 Wahoo imports with `details_unavailable_reason = "wahoo_fit_pending"`.
+- Mark phase-1 Wahoo imports with a user-facing `details_unavailable_reason` such as `"Detailed Wahoo workout data is still being processed. Please check back soon."`.
 - Implement authoritative business filtering in shared read wrappers, not only in `calendar_view`, because `training_load`, `training_context`, `workout_summary`, and other readers also read canonical repositories directly.
 - Add `wahoo.updated_at_epoch_seconds` to settings so Wahoo poll reset logic does not get coupled to unrelated settings edits.
 - Prefer external-import metadata to distinguish legacy externally imported entities from app-owned entities. Do not treat `planned_workout_syncs` as proof of external ownership because local push uses that path.
@@ -112,7 +112,7 @@
 - Set `source_activity_id` to the raw Wahoo workout id.
 - Carry summary-level fields such as duration, distance, average power, cadence, normalized power, and TSS when the Wahoo summary exposes them.
 - Store any raw file-download pointer only where it is needed for phase 2; do not leak provider DTOs into canonical models.
-- Set `details_unavailable_reason = "wahoo_fit_pending"` until phase-2 enrichment succeeds.
+- Set `details_unavailable_reason` to the same user-facing pending-processing message until phase-2 enrichment succeeds.
 - Let `ExternalImportService` keep owning canonical persistence, observations, sync-state updates, and best-effort calendar refresh.
 
 **Done when:**
@@ -177,6 +177,9 @@
 - Remove or bypass `UpsertPlannedWorkout`, `UpsertRace`, and `UpsertSpecialDay` from the external polling flow.
 - Keep Intervals and Wahoo external polling for completed workouts only.
 - Decide explicitly how to hide or clean up historical externally imported races and special days so they do not continue to appear as if they were app-owned.
+- Default to visibility-only cleanup first: keep the canonical rows for auditability and rollback, but hide historical externally imported races and special days through authoritative wrappers backed by external-import metadata.
+- Consider hard delete or migration only if retained hidden rows create real product confusion, storage pressure, or policy issues.
+- If a stronger cleanup path is chosen later, document the migration, rollback path, and how to preserve enough provenance to restore the old behavior safely.
 
 **Done when:**
 - external providers no longer create or refresh canonical planned workouts, races, or special days
@@ -290,7 +293,17 @@
 - task retry after transient download failure
 - task retry after parse failure with stored raw FIT preserved
 - repeated task execution remains idempotent
-- enriched completed workout replaces `wahoo_fit_pending` with real details
+- enriched completed workout replaces the temporary Wahoo processing message with real details
+
+## Operational Safety
+
+- Rollback:
+- keep the Wahoo-first behavior isolated to the authoritative wrapper wiring and Wahoo polling branch so rollback is a small code revert or wiring revert, not a storage migration.
+- if production behavior is wrong, first disable Wahoo poll bootstrap / runtime wiring and switch readers back to the canonical repositories before considering any data cleanup.
+- Observability:
+- log Wahoo poll attempts, successes, failures, cursor updates, and partial-import recompute fallbacks with `user_id`, provider, stream, and workout identifiers where available.
+- log FIT enrichment stage transitions and failures with `user_id`, `completed_workout_id`, and `wahoo_workout_id`.
+- during rollout, watch for enrichment backlog growth, repeated parse/download failures, and unexpected spikes in hidden-workout behavior on Wahoo-authoritative days.
 
 ## Final Verification
 

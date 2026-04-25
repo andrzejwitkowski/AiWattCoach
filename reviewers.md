@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-25 | user | Wahoo review follow-up and polling regression cleanup
+
+- Problem: the follow-up Wahoo review patch still had a compile-risky delegation cleanup in `src/adapters/wahoo/adapter.rs` and the in-progress `ProviderPollingService` edits had accidentally dropped Intervals calendar event imports while wiring the new Wahoo completed-workout path, which would have advanced the calendar cursor without importing planned workouts, races, or special days.
+- Fix: kept the Wahoo adapter delegation cleanup but moved the shared `delegate!` macro into a valid scope for the impls, restored the Intervals calendar import loop with the existing `map_event_to_import_command(...)` behavior, and updated the calendar polling regression to assert import plus cursor advancement instead of the accidental no-import behavior.
+- Prevention: when touching shared polling code for one provider, reread the full existing code path for neighboring streams before sending the patch; for review cleanups that introduce macros, compile-check their definition scope immediately so a style refactor does not turn into a build break or a behavior regression.
+
 ### 2026-04-25 | user | OpenCode Graphify plugin activation
 
 - Problem: the repo already had `graphify-out/` artifacts and a repo-local OpenCode plugin path in `opencode.json`, but the plugin file exported only `GraphifyPlugin` and relied on prepending `echo` to `bash` commands. That made the integration brittle and easy to miss in normal search-driven sessions that start with `glob`, `grep`, or `read` instead of `bash`, and a plain `.js` module shape would still depend on local Node module-mode heuristics.

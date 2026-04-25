@@ -6,7 +6,10 @@ use crate::domain::{
         CalendarProjectedWorkout, PlannedWorkoutSyncStatus,
     },
     calendar_view::{CalendarEntryKind, CalendarEntryView},
-    completed_workouts::{CompletedWorkout, CompletedWorkoutSeries, CompletedWorkoutStream},
+    completed_workouts::{
+        completed_workout_activity_id, CompletedWorkout, CompletedWorkoutSeries,
+        CompletedWorkoutStream,
+    },
     intervals::{ActualWorkoutMatch, DateRange, MatchedWorkoutInterval},
 };
 
@@ -271,9 +274,7 @@ fn float_series_values(series: &CompletedWorkoutSeries) -> Vec<f64> {
 }
 
 fn legacy_activity_id(completed_workout_id: &str) -> &str {
-    completed_workout_id
-        .strip_prefix("intervals-activity:")
-        .unwrap_or(completed_workout_id)
+    completed_workout_activity_id(completed_workout_id)
 }
 
 fn parse_projected_workout(

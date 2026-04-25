@@ -154,43 +154,90 @@ pub async fn reconcile_intervals_poll_states(
         .list_intervals_poll_bootstrap_users(&existing_intervals_user_ids)
         .await?
     {
-        for stream in [
-            ProviderPollStream::Calendar,
-            ProviderPollStream::CompletedWorkouts,
-        ] {
-            let existing = poll_states
-                .find_by_provider_and_stream(
-                    &user.user_id,
-                    ExternalProvider::Intervals,
-                    stream.clone(),
-                )
-                .await?;
+        let existing = poll_states
+            .find_by_provider_and_stream(
+                &user.user_id,
+                ExternalProvider::Intervals,
+                ProviderPollStream::CompletedWorkouts,
+            )
+            .await?;
 
-            if !user.desired_active {
-                if let Some(state) = existing {
-                    poll_states
-                        .upsert(ProviderPollState {
-                            next_due_at_epoch_seconds: i64::MAX,
-                            cursor: None,
-                            backoff_until_epoch_seconds: None,
-                            last_error: None,
-                            ..state
-                        })
-                        .await?;
-                }
-                continue;
-            }
-
-            if should_reset_poll_state(existing.as_ref(), user.intervals_updated_at_epoch_seconds) {
+        if !user.desired_active {
+            if let Some(state) = existing {
                 poll_states
-                    .upsert(ProviderPollState::new(
-                        user.user_id.clone(),
-                        ExternalProvider::Intervals,
-                        stream,
-                        now_epoch_seconds,
-                    ))
+                    .upsert(ProviderPollState {
+                        next_due_at_epoch_seconds: i64::MAX,
+                        cursor: None,
+                        backoff_until_epoch_seconds: None,
+                        last_error: None,
+                        ..state
+                    })
                     .await?;
             }
+            continue;
+        }
+
+        if should_reset_poll_state(existing.as_ref(), user.intervals_updated_at_epoch_seconds) {
+            poll_states
+                .upsert(ProviderPollState::new(
+                    user.user_id.clone(),
+                    ExternalProvider::Intervals,
+                    ProviderPollStream::CompletedWorkouts,
+                    now_epoch_seconds,
+                ))
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn reconcile_wahoo_poll_states(
+    settings_repository: &MongoUserSettingsRepository,
+    poll_states: &MongoProviderPollStateRepository,
+    clock: &impl Clock,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let now_epoch_seconds = clock.now_epoch_seconds();
+    let existing_wahoo_user_ids = poll_states
+        .list_user_ids_for_provider(ExternalProvider::Wahoo)
+        .await?;
+
+    for user in settings_repository
+        .list_wahoo_poll_bootstrap_users(&existing_wahoo_user_ids)
+        .await?
+    {
+        let existing = poll_states
+            .find_by_provider_and_stream(
+                &user.user_id,
+                ExternalProvider::Wahoo,
+                ProviderPollStream::CompletedWorkouts,
+            )
+            .await?;
+
+        if !user.desired_active {
+            if let Some(state) = existing {
+                poll_states
+                    .upsert(ProviderPollState {
+                        next_due_at_epoch_seconds: i64::MAX,
+                        cursor: None,
+                        backoff_until_epoch_seconds: None,
+                        last_error: None,
+                        ..state
+                    })
+                    .await?;
+            }
+            continue;
+        }
+
+        if should_reset_poll_state(existing.as_ref(), user.wahoo_updated_at_epoch_seconds) {
+            poll_states
+                .upsert(ProviderPollState::new(
+                    user.user_id.clone(),
+                    ExternalProvider::Wahoo,
+                    ProviderPollStream::CompletedWorkouts,
+                    now_epoch_seconds,
+                ))
+                .await?;
         }
     }
 

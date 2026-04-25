@@ -4,8 +4,8 @@ use std::{
 };
 
 use super::{
-    WahooConnectState, WahooConnectStateRepository, WahooError, WahooOAuthPort, WahooService,
-    WahooToken, WahooUseCases,
+    WahooApiPort, WahooConnectState, WahooConnectStateRepository, WahooError, WahooOAuthPort,
+    WahooService, WahooToken, WahooUseCases, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
 };
 use crate::domain::{
     identity::{Clock, IdGenerator},
@@ -179,6 +179,49 @@ impl WahooOAuthPort for TestOAuth {
                 expires_at_epoch_seconds: 1_800,
             })
         })
+    }
+}
+
+impl WahooApiPort for TestOAuth {
+    fn list_workouts(
+        &self,
+        _access_token: &str,
+        _page: usize,
+        _per_page: usize,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        Box::pin(async {
+            Ok(WahooWorkoutList {
+                workouts: Vec::new(),
+                total: 0,
+                page: 1,
+                per_page: 100,
+                order: None,
+                sort: None,
+            })
+        })
+    }
+
+    fn get_workout(
+        &self,
+        _access_token: &str,
+        _workout_id: i64,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotFound) })
+    }
+
+    fn get_workout_summary(
+        &self,
+        _access_token: &str,
+        _workout_id: i64,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn download_workout_file(
+        &self,
+        _file_url: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Vec<u8>, WahooError>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 }
 

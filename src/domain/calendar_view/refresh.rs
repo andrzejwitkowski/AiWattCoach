@@ -103,6 +103,7 @@ pub struct CalendarEntryViewRefreshService<
     Races,
     SpecialDays,
     SyncStates,
+    CleanupPlanned = Planned,
     PlannedCompletedLinks = NoopPlannedCompletedWorkoutLinkRepository,
 > where
     Views: CalendarEntryViewRepository + Clone,
@@ -112,10 +113,12 @@ pub struct CalendarEntryViewRefreshService<
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
+    CleanupPlanned: PlannedWorkoutRepository + Clone,
     PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
 {
     views: Views,
     planned_workouts: Planned,
+    cleanup_planned_workouts: CleanupPlanned,
     planned_workout_syncs: PlannedSyncs,
     completed_workouts: Completed,
     races: Races,
@@ -133,6 +136,7 @@ impl<Views, Planned, PlannedSyncs, Completed, Races, SpecialDays, SyncStates>
         Races,
         SpecialDays,
         SyncStates,
+        Planned,
         NoopPlannedCompletedWorkoutLinkRepository,
     >
 where
@@ -155,6 +159,7 @@ where
     ) -> Self {
         Self {
             views,
+            cleanup_planned_workouts: planned_workouts.clone(),
             planned_workouts,
             planned_workout_syncs,
             completed_workouts,
@@ -174,6 +179,7 @@ impl<
         Races,
         SpecialDays,
         SyncStates,
+        CleanupPlanned,
         PlannedCompletedLinks,
     >
     CalendarEntryViewRefreshService<
@@ -184,6 +190,7 @@ impl<
         Races,
         SpecialDays,
         SyncStates,
+        CleanupPlanned,
         PlannedCompletedLinks,
     >
 where
@@ -194,8 +201,39 @@ where
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
+    CleanupPlanned: PlannedWorkoutRepository + Clone,
     PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
 {
+    pub fn with_cleanup_planned_workouts<NewCleanupPlanned>(
+        self,
+        cleanup_planned_workouts: NewCleanupPlanned,
+    ) -> CalendarEntryViewRefreshService<
+        Views,
+        Planned,
+        PlannedSyncs,
+        Completed,
+        Races,
+        SpecialDays,
+        SyncStates,
+        NewCleanupPlanned,
+        PlannedCompletedLinks,
+    >
+    where
+        NewCleanupPlanned: PlannedWorkoutRepository + Clone,
+    {
+        CalendarEntryViewRefreshService {
+            views: self.views,
+            planned_workouts: self.planned_workouts,
+            cleanup_planned_workouts,
+            planned_workout_syncs: self.planned_workout_syncs,
+            completed_workouts: self.completed_workouts,
+            races: self.races,
+            special_days: self.special_days,
+            sync_states: self.sync_states,
+            planned_completed_links: self.planned_completed_links,
+        }
+    }
+
     pub fn with_planned_completed_links<NewPlannedCompletedLinks>(
         self,
         planned_completed_links: NewPlannedCompletedLinks,
@@ -207,6 +245,7 @@ where
         Races,
         SpecialDays,
         SyncStates,
+        CleanupPlanned,
         NewPlannedCompletedLinks,
     >
     where
@@ -215,6 +254,7 @@ where
         CalendarEntryViewRefreshService {
             views: self.views,
             planned_workouts: self.planned_workouts,
+            cleanup_planned_workouts: self.cleanup_planned_workouts,
             planned_workout_syncs: self.planned_workout_syncs,
             completed_workouts: self.completed_workouts,
             races: self.races,
@@ -233,6 +273,7 @@ impl<
         Races,
         SpecialDays,
         SyncStates,
+        CleanupPlanned,
         PlannedCompletedLinks,
     > CalendarEntryViewRefreshPort
     for CalendarEntryViewRefreshService<
@@ -243,6 +284,7 @@ impl<
         Races,
         SpecialDays,
         SyncStates,
+        CleanupPlanned,
         PlannedCompletedLinks,
     >
 where
@@ -253,6 +295,7 @@ where
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
+    CleanupPlanned: PlannedWorkoutRepository + Clone,
     PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
 {
     fn refresh_range_for_user(
@@ -263,6 +306,7 @@ where
     ) -> BoxFuture<Result<Vec<CalendarEntryView>, CalendarEntryViewError>> {
         let views = self.views.clone();
         let planned_workouts = self.planned_workouts.clone();
+        let cleanup_planned_workouts = self.cleanup_planned_workouts.clone();
         let planned_workout_syncs = self.planned_workout_syncs.clone();
         let completed_workouts = self.completed_workouts.clone();
         let races = self.races.clone();
@@ -273,7 +317,7 @@ where
         let oldest = oldest.to_string();
         let newest = newest.to_string();
         Box::pin(async move {
-            let all_planned_ids = planned_workouts
+            let all_planned_ids = cleanup_planned_workouts
                 .list_by_user_id(&user_id)
                 .await
                 .map_err(map_planned_error)?

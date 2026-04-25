@@ -33,5 +33,6 @@ mod training_plan_shared;
 pub mod training_plan_snapshots;
 pub mod users;
 pub mod wahoo_connect_state;
+pub mod wahoo_fit_files;
 pub mod whitelist;
 pub mod workout_summary;

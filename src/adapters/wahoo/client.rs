@@ -8,9 +8,17 @@ use sha2::Digest as _;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
-    adapters::wahoo::dto::WahooTokenResponse,
-    domain::wahoo::{BoxFuture, WahooError, WahooOAuthPort, WahooToken},
+    adapters::wahoo::dto::{
+        WahooFileReferenceResponse, WahooTokenResponse, WahooWorkoutListResponse,
+        WahooWorkoutResponse, WahooWorkoutSummaryResponse,
+    },
+    domain::wahoo::{
+        BoxFuture, WahooApiPort, WahooError, WahooFileReference, WahooOAuthPort, WahooToken,
+        WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+    },
 };
+
+const DEFAULT_BASE_URL: &str = "https://api.wahooligan.com";
 
 #[derive(Clone)]
 pub struct WahooOAuthClient {
@@ -21,6 +29,7 @@ pub struct WahooOAuthClient {
     authorize_url: String,
     token_url: String,
     scope: String,
+    base_url: String,
 }
 
 impl WahooOAuthClient {
@@ -41,7 +50,13 @@ impl WahooOAuthClient {
             authorize_url: authorize_url.into(),
             token_url: token_url.into(),
             scope: scope.into(),
+            base_url: DEFAULT_BASE_URL.to_string(),
         }
+    }
+
+    pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.base_url = base_url.into().trim_end_matches('/').to_string();
+        self
     }
 
     fn with_trace_context(request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
@@ -84,6 +99,97 @@ impl WahooOAuthClient {
             refresh_token: payload.refresh_token,
             expires_at_epoch_seconds: now.saturating_add(payload.expires_in),
         })
+    }
+
+    fn api_url(&self, path: &str) -> String {
+        format!("{}{path}", self.base_url)
+    }
+
+    fn bearer_request(&self, url: String, access_token: &str) -> reqwest::RequestBuilder {
+        Self::with_trace_context(self.client.get(url).bearer_auth(access_token))
+    }
+
+    async fn decode_json<T>(response: logging::LoggedResponse) -> Result<T, WahooError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        serde_json::from_slice(&response.body)
+            .map_err(|error| WahooError::External(error.to_string()))
+    }
+
+    async fn execute_api_get<T>(&self, request: reqwest::RequestBuilder) -> Result<T, WahooError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let response = logging::execute_and_log_no_body(&self.client, request)
+            .await
+            .map_err(|error| WahooError::External(error.to_string()))?;
+        match response.status {
+            status if status.is_success() => Self::decode_json(response).await,
+            reqwest::StatusCode::NOT_FOUND => Err(WahooError::NotFound),
+            status => Err(WahooError::External(format!(
+                "Wahoo API request failed with status {} ({})",
+                status,
+                summarize_error_body(&response.body)
+            ))),
+        }
+    }
+}
+
+fn map_file_reference(file: Option<WahooFileReferenceResponse>) -> Option<WahooFileReference> {
+    let url = file?.url?.trim().to_string();
+    if url.is_empty() {
+        None
+    } else {
+        Some(WahooFileReference { url })
+    }
+}
+
+fn parse_optional_decimal(value: Option<String>) -> Option<f64> {
+    value?.trim().parse().ok()
+}
+
+fn map_workout_summary(summary: WahooWorkoutSummaryResponse) -> WahooWorkoutSummary {
+    WahooWorkoutSummary {
+        id: summary.id,
+        name: summary.name,
+        ascent_meters: parse_optional_decimal(summary.ascent_accum),
+        cadence_avg_rpm: parse_optional_decimal(summary.cadence_avg),
+        calories: parse_optional_decimal(summary.calories_accum),
+        distance_meters: parse_optional_decimal(summary.distance_accum),
+        duration_active_seconds: parse_optional_decimal(summary.duration_active_accum),
+        duration_paused_seconds: parse_optional_decimal(summary.duration_paused_accum),
+        duration_total_seconds: parse_optional_decimal(summary.duration_total_accum),
+        heart_rate_avg_bpm: parse_optional_decimal(summary.heart_rate_avg),
+        normalized_power_watts: parse_optional_decimal(summary.power_bike_np_last),
+        training_stress_score: parse_optional_decimal(summary.power_bike_tss_last),
+        average_power_watts: parse_optional_decimal(summary.power_avg),
+        speed_avg_mps: parse_optional_decimal(summary.speed_avg),
+        total_work_joules: parse_optional_decimal(summary.work_accum),
+        time_zone: summary.time_zone,
+        manual: summary.manual,
+        edited: summary.edited,
+        fitness_app_id: summary.fitness_app_id,
+        file: map_file_reference(summary.file),
+        created_at: summary.created_at,
+        updated_at: summary.updated_at,
+    }
+}
+
+fn map_workout(workout: WahooWorkoutResponse) -> WahooWorkout {
+    WahooWorkout {
+        id: workout.id,
+        starts: workout.starts,
+        minutes: workout.minutes,
+        name: workout.name,
+        plan_id: workout.plan_id,
+        plan_ids: workout.plan_ids,
+        route_id: workout.route_id,
+        workout_token: workout.workout_token,
+        workout_type_id: workout.workout_type_id,
+        workout_summary: workout.workout_summary.map(map_workout_summary),
+        created_at: workout.created_at,
+        updated_at: workout.updated_at,
     }
 }
 
@@ -205,6 +311,95 @@ impl WahooOAuthPort for WahooOAuthClient {
                 ],
             )
             .await
+        })
+    }
+}
+
+impl WahooApiPort for WahooOAuthClient {
+    fn list_workouts(
+        &self,
+        access_token: &str,
+        page: usize,
+        per_page: usize,
+    ) -> BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            let mut url = reqwest::Url::parse(&client.api_url("/v1/workouts"))
+                .map_err(|error| WahooError::External(error.to_string()))?;
+            url.query_pairs_mut()
+                .append_pair("page", &page.to_string())
+                .append_pair("per_page", &per_page.to_string());
+            let payload: WahooWorkoutListResponse = client
+                .execute_api_get(client.bearer_request(url.to_string(), &access_token))
+                .await?;
+
+            Ok(WahooWorkoutList {
+                workouts: payload.workouts.into_iter().map(map_workout).collect(),
+                total: payload.total.unwrap_or_default(),
+                page: payload.page.unwrap_or(page),
+                per_page: payload.per_page.unwrap_or(per_page),
+                order: payload.order,
+                sort: payload.sort,
+            })
+        })
+    }
+
+    fn get_workout(
+        &self,
+        access_token: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            let payload: WahooWorkoutResponse = client
+                .execute_api_get(client.bearer_request(
+                    client.api_url(&format!("/v1/workouts/{workout_id}")),
+                    &access_token,
+                ))
+                .await?;
+            Ok(map_workout(payload))
+        })
+    }
+
+    fn get_workout_summary(
+        &self,
+        access_token: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            match client
+                .execute_api_get::<WahooWorkoutSummaryResponse>(client.bearer_request(
+                    client.api_url(&format!("/v1/workouts/{workout_id}/workout_summary")),
+                    &access_token,
+                ))
+                .await
+            {
+                Ok(summary) => Ok(Some(map_workout_summary(summary))),
+                Err(WahooError::NotFound) => Ok(None),
+                Err(error) => Err(error),
+            }
+        })
+    }
+
+    fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
+        let client = self.client.clone();
+        let request = Self::with_trace_context(client.get(file_url.to_string()));
+        Box::pin(async move {
+            let response = logging::execute_and_log_no_body(&client, request)
+                .await
+                .map_err(|error| WahooError::External(error.to_string()))?;
+            if !response.status.is_success() {
+                return Err(WahooError::External(format!(
+                    "Wahoo file download failed with status {} ({})",
+                    response.status,
+                    summarize_error_body(&response.body)
+                )));
+            }
+            Ok(response.body.to_vec())
         })
     }
 }

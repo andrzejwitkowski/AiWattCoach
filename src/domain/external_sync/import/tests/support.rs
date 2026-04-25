@@ -581,6 +581,32 @@ impl ExternalObservationRepository for InMemoryObservationRepository {
         })
     }
 
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        external_object_kind: crate::domain::external_sync::ExternalObjectKind,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|observation| {
+                    observation.user_id == user_id
+                        && observation.external_object_kind == external_object_kind
+                        && canonical_entities.contains(&observation.canonical_entity)
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
     fn find_by_provider_and_external_id(
         &self,
         user_id: &str,

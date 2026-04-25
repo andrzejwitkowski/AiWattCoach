@@ -55,6 +55,7 @@ use aiwattcoach::{
             training_plan_snapshots::MongoTrainingPlanSnapshotRepository,
             users::MongoUserRepository,
             wahoo_connect_state::MongoWahooConnectStateRepository,
+            wahoo_fit_files::MongoWahooFitFileRepository,
             whitelist::MongoWhitelistRepository,
             workout_summary::MongoWorkoutSummaryRepository,
         },
@@ -62,6 +63,7 @@ use aiwattcoach::{
         wahoo::{
             adapter::WahooOAuthAdapter, client::WahooOAuthClient, dev_client::DevWahooOAuthClient,
         },
+        wahoo_fit_parser::WahooFitParser,
         workout_summary_completed_target::CompletedWorkoutTargetAdapter,
         workout_summary_latest_activity::LatestCompletedActivityAdapter,
     },
@@ -78,15 +80,19 @@ use aiwattcoach::{
     domain::calendar::CalendarService,
     domain::calendar_labels::CalendarLabelsService,
     domain::calendar_view::CalendarEntryViewRefreshService,
-    domain::completed_workouts::CompletedWorkoutReadService,
+    domain::completed_workouts::{
+        AuthoritativeCompletedWorkoutRepository, CompletedWorkoutReadService,
+    },
     domain::external_sync::ExternalImportService,
     domain::identity::{
         validate_session_ttl_against_current_time, Clock, IdentityService, IdentityServiceConfig,
         IdentityServiceDependencies,
     },
     domain::intervals::IntervalsService,
-    domain::races::RaceService,
+    domain::planned_workouts::AuthoritativePlannedWorkoutRepository,
+    domain::races::{AuthoritativeRaceRepository, RaceService},
     domain::settings::UserSettingsService,
+    domain::special_days::AuthoritativeSpecialDayRepository,
     domain::task_scheduler::{TaskSchedulerService, TaskWorkerConfig},
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
@@ -95,13 +101,17 @@ use aiwattcoach::{
         TrainingPlanGenerationService,
     },
     domain::wahoo::WahooService,
+    domain::wahoo_fit_enrichment::{
+        wahoo_fit_enrichment_task_handler, SchedulerBackedWahooFitEnrichmentService,
+        WahooFitEnrichmentService,
+    },
     domain::workout_summary::{
         workout_summary_coach_reply_task_handler, SchedulerBackedWorkoutSummaryService,
         WorkoutSummaryService,
     },
     main_runtime::{
-        finish_server_shutdown, reconcile_intervals_poll_states, shutdown_signal,
-        TrainingPlanWorkoutSummaryAdapter,
+        finish_server_shutdown, reconcile_intervals_poll_states, reconcile_wahoo_poll_states,
+        shutdown_signal, TrainingPlanWorkoutSummaryAdapter,
     },
     telemetry::setup_telemetry,
     AppState,
@@ -261,6 +271,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         &SystemClock,
     )
     .await?;
+    reconcile_wahoo_poll_states(
+        &settings_repository,
+        &provider_poll_state_repository,
+        &SystemClock,
+    )
+    .await?;
     let race_repository = MongoRaceRepository::new(mongo_client.clone(), &mongo_database);
     race_repository.ensure_indexes().await?;
     let planned_workout_repository =
@@ -275,8 +291,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let completed_workout_repository =
         MongoCompletedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
     completed_workout_repository.ensure_indexes().await?;
-    let training_load_recompute_service = Arc::new(TrainingLoadRecomputeService::new(
+    let wahoo_fit_file_repository =
+        MongoWahooFitFileRepository::new(mongo_client.clone(), &mongo_database);
+    wahoo_fit_file_repository.ensure_indexes().await?;
+    let authoritative_completed_workout_repository = AuthoritativeCompletedWorkoutRepository::new(
         completed_workout_repository.clone(),
+        external_sync_state_repository.clone(),
+    );
+    let authoritative_planned_workout_repository = AuthoritativePlannedWorkoutRepository::new(
+        planned_workout_repository.clone(),
+        authoritative_completed_workout_repository.clone(),
+        planned_completed_link_repository.clone(),
+        external_sync_state_repository.clone(),
+    );
+    let training_load_recompute_service = Arc::new(TrainingLoadRecomputeService::new(
+        authoritative_completed_workout_repository.clone(),
         ftp_history_repository.clone(),
         training_load_daily_snapshot_repository.clone(),
         settings_repository.clone(),
@@ -325,6 +354,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let special_day_repository =
         MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);
     special_day_repository.ensure_indexes().await?;
+    let authoritative_special_day_repository = AuthoritativeSpecialDayRepository::new(
+        special_day_repository.clone(),
+        external_observation_repository.clone(),
+    );
+    let authoritative_race_repository = AuthoritativeRaceRepository::new(
+        race_repository.clone(),
+        external_observation_repository.clone(),
+    );
     let calendar_entry_view_repository =
         MongoCalendarEntryViewRepository::new(mongo_client.clone(), &mongo_database);
     calendar_entry_view_repository.ensure_indexes().await?;
@@ -344,13 +381,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     upload_operation_repository.ensure_indexes().await?;
     let calendar_entry_view_refresh_service = CalendarEntryViewRefreshService::new(
         calendar_entry_view_repository.clone(),
-        planned_workout_repository.clone(),
+        authoritative_planned_workout_repository.clone(),
         planned_workout_sync_repository.clone(),
-        completed_workout_repository.clone(),
-        race_repository.clone(),
-        special_day_repository.clone(),
+        authoritative_completed_workout_repository.clone(),
+        authoritative_race_repository.clone(),
+        authoritative_special_day_repository.clone(),
         external_sync_state_repository.clone(),
     )
+    .with_cleanup_planned_workouts(planned_workout_repository.clone())
     .with_planned_completed_links(planned_completed_link_repository.clone());
     let intervals_api_client = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
@@ -384,6 +422,35 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )
     .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone())
     .with_training_load_recompute_service(training_load_recompute_service.clone());
+    let wahoo_fit_enrichment_service = wahoo_service.clone().map(|wahoo_service| {
+        Arc::new(
+            WahooFitEnrichmentService::new(
+                wahoo_service,
+                completed_workout_repository.clone(),
+                wahoo_fit_file_repository.clone(),
+                WahooFitParser,
+                SystemClock,
+            )
+            .with_training_load_recompute_service(training_load_recompute_service.clone()),
+        )
+    });
+    let wahoo_fit_enrichment_queue_service = wahoo_fit_enrichment_service.clone().map(|_| {
+        Arc::new(SchedulerBackedWahooFitEnrichmentService::new(
+            wahoo_fit_file_repository.clone(),
+            shared_task_scheduler.clone(),
+            UuidIdGenerator,
+        ))
+    });
+    let provider_polling_service = if let Some(wahoo_service) = wahoo_service.clone() {
+        let provider_polling_service = provider_polling_service.with_wahoo_service(wahoo_service);
+        if let Some(queue) = wahoo_fit_enrichment_queue_service.clone() {
+            provider_polling_service.with_wahoo_fit_enrichment_queue(queue)
+        } else {
+            provider_polling_service
+        }
+    } else {
+        provider_polling_service
+    };
     let activity_identity_extractor = ActivityFileIdentityExtractor;
     let intervals_service = Arc::new(
         IntervalsService::new(
@@ -402,14 +469,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             Arc::new(workout_summary_repository.clone()),
             SystemClock,
         )
-        .with_completed_workout_repository(completed_workout_repository.clone())
-        .with_planned_workout_repository(planned_workout_repository.clone())
-        .with_special_day_repository(special_day_repository.clone())
+        .with_completed_workout_repository(authoritative_completed_workout_repository.clone())
+        .with_planned_workout_repository(authoritative_planned_workout_repository.clone())
+        .with_special_day_repository(authoritative_special_day_repository.clone())
         .with_ftp_history_repository(ftp_history_repository.clone())
         .with_training_load_daily_snapshot_repository(
             training_load_daily_snapshot_repository.clone(),
         )
-        .with_race_repository(Arc::new(race_repository.clone()))
+        .with_race_repository(Arc::new(authoritative_race_repository.clone()))
         .with_training_plan_projection_repository(Arc::new(
             training_plan_projection_repository.clone(),
         )),
@@ -444,10 +511,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_athlete_summary_service(athlete_summary_direct_service.clone())
         .with_settings_service(settings_service.clone())
         .with_completed_workout_target_service(Arc::new(CompletedWorkoutTargetAdapter::new(
-            completed_workout_repository.clone(),
+            authoritative_completed_workout_repository.clone(),
         )))
         .with_latest_completed_activity_service(Arc::new(
-            LatestCompletedActivityAdapter::new(completed_workout_repository.clone()),
+            LatestCompletedActivityAdapter::new(authoritative_completed_workout_repository.clone()),
         )),
     );
     let training_plan_direct_service = Arc::new(
@@ -473,7 +540,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     ));
     let race_service = Arc::new(
         RaceService::new(
-            race_repository.clone(),
+            authoritative_race_repository.clone(),
             (*intervals_service).clone(),
             external_sync_state_repository.clone(),
             SystemClock,
@@ -487,7 +554,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let calendar_labels_service =
         Arc::new(CalendarLabelsService::new(race_calendar_source.clone()));
     let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
-        completed_workout_repository.clone(),
+        authoritative_completed_workout_repository.clone(),
     ));
     let completed_workout_admin_service = Arc::new(
         IntervalsCompletedWorkoutBackfillService::new(
@@ -509,7 +576,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_planned_workout_tokens(planned_workout_token_repository)
         .with_provider_poll_states(provider_poll_state_repository)
-        .with_completed_workouts(completed_workout_repository.clone())
+        .with_completed_workouts(authoritative_completed_workout_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
     let workout_summary_direct_service = Arc::new(
@@ -522,6 +589,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         shared_task_scheduler.clone(),
         UuidIdGenerator,
     ));
+    let mut task_handlers = vec![
+        workout_summary_coach_reply_task_handler(workout_summary_direct_service.clone()),
+        athlete_summary_generate_task_handler(athlete_summary_direct_service.clone()),
+        training_plan_generate_task_handler(training_plan_direct_service),
+    ];
+    if let Some(service) = wahoo_fit_enrichment_service.clone() {
+        task_handlers.push(wahoo_fit_enrichment_task_handler(service));
+    }
     let workout_summary_task_worker = spawn_task_worker(
         shared_task_scheduler.clone(),
         format!("{}-workout-summary", default_task_scheduler_worker_id()),
@@ -532,11 +607,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             idle_poll_interval: Duration::from_millis(100),
             max_concurrency: 4,
         },
-        vec![
-            workout_summary_coach_reply_task_handler(workout_summary_direct_service.clone()),
-            athlete_summary_generate_task_handler(athlete_summary_direct_service.clone()),
-            training_plan_generate_task_handler(training_plan_direct_service),
-        ],
+        task_handlers,
     )?;
     let workout_summary_service = Arc::new(SchedulerBackedWorkoutSummaryService::new(
         workout_summary_direct_service,

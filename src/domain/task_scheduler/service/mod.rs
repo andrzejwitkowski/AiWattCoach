@@ -102,7 +102,10 @@ where
         task: ScheduledTask,
     ) -> BoxFuture<Result<ScheduledTask, TaskSchedulerError>> {
         let scheduler = self.clone();
-        Box::pin(async move { scheduler.enqueue(task).await.map(|result| result.task) })
+        Box::pin(async move {
+            let task = scheduler.enqueue(task).await.map(|result| result.task)?;
+            scheduler.retry_if_terminal(task).await
+        })
     }
 
     pub fn now_epoch_seconds(&self) -> i64 {

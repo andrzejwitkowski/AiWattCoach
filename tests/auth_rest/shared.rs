@@ -17,7 +17,10 @@ use aiwattcoach::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
         SettingsError, UserSettings, UserSettingsUseCases,
     },
-    domain::wahoo::{WahooAuthExchange, WahooAuthStart, WahooError, WahooToken, WahooUseCases},
+    domain::wahoo::{
+        WahooAuthExchange, WahooAuthStart, WahooError, WahooToken, WahooUseCases, WahooWorkout,
+        WahooWorkoutList, WahooWorkoutSummary,
+    },
     Settings,
 };
 use mongodb::Client;
@@ -336,6 +339,44 @@ impl WahooUseCases for TestWahooService {
         *self.last_ensure_user_id.lock().unwrap() = Some(user_id.to_string());
         let result = self.ensure_result.clone();
         Box::pin(async move { result })
+    }
+
+    fn list_workouts(
+        &self,
+        _user_id: &str,
+        _page: usize,
+        _per_page: usize,
+    ) -> BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        Box::pin(async {
+            Ok(WahooWorkoutList {
+                workouts: Vec::new(),
+                total: 0,
+                page: 1,
+                per_page: 100,
+                order: None,
+                sort: None,
+            })
+        })
+    }
+
+    fn get_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotFound) })
+    }
+
+    fn get_workout_summary(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn download_workout_file(&self, _file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 }
 

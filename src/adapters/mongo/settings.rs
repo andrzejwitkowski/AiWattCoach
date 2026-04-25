@@ -60,6 +60,7 @@ struct WahooDocument {
     expires_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     connected: bool,
+    updated_at_epoch_seconds: Option<i64>,
 }
 
 impl std::fmt::Debug for WahooDocument {
@@ -69,8 +70,31 @@ impl std::fmt::Debug for WahooDocument {
             .field("refresh_token", &RedactedOptionalText(&self.refresh_token))
             .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
             .field("connected", &self.connected)
+            .field("updated_at_epoch_seconds", &self.updated_at_epoch_seconds)
             .finish()
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WahooPollBootstrapUser {
+    pub user_id: String,
+    pub desired_active: bool,
+    pub wahoo_updated_at_epoch_seconds: Option<i64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct WahooPollBootstrapUserDocument {
+    user_id: String,
+    updated_at_epoch_seconds: Option<i64>,
+    wahoo: Option<WahooPollBootstrapWahooDocument>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct WahooPollBootstrapWahooDocument {
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+    connected: Option<bool>,
+    updated_at_epoch_seconds: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -260,6 +284,58 @@ impl MongoUserSettingsRepository {
             })
             .collect())
     }
+
+    pub async fn list_wahoo_poll_bootstrap_users(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<WahooPollBootstrapUser>, SettingsError> {
+        let poll_user_ids = user_ids
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let collection = self
+            .collection
+            .clone_with_type::<WahooPollBootstrapUserDocument>();
+        let filter = build_wahoo_poll_bootstrap_filter(user_ids);
+        let documents = collection
+            .find(filter)
+            .projection(doc! {
+                "_id": 0,
+                "user_id": 1,
+                "wahoo": 1,
+                "updated_at_epoch_seconds": 1,
+            })
+            .sort(doc! { "user_id": 1 })
+            .await
+            .map_err(|error| SettingsError::Repository(error.to_string()))?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(|error| SettingsError::Repository(error.to_string()))?;
+
+        Ok(documents
+            .into_iter()
+            .filter(|document| {
+                if poll_user_ids.contains(&document.user_id) {
+                    return true;
+                }
+
+                should_include_non_requested_wahoo_bootstrap_user(document)
+            })
+            .map(|document| {
+                let desired_active = document
+                    .wahoo
+                    .as_ref()
+                    .is_some_and(is_bootstrap_active_wahoo);
+                let wahoo_updated_at_epoch_seconds = bootstrap_wahoo_updated_at(&document);
+
+                WahooPollBootstrapUser {
+                    user_id: document.user_id,
+                    desired_active,
+                    wahoo_updated_at_epoch_seconds,
+                }
+            })
+            .collect())
+    }
 }
 
 fn has_non_empty(value: Option<&str>) -> bool {
@@ -281,11 +357,35 @@ fn should_include_non_requested_bootstrap_user(
         .is_some_and(is_bootstrap_active_intervals)
 }
 
+fn is_bootstrap_active_wahoo(wahoo: &WahooPollBootstrapWahooDocument) -> bool {
+    has_non_empty(wahoo.refresh_token.as_deref())
+        && wahoo.connected != Some(false)
+        && (has_non_empty(wahoo.access_token.as_deref())
+            || has_non_empty(wahoo.refresh_token.as_deref()))
+}
+
+fn should_include_non_requested_wahoo_bootstrap_user(
+    document: &WahooPollBootstrapUserDocument,
+) -> bool {
+    document
+        .wahoo
+        .as_ref()
+        .is_some_and(is_bootstrap_active_wahoo)
+}
+
 fn bootstrap_intervals_updated_at(document: &IntervalsPollBootstrapUserDocument) -> Option<i64> {
     document
         .intervals
         .as_ref()
         .and_then(|intervals| intervals.updated_at_epoch_seconds)
+        .or(document.updated_at_epoch_seconds)
+}
+
+fn bootstrap_wahoo_updated_at(document: &WahooPollBootstrapUserDocument) -> Option<i64> {
+    document
+        .wahoo
+        .as_ref()
+        .and_then(|wahoo| wahoo.updated_at_epoch_seconds)
         .or(document.updated_at_epoch_seconds)
 }
 
@@ -295,6 +395,21 @@ fn build_intervals_poll_bootstrap_filter(user_ids: &[String]) -> mongodb::bson::
             { "intervals.api_key": { "$type": "string", "$regex": "\\S" } },
             { "intervals.athlete_id": { "$type": "string", "$regex": "\\S" } },
             { "intervals.connected": { "$ne": false } },
+        ]
+    }];
+
+    if !user_ids.is_empty() {
+        filter_clauses.push(doc! { "user_id": { "$in": user_ids } });
+    }
+
+    doc! { "$or": filter_clauses }
+}
+
+fn build_wahoo_poll_bootstrap_filter(user_ids: &[String]) -> mongodb::bson::Document {
+    let mut filter_clauses = vec![doc! {
+        "$and": [
+            { "wahoo.refresh_token": { "$type": "string", "$regex": "\\S" } },
+            { "wahoo.connected": { "$ne": false } },
         ]
     }];
 
@@ -509,6 +624,7 @@ fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
             refresh_token: doc.wahoo.refresh_token,
             expires_at_epoch_seconds: doc.wahoo.expires_at_epoch_seconds,
             connected: doc.wahoo.connected,
+            updated_at_epoch_seconds: doc.wahoo.updated_at_epoch_seconds,
         },
         availability: map_document_availability_to_domain(doc.availability),
         cycling: map_document_cycling_to_domain(doc.cycling),
@@ -543,6 +659,7 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
             refresh_token: settings.wahoo.refresh_token.clone(),
             expires_at_epoch_seconds: settings.wahoo.expires_at_epoch_seconds,
             connected: settings.wahoo.connected,
+            updated_at_epoch_seconds: settings.wahoo.updated_at_epoch_seconds,
         },
         options: OptionsDocument {
             analyze_without_heart_rate: settings.options.analyze_without_heart_rate,
@@ -730,6 +847,7 @@ mod tests {
                 access_token: Some("wahoo-access-token".to_string()),
                 refresh_token: Some("wahoo-refresh-token".to_string()),
                 expires_at_epoch_seconds: Some(123),
+                updated_at_epoch_seconds: Some(456),
                 connected: true,
             },
             ..build_settings_document("user-1", 1)

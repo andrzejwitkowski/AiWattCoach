@@ -7,8 +7,9 @@ use chrono::{Duration, NaiveDate};
 
 use crate::domain::{
     completed_workouts::{
-        BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutError,
-        CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutSeries,
+        completed_workout_activity_id, BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout,
+        CompletedWorkoutError, CompletedWorkoutMetrics, CompletedWorkoutRepository,
+        CompletedWorkoutSeries,
     },
     identity::Clock,
     intervals::{
@@ -382,7 +383,10 @@ where
             .list_completed_workouts(user_id, &activities_range.oldest, &activities_range.newest)
             .await
         {
-            Ok(workouts) => (workouts, "ok".to_string()),
+            Ok(workouts) => (
+                dedup_completed_workouts_for_prompt(workouts),
+                "ok".to_string(),
+            ),
             Err(_) => (Vec::new(), "internal_error".to_string()),
         };
         let history_activities = history_completed_workouts
@@ -880,6 +884,41 @@ fn build_direct_event_matches(
         .collect()
 }
 
+fn dedup_completed_workouts_for_prompt(workouts: Vec<CompletedWorkout>) -> Vec<CompletedWorkout> {
+    let mut best_by_key = BTreeMap::<(String, String), CompletedWorkout>::new();
+
+    for workout in workouts {
+        let date = date_key(&workout.start_date_local).to_string();
+        let activity_id = workout
+            .source_activity_id
+            .clone()
+            .unwrap_or_else(|| legacy_activity_id(&workout.completed_workout_id).to_string());
+        let key = (date, activity_id);
+
+        match best_by_key.get(&key) {
+            Some(existing) if !prefer_completed_workout_for_prompt(&workout, existing) => {}
+            _ => {
+                best_by_key.insert(key, workout);
+            }
+        }
+    }
+
+    best_by_key.into_values().collect()
+}
+
+fn prefer_completed_workout_for_prompt(
+    candidate: &CompletedWorkout,
+    existing: &CompletedWorkout,
+) -> bool {
+    let candidate_is_wahoo = candidate.completed_workout_id.starts_with("wahoo-workout:");
+    let existing_is_wahoo = existing.completed_workout_id.starts_with("wahoo-workout:");
+    match (candidate_is_wahoo, existing_is_wahoo) {
+        (true, false) => true,
+        (false, true) => false,
+        _ => candidate.completed_workout_id > existing.completed_workout_id,
+    }
+}
+
 fn map_planned_workout_to_event(workout: &PlannedWorkout) -> Event {
     Event {
         id: canonical_event_id(&workout.planned_workout_id, &workout.date),
@@ -1138,9 +1177,7 @@ fn map_canonical_line_to_intervals_line(
 }
 
 fn legacy_activity_id(completed_workout_id: &str) -> &str {
-    completed_workout_id
-        .strip_prefix("intervals-activity:")
-        .unwrap_or(completed_workout_id)
+    completed_workout_activity_id(completed_workout_id)
 }
 
 fn canonical_event_id(entity_id: &str, date: &str) -> i64 {

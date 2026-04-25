@@ -5,8 +5,9 @@ use crate::domain::{
 };
 
 use super::{
-    BoxFuture, WahooAuthExchange, WahooAuthStart, WahooConnectState, WahooConnectStateRepository,
-    WahooError, WahooOAuthPort, WahooToken,
+    BoxFuture, WahooApiPort, WahooAuthExchange, WahooAuthStart, WahooConnectState,
+    WahooConnectStateRepository, WahooError, WahooOAuthPort, WahooToken, WahooWorkout,
+    WahooWorkoutList, WahooWorkoutSummary,
 };
 
 const CONNECT_STATE_TTL_SECONDS: i64 = 600;
@@ -26,44 +27,65 @@ pub trait WahooUseCases: Send + Sync {
     ) -> BoxFuture<Result<WahooAuthExchange, WahooError>>;
 
     fn ensure_token(&self, user_id: &str) -> BoxFuture<Result<WahooToken, WahooError>>;
+
+    fn list_workouts(
+        &self,
+        user_id: &str,
+        page: usize,
+        per_page: usize,
+    ) -> BoxFuture<Result<WahooWorkoutList, WahooError>>;
+
+    fn get_workout(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>>;
+
+    fn get_workout_summary(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>>;
+
+    fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>>;
 }
 
 #[derive(Clone)]
-pub struct WahooService<SettingsRepo, ConnectStates, OAuth, Time, Ids>
+pub struct WahooService<SettingsRepo, ConnectStates, Client, Time, Ids>
 where
     SettingsRepo: UserSettingsRepository,
     ConnectStates: WahooConnectStateRepository,
-    OAuth: WahooOAuthPort,
+    Client: WahooOAuthPort + WahooApiPort,
     Time: Clock,
     Ids: IdGenerator,
 {
     settings_repository: SettingsRepo,
     connect_states: ConnectStates,
-    oauth: OAuth,
+    client: Client,
     clock: Time,
     ids: Ids,
 }
 
-impl<SettingsRepo, ConnectStates, OAuth, Time, Ids>
-    WahooService<SettingsRepo, ConnectStates, OAuth, Time, Ids>
+impl<SettingsRepo, ConnectStates, Client, Time, Ids>
+    WahooService<SettingsRepo, ConnectStates, Client, Time, Ids>
 where
     SettingsRepo: UserSettingsRepository,
     ConnectStates: WahooConnectStateRepository,
-    OAuth: WahooOAuthPort,
+    Client: WahooOAuthPort + WahooApiPort,
     Time: Clock,
     Ids: IdGenerator,
 {
     pub fn new(
         settings_repository: SettingsRepo,
         connect_states: ConnectStates,
-        oauth: OAuth,
+        client: Client,
         clock: Time,
         ids: Ids,
     ) -> Self {
         Self {
             settings_repository,
             connect_states,
-            oauth,
+            client,
             clock,
             ids,
         }
@@ -90,13 +112,20 @@ where
         &self,
         user_id: &str,
         token: WahooToken,
+        mark_connection_updated: bool,
     ) -> Result<WahooToken, WahooError> {
         let mut settings = self.get_or_create_settings(user_id).await?;
+        let connection_updated_at_epoch_seconds = if mark_connection_updated {
+            Some(self.clock.now_epoch_seconds())
+        } else {
+            settings.wahoo.updated_at_epoch_seconds
+        };
         settings.wahoo = WahooConfig {
             access_token: Some(token.access_token.clone()),
             refresh_token: Some(token.refresh_token.clone()),
             expires_at_epoch_seconds: Some(token.expires_at_epoch_seconds),
             connected: true,
+            updated_at_epoch_seconds: connection_updated_at_epoch_seconds,
         };
         settings.updated_at_epoch_seconds = self.clock.now_epoch_seconds();
         self.settings_repository
@@ -123,7 +152,7 @@ where
                 now,
             ))
             .await?;
-        let redirect_url = self.oauth.build_authorize_url(&state)?;
+        let redirect_url = self.client.build_authorize_url(&state)?;
         Ok(WahooAuthStart {
             state,
             redirect_url,
@@ -143,8 +172,8 @@ where
             .await?
             .filter(|saved| !saved.is_expired(now))
             .ok_or(WahooError::InvalidConnectState)?;
-        let token = self.oauth.exchange_code(code).await?;
-        let token = self.persist_token(&state.user_id, token).await?;
+        let token = self.client.exchange_code(code).await?;
+        let token = self.persist_token(&state.user_id, token, true).await?;
 
         Ok(WahooAuthExchange {
             redirect_to: sanitize_return_to(state.return_to)
@@ -173,17 +202,55 @@ where
         }
 
         let refresh_token = wahoo.refresh_token.ok_or(WahooError::NotConnected)?;
-        let token = self.oauth.refresh_token(&refresh_token).await?;
-        self.persist_token(user_id, token).await
+        let token = self.client.refresh_token(&refresh_token).await?;
+        self.persist_token(user_id, token, false).await
+    }
+
+    async fn list_workouts(
+        &self,
+        user_id: &str,
+        page: usize,
+        per_page: usize,
+    ) -> Result<WahooWorkoutList, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client
+            .list_workouts(&token.access_token, page, per_page)
+            .await
+    }
+
+    async fn get_workout(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+    ) -> Result<WahooWorkout, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client
+            .get_workout(&token.access_token, workout_id)
+            .await
+    }
+
+    async fn get_workout_summary(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+    ) -> Result<Option<WahooWorkoutSummary>, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client
+            .get_workout_summary(&token.access_token, workout_id)
+            .await
+    }
+
+    async fn download_workout_file(&self, file_url: &str) -> Result<Vec<u8>, WahooError> {
+        self.client.download_workout_file(file_url).await
     }
 }
 
-impl<SettingsRepo, ConnectStates, OAuth, Time, Ids> WahooUseCases
-    for WahooService<SettingsRepo, ConnectStates, OAuth, Time, Ids>
+impl<SettingsRepo, ConnectStates, Client, Time, Ids> WahooUseCases
+    for WahooService<SettingsRepo, ConnectStates, Client, Time, Ids>
 where
     SettingsRepo: UserSettingsRepository,
     ConnectStates: WahooConnectStateRepository,
-    OAuth: WahooOAuthPort,
+    Client: WahooOAuthPort + WahooApiPort,
     Time: Clock,
     Ids: IdGenerator,
 {
@@ -214,6 +281,43 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move { service.ensure_token(&user_id).await })
+    }
+
+    fn list_workouts(
+        &self,
+        user_id: &str,
+        page: usize,
+        per_page: usize,
+    ) -> BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.list_workouts(&user_id, page, per_page).await })
+    }
+
+    fn get_workout(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.get_workout(&user_id, workout_id).await })
+    }
+
+    fn get_workout_summary(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.get_workout_summary(&user_id, workout_id).await })
+    }
+
+    fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
+        let service = self.clone();
+        let file_url = file_url.to_string();
+        Box::pin(async move { service.download_workout_file(&file_url).await })
     }
 }
 

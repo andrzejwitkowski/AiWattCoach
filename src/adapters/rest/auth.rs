@@ -158,7 +158,8 @@ pub async fn start_wahoo_connect(
             StatusCode::BAD_REQUEST.into_response()
         }
         Err(
-            crate::domain::wahoo::WahooError::Repository(_)
+            crate::domain::wahoo::WahooError::NotFound
+            | crate::domain::wahoo::WahooError::Repository(_)
             | crate::domain::wahoo::WahooError::External(_),
         ) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
@@ -192,7 +193,8 @@ pub async fn finish_wahoo_connect(
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
         Err(
-            crate::domain::wahoo::WahooError::Repository(_)
+            crate::domain::wahoo::WahooError::NotFound
+            | crate::domain::wahoo::WahooError::Repository(_)
             | crate::domain::wahoo::WahooError::External(_),
         ) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
