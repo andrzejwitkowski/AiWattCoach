@@ -195,7 +195,7 @@ fn wahoo_oauth_settings_debug_redacts_client_secret() {
     );
     values.insert(
         "WAHOO_OAUTH_REDIRECT_URL".to_string(),
-        "http://localhost:3002/api/auth/wahoo/callback".to_string(),
+        "http://localhost:3002/api/wahoo/callback".to_string(),
     );
 
     let settings = Settings::from_map(&values).unwrap();
@@ -279,7 +279,7 @@ fn settings_parse_optional_wahoo_oauth_credentials() {
     );
     values.insert(
         "WAHOO_OAUTH_REDIRECT_URL".to_string(),
-        "http://localhost:3002/api/auth/wahoo/callback".to_string(),
+        "http://localhost:3002/api/wahoo/callback".to_string(),
     );
 
     let settings = Settings::from_map(&values).unwrap();
@@ -291,7 +291,7 @@ fn settings_parse_optional_wahoo_oauth_credentials() {
     assert_eq!(wahoo.client_id, "wahoo-client-id");
     assert_eq!(
         wahoo.redirect_url,
-        "http://localhost:3002/api/auth/wahoo/callback"
+        "http://localhost:3002/api/wahoo/callback"
     );
     assert_eq!(
         wahoo.authorize_url,

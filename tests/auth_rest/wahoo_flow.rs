@@ -46,7 +46,7 @@ async fn wahoo_callback_redirects_back_to_settings() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/api/auth/wahoo/callback?state=wahoo-state-1&code=oauth-code")
+                .uri("/api/wahoo/callback?state=wahoo-state-1&code=oauth-code")
                 .header(header::COOKIE, "aiwattcoach_session=session-1")
                 .body(Body::empty())
                 .unwrap(),
@@ -77,7 +77,7 @@ async fn wahoo_callback_requires_authenticated_user() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/api/auth/wahoo/callback?state=wahoo-state-1&code=oauth-code")
+                .uri("/api/wahoo/callback?state=wahoo-state-1&code=oauth-code")
                 .body(Body::empty())
                 .unwrap(),
         )

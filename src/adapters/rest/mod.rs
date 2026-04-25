@@ -60,7 +60,7 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/auth/google/start", get(auth::start_google_login))
         .route("/api/auth/google/callback", get(auth::finish_google_login))
         .route("/api/auth/wahoo/start", get(auth::start_wahoo_connect))
-        .route("/api/auth/wahoo/callback", get(auth::finish_wahoo_connect))
+        .route("/api/wahoo/callback", get(auth::finish_wahoo_connect))
         .route(
             "/api/auth/whitelist",
             post(auth::join_whitelist).layer(DefaultBodyLimit::max(4 * 1024)),
