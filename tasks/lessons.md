@@ -59,6 +59,12 @@
 - When review feedback asks to make adapter constants environment-configurable, route the values through the centralized startup settings parser with explicit defaults instead of reading `std::env` inside the adapter.
 - After adding new env-backed settings, update the env key loader, sample env file, and focused settings tests in the same change so the new configuration path is actually exercised.
 
+## OpenCode Plugin Wiring
+
+- When a repo-local OpenCode plugin is configured in `opencode.json`, verify that the plugin file exports the module in the shape expected by the installed plugin API, not just a conveniently named helper like `GraphifyPlugin`.
+- If a repo-level reminder is meant to influence normal code exploration, inject it into session/system context instead of relying only on `bash` command rewriting, because many exploration flows start with `glob`, `grep`, or `read`.
+- If the plugin uses ESM syntax, make the tracked repo state explicitly ESM via a committed `.mjs` path or committed package metadata. Do not rely on ignored local files to make the plugin load cleanly.
+
 ## OAuth Callback Alignment
 
 - For OAuth flows with separate `start` and `callback` endpoints, verify that the configured provider callback URL matches the actual backend router path exactly. Keep the callback route, example env, dev client shortcut, and focused auth/settings tests aligned in the same change.

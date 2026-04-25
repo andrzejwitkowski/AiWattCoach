@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-25 | user | OpenCode Graphify plugin activation
+
+- Problem: the repo already had `graphify-out/` artifacts and a repo-local OpenCode plugin path in `opencode.json`, but the plugin file exported only `GraphifyPlugin` and relied on prepending `echo` to `bash` commands. That made the integration brittle and easy to miss in normal search-driven sessions that start with `glob`, `grep`, or `read` instead of `bash`, and a plain `.js` module shape would still depend on local Node module-mode heuristics.
+- Fix: rewrote the repo-local Graphify plugin to export an OpenCode `server` module with `id = "graphify"`, moved the reminder into `experimental.chat.system.transform`, pointed it at `graphify-out/GRAPH_REPORT.md`, `graphify-out/wiki/index.md`, and `./scripts/rebuild_graphify.sh`, and renamed the plugin file to `.mjs` while updating `opencode.json` so the repo-tracked plugin stays self-contained without relying on ignored local package metadata.
+- Prevention: for repo-local OpenCode plugins, verify the module export shape against the installed plugin API and make the tracked file format self-describing (`.mjs` or committed package metadata) instead of relying on local shell mutations or ignored Node module settings.
+
 ### 2026-04-24 | CodeRabbit | PR #115 training plan scheduler retry follow-up
 
 - Problem: `training_plan.generate_for_saved_workout` still used `RetryStrategy::Never` even though the wrapped workflow is deduped by durable `operation_key` state and can replay persisted output, so retryable scheduler failures like handler panics became terminal instead of rerunning once the pending operation was reclaimable.
