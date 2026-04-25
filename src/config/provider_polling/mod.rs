@@ -353,6 +353,7 @@ where
         let mut page = 1usize;
         let per_page = 30usize;
         let mut workouts_to_import = Vec::new();
+        let mut newest_seen_cursor = watermark.clone();
 
         loop {
             let list = wahoo_service
@@ -375,6 +376,10 @@ where
                     reached_known_watermark = true;
                     break;
                 }
+                newest_seen_cursor = match newest_seen_cursor {
+                    Some(current) => Some(std::cmp::max(current, updated_at.clone())),
+                    None => Some(updated_at.clone()),
+                };
                 if workout.workout_summary.is_some() {
                     workouts_to_import.push(workout);
                 }
@@ -387,7 +392,7 @@ where
             page += 1;
         }
 
-        let mut newest_cursor = watermark.clone();
+        let mut newest_cursor = newest_seen_cursor;
         let mut earliest_imported_date = None::<String>;
         for workout in workouts_to_import.iter().rev() {
             let Some(command) = map_workout_to_import_command(&state.user_id, workout) else {
@@ -520,7 +525,7 @@ where
                 ),
             }
         }
-        let cursor = advance_calendar_cursor(state, &range);
+        let cursor = advance_calendar_cursor(state, &events, &range);
         self.refresh_full_range_on_initial_sync(state, &range)
             .await?;
         Ok(cursor)
@@ -788,7 +793,15 @@ fn parse_wahoo_timestamp(value: &str) -> Result<String, String> {
         .map_err(|error| error.to_string())
 }
 
-fn advance_calendar_cursor(state: &ProviderPollState, range: &DateRange) -> Option<String> {
+fn advance_calendar_cursor(
+    state: &ProviderPollState,
+    events: &[crate::domain::intervals::Event],
+    range: &DateRange,
+) -> Option<String> {
+    if !events.is_empty() {
+        return Some(range.newest.clone());
+    }
+
     state.cursor.clone().or_else(|| Some(range.newest.clone()))
 }
 

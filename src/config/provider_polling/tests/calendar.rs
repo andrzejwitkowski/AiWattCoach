@@ -137,6 +137,55 @@ async fn later_calendar_sync_uses_cursor_and_skips_full_range_refresh() {
 }
 
 #[tokio::test]
+async fn later_calendar_sync_with_new_events_advances_cursor_to_window_end() {
+    let mut state = ProviderPollState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        ProviderPollStream::Calendar,
+        1_699_999_900,
+    );
+    state.cursor = Some("2023-11-20".to_string());
+    let event = Event {
+        id: 144,
+        start_date_local: "2023-11-21T08:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Threshold Builder".to_string()),
+        category: EventCategory::Workout,
+        description: Some("Threshold Builder\n- 10m 90-95%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    };
+    let poll_states = RecordingProviderPollStateRepository::with_states(vec![state]);
+    let refresh = RecordingCalendarRefresh::default();
+    let service = ProviderPollingService::new(
+        FakeIntervalsApi::with_events(vec![event]),
+        FakeIntervalsSettings,
+        poll_states.clone(),
+        RecordingImportService::default(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_windows(7, 14, 7)
+    .with_incremental_lookback(2)
+    .with_calendar_view_refresh(refresh.clone());
+
+    service.poll_due_once().await.unwrap();
+
+    let stored = poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Intervals,
+            ProviderPollStream::Calendar,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.cursor.as_deref(), Some("2023-11-28"));
+    assert!(refresh.ranges().is_empty());
+}
+
+#[tokio::test]
 async fn poll_due_once_keeps_cursor_when_provider_returns_no_new_events() {
     let mut state = ProviderPollState::new(
         "user-1".to_string(),

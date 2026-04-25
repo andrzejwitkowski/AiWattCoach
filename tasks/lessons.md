@@ -45,6 +45,8 @@
 
 ## Small Review Fixes
 
+- When simplifying poll-cursor helpers, verify both branches explicitly: existing cursor plus new upstream results should usually advance, while existing cursor plus no new results may need to stay put. Do not drop the data-presence signal unless a regression test proves the simplified semantics are still correct.
+- If a polling loop filters fetched upstream records before import, do not tie cursor advancement only to the filtered subset unless repeated rereads of skipped records are intentional. Cursor/watermark movement usually belongs to the full consumed upstream page.
 - In response/body mappers, decode a byte payload to UTF-8 once and reuse the borrowed text across classification and logging helpers instead of repeating `from_utf8(...)` work.
 - If parsed JSON string data is only compared against a static literal, keep it borrowed as `&str` and compare in place instead of allocating an owned `String` first.
 

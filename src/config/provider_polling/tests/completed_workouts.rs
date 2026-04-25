@@ -162,6 +162,47 @@ async fn wahoo_completed_stream_normalizes_mixed_offset_cursor_ordering() {
 }
 
 #[tokio::test]
+async fn wahoo_completed_stream_advances_cursor_even_without_importable_summaries() {
+    let mut state = ProviderPollState::new(
+        "user-1".to_string(),
+        ExternalProvider::Wahoo,
+        ProviderPollStream::CompletedWorkouts,
+        1_699_999_900,
+    );
+    state.cursor = Some("2023-11-14T08:00:00+00:00".to_string());
+
+    let mut workout = sample_wahoo_workout(42, "2023-11-15T08:00:00Z", "2023-11-15T09:00:00+00:00");
+    workout.workout_summary = None;
+
+    let poll_states = RecordingProviderPollStateRepository::with_states(vec![state]);
+    let imports = RecordingImportService::default();
+    let wahoo = RecordingWahooService::with_workouts(vec![workout]);
+    let service = ProviderPollingService::new(
+        RecordingIntervalsApi::default(),
+        FakeIntervalsSettings,
+        poll_states.clone(),
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_wahoo_service(std::sync::Arc::new(wahoo));
+
+    service.poll_due_once().await.unwrap();
+
+    assert!(imports.commands().is_empty());
+    let stored = poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Wahoo,
+            ProviderPollStream::CompletedWorkouts,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.cursor.as_deref(), Some("2023-11-15T09:00:00+00:00"));
+}
+
+#[tokio::test]
 async fn wahoo_completed_stream_enqueues_fit_enrichment_after_successful_import() {
     let poll_states =
         RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(

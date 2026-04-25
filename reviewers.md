@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-25 | user | intervals calendar poll cursor regression
+
+- Problem: the simplified `advance_calendar_cursor(...)` helper in `src/config/provider_polling/mod.rs` stopped looking at whether Intervals actually returned any calendar events. On incremental polls with an existing cursor and new events, it kept the old cursor instead of advancing to the end of the current window, so the service could keep rereading the same calendar range forever.
+- Fix: restored event-aware cursor advancement in `poll_intervals_calendar_stream(...)` so any non-empty event page advances the cursor to `range.newest`, while empty responses still preserve the existing cursor; added a regression test for `state.cursor != None` plus returned events.
+- Prevention: when simplifying polling cursor helpers, re-check the state-transition contract for both "new data arrived" and "no new data" paths before removing input parameters, and add an explicit regression for incremental sync with an existing cursor.
+
+### 2026-04-25 | user | Wahoo poll cursor stall without workout summaries
+
+- Problem: `src/config/provider_polling/mod.rs` advanced the Wahoo completed-workout cursor only while iterating `workouts_to_import`, so a page of workouts newer than the watermark but missing `workout_summary` produced no imports and left the cursor unchanged. The next poll could fetch the same page again forever.
+- Fix: track the newest seen Wahoo cursor across all workouts above the watermark, not just the subset that becomes import commands, and added a regression test for a newer workout with `workout_summary = None`.
+- Prevention: if polling filters upstream items before import, keep cursor advancement based on all consumed source records unless the product explicitly wants to revisit skipped records on every poll.
+
 ### 2026-04-25 | user | planned-workout authoritative test fixture regression
 
 - Problem: after the Wahoo-first authoritative-read changes, `src/domain/planned_workouts/authoritative.rs` still had a local test fixture that passed `planned_workout_id` into the wrong `CompletedWorkout::new(...)` argument slot. The test intended to prove hiding a planned workout when an authoritative completed workout linked to it, but the fixture actually left `planned_workout_id = None` and placed the planned id in the `name` field instead, so CI failed with a false-negative regression.
