@@ -81,9 +81,10 @@ impl WahooOAuthClient {
         token_url: String,
         form: Vec<(&'static str, String)>,
     ) -> Result<WahooToken, WahooError> {
-        let response = logging::execute_and_log_no_body(
+        let response = logging::execute_and_log(
             &client,
             Self::with_trace_context(client.post(token_url).form(&form)),
+            logging::BodyLoggingMode::Full,
         )
         .await
         .map_err(|error| WahooError::External(error.to_string()))?;
@@ -133,9 +134,10 @@ impl WahooOAuthClient {
     where
         T: serde::de::DeserializeOwned,
     {
-        let response = logging::execute_and_log_no_body(&self.client, request)
-            .await
-            .map_err(|error| WahooError::External(error.to_string()))?;
+        let response =
+            logging::execute_and_log(&self.client, request, logging::BodyLoggingMode::Full)
+                .await
+                .map_err(|error| WahooError::External(error.to_string()))?;
         match response.status {
             status if status.is_success() => Self::decode_json(response),
             reqwest::StatusCode::NOT_FOUND => Err(WahooError::NotFound),
@@ -405,7 +407,7 @@ impl WahooApiPort for WahooOAuthClient {
                                 provider_updated_at: request.provider_updated_at,
                             },
                         }),
-                    logging::BodyLoggingMode::None,
+                    logging::BodyLoggingMode::Full,
                 )
                 .await?;
             map_plan(payload).ok_or_else(|| {
@@ -437,7 +439,7 @@ impl WahooApiPort for WahooOAuthClient {
                                 provider_updated_at: request.provider_updated_at,
                             },
                         }),
-                    logging::BodyLoggingMode::None,
+                    logging::BodyLoggingMode::Full,
                 )
                 .await?;
             map_plan(payload).ok_or_else(|| {
@@ -600,9 +602,10 @@ impl WahooApiPort for WahooOAuthClient {
         let client = self.client.clone();
         let request = Self::with_trace_context(client.get(file_url));
         Box::pin(async move {
-            let response = logging::execute_and_log_no_body(&client, request)
-                .await
-                .map_err(|error| WahooError::External(error.to_string()))?;
+            let response =
+                logging::execute_and_log(&client, request, logging::BodyLoggingMode::Full)
+                    .await
+                    .map_err(|error| WahooError::External(error.to_string()))?;
             if !response.status.is_success() {
                 return Err(WahooError::External(format!(
                     "Wahoo file download failed with status {} ({})",

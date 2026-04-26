@@ -17,27 +17,16 @@ pub struct LoggedResponse {
 #[derive(Clone, Copy, Debug)]
 pub enum BodyLoggingMode {
     Full,
-    None,
 }
 
 pub async fn execute_and_log(
     client: &reqwest::Client,
     request: RequestBuilder,
-    body_logging: BodyLoggingMode,
+    _body_logging: BodyLoggingMode,
 ) -> Result<LoggedResponse, reqwest::Error> {
     let request = request.build()?;
 
-    match body_logging {
-        BodyLoggingMode::Full => execute_and_log_with_body_request(client, request).await,
-        BodyLoggingMode::None => execute_and_log_without_body(client, request).await,
-    }
-}
-
-pub async fn execute_and_log_no_body(
-    client: &reqwest::Client,
-    request: RequestBuilder,
-) -> Result<LoggedResponse, reqwest::Error> {
-    execute_and_log(client, request, BodyLoggingMode::None).await
+    execute_and_log_with_body_request(client, request).await
 }
 
 async fn execute_and_log_with_body_request(
@@ -56,34 +45,6 @@ async fn execute_and_log_with_body_request(
         .map(|bytes| format_request_body(&method, bytes));
 
     log_request(&method, &url, &headers, request_body_preview.as_deref());
-
-    let start = Instant::now();
-    let response = client
-        .execute(request)
-        .await
-        .inspect_err(|error| log_transport_failure(&method, &url, error, "request_send_failed"))?;
-    let latency = start.elapsed();
-
-    let status = response.status();
-    let body = response
-        .bytes()
-        .await
-        .inspect_err(|error| log_transport_failure(&method, &url, error, "response_read_failed"))?;
-
-    log_response(&method, &url, status, latency, None);
-
-    Ok(LoggedResponse { status, body })
-}
-
-async fn execute_and_log_without_body(
-    client: &reqwest::Client,
-    request: Request,
-) -> Result<LoggedResponse, reqwest::Error> {
-    let method = request.method().clone();
-    let url = request.url().clone();
-    let headers = request.headers().clone();
-
-    log_request(&method, &url, &headers, None);
 
     let start = Instant::now();
     let response = client
