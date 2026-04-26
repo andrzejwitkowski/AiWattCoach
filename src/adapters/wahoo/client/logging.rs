@@ -7,7 +7,9 @@ use sha2::Digest;
 use crate::telemetry::is_sensitive_key;
 
 const CLIENT_NAME: &str = "wahoo_oauth";
+const CLIENT_LABEL: &str = "wahoo";
 const MAX_LOGGED_BODY_CHARS: usize = 1024;
+const SAFE_QUERY_KEYS: &[&str] = &["page", "per_page", "sort", "order", "external_id"];
 
 pub struct LoggedResponse {
     pub status: StatusCode,
@@ -150,6 +152,7 @@ fn log_request(
     if let Some(body) = body_preview {
         tracing::info!(
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %sanitized_url(url),
             http.headers = ?header_fields,
@@ -159,6 +162,7 @@ fn log_request(
     } else {
         tracing::info!(
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %sanitized_url(url),
             http.headers = ?header_fields,
@@ -178,6 +182,7 @@ fn log_response(
         tracing::Level::ERROR => tracing::event!(
             tracing::Level::ERROR,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
@@ -187,6 +192,7 @@ fn log_response(
         tracing::Level::WARN => tracing::event!(
             tracing::Level::WARN,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
@@ -196,6 +202,7 @@ fn log_response(
         _ => tracing::event!(
             tracing::Level::INFO,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
@@ -216,6 +223,7 @@ fn response_log_level(status: StatusCode) -> tracing::Level {
 fn log_transport_failure(method: &Method, url: &reqwest::Url, error: &reqwest::Error, stage: &str) {
     tracing::error!(
         provider = CLIENT_NAME,
+        client = CLIENT_LABEL,
         http.method = %method,
         http.url = %sanitized_url(url),
         failure.stage = stage,
@@ -249,12 +257,33 @@ fn sanitized_url(url: &reqwest::Url) -> String {
         );
     }
 
+    let safe_query = url
+        .query_pairs()
+        .filter(|(key, _)| {
+            SAFE_QUERY_KEYS
+                .iter()
+                .any(|allowed| key.eq_ignore_ascii_case(allowed))
+        })
+        .map(|(key, value)| {
+            format!(
+                "{}={}",
+                urlencoding::encode(&key),
+                urlencoding::encode(&value)
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if !safe_query.is_empty() {
+        sanitized.push('?');
+        sanitized.push_str(&safe_query.join("&"));
+    }
+
     sanitized
 }
 
 #[cfg(test)]
 mod tests {
-    use super::format_request_body;
+    use super::{format_request_body, sanitized_url};
     use reqwest::Method;
 
     #[test]
@@ -268,5 +297,18 @@ mod tests {
         assert!(preview.contains("workout[workout_token]"));
         assert!(preview.contains("[REDACTED]"));
         assert!(!preview.contains("secret-token"));
+    }
+
+    #[test]
+    fn sanitized_url_keeps_safe_wahoo_query_params() {
+        let url = reqwest::Url::parse(
+            "https://api.wahooligan.com/v1/workouts?page=2&per_page=30&sort=updated_at&order=desc&access_token=secret",
+        )
+        .unwrap();
+
+        assert_eq!(
+            sanitized_url(&url),
+            "https://api.wahooligan.com/v1/workouts?page=2&per_page=30&sort=updated_at&order=desc"
+        );
     }
 }
