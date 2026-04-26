@@ -171,7 +171,7 @@ fn is_trainer_workout(workout_type_id: Option<i64>) -> bool {
         Some(
             WahooWorkoutTypeId::Fe
                 | WahooWorkoutTypeId::RunningTreadmill
-                | WahooWorkoutTypeId::BikingMotocycling
+                | WahooWorkoutTypeId::BikingIndoor
         )
     )
 }
@@ -273,5 +273,22 @@ mod tests {
         };
 
         assert_eq!(import.workout.details_unavailable_reason, None);
+    }
+
+    #[test]
+    fn map_workout_to_import_command_marks_biking_indoor_as_trainer() {
+        let mut workout = sample_workout();
+        workout.workout_type_id = Some(super::WahooWorkoutTypeId::BikingIndoor as i64);
+
+        let command = map_workout_to_import_command("user-1", &workout)
+            .expect("workout with summary should map");
+
+        let crate::domain::external_sync::ExternalImportCommand::UpsertCompletedWorkout(import) =
+            command
+        else {
+            panic!("expected completed workout import");
+        };
+
+        assert!(import.workout.trainer);
     }
 }

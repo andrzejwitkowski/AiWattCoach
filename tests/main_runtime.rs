@@ -298,6 +298,20 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
         })
         .await
         .unwrap();
+    poll_states
+        .upsert(ProviderPollState {
+            user_id: "connected-user".to_string(),
+            provider: ExternalProvider::Intervals,
+            stream: ProviderPollStream::Calendar,
+            cursor: Some("2026-04-03".to_string()),
+            next_due_at_epoch_seconds: 42,
+            last_attempted_at_epoch_seconds: Some(40),
+            last_successful_at_epoch_seconds: Some(41),
+            last_error: Some("legacy calendar state".to_string()),
+            backoff_until_epoch_seconds: Some(99),
+        })
+        .await
+        .unwrap();
 
     reconcile_intervals_poll_states(
         &settings_repository,
@@ -341,6 +355,20 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
         .await
         .unwrap()
         .is_none());
+
+    let connected_calendar = poll_states
+        .find_by_provider_and_stream(
+            "connected-user",
+            ExternalProvider::Intervals,
+            ProviderPollStream::Calendar,
+        )
+        .await
+        .unwrap()
+        .expect("connected user legacy calendar state should be parked");
+    assert_eq!(connected_calendar.next_due_at_epoch_seconds, i64::MAX);
+    assert_eq!(connected_calendar.cursor, None);
+    assert_eq!(connected_calendar.last_error, None);
+    assert_eq!(connected_calendar.backoff_until_epoch_seconds, None);
 
     let disconnected_completed = poll_states
         .find_by_provider_and_stream(

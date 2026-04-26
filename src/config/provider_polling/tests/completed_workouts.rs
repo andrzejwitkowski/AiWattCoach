@@ -306,8 +306,8 @@ async fn wahoo_completed_stream_recomputes_from_successful_imports_when_enqueue_
     .with_training_load_recompute_service(recompute.clone())
     .with_wahoo_service(std::sync::Arc::new(RecordingWahooService::with_workouts(
         vec![
-            sample_wahoo_workout(42, "2023-11-14T08:00:00Z", "2023-11-14T09:00:00+00:00"),
             sample_wahoo_workout(43, "2023-11-15T08:00:00Z", "2023-11-15T09:00:00+00:00"),
+            sample_wahoo_workout(42, "2023-11-14T08:00:00Z", "2023-11-14T09:00:00+00:00"),
         ],
     )))
     .with_wahoo_fit_enrichment_queue(std::sync::Arc::new(
@@ -322,10 +322,73 @@ async fn wahoo_completed_stream_recomputes_from_successful_imports_when_enqueue_
         recompute.calls(),
         vec![(
             "user-1".to_string(),
-            "2023-11-15".to_string(),
+            "2023-11-14".to_string(),
             1_700_000_000
         )]
     );
+}
+
+#[tokio::test]
+async fn wahoo_completed_stream_scans_later_pages_for_recently_edited_older_workouts() {
+    let mut state = ProviderPollState::new(
+        "user-1".to_string(),
+        ExternalProvider::Wahoo,
+        ProviderPollStream::CompletedWorkouts,
+        1_699_999_900,
+    );
+    state.cursor = Some("2023-11-20T00:00:00+00:00".to_string());
+
+    let mut workouts = (0..30)
+        .map(|index| {
+            sample_wahoo_workout(
+                100 + index,
+                &format!("2023-11-{:02}T08:00:00Z", 30 - index),
+                "2023-11-20T00:00:00+00:00",
+            )
+        })
+        .collect::<Vec<_>>();
+    workouts.push(sample_wahoo_workout(
+        999,
+        "2023-10-01T08:00:00Z",
+        "2023-11-21T09:00:00+00:00",
+    ));
+
+    let poll_states = RecordingProviderPollStateRepository::with_states(vec![state]);
+    let imports = RecordingImportService::default();
+    let wahoo = RecordingWahooService::with_workouts(workouts);
+    let service = ProviderPollingService::new(
+        RecordingIntervalsApi::default(),
+        FakeIntervalsSettings,
+        poll_states.clone(),
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_wahoo_service(std::sync::Arc::new(wahoo.clone()));
+
+    service.poll_due_once().await.unwrap();
+
+    assert_eq!(
+        wahoo.list_calls(),
+        vec![("user-1".to_string(), 1, 30), ("user-1".to_string(), 2, 30)]
+    );
+    let commands = imports.commands();
+    assert_eq!(commands.len(), 1);
+    let ExternalImportCommand::UpsertCompletedWorkout(import) = &commands[0] else {
+        panic!("expected completed workout import");
+    };
+    assert_eq!(import.workout.completed_workout_id, "wahoo-workout:999");
+
+    let stored = poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Wahoo,
+            ProviderPollStream::CompletedWorkouts,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.cursor.as_deref(), Some("2023-11-21T09:00:00+00:00"));
 }
 
 #[tokio::test]

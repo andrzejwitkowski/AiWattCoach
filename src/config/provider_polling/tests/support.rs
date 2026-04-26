@@ -374,6 +374,7 @@ impl WahooUseCases for RecordingWahooService {
         Box::pin(async move {
             list_calls.lock().unwrap().push((user_id, page, per_page));
             let workouts = workouts.lock().unwrap().clone();
+            let total = workouts.len();
             let start = (page.saturating_sub(1)) * per_page;
             let page_items = workouts
                 .into_iter()
@@ -381,7 +382,7 @@ impl WahooUseCases for RecordingWahooService {
                 .take(per_page)
                 .collect::<Vec<_>>();
             Ok(WahooWorkoutList {
-                total: page_items.len(),
+                total,
                 workouts: page_items,
                 page,
                 per_page,

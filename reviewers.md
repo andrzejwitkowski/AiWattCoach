@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | Copilot/CodeRabbit | PR #143 Wahoo review follow-up
+
+- Problem: the Wahoo-first branch still had several review-confirmed gaps: indoor Wahoo rides were classified with `BikingMotocycling` instead of `BikingIndoor`, the completed-workout poller stopped pagination on the first stale `updated_at` even though the API is sorted by `starts` and could therefore skip recently edited older workouts, parse failures in FIT enrichment were retried even when stored bytes made them deterministic, persisted legacy Intervals calendar poll states were not being parked after the completed-workouts-only transition, and training-context prompt dedupe used lexicographic completed-workout-id ordering so `...:9` could beat `...:10`.
+- Fix: switched Wahoo trainer detection to `BikingIndoor`, changed the Wahoo poller to continue scanning later pages while still filtering imported workouts by the `updated_at` watermark and added regressions for both the realistic ordering case and a later-page edited workout, marked `WahooFitEnrichmentError::Parse` as non-retryable with a focused test, parked existing Intervals calendar poll states both in settings-update sync and runtime reconciliation paths, tightened the auth-handler `NotFound` mapping into an explicit branch with rationale, added minimal FIT download URL validation, and changed training-context dedupe to prefer numeric completed-workout ids before falling back to timestamp/string comparison.
+- Prevention: when a watermark key does not match the upstream API sort order, do not use it for early pagination termination; either scan all pages or rebase the cursor to the actual sort key. When deprecating or sidelining a poll stream, explicitly park any already-persisted state in both user-settings sync paths and startup reconciliation. When tie-breaking provider ids with numeric suffixes, parse and compare the numeric part instead of relying on lexicographic string order.
+
 ### 2026-04-25 | user | intervals calendar poll cursor regression
 
 - Problem: the simplified `advance_calendar_cursor(...)` helper in `src/config/provider_polling/mod.rs` stopped looking at whether Intervals actually returned any calendar events. On incremental polls with an existing cursor and new events, it kept the old cursor instead of advancing to the end of the current window, so the service could keep rereading the same calendar range forever.

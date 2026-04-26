@@ -386,8 +386,27 @@ impl WahooApiPort for WahooOAuthClient {
     }
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
+        let file_url = match Url::parse(file_url) {
+            Ok(file_url) if file_url.scheme() == "https" && file_url.host_str().is_some() => {
+                file_url
+            }
+            Ok(file_url) => {
+                return Box::pin(async move {
+                    Err(WahooError::External(format!(
+                        "invalid Wahoo FIT file URL scheme/host: {file_url}"
+                    )))
+                });
+            }
+            Err(error) => {
+                return Box::pin(async move {
+                    Err(WahooError::External(format!(
+                        "invalid Wahoo FIT file URL: {error}"
+                    )))
+                });
+            }
+        };
         let client = self.client.clone();
-        let request = Self::with_trace_context(client.get(file_url.to_string()));
+        let request = Self::with_trace_context(client.get(file_url));
         Box::pin(async move {
             let response = logging::execute_and_log_no_body(&client, request)
                 .await

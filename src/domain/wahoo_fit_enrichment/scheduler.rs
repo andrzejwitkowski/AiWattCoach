@@ -206,11 +206,10 @@ fn map_task_failure(error: WahooFitEnrichmentError) -> TaskRunOutcome {
 
 fn error_is_retryable(error: &WahooFitEnrichmentError) -> bool {
     match error {
-        WahooFitEnrichmentError::NotFound | WahooFitEnrichmentError::DownloadUnavailable(_) => {
-            false
-        }
-        WahooFitEnrichmentError::Parse(_)
-        | WahooFitEnrichmentError::CompletedWorkoutRepository(_)
+        WahooFitEnrichmentError::NotFound
+        | WahooFitEnrichmentError::DownloadUnavailable(_)
+        | WahooFitEnrichmentError::Parse(_) => false,
+        WahooFitEnrichmentError::CompletedWorkoutRepository(_)
         | WahooFitEnrichmentError::FitFileRepository(_)
         | WahooFitEnrichmentError::Scheduler(_)
         | WahooFitEnrichmentError::TrainingLoad(_) => true,
@@ -540,5 +539,12 @@ mod tests {
             .expect("re-enqueue should revive failed task");
 
         assert_eq!(tasks.only_task().status, TaskStatus::Queued);
+    }
+
+    #[test]
+    fn parse_errors_are_not_retryable() {
+        assert!(!error_is_retryable(&WahooFitEnrichmentError::Parse(
+            "bad fit".to_string()
+        )));
     }
 }

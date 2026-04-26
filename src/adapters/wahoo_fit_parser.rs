@@ -289,6 +289,34 @@ fn is_trainer_activity(sport: Option<Sport>, sub_sport: Option<SubSport>) -> Opt
             Some(SubSport::VirtualActivity | SubSport::IndoorCycling | SubSport::Spin),
         ) => Some(true),
         (Sport::Generic, Some(SubSport::VirtualActivity)) => Some(true),
-        _ => Some(false),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fitparser::profile::field_types::{Sport, SubSport};
+
+    use super::is_trainer_activity;
+
+    #[test]
+    fn is_trainer_activity_keeps_unknown_values_unset() {
+        assert_eq!(is_trainer_activity(Some(Sport::Cycling), None), None);
+        assert_eq!(
+            is_trainer_activity(Some(Sport::Cycling), Some(SubSport::Road)),
+            None
+        );
+    }
+
+    #[test]
+    fn is_trainer_activity_marks_known_indoor_variants() {
+        assert_eq!(
+            is_trainer_activity(Some(Sport::Cycling), Some(SubSport::IndoorCycling)),
+            Some(true)
+        );
+        assert_eq!(
+            is_trainer_activity(Some(Sport::Generic), Some(SubSport::VirtualActivity)),
+            Some(true)
+        );
     }
 }

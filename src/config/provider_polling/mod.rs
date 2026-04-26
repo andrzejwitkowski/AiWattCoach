@@ -366,15 +366,13 @@ where
             }
 
             let list_len = list.workouts.len();
-            let mut reached_known_watermark = false;
             for workout in list.workouts {
                 let updated_at = workout_sort_key(&workout)?;
                 if watermark
                     .as_ref()
                     .is_some_and(|watermark| updated_at <= *watermark)
                 {
-                    reached_known_watermark = true;
-                    break;
+                    continue;
                 }
                 newest_seen_cursor = match newest_seen_cursor {
                     Some(current) => Some(std::cmp::max(current, updated_at.clone())),
@@ -385,7 +383,7 @@ where
                 }
             }
 
-            if reached_known_watermark || list_len < per_page {
+            if list_len < per_page {
                 break;
             }
 

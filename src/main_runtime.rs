@@ -154,6 +154,25 @@ pub async fn reconcile_intervals_poll_states(
         .list_intervals_poll_bootstrap_users(&existing_intervals_user_ids)
         .await?
     {
+        if let Some(calendar_state) = poll_states
+            .find_by_provider_and_stream(
+                &user.user_id,
+                ExternalProvider::Intervals,
+                ProviderPollStream::Calendar,
+            )
+            .await?
+        {
+            poll_states
+                .upsert(ProviderPollState {
+                    next_due_at_epoch_seconds: i64::MAX,
+                    cursor: None,
+                    backoff_until_epoch_seconds: None,
+                    last_error: None,
+                    ..calendar_state
+                })
+                .await?;
+        }
+
         let existing = poll_states
             .find_by_provider_and_stream(
                 &user.user_id,

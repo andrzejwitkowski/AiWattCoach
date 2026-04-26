@@ -915,8 +915,27 @@ fn prefer_completed_workout_for_prompt(
     match (candidate_is_wahoo, existing_is_wahoo) {
         (true, false) => true,
         (false, true) => false,
-        _ => candidate.completed_workout_id > existing.completed_workout_id,
+        _ => match (
+            numeric_completed_workout_id(candidate),
+            numeric_completed_workout_id(existing),
+        ) {
+            (Some(candidate_id), Some(existing_id)) if candidate_id != existing_id => {
+                candidate_id > existing_id
+            }
+            _ if candidate.start_date_local != existing.start_date_local => {
+                candidate.start_date_local > existing.start_date_local
+            }
+            _ => candidate.completed_workout_id > existing.completed_workout_id,
+        },
     }
+}
+
+fn numeric_completed_workout_id(workout: &CompletedWorkout) -> Option<i64> {
+    workout
+        .completed_workout_id
+        .rsplit(':')
+        .next()
+        .and_then(|value| value.parse::<i64>().ok())
 }
 
 fn map_planned_workout_to_event(workout: &PlannedWorkout) -> Event {
@@ -1234,4 +1253,67 @@ fn default_special_day_name(kind: &SpecialDayKind) -> String {
 
 fn date_key(value: &str) -> &str {
     value.get(..10).unwrap_or(value)
+}
+
+#[cfg(test)]
+mod dedup_tests {
+    use crate::domain::completed_workouts::{
+        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics,
+    };
+
+    use super::prefer_completed_workout_for_prompt;
+
+    fn sample_workout(id: &str, start_date_local: &str) -> CompletedWorkout {
+        CompletedWorkout::new(
+            id.to_string(),
+            "user-1".to_string(),
+            start_date_local.to_string(),
+            None,
+            None,
+            None,
+            None,
+            Some("Ride".to_string()),
+            None,
+            false,
+            None,
+            None,
+            CompletedWorkoutMetrics {
+                training_stress_score: None,
+                normalized_power_watts: None,
+                intensity_factor: None,
+                efficiency_factor: None,
+                variability_index: None,
+                average_power_watts: None,
+                ftp_watts: None,
+                total_work_joules: None,
+                calories: None,
+                trimp: None,
+                power_load: None,
+                heart_rate_load: None,
+                pace_load: None,
+                strain_score: None,
+            },
+            CompletedWorkoutDetails {
+                intervals: Vec::new(),
+                interval_groups: Vec::new(),
+                streams: Vec::new(),
+                interval_summary: Vec::new(),
+                skyline_chart: Vec::new(),
+                power_zone_times: Vec::new(),
+                heart_rate_zone_times: Vec::new(),
+                pace_zone_times: Vec::new(),
+                gap_zone_times: Vec::new(),
+            },
+            None,
+        )
+    }
+
+    #[test]
+    fn prefer_completed_workout_for_prompt_uses_numeric_ids_before_lexicographic_order() {
+        let candidate = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
+        let existing = sample_workout("wahoo-workout:9", "2026-05-01T08:00:00Z");
+
+        assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
+        assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
 }

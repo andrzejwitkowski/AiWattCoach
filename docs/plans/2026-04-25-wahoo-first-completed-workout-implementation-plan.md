@@ -298,12 +298,12 @@
 ## Operational Safety
 
 - Rollback:
-- keep the Wahoo-first behavior isolated to the authoritative wrapper wiring and Wahoo polling branch so rollback is a small code revert or wiring revert, not a storage migration.
-- if production behavior is wrong, first disable Wahoo poll bootstrap / runtime wiring and switch readers back to the canonical repositories before considering any data cleanup.
+  - keep the Wahoo-first behavior isolated to the authoritative wrapper wiring and Wahoo polling branch so rollback is a small code revert or wiring revert, not a storage migration.
+  - if production behavior is wrong, first disable Wahoo poll bootstrap / runtime wiring and switch readers back to the canonical repositories before considering any data cleanup.
 - Observability:
-- log Wahoo poll attempts, successes, failures, cursor updates, and partial-import recompute fallbacks with `user_id`, provider, stream, and workout identifiers where available.
-- log FIT enrichment stage transitions and failures with `user_id`, `completed_workout_id`, and `wahoo_workout_id`.
-- during rollout, watch for enrichment backlog growth, repeated parse/download failures, and unexpected spikes in hidden-workout behavior on Wahoo-authoritative days.
+  - log Wahoo poll attempts, successes, failures, cursor updates, and partial-import recompute fallbacks with `user_id`, provider, stream, and workout identifiers where available.
+  - log FIT enrichment stage transitions and failures with `user_id`, `completed_workout_id`, and `wahoo_workout_id`.
+  - during rollout, watch for enrichment backlog growth, repeated parse/download failures, and unexpected spikes in hidden-workout behavior on Wahoo-authoritative days.
 
 ## Final Verification
 
