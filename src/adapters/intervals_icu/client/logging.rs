@@ -406,7 +406,7 @@ mod tests {
 
         assert_eq!(json["api_key"], "[REDACTED]");
         assert_eq!(json["events"][0]["token"], "[REDACTED]");
-        assert_eq!(json["athlete_id"], "12345");
+        assert_eq!(json["athlete_id"], "[REDACTED]");
     }
 
     #[test]

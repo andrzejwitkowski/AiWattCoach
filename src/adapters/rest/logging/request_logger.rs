@@ -122,9 +122,14 @@ where
     }
 }
 
+/// Maximum bytes to buffer when collecting a request or response body for logging.
+/// Prevents unbounded memory allocation when RequestLogLayer is enabled on routes
+/// with large payloads.
+const MAX_COLLECT_BYTES: usize = 10 * 1024 * 1024;
+
 /// Collect the full body for logging and response reconstruction.
 async fn collect_body(body: Body) -> Result<Vec<u8>, ()> {
-    let bytes = match to_bytes(body, usize::MAX).await {
+    let bytes = match to_bytes(body, MAX_COLLECT_BYTES).await {
         Err(_) => return Err(()),
         Ok(bytes) => bytes,
     };

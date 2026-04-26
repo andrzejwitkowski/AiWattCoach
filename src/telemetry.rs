@@ -204,6 +204,29 @@ pub fn is_sensitive_key(key: &str) -> bool {
         || lowercase.contains("apikey")
         || lowercase == "user"
         || lowercase.ends_with("_user")
+        || lowercase.contains("email")
+        || lowercase.contains("medication")
+        || lowercase == "fullname"
+        || lowercase.contains("full_name")
+        || lowercase == "age"
+        || lowercase == "weightkg"
+        || lowercase == "weight_kg"
+        || lowercase == "heightcm"
+        || lowercase == "height_cm"
+        || lowercase.contains("hrmax")
+        || lowercase.contains("hr_max")
+        || lowercase.contains("vo2max")
+        || lowercase.contains("vo2_max")
+        || lowercase == "athletenotes"
+        || lowercase.contains("athlete_notes")
+        || lowercase == "athleteprompt"
+        || lowercase.contains("athlete_prompt")
+        || lowercase.contains("athleteid")
+        || lowercase.contains("athlete_id")
+        || lowercase == "content"
+        || lowercase == "message"
+        || lowercase.contains("filecontent")
+        || lowercase.contains("file_content")
 }
 
 #[cfg(test)]
@@ -225,8 +248,8 @@ mod tests {
     use tracing_subscriber::{layer::SubscriberExt, Registry};
 
     use super::{
-        build_log_bridge_layer, build_resource, combine_shutdown_errors, redact_if_sensitive,
-        resolve_service_name,
+        build_log_bridge_layer, build_resource, combine_shutdown_errors, is_sensitive_key,
+        redact_if_sensitive, resolve_service_name,
     };
 
     fn telemetry_env_lock() -> &'static Mutex<()> {
@@ -268,6 +291,52 @@ mod tests {
     fn leaves_non_sensitive_fields_unchanged() {
         assert_eq!(redact_if_sensitive("request_id", "abc-123"), "abc-123");
         assert_eq!(redact_if_sensitive("environment", "dev"), "dev");
+    }
+
+    #[test]
+    fn is_sensitive_key_redacts_pii_fields() {
+        assert!(is_sensitive_key("email"));
+        assert!(is_sensitive_key("fullName"));
+        assert!(is_sensitive_key("full_name"));
+        assert!(is_sensitive_key("age"));
+        assert!(is_sensitive_key("weightKg"));
+        assert!(is_sensitive_key("weight_kg"));
+        assert!(is_sensitive_key("heightCm"));
+        assert!(is_sensitive_key("height_cm"));
+        assert!(is_sensitive_key("hrMaxBpm"));
+        assert!(is_sensitive_key("hr_max_bpm"));
+        assert!(is_sensitive_key("vo2Max"));
+        assert!(is_sensitive_key("vo2_max"));
+    }
+
+    #[test]
+    fn is_sensitive_key_redacts_health_and_personal_fields() {
+        assert!(is_sensitive_key("medications"));
+        assert!(is_sensitive_key("athleteNotes"));
+        assert!(is_sensitive_key("athlete_notes"));
+        assert!(is_sensitive_key("athletePrompt"));
+        assert!(is_sensitive_key("athlete_prompt"));
+        assert!(is_sensitive_key("athleteId"));
+        assert!(is_sensitive_key("athlete_id"));
+    }
+
+    #[test]
+    fn is_sensitive_key_redacts_content_and_binary_fields() {
+        assert!(is_sensitive_key("content"));
+        assert!(is_sensitive_key("message"));
+        assert!(is_sensitive_key("fileContents"));
+        assert!(is_sensitive_key("file_contents"));
+        assert!(is_sensitive_key("fileContentsBase64"));
+    }
+
+    #[test]
+    fn is_sensitive_key_does_not_over_match() {
+        assert!(!is_sensitive_key("contentType"));
+        assert!(!is_sensitive_key("content-Type"));
+        assert!(!is_sensitive_key("ageGroup"));
+        assert!(!is_sensitive_key("deviceId"));
+        assert!(!is_sensitive_key("weightedScore"));
+        assert!(!is_sensitive_key("messageId"));
     }
 
     #[test]

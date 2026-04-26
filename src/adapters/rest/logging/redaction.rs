@@ -195,4 +195,82 @@ mod tests {
         let preview = format_binary_body_preview(bytes);
         assert!(preview.starts_with("binary(11 bytes,hash="));
     }
+
+    #[test]
+    fn redact_value_redacts_pii_fields() {
+        let mut value: serde_json::Value = serde_json::json!({
+            "email": "user@example.com",
+            "fullName": "Jan Kowalski",
+            "age": 35,
+            "weightKg": 75.0,
+            "heightCm": 180,
+            "hrMaxBpm": 190,
+            "vo2Max": 55.0
+        });
+
+        redact_value(&mut value);
+
+        assert_eq!(value["email"], "[REDACTED]");
+        assert_eq!(value["fullName"], "[REDACTED]");
+        assert_eq!(value["age"], "[REDACTED]");
+        assert_eq!(value["weightKg"], "[REDACTED]");
+        assert_eq!(value["heightCm"], "[REDACTED]");
+        assert_eq!(value["hrMaxBpm"], "[REDACTED]");
+        assert_eq!(value["vo2Max"], "[REDACTED]");
+    }
+
+    #[test]
+    fn redact_value_redacts_health_and_personal_fields() {
+        let mut value: serde_json::Value = serde_json::json!({
+            "medications": "ibuprofen",
+            "athleteNotes": "feeling tired",
+            "athletePrompt": "train harder",
+            "athleteId": "12345"
+        });
+
+        redact_value(&mut value);
+
+        assert_eq!(value["medications"], "[REDACTED]");
+        assert_eq!(value["athleteNotes"], "[REDACTED]");
+        assert_eq!(value["athletePrompt"], "[REDACTED]");
+        assert_eq!(value["athleteId"], "[REDACTED]");
+    }
+
+    #[test]
+    fn redact_value_redacts_content_and_binary_fields() {
+        let mut value: serde_json::Value = serde_json::json!({
+            "content": "private message",
+            "message": "log entry with PII",
+            "fileContents": "raw-file-data",
+            "fileContentsBase64": "base64data"
+        });
+
+        redact_value(&mut value);
+
+        assert_eq!(value["content"], "[REDACTED]");
+        assert_eq!(value["message"], "[REDACTED]");
+        assert_eq!(value["fileContents"], "[REDACTED]");
+        assert_eq!(value["fileContentsBase64"], "[REDACTED]");
+    }
+
+    #[test]
+    fn redact_value_preserves_non_sensitive_fields() {
+        let mut value: serde_json::Value = serde_json::json!({
+            "name": "My Workout",
+            "category": "Cycling",
+            "date": "2025-01-01",
+            "rpe": 7,
+            "saved": true,
+            "indoor": false
+        });
+
+        redact_value(&mut value);
+
+        assert_eq!(value["name"], "My Workout");
+        assert_eq!(value["category"], "Cycling");
+        assert_eq!(value["date"], "2025-01-01");
+        assert_eq!(value["rpe"], 7);
+        assert_eq!(value["saved"], true);
+        assert_eq!(value["indoor"], false);
+    }
 }
