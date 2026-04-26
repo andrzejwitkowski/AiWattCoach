@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use chrono::{Duration, NaiveDate};
+
 use crate::domain::{
     completed_workouts::CompletedWorkoutRepository,
     external_sync::{
@@ -139,21 +141,47 @@ where
             .map(|state| state.canonical_entity.entity_id)
             .collect::<HashSet<_>>();
         let completed_workouts = match date_range {
-            Some((oldest, newest)) => self
-                .completed_workouts
-                .list_by_user_id_and_date_range(user_id, &oldest, &newest)
-                .await
-                .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?,
+            Some((oldest, newest)) => {
+                let (completed_oldest, completed_newest) =
+                    expanded_completed_workout_range(&oldest, &newest)?;
+                self.completed_workouts
+                    .list_by_user_id_and_date_range(user_id, &completed_oldest, &completed_newest)
+                    .await
+                    .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?
+            }
             None => self
                 .completed_workouts
                 .list_by_user_id(user_id)
                 .await
                 .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?,
         };
+        // Planned-workout authority currently comes only from Intervals. Wahoo contributes
+        // completed workouts but does not import planned workouts into this repository.
         let planned_ids_with_authoritative_completed = completed_workouts
             .iter()
             .filter_map(|workout| workout.planned_workout_id.clone())
             .collect::<HashSet<_>>();
+        let authoritative_completed_ids = completed_workouts
+            .iter()
+            .map(|workout| workout.completed_workout_id.clone())
+            .collect::<HashSet<_>>();
+        let candidate_planned_ids = workouts
+            .iter()
+            .filter(|workout| {
+                !externally_owned_ids.contains(&workout.planned_workout_id)
+                    && !is_legacy_external_planned_workout_id(&workout.planned_workout_id)
+                    && !planned_ids_with_authoritative_completed
+                        .contains(&workout.planned_workout_id)
+            })
+            .map(|workout| workout.planned_workout_id.clone())
+            .collect::<Vec<_>>();
+        let planned_ids_with_authoritative_links = self
+            .load_planned_ids_with_authoritative_links(
+                user_id,
+                &candidate_planned_ids,
+                &authoritative_completed_ids,
+            )
+            .await?;
 
         let mut visible = Vec::with_capacity(workouts.len());
         for workout in workouts {
@@ -164,9 +192,7 @@ where
             }
 
             if planned_ids_with_authoritative_completed.contains(&workout.planned_workout_id)
-                || self
-                    .has_authoritative_completed_link(user_id, &workout.planned_workout_id)
-                    .await?
+                || planned_ids_with_authoritative_links.contains(&workout.planned_workout_id)
             {
                 continue;
             }
@@ -177,26 +203,37 @@ where
         Ok(visible)
     }
 
-    async fn has_authoritative_completed_link(
+    async fn load_planned_ids_with_authoritative_links(
         &self,
         user_id: &str,
-        planned_workout_id: &str,
-    ) -> Result<bool, PlannedWorkoutError> {
-        let Some(link) = self
+        planned_workout_ids: &[String],
+        authoritative_completed_ids: &HashSet<String>,
+    ) -> Result<HashSet<String>, PlannedWorkoutError> {
+        let links = self
             .planned_completed_links
-            .find_by_planned_workout_id(user_id, planned_workout_id)
+            .find_by_planned_workout_ids(user_id, planned_workout_ids)
             .await
-            .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?
-        else {
-            return Ok(false);
-        };
-
-        self.completed_workouts
-            .find_by_user_id_and_completed_workout_id(user_id, &link.completed_workout_id)
-            .await
-            .map(|workout| workout.is_some())
-            .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))
+            .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?;
+        Ok(links
+            .into_iter()
+            .filter(|link| authoritative_completed_ids.contains(&link.completed_workout_id))
+            .map(|link| link.planned_workout_id)
+            .collect())
     }
+}
+
+fn expanded_completed_workout_range(
+    oldest: &str,
+    newest: &str,
+) -> Result<(String, String), PlannedWorkoutError> {
+    let oldest = NaiveDate::parse_from_str(oldest, "%Y-%m-%d")
+        .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?;
+    let newest = NaiveDate::parse_from_str(newest, "%Y-%m-%d")
+        .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?;
+    Ok((
+        (oldest - Duration::days(1)).format("%Y-%m-%d").to_string(),
+        (newest + Duration::days(1)).format("%Y-%m-%d").to_string(),
+    ))
 }
 
 fn is_legacy_external_planned_workout_id(planned_workout_id: &str) -> bool {
@@ -449,6 +486,30 @@ mod tests {
             })
         }
 
+        fn find_by_planned_workout_ids(
+            &self,
+            user_id: &str,
+            planned_workout_ids: &[String],
+        ) -> crate::domain::planned_completed_links::BoxFuture<
+            Result<
+                Vec<PlannedCompletedWorkoutLink>,
+                crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+            >,
+        > {
+            let links = self.links.clone();
+            let user_id = user_id.to_string();
+            let planned_workout_ids = planned_workout_ids.to_vec();
+            Box::pin(async move {
+                Ok(links
+                    .into_iter()
+                    .filter(|link| {
+                        link.user_id == user_id
+                            && planned_workout_ids.contains(&link.planned_workout_id)
+                    })
+                    .collect())
+            })
+        }
+
         fn upsert(
             &self,
             link: PlannedCompletedWorkoutLink,
@@ -645,6 +706,55 @@ mod tests {
         );
 
         let visible = repository.list_by_user_id("user-1").await.unwrap();
+
+        assert!(visible.is_empty());
+    }
+
+    #[tokio::test]
+    async fn hides_planned_workout_when_authoritative_completed_workout_crosses_date_boundary() {
+        let planned_workouts = super::super::ports::NoopPlannedWorkoutRepository::default();
+        planned_workouts
+            .upsert(sample_planned_workout("planned-1", "2026-05-01"))
+            .await
+            .unwrap();
+        let workouts = TestCompletedWorkouts {
+            workouts: vec![sample_completed_workout(
+                "wahoo-workout:1",
+                "2026-05-02",
+                Some("planned-1"),
+            )],
+        };
+        let sync_states = TestSyncStates {
+            states: vec![ExternalSyncState {
+                user_id: "user-1".to_string(),
+                provider: ExternalProvider::Wahoo,
+                canonical_entity: CanonicalEntityRef::new(
+                    CanonicalEntityKind::CompletedWorkout,
+                    "wahoo-workout:1".to_string(),
+                ),
+                external_id: Some("1".to_string()),
+                sync_status: ExternalSyncStatus::Synced,
+                last_synced_payload_hash: None,
+                last_seen_remote_payload_hash: None,
+                last_error: None,
+                last_synced_at_epoch_seconds: None,
+                last_seen_remote_at_epoch_seconds: None,
+                conflict_status: ConflictStatus::InSync,
+            }],
+        };
+        let completed_workouts =
+            AuthoritativeCompletedWorkoutRepository::new(workouts, sync_states.clone());
+        let repository = AuthoritativePlannedWorkoutRepository::new(
+            planned_workouts,
+            completed_workouts,
+            TestPlannedCompletedLinks::default(),
+            sync_states,
+        );
+
+        let visible = repository
+            .list_by_user_id_and_date_range("user-1", "2026-05-01", "2026-05-01")
+            .await
+            .unwrap();
 
         assert!(visible.is_empty());
     }

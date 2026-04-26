@@ -172,16 +172,7 @@ where
             .await
             .map_err(WahooFitEnrichmentError::Wahoo)?;
         let now_epoch_seconds = self.clock.now_epoch_seconds();
-        let downloaded_fit_file =
-            fit_file
-                .clone()
-                .mark_downloaded(wahoo_workout_id, file_url.clone(), now_epoch_seconds);
-        self.fit_files
-            .upsert(downloaded_fit_file)
-            .await
-            .map_err(map_fit_file_error)?;
         let stored_fit_file = fit_file.mark_stored(
-            wahoo_workout_id,
             file_url,
             sha256_hex(&raw_fit_bytes),
             raw_fit_bytes.clone(),

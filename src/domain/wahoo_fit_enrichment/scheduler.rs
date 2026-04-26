@@ -37,37 +37,25 @@ pub trait WahooFitEnrichmentQueueUseCases: Send + Sync + 'static {
 }
 
 #[derive(Clone)]
-pub struct SchedulerBackedWahooFitEnrichmentService<FitFiles, Tasks, Workers, Time, Ids>
+pub struct SchedulerBackedWahooFitEnrichmentService<Tasks, Workers, Time, Ids>
 where
-    FitFiles: WahooFitFileRepository,
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
 {
-    _fit_files: FitFiles,
     scheduler: TaskSchedulerService<Tasks, Workers, Time>,
     ids: Ids,
 }
 
-impl<FitFiles, Tasks, Workers, Time, Ids>
-    SchedulerBackedWahooFitEnrichmentService<FitFiles, Tasks, Workers, Time, Ids>
+impl<Tasks, Workers, Time, Ids> SchedulerBackedWahooFitEnrichmentService<Tasks, Workers, Time, Ids>
 where
-    FitFiles: WahooFitFileRepository,
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
     Ids: IdGenerator,
 {
-    pub fn new(
-        fit_files: FitFiles,
-        scheduler: TaskSchedulerService<Tasks, Workers, Time>,
-        ids: Ids,
-    ) -> Self {
-        Self {
-            _fit_files: fit_files,
-            scheduler,
-            ids,
-        }
+    pub fn new(scheduler: TaskSchedulerService<Tasks, Workers, Time>, ids: Ids) -> Self {
+        Self { scheduler, ids }
     }
 
     fn build_enrichment_task(
@@ -82,7 +70,6 @@ where
                 user_id: user_id.to_string(),
                 task_type: WAHOO_FIT_ENRICHMENT_TASK_TYPE.to_string(),
                 payload: serde_json::to_value(WahooFitEnrichmentTaskPayload {
-                    user_id: user_id.to_string(),
                     completed_workout_id: completed_workout_id.to_string(),
                     wahoo_workout_id,
                 })
@@ -105,10 +92,9 @@ where
     }
 }
 
-impl<FitFiles, Tasks, Workers, Time, Ids> WahooFitEnrichmentQueueUseCases
-    for SchedulerBackedWahooFitEnrichmentService<FitFiles, Tasks, Workers, Time, Ids>
+impl<Tasks, Workers, Time, Ids> WahooFitEnrichmentQueueUseCases
+    for SchedulerBackedWahooFitEnrichmentService<Tasks, Workers, Time, Ids>
 where
-    FitFiles: WahooFitFileRepository,
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
     Time: Clock,
@@ -165,7 +151,7 @@ where
 
             match base
                 .enrich_completed_workout(
-                    &payload.user_id,
+                    &task.user_id,
                     &payload.completed_workout_id,
                     payload.wahoo_workout_id,
                 )
@@ -263,9 +249,6 @@ mod tests {
             TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRepository, TaskRetryRequest,
             TaskSchedulerService, TaskStatus, TaskWorker, TaskWorkerRepository,
         },
-        wahoo_fit_files::{
-            BoxFuture as WahooFitFileBoxFuture, WahooFitFileError, WahooFitFileRepository,
-        },
     };
 
     use super::*;
@@ -285,51 +268,6 @@ mod tests {
     impl IdGenerator for FixedIds {
         fn new_id(&self, prefix: &str) -> String {
             format!("{prefix}-1")
-        }
-    }
-
-    #[derive(Clone, Default)]
-    struct InMemoryWahooFitFileRepository {
-        find_calls: Arc<Mutex<usize>>,
-        upsert_calls: Arc<Mutex<usize>>,
-    }
-
-    impl InMemoryWahooFitFileRepository {
-        fn find_calls(&self) -> usize {
-            *self.find_calls.lock().unwrap()
-        }
-
-        fn upsert_calls(&self) -> usize {
-            *self.upsert_calls.lock().unwrap()
-        }
-    }
-
-    impl WahooFitFileRepository for InMemoryWahooFitFileRepository {
-        fn find_by_user_id_and_completed_workout_id(
-            &self,
-            _user_id: &str,
-            _completed_workout_id: &str,
-        ) -> WahooFitFileBoxFuture<
-            Result<Option<crate::domain::wahoo_fit_files::WahooFitFile>, WahooFitFileError>,
-        > {
-            let find_calls = self.find_calls.clone();
-            Box::pin(async move {
-                *find_calls.lock().unwrap() += 1;
-                Ok(None)
-            })
-        }
-
-        fn upsert(
-            &self,
-            fit_file: crate::domain::wahoo_fit_files::WahooFitFile,
-        ) -> WahooFitFileBoxFuture<
-            Result<crate::domain::wahoo_fit_files::WahooFitFile, WahooFitFileError>,
-        > {
-            let upsert_calls = self.upsert_calls.clone();
-            Box::pin(async move {
-                *upsert_calls.lock().unwrap() += 1;
-                Ok(fit_file)
-            })
         }
     }
 
@@ -514,12 +452,10 @@ mod tests {
 
     #[tokio::test]
     async fn enqueue_uses_completed_workout_dedupe_key_and_retries_failed_task() {
-        let fit_files = InMemoryWahooFitFileRepository::default();
         let tasks = InMemoryTaskRepository::default();
         let scheduler =
             TaskSchedulerService::new(tasks.clone(), InMemoryTaskWorkerRepository, FixedClock);
-        let service =
-            SchedulerBackedWahooFitEnrichmentService::new(fit_files.clone(), scheduler, FixedIds);
+        let service = SchedulerBackedWahooFitEnrichmentService::new(scheduler, FixedIds);
 
         service
             .enqueue_enrichment("user-1", "wahoo-workout:42", 42)
@@ -528,8 +464,6 @@ mod tests {
 
         let task = tasks.only_task();
         assert_eq!(task.dedupe_key, "wahoo-fit:wahoo-workout:42");
-        assert_eq!(fit_files.find_calls(), 0);
-        assert_eq!(fit_files.upsert_calls(), 0);
 
         tasks.mark_failed(&task.id, 1_700_000_000);
 
@@ -539,6 +473,69 @@ mod tests {
             .expect("re-enqueue should revive failed task");
 
         assert_eq!(tasks.only_task().status, TaskStatus::Queued);
+    }
+
+    #[tokio::test]
+    async fn task_handler_uses_task_user_id_instead_of_payload_user_id() {
+        #[derive(Clone, Default)]
+        struct RecordingExecutor {
+            calls: Arc<Mutex<Vec<(String, String, i64)>>>,
+        }
+
+        impl WahooFitEnrichmentExecutionUseCases for RecordingExecutor {
+            fn enrich_completed_workout(
+                &self,
+                user_id: &str,
+                completed_workout_id: &str,
+                wahoo_workout_id: i64,
+            ) -> BoxFuture<Result<(), WahooFitEnrichmentError>> {
+                let calls = self.calls.clone();
+                let user_id = user_id.to_string();
+                let completed_workout_id = completed_workout_id.to_string();
+                Box::pin(async move {
+                    calls
+                        .lock()
+                        .unwrap()
+                        .push((user_id, completed_workout_id, wahoo_workout_id));
+                    Ok(())
+                })
+            }
+        }
+
+        let executor = Arc::new(RecordingExecutor::default());
+        let handler = wahoo_fit_enrichment_task_handler(executor.clone());
+        let task = ScheduledTask::new(
+            NewTask {
+                id: "task-1".to_string(),
+                user_id: "task-user".to_string(),
+                task_type: WAHOO_FIT_ENRICHMENT_TASK_TYPE.to_string(),
+                payload: serde_json::json!({
+                    "user_id": "payload-user",
+                    "completed_workout_id": "wahoo-workout:42",
+                    "wahoo_workout_id": 42,
+                }),
+                retry_strategy: RetryStrategy::Fixed {
+                    max_attempts: 3,
+                    delay_seconds: 300,
+                },
+                dedupe_key: "wahoo-fit:wahoo-workout:42".to_string(),
+                execution_timeout_seconds: 180,
+                leader_only: false,
+            },
+            1_700_000_000,
+        )
+        .unwrap();
+
+        let outcome = handler.run(task).await;
+
+        assert!(matches!(
+            outcome,
+            TaskRunOutcome::Completed { checkpoint: None }
+        ));
+        assert_eq!(
+            executor.calls.lock().unwrap().clone(),
+            vec![("task-user".to_string(), "wahoo-workout:42".to_string(), 42,)]
+        );
     }
 
     #[test]

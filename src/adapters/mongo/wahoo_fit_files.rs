@@ -179,7 +179,6 @@ mod tests {
         let fit_file =
             WahooFitFile::new("user-1".to_string(), "wahoo-workout:1".to_string(), 1, 100)
                 .mark_stored(
-                    1,
                     "https://example.test/file.fit".to_string(),
                     "hash-1".to_string(),
                     vec![1, 2, 3],

@@ -17,7 +17,6 @@ pub struct ParsedWahooFitWorkout {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WahooFitEnrichmentTaskPayload {
-    pub user_id: String,
     pub completed_workout_id: String,
     pub wahoo_workout_id: i64,
 }

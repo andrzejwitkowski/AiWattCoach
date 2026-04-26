@@ -1304,6 +1304,33 @@ impl PlannedCompletedWorkoutLinkRepository for TestPlannedCompletedWorkoutLinkRe
         })
     }
 
+    fn find_by_planned_workout_ids(
+        &self,
+        user_id: &str,
+        planned_workout_ids: &[String],
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<
+            Vec<PlannedCompletedWorkoutLink>,
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_ids = planned_workout_ids.to_vec();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|link| {
+                    link.user_id == user_id
+                        && planned_workout_ids.contains(&link.planned_workout_id)
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
     fn upsert(
         &self,
         link: PlannedCompletedWorkoutLink,

@@ -109,7 +109,7 @@ impl WahooOAuthClient {
         Self::with_trace_context(self.client.get(url).bearer_auth(access_token))
     }
 
-    async fn decode_json<T>(response: logging::LoggedResponse) -> Result<T, WahooError>
+    fn decode_json<T>(response: logging::LoggedResponse) -> Result<T, WahooError>
     where
         T: serde::de::DeserializeOwned,
     {
@@ -125,7 +125,7 @@ impl WahooOAuthClient {
             .await
             .map_err(|error| WahooError::External(error.to_string()))?;
         match response.status {
-            status if status.is_success() => Self::decode_json(response).await,
+            status if status.is_success() => Self::decode_json(response),
             reqwest::StatusCode::NOT_FOUND => Err(WahooError::NotFound),
             status => Err(WahooError::External(format!(
                 "Wahoo API request failed with status {} ({})",

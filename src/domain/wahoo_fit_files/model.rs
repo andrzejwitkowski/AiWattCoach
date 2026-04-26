@@ -64,20 +64,13 @@ impl WahooFitFile {
         }
     }
 
-    pub fn mark_queued(mut self, wahoo_workout_id: i64, now_epoch_seconds: i64) -> Self {
-        self.wahoo_workout_id = wahoo_workout_id;
+    pub fn mark_queued(mut self, now_epoch_seconds: i64) -> Self {
         self.stage = WahooFitFileStage::Queued;
         self.updated_at_epoch_seconds = now_epoch_seconds;
         self
     }
 
-    pub fn mark_downloaded(
-        mut self,
-        wahoo_workout_id: i64,
-        file_url: String,
-        now_epoch_seconds: i64,
-    ) -> Self {
-        self.wahoo_workout_id = wahoo_workout_id;
+    pub fn mark_downloaded(mut self, file_url: String, now_epoch_seconds: i64) -> Self {
         self.stage = WahooFitFileStage::Downloaded;
         self.file_url = Some(file_url);
         self.downloaded_at_epoch_seconds = Some(now_epoch_seconds);
@@ -87,18 +80,17 @@ impl WahooFitFile {
 
     pub fn mark_stored(
         mut self,
-        wahoo_workout_id: i64,
         file_url: String,
         file_hash_sha256: String,
         raw_fit_bytes: Vec<u8>,
         now_epoch_seconds: i64,
     ) -> Self {
-        self.wahoo_workout_id = wahoo_workout_id;
         self.stage = WahooFitFileStage::Stored;
         self.file_url = Some(file_url);
         self.file_hash_sha256 = Some(file_hash_sha256);
         self.raw_fit_bytes = Some(raw_fit_bytes);
-        self.downloaded_at_epoch_seconds = Some(now_epoch_seconds);
+        self.downloaded_at_epoch_seconds
+            .get_or_insert(now_epoch_seconds);
         self.stored_at_epoch_seconds = Some(now_epoch_seconds);
         self.updated_at_epoch_seconds = now_epoch_seconds;
         self

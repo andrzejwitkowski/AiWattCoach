@@ -397,11 +397,18 @@ where
                 continue;
             };
 
-            let import_outcome = self
-                .imports
-                .import(command)
-                .await
-                .map_err(|error| error.to_string())?;
+            let import_outcome = match self.imports.import(command).await {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    self.recompute_partial_wahoo_imports_if_needed(
+                        state,
+                        earliest_imported_date.as_deref(),
+                        now_epoch_seconds,
+                    )
+                    .await;
+                    return Err(error.to_string());
+                }
+            };
             if let Some(date) = workout.starts.get(..10) {
                 earliest_imported_date = match earliest_imported_date {
                     Some(current) => Some(std::cmp::min(current, date.to_string())),

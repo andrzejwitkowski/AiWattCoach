@@ -1,3 +1,4 @@
+use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
@@ -101,6 +102,35 @@ impl PlannedCompletedWorkoutLinkRepository for MongoPlannedCompletedWorkoutLinkR
                 .await
                 .map_err(|error| PlannedCompletedWorkoutLinkError::Repository(error.to_string()))?;
             document.map(map_document_to_domain).transpose()
+        })
+    }
+
+    fn find_by_planned_workout_ids(
+        &self,
+        user_id: &str,
+        planned_workout_ids: &[String],
+    ) -> PlannedCompletedWorkoutLinkBoxFuture<
+        Result<Vec<PlannedCompletedWorkoutLink>, PlannedCompletedWorkoutLinkError>,
+    > {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_ids = planned_workout_ids.to_vec();
+        Box::pin(async move {
+            if planned_workout_ids.is_empty() {
+                return Ok(Vec::new());
+            }
+
+            let documents = collection
+                .find(doc! {
+                    "user_id": &user_id,
+                    "planned_workout_id": { "$in": planned_workout_ids },
+                })
+                .await
+                .map_err(|error| PlannedCompletedWorkoutLinkError::Repository(error.to_string()))?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(|error| PlannedCompletedWorkoutLinkError::Repository(error.to_string()))?;
+            documents.into_iter().map(map_document_to_domain).collect()
         })
     }
 

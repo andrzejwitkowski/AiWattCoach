@@ -884,6 +884,8 @@ fn build_direct_event_matches(
         .collect()
 }
 
+// Inputs are already filtered through authoritative repositories, so this dedupe operates on
+// same-source duplicates only and keeps the most representative row for prompt rendering.
 fn dedup_completed_workouts_for_prompt(workouts: Vec<CompletedWorkout>) -> Vec<CompletedWorkout> {
     let mut best_by_key = BTreeMap::<(String, String), CompletedWorkout>::new();
 
@@ -1261,7 +1263,7 @@ mod dedup_tests {
         CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics,
     };
 
-    use super::prefer_completed_workout_for_prompt;
+    use super::{dedup_completed_workouts_for_prompt, prefer_completed_workout_for_prompt};
 
     fn sample_workout(id: &str, start_date_local: &str) -> CompletedWorkout {
         CompletedWorkout::new(
@@ -1315,5 +1317,36 @@ mod dedup_tests {
 
         assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
         assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
+
+    #[test]
+    fn prefer_completed_workout_for_prompt_prefers_wahoo_over_other_sources() {
+        let candidate = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
+        let existing = sample_workout("intervals-activity:10", "2026-05-01T08:00:00Z");
+
+        assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
+        assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
+
+    #[test]
+    fn prefer_completed_workout_for_prompt_falls_back_to_start_time_when_ids_tie() {
+        let candidate = sample_workout("wahoo-workout:10", "2026-05-01T09:00:00Z");
+        let existing = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
+
+        assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
+        assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
+
+    #[test]
+    fn dedup_completed_workouts_for_prompt_keeps_preferred_duplicate() {
+        let mut intervals = sample_workout("intervals-activity:10", "2026-05-01T08:00:00Z");
+        intervals.source_activity_id = Some("10".to_string());
+        let mut wahoo = sample_workout("wahoo-workout:10", "2026-05-01T08:05:00Z");
+        wahoo.source_activity_id = Some("10".to_string());
+
+        let deduped = dedup_completed_workouts_for_prompt(vec![intervals, wahoo.clone()]);
+
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0].completed_workout_id, wahoo.completed_workout_id);
     }
 }

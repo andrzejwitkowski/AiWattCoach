@@ -436,7 +436,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     });
     let wahoo_fit_enrichment_queue_service = wahoo_fit_enrichment_service.clone().map(|_| {
         Arc::new(SchedulerBackedWahooFitEnrichmentService::new(
-            wahoo_fit_file_repository.clone(),
             shared_task_scheduler.clone(),
             UuidIdGenerator,
         ))

@@ -145,8 +145,7 @@ fn map_activity_type(workout_type_id: Option<i64>) -> Option<String> {
             | WahooWorkoutTypeId::Fe
             | WahooWorkoutTypeId::BikingCyclecross
             | WahooWorkoutTypeId::BikingIndoor
-            | WahooWorkoutTypeId::BikingMountain
-            | WahooWorkoutTypeId::BikingMotocycling,
+            | WahooWorkoutTypeId::BikingMountain,
         ) => Some("Ride".to_string()),
         Some(
             WahooWorkoutTypeId::Running
@@ -290,5 +289,22 @@ mod tests {
         };
 
         assert!(import.workout.trainer);
+    }
+
+    #[test]
+    fn map_workout_to_import_command_does_not_classify_motorcycling_as_ride() {
+        let mut workout = sample_workout();
+        workout.workout_type_id = Some(super::WahooWorkoutTypeId::BikingMotocycling as i64);
+
+        let command = map_workout_to_import_command("user-1", &workout)
+            .expect("workout with summary should map");
+
+        let crate::domain::external_sync::ExternalImportCommand::UpsertCompletedWorkout(import) =
+            command
+        else {
+            panic!("expected completed workout import");
+        };
+
+        assert_eq!(import.workout.activity_type, None);
     }
 }

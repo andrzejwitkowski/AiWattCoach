@@ -329,6 +329,47 @@ async fn wahoo_completed_stream_recomputes_from_successful_imports_when_enqueue_
 }
 
 #[tokio::test]
+async fn wahoo_completed_stream_recomputes_from_successful_imports_when_import_fails() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Wahoo,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let imports = RecordingImportService::failing_on_call("import exploded", 2);
+    let recompute = std::sync::Arc::new(RecordingTrainingLoadRecomputeService::default());
+    let service = ProviderPollingService::new(
+        RecordingIntervalsApi::default(),
+        FakeIntervalsSettings,
+        poll_states,
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_training_load_recompute_service(recompute.clone())
+    .with_wahoo_service(std::sync::Arc::new(RecordingWahooService::with_workouts(
+        vec![
+            sample_wahoo_workout(43, "2023-11-15T08:00:00Z", "2023-11-15T09:00:00+00:00"),
+            sample_wahoo_workout(42, "2023-11-14T08:00:00Z", "2023-11-14T09:00:00+00:00"),
+        ],
+    )));
+
+    let processed = service.poll_due_once().await.unwrap();
+
+    assert_eq!(processed, 1);
+    assert_eq!(imports.commands().len(), 2);
+    assert_eq!(
+        recompute.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2023-11-14".to_string(),
+            1_700_000_000
+        )]
+    );
+}
+
+#[tokio::test]
 async fn wahoo_completed_stream_scans_later_pages_for_recently_edited_older_workouts() {
     let mut state = ProviderPollState::new(
         "user-1".to_string(),

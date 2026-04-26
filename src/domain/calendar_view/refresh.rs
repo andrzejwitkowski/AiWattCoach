@@ -71,6 +71,19 @@ impl PlannedCompletedWorkoutLinkRepository for NoopPlannedCompletedWorkoutLinkRe
         Box::pin(async { Ok(None) })
     }
 
+    fn find_by_planned_workout_ids(
+        &self,
+        _user_id: &str,
+        _planned_workout_ids: &[String],
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<
+            Vec<crate::domain::planned_completed_links::PlannedCompletedWorkoutLink>,
+            crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError,
+        >,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
     fn upsert(
         &self,
         link: crate::domain::planned_completed_links::PlannedCompletedWorkoutLink,
