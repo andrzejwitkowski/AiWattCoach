@@ -4,8 +4,10 @@ use std::{
 };
 
 use super::{
-    WahooConnectState, WahooConnectStateRepository, WahooError, WahooOAuthPort, WahooService,
-    WahooToken, WahooUseCases,
+    WahooApiPort, WahooConnectState, WahooConnectStateRepository, WahooCreatePlan,
+    WahooCreateWorkout, WahooError, WahooOAuthPort, WahooPlan, WahooService, WahooToken,
+    WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooWorkout, WahooWorkoutList,
+    WahooWorkoutSummary,
 };
 use crate::domain::{
     identity::{Clock, IdGenerator},
@@ -146,6 +148,7 @@ impl WahooConnectStateRepository for InMemoryConnectStates {
 #[derive(Clone, Default)]
 struct TestOAuth {
     last_code: Arc<Mutex<Option<String>>>,
+    plans: Arc<Mutex<Vec<WahooPlan>>>,
 }
 
 impl WahooOAuthPort for TestOAuth {
@@ -182,6 +185,92 @@ impl WahooOAuthPort for TestOAuth {
     }
 }
 
+impl WahooApiPort for TestOAuth {
+    fn list_plans(
+        &self,
+        _access_token: &str,
+        _external_id: Option<&str>,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Vec<WahooPlan>, WahooError>> {
+        let plans = self.plans.clone();
+        Box::pin(async move { Ok(plans.lock().unwrap().clone()) })
+    }
+
+    fn create_plan(
+        &self,
+        _access_token: &str,
+        _request: WahooCreatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_plan(
+        &self,
+        _access_token: &str,
+        _plan_id: i64,
+        _request: WahooUpdatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn list_workouts(
+        &self,
+        _access_token: &str,
+        _page: usize,
+        _per_page: usize,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        Box::pin(async {
+            Ok(WahooWorkoutList {
+                workouts: Vec::new(),
+                total: 0,
+                page: 1,
+                per_page: 100,
+                order: None,
+                sort: None,
+            })
+        })
+    }
+
+    fn get_workout(
+        &self,
+        _access_token: &str,
+        _workout_id: i64,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotFound) })
+    }
+
+    fn get_workout_summary(
+        &self,
+        _access_token: &str,
+        _workout_id: i64,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn create_workout(
+        &self,
+        _access_token: &str,
+        _request: WahooCreateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_workout(
+        &self,
+        _access_token: &str,
+        _workout_id: i64,
+        _request: WahooUpdateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn download_workout_file(
+        &self,
+        _file_url: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Vec<u8>, WahooError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
 #[tokio::test]
 async fn finish_connect_rejects_state_owned_by_another_user() {
     let settings = InMemorySettingsRepository::default();
@@ -214,4 +303,50 @@ async fn finish_connect_rejects_state_owned_by_another_user() {
     assert_eq!(error, WahooError::InvalidConnectState);
     assert_eq!(*oauth.last_code.lock().unwrap(), None);
     assert_eq!(connect_states.items.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn find_plan_by_external_id_rejects_duplicate_external_ids() {
+    let settings = InMemorySettingsRepository::default();
+    let mut user_settings = UserSettings::new_defaults("user-1".to_string(), 100);
+    user_settings.wahoo.connected = true;
+    user_settings.wahoo.access_token = Some("access-token".to_string());
+    user_settings.wahoo.refresh_token = Some("refresh-token".to_string());
+    user_settings.wahoo.expires_at_epoch_seconds = Some(1_000);
+    settings.upsert(user_settings).await.unwrap();
+    let connect_states = InMemoryConnectStates::default();
+    let oauth = TestOAuth::default();
+    oauth.plans.lock().unwrap().extend([
+        WahooPlan {
+            id: 1,
+            external_id: "plan-1".to_string(),
+            provider_updated_at: None,
+            filename: None,
+            name: None,
+            description: None,
+            created_at: None,
+            updated_at: None,
+        },
+        WahooPlan {
+            id: 2,
+            external_id: "plan-1".to_string(),
+            provider_updated_at: None,
+            filename: None,
+            name: None,
+            description: None,
+            created_at: None,
+            updated_at: None,
+        },
+    ]);
+    let service = WahooService::new(settings, connect_states, oauth, TestClock, TestIds);
+
+    let error = service
+        .find_plan_by_external_id("user-1", "plan-1")
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        WahooError::External("Wahoo returned 2 plans for external_id 'plan-1'".to_string())
+    );
 }

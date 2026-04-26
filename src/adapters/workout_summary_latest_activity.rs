@@ -1,5 +1,5 @@
 use crate::domain::{
-    completed_workouts::CompletedWorkoutRepository,
+    completed_workouts::{completed_workout_activity_id, CompletedWorkoutRepository},
     workout_summary::{BoxFuture, LatestCompletedActivityUseCases, WorkoutSummaryError},
 };
 
@@ -31,11 +31,7 @@ where
                 .map(|workout| {
                     workout.map(|workout| {
                         workout.source_activity_id.unwrap_or_else(|| {
-                            workout
-                                .completed_workout_id
-                                .strip_prefix("intervals-activity:")
-                                .unwrap_or(&workout.completed_workout_id)
-                                .to_string()
+                            completed_workout_activity_id(&workout.completed_workout_id).to_string()
                         })
                     })
                 })

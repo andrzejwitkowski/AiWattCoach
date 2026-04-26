@@ -45,7 +45,9 @@ export function PlannedWorkoutDetailModal({
     : null;
   const activeInterval = chartIntervals.find((interval) => interval.id === highlightedIntervalKey) ?? null;
   const syncStatus = event.plannedSource === 'predicted' ? (event.syncStatus ?? 'unsynced') : null;
-  const canSync = Boolean(event.projectedWorkout);
+  const canSync = Boolean(event.projectedWorkout) && !event.restDay && !event.projectedWorkout?.restDay && !event.indoor;
+  const isInWahooSyncWindow = event.projectedWorkout ? isDateWithinWahooSyncWindow(event.projectedWorkout.date) : false;
+  const syncDisabledReason = canSync && !isInWahooSyncWindow ? t('calendar.syncToWahooWindowMessage') : null;
 
   useEffect(() => {
     setHoveredIntervalKey(null);
@@ -53,7 +55,7 @@ export function PlannedWorkoutDetailModal({
   }, [event.id, event.projectedWorkout?.projectedWorkoutId]);
 
   const handleSync = async () => {
-    if (!event.projectedWorkout || syncing) {
+    if (!event.projectedWorkout || syncing || !isInWahooSyncWindow) {
       return;
     }
 
@@ -73,7 +75,12 @@ export function PlannedWorkoutDetailModal({
       }
 
       if (error instanceof HttpError && error.status === 422) {
-        onSyncError(t('calendar.connectionRequired'));
+        onSyncError(t('calendar.wahooConnectionRequired'));
+        return;
+      }
+
+      if (error instanceof HttpError && error.status === 400) {
+        onSyncError(mapPlannedWorkoutSyncValidationError(error, t));
         return;
       }
 
@@ -97,14 +104,21 @@ export function PlannedWorkoutDetailModal({
           </span>
         ) : null}
         {canSync ? (
-          <button
-            type="button"
-            onClick={() => void handleSync()}
-            disabled={syncing}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-60"
-          >
-            {syncing ? t('calendar.syncingToIntervals') : t('calendar.syncToIntervals')}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => void handleSync()}
+              disabled={syncing || !isInWahooSyncWindow}
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {syncing ? t('calendar.syncingToWahoo') : t('calendar.syncToWahoo')}
+            </button>
+            {syncDisabledReason ? (
+              <div className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-100">
+                {syncDisabledReason}
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
       <WorkoutBars bars={bars} />
@@ -201,6 +215,57 @@ export function PlannedWorkoutDetailModal({
       ) : null}
     </div>
   );
+}
+
+function isDateWithinWahooSyncWindow(dateKey: string): boolean {
+  const today = new Date();
+  const earliestAllowedDate = toUtcDateKey(today);
+  const latestAllowedDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  latestAllowedDate.setUTCDate(latestAllowedDate.getUTCDate() + 6);
+
+  return dateKey >= earliestAllowedDate && dateKey <= toUtcDateKey(latestAllowedDate);
+}
+
+function toUtcDateKey(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function mapPlannedWorkoutSyncValidationError(
+  error: HttpError,
+  t: ReturnType<typeof useTranslation>['t'],
+): string {
+  const errorCode = typeof error.body === 'object' && error.body !== null && 'code' in error.body
+    ? (error.body as { code?: unknown }).code
+    : undefined;
+
+  if (errorCode === 'wahoo_window_out_of_range') {
+    return t('calendar.syncToWahooWindowMessage');
+  }
+
+  if (errorCode === 'wahoo_ftp_required') {
+    return t('calendar.syncToWahooFtpRequired');
+  }
+
+  if (errorCode === 'invalid_date_format') {
+    return t('calendar.syncToWahooInvalidDate');
+  }
+
+  if (error.message === 'Only planned workouts scheduled between today and the next 6 days can sync to Wahoo') {
+    return t('calendar.syncToWahooWindowMessage');
+  }
+
+  if (error.message === 'Set your cycling FTP in Settings before syncing to Wahoo') {
+    return t('calendar.syncToWahooFtpRequired');
+  }
+
+  if (error.message === 'planned workout date must be in YYYY-MM-DD format') {
+    return t('calendar.syncToWahooInvalidDate');
+  }
+
+  return t('calendar.syncFailedMessage');
 }
 
 function buildRawWorkoutNoteLines(rawWorkoutDoc: string | null): string[] {

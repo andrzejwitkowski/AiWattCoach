@@ -19,6 +19,15 @@ use crate::domain::{
     training_load::{
         BoxFuture as TrainingLoadBoxFuture, TrainingLoadError, TrainingLoadRecomputeUseCases,
     },
+    wahoo::{
+        WahooCreatePlan, WahooCreateWorkout, WahooError, WahooFileReference, WahooPlan,
+        WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooWorkout, WahooWorkoutList,
+        WahooWorkoutSummary,
+    },
+    wahoo_fit_enrichment::{
+        BoxFuture as WahooFitEnrichmentBoxFuture, WahooFitEnrichmentError,
+        WahooFitEnrichmentQueueUseCases,
+    },
 };
 
 #[derive(Clone)]
@@ -52,9 +61,28 @@ pub(super) struct RecordingTrainingLoadRecomputeService {
     calls: Arc<Mutex<Vec<(String, String, i64)>>>,
 }
 
+#[derive(Clone, Default)]
+pub(super) struct RecordingWahooFitEnrichmentQueue {
+    calls: Arc<Mutex<Vec<(String, String, i64)>>>,
+    failure: Arc<Mutex<Option<String>>>,
+}
+
 impl RecordingTrainingLoadRecomputeService {
     pub(super) fn calls(&self) -> Vec<(String, String, i64)> {
         self.calls.lock().unwrap().clone()
+    }
+}
+
+impl RecordingWahooFitEnrichmentQueue {
+    pub(super) fn calls(&self) -> Vec<(String, String, i64)> {
+        self.calls.lock().unwrap().clone()
+    }
+
+    pub(super) fn failing(message: &str) -> Self {
+        Self {
+            calls: Arc::new(Mutex::new(Vec::new())),
+            failure: Arc::new(Mutex::new(Some(message.to_string()))),
+        }
     }
 }
 
@@ -170,6 +198,30 @@ impl TrainingLoadRecomputeUseCases for RecordingTrainingLoadRecomputeService {
     }
 }
 
+impl WahooFitEnrichmentQueueUseCases for RecordingWahooFitEnrichmentQueue {
+    fn enqueue_enrichment(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+        wahoo_workout_id: i64,
+    ) -> WahooFitEnrichmentBoxFuture<Result<(), WahooFitEnrichmentError>> {
+        let calls = self.calls.clone();
+        let failure = self.failure.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            if let Some(message) = failure.lock().unwrap().clone() {
+                return Err(WahooFitEnrichmentError::Scheduler(message));
+            }
+            calls
+                .lock()
+                .unwrap()
+                .push((user_id, completed_workout_id, wahoo_workout_id));
+            Ok(())
+        })
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct FakeIntervalsSettings;
 
@@ -262,6 +314,202 @@ impl RecordingIntervalsApi {
 
     pub(super) fn activity_lookups(&self) -> Vec<String> {
         self.activity_lookups.lock().unwrap().clone()
+    }
+}
+
+#[derive(Clone, Default)]
+pub(super) struct RecordingWahooService {
+    workouts: Arc<Mutex<Vec<WahooWorkout>>>,
+    list_calls: Arc<Mutex<Vec<(String, usize, usize)>>>,
+}
+
+impl RecordingWahooService {
+    pub(super) fn with_workouts(workouts: Vec<WahooWorkout>) -> Self {
+        Self {
+            workouts: Arc::new(Mutex::new(workouts)),
+            list_calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub(super) fn list_calls(&self) -> Vec<(String, usize, usize)> {
+        self.list_calls.lock().unwrap().clone()
+    }
+}
+
+impl WahooUseCases for RecordingWahooService {
+    fn begin_connect(
+        &self,
+        _user_id: &str,
+        _return_to: Option<String>,
+    ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooAuthStart, WahooError>>
+    {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn finish_connect(
+        &self,
+        _user_id: &str,
+        _state: &str,
+        _code: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooAuthExchange, WahooError>>
+    {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn ensure_token(
+        &self,
+        _user_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooToken, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn list_workouts(
+        &self,
+        user_id: &str,
+        page: usize,
+        per_page: usize,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        let workouts = self.workouts.clone();
+        let list_calls = self.list_calls.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            list_calls.lock().unwrap().push((user_id, page, per_page));
+            let workouts = workouts.lock().unwrap().clone();
+            let total = workouts.len();
+            let start = (page.saturating_sub(1)) * per_page;
+            let page_items = workouts
+                .into_iter()
+                .skip(start)
+                .take(per_page)
+                .collect::<Vec<_>>();
+            Ok(WahooWorkoutList {
+                total,
+                workouts: page_items,
+                page,
+                per_page,
+                order: None,
+                sort: None,
+            })
+        })
+    }
+
+    fn get_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotFound) })
+    }
+
+    fn get_workout_summary(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_plan_by_external_id(
+        &self,
+        _user_id: &str,
+        _external_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooPlan>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn create_plan(
+        &self,
+        _user_id: &str,
+        _request: WahooCreatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_plan(
+        &self,
+        _user_id: &str,
+        _plan_id: i64,
+        _request: WahooUpdatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn create_workout(
+        &self,
+        _user_id: &str,
+        _request: WahooCreateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+        _request: WahooUpdateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn download_workout_file(
+        &self,
+        _file_url: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Vec<u8>, WahooError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
+pub(super) fn sample_wahoo_workout(id: i64, starts: &str, updated_at: &str) -> WahooWorkout {
+    sample_wahoo_workout_with_fit_file(
+        id,
+        starts,
+        updated_at,
+        Some(format!("https://example.com/{id}.fit")),
+    )
+}
+
+pub(super) fn sample_wahoo_workout_with_fit_file(
+    id: i64,
+    starts: &str,
+    updated_at: &str,
+    file_url: Option<String>,
+) -> WahooWorkout {
+    WahooWorkout {
+        id,
+        starts: starts.to_string(),
+        minutes: Some(60),
+        name: Some(format!("Wahoo Workout {id}")),
+        plan_id: None,
+        plan_ids: Vec::new(),
+        route_id: None,
+        workout_token: None,
+        workout_type_id: None,
+        workout_summary: Some(WahooWorkoutSummary {
+            id,
+            name: Some(format!("Wahoo Workout {id}")),
+            ascent_meters: None,
+            cadence_avg_rpm: None,
+            calories: None,
+            distance_meters: Some(10_000.0),
+            duration_active_seconds: Some(3600.0),
+            duration_paused_seconds: Some(0.0),
+            duration_total_seconds: Some(3600.0),
+            heart_rate_avg_bpm: None,
+            normalized_power_watts: Some(250.0),
+            training_stress_score: Some(80.0),
+            average_power_watts: Some(230.0),
+            speed_avg_mps: None,
+            total_work_joules: None,
+            time_zone: None,
+            manual: false,
+            edited: false,
+            fitness_app_id: None,
+            file: file_url.map(|url| WahooFileReference { url }),
+            created_at: Some(updated_at.to_string()),
+            updated_at: Some(updated_at.to_string()),
+        }),
+        created_at: Some(updated_at.to_string()),
+        updated_at: Some(updated_at.to_string()),
     }
 }
 

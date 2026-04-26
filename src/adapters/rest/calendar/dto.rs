@@ -126,3 +126,20 @@ pub(super) struct ProjectedWorkoutDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rest_day_reason: Option<String>,
 }
+
+#[derive(Serialize)]
+pub(super) struct ValidationMessageResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    pub message: String,
+}
+
+pub(super) fn validation_code_message_response(
+    code: &str,
+    message: &str,
+) -> ValidationMessageResponse {
+    ValidationMessageResponse {
+        code: Some(code.to_string()),
+        message: message.to_string(),
+    }
+}

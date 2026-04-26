@@ -1,14 +1,22 @@
 import { generateTraceparent } from './logger';
 
 export class HttpError extends Error {
+  public readonly body: unknown;
+
   constructor(
     public readonly status: number,
-    message: string
+    message: string,
+    body?: unknown,
   ) {
     super(message);
     this.name = 'HttpError';
+    this.body = body;
   }
 }
+
+type ErrorResponseBody = {
+  message?: string;
+};
 
 export class AuthenticationError extends Error {
   constructor() {
@@ -55,19 +63,49 @@ async function request<TRes>(
     throw new AuthenticationError();
   }
 
+  const responseBody = await parseResponseBody(response);
+
   if (!response.ok && !options?.allowedErrorStatuses?.includes(response.status)) {
-    throw new HttpError(response.status, `${method} ${path} failed: ${response.status}`);
+    throw new HttpError(
+      response.status,
+      getErrorMessage(method, path, response.status, responseBody),
+      responseBody,
+    );
   }
 
   if (response.status === 204) {
     return undefined as TRes;
   }
 
-  try {
-    return (await response.json()) as TRes;
-  } catch {
+  if (responseBody === undefined) {
     throw new HttpError(response.status, `${method} ${path}: invalid JSON response`);
   }
+
+  return responseBody as TRes;
+}
+
+async function parseResponseBody(response: Response): Promise<unknown> {
+  if (response.status === 204) {
+    return undefined;
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+}
+
+function getErrorMessage(method: string, path: string, status: number, body: unknown): string {
+  if (isErrorResponseBody(body) && typeof body.message === 'string' && body.message.trim()) {
+    return body.message;
+  }
+
+  return `${method} ${path} failed: ${status}`;
+}
+
+function isErrorResponseBody(body: unknown): body is ErrorResponseBody {
+  return typeof body === 'object' && body !== null && 'message' in body;
 }
 
 export function get<TRes>(apiBaseUrl: string, path: string, options?: RequestOptions): Promise<TRes> {

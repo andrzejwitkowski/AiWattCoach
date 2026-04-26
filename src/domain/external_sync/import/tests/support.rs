@@ -22,6 +22,10 @@ use crate::domain::{
     planned_workout_tokens::{
         PlannedWorkoutToken, PlannedWorkoutTokenError, PlannedWorkoutTokenRepository,
     },
+    planned_workout_wahoo_syncs::{
+        PlannedWorkoutWahooSyncError, PlannedWorkoutWahooSyncRecord,
+        PlannedWorkoutWahooSyncRepository,
+    },
     planned_workouts::{
         PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
         PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
@@ -130,6 +134,11 @@ pub(super) struct InMemoryPlannedWorkoutTokenRepository {
 #[derive(Clone, Default)]
 pub(super) struct InMemoryPlannedCompletedWorkoutLinkRepository {
     stored: Arc<Mutex<Vec<PlannedCompletedWorkoutLink>>>,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct InMemoryPlannedWorkoutWahooSyncRepository {
+    stored: Arc<Mutex<Vec<PlannedWorkoutWahooSyncRecord>>>,
 }
 
 impl RaceRepository for InMemoryRaceRepository {
@@ -516,6 +525,30 @@ impl PlannedCompletedWorkoutLinkRepository for InMemoryPlannedCompletedWorkoutLi
         })
     }
 
+    fn find_by_planned_workout_ids(
+        &self,
+        user_id: &str,
+        planned_workout_ids: &[String],
+    ) -> crate::domain::planned_completed_links::BoxFuture<
+        Result<Vec<PlannedCompletedWorkoutLink>, PlannedCompletedWorkoutLinkError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_ids = planned_workout_ids.to_vec();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|link| {
+                    link.user_id == user_id
+                        && planned_workout_ids.contains(&link.planned_workout_id)
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
     fn upsert(
         &self,
         link: PlannedCompletedWorkoutLink,
@@ -555,6 +588,93 @@ impl PlannedCompletedWorkoutLinkRepository for InMemoryPlannedCompletedWorkoutLi
     }
 }
 
+impl PlannedWorkoutWahooSyncRepository for InMemoryPlannedWorkoutWahooSyncRepository {
+    fn find_by_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> crate::domain::planned_workout_wahoo_syncs::BoxFuture<
+        Result<Option<PlannedWorkoutWahooSyncRecord>, PlannedWorkoutWahooSyncError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|record| {
+                    record.user_id == user_id && record.planned_workout_id == planned_workout_id
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        user_id: &str,
+        wahoo_plan_id: i64,
+    ) -> crate::domain::planned_workout_wahoo_syncs::BoxFuture<
+        Result<Option<PlannedWorkoutWahooSyncRecord>, PlannedWorkoutWahooSyncError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|record| {
+                    record.user_id == user_id && record.wahoo_plan_id == Some(wahoo_plan_id)
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        user_id: &str,
+        wahoo_workout_token: &str,
+    ) -> crate::domain::planned_workout_wahoo_syncs::BoxFuture<
+        Result<Option<PlannedWorkoutWahooSyncRecord>, PlannedWorkoutWahooSyncError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let wahoo_workout_token = wahoo_workout_token.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|record| {
+                    record.user_id == user_id
+                        && record.wahoo_workout_token.as_deref()
+                            == Some(wahoo_workout_token.as_str())
+                })
+                .cloned())
+        })
+    }
+
+    fn upsert(
+        &self,
+        record: PlannedWorkoutWahooSyncRecord,
+    ) -> crate::domain::planned_workout_wahoo_syncs::BoxFuture<
+        Result<PlannedWorkoutWahooSyncRecord, PlannedWorkoutWahooSyncError>,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                !(existing.user_id == record.user_id
+                    && existing.planned_workout_id == record.planned_workout_id)
+            });
+            stored.push(record.clone());
+            Ok(record)
+        })
+    }
+}
+
 impl InMemoryObservationRepository {
     pub(super) fn stored(&self) -> Vec<ExternalObservation> {
         self.stored.lock().unwrap().clone()
@@ -578,6 +698,32 @@ impl ExternalObservationRepository for InMemoryObservationRepository {
             });
             stored.push(observation.clone());
             Ok(observation)
+        })
+    }
+
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        external_object_kind: crate::domain::external_sync::ExternalObjectKind,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|observation| {
+                    observation.user_id == user_id
+                        && observation.external_object_kind == external_object_kind
+                        && canonical_entities.contains(&observation.canonical_entity)
+                })
+                .cloned()
+                .collect())
         })
     }
 
@@ -775,6 +921,7 @@ pub(super) fn external_import_service(
     special_days: InMemorySpecialDayRepository,
     planned_workout_tokens: InMemoryPlannedWorkoutTokenRepository,
     planned_completed_links: InMemoryPlannedCompletedWorkoutLinkRepository,
+    planned_workout_wahoo_syncs: InMemoryPlannedWorkoutWahooSyncRepository,
     observations: InMemoryObservationRepository,
     sync_states: InMemorySyncStateRepository,
     refresh: RecordingRefresh,
@@ -785,6 +932,7 @@ pub(super) fn external_import_service(
     InMemorySpecialDayRepository,
     InMemoryPlannedWorkoutTokenRepository,
     InMemoryPlannedCompletedWorkoutLinkRepository,
+    InMemoryPlannedWorkoutWahooSyncRepository,
     InMemoryObservationRepository,
     InMemorySyncStateRepository,
     FixedClock,
@@ -801,6 +949,7 @@ pub(super) fn external_import_service(
         sync_states,
         FixedClock,
     )
+    .with_planned_workout_wahoo_syncs(planned_workout_wahoo_syncs)
     .with_calendar_view_refresh(refresh)
 }
 
@@ -815,6 +964,7 @@ pub(super) fn external_import_service_without_refresh(
     special_days: InMemorySpecialDayRepository,
     planned_workout_tokens: InMemoryPlannedWorkoutTokenRepository,
     planned_completed_links: InMemoryPlannedCompletedWorkoutLinkRepository,
+    planned_workout_wahoo_syncs: InMemoryPlannedWorkoutWahooSyncRepository,
     observations: InMemoryObservationRepository,
     sync_states: InMemorySyncStateRepository,
 ) -> ExternalImportService<
@@ -824,6 +974,7 @@ pub(super) fn external_import_service_without_refresh(
     InMemorySpecialDayRepository,
     InMemoryPlannedWorkoutTokenRepository,
     InMemoryPlannedCompletedWorkoutLinkRepository,
+    InMemoryPlannedWorkoutWahooSyncRepository,
     InMemoryObservationRepository,
     InMemorySyncStateRepository,
     FixedClock,
@@ -838,6 +989,28 @@ pub(super) fn external_import_service_without_refresh(
         observations,
         sync_states,
         FixedClock,
+    )
+    .with_planned_workout_wahoo_syncs(planned_workout_wahoo_syncs)
+}
+
+pub(super) fn sample_planned_workout_wahoo_sync_record(
+    planned_workout_id: &str,
+) -> PlannedWorkoutWahooSyncRecord {
+    PlannedWorkoutWahooSyncRecord::pending(
+        "user-1".to_string(),
+        "training-plan:user-1:w1:1".to_string(),
+        "2026-05-11".to_string(),
+        planned_workout_id.to_string(),
+        "source-workout-1".to_string(),
+        planned_workout_id.to_string(),
+        1_700_000_000,
+    )
+    .mark_synced(
+        "payload-hash-1".to_string(),
+        5_001,
+        60_001,
+        "[AIWATTCOACH:pw=WAH001TOKN]".to_string(),
+        1_700_000_000,
     )
 }
 

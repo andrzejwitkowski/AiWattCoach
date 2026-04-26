@@ -286,6 +286,46 @@ async fn builder_dedups_matched_recent_planned_workout_from_day_plans() {
 }
 
 #[tokio::test]
+async fn builder_prefers_wahoo_completed_workout_when_same_activity_exists_twice() {
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(TestWorkoutSummaryRepository),
+        FixedClock,
+    )
+    .with_completed_workout_repository(TestCompletedWorkoutRepository::with_workouts(vec![
+        sample_completed_workout_on_date_with_ftp(
+            "ride-1",
+            "2026-04-03T08:00:00",
+            Some(300),
+            Some("intervals-event:101".to_string()),
+        ),
+        crate::domain::completed_workouts::CompletedWorkout {
+            completed_workout_id: "wahoo-workout:ride-1".to_string(),
+            source_activity_id: Some("ride-1".to_string()),
+            ..sample_completed_workout_on_date_with_ftp(
+                "ride-1",
+                "2026-04-03T08:00:00",
+                Some(305),
+                Some("intervals-event:101".to_string()),
+            )
+        },
+    ]))
+    .with_planned_workout_repository(TestPlannedWorkoutRepository::default())
+    .with_special_day_repository(TestSpecialDayRepository::default());
+
+    let result = builder.build("user-1", "ride-1").await.unwrap();
+    let recent_day = result
+        .context
+        .recent_days
+        .iter()
+        .find(|day| day.date == "2026-04-03")
+        .expect("recent day should exist");
+
+    assert_eq!(recent_day.workouts.len(), 1);
+    assert_eq!(result.context.history.activity_count, 1);
+}
+
+#[tokio::test]
 async fn build_athlete_summary_context_uses_explicit_summary_focus() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),

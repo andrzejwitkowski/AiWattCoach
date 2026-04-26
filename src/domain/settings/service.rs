@@ -433,59 +433,88 @@ where
         || previous.athlete_id != intervals.athlete_id
         || previous.connected != intervals.connected;
 
-    for stream in [
-        ProviderPollStream::Calendar,
-        ProviderPollStream::CompletedWorkouts,
-    ] {
-        let existing = poll_states
-            .find_by_provider_and_stream(user_id, ExternalProvider::Intervals, stream.clone())
-            .await
-            .map_err(map_poll_state_error)?;
+    let existing = poll_states
+        .find_by_provider_and_stream(
+            user_id,
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+        )
+        .await
+        .map_err(map_poll_state_error)?;
 
-        let state = match existing {
-            Some(state) => {
-                if !intervals.connected {
-                    ProviderPollState {
-                        next_due_at_epoch_seconds: i64::MAX,
-                        cursor: None,
-                        backoff_until_epoch_seconds: None,
-                        last_error: None,
-                        ..state
-                    }
-                } else if credentials_changed {
-                    ProviderPollState {
-                        next_due_at_epoch_seconds: now_epoch_seconds,
-                        cursor: None,
-                        backoff_until_epoch_seconds: None,
-                        last_error: None,
-                        last_attempted_at_epoch_seconds: None,
-                        last_successful_at_epoch_seconds: None,
-                        ..state
-                    }
-                } else if state.next_due_at_epoch_seconds <= now_epoch_seconds
-                    && state.backoff_until_epoch_seconds.is_none()
-                {
-                    state
-                } else {
-                    ProviderPollState { ..state }
+    let state = match existing {
+        Some(state) => {
+            if !intervals.connected {
+                ProviderPollState {
+                    next_due_at_epoch_seconds: i64::MAX,
+                    cursor: None,
+                    backoff_until_epoch_seconds: None,
+                    last_error: None,
+                    ..state
                 }
+            } else if credentials_changed {
+                ProviderPollState {
+                    next_due_at_epoch_seconds: now_epoch_seconds,
+                    cursor: None,
+                    backoff_until_epoch_seconds: None,
+                    last_error: None,
+                    last_attempted_at_epoch_seconds: None,
+                    last_successful_at_epoch_seconds: None,
+                    ..state
+                }
+            } else {
+                state
             }
-            None => ProviderPollState::new(
-                user_id.to_string(),
-                ExternalProvider::Intervals,
-                stream,
-                if intervals.connected {
-                    now_epoch_seconds
-                } else {
-                    i64::MAX
-                },
-            ),
-        };
+        }
+        None => ProviderPollState::new(
+            user_id.to_string(),
+            ExternalProvider::Intervals,
+            ProviderPollStream::CompletedWorkouts,
+            if intervals.connected {
+                now_epoch_seconds
+            } else {
+                i64::MAX
+            },
+        ),
+    };
 
+    poll_states
+        .upsert(state)
+        .await
+        .map_err(map_poll_state_error)?;
+
+    park_existing_intervals_calendar_poll_state(poll_states, user_id)
+        .await
+        .map_err(map_poll_state_error)?;
+
+    Ok(())
+}
+
+async fn park_existing_intervals_calendar_poll_state<PollStates>(
+    poll_states: &PollStates,
+    user_id: &str,
+) -> Result<(), crate::domain::external_sync::ExternalSyncRepositoryError>
+where
+    PollStates: ProviderPollStateRepository,
+{
+    let existing = poll_states
+        .find_by_provider_and_stream(
+            user_id,
+            ExternalProvider::Intervals,
+            ProviderPollStream::Calendar,
+        )
+        .await?;
+
+    if let Some(state) = existing {
         poll_states
-            .upsert(state)
-            .await
-            .map_err(map_poll_state_error)?;
+            .upsert(ProviderPollState {
+                next_due_at_epoch_seconds: i64::MAX,
+                cursor: None,
+                backoff_until_epoch_seconds: None,
+                last_error: None,
+                ..state
+            })
+            .await?;
     }
 
     Ok(())
@@ -1216,7 +1245,7 @@ mod tests {
         assert_eq!(updated.intervals.athlete_id.as_deref(), Some("athlete-1"));
 
         let stored = poll_states.stored();
-        assert_eq!(stored.len(), 2);
+        assert_eq!(stored.len(), 1);
         assert!(stored
             .iter()
             .all(|state| state.next_due_at_epoch_seconds == i64::MAX));
@@ -1265,13 +1294,27 @@ mod tests {
             .upsert(ProviderPollState {
                 user_id: "user-1".to_string(),
                 provider: ExternalProvider::Intervals,
-                stream: ProviderPollStream::Calendar,
+                stream: ProviderPollStream::CompletedWorkouts,
                 cursor: Some("2026-05-01".to_string()),
                 next_due_at_epoch_seconds: 1_700_000_000,
                 last_attempted_at_epoch_seconds: Some(1_699_999_000),
                 last_successful_at_epoch_seconds: Some(1_699_999_100),
                 last_error: Some("bad auth".to_string()),
                 backoff_until_epoch_seconds: Some(1_700_000_300),
+            })
+            .await
+            .unwrap();
+        poll_states
+            .upsert(ProviderPollState {
+                user_id: "user-1".to_string(),
+                provider: ExternalProvider::Intervals,
+                stream: ProviderPollStream::Calendar,
+                cursor: Some("2026-05-02".to_string()),
+                next_due_at_epoch_seconds: 1_700_000_050,
+                last_attempted_at_epoch_seconds: Some(1_699_999_200),
+                last_successful_at_epoch_seconds: Some(1_699_999_300),
+                last_error: Some("calendar stale".to_string()),
+                backoff_until_epoch_seconds: Some(1_700_000_400),
             })
             .await
             .unwrap();
@@ -1317,7 +1360,7 @@ mod tests {
             .upsert(ProviderPollState {
                 user_id: "user-1".to_string(),
                 provider: ExternalProvider::Intervals,
-                stream: ProviderPollStream::Calendar,
+                stream: ProviderPollStream::CompletedWorkouts,
                 cursor: Some("2099-01-01".to_string()),
                 next_due_at_epoch_seconds: 1_700_099_999,
                 last_attempted_at_epoch_seconds: Some(1_699_999_000),
@@ -1367,7 +1410,7 @@ mod tests {
             .upsert(ProviderPollState {
                 user_id: "user-1".to_string(),
                 provider: ExternalProvider::Intervals,
-                stream: ProviderPollStream::Calendar,
+                stream: ProviderPollStream::CompletedWorkouts,
                 cursor: Some("2026-05-01".to_string()),
                 next_due_at_epoch_seconds: 1_700_099_999,
                 last_attempted_at_epoch_seconds: Some(1_699_999_000),
@@ -1393,17 +1436,12 @@ mod tests {
             .unwrap();
 
         let stored = poll_states.stored();
+        assert_eq!(stored.len(), 1);
         assert!(stored.iter().any(|state| {
-            state.stream == ProviderPollStream::Calendar
+            state.stream == ProviderPollStream::CompletedWorkouts
                 && state.next_due_at_epoch_seconds == 1_700_099_999
                 && state.backoff_until_epoch_seconds == Some(1_700_100_100)
                 && state.last_error.as_deref() == Some("transient")
-        }));
-        assert!(stored.iter().any(|state| {
-            state.stream == ProviderPollStream::CompletedWorkouts
-                && state.next_due_at_epoch_seconds == 1_700_000_000
-                && state.backoff_until_epoch_seconds.is_none()
-                && state.last_error.is_none()
         }));
     }
 }

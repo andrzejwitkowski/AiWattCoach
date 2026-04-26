@@ -14,6 +14,7 @@
 ## Signature Change Verification
 
 - When changing a function signature, grep every call site including local `#[cfg(test)]` modules in the same file before calling the refactor done. `cargo clippy --all-targets` compiles test targets too, so a missed unit-test call site will still fail CI even if the runtime code builds.
+- For constructors with many positional arguments of the same type, re-check test fixtures against the canonical signature before treating behavior regressions as product bugs. A misordered fixture can silently move a link/id into the wrong field and produce misleading CI failures.
 
 ## Fixture Refactor Verification
 
@@ -44,8 +45,12 @@
 
 ## Small Review Fixes
 
+- When simplifying poll-cursor helpers, verify both branches explicitly: existing cursor plus new upstream results should usually advance, while existing cursor plus no new results may need to stay put. Do not drop the data-presence signal unless a regression test proves the simplified semantics are still correct.
+- If a polling loop filters fetched upstream records before import, do not tie cursor advancement only to the filtered subset unless repeated rereads of skipped records are intentional. Cursor/watermark movement usually belongs to the full consumed upstream page.
 - In response/body mappers, decode a byte payload to UTF-8 once and reuse the borrowed text across classification and logging helpers instead of repeating `from_utf8(...)` work.
 - If parsed JSON string data is only compared against a static literal, keep it borrowed as `&str` and compare in place instead of allocating an owned `String` first.
+- When a review-driven change upgrades a match-strength enum or ranking rule, grep the touched test module for old enum expectations before shipping. Production code and review replies can be correct while one stale assertion still expects the pre-change ranking.
+- For external client write logging, prefer adapter-local body preview logging only on the specific POST/PUT paths that need it, and redact secret-bearing form keys before they hit logs. Do not broaden body logging for unrelated requests just to debug one provider write flow.
 
 ## Release Workflow Reliability
 

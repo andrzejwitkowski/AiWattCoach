@@ -83,7 +83,7 @@ where
         })
     }
 
-    async fn retry_if_terminal(
+    pub(super) async fn retry_if_terminal(
         &self,
         task: ScheduledTask,
     ) -> Result<ScheduledTask, TaskSchedulerError> {

@@ -95,6 +95,49 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
         })
     }
 
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        external_object_kind: ExternalObjectKind,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let external_object_kind = external_object_kind_as_str(&external_object_kind).to_string();
+        let canonical_entities = canonical_entities
+            .iter()
+            .map(|entity| {
+                doc! {
+                    "canonical_entity_kind": canonical_entity_kind_as_str(&entity.entity_kind),
+                    "canonical_entity_id": &entity.entity_id,
+                }
+            })
+            .collect::<Vec<_>>();
+        Box::pin(async move {
+            if canonical_entities.is_empty() {
+                return Ok(Vec::new());
+            }
+
+            collection
+                .find(doc! {
+                    "user_id": &user_id,
+                    "external_object_kind": &external_object_kind,
+                    "$or": canonical_entities,
+                })
+                .await
+                .map_err(storage_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(storage_error)
+                .map(|documents| {
+                    documents
+                        .into_iter()
+                        .map(map_document_to_observation)
+                        .collect()
+                })
+        })
+    }
+
     fn find_by_provider_and_external_id(
         &self,
         user_id: &str,

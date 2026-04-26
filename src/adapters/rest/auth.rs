@@ -157,10 +157,15 @@ pub async fn start_wahoo_connect(
         Err(crate::domain::wahoo::WahooError::InvalidConnectState) => {
             StatusCode::BAD_REQUEST.into_response()
         }
-        Err(
-            crate::domain::wahoo::WahooError::Repository(_)
-            | crate::domain::wahoo::WahooError::External(_),
-        ) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(crate::domain::wahoo::WahooError::Repository(_))
+        | Err(crate::domain::wahoo::WahooError::External(_)) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+        // Auth handlers do not look up workout resources, but an unexpected upstream 404 is
+        // still an availability problem rather than a user-facing missing-route condition.
+        Err(crate::domain::wahoo::WahooError::NotFound) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
     }
 }
 
@@ -191,10 +196,15 @@ pub async fn finish_wahoo_connect(
         Err(crate::domain::wahoo::WahooError::NotConnected) => {
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
-        Err(
-            crate::domain::wahoo::WahooError::Repository(_)
-            | crate::domain::wahoo::WahooError::External(_),
-        ) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(crate::domain::wahoo::WahooError::Repository(_))
+        | Err(crate::domain::wahoo::WahooError::External(_)) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+        // Auth handlers do not look up workout resources, but an unexpected upstream 404 is
+        // still an availability problem rather than a user-facing missing-route condition.
+        Err(crate::domain::wahoo::WahooError::NotFound) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
     }
 }
 

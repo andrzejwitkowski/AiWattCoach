@@ -8,7 +8,7 @@ use crate::domain::{
 use super::{support::*, ProviderPollingService};
 
 #[tokio::test]
-async fn poll_due_once_imports_calendar_events_and_marks_success() {
+async fn poll_due_once_imports_calendar_events_and_advances_cursor() {
     let poll_states =
         RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
             "user-1".to_string(),
@@ -16,19 +16,20 @@ async fn poll_due_once_imports_calendar_events_and_marks_success() {
             ProviderPollStream::Calendar,
             1_699_999_900,
         )]);
+    let event = Event {
+        id: 144,
+        start_date_local: "2023-11-14T08:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Threshold Builder".to_string()),
+        category: EventCategory::Workout,
+        description: Some("Threshold Builder\n- 10m 90-95%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    };
     let imports = RecordingImportService::default();
     let service = ProviderPollingService::new(
-        FakeIntervalsApi::with_events(vec![Event {
-            id: 144,
-            start_date_local: "2026-05-10T00:00:00".to_string(),
-            event_type: Some("Ride".to_string()),
-            name: Some("Threshold Builder".to_string()),
-            category: EventCategory::Workout,
-            description: Some("Threshold Builder\n- 10m 90-95%".to_string()),
-            indoor: false,
-            color: None,
-            workout_doc: None,
-        }]),
+        FakeIntervalsApi::with_events(vec![event.clone()]),
         FakeIntervalsSettings,
         poll_states.clone(),
         imports.clone(),
@@ -42,6 +43,12 @@ async fn poll_due_once_imports_calendar_events_and_marks_success() {
 
     assert_eq!(processed, 1);
     assert_eq!(imports.commands().len(), 1);
+    let crate::domain::external_sync::ExternalImportCommand::UpsertPlannedWorkout(import) =
+        &imports.commands()[0]
+    else {
+        panic!("expected planned workout import");
+    };
+    assert_eq!(import.external_id, event.id.to_string());
     let stored = poll_states
         .find_by_provider_and_stream(
             "user-1",
@@ -126,6 +133,55 @@ async fn later_calendar_sync_uses_cursor_and_skips_full_range_refresh() {
         api.event_ranges(),
         vec![("2023-11-18".to_string(), "2023-11-28".to_string())]
     );
+    assert!(refresh.ranges().is_empty());
+}
+
+#[tokio::test]
+async fn later_calendar_sync_with_new_events_advances_cursor_to_window_end() {
+    let mut state = ProviderPollState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        ProviderPollStream::Calendar,
+        1_699_999_900,
+    );
+    state.cursor = Some("2023-11-20".to_string());
+    let event = Event {
+        id: 144,
+        start_date_local: "2023-11-21T08:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Threshold Builder".to_string()),
+        category: EventCategory::Workout,
+        description: Some("Threshold Builder\n- 10m 90-95%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    };
+    let poll_states = RecordingProviderPollStateRepository::with_states(vec![state]);
+    let refresh = RecordingCalendarRefresh::default();
+    let service = ProviderPollingService::new(
+        FakeIntervalsApi::with_events(vec![event]),
+        FakeIntervalsSettings,
+        poll_states.clone(),
+        RecordingImportService::default(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_windows(7, 14, 7)
+    .with_incremental_lookback(2)
+    .with_calendar_view_refresh(refresh.clone());
+
+    service.poll_due_once().await.unwrap();
+
+    let stored = poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Intervals,
+            ProviderPollStream::Calendar,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.cursor.as_deref(), Some("2023-11-28"));
     assert!(refresh.ranges().is_empty());
 }
 

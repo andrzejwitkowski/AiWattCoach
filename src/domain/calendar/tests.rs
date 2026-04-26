@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::domain::{
     calendar::{
-        CalendarError, CalendarService, CalendarUseCases, PlannedWorkoutSyncRecord,
-        PlannedWorkoutSyncRepository, SyncPlannedWorkout,
+        CalendarError, CalendarService, CalendarUseCases, NoopWahooUseCases,
+        PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository, SyncPlannedWorkout,
     },
     calendar_view::{
         CalendarEntryKind, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
@@ -13,30 +13,36 @@ use crate::domain::{
         CompletedWorkout, CompletedWorkoutError, CompletedWorkoutMetrics,
         CompletedWorkoutRepository, CompletedWorkoutSeries, CompletedWorkoutStream,
     },
-    external_sync::{
-        ExternalProvider, ExternalSyncRepositoryError, ProviderPollState,
-        ProviderPollStateRepository, ProviderPollStream,
-    },
     identity::Clock,
     intervals::{
         parse_planned_workout, BoxFuture as IntervalsBoxFuture, CreateEvent, DateRange, Event,
         EventCategory, IntervalsError, IntervalsUseCases, UpdateEvent,
     },
     planned_workout_tokens::NoopPlannedWorkoutTokenRepository,
+    planned_workout_wahoo_syncs::{
+        PlannedWorkoutWahooSyncRecord, PlannedWorkoutWahooSyncRepository,
+    },
+    settings::{CyclingSettings, SettingsError, UserSettings, UserSettingsRepository, WahooConfig},
     training_plan::{
         BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, TrainingPlanProjectedDay,
         TrainingPlanProjectionRepository, TrainingPlanReplacementResult, TrainingPlanSnapshot,
+    },
+    wahoo::{
+        WahooCreatePlan, WahooCreateWorkout, WahooError, WahooPlan, WahooUpdatePlan,
+        WahooUpdateWorkout, WahooUseCases, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
     },
 };
 
 #[tokio::test]
 async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
     let refresh = RecordingCalendarRefresh::default();
-    let poll_states = InMemoryProviderPollStateRepository::default();
+    let wahoo = RecordingWahooService::successful();
+    let wahoo_syncs = InMemoryPlannedWorkoutWahooSyncRepository::default();
+    let settings = InMemoryUserSettingsRepository::with_ftp(295);
     let service = CalendarService::new(
         FakeIntervalsService::with_created_event(Event {
             id: 77,
-            start_date_local: "2026-03-26T00:00:00".to_string(),
+            start_date_local: "2023-11-14T00:00:00".to_string(),
             event_type: Some("Ride".to_string()),
             name: Some("Build Session".to_string()),
             category: EventCategory::Workout,
@@ -49,14 +55,14 @@ async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
         FakeProjectionRepository::with_days(vec![projected_day(
             "user-1",
             "training-plan:user-1:w1:1",
-            "2026-03-26",
+            "2023-11-14",
             "Build Session",
         )]),
         InMemoryPlannedWorkoutSyncRepository::default(),
         FixedClock,
     )
+    .with_wahoo(wahoo.clone(), wahoo_syncs.clone(), settings)
     .with_planned_workout_tokens(NoopPlannedWorkoutTokenRepository::default())
-    .with_provider_poll_states(poll_states.clone())
     .with_calendar_view_refresh(refresh.clone());
 
     let result = service
@@ -64,29 +70,28 @@ async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
             "user-1",
             SyncPlannedWorkout {
                 operation_key: "training-plan:user-1:w1:1".to_string(),
-                date: "2026-03-26".to_string(),
+                date: "2023-11-14".to_string(),
             },
         )
         .await
         .unwrap();
 
-    assert_eq!(result.linked_intervals_event_id, Some(77));
-    let poll_state = poll_states
-        .find_by_provider_and_stream(
-            "user-1",
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar,
-        )
+    assert_eq!(result.linked_intervals_event_id, None);
+    let wahoo_sync = wahoo_syncs
+        .find_by_planned_workout_id("user-1", "training-plan:user-1:w1:1:2023-11-14")
         .await
         .unwrap()
-        .expect("expected poll state");
-    assert_eq!(poll_state.next_due_at_epoch_seconds, 1_700_000_000);
+        .expect("expected wahoo sync record");
+    assert_eq!(wahoo_sync.wahoo_plan_id, Some(5001));
+    assert_eq!(wahoo_sync.wahoo_workout_id, Some(6001));
+    assert_eq!(wahoo.plan_create_calls(), 1);
+    assert_eq!(wahoo.workout_create_calls(), 1);
     assert_eq!(
         refresh.calls(),
         vec![(
             "user-1".to_string(),
-            "2026-03-26".to_string(),
-            "2026-03-26".to_string(),
+            "2023-11-14".to_string(),
+            "2023-11-14".to_string(),
         )]
     );
 }
@@ -94,23 +99,25 @@ async fn sync_planned_workout_refreshes_calendar_view_for_synced_day() {
 #[tokio::test]
 async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persisting_failure() {
     let refresh = RecordingCalendarRefresh::default();
-    let poll_states = InMemoryProviderPollStateRepository::default();
+    let wahoo = RecordingWahooService::failing("wahoo unavailable");
+    let wahoo_syncs = InMemoryPlannedWorkoutWahooSyncRepository::default();
+    let settings = InMemoryUserSettingsRepository::with_ftp(295);
     let service = CalendarService::new(
-        FakeIntervalsService::with_create_error(IntervalsError::ConnectionError(
-            "intervals unavailable".to_string(),
+        FakeIntervalsService::with_events_error(IntervalsError::ConnectionError(
+            "intervals unused in Wahoo sync failure path".to_string(),
         )),
         InMemoryCalendarEntryViewRepository::default(),
         FakeProjectionRepository::with_days(vec![projected_day(
             "user-1",
             "training-plan:user-1:w1:1",
-            "2026-03-26",
+            "2023-11-14",
             "Build Session",
         )]),
         InMemoryPlannedWorkoutSyncRepository::default(),
         FixedClock,
     )
+    .with_wahoo(wahoo, wahoo_syncs.clone(), settings)
     .with_planned_workout_tokens(NoopPlannedWorkoutTokenRepository::default())
-    .with_provider_poll_states(poll_states.clone())
     .with_calendar_view_refresh(refresh.clone());
 
     let error = service
@@ -118,7 +125,7 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
             "user-1",
             SyncPlannedWorkout {
                 operation_key: "training-plan:user-1:w1:1".to_string(),
-                date: "2026-03-26".to_string(),
+                date: "2023-11-14".to_string(),
             },
         )
         .await
@@ -126,25 +133,70 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
 
     assert_eq!(
         error,
-        CalendarError::Unavailable("intervals unavailable".to_string())
+        CalendarError::Unavailable("wahoo unavailable".to_string())
     );
-    assert!(poll_states
-        .find_by_provider_and_stream(
-            "user-1",
-            ExternalProvider::Intervals,
-            ProviderPollStream::Calendar
-        )
+    let wahoo_sync = wahoo_syncs
+        .find_by_planned_workout_id("user-1", "training-plan:user-1:w1:1:2023-11-14")
         .await
         .unwrap()
-        .is_none());
+        .expect("expected failed wahoo sync record");
+    assert_eq!(wahoo_sync.wahoo_plan_id, None);
+    assert_eq!(wahoo_sync.wahoo_workout_id, None);
+    assert_eq!(wahoo_sync.last_error.as_deref(), Some("wahoo unavailable"));
     assert_eq!(
         refresh.calls(),
         vec![(
             "user-1".to_string(),
-            "2026-03-26".to_string(),
-            "2026-03-26".to_string(),
+            "2023-11-14".to_string(),
+            "2023-11-14".to_string(),
         )]
     );
+}
+
+#[tokio::test]
+async fn sync_planned_workout_returns_credentials_not_configured_when_wahoo_is_not_connected() {
+    let wahoo_syncs = InMemoryPlannedWorkoutWahooSyncRepository::default();
+    let service = CalendarService::new(
+        FakeIntervalsService::with_events_error(IntervalsError::ConnectionError(
+            "intervals unused in not-connected Wahoo sync path".to_string(),
+        )),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        InMemoryPlannedWorkoutSyncRepository::default(),
+        FixedClock,
+    )
+    .with_wahoo(
+        NoopWahooUseCases,
+        wahoo_syncs.clone(),
+        InMemoryUserSettingsRepository::with_ftp(295),
+    )
+    .with_planned_workout_tokens(NoopPlannedWorkoutTokenRepository::default());
+
+    let error = service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, CalendarError::CredentialsNotConfigured);
+    let wahoo_sync = wahoo_syncs
+        .find_by_planned_workout_id("user-1", "training-plan:user-1:w1:1:2023-11-14")
+        .await
+        .unwrap()
+        .expect("expected failed wahoo sync record");
+    assert_eq!(wahoo_sync.wahoo_plan_id, None);
+    assert_eq!(wahoo_sync.wahoo_workout_id, None);
+    assert!(wahoo_sync.last_error.is_some());
 }
 
 #[derive(Clone, Default)]
@@ -181,7 +233,6 @@ impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
 #[derive(Clone)]
 struct FakeIntervalsService {
     created_event: Event,
-    create_error: Option<IntervalsError>,
     list_events_error: Option<IntervalsError>,
     created_events: Arc<Mutex<Vec<CreateEvent>>>,
     updated_events: Arc<Mutex<Vec<(i64, UpdateEvent)>>>,
@@ -191,27 +242,6 @@ impl FakeIntervalsService {
     fn with_created_event(created_event: Event) -> Self {
         Self {
             created_event,
-            create_error: None,
-            list_events_error: None,
-            created_events: Arc::new(Mutex::new(Vec::new())),
-            updated_events: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-
-    fn with_create_error(create_error: IntervalsError) -> Self {
-        Self {
-            created_event: Event {
-                id: 0,
-                start_date_local: "2026-03-26T00:00:00".to_string(),
-                event_type: None,
-                name: None,
-                category: EventCategory::Workout,
-                description: None,
-                indoor: false,
-                color: None,
-                workout_doc: None,
-            },
-            create_error: Some(create_error),
             list_events_error: None,
             created_events: Arc::new(Mutex::new(Vec::new())),
             updated_events: Arc::new(Mutex::new(Vec::new())),
@@ -231,19 +261,10 @@ impl FakeIntervalsService {
                 color: None,
                 workout_doc: None,
             },
-            create_error: None,
             list_events_error: Some(list_events_error),
             created_events: Arc::new(Mutex::new(Vec::new())),
             updated_events: Arc::new(Mutex::new(Vec::new())),
         }
-    }
-
-    fn created_events(&self) -> Vec<CreateEvent> {
-        self.created_events.lock().unwrap().clone()
-    }
-
-    fn updated_events(&self) -> Vec<(i64, UpdateEvent)> {
-        self.updated_events.lock().unwrap().clone()
     }
 }
 
@@ -283,14 +304,10 @@ impl IntervalsUseCases for FakeIntervalsService {
         event: CreateEvent,
     ) -> IntervalsBoxFuture<Result<Event, IntervalsError>> {
         let created_event = self.created_event.clone();
-        let create_error = self.create_error.clone();
         let created_events = self.created_events.clone();
         Box::pin(async move {
             created_events.lock().unwrap().push(event);
-            match create_error {
-                Some(error) => Err(error),
-                None => Ok(created_event),
-            }
+            Ok(created_event)
         })
     }
 
@@ -334,7 +351,7 @@ struct InMemoryPlannedWorkoutSyncRepository {
 async fn sync_planned_workout_adds_match_marker_to_created_event_description() {
     let intervals = FakeIntervalsService::with_created_event(Event {
         id: 77,
-        start_date_local: "2026-03-26T00:00:00".to_string(),
+        start_date_local: "2023-11-14T00:00:00".to_string(),
         event_type: Some("Ride".to_string()),
         name: Some("Build Session".to_string()),
         category: EventCategory::Workout,
@@ -343,17 +360,23 @@ async fn sync_planned_workout_adds_match_marker_to_created_event_description() {
         color: None,
         workout_doc: None,
     });
+    let wahoo = RecordingWahooService::successful();
     let service = CalendarService::new(
         intervals.clone(),
         InMemoryCalendarEntryViewRepository::default(),
         FakeProjectionRepository::with_days(vec![projected_day(
             "user-1",
             "training-plan:user-1:w1:1",
-            "2026-03-26",
+            "2023-11-14",
             "Build Session",
         )]),
         InMemoryPlannedWorkoutSyncRepository::default(),
         FixedClock,
+    )
+    .with_wahoo(
+        wahoo.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
+        InMemoryUserSettingsRepository::with_ftp(295),
     )
     .with_planned_workout_tokens(NoopPlannedWorkoutTokenRepository::default());
 
@@ -362,27 +385,27 @@ async fn sync_planned_workout_adds_match_marker_to_created_event_description() {
             "user-1",
             SyncPlannedWorkout {
                 operation_key: "training-plan:user-1:w1:1".to_string(),
-                date: "2026-03-26".to_string(),
+                date: "2023-11-14".to_string(),
             },
         )
         .await
         .unwrap();
 
-    let created_events = intervals.created_events();
-    assert_eq!(created_events.len(), 1);
-    let description = created_events[0]
-        .description
-        .as_deref()
-        .expect("created description");
-    assert!(description.contains("- 60m 70%"));
-    assert!(description.contains("[AIWATTCOACH:pw="));
+    let created_workouts = wahoo.created_workouts();
+    assert_eq!(created_workouts.len(), 1);
+    assert_eq!(created_workouts[0].name, "Build Session");
+    assert_eq!(created_workouts[0].starts, "2023-11-14T00:00:00.000Z");
+    assert_eq!(created_workouts[0].minutes, 60);
+    assert!(created_workouts[0]
+        .workout_token
+        .starts_with("[AIWATTCOACH:pw="));
 }
 
 #[tokio::test]
 async fn sync_planned_workout_preserves_single_marker_when_updating_existing_event() {
     let intervals = FakeIntervalsService::with_created_event(Event {
         id: 88,
-        start_date_local: "2026-03-26T00:00:00".to_string(),
+        start_date_local: "2023-11-14T00:00:00".to_string(),
         event_type: Some("Ride".to_string()),
         name: Some("Build Session".to_string()),
         category: EventCategory::Workout,
@@ -391,13 +414,14 @@ async fn sync_planned_workout_preserves_single_marker_when_updating_existing_eve
         color: Some("blue".to_string()),
         workout_doc: None,
     });
+    let wahoo = RecordingWahooService::successful();
     let syncs = InMemoryPlannedWorkoutSyncRepository::default();
     syncs
         .upsert(
             PlannedWorkoutSyncRecord::pending(
                 "user-1".to_string(),
                 "training-plan:user-1:w1:1".to_string(),
-                "2026-03-26".to_string(),
+                "2023-11-14".to_string(),
                 "training-plan:user-1:w1:1".to_string(),
                 1_700_000_000,
             )
@@ -410,6 +434,28 @@ async fn sync_planned_workout_preserves_single_marker_when_updating_existing_eve
         )
         .await
         .unwrap();
+    let wahoo_syncs = InMemoryPlannedWorkoutWahooSyncRepository::default();
+    wahoo_syncs
+        .upsert(
+            PlannedWorkoutWahooSyncRecord::pending(
+                "user-1".to_string(),
+                "training-plan:user-1:w1:1".to_string(),
+                "2023-11-14".to_string(),
+                "training-plan:user-1:w1:1:2023-11-14".to_string(),
+                "workout-1".to_string(),
+                "training-plan:user-1:w1:1:2023-11-14".to_string(),
+                1_700_000_000,
+            )
+            .mark_synced(
+                "old-hash".to_string(),
+                5001,
+                6001,
+                "[AIWATTCOACH:pw=ABC123EF45]".to_string(),
+                1_700_000_001,
+            ),
+        )
+        .await
+        .unwrap();
 
     let service = CalendarService::new(
         intervals.clone(),
@@ -417,11 +463,16 @@ async fn sync_planned_workout_preserves_single_marker_when_updating_existing_eve
         FakeProjectionRepository::with_days(vec![projected_day(
             "user-1",
             "training-plan:user-1:w1:1",
-            "2026-03-26",
+            "2023-11-14",
             "Build Session",
         )]),
         syncs,
         FixedClock,
+    )
+    .with_wahoo(
+        wahoo.clone(),
+        wahoo_syncs,
+        InMemoryUserSettingsRepository::with_ftp(295),
     )
     .with_planned_workout_tokens(NoopPlannedWorkoutTokenRepository::default());
 
@@ -430,31 +481,26 @@ async fn sync_planned_workout_preserves_single_marker_when_updating_existing_eve
             "user-1",
             SyncPlannedWorkout {
                 operation_key: "training-plan:user-1:w1:1".to_string(),
-                date: "2026-03-26".to_string(),
+                date: "2023-11-14".to_string(),
             },
         )
         .await
         .unwrap();
 
-    let updated_events = intervals.updated_events();
-    assert_eq!(updated_events.len(), 1);
-    assert_eq!(updated_events[0].0, 88);
+    let updated_workouts = wahoo.updated_workouts();
+    assert_eq!(updated_workouts.len(), 1);
+    assert_eq!(updated_workouts[0].0, 6001);
     assert_eq!(
-        updated_events[0].1.start_date_local.as_deref(),
-        Some("2026-03-26T00:00:00")
+        updated_workouts[0].1.starts.as_deref(),
+        Some("2023-11-14T00:00:00.000Z")
     );
-    assert_eq!(updated_events[0].1.name.as_deref(), Some("Build Session"));
-    assert_eq!(updated_events[0].1.indoor, Some(true));
-    assert_eq!(updated_events[0].1.color.as_deref(), Some("blue"));
-    assert_eq!(updated_events[0].1.workout_doc, None);
-    let description = updated_events[0]
-        .1
-        .description
-        .as_deref()
-        .expect("updated description");
-    assert!(description.contains("Keep this note"));
-    assert!(description.contains("- 60m 70%"));
-    assert_eq!(description.matches("[AIWATTCOACH:pw=").count(), 1);
+    assert_eq!(updated_workouts[0].1.name.as_deref(), Some("Build Session"));
+    assert_eq!(updated_workouts[0].1.minutes, Some(60));
+    assert_eq!(updated_workouts[0].1.plan_id, Some(5001));
+    assert_eq!(
+        updated_workouts[0].1.workout_token.as_deref(),
+        Some("[AIWATTCOACH:pw=ABC123EF45]")
+    );
 }
 
 impl PlannedWorkoutSyncRepository for InMemoryPlannedWorkoutSyncRepository {
@@ -519,72 +565,6 @@ impl PlannedWorkoutSyncRepository for InMemoryPlannedWorkoutSyncRepository {
             });
             stored.push(record.clone());
             Ok(record)
-        })
-    }
-}
-
-#[derive(Clone, Default)]
-struct InMemoryProviderPollStateRepository {
-    stored: Arc<Mutex<Vec<ProviderPollState>>>,
-}
-
-impl ProviderPollStateRepository for InMemoryProviderPollStateRepository {
-    fn upsert(
-        &self,
-        state: ProviderPollState,
-    ) -> crate::domain::external_sync::BoxFuture<
-        Result<ProviderPollState, ExternalSyncRepositoryError>,
-    > {
-        let stored = self.stored.clone();
-        Box::pin(async move {
-            let mut stored = stored.lock().unwrap();
-            stored.retain(|existing| {
-                !(existing.user_id == state.user_id
-                    && existing.provider == state.provider
-                    && existing.stream == state.stream)
-            });
-            stored.push(state.clone());
-            Ok(state)
-        })
-    }
-
-    fn list_due(
-        &self,
-        now_epoch_seconds: i64,
-    ) -> crate::domain::external_sync::BoxFuture<
-        Result<Vec<ProviderPollState>, ExternalSyncRepositoryError>,
-    > {
-        let stored = self.stored.clone();
-        Box::pin(async move {
-            Ok(stored
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|state| state.is_due(now_epoch_seconds))
-                .cloned()
-                .collect())
-        })
-    }
-
-    fn find_by_provider_and_stream(
-        &self,
-        user_id: &str,
-        provider: ExternalProvider,
-        stream: ProviderPollStream,
-    ) -> crate::domain::external_sync::BoxFuture<
-        Result<Option<ProviderPollState>, ExternalSyncRepositoryError>,
-    > {
-        let stored = self.stored.clone();
-        let user_id = user_id.to_string();
-        Box::pin(async move {
-            Ok(stored
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|state| {
-                    state.user_id == user_id && state.provider == provider && state.stream == stream
-                })
-                .cloned())
         })
     }
 }
@@ -1090,6 +1070,445 @@ impl CompletedWorkoutRepository for InMemoryCompletedWorkoutRepository {
             stored.push(workout.clone());
             Ok(workout)
         })
+    }
+}
+
+#[derive(Clone, Default)]
+struct InMemoryPlannedWorkoutWahooSyncRepository {
+    stored: Arc<Mutex<Vec<PlannedWorkoutWahooSyncRecord>>>,
+}
+
+impl PlannedWorkoutWahooSyncRepository for InMemoryPlannedWorkoutWahooSyncRepository {
+    fn find_by_planned_workout_id(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+    ) -> crate::domain::planned_workout_wahoo_syncs::BoxFuture<
+        Result<
+            Option<PlannedWorkoutWahooSyncRecord>,
+            crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let planned_workout_id = planned_workout_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|record| {
+                    record.user_id == user_id && record.planned_workout_id == planned_workout_id
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        user_id: &str,
+        wahoo_plan_id: i64,
+    ) -> crate::domain::planned_workout_wahoo_syncs::BoxFuture<
+        Result<
+            Option<PlannedWorkoutWahooSyncRecord>,
+            crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|record| {
+                    record.user_id == user_id && record.wahoo_plan_id == Some(wahoo_plan_id)
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        user_id: &str,
+        wahoo_workout_token: &str,
+    ) -> crate::domain::planned_workout_wahoo_syncs::BoxFuture<
+        Result<
+            Option<PlannedWorkoutWahooSyncRecord>,
+            crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let wahoo_workout_token = wahoo_workout_token.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|record| {
+                    record.user_id == user_id
+                        && record.wahoo_workout_token.as_deref()
+                            == Some(wahoo_workout_token.as_str())
+                })
+                .cloned())
+        })
+    }
+
+    fn upsert(
+        &self,
+        record: PlannedWorkoutWahooSyncRecord,
+    ) -> crate::domain::planned_workout_wahoo_syncs::BoxFuture<
+        Result<
+            PlannedWorkoutWahooSyncRecord,
+            crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncError,
+        >,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                !(existing.user_id == record.user_id
+                    && existing.planned_workout_id == record.planned_workout_id)
+            });
+            stored.push(record.clone());
+            Ok(record)
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+struct InMemoryUserSettingsRepository {
+    stored: Arc<Mutex<Vec<UserSettings>>>,
+}
+
+impl InMemoryUserSettingsRepository {
+    fn with_ftp(ftp_watts: u32) -> Self {
+        Self {
+            stored: Arc::new(Mutex::new(vec![UserSettings {
+                user_id: "user-1".to_string(),
+                intervals: Default::default(),
+                wahoo: WahooConfig {
+                    connected: true,
+                    ..Default::default()
+                },
+                ai_agents: Default::default(),
+                options: Default::default(),
+                cycling: CyclingSettings {
+                    ftp_watts: Some(ftp_watts),
+                    ..Default::default()
+                },
+                availability: Default::default(),
+                created_at_epoch_seconds: 1_700_000_000,
+                updated_at_epoch_seconds: 1_700_000_000,
+            }])),
+        }
+    }
+}
+
+impl UserSettingsRepository for InMemoryUserSettingsRepository {
+    fn find_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::settings::BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|settings| settings.user_id == user_id)
+                .cloned())
+        })
+    }
+
+    fn upsert(
+        &self,
+        settings: UserSettings,
+    ) -> crate::domain::settings::BoxFuture<Result<UserSettings, SettingsError>> {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| existing.user_id != settings.user_id);
+            stored.push(settings.clone());
+            Ok(settings)
+        })
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: crate::domain::settings::AiAgentsConfig,
+        _updated_at_epoch_seconds: i64,
+    ) -> crate::domain::settings::BoxFuture<Result<(), SettingsError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: crate::domain::settings::IntervalsConfig,
+        _updated_at_epoch_seconds: i64,
+    ) -> crate::domain::settings::BoxFuture<Result<(), SettingsError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: crate::domain::settings::AnalysisOptions,
+        _updated_at_epoch_seconds: i64,
+    ) -> crate::domain::settings::BoxFuture<Result<(), SettingsError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: CyclingSettings,
+        _updated_at_epoch_seconds: i64,
+    ) -> crate::domain::settings::BoxFuture<Result<(), SettingsError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: crate::domain::settings::AvailabilitySettings,
+        _updated_at_epoch_seconds: i64,
+    ) -> crate::domain::settings::BoxFuture<Result<(), SettingsError>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingWahooService {
+    plan_create_calls: Arc<Mutex<usize>>,
+    workout_create_calls: Arc<Mutex<usize>>,
+    created_workouts: Arc<Mutex<Vec<WahooCreateWorkout>>>,
+    updated_workouts: Arc<Mutex<Vec<(i64, WahooUpdateWorkout)>>>,
+    failure: Option<String>,
+}
+
+impl RecordingWahooService {
+    fn successful() -> Self {
+        Self::default()
+    }
+
+    fn failing(message: &str) -> Self {
+        Self {
+            failure: Some(message.to_string()),
+            ..Self::default()
+        }
+    }
+
+    fn plan_create_calls(&self) -> usize {
+        *self.plan_create_calls.lock().unwrap()
+    }
+
+    fn workout_create_calls(&self) -> usize {
+        *self.workout_create_calls.lock().unwrap()
+    }
+
+    fn created_workouts(&self) -> Vec<WahooCreateWorkout> {
+        self.created_workouts.lock().unwrap().clone()
+    }
+
+    fn updated_workouts(&self) -> Vec<(i64, WahooUpdateWorkout)> {
+        self.updated_workouts.lock().unwrap().clone()
+    }
+}
+
+impl WahooUseCases for RecordingWahooService {
+    fn begin_connect(
+        &self,
+        _user_id: &str,
+        _return_to: Option<String>,
+    ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooAuthStart, WahooError>>
+    {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn finish_connect(
+        &self,
+        _user_id: &str,
+        _state: &str,
+        _code: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooAuthExchange, WahooError>>
+    {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn ensure_token(
+        &self,
+        _user_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooToken, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn list_workouts(
+        &self,
+        _user_id: &str,
+        _page: usize,
+        _per_page: usize,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        Box::pin(async {
+            Ok(WahooWorkoutList {
+                workouts: Vec::new(),
+                total: 0,
+                page: 1,
+                per_page: 100,
+                order: None,
+                sort: None,
+            })
+        })
+    }
+
+    fn get_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotFound) })
+    }
+
+    fn get_workout_summary(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_plan_by_external_id(
+        &self,
+        _user_id: &str,
+        _external_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooPlan>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn create_plan(
+        &self,
+        _user_id: &str,
+        request: WahooCreatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        let calls = self.plan_create_calls.clone();
+        let failure = self.failure.clone();
+        Box::pin(async move {
+            *calls.lock().unwrap() += 1;
+            if let Some(message) = failure {
+                return Err(WahooError::External(message));
+            }
+            Ok(WahooPlan {
+                id: 5001,
+                external_id: request.external_id,
+                provider_updated_at: Some(request.provider_updated_at),
+                filename: request.filename,
+                name: None,
+                description: None,
+                created_at: None,
+                updated_at: None,
+            })
+        })
+    }
+
+    fn update_plan(
+        &self,
+        _user_id: &str,
+        plan_id: i64,
+        request: WahooUpdatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        let failure = self.failure.clone();
+        Box::pin(async move {
+            if let Some(message) = failure {
+                return Err(WahooError::External(message));
+            }
+            Ok(WahooPlan {
+                id: plan_id,
+                external_id: "training-plan:user-1:w1:1:2026-03-26".to_string(),
+                provider_updated_at: Some(request.provider_updated_at),
+                filename: request.filename,
+                name: None,
+                description: None,
+                created_at: None,
+                updated_at: None,
+            })
+        })
+    }
+
+    fn create_workout(
+        &self,
+        _user_id: &str,
+        request: WahooCreateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        let calls = self.workout_create_calls.clone();
+        let created_workouts = self.created_workouts.clone();
+        let failure = self.failure.clone();
+        Box::pin(async move {
+            *calls.lock().unwrap() += 1;
+            created_workouts.lock().unwrap().push(request.clone());
+            if let Some(message) = failure {
+                return Err(WahooError::External(message));
+            }
+            Ok(WahooWorkout {
+                id: 6001,
+                starts: request.starts,
+                minutes: Some(request.minutes),
+                name: Some(request.name),
+                plan_id: request.plan_id,
+                plan_ids: request.plan_id.into_iter().collect(),
+                route_id: None,
+                workout_token: Some(request.workout_token),
+                workout_type_id: Some(request.workout_type_id),
+                workout_summary: None,
+                created_at: None,
+                updated_at: None,
+            })
+        })
+    }
+
+    fn update_workout(
+        &self,
+        _user_id: &str,
+        workout_id: i64,
+        request: WahooUpdateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        let updated_workouts = self.updated_workouts.clone();
+        let failure = self.failure.clone();
+        Box::pin(async move {
+            updated_workouts
+                .lock()
+                .unwrap()
+                .push((workout_id, request.clone()));
+            if let Some(message) = failure {
+                return Err(WahooError::External(message));
+            }
+            Ok(WahooWorkout {
+                id: workout_id,
+                starts: request
+                    .starts
+                    .unwrap_or_else(|| "2026-03-26T00:00:00.000Z".to_string()),
+                minutes: request.minutes,
+                name: request.name,
+                plan_id: request.plan_id,
+                plan_ids: request.plan_id.into_iter().collect(),
+                route_id: None,
+                workout_token: request.workout_token,
+                workout_type_id: request.workout_type_id,
+                workout_summary: None,
+                created_at: None,
+                updated_at: None,
+            })
+        })
+    }
+
+    fn download_workout_file(
+        &self,
+        _file_url: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Vec<u8>, WahooError>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 }
 

@@ -21,6 +21,66 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | CodeRabbit | PR #143 Wahoo import duration fallback
+
+- Problem: `src/adapters/wahoo/import_mapping.rs` still fell back from `summary.duration_total_seconds` straight to `workout.minutes`, but `minutes` is the planned duration, not the actual elapsed duration. When Wahoo omitted total duration but still provided summary active duration, the canonical completed workout could record a wildly inflated elapsed time.
+- Fix: changed the mapping to prefer `summary.duration_active_seconds` before the planned `workout.minutes` fallback, kept the planned-duration fallback only as a last resort with an explicit comment, and added a focused regression proving the importer now records the actual summary duration.
+- Prevention: when provider payloads expose both planned and completed-workout timing fields, derive canonical elapsed duration from summary/activity result fields first and use planned duration only as a clearly documented last-resort fallback.
+
+### 2026-04-26 | user | Wahoo workout request body logging
+
+- Problem: po domknięciu review fixów klient Wahoo nadal logował write requesty bez body preview, więc przy debugowaniu `create_workout` / `update_workout` brakowało widoczności faktycznie wysyłanego form payloadu.
+- Fix: rozszerzyłem `src/adapters/wahoo/client/logging.rs` o tryb `BodyLoggingMode::Full` dla requestów, dodałem bezpieczny preview dla form-encoded payloadów z redakcją pól wrażliwych takich jak `workout_token`, i podpiąłem ten tryb tylko pod `create_workout` / `update_workout` w `src/adapters/wahoo/client.rs`.
+- Prevention: gdy użytkownik prosi o lepszą obserwowalność na adapter write path, najpierw sprawdź `docs/logging.md` i ogranicz body logging do konkretnych requestów z redakcją sekretów, zamiast rozszerzać je globalnie na cały klient.
+
+### 2026-04-26 | user | PR #144 follow-up stale external-sync expectation
+
+- Problem: after promoting `wahoo_workout_token` matches to `PlannedCompletedWorkoutLinkMatchSource::Explicit`, I updated the production code and nearby review discussion but missed the existing domain regression `import_completed_workout_falls_back_to_wahoo_workout_token_when_plan_id_missing`, which still expected `Token` and failed the full Rust test run.
+- Fix: updated the external-sync test to assert `Explicit` for Wahoo workout-token-backed planned-workout links, matching the intended ranking behavior already implemented in `src/domain/external_sync/import/mod.rs`.
+- Prevention: whenever a review-driven change alters enum/ranking semantics, grep all focused tests for the old enum variant and rerun the full touched test module before calling the patch complete.
+
+### 2026-04-26 | Copilot/CodeRabbit | PR #144 Wahoo planned-workout review follow-up
+
+- Problem: the PR review surfaced several real gaps around Wahoo planned-workout sync and linking: Wahoo plan mapping could swallow repeat blocks past text separators, planned-workout sync re-queried Wahoo plans unnecessarily and lacked stable REST error codes for frontend handling, external-sync linking treated `wahoo_workout_token` matches as weaker token matches instead of explicit Wahoo identities, Wahoo plan lookup silently accepted duplicate `external_id` rows, and one attempted REST test covered the wrong layer for the not-connected path.
+- Fix: made Wahoo repeat parsing stop at text delimiters, simplified existing-plan resolution to avoid the duplicate lookup, added stable calendar sync error codes for invalid date / sync window / missing FTP / Wahoo-not-connected responses and updated the modal to prefer `error.body.code` with message fallback, mapped `wahoo_workout_token` link resolution to `Explicit`, rejected duplicate Wahoo plans with a focused regression, wired planned-workout Wahoo sync records into `ExternalImportService`, moved Wahoo-not-connected coverage to a domain test instead of the miswired REST harness, and kept the frontend sync-window helper aligned with the backend's current UTC-based contract.
+- Prevention: when review feedback touches transport errors, verify that the test harness actually wires the dependency path being asserted before adding or keeping a REST integration case. For provider-owned identifiers, prefer stable machine-readable codes and explicit match-source semantics instead of UI string matching or generic token classification. If a provider lookup is expected to be unique by `external_id`, treat duplicate upstream rows as an error and add a regression immediately.
+
+### 2026-04-26 | Copilot/CodeRabbit | PR #143 Wahoo second review pass
+
+- Problem: the follow-up review still pointed at a few real gaps after the first cleanup: Wahoo motorcycling was still normalized as `Ride`, partial Wahoo batch imports still skipped training-load recompute when `imports.import(...)` failed after earlier successes, planned-workout authoritative reads could miss cross-boundary completed workouts and still did per-workout link lookups, and the Wahoo FIT enrichment scheduler still trusted payload `user_id` instead of the scheduled task tenant key.
+- Fix: removed `BikingMotocycling` from Wahoo `Ride` classification and added a regression, added the same partial recompute fallback for Wahoo import failures with a focused test, expanded the completed-workout date-range window by one day on planned-workout visibility reads and bulk-loaded planned-completed links through a new repository method to eliminate the N+1 path, and changed the Wahoo FIT enrichment task payload/handler to use `task.user_id` as the source of truth with a scheduler test. While touching the same area, I also made `decode_json` synchronous, documented the same-source assumption in training-context prompt dedupe with extra tests, removed the unused FIT-file repository generic from the queue-side scheduler wrapper, and collapsed the immediate downloaded+stored FIT-file upserts into one persisted stored checkpoint while preserving the original download timestamp field semantics.
+- Prevention: when provider-specific enums distinguish human-powered and motorized activities, re-check both `activity_type` and `trainer` mappings together. Any batch import loop that can persist a prefix of records must run the same partial recompute or recovery path on every later failure edge, not only on post-import enrichment steps. For authoritative visibility filters, avoid date windows that exactly match one source if linked records can drift across boundaries, and batch bridge/link lookups before adding per-item async checks on hot read paths. For scheduler tasks, always treat the persisted `ScheduledTask.user_id` as the tenant source of truth rather than duplicating user scope inside untrusted payload JSON.
+
+### 2026-04-26 | Copilot/CodeRabbit | PR #143 Wahoo review follow-up
+
+- Problem: the Wahoo-first branch still had several review-confirmed gaps: indoor Wahoo rides were classified with `BikingMotocycling` instead of `BikingIndoor`, the completed-workout poller stopped pagination on the first stale `updated_at` even though the API is sorted by `starts` and could therefore skip recently edited older workouts, parse failures in FIT enrichment were retried even when stored bytes made them deterministic, persisted legacy Intervals calendar poll states were not being parked after the completed-workouts-only transition, and training-context prompt dedupe used lexicographic completed-workout-id ordering so `...:9` could beat `...:10`.
+- Fix: switched Wahoo trainer detection to `BikingIndoor`, changed the Wahoo poller to continue scanning later pages while still filtering imported workouts by the `updated_at` watermark and added regressions for both the realistic ordering case and a later-page edited workout, marked `WahooFitEnrichmentError::Parse` as non-retryable with a focused test, parked existing Intervals calendar poll states both in settings-update sync and runtime reconciliation paths, tightened the auth-handler `NotFound` mapping into an explicit branch with rationale, added minimal FIT download URL validation, and changed training-context dedupe to prefer numeric completed-workout ids before falling back to timestamp/string comparison.
+- Prevention: when a watermark key does not match the upstream API sort order, do not use it for early pagination termination; either scan all pages or rebase the cursor to the actual sort key. When deprecating or sidelining a poll stream, explicitly park any already-persisted state in both user-settings sync paths and startup reconciliation. When tie-breaking provider ids with numeric suffixes, parse and compare the numeric part instead of relying on lexicographic string order.
+
+### 2026-04-25 | user | intervals calendar poll cursor regression
+
+- Problem: the simplified `advance_calendar_cursor(...)` helper in `src/config/provider_polling/mod.rs` stopped looking at whether Intervals actually returned any calendar events. On incremental polls with an existing cursor and new events, it kept the old cursor instead of advancing to the end of the current window, so the service could keep rereading the same calendar range forever.
+- Fix: restored event-aware cursor advancement in `poll_intervals_calendar_stream(...)` so any non-empty event page advances the cursor to `range.newest`, while empty responses still preserve the existing cursor; added a regression test for `state.cursor != None` plus returned events.
+- Prevention: when simplifying polling cursor helpers, re-check the state-transition contract for both "new data arrived" and "no new data" paths before removing input parameters, and add an explicit regression for incremental sync with an existing cursor.
+
+### 2026-04-25 | user | Wahoo poll cursor stall without workout summaries
+
+- Problem: `src/config/provider_polling/mod.rs` advanced the Wahoo completed-workout cursor only while iterating `workouts_to_import`, so a page of workouts newer than the watermark but missing `workout_summary` produced no imports and left the cursor unchanged. The next poll could fetch the same page again forever.
+- Fix: track the newest seen Wahoo cursor across all workouts above the watermark, not just the subset that becomes import commands, and added a regression test for a newer workout with `workout_summary = None`.
+- Prevention: if polling filters upstream items before import, keep cursor advancement based on all consumed source records unless the product explicitly wants to revisit skipped records on every poll.
+
+### 2026-04-25 | user | planned-workout authoritative test fixture regression
+
+- Problem: after the Wahoo-first authoritative-read changes, `src/domain/planned_workouts/authoritative.rs` still had a local test fixture that passed `planned_workout_id` into the wrong `CompletedWorkout::new(...)` argument slot. The test intended to prove hiding a planned workout when an authoritative completed workout linked to it, but the fixture actually left `planned_workout_id = None` and placed the planned id in the `name` field instead, so CI failed with a false-negative regression.
+- Fix: corrected the fixture argument order so the constructed completed workout really carries `planned_workout_id`, then reran the focused planned-workout authoritative test module.
+- Prevention: when a constructor has many same-typed positional arguments, verify the touched test fixtures against the canonical constructor signature after refactors or new wrappers. For link-driven behavior, assert the linking field itself in the fixture path before trusting the final visibility assertion.
+
+### 2026-04-25 | user | Wahoo review follow-up and polling regression cleanup
+
+- Problem: the follow-up Wahoo review patch still had a compile-risky delegation cleanup in `src/adapters/wahoo/adapter.rs` and the in-progress `ProviderPollingService` edits had accidentally dropped Intervals calendar event imports while wiring the new Wahoo completed-workout path, which would have advanced the calendar cursor without importing planned workouts, races, or special days.
+- Fix: kept the Wahoo adapter delegation cleanup but moved the shared `delegate!` macro into a valid scope for the impls, restored the Intervals calendar import loop with the existing `map_event_to_import_command(...)` behavior, and updated the calendar polling regression to assert import plus cursor advancement instead of the accidental no-import behavior.
+- Prevention: when touching shared polling code for one provider, reread the full existing code path for neighboring streams before sending the patch; for review cleanups that introduce macros, compile-check their definition scope immediately so a style refactor does not turn into a build break or a behavior regression.
+
 ### 2026-04-25 | user | OpenCode Graphify plugin activation
 
 - Problem: the repo already had `graphify-out/` artifacts and a repo-local OpenCode plugin path in `opencode.json`, but the plugin file exported only `GraphifyPlugin` and relied on prepending `echo` to `bash` commands. That made the integration brittle and easy to miss in normal search-driven sessions that start with `glob`, `grep`, or `read` instead of `bash`, and a plain `.js` module shape would still depend on local Node module-mode heuristics.
