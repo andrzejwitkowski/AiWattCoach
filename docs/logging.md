@@ -7,7 +7,7 @@ This document explains how to add logging for new REST endpoints and new externa
 - Keep logs structured and consistent.
 - Preserve trace propagation.
 - Default to low-risk logging for request and response bodies.
-- Redact secrets before they reach logs.
+- Redact secrets and PII before they reach logs.
 - Put transport logging in adapters, not domain code.
 
 ## REST Endpoint Logging
@@ -27,6 +27,33 @@ Main pieces:
 - `ENABLE_ENDPOINT_BODY_LOGGING=true` changes that default to `EndpointLogConfig::full()`.
 - Route-specific `with_log_config(...)` is authoritative and overrides the default config.
 
+### Write endpoint group
+
+All write endpoints (POST, PUT, PATCH) and read endpoints that benefit from observability are grouped into a sub-Router with `RequestLogLayer` and `EndpointLogConfig::request_only()`.
+
+Routes excluded from body logging:
+
+| Route | Reason |
+|---|---|
+| `/api/auth/google/start`, `/api/auth/google/callback` | Login redirects, no useful body |
+| `/api/auth/wahoo/start`, `/api/wahoo/callback` | Login redirects, no useful body |
+| `/api/auth/logout` | Logout, no request body |
+| `/api/auth/me` | Session cookie only, no body |
+| `/api/logs` | Circular risk — logging about incoming logs |
+| `/api/intervals/activities` POST | 16 MB file upload, impractical to buffer |
+| `/api/workout-summaries/{id}/ws` | WebSocket, not buffered by RequestLogLayer |
+| `/health`, `/ready` | Health checks, no body |
+
+Note: `/api/auth/whitelist` POST is included in the write group. Its `email` field is redacted by `is_sensitive_key`.
+
+The `/api/settings` GET route uses a separate group with `response_only()` logging because its response contains API keys and connection status that need redacted observability.
+
+When adding a new write endpoint, add it to the existing write group sub-Router in `router_with_frontend_dist()` so it gets request body logging automatically.
+
+GET routes inside the write group skip request body collection because `RequestLogService` only buffers the body for POST, PUT, and PATCH methods. Response body logging is controlled by the `EndpointLogConfig`; the write group uses `request_only()` so response bodies are not logged for those routes.
+
+The `DefaultBodyLimit` on a route inside a sub-Router with `RequestLogLayer` only bounds the handler's body limit, not the logger's buffer. The logger caps its own buffer at `MAX_COLLECT_BYTES` (10 MB). For routes that need a tighter transport limit (e.g. `/api/settings/intervals/test` with 8 KB), that limit protects the handler but the logger may still buffer up to 10 MB of the request before the handler sees it.
+
 ### When to enable endpoint body logging
 
 Use body logging only when the route needs extra observability and the payload shape is safe enough after redaction.
@@ -41,7 +68,9 @@ Always set a route-specific preview cap with `with_max_body_bytes(...)` when bod
 
 ### Body limits
 
-`with_max_body_bytes(...)` only limits what is written to logs. It does not limit how much of the request body the transport accepts.
+`with_max_body_bytes(...)` only limits what is written to logs. It does not limit how much of the request body the transport accepts. The default is 10 KB (10240 bytes).
+
+The `RequestLogLayer` has a hard cap of 10 MB (`MAX_COLLECT_BYTES`) on how much body it will buffer. This prevents unbounded memory allocation when a route with body logging enabled receives an unexpectedly large payload. Routes that accept genuinely large bodies (like file uploads) should be excluded from body logging entirely, as buffering multi-megabyte payloads is impractical.
 
 If `RequestLogLayer` can buffer the request body, also add a transport-level limit such as `DefaultBodyLimit::max(...)` before the logging layer.
 
@@ -79,6 +108,31 @@ let router = Router::new()
 - Sensitive headers are redacted by name.
 - Binary and non-JSON textual bodies are summarized instead of logged raw in the REST adapter.
 - If a route handles secrets or large uploads, prefer request-only or response-only logging, or leave body logging off.
+
+Sensitive key patterns (checked case-insensitively by `is_sensitive_key` in `src/telemetry.rs`):
+
+| Pattern | Catches | Examples |
+|---|---|---|
+| `password` | passwords | `password`, `db_password` |
+| `secret` | secrets | `client_secret`, `secret` |
+| `token` | tokens | `access_token`, `refreshToken` |
+| `username` | usernames | `username` |
+| `api_key`, `api-key`, `apikey` | API keys | `apiKey`, `x-api-key` |
+| `user` (exact) or `_user` suffix | user identifiers | `user`, `db_user` |
+| `email` | emails | `email`, `userEmail` |
+| `medication` | health data | `medications` |
+| `fullname` (exact) or `full_name` (contains) | real names | `fullName` |
+| `age` (exact) | age | `age` |
+| `weightkg` (exact) or `weight_kg` (contains) | body weight | `weightKg`, `weight_kg` |
+| `heightcm` (exact) or `height_cm` (contains) | height | `heightCm`, `height_cm` |
+| `hrmax` or `hr_max` | max heart rate | `hrMaxBpm`, `hr_max_bpm` |
+| `vo2max` or `vo2_max` | VO2 max | `vo2Max`, `vo2_max` |
+| `athletenotes` (exact) or `athlete_notes` (contains) | personal notes | `athleteNotes` |
+| `athleteprompt` (exact) or `athlete_prompt` (contains) | personal prompts | `athletePrompt` |
+| `athleteid` or `athlete_id` | third-party IDs | `athleteId` |
+| `content` (exact) | message content | `content` |
+| `message` (exact), `usermessage`, `coachmessage`, `messages` | log/chat messages | `message`, `userMessage`, `coachMessage`, `messages` |
+| `filecontent` or `file_content` | binary payloads | `fileContents`, `fileContentsBase64` |
 
 ### Endpoint checklist
 
