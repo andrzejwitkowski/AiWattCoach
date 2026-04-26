@@ -64,10 +64,6 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/auth/google/callback", get(auth::finish_google_login))
         .route("/api/auth/wahoo/start", get(auth::start_wahoo_connect))
         .route("/api/wahoo/callback", get(auth::finish_wahoo_connect))
-        .route(
-            "/api/auth/whitelist",
-            post(auth::join_whitelist).layer(DefaultBodyLimit::max(4 * 1024)),
-        )
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
         .merge(Router::new().route(
@@ -76,6 +72,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         ))
         .merge(
             Router::new()
+                .route(
+                    "/api/auth/whitelist",
+                    post(auth::join_whitelist).layer(DefaultBodyLimit::max(4 * 1024)),
+                )
                 .route("/api/admin/system-info", get(admin::system_info))
                 .route(
                     "/api/admin/completed-workouts/{user_id}/backfill-details",
@@ -98,6 +98,9 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                 .route(
                     "/api/settings/intervals/test",
                     post(settings::test_intervals_connection)
+                        // NOTE: This MethodRouter-level DefaultBodyLimit is enforced by the
+                        // handler, but the outer RequestLogLayer still buffers up to
+                        // MAX_COLLECT_BYTES (10 MB) before this limit is checked.
                         .layer(DefaultBodyLimit::max(8 * 1024)),
                 )
                 .route("/api/settings/options", patch(settings::update_options))

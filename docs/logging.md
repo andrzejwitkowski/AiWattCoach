@@ -44,9 +44,15 @@ Routes excluded from body logging:
 | `/api/workout-summaries/{id}/ws` | WebSocket, not buffered by RequestLogLayer |
 | `/health`, `/ready` | Health checks, no body |
 
+Note: `/api/auth/whitelist` POST is included in the write group. Its `email` field is redacted by `is_sensitive_key`.
+
 The `/api/settings` GET route uses a separate group with `response_only()` logging because its response contains API keys and connection status that need redacted observability.
 
 When adding a new write endpoint, add it to the existing write group sub-Router in `router_with_frontend_dist()` so it gets request body logging automatically.
+
+GET routes inside the write group skip request body collection because `RequestLogService` only buffers the body for POST, PUT, and PATCH methods. Response body logging is controlled by the `EndpointLogConfig`; the write group uses `request_only()` so response bodies are not logged for those routes.
+
+The `DefaultBodyLimit` on a route inside a sub-Router with `RequestLogLayer` only bounds the handler's body limit, not the logger's buffer. The logger caps its own buffer at `MAX_COLLECT_BYTES` (10 MB). For routes that need a tighter transport limit (e.g. `/api/settings/intervals/test` with 8 KB), that limit protects the handler but the logger may still buffer up to 10 MB of the request before the handler sees it.
 
 ### When to enable endpoint body logging
 
@@ -115,17 +121,17 @@ Sensitive key patterns (checked case-insensitively by `is_sensitive_key` in `src
 | `user` (exact) or `_user` suffix | user identifiers | `user`, `db_user` |
 | `email` | emails | `email`, `userEmail` |
 | `medication` | health data | `medications` |
-| `fullname` or `full_name` | real names | `fullName` |
+| `fullname` (exact) or `full_name` (contains) | real names | `fullName` |
 | `age` (exact) | age | `age` |
-| `weight` | body weight | `weightKg`, `weight_kg` |
-| `height` | height | `heightCm`, `height_cm` |
+| `weightkg` (exact) or `weight_kg` (contains) | body weight | `weightKg`, `weight_kg` |
+| `heightcm` (exact) or `height_cm` (contains) | height | `heightCm`, `height_cm` |
 | `hrmax` or `hr_max` | max heart rate | `hrMaxBpm`, `hr_max_bpm` |
 | `vo2max` or `vo2_max` | VO2 max | `vo2Max`, `vo2_max` |
-| `athlete_notes` or `athletenotes` | personal notes | `athleteNotes` |
-| `athlete_prompt` or `athleteprompt` | personal prompts | `athletePrompt` |
+| `athletenotes` (exact) or `athlete_notes` (contains) | personal notes | `athleteNotes` |
+| `athleteprompt` (exact) or `athlete_prompt` (contains) | personal prompts | `athletePrompt` |
 | `athleteid` or `athlete_id` | third-party IDs | `athleteId` |
 | `content` (exact) | message content | `content` |
-| `message` (exact) | log/chat messages | `message` |
+| `message` (exact), `usermessage`, `coachmessage`, `messages` | log/chat messages | `message`, `userMessage`, `coachMessage`, `messages` |
 | `filecontent` or `file_content` | binary payloads | `fileContents`, `fileContentsBase64` |
 
 ### Endpoint checklist

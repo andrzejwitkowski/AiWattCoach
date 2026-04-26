@@ -68,28 +68,42 @@ where
             let uri = req.uri().clone();
             let headers = req.headers().clone();
 
-            let rebuilt_req = if config.log_request_body {
-                let (parts, body) = req.into_parts();
-                let Ok(body_bytes) = collect_body(body).await else {
-                    tracing::warn!(
-                        http.method = %method,
-                        http.target = %uri.path(),
-                        "skipping request body log because body collection failed"
-                    );
-                    return Ok(simple_error_response(StatusCode::BAD_REQUEST));
-                };
+            let has_request_body = matches!(method, Method::POST | Method::PUT | Method::PATCH);
 
-                let body_preview = format_body_for_logging(
-                    &method,
-                    &headers,
-                    body_bytes.as_slice(),
-                    config.max_body_bytes,
-                );
-                log_request(&method, &uri, &headers, Some(&body_preview));
-                Request::from_parts(parts, Body::from(body_bytes))
+            let (rebuilt_req, req_body_preview) = if config.log_request_body && has_request_body {
+                let (parts, body) = req.into_parts();
+                match collect_body(body).await {
+                    Ok(body_bytes) => {
+                        let body_preview = format_body_for_logging(
+                            &method,
+                            &headers,
+                            body_bytes.as_slice(),
+                            config.max_body_bytes,
+                        );
+                        log_request(&method, &uri, &headers, Some(&body_preview));
+                        (
+                            Request::from_parts(parts, Body::from(body_bytes)),
+                            Some(body_preview),
+                        )
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            http.method = %method,
+                            http.target = %uri.path(),
+                            "skipping request body log because body collection failed or was too large"
+                        );
+                        log_request(&method, &uri, &headers, None);
+                        return inner.call(Request::from_parts(parts, Body::empty())).await;
+                    }
+                }
             } else {
-                req
+                if config.log_request_body {
+                    log_request(&method, &uri, &headers, None);
+                }
+                (req, None)
             };
+
+            drop(req_body_preview);
 
             let response = inner.call(rebuilt_req).await?;
 
@@ -98,26 +112,28 @@ where
             }
 
             let (resp_parts, resp_body) = response.into_parts();
-            let Ok(resp_body_bytes) = collect_body(resp_body).await else {
-                tracing::warn!(
-                    http.status_code = resp_parts.status.as_u16(),
-                    "skipping response body log because body collection failed"
-                );
-                return Ok(simple_error_response(StatusCode::BAD_GATEWAY));
-            };
-
-            let resp_preview = format_response_body_for_logging(
-                &resp_parts.headers,
-                resp_body_bytes.as_slice(),
-                config.max_body_bytes,
-            );
-
-            log_response(resp_parts.status, Some(&resp_preview));
-
-            Ok(Response::from_parts(
-                resp_parts,
-                Body::from(resp_body_bytes),
-            ))
+            match collect_body(resp_body).await {
+                Ok(resp_body_bytes) => {
+                    let resp_preview = format_response_body_for_logging(
+                        &resp_parts.headers,
+                        resp_body_bytes.as_slice(),
+                        config.max_body_bytes,
+                    );
+                    log_response(resp_parts.status, Some(&resp_preview));
+                    Ok(Response::from_parts(
+                        resp_parts,
+                        Body::from(resp_body_bytes),
+                    ))
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        http.status_code = resp_parts.status.as_u16(),
+                        "skipping response body log because body collection failed or was too large"
+                    );
+                    log_response(resp_parts.status, None);
+                    Ok(Response::from_parts(resp_parts, Body::empty()))
+                }
+            }
         })
     }
 }
@@ -212,13 +228,6 @@ fn format_response_body_for_logging(
     }
 
     format_body_preview(body_str, max_body_bytes)
-}
-
-fn simple_error_response(status: StatusCode) -> Response<Body> {
-    Response::builder()
-        .status(status)
-        .body(Body::empty())
-        .expect("building static error response should not fail")
 }
 
 fn summarize_text_body(content_type: &str, bytes: &[u8], max_body_bytes: usize) -> String {

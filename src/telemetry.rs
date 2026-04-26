@@ -225,6 +225,9 @@ pub fn is_sensitive_key(key: &str) -> bool {
         || lowercase.contains("athlete_id")
         || lowercase == "content"
         || lowercase == "message"
+        || lowercase == "usermessage"
+        || lowercase == "coachmessage"
+        || lowercase == "messages"
         || lowercase.contains("filecontent")
         || lowercase.contains("file_content")
 }

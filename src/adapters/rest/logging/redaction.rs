@@ -241,6 +241,9 @@ mod tests {
         let mut value: serde_json::Value = serde_json::json!({
             "content": "private message",
             "message": "log entry with PII",
+            "userMessage": "hello coach",
+            "coachMessage": "keep it up",
+            "messages": ["hi", "there"],
             "fileContents": "raw-file-data",
             "fileContentsBase64": "base64data"
         });
@@ -249,6 +252,9 @@ mod tests {
 
         assert_eq!(value["content"], "[REDACTED]");
         assert_eq!(value["message"], "[REDACTED]");
+        assert_eq!(value["userMessage"], "[REDACTED]");
+        assert_eq!(value["coachMessage"], "[REDACTED]");
+        assert_eq!(value["messages"][0], "[REDACTED]");
         assert_eq!(value["fileContents"], "[REDACTED]");
         assert_eq!(value["fileContentsBase64"], "[REDACTED]");
     }
