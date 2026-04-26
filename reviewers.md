@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | user | Wahoo workout request body logging
+
+- Problem: po domknięciu review fixów klient Wahoo nadal logował write requesty bez body preview, więc przy debugowaniu `create_workout` / `update_workout` brakowało widoczności faktycznie wysyłanego form payloadu.
+- Fix: rozszerzyłem `src/adapters/wahoo/client/logging.rs` o tryb `BodyLoggingMode::Full` dla requestów, dodałem bezpieczny preview dla form-encoded payloadów z redakcją pól wrażliwych takich jak `workout_token`, i podpiąłem ten tryb tylko pod `create_workout` / `update_workout` w `src/adapters/wahoo/client.rs`.
+- Prevention: gdy użytkownik prosi o lepszą obserwowalność na adapter write path, najpierw sprawdź `docs/logging.md` i ogranicz body logging do konkretnych requestów z redakcją sekretów, zamiast rozszerzać je globalnie na cały klient.
+
 ### 2026-04-26 | user | PR #144 follow-up stale external-sync expectation
 
 - Problem: after promoting `wahoo_workout_token` matches to `PlannedCompletedWorkoutLinkMatchSource::Explicit`, I updated the production code and nearby review discussion but missed the existing domain regression `import_completed_workout_falls_back_to_wahoo_workout_token_when_plan_id_missing`, which still expected `Token` and failed the full Rust test run.

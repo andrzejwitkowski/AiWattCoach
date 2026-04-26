@@ -147,11 +147,15 @@ impl WahooOAuthClient {
         }
     }
 
-    async fn execute_api_write<T>(&self, request: reqwest::RequestBuilder) -> Result<T, WahooError>
+    async fn execute_api_write<T>(
+        &self,
+        request: reqwest::RequestBuilder,
+        body_logging: logging::BodyLoggingMode,
+    ) -> Result<T, WahooError>
     where
         T: serde::de::DeserializeOwned,
     {
-        let response = logging::execute_and_log_no_body(&self.client, request)
+        let response = logging::execute_and_log(&self.client, request, body_logging)
             .await
             .map_err(|error| WahooError::External(error.to_string()))?;
         match response.status {
@@ -401,6 +405,7 @@ impl WahooApiPort for WahooOAuthClient {
                                 provider_updated_at: request.provider_updated_at,
                             },
                         }),
+                    logging::BodyLoggingMode::None,
                 )
                 .await?;
             map_plan(payload).ok_or_else(|| {
@@ -432,6 +437,7 @@ impl WahooApiPort for WahooOAuthClient {
                                 provider_updated_at: request.provider_updated_at,
                             },
                         }),
+                    logging::BodyLoggingMode::None,
                 )
                 .await?;
             map_plan(payload).ok_or_else(|| {
@@ -531,6 +537,7 @@ impl WahooApiPort for WahooOAuthClient {
                                 plan_id: request.plan_id,
                             },
                         }),
+                    logging::BodyLoggingMode::Full,
                 )
                 .await?;
             Ok(map_workout(payload))
@@ -563,6 +570,7 @@ impl WahooApiPort for WahooOAuthClient {
                                 plan_id: request.plan_id,
                             },
                         }),
+                    logging::BodyLoggingMode::Full,
                 )
                 .await?;
             Ok(map_workout(payload))
