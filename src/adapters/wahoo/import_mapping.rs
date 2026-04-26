@@ -70,6 +70,8 @@ pub fn map_workout_to_import_command(
             .into_iter()
             .flatten()
             .collect(),
+            wahoo_plan_id: workout.plan_id,
+            wahoo_workout_token: workout.workout_token.clone(),
             workout: map_workout_to_completed_workout(user_id, workout, summary),
         },
     )))
@@ -240,7 +242,9 @@ mod tests {
 
     #[test]
     fn map_workout_to_import_command_uses_wahoo_canonical_identity() {
-        let command = map_workout_to_import_command("user-1", &sample_workout())
+        let mut workout = sample_workout();
+        workout.plan_id = Some(7001);
+        let command = map_workout_to_import_command("user-1", &workout)
             .expect("workout with summary should map");
 
         let crate::domain::external_sync::ExternalImportCommand::UpsertCompletedWorkout(import) =
@@ -251,6 +255,8 @@ mod tests {
 
         assert_eq!(import.workout.completed_workout_id, "wahoo-workout:56519");
         assert_eq!(import.workout.source_activity_id.as_deref(), Some("56519"));
+        assert_eq!(import.wahoo_workout_token.as_deref(), Some("token-1"));
+        assert_eq!(import.wahoo_plan_id, Some(7001));
         assert_eq!(
             import.workout.details_unavailable_reason.as_deref(),
             Some("Detailed Wahoo workout data is still being processed. Please check back soon.")

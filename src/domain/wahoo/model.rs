@@ -34,6 +34,53 @@ pub struct WahooFileReference {
     pub url: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WahooPlan {
+    pub id: i64,
+    pub external_id: String,
+    pub provider_updated_at: Option<String>,
+    pub filename: Option<String>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WahooCreatePlan {
+    pub file_base64: String,
+    pub filename: Option<String>,
+    pub external_id: String,
+    pub provider_updated_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WahooUpdatePlan {
+    pub file_base64: String,
+    pub filename: Option<String>,
+    pub provider_updated_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WahooCreateWorkout {
+    pub name: String,
+    pub workout_token: String,
+    pub workout_type_id: i64,
+    pub starts: String,
+    pub minutes: i32,
+    pub plan_id: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WahooUpdateWorkout {
+    pub name: Option<String>,
+    pub workout_token: Option<String>,
+    pub workout_type_id: Option<i64>,
+    pub starts: Option<String>,
+    pub minutes: Option<i32>,
+    pub plan_id: Option<i64>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct WahooWorkoutSummary {
     pub id: i64,

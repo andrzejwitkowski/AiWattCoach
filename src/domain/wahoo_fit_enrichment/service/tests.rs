@@ -11,9 +11,9 @@ use crate::domain::{
         BoxFuture as TrainingLoadBoxFuture, TrainingLoadError, TrainingLoadRecomputeUseCases,
     },
     wahoo::{
-        BoxFuture as WahooBoxFuture, WahooAuthExchange, WahooAuthStart, WahooError,
-        WahooFileReference, WahooToken, WahooUseCases, WahooWorkout, WahooWorkoutList,
-        WahooWorkoutSummary,
+        BoxFuture as WahooBoxFuture, WahooAuthExchange, WahooAuthStart, WahooCreatePlan,
+        WahooCreateWorkout, WahooError, WahooFileReference, WahooPlan, WahooToken, WahooUpdatePlan,
+        WahooUpdateWorkout, WahooUseCases, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
     },
     wahoo_fit_files::{
         BoxFuture as WahooFitFileBoxFuture, WahooFitFile, WahooFitFileRepository, WahooFitFileStage,
@@ -309,6 +309,48 @@ impl WahooUseCases for FakeWahooService {
     ) -> WahooBoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
         let summary = self.summary.clone();
         Box::pin(async move { Ok(summary) })
+    }
+
+    fn find_plan_by_external_id(
+        &self,
+        _user_id: &str,
+        _external_id: &str,
+    ) -> WahooBoxFuture<Result<Option<WahooPlan>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn create_plan(
+        &self,
+        _user_id: &str,
+        _request: WahooCreatePlan,
+    ) -> WahooBoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_plan(
+        &self,
+        _user_id: &str,
+        _plan_id: i64,
+        _request: WahooUpdatePlan,
+    ) -> WahooBoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn create_workout(
+        &self,
+        _user_id: &str,
+        _request: WahooCreateWorkout,
+    ) -> WahooBoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+        _request: WahooUpdateWorkout,
+    ) -> WahooBoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
     }
 
     fn download_workout_file(

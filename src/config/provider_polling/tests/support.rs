@@ -20,7 +20,8 @@ use crate::domain::{
         BoxFuture as TrainingLoadBoxFuture, TrainingLoadError, TrainingLoadRecomputeUseCases,
     },
     wahoo::{
-        WahooError, WahooFileReference, WahooUseCases, WahooWorkout, WahooWorkoutList,
+        WahooCreatePlan, WahooCreateWorkout, WahooError, WahooFileReference, WahooPlan,
+        WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooWorkout, WahooWorkoutList,
         WahooWorkoutSummary,
     },
     wahoo_fit_enrichment::{
@@ -406,6 +407,48 @@ impl WahooUseCases for RecordingWahooService {
         _workout_id: i64,
     ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
         Box::pin(async { Ok(None) })
+    }
+
+    fn find_plan_by_external_id(
+        &self,
+        _user_id: &str,
+        _external_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooPlan>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn create_plan(
+        &self,
+        _user_id: &str,
+        _request: WahooCreatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_plan(
+        &self,
+        _user_id: &str,
+        _plan_id: i64,
+        _request: WahooUpdatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn create_workout(
+        &self,
+        _user_id: &str,
+        _request: WahooCreateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+        _request: WahooUpdateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
     }
 
     fn download_workout_file(

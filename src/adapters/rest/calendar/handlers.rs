@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    dto::{ListCalendarEventsQuery, SyncPlannedWorkoutPath},
+    dto::{validation_code_message_response, ListCalendarEventsQuery, SyncPlannedWorkoutPath},
     error::{map_calendar_error, map_calendar_label_error},
     mapping::{map_calendar_event_to_dto, map_calendar_labels_to_dto},
 };
@@ -119,7 +119,14 @@ pub(in crate::adapters::rest) async fn sync_planned_workout(
     };
 
     if !is_valid_date(&path.date) {
-        return StatusCode::BAD_REQUEST.into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(validation_code_message_response(
+                "invalid_date_format",
+                "planned workout date must be in YYYY-MM-DD format",
+            )),
+        )
+            .into_response();
     }
 
     match calendar_service

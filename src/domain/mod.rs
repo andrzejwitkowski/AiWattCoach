@@ -10,6 +10,7 @@ pub mod intervals;
 pub mod llm;
 pub mod planned_completed_links;
 pub mod planned_workout_tokens;
+pub mod planned_workout_wahoo_syncs;
 pub mod planned_workouts;
 pub mod races;
 pub mod return_to;

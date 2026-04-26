@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | user | Wahoo workout request body logging
+
+- Problem: po domknięciu review fixów klient Wahoo nadal logował write requesty bez body preview, więc przy debugowaniu `create_workout` / `update_workout` brakowało widoczności faktycznie wysyłanego form payloadu.
+- Fix: rozszerzyłem `src/adapters/wahoo/client/logging.rs` o tryb `BodyLoggingMode::Full` dla requestów, dodałem bezpieczny preview dla form-encoded payloadów z redakcją pól wrażliwych takich jak `workout_token`, i podpiąłem ten tryb tylko pod `create_workout` / `update_workout` w `src/adapters/wahoo/client.rs`.
+- Prevention: gdy użytkownik prosi o lepszą obserwowalność na adapter write path, najpierw sprawdź `docs/logging.md` i ogranicz body logging do konkretnych requestów z redakcją sekretów, zamiast rozszerzać je globalnie na cały klient.
+
+### 2026-04-26 | user | PR #144 follow-up stale external-sync expectation
+
+- Problem: after promoting `wahoo_workout_token` matches to `PlannedCompletedWorkoutLinkMatchSource::Explicit`, I updated the production code and nearby review discussion but missed the existing domain regression `import_completed_workout_falls_back_to_wahoo_workout_token_when_plan_id_missing`, which still expected `Token` and failed the full Rust test run.
+- Fix: updated the external-sync test to assert `Explicit` for Wahoo workout-token-backed planned-workout links, matching the intended ranking behavior already implemented in `src/domain/external_sync/import/mod.rs`.
+- Prevention: whenever a review-driven change alters enum/ranking semantics, grep all focused tests for the old enum variant and rerun the full touched test module before calling the patch complete.
+
+### 2026-04-26 | Copilot/CodeRabbit | PR #144 Wahoo planned-workout review follow-up
+
+- Problem: the PR review surfaced several real gaps around Wahoo planned-workout sync and linking: Wahoo plan mapping could swallow repeat blocks past text separators, planned-workout sync re-queried Wahoo plans unnecessarily and lacked stable REST error codes for frontend handling, external-sync linking treated `wahoo_workout_token` matches as weaker token matches instead of explicit Wahoo identities, Wahoo plan lookup silently accepted duplicate `external_id` rows, and one attempted REST test covered the wrong layer for the not-connected path.
+- Fix: made Wahoo repeat parsing stop at text delimiters, simplified existing-plan resolution to avoid the duplicate lookup, added stable calendar sync error codes for invalid date / sync window / missing FTP / Wahoo-not-connected responses and updated the modal to prefer `error.body.code` with message fallback, mapped `wahoo_workout_token` link resolution to `Explicit`, rejected duplicate Wahoo plans with a focused regression, wired planned-workout Wahoo sync records into `ExternalImportService`, moved Wahoo-not-connected coverage to a domain test instead of the miswired REST harness, and kept the frontend sync-window helper aligned with the backend's current UTC-based contract.
+- Prevention: when review feedback touches transport errors, verify that the test harness actually wires the dependency path being asserted before adding or keeping a REST integration case. For provider-owned identifiers, prefer stable machine-readable codes and explicit match-source semantics instead of UI string matching or generic token classification. If a provider lookup is expected to be unique by `external_id`, treat duplicate upstream rows as an error and add a regression immediately.
+
 ### 2026-04-26 | Copilot/CodeRabbit | PR #143 Wahoo second review pass
 
 - Problem: the follow-up review still pointed at a few real gaps after the first cleanup: Wahoo motorcycling was still normalized as `Ride`, partial Wahoo batch imports still skipped training-load recompute when `imports.import(...)` failed after earlier successes, planned-workout authoritative reads could miss cross-boundary completed workouts and still did per-workout link lookups, and the Wahoo FIT enrichment scheduler still trusted payload `user_id` instead of the scheduled task tenant key.

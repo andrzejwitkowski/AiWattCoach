@@ -1,6 +1,7 @@
 use crate::domain::wahoo::{
-    BoxFuture, WahooApiPort, WahooError, WahooFileReference, WahooOAuthPort, WahooToken,
-    WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+    BoxFuture, WahooApiPort, WahooCreatePlan, WahooCreateWorkout, WahooError, WahooFileReference,
+    WahooOAuthPort, WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooWorkout,
+    WahooWorkoutList, WahooWorkoutSummary,
 };
 
 const DEV_AUTH_CODE: &str = "dev-wahoo-auth";
@@ -47,6 +48,60 @@ impl WahooOAuthPort for DevWahooOAuthClient {
 }
 
 impl WahooApiPort for DevWahooOAuthClient {
+    fn list_plans(
+        &self,
+        _access_token: &str,
+        external_id: Option<&str>,
+    ) -> BoxFuture<Result<Vec<WahooPlan>, WahooError>> {
+        let external_id = external_id.map(ToString::to_string);
+        Box::pin(async move {
+            let plan = sample_plan();
+            Ok(match external_id {
+                Some(external_id) if external_id != plan.external_id => Vec::new(),
+                _ => vec![plan],
+            })
+        })
+    }
+
+    fn create_plan(
+        &self,
+        _access_token: &str,
+        request: WahooCreatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async move {
+            Ok(WahooPlan {
+                id: 5001,
+                external_id: request.external_id,
+                provider_updated_at: Some(request.provider_updated_at),
+                filename: request.filename,
+                name: Some("Dev Outdoor Plan".to_string()),
+                description: Some("Dev Wahoo plan".to_string()),
+                created_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+                updated_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+            })
+        })
+    }
+
+    fn update_plan(
+        &self,
+        _access_token: &str,
+        plan_id: i64,
+        request: WahooUpdatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async move {
+            Ok(WahooPlan {
+                id: plan_id,
+                external_id: "dev-planned-workout-id".to_string(),
+                provider_updated_at: Some(request.provider_updated_at),
+                filename: request.filename,
+                name: Some("Dev Outdoor Plan".to_string()),
+                description: Some("Updated dev Wahoo plan".to_string()),
+                created_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+                updated_at: Some("2023-11-14T09:00:00.000Z".to_string()),
+            })
+        })
+    }
+
     fn list_workouts(
         &self,
         _access_token: &str,
@@ -95,6 +150,53 @@ impl WahooApiPort for DevWahooOAuthClient {
         })
     }
 
+    fn create_workout(
+        &self,
+        _access_token: &str,
+        request: WahooCreateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async move {
+            let mut workout = sample_workout();
+            workout.id = 60_001;
+            workout.name = Some(request.name);
+            workout.workout_token = Some(request.workout_token);
+            workout.workout_type_id = Some(request.workout_type_id);
+            workout.starts = request.starts;
+            workout.minutes = Some(request.minutes);
+            workout.plan_id = request.plan_id;
+            Ok(workout)
+        })
+    }
+
+    fn update_workout(
+        &self,
+        _access_token: &str,
+        workout_id: i64,
+        request: WahooUpdateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async move {
+            let mut workout = sample_workout();
+            workout.id = workout_id;
+            if let Some(name) = request.name {
+                workout.name = Some(name);
+            }
+            if let Some(workout_token) = request.workout_token {
+                workout.workout_token = Some(workout_token);
+            }
+            if let Some(workout_type_id) = request.workout_type_id {
+                workout.workout_type_id = Some(workout_type_id);
+            }
+            if let Some(starts) = request.starts {
+                workout.starts = starts;
+            }
+            if let Some(minutes) = request.minutes {
+                workout.minutes = Some(minutes);
+            }
+            workout.plan_id = request.plan_id.or(workout.plan_id);
+            Ok(workout)
+        })
+    }
+
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
         let file_url = file_url.to_string();
         Box::pin(async move {
@@ -109,13 +211,26 @@ impl WahooApiPort for DevWahooOAuthClient {
     }
 }
 
+fn sample_plan() -> WahooPlan {
+    WahooPlan {
+        id: 5_001,
+        external_id: "dev-planned-workout-id".to_string(),
+        provider_updated_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+        filename: Some("plan.json".to_string()),
+        name: Some("Dev Outdoor Plan".to_string()),
+        description: Some("Dev Wahoo plan".to_string()),
+        created_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+        updated_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+    }
+}
+
 fn sample_workout() -> WahooWorkout {
     WahooWorkout {
         id: 56_519,
         starts: "2023-11-14T08:00:00.000Z".to_string(),
         minutes: Some(60),
         name: Some("Dev Wahoo Ride".to_string()),
-        plan_id: None,
+        plan_id: Some(5_001),
         plan_ids: Vec::new(),
         route_id: None,
         workout_token: Some("dev-workout-token".to_string()),

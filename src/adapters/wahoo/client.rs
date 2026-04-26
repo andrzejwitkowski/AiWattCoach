@@ -9,12 +9,16 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
     adapters::wahoo::dto::{
-        WahooFileReferenceResponse, WahooTokenResponse, WahooWorkoutListResponse,
+        WahooCreatePlanRequest, WahooCreatePlanRequestBody, WahooCreateWorkoutRequest,
+        WahooCreateWorkoutRequestBody, WahooFileReferenceResponse, WahooPlanResponse,
+        WahooTokenResponse, WahooUpdatePlanRequest, WahooUpdatePlanRequestBody,
+        WahooUpdateWorkoutRequest, WahooUpdateWorkoutRequestBody, WahooWorkoutListResponse,
         WahooWorkoutResponse, WahooWorkoutSummaryResponse,
     },
     domain::wahoo::{
-        BoxFuture, WahooApiPort, WahooError, WahooFileReference, WahooOAuthPort, WahooToken,
-        WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+        BoxFuture, WahooApiPort, WahooCreatePlan, WahooCreateWorkout, WahooError,
+        WahooFileReference, WahooOAuthPort, WahooPlan, WahooToken, WahooUpdatePlan,
+        WahooUpdateWorkout, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
     },
 };
 
@@ -77,9 +81,10 @@ impl WahooOAuthClient {
         token_url: String,
         form: Vec<(&'static str, String)>,
     ) -> Result<WahooToken, WahooError> {
-        let response = logging::execute_and_log_no_body(
+        let response = logging::execute_and_log(
             &client,
             Self::with_trace_context(client.post(token_url).form(&form)),
+            logging::BodyLoggingMode::Full,
         )
         .await
         .map_err(|error| WahooError::External(error.to_string()))?;
@@ -109,6 +114,14 @@ impl WahooOAuthClient {
         Self::with_trace_context(self.client.get(url).bearer_auth(access_token))
     }
 
+    fn bearer_post(&self, url: String, access_token: &str) -> reqwest::RequestBuilder {
+        Self::with_trace_context(self.client.post(url).bearer_auth(access_token))
+    }
+
+    fn bearer_put(&self, url: String, access_token: &str) -> reqwest::RequestBuilder {
+        Self::with_trace_context(self.client.put(url).bearer_auth(access_token))
+    }
+
     fn decode_json<T>(response: logging::LoggedResponse) -> Result<T, WahooError>
     where
         T: serde::de::DeserializeOwned,
@@ -121,7 +134,30 @@ impl WahooOAuthClient {
     where
         T: serde::de::DeserializeOwned,
     {
-        let response = logging::execute_and_log_no_body(&self.client, request)
+        let response =
+            logging::execute_and_log(&self.client, request, logging::BodyLoggingMode::Full)
+                .await
+                .map_err(|error| WahooError::External(error.to_string()))?;
+        match response.status {
+            status if status.is_success() => Self::decode_json(response),
+            reqwest::StatusCode::NOT_FOUND => Err(WahooError::NotFound),
+            status => Err(WahooError::External(format!(
+                "Wahoo API request failed with status {} ({})",
+                status,
+                summarize_error_body(&response.body)
+            ))),
+        }
+    }
+
+    async fn execute_api_write<T>(
+        &self,
+        request: reqwest::RequestBuilder,
+        body_logging: logging::BodyLoggingMode,
+    ) -> Result<T, WahooError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let response = logging::execute_and_log(&self.client, request, body_logging)
             .await
             .map_err(|error| WahooError::External(error.to_string()))?;
         match response.status {
@@ -134,6 +170,19 @@ impl WahooOAuthClient {
             ))),
         }
     }
+}
+
+fn map_plan(plan: WahooPlanResponse) -> Option<WahooPlan> {
+    Some(WahooPlan {
+        id: plan.id,
+        external_id: plan.external_id?,
+        provider_updated_at: plan.provider_updated_at,
+        filename: plan.filename,
+        name: plan.name,
+        description: plan.description,
+        created_at: plan.created_at,
+        updated_at: plan.updated_at,
+    })
 }
 
 fn map_file_reference(file: Option<WahooFileReferenceResponse>) -> Option<WahooFileReference> {
@@ -316,6 +365,89 @@ impl WahooOAuthPort for WahooOAuthClient {
 }
 
 impl WahooApiPort for WahooOAuthClient {
+    fn list_plans(
+        &self,
+        access_token: &str,
+        external_id: Option<&str>,
+    ) -> BoxFuture<Result<Vec<WahooPlan>, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        let external_id = external_id.map(ToString::to_string);
+        Box::pin(async move {
+            let mut url = reqwest::Url::parse(&client.api_url("/v1/plans"))
+                .map_err(|error| WahooError::External(error.to_string()))?;
+            if let Some(external_id) = external_id.as_deref() {
+                url.query_pairs_mut()
+                    .append_pair("external_id", external_id);
+            }
+            let payload: Vec<WahooPlanResponse> = client
+                .execute_api_get(client.bearer_request(url.to_string(), &access_token))
+                .await?;
+            Ok(payload.into_iter().filter_map(map_plan).collect())
+        })
+    }
+
+    fn create_plan(
+        &self,
+        access_token: &str,
+        request: WahooCreatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            let payload: WahooPlanResponse = client
+                .execute_api_write(
+                    client
+                        .bearer_post(client.api_url("/v1/plans"), &access_token)
+                        .form(&WahooCreatePlanRequest {
+                            plan: WahooCreatePlanRequestBody {
+                                file: request.file_base64,
+                                filename: request.filename,
+                                external_id: request.external_id,
+                                provider_updated_at: request.provider_updated_at,
+                            },
+                        }),
+                    logging::BodyLoggingMode::Full,
+                )
+                .await?;
+            map_plan(payload).ok_or_else(|| {
+                WahooError::External("Wahoo plan response is missing external_id".to_string())
+            })
+        })
+    }
+
+    fn update_plan(
+        &self,
+        access_token: &str,
+        plan_id: i64,
+        request: WahooUpdatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            let payload: WahooPlanResponse = client
+                .execute_api_write(
+                    client
+                        .bearer_put(
+                            client.api_url(&format!("/v1/plans/{plan_id}")),
+                            &access_token,
+                        )
+                        .form(&WahooUpdatePlanRequest {
+                            plan: WahooUpdatePlanRequestBody {
+                                file: request.file_base64,
+                                filename: request.filename,
+                                provider_updated_at: request.provider_updated_at,
+                            },
+                        }),
+                    logging::BodyLoggingMode::Full,
+                )
+                .await?;
+            map_plan(payload).ok_or_else(|| {
+                WahooError::External("Wahoo plan response is missing external_id".to_string())
+            })
+        })
+    }
+
     fn list_workouts(
         &self,
         access_token: &str,
@@ -385,6 +517,68 @@ impl WahooApiPort for WahooOAuthClient {
         })
     }
 
+    fn create_workout(
+        &self,
+        access_token: &str,
+        request: WahooCreateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            let payload: WahooWorkoutResponse = client
+                .execute_api_write(
+                    client
+                        .bearer_post(client.api_url("/v1/workouts"), &access_token)
+                        .form(&WahooCreateWorkoutRequest {
+                            workout: WahooCreateWorkoutRequestBody {
+                                name: request.name,
+                                workout_token: request.workout_token,
+                                workout_type_id: request.workout_type_id,
+                                starts: request.starts,
+                                minutes: request.minutes,
+                                plan_id: request.plan_id,
+                            },
+                        }),
+                    logging::BodyLoggingMode::Full,
+                )
+                .await?;
+            Ok(map_workout(payload))
+        })
+    }
+
+    fn update_workout(
+        &self,
+        access_token: &str,
+        workout_id: i64,
+        request: WahooUpdateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            let payload: WahooWorkoutResponse = client
+                .execute_api_write(
+                    client
+                        .bearer_put(
+                            client.api_url(&format!("/v1/workouts/{workout_id}")),
+                            &access_token,
+                        )
+                        .form(&WahooUpdateWorkoutRequest {
+                            workout: WahooUpdateWorkoutRequestBody {
+                                name: request.name,
+                                workout_token: request.workout_token,
+                                workout_type_id: request.workout_type_id,
+                                starts: request.starts,
+                                minutes: request.minutes,
+                                plan_id: request.plan_id,
+                            },
+                        }),
+                    logging::BodyLoggingMode::Full,
+                )
+                .await?;
+            Ok(map_workout(payload))
+        })
+    }
+
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
         let file_url = match Url::parse(file_url) {
             Ok(file_url) if file_url.scheme() == "https" && file_url.host_str().is_some() => {
@@ -408,9 +602,10 @@ impl WahooApiPort for WahooOAuthClient {
         let client = self.client.clone();
         let request = Self::with_trace_context(client.get(file_url));
         Box::pin(async move {
-            let response = logging::execute_and_log_no_body(&client, request)
-                .await
-                .map_err(|error| WahooError::External(error.to_string()))?;
+            let response =
+                logging::execute_and_log(&client, request, logging::BodyLoggingMode::Full)
+                    .await
+                    .map_err(|error| WahooError::External(error.to_string()))?;
             if !response.status.is_success() {
                 return Err(WahooError::External(format!(
                     "Wahoo file download failed with status {} ({})",

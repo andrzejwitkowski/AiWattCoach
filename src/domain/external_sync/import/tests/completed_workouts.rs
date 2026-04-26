@@ -10,6 +10,7 @@ use crate::domain::{
         PlannedCompletedWorkoutLinkRepository,
     },
     planned_workout_tokens::{PlannedWorkoutToken, PlannedWorkoutTokenRepository},
+    planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncRepository,
     planned_workouts::PlannedWorkoutRepository,
 };
 
@@ -37,6 +38,7 @@ async fn import_completed_workout_persists_canonical_state_and_refreshes_start_d
         special_days,
         planned_workout_tokens,
         planned_completed_links,
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         observations.clone(),
         sync_states.clone(),
         refresh.clone(),
@@ -49,6 +51,8 @@ async fn import_completed_workout_persists_canonical_state_and_refreshes_start_d
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-1".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))
@@ -107,6 +111,7 @@ async fn import_completed_workout_returns_error_for_stale_dedup_mapping() {
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         observations,
         InMemorySyncStateRepository::default(),
     );
@@ -118,6 +123,8 @@ async fn import_completed_workout_returns_error_for_stale_dedup_mapping() {
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-1".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_for_provider(
                     ExternalProvider::Wahoo,
                     "wahoo-activity-1",
@@ -163,6 +170,7 @@ async fn import_completed_workout_reuses_existing_canonical_workout_for_matching
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         observations.clone(),
         InMemorySyncStateRepository::default(),
     );
@@ -179,6 +187,8 @@ async fn import_completed_workout_reuses_existing_canonical_workout_for_matching
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-1".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: incoming,
             },
         )))
@@ -212,6 +222,7 @@ async fn import_completed_workout_refreshes_old_and_new_dates_when_existing_cano
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
         refresh.clone(),
@@ -224,6 +235,8 @@ async fn import_completed_workout_refreshes_old_and_new_dates_when_existing_cano
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-intervals-2".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))
@@ -259,6 +272,7 @@ async fn import_completed_workout_merges_enriched_details_into_existing_sparse_r
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -284,6 +298,8 @@ async fn import_completed_workout_merges_enriched_details_into_existing_sparse_r
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-enriched-details".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: incoming,
             },
         )))
@@ -304,6 +320,7 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -315,6 +332,8 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-1".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_for_provider(
                     ExternalProvider::Wahoo,
                     "wahoo-activity-1",
@@ -331,6 +350,8 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-intervals-1".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))
@@ -352,6 +373,7 @@ async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -363,6 +385,8 @@ async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-intervals-1".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))
@@ -375,6 +399,8 @@ async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help
                 external_id: "provider-b-77".to_string(),
                 normalized_payload_hash: "hash-provider-b-1".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_for_provider(
                     ExternalProvider::Other,
                     "provider-b-77",
@@ -436,6 +462,7 @@ async fn import_completed_workout_rejects_ambiguous_fingerprint_match() {
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         observations,
         InMemorySyncStateRepository::default(),
     );
@@ -447,6 +474,8 @@ async fn import_completed_workout_rejects_ambiguous_fingerprint_match() {
                 external_id: "provider-c-1".to_string(),
                 normalized_payload_hash: "hash-provider-c-1".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_for_provider(
                     ExternalProvider::Other,
                     "provider-c-1",
@@ -488,6 +517,7 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
         InMemorySpecialDayRepository::default(),
         planned_workout_tokens,
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -499,6 +529,8 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-1".to_string(),
                 marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=AB123CDE45]".to_string()],
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))
@@ -524,6 +556,142 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
 }
 
 #[tokio::test]
+async fn import_completed_workout_links_wahoo_activity_by_plan_id_as_explicit() {
+    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(sample_planned_workout_on_date(
+            "planned-wahoo-explicit",
+            "2026-05-11",
+        ))
+        .await
+        .unwrap();
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let planned_workout_wahoo_syncs = InMemoryPlannedWorkoutWahooSyncRepository::default();
+    planned_workout_wahoo_syncs
+        .upsert(sample_planned_workout_wahoo_sync_record(
+            "planned-wahoo-explicit",
+        ))
+        .await
+        .unwrap();
+    let service = external_import_service_without_refresh(
+        planned_workouts,
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        planned_completed_links.clone(),
+        planned_workout_wahoo_syncs,
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Wahoo,
+                external_id: "wahoo-activity-1".to_string(),
+                normalized_payload_hash: "hash-wahoo-plan-id".to_string(),
+                marker_sources: Vec::new(),
+                wahoo_plan_id: Some(5_001),
+                wahoo_workout_token: None,
+                workout: sample_completed_workout_for_provider(
+                    ExternalProvider::Wahoo,
+                    "wahoo-activity-1",
+                    None,
+                ),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(
+        stored[0].planned_workout_id.as_deref(),
+        Some("planned-wahoo-explicit")
+    );
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "wahoo-activity-1")
+        .await
+        .unwrap()
+        .expect("planned-completed link");
+    assert_eq!(link.planned_workout_id, "planned-wahoo-explicit");
+    assert_eq!(
+        link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Explicit
+    );
+}
+
+#[tokio::test]
+async fn import_completed_workout_falls_back_to_wahoo_workout_token_when_plan_id_missing() {
+    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(sample_planned_workout_on_date(
+            "planned-wahoo-token",
+            "2026-05-11",
+        ))
+        .await
+        .unwrap();
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let planned_workout_wahoo_syncs = InMemoryPlannedWorkoutWahooSyncRepository::default();
+    planned_workout_wahoo_syncs
+        .upsert(sample_planned_workout_wahoo_sync_record(
+            "planned-wahoo-token",
+        ))
+        .await
+        .unwrap();
+    let service = external_import_service_without_refresh(
+        planned_workouts,
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        planned_completed_links.clone(),
+        planned_workout_wahoo_syncs,
+        InMemoryObservationRepository::default(),
+        InMemorySyncStateRepository::default(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Wahoo,
+                external_id: "wahoo-activity-token-only".to_string(),
+                normalized_payload_hash: "hash-wahoo-token-only".to_string(),
+                marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: Some("[AIWATTCOACH:pw=WAH001TOKN]".to_string()),
+                workout: sample_completed_workout_for_provider(
+                    ExternalProvider::Wahoo,
+                    "wahoo-activity-token-only",
+                    None,
+                ),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(
+        stored[0].planned_workout_id.as_deref(),
+        Some("planned-wahoo-token")
+    );
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "wahoo-activity-token-only")
+        .await
+        .unwrap()
+        .expect("planned-completed link");
+    assert_eq!(link.planned_workout_id, "planned-wahoo-token");
+    assert_eq!(
+        link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Explicit
+    );
+}
+
+#[tokio::test]
 async fn import_completed_workout_links_single_same_day_planned_workout_as_heuristic() {
     let planned_workouts = InMemoryPlannedWorkoutRepository::default();
     planned_workouts
@@ -543,6 +711,7 @@ async fn import_completed_workout_links_single_same_day_planned_workout_as_heuri
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -554,6 +723,8 @@ async fn import_completed_workout_links_single_same_day_planned_workout_as_heuri
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-heuristic".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_named("Threshold Ride"),
             },
         )))
@@ -598,6 +769,7 @@ async fn import_completed_workout_does_not_link_same_day_planned_workout_when_na
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -609,6 +781,8 @@ async fn import_completed_workout_does_not_link_same_day_planned_workout_when_na
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-no-heuristic".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_named("Blue Top"),
             },
         )))
@@ -653,6 +827,7 @@ async fn import_completed_workout_prefers_token_match_source_over_same_day_fallb
         InMemorySpecialDayRepository::default(),
         planned_workout_tokens,
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -664,6 +839,8 @@ async fn import_completed_workout_prefers_token_match_source_over_same_day_fallb
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-token-priority".to_string(),
                 marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=AB123CDE45]".to_string()],
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))
@@ -720,6 +897,7 @@ async fn import_completed_workout_does_not_downgrade_existing_explicit_link_matc
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -731,6 +909,8 @@ async fn import_completed_workout_does_not_downgrade_existing_explicit_link_matc
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-explicit".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))
@@ -786,6 +966,7 @@ async fn import_completed_workout_does_not_inherit_explicit_match_source_from_di
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -797,6 +978,8 @@ async fn import_completed_workout_does_not_inherit_explicit_match_source_from_di
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-new-pair".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_named("Threshold Ride"),
             },
         )))
@@ -854,6 +1037,7 @@ async fn import_completed_workout_preserves_existing_completed_workout_link_over
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -865,6 +1049,8 @@ async fn import_completed_workout_preserves_existing_completed_workout_link_over
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-preserve-existing-link".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))
@@ -912,6 +1098,7 @@ async fn import_completed_workout_preserves_legacy_planned_id_when_no_better_mat
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -923,6 +1110,8 @@ async fn import_completed_workout_preserves_legacy_planned_id_when_no_better_mat
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-drop-legacy-planned-id".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_named("Threshold Ride"),
             },
         )))
@@ -961,6 +1150,7 @@ async fn import_completed_workout_persists_existing_legacy_planned_id_when_no_re
         InMemorySpecialDayRepository::default(),
         InMemoryPlannedWorkoutTokenRepository::default(),
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -972,6 +1162,8 @@ async fn import_completed_workout_persists_existing_legacy_planned_id_when_no_re
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-preserve-legacy-planned-id".to_string(),
                 marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout_named("Completely Different Ride"),
             },
         )))
@@ -1045,6 +1237,7 @@ async fn import_completed_workout_upgrades_existing_heuristic_link_when_token_ma
         InMemorySpecialDayRepository::default(),
         planned_workout_tokens,
         planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
         InMemoryObservationRepository::default(),
         InMemorySyncStateRepository::default(),
     );
@@ -1056,6 +1249,8 @@ async fn import_completed_workout_upgrades_existing_heuristic_link_when_token_ma
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-upgrade-to-token".to_string(),
                 marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=AB123CDE45]".to_string()],
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
                 workout: sample_completed_workout(),
             },
         )))

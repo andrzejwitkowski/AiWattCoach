@@ -13,4 +13,4 @@ pub use ports::{
     BoxFuture, CalendarUseCases, HiddenCalendarEventSource, NoopPlannedWorkoutSyncRepository,
     PlannedWorkoutSyncRepository,
 };
-pub use service::CalendarService;
+pub use service::{CalendarService, NoopWahooUseCases};
