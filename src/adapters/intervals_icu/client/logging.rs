@@ -7,6 +7,8 @@ use sha2::Digest;
 use crate::telemetry::is_sensitive_key;
 
 const CLIENT_NAME: &str = "intervals_icu";
+const CLIENT_LABEL: &str = "intervals";
+const SAFE_QUERY_KEYS: &[&str] = &["oldest", "newest", "page", "per_page", "category"];
 
 /// Maximum characters to preview in logged request/response bodies.
 const MAX_LOGGED_BODY_CHARS: usize = 1024;
@@ -235,6 +237,7 @@ fn log_request(
     if let Some(body) = body_preview {
         tracing::info!(
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %url,
             http.headers = ?header_fields,
@@ -244,6 +247,7 @@ fn log_request(
     } else {
         tracing::info!(
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %url,
             http.headers = ?header_fields,
@@ -285,6 +289,7 @@ fn log_response_with_body(
         tracing::Level::ERROR => tracing::event!(
             tracing::Level::ERROR,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %url,
             http.status_code = status.as_u16(),
@@ -295,6 +300,7 @@ fn log_response_with_body(
         tracing::Level::WARN => tracing::event!(
             tracing::Level::WARN,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %url,
             http.status_code = status.as_u16(),
@@ -305,6 +311,7 @@ fn log_response_with_body(
         tracing::Level::INFO => tracing::event!(
             tracing::Level::INFO,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %url,
             http.status_code = status.as_u16(),
@@ -326,6 +333,7 @@ fn log_response_without_body(
         tracing::Level::ERROR => tracing::event!(
             tracing::Level::ERROR,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %url,
             http.status_code = status.as_u16(),
@@ -335,6 +343,7 @@ fn log_response_without_body(
         tracing::Level::WARN => tracing::event!(
             tracing::Level::WARN,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %url,
             http.status_code = status.as_u16(),
@@ -344,6 +353,7 @@ fn log_response_without_body(
         tracing::Level::INFO => tracing::event!(
             tracing::Level::INFO,
             provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
             http.method = %method,
             http.url = %url,
             http.status_code = status.as_u16(),
@@ -357,6 +367,7 @@ fn log_response_without_body(
 fn log_transport_failure(method: &Method, url: &reqwest::Url, error: &reqwest::Error, stage: &str) {
     tracing::error!(
         provider = CLIENT_NAME,
+        client = CLIENT_LABEL,
         http.method = %method,
         http.url = %sanitized_url(url),
         failure.stage = stage,
@@ -383,6 +394,27 @@ fn sanitized_url(url: &reqwest::Url) -> String {
     if let Some(port) = url.port() {
         let authority = format!("{}:{}", url.host_str().unwrap_or(""), port);
         sanitized = format!("{}://{}{}", url.scheme(), authority, url.path());
+    }
+
+    let safe_query = url
+        .query_pairs()
+        .filter(|(key, _)| {
+            SAFE_QUERY_KEYS
+                .iter()
+                .any(|allowed| key.eq_ignore_ascii_case(allowed))
+        })
+        .map(|(key, value)| {
+            format!(
+                "{}={}",
+                urlencoding::encode(&key),
+                urlencoding::encode(&value)
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if !safe_query.is_empty() {
+        sanitized.push('?');
+        sanitized.push_str(&safe_query.join("&"));
     }
 
     sanitized
@@ -431,11 +463,11 @@ mod tests {
     }
 
     #[test]
-    fn sanitized_url_drops_query_string() {
-        let url = reqwest::Url::parse("https://intervals.icu/api/v1/athlete/athlete-7/activities?oldest=2026-03-01&newest=2026-03-31").unwrap();
+    fn sanitized_url_keeps_safe_intervals_query_params() {
+        let url = reqwest::Url::parse("https://intervals.icu/api/v1/athlete/athlete-7/activities?oldest=2026-03-01&newest=2026-03-31&page=2&per_page=20&api_key=secret").unwrap();
         assert_eq!(
             sanitized_url(&url),
-            "https://intervals.icu/api/v1/athlete/athlete-7/activities"
+            "https://intervals.icu/api/v1/athlete/athlete-7/activities?oldest=2026-03-01&newest=2026-03-31&page=2&per_page=20"
         );
     }
 }

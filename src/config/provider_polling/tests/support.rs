@@ -321,6 +321,7 @@ impl RecordingIntervalsApi {
 pub(super) struct RecordingWahooService {
     workouts: Arc<Mutex<Vec<WahooWorkout>>>,
     list_calls: Arc<Mutex<Vec<(String, usize, usize)>>>,
+    fail_on_page: Arc<Mutex<Option<(usize, String)>>>,
 }
 
 impl RecordingWahooService {
@@ -328,6 +329,19 @@ impl RecordingWahooService {
         Self {
             workouts: Arc::new(Mutex::new(workouts)),
             list_calls: Arc::new(Mutex::new(Vec::new())),
+            fail_on_page: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub(super) fn with_workouts_failing_on_page(
+        workouts: Vec<WahooWorkout>,
+        page: usize,
+        message: &str,
+    ) -> Self {
+        Self {
+            workouts: Arc::new(Mutex::new(workouts)),
+            list_calls: Arc::new(Mutex::new(Vec::new())),
+            fail_on_page: Arc::new(Mutex::new(Some((page, message.to_string())))),
         }
     }
 
@@ -371,9 +385,15 @@ impl WahooUseCases for RecordingWahooService {
     ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkoutList, WahooError>> {
         let workouts = self.workouts.clone();
         let list_calls = self.list_calls.clone();
+        let fail_on_page = self.fail_on_page.clone();
         let user_id = user_id.to_string();
         Box::pin(async move {
             list_calls.lock().unwrap().push((user_id, page, per_page));
+            if let Some((failed_page, message)) = fail_on_page.lock().unwrap().clone() {
+                if failed_page == page {
+                    return Err(WahooError::External(message));
+                }
+            }
             let workouts = workouts.lock().unwrap().clone();
             let total = workouts.len();
             let start = (page.saturating_sub(1)) * per_page;

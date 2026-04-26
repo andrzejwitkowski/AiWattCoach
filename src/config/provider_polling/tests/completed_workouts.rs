@@ -3,6 +3,7 @@ use crate::domain::external_sync::{
     ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
 };
 use crate::domain::intervals::IntervalsError;
+use serde_json::json;
 
 use super::{support::*, ProviderPollingService};
 
@@ -94,7 +95,7 @@ async fn first_wahoo_completed_sync_uses_two_year_bootstrap_watermark() {
     service.poll_due_once().await.unwrap();
 
     assert!(imports.commands().is_empty());
-    assert_eq!(wahoo.list_calls(), vec![("user-1".to_string(), 1, 30)]);
+    assert_eq!(wahoo.list_calls(), vec![("user-1".to_string(), 1, 100)]);
     let stored = poll_states
         .find_by_provider_and_stream(
             "user-1",
@@ -430,6 +431,139 @@ async fn wahoo_completed_stream_scans_later_pages_for_recently_edited_older_work
         .unwrap()
         .unwrap();
     assert_eq!(stored.cursor.as_deref(), Some("2023-11-21T09:00:00+00:00"));
+}
+
+#[tokio::test]
+async fn wahoo_completed_stream_persists_partial_progress_when_later_page_fails() {
+    let poll_states =
+        RecordingProviderPollStateRepository::with_states(vec![ProviderPollState::new(
+            "user-1".to_string(),
+            ExternalProvider::Wahoo,
+            ProviderPollStream::CompletedWorkouts,
+            1_699_999_900,
+        )]);
+    let imports = RecordingImportService::default();
+    let workouts = (0..205)
+        .map(|index| {
+            sample_wahoo_workout(
+                100 + index,
+                &format!("2023-11-{:02}T08:00:00Z", 30 - (index % 30)),
+                &format!("2023-11-{:02}T09:00:00+00:00", 30 - (index % 30)),
+            )
+        })
+        .collect::<Vec<_>>();
+    let wahoo = RecordingWahooService::with_workouts_failing_on_page(
+        workouts,
+        3,
+        "Wahoo API request failed with status 429 Too Many Requests (oauth_error=Too Many Requests)",
+    );
+    let service = ProviderPollingService::new(
+        RecordingIntervalsApi::default(),
+        FakeIntervalsSettings,
+        poll_states.clone(),
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_timing(300, 120)
+    .with_wahoo_service(std::sync::Arc::new(wahoo.clone()));
+
+    service.poll_due_once().await.unwrap();
+
+    assert_eq!(
+        wahoo.list_calls(),
+        vec![
+            ("user-1".to_string(), 1, 100),
+            ("user-1".to_string(), 2, 100),
+            ("user-1".to_string(), 3, 100)
+        ]
+    );
+    assert_eq!(imports.commands().len(), 200);
+
+    let stored = poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Wahoo,
+            ProviderPollStream::CompletedWorkouts,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let cursor: serde_json::Value =
+        serde_json::from_str(stored.cursor.as_deref().unwrap()).unwrap();
+    assert_eq!(cursor["next_page"], json!(3));
+    assert_eq!(cursor["per_page"], json!(100));
+    assert_eq!(cursor["watermark"], json!("2021-11-14T00:00:00+00:00"));
+    assert_eq!(cursor["newest_seen"], json!("2023-11-30T09:00:00+00:00"));
+    assert_eq!(stored.last_successful_at_epoch_seconds, None);
+    assert_eq!(
+        stored.last_error.as_deref(),
+        Some("Wahoo API request failed with status 429 Too Many Requests (oauth_error=Too Many Requests)")
+    );
+}
+
+#[tokio::test]
+async fn wahoo_completed_stream_resumes_from_checkpoint_page_after_failure() {
+    let mut state = ProviderPollState::new(
+        "user-1".to_string(),
+        ExternalProvider::Wahoo,
+        ProviderPollStream::CompletedWorkouts,
+        1_699_999_900,
+    );
+    state.cursor = Some(
+        json!({
+            "watermark": "2021-11-14T00:00:00+00:00",
+            "next_page": 3,
+            "per_page": 100,
+            "newest_seen": "2023-11-30T09:00:00+00:00"
+        })
+        .to_string(),
+    );
+
+    let workouts = (0..305)
+        .map(|index| {
+            sample_wahoo_workout(
+                100 + index,
+                &format!("2023-11-{:02}T08:00:00Z", 30 - (index % 30)),
+                &format!("2023-11-{:02}T09:00:00+00:00", 30 - (index % 30)),
+            )
+        })
+        .collect::<Vec<_>>();
+    let poll_states = RecordingProviderPollStateRepository::with_states(vec![state]);
+    let imports = RecordingImportService::default();
+    let wahoo = RecordingWahooService::with_workouts(workouts);
+    let service = ProviderPollingService::new(
+        RecordingIntervalsApi::default(),
+        FakeIntervalsSettings,
+        poll_states.clone(),
+        imports.clone(),
+        FixedClock,
+        FixedIdGenerator,
+    )
+    .with_wahoo_service(std::sync::Arc::new(wahoo.clone()));
+
+    service.poll_due_once().await.unwrap();
+
+    assert_eq!(
+        wahoo.list_calls(),
+        vec![
+            ("user-1".to_string(), 3, 100),
+            ("user-1".to_string(), 4, 100)
+        ]
+    );
+    assert_eq!(imports.commands().len(), 105);
+    let stored = poll_states
+        .find_by_provider_and_stream(
+            "user-1",
+            ExternalProvider::Wahoo,
+            ProviderPollStream::CompletedWorkouts,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.cursor.as_deref(), Some("2023-11-30T09:00:00+00:00"));
+    assert_eq!(stored.last_error, None);
+    assert_eq!(stored.last_successful_at_epoch_seconds, Some(1_700_000_000));
 }
 
 #[tokio::test]
