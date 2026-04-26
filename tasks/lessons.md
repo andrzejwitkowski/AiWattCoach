@@ -51,6 +51,7 @@
 - If parsed JSON string data is only compared against a static literal, keep it borrowed as `&str` and compare in place instead of allocating an owned `String` first.
 - When a review-driven change upgrades a match-strength enum or ranking rule, grep the touched test module for old enum expectations before shipping. Production code and review replies can be correct while one stale assertion still expects the pre-change ranking.
 - For external client write logging, prefer adapter-local body preview logging only on the specific POST/PUT paths that need it, and redact secret-bearing form keys before they hit logs. Do not broaden body logging for unrelated requests just to debug one provider write flow.
+- For provider DTO scalars or collections, `#[serde(default)]` only handles missing fields, not explicit `null`. If upstream can send `null`, deserialize through `Option<T>` or a custom helper and add a regression with the real payload shape.
 
 ## Release Workflow Reliability
 

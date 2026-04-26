@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | user | Wahoo reconnect null boolean payload
+
+- Problem: after reconnecting Wahoo, the background `completed_workouts` poll could fail on `GET /v1/workouts` with `invalid type: null, expected a boolean` because Wahoo sometimes returns explicit `null` values inside the workouts payload. The DTO still relied on `#[serde(default)]` for `workout_summary.manual`, `workout_summary.edited`, `plan_ids`, and the top-level `workouts` list, but that only tolerates missing fields, not explicit `null`.
+- Fix: changed the Wahoo workouts DTO to deserialize nullable booleans and vectors through lenient helpers that map missing or `null` values to `false` / empty vectors, and added focused regressions covering the real workouts-list payload shape.
+- Prevention: when a provider field is documented or observed as nullable, do not rely on `#[serde(default)]` alone for scalars or collections because it does not accept explicit `null`; use `Option<T>` or a custom deserializer and add a regression with the real payload shape.
+
 ### 2026-04-26 | CodeRabbit | PR #143 Wahoo import duration fallback
 
 - Problem: `src/adapters/wahoo/import_mapping.rs` still fell back from `summary.duration_total_seconds` straight to `workout.minutes`, but `minutes` is the planned duration, not the actual elapsed duration. When Wahoo omitted total duration but still provided summary active duration, the canonical completed workout could record a wildly inflated elapsed time.
