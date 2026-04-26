@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Duration as ChronoDuration, NaiveDate, Utc};
+use serde::{Deserialize, Serialize};
 use tokio::time::MissedTickBehavior;
 use tracing::warn;
 
@@ -215,23 +216,20 @@ where
 
     async fn process_due_state(&self, state: ProviderPollState) {
         let attempted_at_epoch_seconds = self.clock.now_epoch_seconds();
-        let attempted_state = state.clone().mark_attempted(attempted_at_epoch_seconds);
-        let attempted_state = match self.poll_states.upsert(attempted_state).await {
-            Ok(state) => state,
-            Err(error) => {
-                warn!(
-                    user_id = %state.user_id,
-                    provider = ?state.provider,
-                    stream = ?state.stream,
-                    error = %error,
-                    "failed to persist provider poll attempt"
-                );
-                return;
-            }
-        };
+        let mut attempted_state = state.clone().mark_attempted(attempted_at_epoch_seconds);
+        if let Err(error) = self.poll_states.upsert(attempted_state.clone()).await {
+            warn!(
+                user_id = %state.user_id,
+                provider = ?state.provider,
+                stream = ?state.stream,
+                error = %error,
+                "failed to persist provider poll attempt"
+            );
+            return;
+        }
 
         match self
-            .poll_state(&attempted_state, attempted_at_epoch_seconds)
+            .poll_state(&mut attempted_state, attempted_at_epoch_seconds)
             .await
         {
             Ok(cursor) => {
@@ -282,7 +280,7 @@ where
 
     async fn poll_state(
         &self,
-        state: &ProviderPollState,
+        state: &mut ProviderPollState,
         now_epoch_seconds: i64,
     ) -> Result<Option<String>, String> {
         match state.provider {
@@ -306,7 +304,7 @@ where
 
     async fn poll_intervals_state(
         &self,
-        state: &ProviderPollState,
+        state: &mut ProviderPollState,
         now_epoch_seconds: i64,
     ) -> Result<Option<String>, String> {
         let credentials = self
@@ -333,7 +331,7 @@ where
 
     async fn poll_wahoo_state(
         &self,
-        state: &ProviderPollState,
+        state: &mut ProviderPollState,
         now_epoch_seconds: i64,
     ) -> Result<Option<String>, String> {
         if state.stream != ProviderPollStream::CompletedWorkouts {
@@ -347,19 +345,39 @@ where
             .wahoo_service
             .as_ref()
             .ok_or_else(|| "Wahoo service is not configured".to_string())?;
+        let parsed_cursor = parse_wahoo_cursor(state.cursor.as_deref())?;
         let initial_watermark =
             wahoo_initial_watermark(now_epoch_seconds, self.completed_past_days);
-        let watermark = parse_wahoo_cursor(state.cursor.as_deref())?.or(initial_watermark);
-        let mut page = 1usize;
+        let watermark = parsed_cursor.watermark.or(initial_watermark);
+        let mut page = parsed_cursor.next_page;
         let per_page = 30usize;
         let mut workouts_to_import = Vec::new();
-        let mut newest_seen_cursor = watermark.clone();
+        let mut newest_seen_cursor = parsed_cursor.newest_seen.or(watermark.clone());
 
         loop {
-            let list = wahoo_service
+            let list = match wahoo_service
                 .list_workouts(&state.user_id, page, per_page)
                 .await
-                .map_err(|error| error.to_string())?;
+            {
+                Ok(list) => list,
+                Err(error) => {
+                    if page != parsed_cursor.next_page {
+                        let resume_cursor = format_wahoo_resume_cursor(&WahooPollCursor {
+                            watermark: watermark.clone(),
+                            next_page: page,
+                            newest_seen: newest_seen_cursor.clone(),
+                        })?;
+                        self.import_scanned_wahoo_workouts(
+                            state,
+                            &workouts_to_import,
+                            now_epoch_seconds,
+                        )
+                        .await?;
+                        state.cursor = Some(resume_cursor);
+                    }
+                    return Err(error.to_string());
+                }
+            };
 
             if list.workouts.is_empty() {
                 break;
@@ -390,7 +408,18 @@ where
             page += 1;
         }
 
-        let mut newest_cursor = newest_seen_cursor;
+        self.import_scanned_wahoo_workouts(state, &workouts_to_import, now_epoch_seconds)
+            .await?;
+
+        Ok(newest_seen_cursor)
+    }
+
+    async fn import_scanned_wahoo_workouts(
+        &self,
+        state: &ProviderPollState,
+        workouts_to_import: &[crate::domain::wahoo::WahooWorkout],
+        now_epoch_seconds: i64,
+    ) -> Result<(), String> {
         let mut earliest_imported_date = None::<String>;
         for workout in workouts_to_import.iter().rev() {
             let Some(command) = map_workout_to_import_command(&state.user_id, workout) else {
@@ -427,12 +456,6 @@ where
                 .await;
                 return Err(error);
             }
-
-            let updated_at = workout_sort_key(workout)?;
-            newest_cursor = match newest_cursor {
-                Some(current) => Some(std::cmp::max(current, updated_at)),
-                None => Some(updated_at),
-            };
         }
 
         if let (Some(service), Some(oldest_date)) = (
@@ -445,7 +468,7 @@ where
                 .map_err(|error| error.to_string())?;
         }
 
-        Ok(newest_cursor)
+        Ok(())
     }
 
     async fn recompute_partial_wahoo_imports_if_needed(
@@ -764,14 +787,71 @@ fn parse_date_cursor(cursor: Option<&str>) -> Result<NaiveDate, String> {
         .map_err(|error| format!("invalid poll cursor '{cursor}': {error}"))
 }
 
-fn parse_wahoo_cursor(cursor: Option<&str>) -> Result<Option<String>, String> {
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+struct WahooPollCursor {
+    watermark: Option<String>,
+    #[serde(default = "default_wahoo_cursor_page")]
+    next_page: usize,
+    newest_seen: Option<String>,
+}
+
+impl Default for WahooPollCursor {
+    fn default() -> Self {
+        Self {
+            watermark: None,
+            next_page: default_wahoo_cursor_page(),
+            newest_seen: None,
+        }
+    }
+}
+
+fn default_wahoo_cursor_page() -> usize {
+    1
+}
+
+fn parse_wahoo_cursor(cursor: Option<&str>) -> Result<WahooPollCursor, String> {
     match cursor {
-        None => Ok(None),
-        Some(cursor) if cursor.trim().is_empty() => Ok(None),
+        None => Ok(WahooPollCursor::default()),
+        Some(cursor) if cursor.trim().is_empty() => Ok(WahooPollCursor::default()),
+        Some(cursor) if cursor.trim_start().starts_with('{') => {
+            let mut checkpoint: WahooPollCursor = serde_json::from_str(cursor)
+                .map_err(|error| format!("invalid Wahoo poll checkpoint '{cursor}': {error}"))?;
+            if checkpoint.next_page == 0 {
+                return Err(format!(
+                    "invalid Wahoo poll checkpoint '{cursor}': next_page must be at least 1"
+                ));
+            }
+            checkpoint.watermark = checkpoint
+                .watermark
+                .as_deref()
+                .map(parse_wahoo_timestamp)
+                .transpose()
+                .map_err(|error| {
+                    format!("invalid Wahoo poll checkpoint '{cursor}' watermark: {error}")
+                })?;
+            checkpoint.newest_seen = checkpoint
+                .newest_seen
+                .as_deref()
+                .map(parse_wahoo_timestamp)
+                .transpose()
+                .map_err(|error| {
+                    format!("invalid Wahoo poll checkpoint '{cursor}' newest_seen: {error}")
+                })?;
+            Ok(checkpoint)
+        }
         Some(cursor) => parse_wahoo_timestamp(cursor)
-            .map(Some)
+            .map(|watermark| WahooPollCursor {
+                watermark: Some(watermark),
+                next_page: 1,
+                newest_seen: None,
+            })
             .map_err(|error| format!("invalid Wahoo poll cursor '{cursor}': {error}")),
     }
+}
+
+fn format_wahoo_resume_cursor(cursor: &WahooPollCursor) -> Result<String, String> {
+    serde_json::to_string(cursor)
+        .map_err(|error| format!("failed to encode Wahoo poll checkpoint: {error}"))
 }
 
 fn wahoo_initial_watermark(now_epoch_seconds: i64, completed_past_days: i64) -> Option<String> {

@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | user | Wahoo bootstrap poller loses all progress on rate limit
+
+- Problem: the Wahoo completed-workouts bootstrap scanned every `/v1/workouts` page before importing anything. For accounts with long history, the poller could get many successful `200` pages and then hit `429 Too Many Requests` before the scan finished, which left `cursor = null`, `last_successful_at = null`, and zero Wahoo observations/completed workouts even though dozens of pages had already been read successfully.
+- Fix: changed the Wahoo poller to persist a resumable page checkpoint in the poll cursor on partial scan failure and to import the workouts already gathered before returning the rate-limit error. Added regressions proving the poller now stores `next_page`/`newest_seen` after a later-page failure and resumes from that checkpoint on the next run instead of restarting from page 1.
+- Prevention: when a provider poll loop paginates large remote histories, do not postpone all durable progress until after the full scan succeeds. If later pages can fail or rate-limit independently, persist a resumable checkpoint and keep already-read pages importable so one late `429` does not reset the entire bootstrap to zero.
+
 ### 2026-04-26 | user | Wahoo reconnect null boolean payload
 
 - Problem: after reconnecting Wahoo, the background `completed_workouts` poll could fail on `GET /v1/workouts` with `invalid type: null, expected a boolean` because Wahoo sometimes returns explicit `null` values inside the workouts payload. The DTO still relied on `#[serde(default)]` for `workout_summary.manual`, `workout_summary.edited`, `plan_ids`, and the top-level `workouts` list, but that only tolerates missing fields, not explicit `null`.
