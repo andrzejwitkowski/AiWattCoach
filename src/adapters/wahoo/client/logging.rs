@@ -56,12 +56,15 @@ async fn execute_and_log_with_body_request(
     let latency = start.elapsed();
 
     let status = response.status();
+    let response_headers = response.headers().clone();
     let body = response
         .bytes()
         .await
         .inspect_err(|error| log_transport_failure(&method, &url, error, "response_read_failed"))?;
 
-    log_response(&method, &url, status, latency, None);
+    let rate_limit = parse_rate_limit_headers(&response_headers);
+
+    log_response(&method, &url, status, latency, None, Some(&rate_limit));
 
     Ok(LoggedResponse { status, body })
 }
@@ -177,6 +180,7 @@ fn log_response(
     status: StatusCode,
     latency: std::time::Duration,
     _body_preview: Option<&str>,
+    rate_limit: Option<&RateLimitHeaders>,
 ) {
     match response_log_level(status) {
         tracing::Level::ERROR => tracing::event!(
@@ -187,6 +191,9 @@ fn log_response(
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
+            http.rate_limit.limit = rate_limit.and_then(|headers| headers.limit.as_deref()),
+            http.rate_limit.remaining = rate_limit.and_then(|headers| headers.remaining.as_deref()),
+            http.rate_limit.reset = rate_limit.and_then(|headers| headers.reset.as_deref()),
             "outgoing response (no body)"
         ),
         tracing::Level::WARN => tracing::event!(
@@ -197,6 +204,9 @@ fn log_response(
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
+            http.rate_limit.limit = rate_limit.and_then(|headers| headers.limit.as_deref()),
+            http.rate_limit.remaining = rate_limit.and_then(|headers| headers.remaining.as_deref()),
+            http.rate_limit.reset = rate_limit.and_then(|headers| headers.reset.as_deref()),
             "outgoing response (no body)"
         ),
         _ => tracing::event!(
@@ -207,9 +217,34 @@ fn log_response(
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
+            http.rate_limit.limit = rate_limit.and_then(|headers| headers.limit.as_deref()),
+            http.rate_limit.remaining = rate_limit.and_then(|headers| headers.remaining.as_deref()),
+            http.rate_limit.reset = rate_limit.and_then(|headers| headers.reset.as_deref()),
             "outgoing response (no body)"
         ),
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RateLimitHeaders {
+    limit: Option<String>,
+    remaining: Option<String>,
+    reset: Option<String>,
+}
+
+fn parse_rate_limit_headers(headers: &HeaderMap) -> RateLimitHeaders {
+    RateLimitHeaders {
+        limit: header_value(headers, "x-ratelimit-limit"),
+        remaining: header_value(headers, "x-ratelimit-remaining"),
+        reset: header_value(headers, "x-ratelimit-reset"),
+    }
+}
+
+fn header_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_string())
 }
 
 fn response_log_level(status: StatusCode) -> tracing::Level {
@@ -283,8 +318,8 @@ fn sanitized_url(url: &reqwest::Url) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_request_body, sanitized_url};
-    use reqwest::Method;
+    use super::{format_request_body, parse_rate_limit_headers, sanitized_url, RateLimitHeaders};
+    use reqwest::{header::HeaderMap, Method};
 
     #[test]
     fn format_request_body_redacts_workout_token_in_form_preview() {
@@ -309,6 +344,23 @@ mod tests {
         assert_eq!(
             sanitized_url(&url),
             "https://api.wahooligan.com/v1/workouts?page=2&per_page=30&sort=updated_at&order=desc"
+        );
+    }
+
+    #[test]
+    fn parse_rate_limit_headers_reads_wahoo_limit_headers() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-limit", "5000, 1000, 200".parse().unwrap());
+        headers.insert("x-ratelimit-remaining", "4800, 800, 0".parse().unwrap());
+        headers.insert("x-ratelimit-reset", "300".parse().unwrap());
+
+        assert_eq!(
+            parse_rate_limit_headers(&headers),
+            RateLimitHeaders {
+                limit: Some("5000, 1000, 200".to_string()),
+                remaining: Some("4800, 800, 0".to_string()),
+                reset: Some("300".to_string()),
+            }
         );
     }
 }
