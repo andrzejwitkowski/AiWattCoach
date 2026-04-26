@@ -94,6 +94,9 @@ fn map_workout_to_completed_workout(
         workout.workout_token.clone(),
         is_trainer_workout(workout.workout_type_id),
         round_optional_i32(summary.duration_total_seconds)
+            .or_else(|| round_optional_i32(summary.duration_active_seconds))
+            // `minutes` is the planned workout duration, so only use it if Wahoo summary data
+            // does not expose any actual elapsed-time field.
             .or_else(|| workout.minutes.map(|minutes| minutes.saturating_mul(60))),
         summary.distance_meters,
         CompletedWorkoutMetrics {
@@ -295,6 +298,28 @@ mod tests {
         };
 
         assert!(import.workout.trainer);
+    }
+
+    #[test]
+    fn map_workout_to_import_command_prefers_actual_summary_duration_over_planned_minutes() {
+        let mut workout = sample_workout();
+        let summary = workout
+            .workout_summary
+            .as_mut()
+            .expect("sample workout should have summary");
+        summary.duration_total_seconds = None;
+        summary.duration_active_seconds = Some(179.0);
+
+        let command = map_workout_to_import_command("user-1", &workout)
+            .expect("workout with summary should map");
+
+        let crate::domain::external_sync::ExternalImportCommand::UpsertCompletedWorkout(import) =
+            command
+        else {
+            panic!("expected completed workout import");
+        };
+
+        assert_eq!(import.workout.duration_seconds, Some(179));
     }
 
     #[test]

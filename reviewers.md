@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | CodeRabbit | PR #143 Wahoo import duration fallback
+
+- Problem: `src/adapters/wahoo/import_mapping.rs` still fell back from `summary.duration_total_seconds` straight to `workout.minutes`, but `minutes` is the planned duration, not the actual elapsed duration. When Wahoo omitted total duration but still provided summary active duration, the canonical completed workout could record a wildly inflated elapsed time.
+- Fix: changed the mapping to prefer `summary.duration_active_seconds` before the planned `workout.minutes` fallback, kept the planned-duration fallback only as a last resort with an explicit comment, and added a focused regression proving the importer now records the actual summary duration.
+- Prevention: when provider payloads expose both planned and completed-workout timing fields, derive canonical elapsed duration from summary/activity result fields first and use planned duration only as a clearly documented last-resort fallback.
+
 ### 2026-04-26 | user | Wahoo workout request body logging
 
 - Problem: po domknięciu review fixów klient Wahoo nadal logował write requesty bez body preview, więc przy debugowaniu `create_workout` / `update_workout` brakowało widoczności faktycznie wysyłanego form payloadu.
