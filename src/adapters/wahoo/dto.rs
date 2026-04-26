@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct WahooTokenResponse {
@@ -42,9 +42,9 @@ pub struct WahooWorkoutSummaryResponse {
     pub speed_avg: Option<String>,
     pub work_accum: Option<String>,
     pub time_zone: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bool_or_default")]
     pub manual: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bool_or_default")]
     pub edited: bool,
     pub fitness_app_id: Option<i64>,
     pub file: Option<WahooFileReferenceResponse>,
@@ -59,7 +59,7 @@ pub struct WahooWorkoutResponse {
     pub minutes: Option<i32>,
     pub name: Option<String>,
     pub plan_id: Option<i64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub plan_ids: Vec<i64>,
     pub route_id: Option<i64>,
     pub workout_token: Option<String>,
@@ -71,7 +71,7 @@ pub struct WahooWorkoutResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct WahooWorkoutListResponse {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_vec_or_default")]
     pub workouts: Vec<WahooWorkoutResponse>,
     pub total: Option<usize>,
     pub page: Option<usize>,
@@ -142,4 +142,82 @@ pub struct WahooUpdateWorkoutRequestBody {
     pub minutes: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_id: Option<i64>,
+}
+
+fn deserialize_bool_or_default<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(deserializer)?.unwrap_or(false))
+}
+
+fn deserialize_vec_or_default<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WahooWorkoutListResponse;
+
+    #[test]
+    fn workout_list_deserializes_null_summary_booleans_as_false() {
+        let payload = r#"{
+            "workouts": [
+                {
+                    "id": 56519,
+                    "starts": "2023-11-14T08:00:00.000Z",
+                    "minutes": 60,
+                    "workout_summary": {
+                        "id": 8297,
+                        "manual": null,
+                        "edited": null
+                    }
+                }
+            ],
+            "total": 1,
+            "page": 1,
+            "per_page": 30
+        }"#;
+
+        let response: WahooWorkoutListResponse = serde_json::from_str(payload).unwrap();
+        let summary = response.workouts[0].workout_summary.as_ref().unwrap();
+
+        assert!(!summary.manual);
+        assert!(!summary.edited);
+    }
+
+    #[test]
+    fn workout_list_deserializes_null_vectors_as_empty() {
+        let payload = r#"{
+            "workouts": [
+                {
+                    "id": 56519,
+                    "starts": "2023-11-14T08:00:00.000Z",
+                    "plan_ids": null
+                }
+            ]
+        }"#;
+
+        let response: WahooWorkoutListResponse = serde_json::from_str(payload).unwrap();
+
+        assert!(response.workouts[0].plan_ids.is_empty());
+    }
+
+    #[test]
+    fn workout_list_deserializes_null_workouts_as_empty() {
+        let payload = r#"{
+            "workouts": null,
+            "total": 0,
+            "page": 1,
+            "per_page": 30
+        }"#;
+
+        let response: WahooWorkoutListResponse = serde_json::from_str(payload).unwrap();
+
+        assert!(response.workouts.is_empty());
+    }
 }
