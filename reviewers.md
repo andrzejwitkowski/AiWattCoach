@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | user | PR #144 follow-up stale external-sync expectation
+
+- Problem: after promoting `wahoo_workout_token` matches to `PlannedCompletedWorkoutLinkMatchSource::Explicit`, I updated the production code and nearby review discussion but missed the existing domain regression `import_completed_workout_falls_back_to_wahoo_workout_token_when_plan_id_missing`, which still expected `Token` and failed the full Rust test run.
+- Fix: updated the external-sync test to assert `Explicit` for Wahoo workout-token-backed planned-workout links, matching the intended ranking behavior already implemented in `src/domain/external_sync/import/mod.rs`.
+- Prevention: whenever a review-driven change alters enum/ranking semantics, grep all focused tests for the old enum variant and rerun the full touched test module before calling the patch complete.
+
 ### 2026-04-26 | Copilot/CodeRabbit | PR #144 Wahoo planned-workout review follow-up
 
 - Problem: the PR review surfaced several real gaps around Wahoo planned-workout sync and linking: Wahoo plan mapping could swallow repeat blocks past text separators, planned-workout sync re-queried Wahoo plans unnecessarily and lacked stable REST error codes for frontend handling, external-sync linking treated `wahoo_workout_token` matches as weaker token matches instead of explicit Wahoo identities, Wahoo plan lookup silently accepted duplicate `external_id` rows, and one attempted REST test covered the wrong layer for the not-connected path.

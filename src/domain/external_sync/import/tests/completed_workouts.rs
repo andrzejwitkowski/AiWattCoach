@@ -687,7 +687,7 @@ async fn import_completed_workout_falls_back_to_wahoo_workout_token_when_plan_id
     assert_eq!(link.planned_workout_id, "planned-wahoo-token");
     assert_eq!(
         link.match_source,
-        PlannedCompletedWorkoutLinkMatchSource::Token
+        PlannedCompletedWorkoutLinkMatchSource::Explicit
     );
 }
 

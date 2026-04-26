@@ -49,6 +49,7 @@
 - If a polling loop filters fetched upstream records before import, do not tie cursor advancement only to the filtered subset unless repeated rereads of skipped records are intentional. Cursor/watermark movement usually belongs to the full consumed upstream page.
 - In response/body mappers, decode a byte payload to UTF-8 once and reuse the borrowed text across classification and logging helpers instead of repeating `from_utf8(...)` work.
 - If parsed JSON string data is only compared against a static literal, keep it borrowed as `&str` and compare in place instead of allocating an owned `String` first.
+- When a review-driven change upgrades a match-strength enum or ranking rule, grep the touched test module for old enum expectations before shipping. Production code and review replies can be correct while one stale assertion still expects the pre-change ranking.
 
 ## Release Workflow Reliability
 
