@@ -29,6 +29,8 @@ use crate::{
 const DEFAULT_SUCCESS_INTERVAL_SECONDS: i64 = 5 * 60;
 const DEFAULT_WAHOO_SUCCESS_INTERVAL_SECONDS: i64 = 3 * 60 * 60;
 const DEFAULT_FAILURE_BACKOFF_SECONDS: i64 = 5 * 60;
+const DEFAULT_WAHOO_BOOTSTRAP_PER_PAGE: usize = 100;
+const DEFAULT_WAHOO_INCREMENTAL_PER_PAGE: usize = 30;
 const DEFAULT_CALENDAR_PAST_DAYS: i64 = 30;
 const DEFAULT_CALENDAR_FUTURE_DAYS: i64 = 30;
 const DEFAULT_COMPLETED_PAST_DAYS: i64 = 365 * 2;
@@ -350,7 +352,12 @@ where
             wahoo_initial_watermark(now_epoch_seconds, self.completed_past_days);
         let watermark = parsed_cursor.watermark.or(initial_watermark);
         let mut page = parsed_cursor.next_page;
-        let per_page = 30usize;
+        let per_page = match state.cursor.as_deref() {
+            None => DEFAULT_WAHOO_BOOTSTRAP_PER_PAGE,
+            Some(cursor) if cursor.trim().is_empty() => DEFAULT_WAHOO_BOOTSTRAP_PER_PAGE,
+            Some(cursor) if cursor.trim_start().starts_with('{') => parsed_cursor.per_page,
+            Some(_) => DEFAULT_WAHOO_INCREMENTAL_PER_PAGE,
+        };
         let mut workouts_to_import = Vec::new();
         let mut newest_seen_cursor = parsed_cursor.newest_seen.or(watermark.clone());
 
@@ -365,6 +372,7 @@ where
                         let resume_cursor = format_wahoo_resume_cursor(&WahooPollCursor {
                             watermark: watermark.clone(),
                             next_page: page,
+                            per_page,
                             newest_seen: newest_seen_cursor.clone(),
                         })?;
                         self.import_scanned_wahoo_workouts(
@@ -792,6 +800,8 @@ struct WahooPollCursor {
     watermark: Option<String>,
     #[serde(default = "default_wahoo_cursor_page")]
     next_page: usize,
+    #[serde(default = "default_wahoo_cursor_resume_per_page")]
+    per_page: usize,
     newest_seen: Option<String>,
 }
 
@@ -800,6 +810,7 @@ impl Default for WahooPollCursor {
         Self {
             watermark: None,
             next_page: default_wahoo_cursor_page(),
+            per_page: default_wahoo_cursor_resume_per_page(),
             newest_seen: None,
         }
     }
@@ -807,6 +818,10 @@ impl Default for WahooPollCursor {
 
 fn default_wahoo_cursor_page() -> usize {
     1
+}
+
+fn default_wahoo_cursor_resume_per_page() -> usize {
+    DEFAULT_WAHOO_INCREMENTAL_PER_PAGE
 }
 
 fn parse_wahoo_cursor(cursor: Option<&str>) -> Result<WahooPollCursor, String> {
@@ -819,6 +834,11 @@ fn parse_wahoo_cursor(cursor: Option<&str>) -> Result<WahooPollCursor, String> {
             if checkpoint.next_page == 0 {
                 return Err(format!(
                     "invalid Wahoo poll checkpoint '{cursor}': next_page must be at least 1"
+                ));
+            }
+            if checkpoint.per_page == 0 {
+                return Err(format!(
+                    "invalid Wahoo poll checkpoint '{cursor}': per_page must be at least 1"
                 ));
             }
             checkpoint.watermark = checkpoint
@@ -843,6 +863,7 @@ fn parse_wahoo_cursor(cursor: Option<&str>) -> Result<WahooPollCursor, String> {
             .map(|watermark| WahooPollCursor {
                 watermark: Some(watermark),
                 next_page: 1,
+                per_page: DEFAULT_WAHOO_INCREMENTAL_PER_PAGE,
                 newest_seen: None,
             })
             .map_err(|error| format!("invalid Wahoo poll cursor '{cursor}': {error}")),

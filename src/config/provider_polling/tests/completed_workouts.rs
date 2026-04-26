@@ -95,7 +95,7 @@ async fn first_wahoo_completed_sync_uses_two_year_bootstrap_watermark() {
     service.poll_due_once().await.unwrap();
 
     assert!(imports.commands().is_empty());
-    assert_eq!(wahoo.list_calls(), vec![("user-1".to_string(), 1, 30)]);
+    assert_eq!(wahoo.list_calls(), vec![("user-1".to_string(), 1, 100)]);
     let stored = poll_states
         .find_by_provider_and_stream(
             "user-1",
@@ -443,7 +443,7 @@ async fn wahoo_completed_stream_persists_partial_progress_when_later_page_fails(
             1_699_999_900,
         )]);
     let imports = RecordingImportService::default();
-    let workouts = (0..65)
+    let workouts = (0..205)
         .map(|index| {
             sample_wahoo_workout(
                 100 + index,
@@ -473,12 +473,12 @@ async fn wahoo_completed_stream_persists_partial_progress_when_later_page_fails(
     assert_eq!(
         wahoo.list_calls(),
         vec![
-            ("user-1".to_string(), 1, 30),
-            ("user-1".to_string(), 2, 30),
-            ("user-1".to_string(), 3, 30)
+            ("user-1".to_string(), 1, 100),
+            ("user-1".to_string(), 2, 100),
+            ("user-1".to_string(), 3, 100)
         ]
     );
-    assert_eq!(imports.commands().len(), 60);
+    assert_eq!(imports.commands().len(), 200);
 
     let stored = poll_states
         .find_by_provider_and_stream(
@@ -492,6 +492,7 @@ async fn wahoo_completed_stream_persists_partial_progress_when_later_page_fails(
     let cursor: serde_json::Value =
         serde_json::from_str(stored.cursor.as_deref().unwrap()).unwrap();
     assert_eq!(cursor["next_page"], json!(3));
+    assert_eq!(cursor["per_page"], json!(100));
     assert_eq!(cursor["watermark"], json!("2021-11-14T00:00:00+00:00"));
     assert_eq!(cursor["newest_seen"], json!("2023-11-30T09:00:00+00:00"));
     assert_eq!(stored.last_successful_at_epoch_seconds, None);
@@ -513,12 +514,13 @@ async fn wahoo_completed_stream_resumes_from_checkpoint_page_after_failure() {
         json!({
             "watermark": "2021-11-14T00:00:00+00:00",
             "next_page": 3,
+            "per_page": 100,
             "newest_seen": "2023-11-30T09:00:00+00:00"
         })
         .to_string(),
     );
 
-    let workouts = (0..95)
+    let workouts = (0..305)
         .map(|index| {
             sample_wahoo_workout(
                 100 + index,
@@ -544,9 +546,12 @@ async fn wahoo_completed_stream_resumes_from_checkpoint_page_after_failure() {
 
     assert_eq!(
         wahoo.list_calls(),
-        vec![("user-1".to_string(), 3, 30), ("user-1".to_string(), 4, 30)]
+        vec![
+            ("user-1".to_string(), 3, 100),
+            ("user-1".to_string(), 4, 100)
+        ]
     );
-    assert_eq!(imports.commands().len(), 35);
+    assert_eq!(imports.commands().len(), 105);
     let stored = poll_states
         .find_by_provider_and_stream(
             "user-1",
