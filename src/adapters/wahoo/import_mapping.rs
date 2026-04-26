@@ -70,6 +70,8 @@ pub fn map_workout_to_import_command(
             .into_iter()
             .flatten()
             .collect(),
+            wahoo_plan_id: workout.plan_id,
+            wahoo_workout_token: workout.workout_token.clone(),
             workout: map_workout_to_completed_workout(user_id, workout, summary),
         },
     )))

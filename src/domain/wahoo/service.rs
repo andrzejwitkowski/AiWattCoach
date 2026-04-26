@@ -3,11 +3,13 @@ use crate::domain::{
     return_to::sanitize_return_to,
     settings::{UserSettings, UserSettingsRepository, WahooConfig},
 };
+use std::sync::Arc;
 
 use super::{
     BoxFuture, WahooApiPort, WahooAuthExchange, WahooAuthStart, WahooConnectState,
-    WahooConnectStateRepository, WahooError, WahooOAuthPort, WahooToken, WahooWorkout,
-    WahooWorkoutList, WahooWorkoutSummary,
+    WahooConnectStateRepository, WahooCreatePlan, WahooCreateWorkout, WahooError, WahooOAuthPort,
+    WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooWorkout, WahooWorkoutList,
+    WahooWorkoutSummary,
 };
 
 const CONNECT_STATE_TTL_SECONDS: i64 = 600;
@@ -47,7 +49,136 @@ pub trait WahooUseCases: Send + Sync {
         workout_id: i64,
     ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>>;
 
+    fn find_plan_by_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<WahooPlan>, WahooError>>;
+
+    fn create_plan(
+        &self,
+        user_id: &str,
+        request: WahooCreatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>>;
+
+    fn update_plan(
+        &self,
+        user_id: &str,
+        plan_id: i64,
+        request: WahooUpdatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>>;
+
+    fn create_workout(
+        &self,
+        user_id: &str,
+        request: WahooCreateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>>;
+
+    fn update_workout(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+        request: WahooUpdateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>>;
+
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>>;
+}
+
+impl<T> WahooUseCases for Arc<T>
+where
+    T: WahooUseCases + ?Sized,
+{
+    fn begin_connect(
+        &self,
+        user_id: &str,
+        return_to: Option<String>,
+    ) -> BoxFuture<Result<WahooAuthStart, WahooError>> {
+        self.as_ref().begin_connect(user_id, return_to)
+    }
+
+    fn finish_connect(
+        &self,
+        user_id: &str,
+        state: &str,
+        code: &str,
+    ) -> BoxFuture<Result<WahooAuthExchange, WahooError>> {
+        self.as_ref().finish_connect(user_id, state, code)
+    }
+
+    fn ensure_token(&self, user_id: &str) -> BoxFuture<Result<WahooToken, WahooError>> {
+        self.as_ref().ensure_token(user_id)
+    }
+
+    fn list_workouts(
+        &self,
+        user_id: &str,
+        page: usize,
+        per_page: usize,
+    ) -> BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        self.as_ref().list_workouts(user_id, page, per_page)
+    }
+
+    fn get_workout(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        self.as_ref().get_workout(user_id, workout_id)
+    }
+
+    fn get_workout_summary(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+    ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        self.as_ref().get_workout_summary(user_id, workout_id)
+    }
+
+    fn find_plan_by_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<WahooPlan>, WahooError>> {
+        self.as_ref().find_plan_by_external_id(user_id, external_id)
+    }
+
+    fn create_plan(
+        &self,
+        user_id: &str,
+        request: WahooCreatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        self.as_ref().create_plan(user_id, request)
+    }
+
+    fn update_plan(
+        &self,
+        user_id: &str,
+        plan_id: i64,
+        request: WahooUpdatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        self.as_ref().update_plan(user_id, plan_id, request)
+    }
+
+    fn create_workout(
+        &self,
+        user_id: &str,
+        request: WahooCreateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        self.as_ref().create_workout(user_id, request)
+    }
+
+    fn update_workout(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+        request: WahooUpdateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        self.as_ref().update_workout(user_id, workout_id, request)
+    }
+
+    fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
+        self.as_ref().download_workout_file(file_url)
+    }
 }
 
 #[derive(Clone)]
@@ -240,6 +371,63 @@ where
             .await
     }
 
+    async fn find_plan_by_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> Result<Option<WahooPlan>, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        let mut plans = self
+            .client
+            .list_plans(&token.access_token, Some(external_id))
+            .await?;
+        Ok(plans.pop())
+    }
+
+    async fn create_plan(
+        &self,
+        user_id: &str,
+        request: WahooCreatePlan,
+    ) -> Result<WahooPlan, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client.create_plan(&token.access_token, request).await
+    }
+
+    async fn update_plan(
+        &self,
+        user_id: &str,
+        plan_id: i64,
+        request: WahooUpdatePlan,
+    ) -> Result<WahooPlan, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client
+            .update_plan(&token.access_token, plan_id, request)
+            .await
+    }
+
+    async fn create_workout(
+        &self,
+        user_id: &str,
+        request: WahooCreateWorkout,
+    ) -> Result<WahooWorkout, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client
+            .create_workout(&token.access_token, request)
+            .await
+    }
+
+    async fn update_workout(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+        request: WahooUpdateWorkout,
+    ) -> Result<WahooWorkout, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client
+            .update_workout(&token.access_token, workout_id, request)
+            .await
+    }
+
     async fn download_workout_file(&self, file_url: &str) -> Result<Vec<u8>, WahooError> {
         self.client.download_workout_file(file_url).await
     }
@@ -312,6 +500,63 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move { service.get_workout_summary(&user_id, workout_id).await })
+    }
+
+    fn find_plan_by_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<WahooPlan>, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            service
+                .find_plan_by_external_id(&user_id, &external_id)
+                .await
+        })
+    }
+
+    fn create_plan(
+        &self,
+        user_id: &str,
+        request: WahooCreatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.create_plan(&user_id, request).await })
+    }
+
+    fn update_plan(
+        &self,
+        user_id: &str,
+        plan_id: i64,
+        request: WahooUpdatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.update_plan(&user_id, plan_id, request).await })
+    }
+
+    fn create_workout(
+        &self,
+        user_id: &str,
+        request: WahooCreateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.create_workout(&user_id, request).await })
+    }
+
+    fn update_workout(
+        &self,
+        user_id: &str,
+        workout_id: i64,
+        request: WahooUpdateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.update_workout(&user_id, workout_id, request).await })
     }
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {

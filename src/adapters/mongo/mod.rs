@@ -17,6 +17,7 @@ pub mod pest_parser_poc_workouts;
 pub mod planned_completed_links;
 pub mod planned_workout_syncs;
 pub mod planned_workout_tokens;
+pub mod planned_workout_wahoo_syncs;
 pub mod planned_workouts;
 pub mod provider_poll_states;
 pub mod races;

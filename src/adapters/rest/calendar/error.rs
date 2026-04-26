@@ -1,6 +1,7 @@
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 use tracing::Level;
 
@@ -8,6 +9,7 @@ use crate::domain::calendar::CalendarError;
 use crate::domain::calendar_labels::CalendarLabelError;
 
 use super::super::logging::status_class;
+use super::dto::validation_message_response;
 
 pub(super) fn map_calendar_error(error: CalendarError) -> Response {
     match error {
@@ -25,7 +27,11 @@ pub(super) fn map_calendar_error(error: CalendarError) -> Response {
         }
         CalendarError::Validation(_) => {
             log_calendar_error(Level::WARN, StatusCode::BAD_REQUEST, &error);
-            StatusCode::BAD_REQUEST.into_response()
+            (
+                StatusCode::BAD_REQUEST,
+                Json(validation_message_response(&error.to_string())),
+            )
+                .into_response()
         }
         CalendarError::Unavailable(_) => {
             log_calendar_error(Level::WARN, StatusCode::BAD_GATEWAY, &error);

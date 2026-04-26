@@ -1,7 +1,8 @@
 use std::{future::Future, pin::Pin};
 
 use super::{
-    WahooConnectState, WahooError, WahooToken, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+    WahooConnectState, WahooCreatePlan, WahooCreateWorkout, WahooError, WahooPlan, WahooToken,
+    WahooUpdatePlan, WahooUpdateWorkout, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -25,6 +26,25 @@ pub trait WahooOAuthPort: Clone + Send + Sync + 'static {
 }
 
 pub trait WahooApiPort: Clone + Send + Sync + 'static {
+    fn list_plans(
+        &self,
+        access_token: &str,
+        external_id: Option<&str>,
+    ) -> BoxFuture<Result<Vec<WahooPlan>, WahooError>>;
+
+    fn create_plan(
+        &self,
+        access_token: &str,
+        request: WahooCreatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>>;
+
+    fn update_plan(
+        &self,
+        access_token: &str,
+        plan_id: i64,
+        request: WahooUpdatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>>;
+
     fn list_workouts(
         &self,
         access_token: &str,
@@ -43,6 +63,19 @@ pub trait WahooApiPort: Clone + Send + Sync + 'static {
         access_token: &str,
         workout_id: i64,
     ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>>;
+
+    fn create_workout(
+        &self,
+        access_token: &str,
+        request: WahooCreateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>>;
+
+    fn update_workout(
+        &self,
+        access_token: &str,
+        workout_id: i64,
+        request: WahooUpdateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>>;
 
     fn download_workout_file(&self, file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>>;
 }

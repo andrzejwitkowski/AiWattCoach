@@ -25,7 +25,7 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
     const {t} = useTranslation();
     const [state, setState] = useState<ModalState>({event: null, activity: null, loading: false});
     const [downloadingFit, setDownloadingFit] = useState(false);
-    const [syncingToIntervals, setSyncingToIntervals] = useState(false);
+    const [syncingToWahoo, setSyncingToWahoo] = useState(false);
     const [syncError, setSyncError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -159,8 +159,8 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
                         <PlannedWorkoutDetailModal
                             apiBaseUrl={apiBaseUrl}
                             event={event}
-                            syncing={syncingToIntervals}
-                            onSyncingChange={setSyncingToIntervals}
+                            syncing={syncingToWahoo}
+                            onSyncingChange={setSyncingToWahoo}
                             onSyncError={setSyncError}
                             onEventSynced={(syncedEvent) => setState((current) => ({...current, event: syncedEvent}))}
                         />

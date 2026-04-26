@@ -1,6 +1,6 @@
 use aiwattcoach::domain::{
     calendar_view::CalendarEntryKind,
-    intervals::{parse_planned_workout, IntervalsError, IntervalsUseCases},
+    intervals::{parse_planned_workout, IntervalsError},
     training_plan::{
         TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
     },
@@ -285,7 +285,7 @@ async fn list_calendar_events_returns_predicted_events_with_positive_safe_ids() 
 }
 
 #[tokio::test]
-async fn sync_planned_workout_returns_synced_calendar_event() {
+async fn sync_planned_workout_requires_cycling_ftp_settings() {
     let intervals_service = ScopedIntervalsService::default();
     let app = intervals_test_app_with_projections(
         TestIdentityServiceWithSession::default(),
@@ -293,7 +293,7 @@ async fn sync_planned_workout_returns_synced_calendar_event() {
         TestTrainingPlanProjectionRepository::with_days(vec![projected_day(
             "user-1",
             "training-plan:user-1:w1:1",
-            "2026-03-26",
+            "2023-11-16",
             "Build Session",
         )]),
     )
@@ -303,7 +303,7 @@ async fn sync_planned_workout_returns_synced_calendar_event() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/2026-03-26/sync")
+                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/2023-11-16/sync")
                 .header(header::COOKIE, session_cookie("session-1"))
                 .body(Body::empty())
                 .unwrap(),
@@ -311,46 +311,13 @@ async fn sync_planned_workout_returns_synced_calendar_event() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-    let event: serde_json::Value = get_json(response).await;
+    let body: serde_json::Value = get_json(response).await;
     assert_eq!(
-        event.get("plannedSource").unwrap().as_str(),
-        Some("predicted")
+        body.get("message").and_then(|value| value.as_str()),
+        Some("Set your cycling FTP in Settings before syncing to Wahoo")
     );
-    assert_eq!(event.get("syncStatus").unwrap().as_str(), Some("synced"));
-    assert_eq!(
-        event.get("linkedIntervalsEventId").unwrap().as_i64(),
-        Some(1)
-    );
-    assert_eq!(
-        event
-            .get("projectedWorkout")
-            .and_then(|value| value.get("operationKey"))
-            .and_then(|value| value.as_str()),
-        Some("training-plan:user-1:w1:1")
-    );
-
-    let created_event = intervals_service
-        .list_events(
-            "user-1",
-            &aiwattcoach::domain::intervals::DateRange {
-                oldest: "2026-03-26".to_string(),
-                newest: "2026-03-26".to_string(),
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(created_event.len(), 1);
-    assert_eq!(created_event[0].start_date_local, "2026-03-26T00:00:00");
-    assert_eq!(created_event[0].name.as_deref(), Some("Build Session"));
-    assert_eq!(created_event[0].workout_doc, None);
-    let description = created_event[0]
-        .description
-        .as_deref()
-        .expect("synced description");
-    assert!(description.contains("- 60m 70%"));
-    assert!(description.contains("[AIWATTCOACH:pw="));
 }
 
 #[tokio::test]
@@ -364,7 +331,7 @@ async fn sync_planned_workout_is_scoped_to_authenticated_user() {
         TestTrainingPlanProjectionRepository::with_days(vec![projected_day(
             "user-1",
             "shared-operation",
-            "2026-03-26",
+            "2023-11-16",
             "User 1 Workout",
         )]),
     )
@@ -374,7 +341,7 @@ async fn sync_planned_workout_is_scoped_to_authenticated_user() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/calendar/planned-workouts/shared-operation/2026-03-26/sync")
+                .uri("/api/calendar/planned-workouts/shared-operation/2023-11-16/sync")
                 .header(header::COOKIE, session_cookie("session-user-2"))
                 .body(Body::empty())
                 .unwrap(),
@@ -383,6 +350,36 @@ async fn sync_planned_workout_is_scoped_to_authenticated_user() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn sync_planned_workout_returns_validation_message_for_invalid_date() {
+    let app = intervals_test_app_with_projections(
+        TestIdentityServiceWithSession::default(),
+        ScopedIntervalsService::default(),
+        TestTrainingPlanProjectionRepository::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/not-a-date/sync")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: serde_json::Value = get_json(response).await;
+    assert_eq!(
+        body.get("message").and_then(|value| value.as_str()),
+        Some("planned workout date must be in YYYY-MM-DD format")
+    );
 }
 
 #[derive(Clone, Default)]

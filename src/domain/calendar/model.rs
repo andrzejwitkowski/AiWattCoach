@@ -163,6 +163,68 @@ impl PlannedWorkoutSyncRecord {
             last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
         }
     }
+
+    pub fn mark_pending_without_remote_event(
+        &self,
+        source_workout_id: String,
+        now_epoch_seconds: i64,
+    ) -> Self {
+        Self {
+            user_id: self.user_id.clone(),
+            operation_key: self.operation_key.clone(),
+            date: self.date.clone(),
+            source_workout_id,
+            intervals_event_id: None,
+            status: PlannedWorkoutSyncStatus::Pending,
+            synced_payload_hash: self.synced_payload_hash.clone(),
+            last_error: None,
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
+            updated_at_epoch_seconds: now_epoch_seconds,
+            last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
+        }
+    }
+
+    pub fn mark_synced_without_remote_event(
+        &self,
+        source_workout_id: String,
+        synced_payload_hash: String,
+        now_epoch_seconds: i64,
+    ) -> Self {
+        Self {
+            user_id: self.user_id.clone(),
+            operation_key: self.operation_key.clone(),
+            date: self.date.clone(),
+            source_workout_id,
+            intervals_event_id: None,
+            status: PlannedWorkoutSyncStatus::Synced,
+            synced_payload_hash: Some(synced_payload_hash),
+            last_error: None,
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
+            updated_at_epoch_seconds: now_epoch_seconds,
+            last_synced_at_epoch_seconds: Some(now_epoch_seconds),
+        }
+    }
+
+    pub fn mark_failed_without_remote_event(
+        &self,
+        source_workout_id: String,
+        error: String,
+        now_epoch_seconds: i64,
+    ) -> Self {
+        Self {
+            user_id: self.user_id.clone(),
+            operation_key: self.operation_key.clone(),
+            date: self.date.clone(),
+            source_workout_id,
+            intervals_event_id: None,
+            status: PlannedWorkoutSyncStatus::Failed,
+            synced_payload_hash: self.synced_payload_hash.clone(),
+            last_error: Some(error),
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
+            updated_at_epoch_seconds: now_epoch_seconds,
+            last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

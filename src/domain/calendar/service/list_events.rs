@@ -19,15 +19,29 @@ use super::{
     CalendarService,
 };
 
-impl<Intervals, Entries, Projections, Syncs, Time, Tokens, PollStates, Refresh, Completed>
+impl<
+        Intervals,
+        Entries,
+        Projections,
+        Syncs,
+        Time,
+        Wahoo,
+        WahooSyncs,
+        Settings,
+        Tokens,
+        Refresh,
+        Completed,
+    >
     CalendarService<
         Intervals,
         Entries,
         Projections,
         Syncs,
         Time,
+        Wahoo,
+        WahooSyncs,
+        Settings,
         Tokens,
-        PollStates,
         Refresh,
         Completed,
     >
@@ -38,8 +52,11 @@ where
     Projections: crate::domain::training_plan::TrainingPlanProjectionRepository + Clone,
     Syncs: crate::domain::calendar::PlannedWorkoutSyncRepository + Clone,
     Time: crate::domain::identity::Clock + Clone,
+    Wahoo: crate::domain::wahoo::WahooUseCases + Clone,
+    WahooSyncs:
+        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncRepository + Clone,
+    Settings: crate::domain::settings::UserSettingsRepository + Clone,
     Tokens: crate::domain::planned_workout_tokens::PlannedWorkoutTokenRepository + Clone,
-    PollStates: crate::domain::external_sync::ProviderPollStateRepository + Clone,
     Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort + Clone,
 {
     pub(super) async fn list_events_impl(

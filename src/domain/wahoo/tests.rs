@@ -4,8 +4,10 @@ use std::{
 };
 
 use super::{
-    WahooApiPort, WahooConnectState, WahooConnectStateRepository, WahooError, WahooOAuthPort,
-    WahooService, WahooToken, WahooUseCases, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+    WahooApiPort, WahooConnectState, WahooConnectStateRepository, WahooCreatePlan,
+    WahooCreateWorkout, WahooError, WahooOAuthPort, WahooPlan, WahooService, WahooToken,
+    WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooWorkout, WahooWorkoutList,
+    WahooWorkoutSummary,
 };
 use crate::domain::{
     identity::{Clock, IdGenerator},
@@ -183,6 +185,31 @@ impl WahooOAuthPort for TestOAuth {
 }
 
 impl WahooApiPort for TestOAuth {
+    fn list_plans(
+        &self,
+        _access_token: &str,
+        _external_id: Option<&str>,
+    ) -> crate::domain::wahoo::BoxFuture<Result<Vec<WahooPlan>, WahooError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn create_plan(
+        &self,
+        _access_token: &str,
+        _request: WahooCreatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_plan(
+        &self,
+        _access_token: &str,
+        _plan_id: i64,
+        _request: WahooUpdatePlan,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
     fn list_workouts(
         &self,
         _access_token: &str,
@@ -215,6 +242,23 @@ impl WahooApiPort for TestOAuth {
         _workout_id: i64,
     ) -> crate::domain::wahoo::BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
         Box::pin(async { Ok(None) })
+    }
+
+    fn create_workout(
+        &self,
+        _access_token: &str,
+        _request: WahooCreateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_workout(
+        &self,
+        _access_token: &str,
+        _workout_id: i64,
+        _request: WahooUpdateWorkout,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
     }
 
     fn download_workout_file(

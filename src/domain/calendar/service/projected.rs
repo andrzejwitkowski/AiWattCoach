@@ -5,7 +5,6 @@ use crate::domain::{
         CalendarEvent, CalendarEventCategory, CalendarEventSource, CalendarProjectedWorkout,
         PlannedWorkoutSyncRecord, PlannedWorkoutSyncStatus,
     },
-    intervals::{Event, UpdateEvent},
     training_plan::TrainingPlanProjectedDay,
 };
 
@@ -48,31 +47,6 @@ pub(super) fn build_projected_calendar_event(
         sync_status: Some(status),
         linked_intervals_event_id,
         actual_workout: None,
-    }
-}
-
-pub(super) fn build_update_event(
-    day: &TrainingPlanProjectedDay,
-    existing_event: &Event,
-    planned_workout_marker: Option<&str>,
-) -> UpdateEvent {
-    UpdateEvent {
-        category: Some(crate::domain::intervals::EventCategory::Workout),
-        start_date_local: Some(projected_event_start_date_local(&day.date)),
-        event_type: existing_event
-            .event_type
-            .clone()
-            .or_else(|| Some("Ride".to_string())),
-        name: projected_workout_name(day),
-        description: merge_event_description(
-            existing_event.description.as_deref(),
-            projected_workout_sync_body(day).as_deref(),
-            planned_workout_marker,
-        ),
-        indoor: Some(existing_event.indoor),
-        color: existing_event.color.clone(),
-        workout_doc: None,
-        file_upload: None,
     }
 }
 
@@ -154,10 +128,6 @@ pub fn synthetic_event_id(operation_key: &str, date: &str) -> i64 {
     ((value % MAX_JS_SAFE_INTEGER) + 1) as i64
 }
 
-pub(super) fn projected_event_start_date_local(date: &str) -> String {
-    format!("{date}T00:00:00")
-}
-
 pub(super) fn projected_workout_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
     let workout = day.workout.as_ref()?;
     let workout_name = projected_workout_name(day);
@@ -181,21 +151,6 @@ pub(super) fn projected_workout_sync_body(day: &TrainingPlanProjectedDay) -> Opt
         workout_name
     } else {
         Some(lines.join("\n"))
-    }
-}
-
-pub(super) fn projected_workout_sync_description(
-    day: &TrainingPlanProjectedDay,
-    planned_workout_marker: Option<&str>,
-) -> Option<String> {
-    let description = projected_workout_sync_body(day);
-
-    match planned_workout_marker {
-        Some(marker) => crate::domain::planned_workout_tokens::append_marker_to_description(
-            description.as_deref(),
-            marker,
-        ),
-        None => description,
     }
 }
 
@@ -254,32 +209,5 @@ fn trim_decimal(value: f64) -> String {
         format!("{rounded:.0}")
     } else {
         format!("{rounded:.1}")
-    }
-}
-
-pub(super) fn merge_event_description(
-    existing: Option<&str>,
-    projected: Option<&str>,
-    planned_workout_marker: Option<&str>,
-) -> Option<String> {
-    let merged = match (
-        existing.map(str::trim).filter(|value| !value.is_empty()),
-        projected,
-    ) {
-        (None, None) => None,
-        (Some(existing), None) => Some(existing.to_string()),
-        (None, Some(projected)) => Some(projected.to_string()),
-        (Some(existing), Some(projected)) if existing.contains(projected) => {
-            Some(existing.to_string())
-        }
-        (Some(existing), Some(projected)) => Some(format!("{existing}\n\n{projected}")),
-    };
-
-    match planned_workout_marker {
-        Some(marker) => crate::domain::planned_workout_tokens::append_marker_to_description(
-            merged.as_deref(),
-            marker,
-        ),
-        None => merged,
     }
 }

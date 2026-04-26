@@ -5,8 +5,9 @@ mod service;
 mod tests;
 
 pub use model::{
-    WahooAuthExchange, WahooAuthStart, WahooConnectState, WahooError, WahooFileReference,
-    WahooToken, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+    WahooAuthExchange, WahooAuthStart, WahooConnectState, WahooCreatePlan, WahooCreateWorkout,
+    WahooError, WahooFileReference, WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout,
+    WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
 };
 pub use ports::{BoxFuture, WahooApiPort, WahooConnectStateRepository, WahooOAuthPort};
 pub use service::{WahooService, WahooUseCases};
