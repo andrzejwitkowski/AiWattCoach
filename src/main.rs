@@ -417,6 +417,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         external_sync_state_repository.clone(),
         SystemClock,
     )
+    .with_planned_workout_wahoo_syncs(planned_workout_wahoo_sync_repository.clone())
     .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone());
     let provider_polling_service = ProviderPollingService::new(
         intervals_api_client.clone(),

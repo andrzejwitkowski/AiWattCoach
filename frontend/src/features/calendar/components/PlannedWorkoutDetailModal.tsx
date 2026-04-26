@@ -237,6 +237,22 @@ function mapPlannedWorkoutSyncValidationError(
   error: HttpError,
   t: ReturnType<typeof useTranslation>['t'],
 ): string {
+  const errorCode = typeof error.body === 'object' && error.body !== null && 'code' in error.body
+    ? (error.body as { code?: unknown }).code
+    : undefined;
+
+  if (errorCode === 'wahoo_window_out_of_range') {
+    return t('calendar.syncToWahooWindowMessage');
+  }
+
+  if (errorCode === 'wahoo_ftp_required') {
+    return t('calendar.syncToWahooFtpRequired');
+  }
+
+  if (errorCode === 'invalid_date_format') {
+    return t('calendar.syncToWahooInvalidDate');
+  }
+
   if (error.message === 'Only planned workouts scheduled between today and the next 6 days can sync to Wahoo') {
     return t('calendar.syncToWahooWindowMessage');
   }

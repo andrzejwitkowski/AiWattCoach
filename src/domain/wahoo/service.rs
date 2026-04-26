@@ -377,11 +377,18 @@ where
         external_id: &str,
     ) -> Result<Option<WahooPlan>, WahooError> {
         let token = self.ensure_token(user_id).await?;
-        let mut plans = self
+        let plans = self
             .client
             .list_plans(&token.access_token, Some(external_id))
             .await?;
-        Ok(plans.pop())
+
+        match plans.len() {
+            0 => Ok(None),
+            1 => Ok(plans.into_iter().next()),
+            count => Err(WahooError::External(format!(
+                "Wahoo returned {count} plans for external_id '{external_id}'"
+            ))),
+        }
     }
 
     async fn create_plan(

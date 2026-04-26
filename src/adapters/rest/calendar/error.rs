@@ -9,7 +9,7 @@ use crate::domain::calendar::CalendarError;
 use crate::domain::calendar_labels::CalendarLabelError;
 
 use super::super::logging::status_class;
-use super::dto::validation_message_response;
+use super::dto::validation_code_message_response;
 
 pub(super) fn map_calendar_error(error: CalendarError) -> Response {
     match error {
@@ -23,13 +23,23 @@ pub(super) fn map_calendar_error(error: CalendarError) -> Response {
         }
         CalendarError::CredentialsNotConfigured => {
             log_calendar_error(Level::WARN, StatusCode::UNPROCESSABLE_ENTITY, &error);
-            StatusCode::UNPROCESSABLE_ENTITY.into_response()
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(validation_code_message_response(
+                    "wahoo_not_connected",
+                    "Wahoo credentials not configured",
+                )),
+            )
+                .into_response()
         }
-        CalendarError::Validation(_) => {
+        CalendarError::Validation(ref message) => {
             log_calendar_error(Level::WARN, StatusCode::BAD_REQUEST, &error);
             (
                 StatusCode::BAD_REQUEST,
-                Json(validation_message_response(&error.to_string())),
+                Json(validation_code_message_response(
+                    validation_error_code(message),
+                    message,
+                )),
             )
                 .into_response()
         }
@@ -41,6 +51,17 @@ pub(super) fn map_calendar_error(error: CalendarError) -> Response {
             log_calendar_error(Level::ERROR, StatusCode::INTERNAL_SERVER_ERROR, &error);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+    }
+}
+
+fn validation_error_code(message: &str) -> &str {
+    match message {
+        "planned workout date must be in YYYY-MM-DD format" => "invalid_date_format",
+        "Only planned workouts scheduled between today and the next 6 days can sync to Wahoo" => {
+            "wahoo_window_out_of_range"
+        }
+        "Set your cycling FTP in Settings before syncing to Wahoo" => "wahoo_ftp_required",
+        _ => "validation_error",
     }
 }
 

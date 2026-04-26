@@ -22,6 +22,12 @@ use super::{
     CalendarService,
 };
 
+const MISSING_WAHOO_FTP_MESSAGE: &str = "Set your cycling FTP in Settings before syncing to Wahoo";
+const INVALID_PLANNED_WORKOUT_DATE_MESSAGE: &str =
+    "planned workout date must be in YYYY-MM-DD format";
+const WAHOO_SYNC_WINDOW_MESSAGE: &str =
+    "Only planned workouts scheduled between today and the next 6 days can sync to Wahoo";
+
 impl<
         Intervals,
         Entries,
@@ -134,7 +140,6 @@ where
                 crate::domain::wahoo::WahooPlan,
                 crate::domain::wahoo::WahooWorkout,
                 String,
-                String,
             ),
             CalendarError,
         > = async {
@@ -143,16 +148,11 @@ where
                 .find_by_user_id(user_id)
                 .await
                 .map_err(map_settings_error)?
-                .ok_or_else(|| {
-                    CalendarError::Validation(
-                        "Set your cycling FTP in Settings before syncing to Wahoo".to_string(),
-                    )
-                })?;
-            let ftp_watts = settings.cycling.ftp_watts.ok_or_else(|| {
-                CalendarError::Validation(
-                    "Set your cycling FTP in Settings before syncing to Wahoo".to_string(),
-                )
-            })?;
+                .ok_or_else(|| CalendarError::Validation(MISSING_WAHOO_FTP_MESSAGE.to_string()))?;
+            let ftp_watts = settings
+                .cycling
+                .ftp_watts
+                .ok_or_else(|| CalendarError::Validation(MISSING_WAHOO_FTP_MESSAGE.to_string()))?;
             let planned_workout_marker = ensure_planned_workout_marker(
                 &self.planned_workout_tokens,
                 user_id,
@@ -241,12 +241,14 @@ where
                     .map_err(map_wahoo_error)?
             };
 
-            Ok((plan, workout, workout_token, planned_workout_marker))
+            Ok((plan, workout, workout_token))
         }
         .await;
 
         match sync_result {
-            Ok((plan, workout, workout_token, _planned_workout_marker)) => {
+            Ok((plan, workout, workout_token)) => {
+                // Wahoo sync records intentionally clear any prior Intervals event link because
+                // this flow no longer creates or updates a remote Intervals event.
                 self.wahoo_syncs
                     .upsert(pending_wahoo_record.mark_synced(
                         payload_hash.clone(),
@@ -382,14 +384,12 @@ where
     let today = DateTime::<Utc>::from_timestamp(clock.now_epoch_seconds(), 0)
         .unwrap_or(DateTime::<Utc>::UNIX_EPOCH)
         .date_naive();
-    let requested_date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").map_err(|_| {
-        CalendarError::Validation("planned workout date must be in YYYY-MM-DD format".to_string())
-    })?;
+    let requested_date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .map_err(|_| CalendarError::Validation(INVALID_PLANNED_WORKOUT_DATE_MESSAGE.to_string()))?;
     let latest_sync_date = today + ChronoDuration::days(6);
     if requested_date < today || requested_date > latest_sync_date {
         return Err(CalendarError::Validation(
-            "Only planned workouts scheduled between today and the next 6 days can sync to Wahoo"
-                .to_string(),
+            WAHOO_SYNC_WINDOW_MESSAGE.to_string(),
         ));
     }
     Ok(())
@@ -415,7 +415,10 @@ where
         {
             return Ok(existing);
         }
+
+        return Ok(None);
     }
+
     wahoo
         .find_plan_by_external_id(user_id, planned_workout_id)
         .await

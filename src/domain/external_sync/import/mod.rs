@@ -743,7 +743,7 @@ where
             if let Some(sync) = sync {
                 return Ok(Some(ResolvedPlannedWorkoutLink {
                     planned_workout_id: sync.planned_workout_id,
-                    match_source: PlannedCompletedWorkoutLinkMatchSource::Token,
+                    match_source: PlannedCompletedWorkoutLinkMatchSource::Explicit,
                 }));
             }
         }

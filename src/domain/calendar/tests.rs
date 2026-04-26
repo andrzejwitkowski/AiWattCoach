@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::domain::{
     calendar::{
-        CalendarError, CalendarService, CalendarUseCases, PlannedWorkoutSyncRecord,
-        PlannedWorkoutSyncRepository, SyncPlannedWorkout,
+        CalendarError, CalendarService, CalendarUseCases, NoopWahooUseCases,
+        PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository, SyncPlannedWorkout,
     },
     calendar_view::{
         CalendarEntryKind, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
@@ -103,8 +103,8 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
     let wahoo_syncs = InMemoryPlannedWorkoutWahooSyncRepository::default();
     let settings = InMemoryUserSettingsRepository::with_ftp(295);
     let service = CalendarService::new(
-        FakeIntervalsService::with_create_error(IntervalsError::ConnectionError(
-            "intervals unavailable".to_string(),
+        FakeIntervalsService::with_events_error(IntervalsError::ConnectionError(
+            "intervals unused in Wahoo sync failure path".to_string(),
         )),
         InMemoryCalendarEntryViewRepository::default(),
         FakeProjectionRepository::with_days(vec![projected_day(
@@ -153,6 +153,52 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
     );
 }
 
+#[tokio::test]
+async fn sync_planned_workout_returns_credentials_not_configured_when_wahoo_is_not_connected() {
+    let wahoo_syncs = InMemoryPlannedWorkoutWahooSyncRepository::default();
+    let service = CalendarService::new(
+        FakeIntervalsService::with_events_error(IntervalsError::ConnectionError(
+            "intervals unused in not-connected Wahoo sync path".to_string(),
+        )),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        InMemoryPlannedWorkoutSyncRepository::default(),
+        FixedClock,
+    )
+    .with_wahoo(
+        NoopWahooUseCases,
+        wahoo_syncs.clone(),
+        InMemoryUserSettingsRepository::with_ftp(295),
+    )
+    .with_planned_workout_tokens(NoopPlannedWorkoutTokenRepository::default());
+
+    let error = service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, CalendarError::CredentialsNotConfigured);
+    let wahoo_sync = wahoo_syncs
+        .find_by_planned_workout_id("user-1", "training-plan:user-1:w1:1:2023-11-14")
+        .await
+        .unwrap()
+        .expect("expected failed wahoo sync record");
+    assert_eq!(wahoo_sync.wahoo_plan_id, None);
+    assert_eq!(wahoo_sync.wahoo_workout_id, None);
+    assert!(wahoo_sync.last_error.is_some());
+}
+
 #[derive(Clone, Default)]
 struct RecordingCalendarRefresh {
     calls: Arc<Mutex<Vec<(String, String, String)>>>,
@@ -187,7 +233,6 @@ impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
 #[derive(Clone)]
 struct FakeIntervalsService {
     created_event: Event,
-    create_error: Option<IntervalsError>,
     list_events_error: Option<IntervalsError>,
     created_events: Arc<Mutex<Vec<CreateEvent>>>,
     updated_events: Arc<Mutex<Vec<(i64, UpdateEvent)>>>,
@@ -197,27 +242,6 @@ impl FakeIntervalsService {
     fn with_created_event(created_event: Event) -> Self {
         Self {
             created_event,
-            create_error: None,
-            list_events_error: None,
-            created_events: Arc::new(Mutex::new(Vec::new())),
-            updated_events: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-
-    fn with_create_error(create_error: IntervalsError) -> Self {
-        Self {
-            created_event: Event {
-                id: 0,
-                start_date_local: "2026-03-26T00:00:00".to_string(),
-                event_type: None,
-                name: None,
-                category: EventCategory::Workout,
-                description: None,
-                indoor: false,
-                color: None,
-                workout_doc: None,
-            },
-            create_error: Some(create_error),
             list_events_error: None,
             created_events: Arc::new(Mutex::new(Vec::new())),
             updated_events: Arc::new(Mutex::new(Vec::new())),
@@ -237,7 +261,6 @@ impl FakeIntervalsService {
                 color: None,
                 workout_doc: None,
             },
-            create_error: None,
             list_events_error: Some(list_events_error),
             created_events: Arc::new(Mutex::new(Vec::new())),
             updated_events: Arc::new(Mutex::new(Vec::new())),
@@ -281,14 +304,10 @@ impl IntervalsUseCases for FakeIntervalsService {
         event: CreateEvent,
     ) -> IntervalsBoxFuture<Result<Event, IntervalsError>> {
         let created_event = self.created_event.clone();
-        let create_error = self.create_error.clone();
         let created_events = self.created_events.clone();
         Box::pin(async move {
             created_events.lock().unwrap().push(event);
-            match create_error {
-                Some(error) => Err(error),
-                None => Ok(created_event),
-            }
+            Ok(created_event)
         })
     }
 

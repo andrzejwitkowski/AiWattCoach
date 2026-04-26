@@ -96,9 +96,7 @@ fn build_plan_intervals(
                             child_steps.push(step_to_plan_interval(None, step));
                             child_index += 1;
                         }
-                        crate::domain::intervals::PlannedWorkoutLine::Text(_) => {
-                            child_index += 1;
-                        }
+                        crate::domain::intervals::PlannedWorkoutLine::Text(_) => break,
                         crate::domain::intervals::PlannedWorkoutLine::Repeat(_) => break,
                     }
                 }

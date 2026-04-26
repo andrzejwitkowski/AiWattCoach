@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-26 | Copilot/CodeRabbit | PR #144 Wahoo planned-workout review follow-up
+
+- Problem: the PR review surfaced several real gaps around Wahoo planned-workout sync and linking: Wahoo plan mapping could swallow repeat blocks past text separators, planned-workout sync re-queried Wahoo plans unnecessarily and lacked stable REST error codes for frontend handling, external-sync linking treated `wahoo_workout_token` matches as weaker token matches instead of explicit Wahoo identities, Wahoo plan lookup silently accepted duplicate `external_id` rows, and one attempted REST test covered the wrong layer for the not-connected path.
+- Fix: made Wahoo repeat parsing stop at text delimiters, simplified existing-plan resolution to avoid the duplicate lookup, added stable calendar sync error codes for invalid date / sync window / missing FTP / Wahoo-not-connected responses and updated the modal to prefer `error.body.code` with message fallback, mapped `wahoo_workout_token` link resolution to `Explicit`, rejected duplicate Wahoo plans with a focused regression, wired planned-workout Wahoo sync records into `ExternalImportService`, moved Wahoo-not-connected coverage to a domain test instead of the miswired REST harness, and kept the frontend sync-window helper aligned with the backend's current UTC-based contract.
+- Prevention: when review feedback touches transport errors, verify that the test harness actually wires the dependency path being asserted before adding or keeping a REST integration case. For provider-owned identifiers, prefer stable machine-readable codes and explicit match-source semantics instead of UI string matching or generic token classification. If a provider lookup is expected to be unique by `external_id`, treat duplicate upstream rows as an error and add a regression immediately.
+
 ### 2026-04-26 | Copilot/CodeRabbit | PR #143 Wahoo second review pass
 
 - Problem: the follow-up review still pointed at a few real gaps after the first cleanup: Wahoo motorcycling was still normalized as `Ride`, partial Wahoo batch imports still skipped training-load recompute when `imports.import(...)` failed after earlier successes, planned-workout authoritative reads could miss cross-boundary completed workouts and still did per-workout link lookups, and the Wahoo FIT enrichment scheduler still trusted payload `user_id` instead of the scheduled task tenant key.

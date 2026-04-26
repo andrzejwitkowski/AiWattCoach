@@ -377,6 +377,10 @@ async fn sync_planned_workout_returns_validation_message_for_invalid_date() {
 
     let body: serde_json::Value = get_json(response).await;
     assert_eq!(
+        body.get("code").and_then(|value| value.as_str()),
+        Some("invalid_date_format")
+    );
+    assert_eq!(
         body.get("message").and_then(|value| value.as_str()),
         Some("planned workout date must be in YYYY-MM-DD format")
     );
