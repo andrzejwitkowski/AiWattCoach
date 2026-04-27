@@ -54,141 +54,153 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
     let static_files = ServeDir::new(&frontend_dist);
     let spa_index = ServeFile::new(frontend_dist.join("index.html"));
 
+    let write_log_config = EndpointLogConfig::request_only().with_max_body_bytes(10240);
+    let settings_read_log_config = EndpointLogConfig::response_only().with_max_body_bytes(10240);
+
     Router::new()
         .route("/health", get(health::health_check))
         .route("/ready", get(health::readiness_check))
         .route("/api/auth/google/start", get(auth::start_google_login))
         .route("/api/auth/google/callback", get(auth::finish_google_login))
         .route("/api/auth/wahoo/start", get(auth::start_wahoo_connect))
-        .route("/api/auth/wahoo/callback", get(auth::finish_wahoo_connect))
-        .route(
-            "/api/auth/whitelist",
-            post(auth::join_whitelist).layer(DefaultBodyLimit::max(4 * 1024)),
-        )
+        .route("/api/wahoo/callback", get(auth::finish_wahoo_connect))
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
         .merge(Router::new().route(
             "/api/logs",
             post(logs::ingest_logs).layer(DefaultBodyLimit::max(logs::MAX_REQUEST_BODY_BYTES)),
         ))
-        .route("/api/admin/system-info", get(admin::system_info))
-        .route(
-            "/api/admin/completed-workouts/{user_id}/backfill-details",
-            post(admin::backfill_completed_workout_details),
-        )
-        .route(
-            "/api/admin/completed-workouts/{user_id}/backfill-metrics",
-            post(admin::backfill_completed_workout_metrics),
-        )
-        .route(
-            "/api/admin/settings/{user_id}",
-            get(settings::admin_get_user_settings),
+        .merge(
+            Router::new()
+                .route(
+                    "/api/auth/whitelist",
+                    post(auth::join_whitelist).layer(DefaultBodyLimit::max(4 * 1024)),
+                )
+                .route("/api/admin/system-info", get(admin::system_info))
+                .route(
+                    "/api/admin/completed-workouts/{user_id}/backfill-details",
+                    post(admin::backfill_completed_workout_details),
+                )
+                .route(
+                    "/api/admin/completed-workouts/{user_id}/backfill-metrics",
+                    post(admin::backfill_completed_workout_metrics),
+                )
+                .route(
+                    "/api/admin/settings/{user_id}",
+                    get(settings::admin_get_user_settings),
+                )
+                .route("/api/settings/ai-agents", patch(settings::update_ai_agents))
+                .route(
+                    "/api/settings/ai-agents/test",
+                    post(settings::test_ai_agents_connection),
+                )
+                .route("/api/settings/intervals", patch(settings::update_intervals))
+                .route(
+                    "/api/settings/intervals/test",
+                    post(settings::test_intervals_connection)
+                        // NOTE: This MethodRouter-level DefaultBodyLimit is enforced by the
+                        // handler, but the outer RequestLogLayer still buffers up to
+                        // MAX_COLLECT_BYTES (10 MB) before this limit is checked.
+                        .layer(DefaultBodyLimit::max(8 * 1024)),
+                )
+                .route("/api/settings/options", patch(settings::update_options))
+                .route(
+                    "/api/settings/availability",
+                    patch(settings::update_availability),
+                )
+                .route("/api/settings/cycling", patch(settings::update_cycling))
+                .route(
+                    "/api/athlete-summary",
+                    get(athlete_summary::get_athlete_summary),
+                )
+                .route(
+                    "/api/athlete-summary/generate",
+                    post(athlete_summary::generate_athlete_summary),
+                )
+                .route("/api/calendar/events", get(calendar::list_events))
+                .route("/api/calendar/labels", get(calendar::list_labels))
+                .route(
+                    "/api/calendar/refresh",
+                    post(calendar::refresh_calendar_view),
+                )
+                .route(
+                    "/api/completed-workouts",
+                    get(completed_workouts::list_completed_workouts),
+                )
+                .route(
+                    "/api/completed-workouts/{activity_id}",
+                    get(completed_workouts::get_completed_workout),
+                )
+                .route(
+                    "/api/dashboard/training-load",
+                    get(dashboard::get_training_load_dashboard),
+                )
+                .route(
+                    "/api/calendar/planned-workouts/{operation_key}/{date}/sync",
+                    post(calendar::sync_planned_workout),
+                )
+                .route(
+                    "/api/races",
+                    get(races::list_races).post(races::create_race),
+                )
+                .route(
+                    "/api/races/{race_id}",
+                    get(races::get_race)
+                        .put(races::update_race)
+                        .delete(races::delete_race),
+                )
+                .route(
+                    "/api/workout-summaries",
+                    get(workout_summary::list_summaries),
+                )
+                .route(
+                    "/api/workout-summaries/{workout_id}",
+                    get(workout_summary::get_summary).post(workout_summary::create_summary),
+                )
+                .route(
+                    "/api/workout-summaries/{workout_id}/rpe",
+                    patch(workout_summary::update_rpe),
+                )
+                .route(
+                    "/api/workout-summaries/{workout_id}/state",
+                    post(workout_summary::set_saved_state).patch(workout_summary::set_saved_state),
+                )
+                .route(
+                    "/api/workout-summaries/{workout_id}/messages",
+                    post(workout_summary::send_message),
+                )
+                .route(
+                    "/api/intervals/events",
+                    get(intervals::list_events).post(intervals::create_event),
+                )
+                .route(
+                    "/api/intervals/events/{event_id}",
+                    get(intervals::get_event)
+                        .put(intervals::update_event)
+                        .delete(intervals::delete_event),
+                )
+                .route(
+                    "/api/intervals/events/{event_id}/download.fit",
+                    get(intervals::download_fit),
+                )
+                .route(
+                    "/api/intervals/activities/{activity_id}",
+                    get(intervals::get_activity)
+                        .put(intervals::update_activity)
+                        .delete(intervals::delete_activity),
+                )
+                .layer(RequestLogLayer::new())
+                .route_layer(with_log_config(write_log_config)),
         )
         .merge(
             Router::new()
                 .route("/api/settings", get(settings::get_settings))
                 .layer(RequestLogLayer::new())
-                .route_layer(with_log_config(
-                    EndpointLogConfig::response_only().with_max_body_bytes(2048),
-                )),
-        )
-        .route("/api/settings/ai-agents", patch(settings::update_ai_agents))
-        .route(
-            "/api/settings/ai-agents/test",
-            post(settings::test_ai_agents_connection),
-        )
-        .route("/api/settings/intervals", patch(settings::update_intervals))
-        .merge(
-            Router::new()
-                .route(
-                    "/api/settings/intervals/test",
-                    post(settings::test_intervals_connection)
-                        .layer(DefaultBodyLimit::max(8 * 1024)),
-                )
-                .layer(RequestLogLayer::new())
-                .route_layer(with_log_config(
-                    EndpointLogConfig::request_only().with_max_body_bytes(1024),
-                )),
-        )
-        .route("/api/settings/options", patch(settings::update_options))
-        .route(
-            "/api/settings/availability",
-            patch(settings::update_availability),
-        )
-        .route("/api/settings/cycling", patch(settings::update_cycling))
-        .route(
-            "/api/athlete-summary",
-            get(athlete_summary::get_athlete_summary),
-        )
-        .route(
-            "/api/athlete-summary/generate",
-            post(athlete_summary::generate_athlete_summary),
-        )
-        .route("/api/calendar/events", get(calendar::list_events))
-        .route("/api/calendar/labels", get(calendar::list_labels))
-        .route(
-            "/api/completed-workouts",
-            get(completed_workouts::list_completed_workouts),
-        )
-        .route(
-            "/api/completed-workouts/{activity_id}",
-            get(completed_workouts::get_completed_workout),
-        )
-        .route(
-            "/api/dashboard/training-load",
-            get(dashboard::get_training_load_dashboard),
-        )
-        .route(
-            "/api/calendar/planned-workouts/{operation_key}/{date}/sync",
-            post(calendar::sync_planned_workout),
-        )
-        .route(
-            "/api/races",
-            get(races::list_races).post(races::create_race),
-        )
-        .route(
-            "/api/races/{race_id}",
-            get(races::get_race)
-                .put(races::update_race)
-                .delete(races::delete_race),
-        )
-        .route(
-            "/api/workout-summaries",
-            get(workout_summary::list_summaries),
-        )
-        .route(
-            "/api/workout-summaries/{workout_id}",
-            get(workout_summary::get_summary).post(workout_summary::create_summary),
-        )
-        .route(
-            "/api/workout-summaries/{workout_id}/rpe",
-            patch(workout_summary::update_rpe),
-        )
-        .route(
-            "/api/workout-summaries/{workout_id}/state",
-            post(workout_summary::set_saved_state).patch(workout_summary::set_saved_state),
-        )
-        .route(
-            "/api/workout-summaries/{workout_id}/messages",
-            post(workout_summary::send_message),
+                .route_layer(with_log_config(settings_read_log_config)),
         )
         .route(
             "/api/workout-summaries/{workout_id}/ws",
             get(workout_summary::workout_summary_ws),
-        )
-        .route(
-            "/api/intervals/events",
-            get(intervals::list_events).post(intervals::create_event),
-        )
-        .route(
-            "/api/intervals/events/{event_id}",
-            get(intervals::get_event)
-                .put(intervals::update_event)
-                .delete(intervals::delete_event),
-        )
-        .route(
-            "/api/intervals/events/{event_id}/download.fit",
-            get(intervals::download_fit),
         )
         .route(
             "/api/intervals/activities",
@@ -197,12 +209,6 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                 .layer(DefaultBodyLimit::max(
                     intervals::MAX_ACTIVITY_UPLOAD_REQUEST_BYTES,
                 )),
-        )
-        .route(
-            "/api/intervals/activities/{activity_id}",
-            get(intervals::get_activity)
-                .put(intervals::update_activity)
-                .delete(intervals::delete_activity),
         )
         .fallback(move |request| serve_frontend(request, static_files.clone(), spa_index.clone()))
         .layer(

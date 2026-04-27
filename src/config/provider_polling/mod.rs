@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Duration as ChronoDuration, NaiveDate, Utc};
+use serde::{Deserialize, Serialize};
 use tokio::time::MissedTickBehavior;
 use tracing::warn;
 
@@ -8,20 +9,28 @@ use crate::{
     adapters::intervals_icu::import_mapping::{
         map_activity_to_import_command, map_event_to_import_command,
     },
+    adapters::wahoo::import_mapping::map_workout_to_import_command,
     domain::{
         calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
         external_sync::{
-            ExternalImportUseCases, ExternalProvider, ExternalSyncRepositoryError,
-            ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
+            CanonicalEntityKind, ExternalImportUseCases, ExternalProvider,
+            ExternalSyncRepositoryError, ProviderPollState, ProviderPollStateRepository,
+            ProviderPollStream,
         },
         identity::{Clock, IdGenerator},
         intervals::{DateRange, IntervalsApiPort, IntervalsSettingsPort},
         training_load::TrainingLoadRecomputeUseCases,
+        wahoo::WahooUseCases,
+        wahoo_fit_enrichment::WahooFitEnrichmentQueueUseCases,
     },
+    BackgroundTaskHandle,
 };
 
 const DEFAULT_SUCCESS_INTERVAL_SECONDS: i64 = 5 * 60;
+const DEFAULT_WAHOO_SUCCESS_INTERVAL_SECONDS: i64 = 3 * 60 * 60;
 const DEFAULT_FAILURE_BACKOFF_SECONDS: i64 = 5 * 60;
+const DEFAULT_WAHOO_BOOTSTRAP_PER_PAGE: usize = 100;
+const DEFAULT_WAHOO_INCREMENTAL_PER_PAGE: usize = 30;
 const DEFAULT_CALENDAR_PAST_DAYS: i64 = 30;
 const DEFAULT_CALENDAR_FUTURE_DAYS: i64 = 30;
 const DEFAULT_COMPLETED_PAST_DAYS: i64 = 365 * 2;
@@ -48,12 +57,14 @@ pub struct ProviderPollingService<
 {
     intervals_api: Api,
     intervals_settings: Settings,
+    wahoo_service: Option<std::sync::Arc<dyn WahooUseCases>>,
     poll_states: PollStates,
     imports: Imports,
     clock: Time,
     ids: Ids,
     refresh: Refresh,
     training_load_recompute_service: Option<std::sync::Arc<dyn TrainingLoadRecomputeUseCases>>,
+    wahoo_fit_enrichment_queue: Option<std::sync::Arc<dyn WahooFitEnrichmentQueueUseCases>>,
     success_interval_seconds: i64,
     failure_backoff_seconds: i64,
     calendar_past_days: i64,
@@ -91,12 +102,14 @@ where
         Self {
             intervals_api,
             intervals_settings,
+            wahoo_service: None,
             poll_states,
             imports,
             clock,
             ids,
             refresh: NoopCalendarEntryViewRefresh,
             training_load_recompute_service: None,
+            wahoo_fit_enrichment_queue: None,
             success_interval_seconds: DEFAULT_SUCCESS_INTERVAL_SECONDS,
             failure_backoff_seconds: DEFAULT_FAILURE_BACKOFF_SECONDS,
             calendar_past_days: DEFAULT_CALENDAR_PAST_DAYS,
@@ -128,12 +141,14 @@ where
         ProviderPollingService {
             intervals_api: self.intervals_api,
             intervals_settings: self.intervals_settings,
+            wahoo_service: self.wahoo_service,
             poll_states: self.poll_states,
             imports: self.imports,
             clock: self.clock,
             ids: self.ids,
             refresh,
             training_load_recompute_service: self.training_load_recompute_service,
+            wahoo_fit_enrichment_queue: self.wahoo_fit_enrichment_queue,
             success_interval_seconds: self.success_interval_seconds,
             failure_backoff_seconds: self.failure_backoff_seconds,
             calendar_past_days: self.calendar_past_days,
@@ -148,6 +163,19 @@ where
         training_load_recompute_service: std::sync::Arc<dyn TrainingLoadRecomputeUseCases>,
     ) -> Self {
         self.training_load_recompute_service = Some(training_load_recompute_service);
+        self
+    }
+
+    pub fn with_wahoo_fit_enrichment_queue(
+        mut self,
+        wahoo_fit_enrichment_queue: std::sync::Arc<dyn WahooFitEnrichmentQueueUseCases>,
+    ) -> Self {
+        self.wahoo_fit_enrichment_queue = Some(wahoo_fit_enrichment_queue);
+        self
+    }
+
+    pub fn with_wahoo_service(mut self, wahoo_service: std::sync::Arc<dyn WahooUseCases>) -> Self {
+        self.wahoo_service = Some(wahoo_service);
         self
     }
 
@@ -190,28 +218,25 @@ where
 
     async fn process_due_state(&self, state: ProviderPollState) {
         let attempted_at_epoch_seconds = self.clock.now_epoch_seconds();
-        let attempted_state = state.clone().mark_attempted(attempted_at_epoch_seconds);
-        let attempted_state = match self.poll_states.upsert(attempted_state).await {
-            Ok(state) => state,
-            Err(error) => {
-                warn!(
-                    user_id = %state.user_id,
-                    provider = ?state.provider,
-                    stream = ?state.stream,
-                    error = %error,
-                    "failed to persist provider poll attempt"
-                );
-                return;
-            }
-        };
+        let mut attempted_state = state.clone().mark_attempted(attempted_at_epoch_seconds);
+        if let Err(error) = self.poll_states.upsert(attempted_state.clone()).await {
+            warn!(
+                user_id = %state.user_id,
+                provider = ?state.provider,
+                stream = ?state.stream,
+                error = %error,
+                "failed to persist provider poll attempt"
+            );
+            return;
+        }
 
         match self
-            .poll_state(&attempted_state, attempted_at_epoch_seconds)
+            .poll_state(&mut attempted_state, attempted_at_epoch_seconds)
             .await
         {
             Ok(cursor) => {
-                let next_due_at_epoch_seconds =
-                    attempted_at_epoch_seconds + self.success_interval_seconds;
+                let next_due_at_epoch_seconds = attempted_at_epoch_seconds
+                    + self.success_interval_seconds_for_state(&attempted_state);
                 if let Err(error) = self
                     .poll_states
                     .upsert(attempted_state.mark_succeeded(
@@ -257,13 +282,14 @@ where
 
     async fn poll_state(
         &self,
-        state: &ProviderPollState,
+        state: &mut ProviderPollState,
         now_epoch_seconds: i64,
     ) -> Result<Option<String>, String> {
         match state.provider {
             ExternalProvider::Intervals => {
                 self.poll_intervals_state(state, now_epoch_seconds).await
             }
+            ExternalProvider::Wahoo => self.poll_wahoo_state(state, now_epoch_seconds).await,
             _ => Err(format!(
                 "provider polling is not implemented for {:?}",
                 state.provider
@@ -271,9 +297,16 @@ where
         }
     }
 
+    fn success_interval_seconds_for_state(&self, state: &ProviderPollState) -> i64 {
+        match state.provider {
+            ExternalProvider::Wahoo => DEFAULT_WAHOO_SUCCESS_INTERVAL_SECONDS,
+            _ => self.success_interval_seconds,
+        }
+    }
+
     async fn poll_intervals_state(
         &self,
-        state: &ProviderPollState,
+        state: &mut ProviderPollState,
         now_epoch_seconds: i64,
     ) -> Result<Option<String>, String> {
         let credentials = self
@@ -296,6 +329,207 @@ where
                 .await
             }
         }
+    }
+
+    async fn poll_wahoo_state(
+        &self,
+        state: &mut ProviderPollState,
+        now_epoch_seconds: i64,
+    ) -> Result<Option<String>, String> {
+        if state.stream != ProviderPollStream::CompletedWorkouts {
+            return Err(format!(
+                "provider polling is not implemented for {:?} {:?}",
+                state.provider, state.stream
+            ));
+        }
+
+        let wahoo_service = self
+            .wahoo_service
+            .as_ref()
+            .ok_or_else(|| "Wahoo service is not configured".to_string())?;
+        let parsed_cursor = parse_wahoo_cursor(state.cursor.as_deref())?;
+        let initial_watermark =
+            wahoo_initial_watermark(now_epoch_seconds, self.completed_past_days);
+        let watermark = parsed_cursor.watermark.or(initial_watermark);
+        let mut page = parsed_cursor.next_page;
+        let per_page = match state.cursor.as_deref() {
+            None => DEFAULT_WAHOO_BOOTSTRAP_PER_PAGE,
+            Some(cursor) if cursor.trim().is_empty() => DEFAULT_WAHOO_BOOTSTRAP_PER_PAGE,
+            Some(cursor) if cursor.trim_start().starts_with('{') => parsed_cursor.per_page,
+            Some(_) => DEFAULT_WAHOO_INCREMENTAL_PER_PAGE,
+        };
+        let mut workouts_to_import = Vec::new();
+        let mut newest_seen_cursor = parsed_cursor.newest_seen.or(watermark.clone());
+
+        loop {
+            let list = match wahoo_service
+                .list_workouts(&state.user_id, page, per_page)
+                .await
+            {
+                Ok(list) => list,
+                Err(error) => {
+                    if page != parsed_cursor.next_page {
+                        let resume_cursor = format_wahoo_resume_cursor(&WahooPollCursor {
+                            watermark: watermark.clone(),
+                            next_page: page,
+                            per_page,
+                            newest_seen: newest_seen_cursor.clone(),
+                        })?;
+                        self.import_scanned_wahoo_workouts(
+                            state,
+                            &workouts_to_import,
+                            now_epoch_seconds,
+                        )
+                        .await?;
+                        state.cursor = Some(resume_cursor);
+                    }
+                    return Err(error.to_string());
+                }
+            };
+
+            if list.workouts.is_empty() {
+                break;
+            }
+
+            let list_len = list.workouts.len();
+            for workout in list.workouts {
+                let updated_at = workout_sort_key(&workout)?;
+                if watermark
+                    .as_ref()
+                    .is_some_and(|watermark| updated_at <= *watermark)
+                {
+                    continue;
+                }
+                newest_seen_cursor = match newest_seen_cursor {
+                    Some(current) => Some(std::cmp::max(current, updated_at.clone())),
+                    None => Some(updated_at.clone()),
+                };
+                if workout.workout_summary.is_some() {
+                    workouts_to_import.push(workout);
+                }
+            }
+
+            if list_len < per_page {
+                break;
+            }
+
+            page += 1;
+        }
+
+        self.import_scanned_wahoo_workouts(state, &workouts_to_import, now_epoch_seconds)
+            .await?;
+
+        Ok(newest_seen_cursor)
+    }
+
+    async fn import_scanned_wahoo_workouts(
+        &self,
+        state: &ProviderPollState,
+        workouts_to_import: &[crate::domain::wahoo::WahooWorkout],
+        now_epoch_seconds: i64,
+    ) -> Result<(), String> {
+        let mut earliest_imported_date = None::<String>;
+        for workout in workouts_to_import.iter().rev() {
+            let Some(command) = map_workout_to_import_command(&state.user_id, workout) else {
+                continue;
+            };
+
+            let import_outcome = match self.imports.import(command).await {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    self.recompute_partial_wahoo_imports_if_needed(
+                        state,
+                        earliest_imported_date.as_deref(),
+                        now_epoch_seconds,
+                    )
+                    .await;
+                    return Err(error.to_string());
+                }
+            };
+            if let Some(date) = workout.starts.get(..10) {
+                earliest_imported_date = match earliest_imported_date {
+                    Some(current) => Some(std::cmp::min(current, date.to_string())),
+                    None => Some(date.to_string()),
+                };
+            }
+            if let Err(error) = self
+                .enqueue_wahoo_fit_enrichment_if_needed(state, workout, &import_outcome)
+                .await
+            {
+                self.recompute_partial_wahoo_imports_if_needed(
+                    state,
+                    earliest_imported_date.as_deref(),
+                    now_epoch_seconds,
+                )
+                .await;
+                return Err(error);
+            }
+        }
+
+        if let (Some(service), Some(oldest_date)) = (
+            &self.training_load_recompute_service,
+            earliest_imported_date.as_deref(),
+        ) {
+            service
+                .recompute_from(&state.user_id, oldest_date, now_epoch_seconds)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+
+        Ok(())
+    }
+
+    async fn recompute_partial_wahoo_imports_if_needed(
+        &self,
+        state: &ProviderPollState,
+        oldest_date: Option<&str>,
+        now_epoch_seconds: i64,
+    ) {
+        if let (Some(service), Some(oldest_date)) =
+            (&self.training_load_recompute_service, oldest_date)
+        {
+            if let Err(recompute_error) = service
+                .recompute_from(&state.user_id, oldest_date, now_epoch_seconds)
+                .await
+            {
+                warn!(
+                    user_id = %state.user_id,
+                    oldest_date,
+                    error = %recompute_error,
+                    "training load recompute failed after partial Wahoo completed workout import"
+                );
+            }
+        }
+    }
+
+    async fn enqueue_wahoo_fit_enrichment_if_needed(
+        &self,
+        state: &ProviderPollState,
+        workout: &crate::domain::wahoo::WahooWorkout,
+        import_outcome: &crate::domain::external_sync::ExternalImportOutcome,
+    ) -> Result<(), String> {
+        let Some(queue) = &self.wahoo_fit_enrichment_queue else {
+            return Ok(());
+        };
+        if import_outcome.canonical_entity.entity_kind != CanonicalEntityKind::CompletedWorkout {
+            return Ok(());
+        }
+        let has_fit_file = workout
+            .workout_summary
+            .as_ref()
+            .and_then(|summary| summary.file.as_ref())
+            .is_some_and(|file| !file.url.trim().is_empty());
+        if !has_fit_file {
+            return Ok(());
+        }
+        queue
+            .enqueue_enrichment(
+                &state.user_id,
+                &import_outcome.canonical_entity.entity_id,
+                workout.id,
+            )
+            .await
+            .map_err(|error| error.to_string())
     }
 
     async fn poll_intervals_calendar_stream(
@@ -513,7 +747,8 @@ where
 
 pub fn spawn_provider_polling_loop<Api, Settings, PollStates, Imports, Time, Ids, Refresh>(
     service: ProviderPollingService<Api, Settings, PollStates, Imports, Time, Ids, Refresh>,
-) where
+) -> BackgroundTaskHandle
+where
     Api: IntervalsApiPort,
     Settings: IntervalsSettingsPort,
     PollStates: ProviderPollStateRepository,
@@ -522,17 +757,26 @@ pub fn spawn_provider_polling_loop<Api, Settings, PollStates, Imports, Time, Ids
     Ids: IdGenerator,
     Refresh: CalendarEntryViewRefreshPort,
 {
-    tokio::spawn(async move {
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
+    let join_handle = tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(DEFAULT_LOOP_INTERVAL_SECONDS));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
-            ticker.tick().await;
-            if let Err(error) = service.poll_due_once().await {
-                warn!(%error, "provider polling loop failed to list due streams");
+            tokio::select! {
+                _ = shutdown_rx.changed() => {
+                    break;
+                }
+                _ = ticker.tick() => {
+                    if let Err(error) = service.poll_due_once().await {
+                        warn!(%error, "provider polling loop failed to list due streams");
+                    }
+                }
             }
         }
     });
+
+    BackgroundTaskHandle::new("provider-polling", shutdown_tx, join_handle)
 }
 
 fn epoch_seconds_to_date(epoch_seconds: i64) -> NaiveDate {
@@ -551,16 +795,120 @@ fn parse_date_cursor(cursor: Option<&str>) -> Result<NaiveDate, String> {
         .map_err(|error| format!("invalid poll cursor '{cursor}': {error}"))
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+struct WahooPollCursor {
+    watermark: Option<String>,
+    #[serde(default = "default_wahoo_cursor_page")]
+    next_page: usize,
+    #[serde(default = "default_wahoo_cursor_resume_per_page")]
+    per_page: usize,
+    newest_seen: Option<String>,
+}
+
+impl Default for WahooPollCursor {
+    fn default() -> Self {
+        Self {
+            watermark: None,
+            next_page: default_wahoo_cursor_page(),
+            per_page: default_wahoo_cursor_resume_per_page(),
+            newest_seen: None,
+        }
+    }
+}
+
+fn default_wahoo_cursor_page() -> usize {
+    1
+}
+
+fn default_wahoo_cursor_resume_per_page() -> usize {
+    DEFAULT_WAHOO_INCREMENTAL_PER_PAGE
+}
+
+fn parse_wahoo_cursor(cursor: Option<&str>) -> Result<WahooPollCursor, String> {
+    match cursor {
+        None => Ok(WahooPollCursor::default()),
+        Some(cursor) if cursor.trim().is_empty() => Ok(WahooPollCursor::default()),
+        Some(cursor) if cursor.trim_start().starts_with('{') => {
+            let mut checkpoint: WahooPollCursor = serde_json::from_str(cursor)
+                .map_err(|error| format!("invalid Wahoo poll checkpoint '{cursor}': {error}"))?;
+            if checkpoint.next_page == 0 {
+                return Err(format!(
+                    "invalid Wahoo poll checkpoint '{cursor}': next_page must be at least 1"
+                ));
+            }
+            if checkpoint.per_page == 0 {
+                return Err(format!(
+                    "invalid Wahoo poll checkpoint '{cursor}': per_page must be at least 1"
+                ));
+            }
+            checkpoint.watermark = checkpoint
+                .watermark
+                .as_deref()
+                .map(parse_wahoo_timestamp)
+                .transpose()
+                .map_err(|error| {
+                    format!("invalid Wahoo poll checkpoint '{cursor}' watermark: {error}")
+                })?;
+            checkpoint.newest_seen = checkpoint
+                .newest_seen
+                .as_deref()
+                .map(parse_wahoo_timestamp)
+                .transpose()
+                .map_err(|error| {
+                    format!("invalid Wahoo poll checkpoint '{cursor}' newest_seen: {error}")
+                })?;
+            Ok(checkpoint)
+        }
+        Some(cursor) => parse_wahoo_timestamp(cursor)
+            .map(|watermark| WahooPollCursor {
+                watermark: Some(watermark),
+                next_page: 1,
+                per_page: DEFAULT_WAHOO_INCREMENTAL_PER_PAGE,
+                newest_seen: None,
+            })
+            .map_err(|error| format!("invalid Wahoo poll cursor '{cursor}': {error}")),
+    }
+}
+
+fn format_wahoo_resume_cursor(cursor: &WahooPollCursor) -> Result<String, String> {
+    serde_json::to_string(cursor)
+        .map_err(|error| format!("failed to encode Wahoo poll checkpoint: {error}"))
+}
+
+fn wahoo_initial_watermark(now_epoch_seconds: i64, completed_past_days: i64) -> Option<String> {
+    let today = epoch_seconds_to_date(now_epoch_seconds);
+    let bootstrap_date = today - ChronoDuration::days(completed_past_days);
+    bootstrap_date
+        .and_hms_opt(0, 0, 0)
+        .map(|datetime| DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc).to_rfc3339())
+}
+
+fn workout_sort_key(workout: &crate::domain::wahoo::WahooWorkout) -> Result<String, String> {
+    let raw = workout
+        .workout_summary
+        .as_ref()
+        .and_then(|summary| summary.updated_at.as_deref())
+        .or(workout.updated_at.as_deref())
+        .unwrap_or(workout.starts.as_str());
+    parse_wahoo_timestamp(raw)
+}
+
+fn parse_wahoo_timestamp(value: &str) -> Result<String, String> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map(|timestamp| timestamp.with_timezone(&Utc).to_rfc3339())
+        .map_err(|error| error.to_string())
+}
+
 fn advance_calendar_cursor(
     state: &ProviderPollState,
     events: &[crate::domain::intervals::Event],
     range: &DateRange,
 ) -> Option<String> {
-    if events.is_empty() {
-        return state.cursor.clone().or_else(|| Some(range.newest.clone()));
+    if !events.is_empty() {
+        return Some(range.newest.clone());
     }
 
-    Some(range.newest.clone())
+    state.cursor.clone().or_else(|| Some(range.newest.clone()))
 }
 
 fn advance_completed_workout_cursor(

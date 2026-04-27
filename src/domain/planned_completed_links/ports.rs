@@ -17,6 +17,12 @@ pub trait PlannedCompletedWorkoutLinkRepository: Clone + Send + Sync + 'static {
         completed_workout_id: &str,
     ) -> BoxFuture<Result<Option<PlannedCompletedWorkoutLink>, PlannedCompletedWorkoutLinkError>>;
 
+    fn find_by_planned_workout_ids(
+        &self,
+        user_id: &str,
+        planned_workout_ids: &[String],
+    ) -> BoxFuture<Result<Vec<PlannedCompletedWorkoutLink>, PlannedCompletedWorkoutLinkError>>;
+
     fn upsert(
         &self,
         link: PlannedCompletedWorkoutLink,

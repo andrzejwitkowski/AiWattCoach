@@ -7,8 +7,9 @@ use chrono::{Duration, NaiveDate};
 
 use crate::domain::{
     completed_workouts::{
-        BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutError,
-        CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutSeries,
+        completed_workout_activity_id, BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout,
+        CompletedWorkoutError, CompletedWorkoutMetrics, CompletedWorkoutRepository,
+        CompletedWorkoutSeries,
     },
     identity::Clock,
     intervals::{
@@ -382,7 +383,10 @@ where
             .list_completed_workouts(user_id, &activities_range.oldest, &activities_range.newest)
             .await
         {
-            Ok(workouts) => (workouts, "ok".to_string()),
+            Ok(workouts) => (
+                dedup_completed_workouts_for_prompt(workouts),
+                "ok".to_string(),
+            ),
             Err(_) => (Vec::new(), "internal_error".to_string()),
         };
         let history_activities = history_completed_workouts
@@ -880,6 +884,56 @@ fn build_direct_event_matches(
         .collect()
 }
 
+// Inputs are already filtered through authoritative repositories, so prompt dedupe only needs
+// to collapse true duplicates that share the same logical activity id on the same day.
+fn dedup_completed_workouts_for_prompt(workouts: Vec<CompletedWorkout>) -> Vec<CompletedWorkout> {
+    let mut best_by_key = BTreeMap::<(String, String), CompletedWorkout>::new();
+
+    for workout in workouts {
+        let date = date_key(&workout.start_date_local).to_string();
+        let activity_id = workout
+            .source_activity_id
+            .clone()
+            .unwrap_or_else(|| legacy_activity_id(&workout.completed_workout_id).to_string());
+        let key = (date, activity_id);
+
+        match best_by_key.get(&key) {
+            Some(existing) if !prefer_completed_workout_for_prompt(&workout, existing) => {}
+            _ => {
+                best_by_key.insert(key, workout);
+            }
+        }
+    }
+
+    best_by_key.into_values().collect()
+}
+
+fn prefer_completed_workout_for_prompt(
+    candidate: &CompletedWorkout,
+    existing: &CompletedWorkout,
+) -> bool {
+    match (
+        numeric_completed_workout_id(candidate),
+        numeric_completed_workout_id(existing),
+    ) {
+        (Some(candidate_id), Some(existing_id)) if candidate_id != existing_id => {
+            candidate_id > existing_id
+        }
+        _ if candidate.start_date_local != existing.start_date_local => {
+            candidate.start_date_local > existing.start_date_local
+        }
+        _ => candidate.completed_workout_id > existing.completed_workout_id,
+    }
+}
+
+fn numeric_completed_workout_id(workout: &CompletedWorkout) -> Option<i64> {
+    workout
+        .completed_workout_id
+        .rsplit(':')
+        .next()
+        .and_then(|value| value.parse::<i64>().ok())
+}
+
 fn map_planned_workout_to_event(workout: &PlannedWorkout) -> Event {
     Event {
         id: canonical_event_id(&workout.planned_workout_id, &workout.date),
@@ -1138,9 +1192,7 @@ fn map_canonical_line_to_intervals_line(
 }
 
 fn legacy_activity_id(completed_workout_id: &str) -> &str {
-    completed_workout_id
-        .strip_prefix("intervals-activity:")
-        .unwrap_or(completed_workout_id)
+    completed_workout_activity_id(completed_workout_id)
 }
 
 fn canonical_event_id(entity_id: &str, date: &str) -> i64 {
@@ -1197,4 +1249,107 @@ fn default_special_day_name(kind: &SpecialDayKind) -> String {
 
 fn date_key(value: &str) -> &str {
     value.get(..10).unwrap_or(value)
+}
+
+#[cfg(test)]
+mod dedup_tests {
+    use crate::domain::completed_workouts::{
+        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics,
+    };
+
+    use super::{dedup_completed_workouts_for_prompt, prefer_completed_workout_for_prompt};
+
+    fn sample_workout(id: &str, start_date_local: &str) -> CompletedWorkout {
+        CompletedWorkout::new(
+            id.to_string(),
+            "user-1".to_string(),
+            start_date_local.to_string(),
+            None,
+            None,
+            None,
+            None,
+            Some("Ride".to_string()),
+            None,
+            false,
+            None,
+            None,
+            CompletedWorkoutMetrics {
+                training_stress_score: None,
+                normalized_power_watts: None,
+                intensity_factor: None,
+                efficiency_factor: None,
+                variability_index: None,
+                average_power_watts: None,
+                ftp_watts: None,
+                total_work_joules: None,
+                calories: None,
+                trimp: None,
+                power_load: None,
+                heart_rate_load: None,
+                pace_load: None,
+                strain_score: None,
+            },
+            CompletedWorkoutDetails {
+                intervals: Vec::new(),
+                interval_groups: Vec::new(),
+                streams: Vec::new(),
+                interval_summary: Vec::new(),
+                skyline_chart: Vec::new(),
+                power_zone_times: Vec::new(),
+                heart_rate_zone_times: Vec::new(),
+                pace_zone_times: Vec::new(),
+                gap_zone_times: Vec::new(),
+            },
+            None,
+        )
+    }
+
+    #[test]
+    fn prefer_completed_workout_for_prompt_uses_numeric_ids_before_lexicographic_order() {
+        let candidate = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
+        let existing = sample_workout("wahoo-workout:9", "2026-05-01T08:00:00Z");
+
+        assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
+        assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
+
+    #[test]
+    fn prefer_completed_workout_for_prompt_falls_back_to_completed_workout_id_order() {
+        let candidate = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
+        let existing = sample_workout("intervals-activity:10", "2026-05-01T08:00:00Z");
+
+        assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
+        assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
+
+    #[test]
+    fn prefer_completed_workout_for_prompt_falls_back_when_only_one_id_is_numeric() {
+        let candidate = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
+        let existing = sample_workout("completed-1", "2026-05-01T08:00:00Z");
+
+        assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
+        assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
+
+    #[test]
+    fn prefer_completed_workout_for_prompt_falls_back_to_start_time_when_ids_tie() {
+        let candidate = sample_workout("wahoo-workout:10", "2026-05-01T09:00:00Z");
+        let existing = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
+
+        assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
+        assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
+
+    #[test]
+    fn dedup_completed_workouts_for_prompt_keeps_preferred_duplicate() {
+        let mut intervals = sample_workout("intervals-activity:10", "2026-05-01T08:00:00Z");
+        intervals.source_activity_id = Some("10".to_string());
+        let mut wahoo = sample_workout("wahoo-workout:10", "2026-05-01T08:05:00Z");
+        wahoo.source_activity_id = Some("10".to_string());
+
+        let deduped = dedup_completed_workouts_for_prompt(vec![intervals, wahoo.clone()]);
+
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0].completed_workout_id, wahoo.completed_workout_id);
+    }
 }

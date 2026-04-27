@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::domain::llm::{
-    BoxFuture, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError, LlmProvider,
-    LlmProviderConfig,
+    llm_request_timeout, BoxFuture, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError,
+    LlmProvider, LlmProviderConfig,
 };
 
 use super::{
@@ -29,12 +29,8 @@ impl LlmAdapter {
         }
     }
 
-    fn timeout_for_model(model: &str) -> Duration {
-        if is_thinking_model(model) {
-            Duration::from_secs(180)
-        } else {
-            Duration::from_secs(60)
-        }
+    fn timeout_for_model(_model: &str) -> Duration {
+        llm_request_timeout()
     }
 }
 
@@ -70,14 +66,6 @@ impl LlmChatPort for LlmAdapter {
     }
 }
 
-fn is_thinking_model(model: &str) -> bool {
-    let normalized = model.trim().to_ascii_lowercase();
-    normalized.starts_with("o1")
-        || normalized.starts_with("o3")
-        || normalized.contains("thinking")
-        || normalized.contains("reason")
-}
-
 fn format_timeout(timeout: Duration) -> String {
     if timeout.as_secs() > 0 && timeout.subsec_nanos() == 0 {
         format!("{} seconds", timeout.as_secs())
@@ -95,15 +83,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn standard_models_keep_sixty_second_timeout() {
+    fn standard_models_use_shared_three_minute_timeout() {
         assert_eq!(
             LlmAdapter::timeout_for_model("gpt-4o-mini"),
-            Duration::from_secs(60)
+            Duration::from_secs(180)
         );
     }
 
     #[test]
-    fn thinking_models_get_three_minute_timeout() {
+    fn thinking_models_use_same_shared_three_minute_timeout() {
         assert_eq!(
             LlmAdapter::timeout_for_model("o1-mini"),
             Duration::from_secs(180)
@@ -143,14 +131,6 @@ mod tests {
                 "LLM request timed out after 20 ms for model o1-mini".to_string(),
             ))
         );
-    }
-
-    #[test]
-    fn thinking_model_detection_matches_supported_names() {
-        assert!(is_thinking_model("o1-mini"));
-        assert!(is_thinking_model("o3"));
-        assert!(is_thinking_model("gemini-2.5-pro-thinking"));
-        assert!(!is_thinking_model("gpt-4o-mini"));
     }
 
     fn with_timeout(

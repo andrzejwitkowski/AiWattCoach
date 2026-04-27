@@ -164,6 +164,8 @@ fn build_activity_import_command(
         .into_iter()
         .flatten()
         .collect(),
+        wahoo_plan_id: None,
+        wahoo_workout_token: None,
         workout,
     }))
 }

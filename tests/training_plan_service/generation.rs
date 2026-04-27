@@ -86,6 +86,38 @@ async fn persists_workout_recap_before_generating_training_plan_window() {
 }
 
 #[tokio::test]
+async fn passes_planning_conversation_context_to_initial_plan_generation() {
+    let built = build_service(
+        new_call_log(),
+        vec![Ok(workout_recap())],
+        vec![Ok(valid_plan_window(FIRST_DAY))],
+        vec![],
+        FIRST_DAY,
+    );
+    built
+        .workout_summary
+        .set_planning_context(Some(sample_planning_context()));
+
+    built
+        .service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    let planning_contexts = built.generator.initial_planning_contexts();
+    assert_eq!(planning_contexts.len(), 1);
+    let planning_context = planning_contexts[0]
+        .as_ref()
+        .expect("expected planning context for initial generation");
+    assert_eq!(planning_context.rpe, Some(6));
+    assert_eq!(planning_context.messages.len(), 2);
+    assert_eq!(
+        planning_context.messages[0].role,
+        TrainingPlanConversationRole::Coach
+    );
+}
+
+#[tokio::test]
 async fn checkpoints_recap_in_operation_before_persisting_to_workout_summary() {
     let call_log = new_call_log();
     let built = build_service(

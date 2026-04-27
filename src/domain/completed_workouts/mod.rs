@@ -1,9 +1,12 @@
+mod authoritative;
 mod model;
 mod ports;
+mod selection;
 mod service;
 #[cfg(test)]
 mod tests;
 
+pub use authoritative::AuthoritativeCompletedWorkoutRepository;
 pub use model::{
     CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutError, CompletedWorkoutInterval,
     CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics, CompletedWorkoutSeries,

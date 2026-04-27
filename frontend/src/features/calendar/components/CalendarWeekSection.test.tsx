@@ -394,7 +394,7 @@ describe('CalendarWeekSection', () => {
     const onSelectDayItems = vi.fn();
     render(<CalendarWeekSection week={week} onSelectWorkout={onSelectWorkout} onSelectDayItems={onSelectDayItems} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /grojec/i }));
+    await userEvent.click(screen.getByRole('button', { name: /opener/i }));
 
     expect(onSelectWorkout).not.toHaveBeenCalled();
     expect(onSelectDayItems).toHaveBeenCalledTimes(1);

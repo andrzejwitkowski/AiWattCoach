@@ -1,11 +1,7 @@
 use std::{
     fs,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, OnceLock},
 };
 
 use aiwattcoach::{
@@ -19,7 +15,8 @@ use aiwattcoach::{
         calendar_labels::{CalendarLabelSource, CalendarLabelsService},
         calendar_view::{
             CalendarEntryKind, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
-            CalendarEntryViewRepository,
+            CalendarEntryViewRepository, ManualCalendarRefreshResult,
+            ManualCalendarRefreshUseCases,
         },
         completed_workouts::{
             CompletedWorkout, CompletedWorkoutError, CompletedWorkoutReadService,
@@ -39,7 +36,7 @@ use mongodb::Client;
 
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
-static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
 
 pub(crate) async fn intervals_test_app(
     identity_service: impl IdentityUseCases + 'static,
@@ -85,6 +82,51 @@ pub(crate) async fn intervals_test_app_with_calendar_entries(
     .await
 }
 
+pub(crate) async fn intervals_test_app_with_manual_calendar_refresh_service(
+    identity_service: impl IdentityUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+    manual_calendar_refresh_service: Arc<dyn ManualCalendarRefreshUseCases>,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = shared_frontend_fixture();
+    let completed_workout_repository = InMemoryCompletedWorkoutRepository::default();
+    let calendar_service = Arc::new(
+        CalendarService::new(
+            intervals_service.clone(),
+            InMemoryCalendarEntryViewRepository::default(),
+            EmptyTrainingPlanProjectionRepository,
+            InMemoryPlannedWorkoutSyncRepository,
+            TestClock,
+        )
+        .with_completed_workouts(completed_workout_repository.clone()),
+    );
+    let calendar_labels_service = Arc::new(CalendarLabelsService::new(EmptyCalendarLabelSource));
+    let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
+        completed_workout_repository,
+    ));
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_identity_service(
+            Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_calendar_service(calendar_service)
+        .with_calendar_labels_service(calendar_labels_service)
+        .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
+        .with_completed_workout_service(completed_workout_service)
+        .with_intervals_service(Arc::new(intervals_service)),
+        fixture.dist_dir(),
+    )
+}
+
 pub(crate) async fn intervals_test_app_with_calendar_entries_and_completed_workouts(
     identity_service: impl IdentityUseCases + 'static,
     intervals_service: impl IntervalsUseCases + Clone + 'static,
@@ -126,7 +168,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
     completed_workouts: impl CompletedWorkoutRepository + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
+    let fixture = shared_frontend_fixture();
     let completed_workout_repository = completed_workouts;
     let calendar_service = Arc::new(
         CalendarService::new(
@@ -139,6 +181,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
         .with_completed_workouts(completed_workout_repository.clone()),
     );
     let calendar_labels_service = Arc::new(CalendarLabelsService::new(EmptyCalendarLabelSource));
+    let manual_calendar_refresh_service = Arc::new(TestManualCalendarRefreshService);
     let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
         completed_workout_repository,
     ));
@@ -158,6 +201,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
         )
         .with_calendar_service(calendar_service)
         .with_calendar_labels_service(calendar_labels_service)
+        .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
         .with_completed_workout_service(completed_workout_service)
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
@@ -173,7 +217,7 @@ pub(crate) async fn intervals_test_app_with_all_services(
     race_service: impl RaceUseCases + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
+    let fixture = shared_frontend_fixture();
     let calendar_service = Arc::new(
         CalendarService::new(
             intervals_service.clone(),
@@ -185,6 +229,7 @@ pub(crate) async fn intervals_test_app_with_all_services(
         .with_completed_workouts(InMemoryCompletedWorkoutRepository::default()),
     );
     let calendar_labels_service = Arc::new(CalendarLabelsService::new(calendar_label_source));
+    let manual_calendar_refresh_service = Arc::new(TestManualCalendarRefreshService);
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -201,6 +246,7 @@ pub(crate) async fn intervals_test_app_with_all_services(
         )
         .with_calendar_service(calendar_service)
         .with_calendar_labels_service(calendar_labels_service)
+        .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
         .with_race_service(Arc::new(race_service))
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
@@ -454,6 +500,40 @@ pub(crate) struct InMemoryCalendarEntryViewRepository {
 }
 
 impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
+    fn find_oldest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CalendarBoxFuture<Result<Option<String>, CalendarEntryViewError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| entry.user_id == user_id)
+                .map(|entry| entry.date.clone())
+                .min())
+        })
+    }
+
+    fn find_newest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CalendarBoxFuture<Result<Option<String>, CalendarEntryViewError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| entry.user_id == user_id)
+                .map(|entry| entry.date.clone())
+                .max())
+        })
+    }
+
     fn list_by_user_id_and_date_range(
         &self,
         user_id: &str,
@@ -536,6 +616,24 @@ impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
     }
 }
 
+#[derive(Clone, Default)]
+struct TestManualCalendarRefreshService;
+
+impl ManualCalendarRefreshUseCases for TestManualCalendarRefreshService {
+    fn refresh_calendar_view_for_user(
+        &self,
+        _user_id: &str,
+    ) -> CalendarBoxFuture<Result<ManualCalendarRefreshResult, CalendarEntryViewError>> {
+        Box::pin(async {
+            Ok(ManualCalendarRefreshResult {
+                oldest: "2026-01-01".to_string(),
+                newest: "2026-04-27".to_string(),
+                rebuilt_entry_count: 3,
+            })
+        })
+    }
+}
+
 impl InMemoryCalendarEntryViewRepository {
     pub(crate) fn with_entries(entries: Vec<CalendarEntryView>) -> Self {
         Self {
@@ -593,17 +691,17 @@ struct FrontendFixture {
     root: PathBuf,
 }
 
+fn shared_frontend_fixture() -> &'static FrontendFixture {
+    SHARED_FRONTEND_FIXTURE.get_or_init(frontend_fixture)
+}
+
 fn frontend_fixture() -> FrontendFixture {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let counter = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
-        "aiwattcoach-intervals-spa-fixture-{}-{unique}-{counter}",
+        "aiwattcoach-intervals-spa-fixture-{}",
         std::process::id()
     ));
     let dist_dir = root.join("dist");
+    let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&dist_dir).unwrap();
     fs::write(
         dist_dir.join("index.html"),

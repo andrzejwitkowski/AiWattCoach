@@ -27,6 +27,150 @@ Read this file before planning and before implementation.
 - Fix: taught the workout parser to recognize canonical repeat-header lines without inline durations, expand the following contiguous timed steps as a repeated block when building segments, and added a regression test for the full repeated duration/segment labels.
 - Prevention: when one parser consumes text emitted by another canonical serializer, add regression coverage for structural constructs like repeat headers instead of assuming a flat line-by-line parser preserves grouped semantics.
 
+### 2026-04-27 | user | Wahoo planned-workout sync invalid file
+
+- Problem: Wahoo planned-workout sync sent `POST/PUT /v1/plans` as JSON with a raw base64 string in `plan.file`, while the Wahoo Plans API expects form-encoded fields and a file value wrapped as `data:application/json;base64,...`. That made valid generated `plan.json` payloads fail upstream with `422 Unprocessable Entity (oauth_error=Invalid file)`.
+- Fix: changed the Wahoo client plan create/update paths to send form bodies with `plan[file]`, `plan[filename]`, and provider metadata exactly as documented, wrapped the base64 payload in a JSON data URI, removed the now-dead plan JSON request DTOs, and added focused client tests for both create and update plan form construction.
+- Prevention: when an upstream API describes file uploads as `resource[file]` parameters, verify both the transport encoding (`form` vs `json`) and the exact file wrapper format (`data:<mime>;base64,...` vs raw base64) before assuming a nested JSON request body is acceptable.
+
+### 2026-04-27 | Copilot/CodeRabbit | PR #152 manual calendar refresh review follow-up
+
+- Problem: PR review found five confirmed issues in the self-service calendar refresh feature: the rebuild range still used a full-table scan with a "9999-12-31" sentinel instead of two indexed date lookups, the frontend 401-redirect test restored `window.location` without `try/finally`, the backend handler leaked raw repository error messages and user identifiers in logs, the backend error mapping did not cover the new `InvariantViolation` variant from race/credential errors, and no REST test verified user scoping on the refresh endpoint.
+- Fix: replaced `list_existing_view_dates_for_user` with `find_oldest_date_by_user_id` and `find_newest_date_by_user_id` on the `CalendarEntryViewRepository` trait, implemented both in Mongo (indexed, sorted), in-memory (ports, unit tests, integration test app), and domain test repos; added `CalendarEntryViewError::InvariantViolation(String)` and mapped it to a generic `"failed to refresh calendar view"` response in the REST handler alongside `Repository` errors; extracted `pseudonymize_user_id` as `pub(crate)` and used it in the refresh handler log lines; wrapped the frontend `window.location` mock/restore in `try/finally`; added integration tests for user-scoping and invariant-violation error responses.
+- Prevention: when a new endpoint returns error details, audit both response bodies and log lines for raw identifiers or provider messages before sending for review. When an error enum grows new variants, update all exhaustive match sites including REST error mapping and cross-domain `From` impls. When mocking `window.location` in frontend tests, always restore it in `finally`. When adding repository methods for range computation, prefer targeted index-friendly lookups over full-table scans with sentinel values.
+
+### 2026-04-27 | Copilot/CodeRabbit/internal review loop | manual calendar refresh review follow-up
+
+- Problem: the first self-service calendar refresh version still hard-capped the rebuild range at `today`, so future calendar entries already stored in `calendar_view` could survive a manual rebuild unchanged and future-only data could collapse into an inverted or incomplete range. The Settings card also surfaced raw `500` fallback text because the endpoint returned a bare status with no structured message, and the frontend POST helper still sent a dummy JSON body to a body-less refresh endpoint.
+- Fix: changed manual refresh range resolution to derive `oldest..newest` from all calendar sources plus persisted `calendar_view` dates, keeping future entries inside the rebuild window; added focused regressions for future-inclusive and future-only existing-view cases; changed `POST /api/calendar/refresh` to return a JSON `{ message }` body on repository failures; taught `CalendarRefreshCard` to redirect on `AuthenticationError`; and made the shared `post(...)` helper accept body-less POST requests so the refresh call no longer sends `{}`.
+- Prevention: for any manual projection rebuild, compute the full effective range from every persisted source that can contribute to the projection, including already-materialized read-model rows when they may extend beyond "today". For frontend-triggered maintenance endpoints, keep the transport contract user-friendly on failure and do not force empty JSON payloads onto body-less routes.
+
+### 2026-04-27 | Copilot/CodeRabbit/user | PR #151 follow-up review fixes
+
+- Problem: follow-up review on PR #151 found a few real gaps and one readability issue: power-detail authority ignored `CompletedWorkoutStream.all_null`, Wahoo FIT enrichment still attempted calendar refreshes for malformed `start_date_local`, the sparse-Wahoo calendar regression hid its intent behind mutating an originally detailed fixture, and regenerated graphify artifacts wrote `Graph Report - .` instead of the repo name.
+- Fix: made completed-workout power-detail detection require `!all_null` with a regression, changed Wahoo FIT day refresh to skip malformed dates with a warning instead of calling refresh on an invalid range, introduced a `sample_completed_basic_workout()` fixture plus the inverse calendar authority regression where detailed Wahoo wins back the day, added the asymmetric prompt-dedupe fallback test, and updated the graphify rebuild script to default the project name to `AiWattCoach` before regenerating artifacts.
+- Prevention: when authority rules depend on canonical detail flags, use every semantic field that already exists on the model instead of inferring from sample presence alone. For projection refresh helpers, do not turn malformed local dates into retryable side effects; short-circuit safely and log the invariant break. In tests, prefer fixtures whose names encode the behavioral distinction under review instead of mutating a richer baseline fixture into a sparse one inline.
+
+### 2026-04-27 | user | calendar/LLM completed-workout selection and Wahoo FIT refresh
+
+- Problem: the calendar and training-context read path still treated Wahoo as authoritative for a whole day even when the Wahoo completed workout was only a sparse summary and Intervals already had richer power details. Separately, successful Wahoo FIT enrichment updated the completed workout but did not automatically refresh `calendar_view`, so the day could stay stale until a manual rebuild.
+- Fix: extracted shared completed-workout day selection that treats "detailed" as a non-empty `watts` stream, wired `AuthoritativeCompletedWorkoutRepository` to use that day-level selector, kept prompt-side dedupe limited to collapsing true duplicate logical activities, and connected `WahooFitEnrichmentService` to `CalendarEntryViewRefreshPort` so a successful enrichment refreshes that workout day automatically. Added focused regressions for authoritative day selection, training-context fallback, calendar-view refresh behavior, and scheduler wiring for the new generic refresh dependency.
+- Prevention: when two read paths must agree on source authority, centralize the authority rule in the repository or shared selector instead of re-encoding provider preference in each consumer. For enrichment flows that materially change read models, verify whether the write path must trigger the corresponding projection refresh immediately after persistence.
+
+### 2026-04-26 | user | Wahoo bootstrap poller loses all progress on rate limit
+
+- Problem: the Wahoo completed-workouts bootstrap scanned every `/v1/workouts` page before importing anything. For accounts with long history, the poller could get many successful `200` pages and then hit `429 Too Many Requests` before the scan finished, which left `cursor = null`, `last_successful_at = null`, and zero Wahoo observations/completed workouts even though dozens of pages had already been read successfully.
+- Fix: changed the Wahoo poller to persist a resumable page checkpoint in the poll cursor on partial scan failure and to import the workouts already gathered before returning the rate-limit error. Added regressions proving the poller now stores `next_page`/`newest_seen` after a later-page failure and resumes from that checkpoint on the next run instead of restarting from page 1.
+- Prevention: when a provider poll loop paginates large remote histories, do not postpone all durable progress until after the full scan succeeds. If later pages can fail or rate-limit independently, persist a resumable checkpoint and keep already-read pages importable so one late `429` does not reset the entire bootstrap to zero.
+
+### 2026-04-26 | user | Wahoo reconnect null boolean payload
+
+- Problem: after reconnecting Wahoo, the background `completed_workouts` poll could fail on `GET /v1/workouts` with `invalid type: null, expected a boolean` because Wahoo sometimes returns explicit `null` values inside the workouts payload. The DTO still relied on `#[serde(default)]` for `workout_summary.manual`, `workout_summary.edited`, `plan_ids`, and the top-level `workouts` list, but that only tolerates missing fields, not explicit `null`.
+- Fix: changed the Wahoo workouts DTO to deserialize nullable booleans and vectors through lenient helpers that map missing or `null` values to `false` / empty vectors, and added focused regressions covering the real workouts-list payload shape.
+- Prevention: when a provider field is documented or observed as nullable, do not rely on `#[serde(default)]` alone for scalars or collections because it does not accept explicit `null`; use `Option<T>` or a custom deserializer and add a regression with the real payload shape.
+
+### 2026-04-26 | CodeRabbit | PR #143 Wahoo import duration fallback
+
+- Problem: `src/adapters/wahoo/import_mapping.rs` still fell back from `summary.duration_total_seconds` straight to `workout.minutes`, but `minutes` is the planned duration, not the actual elapsed duration. When Wahoo omitted total duration but still provided summary active duration, the canonical completed workout could record a wildly inflated elapsed time.
+- Fix: changed the mapping to prefer `summary.duration_active_seconds` before the planned `workout.minutes` fallback, kept the planned-duration fallback only as a last resort with an explicit comment, and added a focused regression proving the importer now records the actual summary duration.
+- Prevention: when provider payloads expose both planned and completed-workout timing fields, derive canonical elapsed duration from summary/activity result fields first and use planned duration only as a clearly documented last-resort fallback.
+
+### 2026-04-26 | user | Wahoo workout request body logging
+
+- Problem: po domknięciu review fixów klient Wahoo nadal logował write requesty bez body preview, więc przy debugowaniu `create_workout` / `update_workout` brakowało widoczności faktycznie wysyłanego form payloadu.
+- Fix: rozszerzyłem `src/adapters/wahoo/client/logging.rs` o tryb `BodyLoggingMode::Full` dla requestów, dodałem bezpieczny preview dla form-encoded payloadów z redakcją pól wrażliwych takich jak `workout_token`, i podpiąłem ten tryb tylko pod `create_workout` / `update_workout` w `src/adapters/wahoo/client.rs`.
+- Prevention: gdy użytkownik prosi o lepszą obserwowalność na adapter write path, najpierw sprawdź `docs/logging.md` i ogranicz body logging do konkretnych requestów z redakcją sekretów, zamiast rozszerzać je globalnie na cały klient.
+
+### 2026-04-26 | user | PR #144 follow-up stale external-sync expectation
+
+- Problem: after promoting `wahoo_workout_token` matches to `PlannedCompletedWorkoutLinkMatchSource::Explicit`, I updated the production code and nearby review discussion but missed the existing domain regression `import_completed_workout_falls_back_to_wahoo_workout_token_when_plan_id_missing`, which still expected `Token` and failed the full Rust test run.
+- Fix: updated the external-sync test to assert `Explicit` for Wahoo workout-token-backed planned-workout links, matching the intended ranking behavior already implemented in `src/domain/external_sync/import/mod.rs`.
+- Prevention: whenever a review-driven change alters enum/ranking semantics, grep all focused tests for the old enum variant and rerun the full touched test module before calling the patch complete.
+
+### 2026-04-26 | Copilot/CodeRabbit | PR #144 Wahoo planned-workout review follow-up
+
+- Problem: the PR review surfaced several real gaps around Wahoo planned-workout sync and linking: Wahoo plan mapping could swallow repeat blocks past text separators, planned-workout sync re-queried Wahoo plans unnecessarily and lacked stable REST error codes for frontend handling, external-sync linking treated `wahoo_workout_token` matches as weaker token matches instead of explicit Wahoo identities, Wahoo plan lookup silently accepted duplicate `external_id` rows, and one attempted REST test covered the wrong layer for the not-connected path.
+- Fix: made Wahoo repeat parsing stop at text delimiters, simplified existing-plan resolution to avoid the duplicate lookup, added stable calendar sync error codes for invalid date / sync window / missing FTP / Wahoo-not-connected responses and updated the modal to prefer `error.body.code` with message fallback, mapped `wahoo_workout_token` link resolution to `Explicit`, rejected duplicate Wahoo plans with a focused regression, wired planned-workout Wahoo sync records into `ExternalImportService`, moved Wahoo-not-connected coverage to a domain test instead of the miswired REST harness, and kept the frontend sync-window helper aligned with the backend's current UTC-based contract.
+- Prevention: when review feedback touches transport errors, verify that the test harness actually wires the dependency path being asserted before adding or keeping a REST integration case. For provider-owned identifiers, prefer stable machine-readable codes and explicit match-source semantics instead of UI string matching or generic token classification. If a provider lookup is expected to be unique by `external_id`, treat duplicate upstream rows as an error and add a regression immediately.
+
+### 2026-04-26 | Copilot/CodeRabbit | PR #143 Wahoo second review pass
+
+- Problem: the follow-up review still pointed at a few real gaps after the first cleanup: Wahoo motorcycling was still normalized as `Ride`, partial Wahoo batch imports still skipped training-load recompute when `imports.import(...)` failed after earlier successes, planned-workout authoritative reads could miss cross-boundary completed workouts and still did per-workout link lookups, and the Wahoo FIT enrichment scheduler still trusted payload `user_id` instead of the scheduled task tenant key.
+- Fix: removed `BikingMotocycling` from Wahoo `Ride` classification and added a regression, added the same partial recompute fallback for Wahoo import failures with a focused test, expanded the completed-workout date-range window by one day on planned-workout visibility reads and bulk-loaded planned-completed links through a new repository method to eliminate the N+1 path, and changed the Wahoo FIT enrichment task payload/handler to use `task.user_id` as the source of truth with a scheduler test. While touching the same area, I also made `decode_json` synchronous, documented the same-source assumption in training-context prompt dedupe with extra tests, removed the unused FIT-file repository generic from the queue-side scheduler wrapper, and collapsed the immediate downloaded+stored FIT-file upserts into one persisted stored checkpoint while preserving the original download timestamp field semantics.
+- Prevention: when provider-specific enums distinguish human-powered and motorized activities, re-check both `activity_type` and `trainer` mappings together. Any batch import loop that can persist a prefix of records must run the same partial recompute or recovery path on every later failure edge, not only on post-import enrichment steps. For authoritative visibility filters, avoid date windows that exactly match one source if linked records can drift across boundaries, and batch bridge/link lookups before adding per-item async checks on hot read paths. For scheduler tasks, always treat the persisted `ScheduledTask.user_id` as the tenant source of truth rather than duplicating user scope inside untrusted payload JSON.
+
+### 2026-04-26 | Copilot/CodeRabbit | PR #143 Wahoo review follow-up
+
+- Problem: the Wahoo-first branch still had several review-confirmed gaps: indoor Wahoo rides were classified with `BikingMotocycling` instead of `BikingIndoor`, the completed-workout poller stopped pagination on the first stale `updated_at` even though the API is sorted by `starts` and could therefore skip recently edited older workouts, parse failures in FIT enrichment were retried even when stored bytes made them deterministic, persisted legacy Intervals calendar poll states were not being parked after the completed-workouts-only transition, and training-context prompt dedupe used lexicographic completed-workout-id ordering so `...:9` could beat `...:10`.
+- Fix: switched Wahoo trainer detection to `BikingIndoor`, changed the Wahoo poller to continue scanning later pages while still filtering imported workouts by the `updated_at` watermark and added regressions for both the realistic ordering case and a later-page edited workout, marked `WahooFitEnrichmentError::Parse` as non-retryable with a focused test, parked existing Intervals calendar poll states both in settings-update sync and runtime reconciliation paths, tightened the auth-handler `NotFound` mapping into an explicit branch with rationale, added minimal FIT download URL validation, and changed training-context dedupe to prefer numeric completed-workout ids before falling back to timestamp/string comparison.
+- Prevention: when a watermark key does not match the upstream API sort order, do not use it for early pagination termination; either scan all pages or rebase the cursor to the actual sort key. When deprecating or sidelining a poll stream, explicitly park any already-persisted state in both user-settings sync paths and startup reconciliation. When tie-breaking provider ids with numeric suffixes, parse and compare the numeric part instead of relying on lexicographic string order.
+
+### 2026-04-25 | user | intervals calendar poll cursor regression
+
+- Problem: the simplified `advance_calendar_cursor(...)` helper in `src/config/provider_polling/mod.rs` stopped looking at whether Intervals actually returned any calendar events. On incremental polls with an existing cursor and new events, it kept the old cursor instead of advancing to the end of the current window, so the service could keep rereading the same calendar range forever.
+- Fix: restored event-aware cursor advancement in `poll_intervals_calendar_stream(...)` so any non-empty event page advances the cursor to `range.newest`, while empty responses still preserve the existing cursor; added a regression test for `state.cursor != None` plus returned events.
+- Prevention: when simplifying polling cursor helpers, re-check the state-transition contract for both "new data arrived" and "no new data" paths before removing input parameters, and add an explicit regression for incremental sync with an existing cursor.
+
+### 2026-04-25 | user | Wahoo poll cursor stall without workout summaries
+
+- Problem: `src/config/provider_polling/mod.rs` advanced the Wahoo completed-workout cursor only while iterating `workouts_to_import`, so a page of workouts newer than the watermark but missing `workout_summary` produced no imports and left the cursor unchanged. The next poll could fetch the same page again forever.
+- Fix: track the newest seen Wahoo cursor across all workouts above the watermark, not just the subset that becomes import commands, and added a regression test for a newer workout with `workout_summary = None`.
+- Prevention: if polling filters upstream items before import, keep cursor advancement based on all consumed source records unless the product explicitly wants to revisit skipped records on every poll.
+
+### 2026-04-25 | user | planned-workout authoritative test fixture regression
+
+- Problem: after the Wahoo-first authoritative-read changes, `src/domain/planned_workouts/authoritative.rs` still had a local test fixture that passed `planned_workout_id` into the wrong `CompletedWorkout::new(...)` argument slot. The test intended to prove hiding a planned workout when an authoritative completed workout linked to it, but the fixture actually left `planned_workout_id = None` and placed the planned id in the `name` field instead, so CI failed with a false-negative regression.
+- Fix: corrected the fixture argument order so the constructed completed workout really carries `planned_workout_id`, then reran the focused planned-workout authoritative test module.
+- Prevention: when a constructor has many same-typed positional arguments, verify the touched test fixtures against the canonical constructor signature after refactors or new wrappers. For link-driven behavior, assert the linking field itself in the fixture path before trusting the final visibility assertion.
+
+### 2026-04-25 | user | Wahoo review follow-up and polling regression cleanup
+
+- Problem: the follow-up Wahoo review patch still had a compile-risky delegation cleanup in `src/adapters/wahoo/adapter.rs` and the in-progress `ProviderPollingService` edits had accidentally dropped Intervals calendar event imports while wiring the new Wahoo completed-workout path, which would have advanced the calendar cursor without importing planned workouts, races, or special days.
+- Fix: kept the Wahoo adapter delegation cleanup but moved the shared `delegate!` macro into a valid scope for the impls, restored the Intervals calendar import loop with the existing `map_event_to_import_command(...)` behavior, and updated the calendar polling regression to assert import plus cursor advancement instead of the accidental no-import behavior.
+- Prevention: when touching shared polling code for one provider, reread the full existing code path for neighboring streams before sending the patch; for review cleanups that introduce macros, compile-check their definition scope immediately so a style refactor does not turn into a build break or a behavior regression.
+
+### 2026-04-25 | user | OpenCode Graphify plugin activation
+
+- Problem: the repo already had `graphify-out/` artifacts and a repo-local OpenCode plugin path in `opencode.json`, but the plugin file exported only `GraphifyPlugin` and relied on prepending `echo` to `bash` commands. That made the integration brittle and easy to miss in normal search-driven sessions that start with `glob`, `grep`, or `read` instead of `bash`, and a plain `.js` module shape would still depend on local Node module-mode heuristics.
+- Fix: rewrote the repo-local Graphify plugin to export an OpenCode `server` module with `id = "graphify"`, moved the reminder into `experimental.chat.system.transform`, pointed it at `graphify-out/GRAPH_REPORT.md`, `graphify-out/wiki/index.md`, and `./scripts/rebuild_graphify.sh`, and renamed the plugin file to `.mjs` while updating `opencode.json` so the repo-tracked plugin stays self-contained without relying on ignored local package metadata.
+- Prevention: for repo-local OpenCode plugins, verify the module export shape against the installed plugin API and make the tracked file format self-describing (`.mjs` or committed package metadata) instead of relying on local shell mutations or ignored Node module settings.
+
+### 2026-04-24 | CodeRabbit | PR #115 training plan scheduler retry follow-up
+
+- Problem: `training_plan.generate_for_saved_workout` still used `RetryStrategy::Never` even though the wrapped workflow is deduped by durable `operation_key` state and can replay persisted output, so retryable scheduler failures like handler panics became terminal instead of rerunning once the pending operation was reclaimable.
+- Fix: shared the training-plan stale-pending timeout constant, changed the scheduled task to `RetryStrategy::Fixed { max_attempts: 3, delay_seconds: 300 }` aligned to that reclaim window, and added a panic-once scheduler regression that proves the task enters `RetryScheduled` and completes on the second attempt.
+- Prevention: when a scheduler task wraps a durable `claim_pending` workflow, align automatic retry delay with the same stale/reclaim window; otherwise a retry can re-enter too early, hit `already in progress`, and collapse a recoverable scheduler failure into a terminal error.
+
+### 2026-04-24 | Copilot/CodeRabbit | PR #115 unresolved scheduler review follow-up
+
+- Problem: PR #115 still had unresolved scheduler review gaps after the earlier merge pass: `AbortOnDropHandle::join()` consumed its inner `JoinHandle`, so dropping the wrapper during cancellation could no longer abort the child task; the training-plan task runner still swallowed completed-checkpoint serialization failures with `.ok()`; the maintenance loop rebuilt a fresh `TaskSchedulerService`, which split in-memory task waiters from the shared worker/service instance; Mongo task writes still accepted invalid retry strategies even though reads rejected them; and the existing regressions did not prove clone-shared timeout notifications or worker shutdown abort behavior.
+- Fix: changed `AbortOnDropHandle::join()` to await through `as_mut()`, converted completed training-plan checkpoint serialization failure into explicit non-retryable task failure, reused `shared_task_scheduler.clone()` for the maintenance loop wiring, validated retry strategies in `map_task_to_document(...)`, documented the `was_regenerated` deduplicated-wait semantics and extracted athlete-summary retry constants, cleared the deterministic frontend temp fixture root on init, and added focused regressions for timeout-waiter notifications across scheduler clones plus worker shutdown aborting an in-flight handler.
+- Prevention: if an abort-on-drop wrapper also exposes `join()`, never move the inner handle out before awaiting it; whenever scheduler behavior depends on in-memory waiters or watch channels, all producers and waiters must share the same service instance or clones of it; and if persistence reads validate scheduler invariants, enforce the same invariants at the write boundary so poison rows cannot be stored in the first place.
+
+### 2026-04-24 | user | auth test fixture helper follow-up
+
+- Problem: after the latest merge, `tests/auth_rest/shared.rs` still called a removed `keep_frontend_fixture(...)` helper in the Wahoo auth test app builder, so `cargo clippy --all-targets --all-features -- -D warnings` failed while compiling the `auth_rest` test target.
+- Fix: switched the Wahoo auth test helper to reuse the existing `shared_frontend_fixture()` path just like the neighboring auth test builders and reran clippy.
+- Prevention: when a test fixture strategy is refactored to a shared helper, grep for both the new helper and any removed helper names to catch stale call sites in adjacent test builders before pushing.
+
+### 2026-04-24 | user | settings DTO signature follow-up
+
+- Problem: after extending `map_settings_to_dto(...)` with the new `wahoo_available` argument, I updated the runtime handler call sites but missed the unit test in `src/adapters/rest/settings/mapping.rs`, so CI failed in `cargo clippy --all-targets --all-features -- -D warnings` during the lib test build.
+- Fix: updated the remaining unit-test call site to pass the explicit Wahoo availability flag and reran clippy on the full workspace.
+- Prevention: whenever a helper signature changes, grep all call sites including `#[cfg(test)]` modules in the defining file before treating the refactor as complete; clippy on `--all-targets` builds tests too.
+
+### 2026-04-24 | user | PR conflict verification
+
+- Problem: I treated the branch as conflict-free after syncing it with `origin/feature/task-scheduler-core-pr1`, but did not verify it against the latest `origin/main`. The base branch had advanced, so the open PR still showed unresolved merge conflicts.
+- Fix: fetched the latest `origin/main`, reproduced the merge locally, resolved the new conflicts in `src/main.rs`, `reviewers.md`, and `tasks/lessons.md`, and regenerated `graphify-out` from the merged tree.
+- Prevention: when resolving PR conflicts, always fetch the current base branch ref and test the merge against that exact remote ref immediately before calling the PR conflict-free. A clean worktree or synced head branch is not sufficient if the base branch moved.
+
+### 2026-04-24 | user | Wahoo OAuth callback route alignment
+
+- Problem: the code still exposed the Wahoo OAuth callback on `/api/auth/wahoo/callback`, while the deployed callback configured for the app was `https://sandbox.wattly.pl/api/wahoo/callback`. That mismatch would let the OAuth start succeed but cause the provider redirect to miss the real backend route unless the env used a legacy path.
+- Fix: changed the backend callback route to `/api/wahoo/callback`, updated the dev Wahoo OAuth client callback URL, updated `.env.example`, and aligned the auth/settings tests with the new callback path while leaving the connect-start endpoint unchanged.
+- Prevention: when an OAuth integration uses separate start and callback endpoints, verify the deployed provider callback against the real router path before shipping; do not assume the callback should stay under the same URL prefix as the start endpoint.
+
 ### 2026-04-24 | CodeRabbit/Copilot | PR #141 Wahoo OAuth review follow-up
 
 - Problem: the first Wahoo OAuth connect version duplicated security-sensitive `returnTo` sanitization, used a misleading `NotConfigured` error for missing per-user Wahoo credentials, built the live reqwest client with `.expect(...)`, leaked Wahoo tokens through Mongo `Debug`, discarded all token-endpoint error detail, and accepted callback state consumption without binding it to the authenticated app user.
@@ -39,17 +183,149 @@ Read this file before planning and before implementation.
 - Fix: added optional `WAHOO_OAUTH_AUTHORIZE_URL`, `WAHOO_OAUTH_TOKEN_URL`, and `WAHOO_OAUTH_SCOPE` settings with Wahoo defaults in centralized settings parsing, wired those values into `WahooOAuthClient`, updated `.env.example`, and added focused settings tests for both default and override behavior.
 - Prevention: when a review asks for env-driven behavior, first check whether the repo already has a startup settings seam and implement the override there instead of adding ad hoc environment reads in leaf adapters.
 
+### 2026-04-23 | user/CodeRabbit | PR #115 merge and review follow-up
+
+- Problem: PR #115 had diverged from `main` and still carried real review gaps after earlier follow-up passes: `heartbeat_worker` still raced with active-task updates because `set_worker_state` updated the cache after the upsert, panicking task handlers were logged but not converted into persisted scheduler failure state, athlete-summary task completion silently downgraded checkpoint serialization errors to `Completed { checkpoint: None }`, recovery tests did not prove repository-write idempotency, and `tasks/lessons.md` contradicted itself about `OnceLock<mongodb::Client>` reuse across separate `#[tokio::test]` runtimes.
+- Fix: merged the branch with `main` while preserving both repo verification script flows, changed `set_worker_state` to hold the worker-state lock across persistence with rollback on failure and added heartbeat-specific regressions, converted panicking task handlers into retryable failed task outcomes before releasing worker activity and updated the panic regression, changed athlete-summary completion to fail explicitly when checkpoint serialization fails, added repository idempotency assertions to the workout-summary recovery tests, and narrowed the lessons guidance so `OnceLock` stays recommended only for runtime-safe per-binary fixtures.
+- Prevention: after review feedback claims a path is fixed, reread the current code and verify the full behavior instead of assuming the earlier patch was enough; any full-snapshot worker heartbeat must share the same lock/persist discipline as incremental worker-state updates; never swallow persisted-checkpoint serialization errors with `.ok()` when downstream result handlers require that checkpoint contract; and recovery tests must assert the absence of duplicate writes, not only the final returned object.
+
 ### 2026-04-23 | Copilot | PR #138 Intervals Strava 422 logging follow-up
 
 - Problem: the first version of the Intervals Strava-422 classifier decoded the same response body to UTF-8 twice inside `map_error_response_from_logged_response(...)` and allocated a temporary `String` just to compare the parsed `error` field with a static message.
 - Fix: reused one decoded `Option<&str>` for both the known-422 classifier and the hashed log-summary path, and changed the parsed JSON `error` extraction to stay borrowed as `&str` so the comparison avoids an unnecessary allocation.
 - Prevention: when a review fix adds lightweight response classification, reread the hot-path helper for duplicate decoding/parsing work and for avoidable temporary allocations before sending it back for review.
 
+### 2026-04-22 | CodeRabbit | PR #115 unresolved review follow-up
+
+- Problem: unresolved PR #115 review threads still pointed at three real gaps and several hygiene issues: the maintenance loop accepted zero-second ticker intervals that would panic inside Tokio, terminal task mapping silently dropped `cleanup_after` when a terminal task lacked `finished_at_epoch_seconds`, recovery completion paths in workout-summary bypassed the existing post-provider retry helper, worker-state cache mutations could diverge from the persisted worker row on concurrent active-task updates or failed upserts, test verification still forced `cargo test -- --nocapture`, several Mongo test fixtures still printed connection-string context in failure messages, and the scheduler `TestCoach::failing(...)` fake kept failing forever instead of modeling a transient provider error.
+- Fix: added upfront validation for maintenance heartbeat/sweep intervals and tests for both zero-valued cases; made terminal-task cleanup mapping reject terminal tasks without `finished_at_epoch_seconds`; routed both coach-reply recovery completion paths through `persist_post_provider_operation(...)` and added focused recovery regressions; serialized worker-state cache mutations across worker upserts with rollback on failure plus targeted worker-state regressions; changed `scripts/verify_rust_tests.sh` to plain `cargo test`, removed raw Mongo URI text from the touched fixture error messages, tightened the task TTL index assertion to check `expire_after = 0`, and changed the scheduler `TestCoach` fake to consume its injected failure once while updating the retry regression to rely on that one-shot behavior.
+- Prevention: if code constructs Tokio intervals or tickers, validate the interval config before spawning; if a mapper computes TTL cleanup metadata for terminal records, missing terminal timestamps should be treated as invariant violations, not silently downgraded to `None`; any post-provider recovery write must go through the dedicated retry wrapper instead of ad hoc repository upserts; if in-memory worker state mirrors durable worker projections, keep mutation and persistence serialized per worker and restore the previous cache state on persist failure; test logs and scripts must not expose connection strings by default, and failure fakes should be one-shot unless a test explicitly needs persistent failure behavior.
+
+### 2026-04-22 | Copilot/Qodo | PR #126 athlete summary scheduler review follow-up
+
+- Problem: new `src/domain/athlete_summary/...` scheduler tests called `crate::config::spawn_task_worker(...)`, which pulled composition-root wiring into domain tests, and the shared `workout_summary.coach_reply` task timeout was narrowed to a single LLM request even though one task attempt can also regenerate athlete summary before requesting the coach reply.
+- Fix: replaced the `athlete_summary` test dependency on `crate::config` with a local test worker helper built from domain scheduler primitives only, and raised `COACH_REPLY_EXECUTION_TIMEOUT_SECONDS` to cover two LLM requests plus a small buffer for context-building and checkpoint writes.
+- Prevention: keep `src/domain/**` tests on domain-owned scheduler primitives or local test helpers instead of importing startup/config wiring, and for scheduler-owned LLM tasks size execution timeouts to the full end-to-end attempt path rather than the inner provider HTTP timeout alone.
+
+### 2026-04-22 | user | LLM-backed scheduler timeout alignment
+
+- Problem: the new `athlete_summary.generate` scheduler task kept a hard-coded execution timeout that was not explicitly aligned with the real LLM request timeout policy, and the branch still encoded model-name-based adapter timeouts separately from scheduler task timeouts.
+- Fix: introduced a shared `domain::llm` timeout constant/helper with a uniform 3-minute request timeout, switched the LLM adapter to use that shared timeout for all models, and aligned scheduler execution timeouts to that same baseline instead of separate adapter-specific literals.
+- Prevention: for any LLM-backed scheduler task, compare task execution timeout against the actual provider request timeout source before shipping, then add explicit buffer for non-HTTP work or nested LLM calls when the end-to-end task path needs more than one request window.
+
 ### 2026-04-22 | CodeRabbit/Copilot | PR #128 release workflow follow-up
 
 - Problem: the first registry-release version left version-resolution logic embedded inline in GitHub Actions without tests, pushed release tags before image publication could fail, kept cache permissions too narrow for `rust-cache` and Buildx `type=gha`, and let the fallback publish script depend on the caller's current working directory.
 - Fix: extracted release version resolution into `scripts/resolve-release-version.mjs` with unit tests, refactored the fallback publish helper into testable functions with unit tests and repo-root-based Docker context, moved git tag creation/push to after the image publish step succeeds, and added `actions: write` where the workflow uses GitHub Actions cache APIs.
 - Prevention: when a workflow introduces custom versioning or release orchestration, move the logic into a testable script instead of inline bash; if a release tag is meant to imply a deployable artifact, publish the artifact first and push the tag only after success; any workflow using `rust-cache` or Buildx `type=gha` must keep `actions` token permissions explicit; CLI helpers that shell out should anchor filesystem context to known paths instead of assuming the caller's cwd.
+
+### 2026-04-22 | user | scheduler panic regression test follow-up
+
+- Problem: the new panic-path regression test assumed the worker heartbeat row already existed and used `expect(...)` on an eventually updated worker projection, so it could fail before the worker finished startup even though the runtime behavior was correct.
+- Fix: changed the first phase of the test to wait on the owned handler-start signal plus primary task state (`Running` with `claimed_by = worker-1`) instead of the worker repository, and changed the cleanup wait to poll the worker projection with `is_some_and(...)` until `active_task_ids` becomes empty.
+- Prevention: in async worker tests, synchronize early assertions on direct control signals or primary task state, not on lagging heartbeat/projection writes; when polling eventually updated projections, avoid `expect(...)` until the phase that guarantees the row exists.
+
+### 2026-04-22 | Copilot | PR #115 task worker and workout summary review follow-up
+
+- Problem: the shared task worker still accepted zero-valued timing config that could panic at runtime when creating Tokio intervals, a panicking task handler could outlive the parent cleanup path and leave heartbeats/worker activity detached, coach-reply failure logs omitted `user_id`, and the save workflow treated any historical coach message as a finished conversation even if the latest message was still from the user.
+- Fix: validated `lease_duration_seconds`, `heartbeat_interval`, and `idle_poll_interval` before spawning the worker; wrapped worker child tasks so handler and heartbeat tasks are aborted on drop while still clearing worker activity after panics; added `user_id` to the coach-reply failure `warn!`; and changed the save workflow conversation-finished check to require the last message to be from the coach, with focused regressions for each path.
+- Prevention: any runtime loop that constructs `tokio::interval` or similar timers must fail fast on non-positive config before spawning, any spawned child task created only for orchestration should be owned by an abort-on-drop guard so panics and shutdown cannot detach it, failure logs at workflow boundaries should include user/workout identifiers needed for recovery, and conversation-complete predicates must inspect the terminal message state instead of searching the whole history for any matching role.
+
+### 2026-04-22 | Copilot | training plan conversation context review follow-up
+
+- Problem: the first review version treated missing workout summaries as `Ok(None)` when loading planning context, cloned the full planning context unnecessarily during retries, and embedded raw conversation text into `stable_context`, which is transported as system-role context for some LLM providers.
+- Fix: changed `get_planning_context` to propagate `WorkoutSummaryError::NotFound` through the existing training-plan error mapping, switched training-plan prompt assembly to send prior coach/user planning history as role-correct `conversation` messages while keeping only `planning_rpe` in `stable_context`, and changed planning-context caching in the generation service to load once without cloning on each correction call.
+- Prevention: when threading user-originated history into LLM requests, check every provider mapping before putting that data into `stable_context` or any system-role field; prefer role-correct conversation messages for conversational history, and do not silently downgrade missing prerequisite state into `None` unless the flow is explicitly optional.
+
+### 2026-04-22 | user | verification strategy for heavy Rust test binaries
+
+- Problem: I launched multiple heavy `cargo test --test ...` binaries in parallel while verifying the training-plan conversation-context change. In this repo that produced non-diagnostic `SIGKILL` failures under host pressure, which obscured whether the code itself was actually broken.
+- Fix: switched verification to sequential, narrowly filtered Rust tests for the touched behavior, kept `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `bun run verify:arch` as the reliable completion gates, and stopped treating the parallel-suite `SIGKILL`s as actionable product failures.
+- Prevention: never parallelize heavy Rust test binaries in this repo. If broad suites hit host-level `SIGKILL`s, verify the changed behavior with sequential targeted filters and explicitly report the broader suites as skipped for environment reasons instead of chasing a fake code regression.
+
+### 2026-04-21 | user | training plan projected-day roots and calendar view refresh
+
+- Problem: after saving a new workout, a fresh training-plan projection was persisted for the new window, but the calendar could still miss the first projected day of that new snapshot. Real Mongo data showed `training_plan_projected_days` already contained an active row for `2026-04-22` while `calendar_entry_views` did not. The root cause was not refresh-range cleanup; the bridge readers for projected plans were still filtering with `date > snapshot.start_date`, so the first day of every snapshot was silently dropped before calendar refresh and other projected-day readers ever saw it.
+- Fix: changed the projected-day root readers to treat `snapshot.start_date` as inclusive in both Mongo adapters and the in-memory training-plan test repository, updated the Mongo regression tests that had encoded the old exclusion behavior, and added an integration regression proving `CalendarEntryViewRefreshService` now writes a planned calendar entry for a projected workout that lands on `snapshot.start_date`.
+- Prevention: when a projection snapshot stores dated `days`, treat `start_date` as the first real day in that window unless there is an explicit separate anchor-day model. Before blaming downstream refresh logic, compare the durable source rows and the first read adapter that reconstructs canonical roots from them.
+
+### 2026-04-21 | user | workout summary scheduler pending-retry recovery
+
+- Problem: scheduler-backed `workout_summary.coach_reply` retries still used the generic 30-second task delay even when the direct coach-reply workflow returned `ReplyAlreadyPending`, but the underlying `CoachReplyOperation` only became reclaimable after the 300-second stale window. That mismatch could exhaust task retries and leave a failed task even though the durable reply operation was still recoverable later.
+- Fix: added a scheduler failure-path retry-delay override so `ReplyAlreadyPending` reschedules the task at the coach-reply stale-operation window instead of the generic fixed delay, kept the direct workflow semantics unchanged, and added a scheduler-backed regression test that proves the delayed retry succeeds once the reclaim window opens.
+- Prevention: whenever a scheduled wrapper sits on top of another durable operation with its own reclaim or stale timeout, compare the scheduler retry cadence against that recovery window explicitly; do not let wrapper retries exhaust before the wrapped durable state can be reclaimed.
+
+### 2026-04-21 | user | task scheduler review follow-up on PR #120
+
+- Problem: the shared task worker runtime still lived under `src/domain/task_scheduler`, which kept `tokio` runtime orchestration in the domain layer, and both `src/domain/task_scheduler/service.rs` and the scheduler worker file had grown too large to review comfortably. The task storage also lacked a cleanup policy for terminal task records.
+- Fix: moved the runtime worker loop into `src/config/task_scheduler/worker.rs`, kept only task handler/config types in `src/domain/task_scheduler`, split the scheduler service into concern-based modules under `src/domain/task_scheduler/service/`, split config scheduler wiring into `maintenance.rs` and `worker.rs`, and added a Mongo TTL cleanup field/index for completed/failed/timed-out tasks.
+- Prevention: when adding scheduler/runtime behavior, keep `tokio` spawning, timers, shutdown handles, and logging orchestration outside `src/domain`; if a scheduler or config file starts exceeding a few phases or a few hundred lines, split it immediately by concern instead of waiting for review to call it out.
+
+### 2026-04-21 | user | Rust test harness instability follow-up
+
+- Problem: after the earlier memory-hygiene cleanup, the full `cargo test -- --nocapture` run was still failing for harness reasons that looked like flaky suite instability: tracing-capture helpers assumed the global active buffer map must be empty even while parallel tests were still running, and multiple Mongo-backed test helpers reused a `OnceLock<mongodb::Client>` across separate `#[tokio::test]` runtimes, which led to cancelled driver tasks and runtime-shutdown errors.
+- Fix: changed the tracing-capture assertions to verify that the current capture was cleaned up instead of asserting global emptiness, removed the outer `tokio::time::timeout(...)` cancellation pattern from Mongo test availability checks in favor of short driver `server_selection_timeout` settings, and stopped reusing shared Mongo clients across separate test runtimes in the affected helpers.
+- Prevention: when stabilizing Rust test harness code, validate per-test isolation instead of global-emptiness assumptions, and do not share async driver clients across independent `#[tokio::test]` runtimes unless the resource lifetime is guaranteed to outlive every runtime that uses it.
+
+### 2026-04-21 | user | integration vs unit test boundary cleanup
+
+- Problem: several REST integration suites were asserting domain behavior and adapter helper rules that already belonged below the HTTP layer, which duplicated coverage and made the endpoint suites larger than necessary.
+- Fix: moved settings masking/interval normalization checks into adapter unit tests, moved completed-workout id fallback checks into `CompletedWorkoutReadService` unit tests, strengthened existing calendar domain tests for sync/update behavior, and removed the redundant REST cases while keeping auth/status/limit/happy-path coverage at the integration layer.
+- Prevention: before adding or keeping a REST integration test, ask whether it proves transport-boundary behavior or just repeats service/helper logic; if it is not boundary-specific, cover it with a lower-level fake-backed test and leave only one straightforward happy path per endpoint.
+
+### 2026-04-20 | user | test-suite memory leaks and unstable Rust harnesses
+
+- Problem: several Rust test binaries leaked memory and process resources by retaining frontend fixtures in globals, recreating expensive Mongo clients repeatedly, and spawning Axum test servers with unmanaged `tokio::spawn` tasks that lived until process exit. This made `cargo test -- --nocapture` fail with shifting suite-level `SIGKILL`s.
+- Fix: replaced unbounded retained fixtures with bounded shared fixtures, reused `mongodb::Client` per test binary where safe, disabled the unnecessary bin test harness in `Cargo.toml`, and updated the affected test helpers to own spawned server tasks and abort them in `Drop`.
+- Prevention: when writing tests, treat memory and task lifetime as part of the helper contract: no unbounded globals, no unmanaged spawned servers, prefer bounded per-binary singletons for expensive immutable resources, and diagnose suite-level flakiness only with sequential heavy test runs.
+
+### 2026-04-20 | user | scheduler worker loop ownership and generic boundaries
+
+- Problem: the dedicated `workout_summary` task runner embedded the whole claim, idle wait, task heartbeat, completion, and failure persistence loop inside feature code, which made the critical scheduler flow difficult to reason about and tied generic worker behavior to one LLM-specific use case.
+- Fix: extracted the shared worker loop into `src/domain/task_scheduler/runner.rs` with a small generic `TaskRunnerHandler` contract and `TaskRunOutcome`, then reduced the workout summary runner to payload parsing and coach-reply-specific success/error mapping only.
+- Prevention: when adding another scheduled workflow, first ask whether the logic is generic worker orchestration or feature-specific task handling; keep claim/lease/heartbeat/complete/fail mechanics in `task_scheduler`, and let feature runners provide only payload parsing plus domain outcome mapping.
+
+### 2026-04-20 | user | scheduler result waiting must stay generic
+
+- Problem: `SchedulerBackedWorkoutSummaryService` still had its own task-status polling loop for waiting on completed/failed/timed-out results, so the scheduler orchestration was split between `task_scheduler` and feature code.
+- Fix: added generic `ResultTaskHandler`, `enqueue_result_task(...)`, `wait_for_result_task(...)`, and `enqueue_no_result_task(...)` to `src/domain/task_scheduler/service.rs`, then rewired the workout summary wrapper to provide only checkpoint/error parsing and final result hydration.
+- Prevention: for background workflows that return a caller-visible result, keep enqueue/retry/poll/result orchestration inside `task_scheduler`; feature wrappers may build the task and map terminal scheduler state into domain output, but must not own custom polling loops.
+
+### 2026-04-20 | user | single scheduler worker loop and smaller service methods
+
+- Problem: the scheduler still had a per-feature worker spawn shape and `TaskSchedulerService` accumulated large orchestration methods that were difficult to review; the result path also still looked like a custom loop instead of a generic scheduler-owned mechanism.
+- Fix: replaced the per-feature worker flow with one global worker loop in `src/domain/task_scheduler/runner.rs` that dispatches by registered `task_type` handlers, changed result waiting to event-driven task updates via in-memory watchers instead of polling, and split scheduler service logic into smaller request-building and state-transition helpers.
+- Prevention: keep exactly one worker claim/dispatch loop in the scheduler layer, let handlers only implement task-type-specific execution/result mapping, and split any scheduler/service method as soon as it spans multiple orchestration phases.
+
+### 2026-04-20 | user | scheduler workers need real concurrency and shared active-task state
+
+- Problem: the first global worker loop still awaited a claimed task inline, which effectively serialized task handling, and the initial concurrency refactor briefly used non-shared active-task state that could drop `active_task_ids` updates under parallel work.
+- Fix: introduced bounded worker concurrency via a semaphore-backed task pool in `src/domain/task_scheduler/runner.rs`, kept task execution in spawned task slots, and centralized per-worker active-task tracking so claim/heartbeat/release all update the same shared runtime state.
+- Prevention: when adding concurrency to worker loops, verify both throughput semantics and shared state semantics together; if multiple tasks can run in parallel, any worker-level heartbeat or active-task snapshot must come from one shared source of truth, not per-task local state.
+
+### 2026-04-20 | user | workout summary chat use case method too large
+
+- Problem: `generate_coach_reply_impl` in `src/domain/workout_summary/service/use_cases/chat.rs` had grown into a near-file-sized orchestration method that mixed validation, operation claiming, LLM call execution, checkpoint persistence, message append, and final result hydration in one block.
+- Fix: split the method into small helpers for loading the persisted user message, claiming/recovering the reply operation, requesting and checkpointing the LLM response, appending the coach message, finalizing the completed operation, and building the final `CoachReply`.
+- Prevention: when a use-case method starts spanning the whole file, stop and split it by phase immediately; orchestration methods should read top-to-bottom as a short pipeline, with detailed persistence and recovery logic pushed into named helpers.
+
+### 2026-04-20 | user | workout summary scheduler-backed coach reply PR2 review fixes
+
+- Problem: the dedicated `workout_summary.coach_reply` runner did not publish its own worker heartbeat or `active_task_ids`, the scheduler-backed wait path introduced a new 30-second caller-visible timeout that the direct path never had, and the wrapper dropped `athlete_summary_was_regenerated` from the `generate_coach_reply()` contract.
+- Fix: made the dedicated runner persist its own worker state while idle and while holding a task, removed the wrapper-only 30-second timeout so synchronous callers wait for terminal task state, and stored a structured completed-task checkpoint that preserves both the persisted coach message and the regeneration flag while remaining backward-compatible with older message-only checkpoints.
+- Prevention: when wrapping an existing synchronous flow with the scheduler, verify that the wrapper does not shorten the old success contract, that any worker used for recovery semantics publishes the same lifecycle data the sweeper relies on, and that task checkpoints preserve every field the original return type promised to callers.
+
+### 2026-04-20 | user | task scheduler restart recovery semantics
+
+- Problem: the first scheduler core version left `running` tasks stuck after process restart unless someone manually retried a later `timed_out` task, which was too weak for instance restarts and docker-style redeploys.
+- Fix: added explicit task recovery in the scheduler sweep so `running` tasks move back to `retry_scheduled` when their owner worker disappears or restarts without reporting the task as active; `timed_out` now stays for the narrower truly abandoned case.
+- Prevention: when designing worker leases, test restart behavior separately from timeout behavior and verify that a dead or restarted owner leads to automatic reclaim when the state is unambiguous.
+
+### 2026-04-20 | user | task scheduler worker identity and timeout defaults
+
+- Problem: the first PR left `worker_id` lifecycle implicit and used an aggressively low default worker-staleness window that could misclassify long-running LLM tasks as abandoned.
+- Fix: added `default_task_scheduler_worker_id()` so workers prefer a stable `TASK_SCHEDULER_WORKER_ID` or `HOSTNAME` identity before falling back to a per-process UUID, and raised the default `worker_stale_after_seconds` in `src/config/task_scheduler.rs` to a safer 30-minute window.
+- Prevention: when introducing distributed worker coordination, define the worker-id source explicitly and make container-friendly stable identities the default when restart recovery is required; also sanity-check timeout defaults against the slowest expected external operation before sending for review.
 
 ### 2026-04-19 | Copilot | admin metrics backfill test coverage
 

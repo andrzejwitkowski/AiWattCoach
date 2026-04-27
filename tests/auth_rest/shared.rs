@@ -3,9 +3,7 @@ use std::{
     future::Future,
     path::PathBuf,
     pin::Pin,
-    sync::atomic::{AtomicU64, Ordering},
     sync::{Arc, Mutex, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use aiwattcoach::{
@@ -19,7 +17,11 @@ use aiwattcoach::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
         SettingsError, UserSettings, UserSettingsUseCases,
     },
-    domain::wahoo::{WahooAuthExchange, WahooAuthStart, WahooError, WahooToken, WahooUseCases},
+    domain::wahoo::{
+        WahooAuthExchange, WahooAuthStart, WahooCreatePlan, WahooCreateWorkout, WahooError,
+        WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooWorkout,
+        WahooWorkoutList, WahooWorkoutSummary,
+    },
     Settings,
 };
 use mongodb::Client;
@@ -31,14 +33,11 @@ type FinishConnectInput = (String, String, String);
 
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
-static FRONTEND_FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
-static KEPT_FRONTEND_FIXTURES: OnceLock<Mutex<Vec<FrontendFixture>>> = OnceLock::new();
+static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
 
 pub(crate) async fn auth_test_app(identity_service: TestIdentityService) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -66,9 +65,7 @@ pub(crate) async fn auth_test_app_with_custom_settings(
     settings: Settings,
     identity_service: TestIdentityService,
 ) -> axum::Router {
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -97,9 +94,7 @@ pub(crate) async fn auth_test_app_with_custom_settings_and_limited_whitelist_rat
     identity_service: TestIdentityService,
     max_attempts: usize,
 ) -> axum::Router {
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -125,9 +120,7 @@ pub(crate) async fn auth_test_app_with_custom_settings_and_limited_whitelist_rat
 
 pub(crate) async fn auth_test_app_without_identity() -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -144,9 +137,7 @@ pub(crate) async fn auth_test_app_with_settings(
     settings_service: TestSettingsService,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -175,9 +166,7 @@ pub(crate) async fn auth_test_app_with_wahoo(
     wahoo_service: TestWahooService,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -206,9 +195,7 @@ pub(crate) async fn auth_test_app_with_limited_whitelist_rate(
     max_attempts: usize,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
-    let dist_dir = fixture.dist_dir();
-    keep_frontend_fixture(fixture);
+    let dist_dir = shared_frontend_fixture().dist_dir();
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -353,6 +340,86 @@ impl WahooUseCases for TestWahooService {
         *self.last_ensure_user_id.lock().unwrap() = Some(user_id.to_string());
         let result = self.ensure_result.clone();
         Box::pin(async move { result })
+    }
+
+    fn list_workouts(
+        &self,
+        _user_id: &str,
+        _page: usize,
+        _per_page: usize,
+    ) -> BoxFuture<Result<WahooWorkoutList, WahooError>> {
+        Box::pin(async {
+            Ok(WahooWorkoutList {
+                workouts: Vec::new(),
+                total: 0,
+                page: 1,
+                per_page: 100,
+                order: None,
+                sort: None,
+            })
+        })
+    }
+
+    fn get_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotFound) })
+    }
+
+    fn get_workout_summary(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_plan_by_external_id(
+        &self,
+        _user_id: &str,
+        _external_id: &str,
+    ) -> BoxFuture<Result<Option<WahooPlan>, WahooError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn create_plan(
+        &self,
+        _user_id: &str,
+        _request: WahooCreatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_plan(
+        &self,
+        _user_id: &str,
+        _plan_id: i64,
+        _request: WahooUpdatePlan,
+    ) -> BoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn create_workout(
+        &self,
+        _user_id: &str,
+        _request: WahooCreateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn update_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+        _request: WahooUpdateWorkout,
+    ) -> BoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn download_workout_file(&self, _file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 }
 
@@ -527,14 +594,13 @@ async fn test_mongo_client(uri: &str) -> Client {
         .expect("test mongo client should be created")
 }
 
+fn shared_frontend_fixture() -> &'static FrontendFixture {
+    SHARED_FRONTEND_FIXTURE.get_or_init(frontend_fixture)
+}
+
 fn frontend_fixture() -> FrontendFixture {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let counter = FRONTEND_FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
-        "aiwattcoach-auth-spa-fixture-{}-{unique}-{counter}",
+        "aiwattcoach-auth-spa-fixture-{}",
         std::process::id()
     ));
     let dist_dir = root.join("dist");
@@ -562,12 +628,4 @@ impl Drop for FrontendFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
-}
-
-fn keep_frontend_fixture(fixture: FrontendFixture) {
-    KEPT_FRONTEND_FIXTURES
-        .get_or_init(|| Mutex::new(Vec::new()))
-        .lock()
-        .unwrap()
-        .push(fixture);
 }

@@ -2,6 +2,7 @@ import { useSettings } from '../features/settings/context/SettingsContext';
 import { AiAgentsCard } from '../features/settings/components/AiAgentsCard';
 import { AvailabilityCard } from '../features/settings/components/AvailabilityCard';
 import { AthleteSummaryCard } from '../features/settings/components/AthleteSummaryCard';
+import { CalendarRefreshCard } from '../features/settings/components/CalendarRefreshCard';
 import { CyclingSettingsCard } from '../features/settings/components/CyclingSettingsCard';
 import { IntervalsCard } from '../features/settings/components/IntervalsCard';
 import { OptionsCard } from '../features/settings/components/OptionsCard';
@@ -67,6 +68,7 @@ export function SettingsPage({ apiBaseUrl }: SettingsPageProps) {
         </div>
       </div>
       <AthleteSummaryCard settings={settings} apiBaseUrl={apiBaseUrl} />
+      <CalendarRefreshCard apiBaseUrl={apiBaseUrl} />
       <AvailabilityCard
         settings={settings}
         apiBaseUrl={apiBaseUrl}

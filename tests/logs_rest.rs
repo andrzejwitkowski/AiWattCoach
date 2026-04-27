@@ -1,11 +1,6 @@
 mod support;
 
-use std::{
-    fs,
-    path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::PathBuf, sync::OnceLock};
 
 use aiwattcoach::{build_app_with_frontend_dist, AppState, Settings};
 use axum::{
@@ -19,7 +14,7 @@ use tower::util::ServiceExt;
 use crate::support::tracing_capture::capture_tracing_logs;
 
 const RESPONSE_LIMIT_BYTES: usize = 16 * 1024;
-static FRONTEND_FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static SHARED_FRONTEND_FIXTURE: OnceLock<FrontendFixture> = OnceLock::new();
 #[tokio::test(flavor = "current_thread")]
 async fn valid_info_warn_and_error_payloads_are_accepted() {
     let app = logs_test_app().await;
@@ -317,7 +312,7 @@ async fn log_ingestion_rejects_requests_with_mismatched_origin() {
 
 async fn logs_test_app() -> axum::Router {
     let settings = Settings::test_defaults();
-    let fixture = frontend_fixture();
+    let fixture = shared_frontend_fixture();
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -350,14 +345,13 @@ struct FrontendFixture {
     root: PathBuf,
 }
 
+fn shared_frontend_fixture() -> &'static FrontendFixture {
+    SHARED_FRONTEND_FIXTURE.get_or_init(frontend_fixture)
+}
+
 fn frontend_fixture() -> FrontendFixture {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let counter = FRONTEND_FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
-        "aiwattcoach-logs-spa-fixture-{}-{unique}-{counter}",
+        "aiwattcoach-logs-spa-fixture-{}",
         std::process::id()
     ));
     let dist_dir = root.join("dist");

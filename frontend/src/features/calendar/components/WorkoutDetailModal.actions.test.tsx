@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import '../../../i18n';
 import { makeActualWorkout, makeEvent, makeEventDefinition, makeSelection, makeWorkoutSummary } from '../testData';
 import { HttpError } from '../../../lib/httpClient';
 import { mockedDownloadFit, mockedLoadActivity, mockedLoadEvent, mockedSyncPlannedWorkout } from './WorkoutDetailModal.testHelpers';
@@ -11,6 +12,13 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
+function dateKeyFromUtcOffset(days: number) {
+  const now = new Date();
+  const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  utcDate.setUTCDate(utcDate.getUTCDate() + days);
+  return utcDate.toISOString().slice(0, 10);
+}
 
 describe('WorkoutDetailModal actions', () => {
   it('hides FIT download action in completed mode', async () => {
@@ -112,17 +120,20 @@ describe('WorkoutDetailModal actions', () => {
   });
 
   it('syncs a planned workout from the modal action', async () => {
+    const workoutDate = dateKeyFromUtcOffset(2);
+
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
         id: 901,
-        startDateLocal: '2026-03-26',
+        startDateLocal: workoutDate,
         name: 'Predicted Build',
+        indoor: false,
         plannedSource: 'predicted',
         syncStatus: 'modified',
         projectedWorkout: {
-          projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+          projectedWorkoutId: `training-plan:user-1:w1:1:${workoutDate}`,
           operationKey: 'training-plan:user-1:w1:1',
-          date: '2026-03-26',
+          date: workoutDate,
           sourceWorkoutId: 'w1',
         },
         eventDefinition: makeEventDefinition({
@@ -135,15 +146,16 @@ describe('WorkoutDetailModal actions', () => {
     mockedSyncPlannedWorkout.mockResolvedValue(
       makeEvent({
         id: 91,
-        startDateLocal: '2026-03-26',
+        startDateLocal: workoutDate,
         name: 'Predicted Build',
+        indoor: false,
         plannedSource: 'predicted',
         syncStatus: 'synced',
         linkedIntervalsEventId: 91,
         projectedWorkout: {
-          projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+          projectedWorkoutId: `training-plan:user-1:w1:1:${workoutDate}`,
           operationKey: 'training-plan:user-1:w1:1',
-          date: '2026-03-26',
+          date: workoutDate,
           sourceWorkoutId: 'w1',
         },
         eventDefinition: makeEventDefinition({
@@ -157,17 +169,18 @@ describe('WorkoutDetailModal actions', () => {
       <WorkoutDetailModal
         apiBaseUrl=""
         selection={makeSelection({
-          dateKey: '2026-03-26',
+          dateKey: workoutDate,
           event: makeEvent({
             id: 901,
-            startDateLocal: '2026-03-26',
+            startDateLocal: workoutDate,
             name: 'Predicted Build',
+            indoor: false,
             plannedSource: 'predicted',
             syncStatus: 'modified',
             projectedWorkout: {
-              projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+              projectedWorkoutId: `training-plan:user-1:w1:1:${workoutDate}`,
               operationKey: 'training-plan:user-1:w1:1',
-              date: '2026-03-26',
+              date: workoutDate,
               sourceWorkoutId: 'w1',
             },
           }),
@@ -176,26 +189,29 @@ describe('WorkoutDetailModal actions', () => {
       />,
     );
 
-    const syncButton = await screen.findByRole('button', { name: /sync to intervals/i });
+    const syncButton = await screen.findByRole('button', { name: /sync to wahoo/i });
 
     await userEvent.click(syncButton);
 
-    await waitFor(() => expect(mockedSyncPlannedWorkout).toHaveBeenCalledWith('', 'training-plan:user-1:w1:1', '2026-03-26'));
+    await waitFor(() => expect(mockedSyncPlannedWorkout).toHaveBeenCalledWith('', 'training-plan:user-1:w1:1', workoutDate));
     await waitFor(() => expect(screen.getByText(/synced/i)).toBeInTheDocument());
   });
 
   it('shows sync failure feedback when the planned workout sync request fails', async () => {
+    const workoutDate = dateKeyFromUtcOffset(3);
+
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
         id: 902,
-        startDateLocal: '2026-03-27',
+        startDateLocal: workoutDate,
         name: 'Predicted Failure',
+        indoor: false,
         plannedSource: 'predicted',
         syncStatus: 'modified',
         projectedWorkout: {
-          projectedWorkoutId: 'training-plan:user-1:w1:2:2026-03-27',
+          projectedWorkoutId: `training-plan:user-1:w1:2:${workoutDate}`,
           operationKey: 'training-plan:user-1:w1:2',
-          date: '2026-03-27',
+          date: workoutDate,
           sourceWorkoutId: 'w2',
         },
         eventDefinition: makeEventDefinition({
@@ -211,17 +227,18 @@ describe('WorkoutDetailModal actions', () => {
       <WorkoutDetailModal
         apiBaseUrl=""
         selection={makeSelection({
-          dateKey: '2026-03-27',
+          dateKey: workoutDate,
           event: makeEvent({
             id: 902,
-            startDateLocal: '2026-03-27',
+            startDateLocal: workoutDate,
             name: 'Predicted Failure',
+            indoor: false,
             plannedSource: 'predicted',
             syncStatus: 'modified',
             projectedWorkout: {
-              projectedWorkoutId: 'training-plan:user-1:w1:2:2026-03-27',
+              projectedWorkoutId: `training-plan:user-1:w1:2:${workoutDate}`,
               operationKey: 'training-plan:user-1:w1:2',
-              date: '2026-03-27',
+              date: workoutDate,
               sourceWorkoutId: 'w2',
             },
           }),
@@ -230,11 +247,247 @@ describe('WorkoutDetailModal actions', () => {
       />,
     );
 
-    const syncButton = await screen.findByRole('button', { name: /sync to intervals/i });
+    const syncButton = await screen.findByRole('button', { name: /sync to wahoo/i });
 
     await userEvent.click(syncButton);
 
-    await waitFor(() => expect(screen.getByText(/unable to sync this planned workout to intervals right now/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/unable to sync this planned workout to wahoo right now/i)).toBeInTheDocument());
+  });
+
+  it('shows the ftp warning when Wahoo sync requires cycling ftp settings', async () => {
+    const workoutDate = dateKeyFromUtcOffset(3);
+
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 904,
+        startDateLocal: workoutDate,
+        name: 'Missing FTP',
+        indoor: false,
+        plannedSource: 'predicted',
+        syncStatus: 'modified',
+        projectedWorkout: {
+          projectedWorkoutId: `training-plan:user-1:w1:4:${workoutDate}`,
+          operationKey: 'training-plan:user-1:w1:4',
+          date: workoutDate,
+          sourceWorkoutId: 'w4',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 45min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 2700 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+    mockedSyncPlannedWorkout.mockRejectedValue(
+      new HttpError(400, 'Set your cycling FTP in Settings before syncing to Wahoo', {
+        message: 'Set your cycling FTP in Settings before syncing to Wahoo',
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: workoutDate,
+          event: makeEvent({
+            id: 904,
+            startDateLocal: workoutDate,
+            name: 'Missing FTP',
+            indoor: false,
+            plannedSource: 'predicted',
+            syncStatus: 'modified',
+            projectedWorkout: {
+              projectedWorkoutId: `training-plan:user-1:w1:4:${workoutDate}`,
+              operationKey: 'training-plan:user-1:w1:4',
+              date: workoutDate,
+              sourceWorkoutId: 'w4',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const syncButton = await screen.findByRole('button', { name: /sync to wahoo/i });
+
+    await userEvent.click(syncButton);
+
+    await waitFor(() => expect(screen.getByText(/set your cycling ftp in settings before syncing to wahoo/i)).toBeInTheDocument());
+  });
+
+  it('shows the Wahoo connection warning when sync returns 422', async () => {
+    const workoutDate = dateKeyFromUtcOffset(3);
+
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 906,
+        startDateLocal: workoutDate,
+        name: 'Connect Wahoo First',
+        indoor: false,
+        plannedSource: 'predicted',
+        syncStatus: 'unsynced',
+        projectedWorkout: {
+          projectedWorkoutId: `training-plan:user-1:w1:6:${workoutDate}`,
+          operationKey: 'training-plan:user-1:w1:6',
+          date: workoutDate,
+          sourceWorkoutId: 'w6',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 45min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 2700 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+    mockedSyncPlannedWorkout.mockRejectedValue(new HttpError(422, 'unprocessable entity'));
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: workoutDate,
+          event: makeEvent({
+            id: 906,
+            startDateLocal: workoutDate,
+            name: 'Connect Wahoo First',
+            indoor: false,
+            plannedSource: 'predicted',
+            syncStatus: 'unsynced',
+            projectedWorkout: {
+              projectedWorkoutId: `training-plan:user-1:w1:6:${workoutDate}`,
+              operationKey: 'training-plan:user-1:w1:6',
+              date: workoutDate,
+              sourceWorkoutId: 'w6',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const syncButton = await screen.findByRole('button', { name: /sync to wahoo/i });
+
+    await userEvent.click(syncButton);
+
+    await waitFor(() => expect(screen.getByText(/connect wahoo in settings before syncing this planned workout/i)).toBeInTheDocument());
+  });
+
+  it('disables Wahoo sync outside the allowed date window', async () => {
+    const workoutDate = dateKeyFromUtcOffset(8);
+
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 905,
+        startDateLocal: workoutDate,
+        name: 'Too Far Away',
+        indoor: false,
+        plannedSource: 'predicted',
+        syncStatus: 'unsynced',
+        projectedWorkout: {
+          projectedWorkoutId: `training-plan:user-1:w1:5:${workoutDate}`,
+          operationKey: 'training-plan:user-1:w1:5',
+          date: workoutDate,
+          sourceWorkoutId: 'w5',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 60min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 3600 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: workoutDate,
+          event: makeEvent({
+            id: 905,
+            startDateLocal: workoutDate,
+            name: 'Too Far Away',
+            indoor: false,
+            plannedSource: 'predicted',
+            syncStatus: 'unsynced',
+            projectedWorkout: {
+              projectedWorkoutId: `training-plan:user-1:w1:5:${workoutDate}`,
+              operationKey: 'training-plan:user-1:w1:5',
+              date: workoutDate,
+              sourceWorkoutId: 'w5',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const syncButton = await screen.findByRole('button', { name: /sync to wahoo/i });
+
+    expect(syncButton).toBeDisabled();
+    expect(screen.getByText(/only workouts scheduled for today through the next 6 days can sync to wahoo/i)).toBeInTheDocument();
+    expect(mockedSyncPlannedWorkout).not.toHaveBeenCalled();
+  });
+
+  it('does not show Wahoo sync for projected rest days', async () => {
+    const workoutDate = dateKeyFromUtcOffset(2);
+
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 907,
+        startDateLocal: workoutDate,
+        name: 'Rest Day',
+        indoor: false,
+        restDay: true,
+        restDayReason: 'Need recovery before next block',
+        plannedSource: 'predicted',
+        syncStatus: 'unsynced',
+        projectedWorkout: {
+          projectedWorkoutId: `training-plan:user-1:w1:7:${workoutDate}`,
+          operationKey: 'training-plan:user-1:w1:7',
+          date: workoutDate,
+          sourceWorkoutId: 'w7',
+          restDay: true,
+          restDayReason: 'Need recovery before next block',
+        },
+        eventDefinition: makeEventDefinition({
+          summary: makeWorkoutSummary({ totalDurationSeconds: 0 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: workoutDate,
+          event: makeEvent({
+            id: 907,
+            startDateLocal: workoutDate,
+            name: 'Rest Day',
+            indoor: false,
+            restDay: true,
+            restDayReason: 'Need recovery before next block',
+            plannedSource: 'predicted',
+            syncStatus: 'unsynced',
+            projectedWorkout: {
+              projectedWorkoutId: `training-plan:user-1:w1:7:${workoutDate}`,
+              operationKey: 'training-plan:user-1:w1:7',
+              date: workoutDate,
+              sourceWorkoutId: 'w7',
+              restDay: true,
+              restDayReason: 'Need recovery before next block',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Rest Day')).toBeInTheDocument());
+
+    expect(screen.queryByRole('button', { name: /sync to wahoo/i })).not.toBeInTheDocument();
+    expect(mockedSyncPlannedWorkout).not.toHaveBeenCalled();
   });
 
   it('does not request event details for unsynced predicted workouts', async () => {
@@ -249,6 +502,7 @@ describe('WorkoutDetailModal actions', () => {
             id: 903,
             startDateLocal: '2026-03-28',
             name: 'Unsynced Prediction',
+            indoor: false,
             plannedSource: 'predicted',
             syncStatus: 'unsynced',
             projectedWorkout: {
@@ -280,6 +534,7 @@ describe('WorkoutDetailModal actions', () => {
             id: 903,
             startDateLocal: '2026-03-28',
             name: 'Unsynced Prediction',
+            indoor: false,
             plannedSource: 'predicted',
             syncStatus: 'unsynced',
             linkedIntervalsEventId: null,
@@ -298,5 +553,60 @@ describe('WorkoutDetailModal actions', () => {
     await waitFor(() => expect(screen.getByText('Unsynced Prediction')).toBeInTheDocument());
 
     expect(screen.queryByRole('button', { name: /download fit/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show Wahoo sync for indoor workouts', async () => {
+    const workoutDate = dateKeyFromUtcOffset(2);
+
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 908,
+        startDateLocal: workoutDate,
+        name: 'Indoor Trainer Session',
+        indoor: true,
+        plannedSource: 'predicted',
+        syncStatus: 'modified',
+        projectedWorkout: {
+          projectedWorkoutId: `training-plan:user-1:w1:8:${workoutDate}`,
+          operationKey: 'training-plan:user-1:w1:8',
+          date: workoutDate,
+          sourceWorkoutId: 'w8',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 45min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 2700 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: workoutDate,
+          event: makeEvent({
+            id: 908,
+            startDateLocal: workoutDate,
+            name: 'Indoor Trainer Session',
+            indoor: true,
+            plannedSource: 'predicted',
+            syncStatus: 'modified',
+            projectedWorkout: {
+              projectedWorkoutId: `training-plan:user-1:w1:8:${workoutDate}`,
+              operationKey: 'training-plan:user-1:w1:8',
+              date: workoutDate,
+              sourceWorkoutId: 'w8',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Indoor Trainer Session')).toBeInTheDocument());
+
+    expect(screen.queryByRole('button', { name: /sync to wahoo/i })).not.toBeInTheDocument();
+    expect(mockedSyncPlannedWorkout).not.toHaveBeenCalled();
   });
 });

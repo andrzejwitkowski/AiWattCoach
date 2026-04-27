@@ -7,11 +7,12 @@
     "dev:docker": "docker compose -f docker-compose-dev.yml up --build",
     "dev:docker:down": "docker compose -f docker-compose-dev.yml down -v",
     "docker:publish:registry": "bun ./scripts/publish-registry-image.mjs",
-    "verify:scripts": "bun test scripts/*.test.mjs",
+    "verify:scripts": "bun test ./scripts",
     "verify:rust": "cargo fmt -- --check && cargo clippy --all-targets --all-features -- -D warnings",
     "verify:arch": "sh ./scripts/verify_arch.sh",
     "verify:frontend": "bun run --cwd frontend test && bun run --cwd frontend build",
-    "verify:all": "bun run verify:rust && bun run verify:arch && cargo test && bun run verify:scripts && bun run verify:frontend",
+    "verify:rust-tests": "sh ./scripts/verify_rust_tests.sh",
+    "verify:all": "bun run verify:rust && bun run verify:arch && bun run verify:rust-tests && bun run verify:scripts && bun run verify:frontend",
     "test:all": "bun run verify:all"
   },
   "devDependencies": {

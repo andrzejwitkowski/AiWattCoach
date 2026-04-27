@@ -26,10 +26,12 @@ use aiwattcoach::{
 use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, Document},
+    options::ClientOptions,
     Client,
 };
 
 static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
+const TEST_MONGO_SERVER_SELECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[tokio::test]
 async fn training_plan_generation_operation_repository_round_trips_and_reclaims_failed_operations()
@@ -263,10 +265,14 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
     assert_eq!(projected_days.len(), 14);
 
     let active_for_user = repository.list_active_by_user_id("user-1").await.unwrap();
-    assert!(active_for_user
-        .iter()
-        .all(|day| day.operation_key == second_snapshot.operation_key));
-    assert!(!active_for_user.iter().any(|day| day.date == "2026-04-07"));
+    assert!(active_for_user.iter().any(|day| {
+        day.operation_key == first_snapshot.operation_key && day.date == "2026-04-06"
+    }));
+    assert!(active_for_user.iter().any(|day| day.date == "2026-04-07"));
+    assert!(active_for_user.iter().all(|day| {
+        day.operation_key == first_snapshot.operation_key
+            || day.operation_key == second_snapshot.operation_key
+    }));
     assert!(!active_for_user
         .iter()
         .any(|day| day.operation_key == other_user_snapshot.operation_key));
@@ -275,7 +281,8 @@ async fn training_plan_projection_repository_replaces_window_and_supersedes_over
         .find_active_by_operation_key(&first_snapshot.operation_key)
         .await
         .unwrap();
-    assert!(first_active.is_empty());
+    assert_eq!(first_active.len(), 1);
+    assert_eq!(first_active[0].date, "2026-04-06");
 
     fixture.cleanup().await;
 }
@@ -443,7 +450,7 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
         .find_active_by_operation_key(&snapshot.operation_key)
         .await
         .unwrap();
-    assert_eq!(active_for_operation.len(), 13);
+    assert_eq!(active_for_operation.len(), 14);
 
     fixture.cleanup().await;
 }
@@ -535,19 +542,17 @@ async fn mongo_fixture_or_skip() -> Option<MongoFixture> {
 impl MongoFixture {
     async fn new() -> Result<Self, String> {
         let settings = Settings::test_defaults();
-        let mongo_uri = settings.mongo.uri.clone();
-        let client = Client::with_uri_str(&settings.mongo.uri)
+        let mut options = ClientOptions::parse(&settings.mongo.uri)
             .await
-            .map_err(|error| {
-                format!("failed to create test mongo client for {mongo_uri}: {error}")
-            })?;
-        tokio::time::timeout(
-            Duration::from_secs(1),
-            client.database("admin").run_command(doc! { "ping": 1 }),
-        )
-        .await
-        .map_err(|_| format!("timed out connecting to Mongo at {mongo_uri}"))?
-        .map_err(|error| format!("failed to connect to Mongo at {mongo_uri}: {error}"))?;
+            .map_err(|error| format!("failed to create test mongo client: {error}"))?;
+        options.server_selection_timeout = Some(TEST_MONGO_SERVER_SELECTION_TIMEOUT);
+        let client = Client::with_options(options)
+            .map_err(|error| format!("failed to create test mongo client: {error}"))?;
+        client
+            .database("admin")
+            .run_command(doc! { "ping": 1 })
+            .await
+            .map_err(|error| format!("failed to connect to Mongo: {error}"))?;
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

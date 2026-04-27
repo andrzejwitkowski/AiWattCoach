@@ -83,6 +83,28 @@ pub struct PlannedWorkoutSyncRecord {
 }
 
 impl PlannedWorkoutSyncRecord {
+    fn with_status(
+        &self,
+        status: PlannedWorkoutSyncStatus,
+        source_workout_id: String,
+        remote_state: PlannedWorkoutRemoteState,
+        now_epoch_seconds: i64,
+    ) -> Self {
+        Self {
+            user_id: self.user_id.clone(),
+            operation_key: self.operation_key.clone(),
+            date: self.date.clone(),
+            source_workout_id,
+            intervals_event_id: remote_state.intervals_event_id,
+            status,
+            synced_payload_hash: remote_state.synced_payload_hash,
+            last_error: remote_state.last_error,
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
+            updated_at_epoch_seconds: now_epoch_seconds,
+            last_synced_at_epoch_seconds: remote_state.last_synced_at_epoch_seconds,
+        }
+    }
+
     pub fn pending(
         user_id: String,
         operation_key: String,
@@ -106,19 +128,17 @@ impl PlannedWorkoutSyncRecord {
     }
 
     pub fn mark_pending(&self, source_workout_id: String, now_epoch_seconds: i64) -> Self {
-        Self {
-            user_id: self.user_id.clone(),
-            operation_key: self.operation_key.clone(),
-            date: self.date.clone(),
+        self.with_status(
+            PlannedWorkoutSyncStatus::Pending,
             source_workout_id,
-            intervals_event_id: self.intervals_event_id,
-            status: PlannedWorkoutSyncStatus::Pending,
-            synced_payload_hash: self.synced_payload_hash.clone(),
-            last_error: None,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: now_epoch_seconds,
-            last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
-        }
+            PlannedWorkoutRemoteState {
+                intervals_event_id: self.intervals_event_id,
+                synced_payload_hash: self.synced_payload_hash.clone(),
+                last_error: None,
+                last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
+            },
+            now_epoch_seconds,
+        )
     }
 
     pub fn mark_synced(
@@ -128,19 +148,17 @@ impl PlannedWorkoutSyncRecord {
         synced_payload_hash: String,
         now_epoch_seconds: i64,
     ) -> Self {
-        Self {
-            user_id: self.user_id.clone(),
-            operation_key: self.operation_key.clone(),
-            date: self.date.clone(),
+        self.with_status(
+            PlannedWorkoutSyncStatus::Synced,
             source_workout_id,
-            intervals_event_id: Some(intervals_event_id),
-            status: PlannedWorkoutSyncStatus::Synced,
-            synced_payload_hash: Some(synced_payload_hash),
-            last_error: None,
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: now_epoch_seconds,
-            last_synced_at_epoch_seconds: Some(now_epoch_seconds),
-        }
+            PlannedWorkoutRemoteState {
+                intervals_event_id: Some(intervals_event_id),
+                synced_payload_hash: Some(synced_payload_hash),
+                last_error: None,
+                last_synced_at_epoch_seconds: Some(now_epoch_seconds),
+            },
+            now_epoch_seconds,
+        )
     }
 
     pub fn mark_failed(
@@ -149,20 +167,62 @@ impl PlannedWorkoutSyncRecord {
         error: String,
         now_epoch_seconds: i64,
     ) -> Self {
-        Self {
-            user_id: self.user_id.clone(),
-            operation_key: self.operation_key.clone(),
-            date: self.date.clone(),
+        self.with_status(
+            PlannedWorkoutSyncStatus::Failed,
             source_workout_id,
-            intervals_event_id: self.intervals_event_id,
-            status: PlannedWorkoutSyncStatus::Failed,
-            synced_payload_hash: self.synced_payload_hash.clone(),
-            last_error: Some(error),
-            created_at_epoch_seconds: self.created_at_epoch_seconds,
-            updated_at_epoch_seconds: now_epoch_seconds,
-            last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
-        }
+            PlannedWorkoutRemoteState {
+                intervals_event_id: self.intervals_event_id,
+                synced_payload_hash: self.synced_payload_hash.clone(),
+                last_error: Some(error),
+                last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
+            },
+            now_epoch_seconds,
+        )
     }
+
+    pub fn mark_pending_without_remote_event(
+        &self,
+        source_workout_id: String,
+        now_epoch_seconds: i64,
+    ) -> Self {
+        self.with_status(
+            PlannedWorkoutSyncStatus::Pending,
+            source_workout_id,
+            PlannedWorkoutRemoteState {
+                intervals_event_id: None,
+                synced_payload_hash: self.synced_payload_hash.clone(),
+                last_error: None,
+                last_synced_at_epoch_seconds: self.last_synced_at_epoch_seconds,
+            },
+            now_epoch_seconds,
+        )
+    }
+
+    pub fn mark_synced_without_remote_event(
+        &self,
+        source_workout_id: String,
+        synced_payload_hash: String,
+        now_epoch_seconds: i64,
+    ) -> Self {
+        self.with_status(
+            PlannedWorkoutSyncStatus::Synced,
+            source_workout_id,
+            PlannedWorkoutRemoteState {
+                intervals_event_id: None,
+                synced_payload_hash: Some(synced_payload_hash),
+                last_error: None,
+                last_synced_at_epoch_seconds: Some(now_epoch_seconds),
+            },
+            now_epoch_seconds,
+        )
+    }
+}
+
+struct PlannedWorkoutRemoteState {
+    intervals_event_id: Option<i64>,
+    synced_payload_hash: Option<String>,
+    last_error: Option<String>,
+    last_synced_at_epoch_seconds: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

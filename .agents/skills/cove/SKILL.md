@@ -28,7 +28,7 @@ Default: **full**. Switch: `/cove lite|full`.
 Drop:
 - `let` when type inferred or obvious
 - unnecessary `mut`
-- redundant closures: `|x| x` -> `.identity()`
+- redundant closures: `|x| x` → `.identity()`
 - verbose error handling when `?` suffices
 - `-> ()` when obvious
 
@@ -61,7 +61,7 @@ Use:
 - `join!` for parallel independent `await`s
 - `select!` for race conditions
 
-X verbose:
+❌ verbose:
 ```rust
 let mut result = Vec::new();
 for item in items.iter() {
@@ -71,7 +71,7 @@ for item in items.iter() {
 }
 ```
 
-OK full:
+✅ full:
 ```rust
 let result: Vec<_> = items.iter().filter_map(|i| i.get_value()).collect();
 ```
@@ -85,7 +85,7 @@ let result: Vec<_> = items.iter().filter_map(|i| i.get_value()).collect();
 
 ## Examples
 
-X verbose:
+❌ verbose:
 ```rust
 fn process_items(items: &[Item]) -> Result<Vec<ProcessedItem>, ProcessingError> {
     let mut results = Vec::new();
@@ -97,7 +97,7 @@ fn process_items(items: &[Item]) -> Result<Vec<ProcessedItem>, ProcessingError> 
 }
 ```
 
-OK full:
+✅ full:
 ```rust
 fn process_items(items: &[Item]) -> Result<Vec<ProcessedItem>, ProcessingError> {
     items.iter().map(|i| i.process()).collect()
@@ -109,8 +109,8 @@ fn process_items(items: &[Item]) -> Result<Vec<ProcessedItem>, ProcessingError> 
 Drop:
 - `self` in method bodies (already in class)
 - `return` when last expression
-- `None` checks: `if x is None` -> `if not x` (only when x not falsy primitive)
-- redundant parentheses: `if (a and b):` -> `if a and b:`
+- `None` checks: `if x is None` → `if not x` (only when x not falsy primitive)
+- redundant parentheses: `if (a and b):` → `if a and b:`
 - explicit `list()` / `dict()` / `set()` when comprehension works
 - `== True` / `== False`
 
@@ -123,7 +123,7 @@ Use:
 - dataclasses / attrs for structs
 - match-case (Python 3.10+)
 
-X verbose:
+❌ verbose:
 ```python
 def process_items(items):
     results = []
@@ -135,7 +135,7 @@ def process_items(items):
     return results
 ```
 
-OK full:
+✅ full:
 ```python
 def process_items(items):
     return [i.get_value() for i in items if i and i.get_value() > 0]
@@ -147,7 +147,7 @@ Drop:
 - `this->` (already in class)
 - `return` when last expression
 - `std::` when `using namespace std;` or type obvious
-- redundant `()` around lambda return: `[]() { return x; }` -> `[] { return x; }`
+- redundant `()` around lambda return: `[]() { return x; }` → `[] { return x; }`
 - empty destructors
 - `private:` when class body is private by default (struct is public by default)
 - redundant `{ }` around single statements
@@ -164,7 +164,7 @@ Use:
 - `= default` / `= delete`
 - trailing return type: `auto f() -> int`
 
-X verbose:
+❌ verbose:
 ```cpp
 std::vector<int> process_items(const std::vector<Item>& items) {
     std::vector<int> results;
@@ -180,7 +180,7 @@ std::vector<int> process_items(const std::vector<Item>& items) {
 }
 ```
 
-OK full:
+✅ full:
 ```cpp
 auto process_items(const std::vector<Item>& items) -> std::vector<int> {
     std::vector<int> results;
@@ -208,7 +208,7 @@ Use:
 - `aspect-ratio` over padding hacks
 - `gap` for spacing in flex/grid
 
-X verbose:
+❌ verbose:
 ```html
 <div class="container">
   <div class="row">
@@ -226,7 +226,7 @@ X verbose:
 </div>
 ```
 
-OK cove:
+✅ cove:
 ```html
 <section class="card">
   <h3>Title</h3>
@@ -234,7 +234,7 @@ OK cove:
 </section>
 ```
 
-X verbose:
+❌ verbose:
 ```css
 .element {
   margin-top: 10px;
@@ -248,7 +248,7 @@ X verbose:
 }
 ```
 
-OK cove:
+✅ cove:
 ```css
 .element {
   margin: 10px 0;
@@ -261,7 +261,7 @@ OK cove:
 Drop:
 - `this.field` (already in class)
 - `return` when last expression
-- redundant `()` around lambdas: `x -> { return x; }` -> `x -> x`
+- redundant `()` around lambdas: `x -> { return x; }` → `x -> x`
 - empty constructor / initializer blocks `{}`
 - `public` on interface methods (implicit)
 - `@Override` when method clearly overrides (Lombok, etc.)
@@ -280,7 +280,7 @@ Use:
 - `Objects.requireNonNullElse()`
 - `String.join()` over manual concatenation
 
-X verbose:
+❌ verbose:
 ```java
 public List<Integer> processItems(List<Item> items) {
     List<Integer> results = new ArrayList<Integer>();
@@ -296,7 +296,7 @@ public List<Integer> processItems(List<Item> items) {
 }
 ```
 
-OK full:
+✅ full:
 ```java
 List<Integer> processItems(List<Item> items) {
     var results = new ArrayList<Integer>();
@@ -314,8 +314,8 @@ List<Integer> processItems(List<Item> items) {
 Short output. All logic, no ceremony.
 
 Drop:
-- `System.out.println("value = " + x)` -> `println!("{x}")` / `print("{x}")` / `console.log(x)`
-- `console.log("debug", x, y)` -> `console.log({x, y})` or `dbg!(x)`
+- `System.out.println("value = " + x)` → `println!("{x}")` / `print("{x}")` / `console.log(x)`
+- `console.log("debug", x, y)` → `console.log({x, y})` or `dbg!(x)`
 - verbose format strings when interpolation works
 - log level labels when context clear
 - `print()` newline when `println()` cleaner
@@ -330,25 +330,25 @@ Use:
 - `clog` / `eprintln` for errors
 - terse timestamps: `HH:MM:SS`
 
-X verbose:
+❌ verbose:
 ```js
 console.log("Processing item:", item.name, "with value:", item.value);
 console.log("Result count:", results.length);
 ```
 
-OK full:
+✅ full:
 ```js
 console.log({item: item.name, value: item.value});
 console.log({count: results.length});
 ```
 
-X verbose:
+❌ verbose:
 ```python
 print("The result is:", str(result))
 print(f"Processing item {item.name} with value {item.value}")
 ```
 
-OK full:
+✅ full:
 ```python
 print(f"{result}")
 print(f"{item.name}: {item.value}")
@@ -357,8 +357,8 @@ print(f"{item.name}: {item.value}")
 ### Shell (bash/zsh)
 
 Drop:
-- `$(...)` when backticks work: `` `command` `` -> `$(command)`
-- `echo "$VAR"` -> `echo $VAR` (unless needed)
+- `$(...)` when backticks work: `` `command` `` → `$(command)`
+- `echo "$VAR"` → `echo $VAR` (unless needed)
 - `then`/`fi` when single-line `&&`/`||` works
 - `function` keyword (bash)
 - `#!/bin/bash` when shebang not needed
@@ -376,7 +376,7 @@ Use:
 - short flags: `-r` over `--recursive`
 - `_` for unused: `cmd _ arg2`
 
-X verbose:
+❌ verbose:
 ```bash
 #!/bin/bash
 function process_files() {
@@ -390,7 +390,7 @@ function process_files() {
 }
 ```
 
-OK full:
+✅ full:
 ```bash
 process_files() {
     for f in *.txt; do
@@ -405,8 +405,8 @@ Drop:
 - `function` keyword when arrow functions cleaner
 - `return` when last expression
 - redundant `=== true` / `=== false`
-- `new Array()` / `new Object()` -> `[]` / `{}`
-- verbose `if (x !== null && x !== undefined)` -> `if (x != null)`
+- `new Array()` / `new Object()` → `[]` / `{}`
+- verbose `if (x !== null && x !== undefined)` → `if (x != null)`
 
 Use:
 - arrow functions: `x => x * 2`
@@ -420,7 +420,7 @@ Use:
 - `for...of` over `for (let i = 0; ...)` when index not needed
 - `const` by default, `let` only when reassign
 
-X verbose:
+❌ verbose:
 ```js
 function processItems(items) {
     var results = new Array();
@@ -437,13 +437,13 @@ function processItems(items) {
 }
 ```
 
-OK cove:
+✅ cove:
 ```js
 const processItems = items =>
     items?.filter(i => i?.value > 0).map(i => i.value) ?? []
 ```
 
-X verbose:
+❌ verbose:
 ```js
 const getFullName = (user) => {
     if (user.firstName !== null && user.firstName !== undefined) {
@@ -454,21 +454,21 @@ const getFullName = (user) => {
 }
 ```
 
-OK cove:
+✅ cove:
 ```js
 const getFullName = ({ firstName, lastName }) =>
     firstName ? `${firstName} ${lastName}` : 'Unknown'
 ```
 
-## Contextual Formatting
+## Contextual Formatting 
 
 Auto-applies in most contextual technical situations.
 
 Examples:
-- bug / error / crash / fail -> drill why
-- "why" questions -> drill why
-- debug / root cause / stack trace -> drill why
-- vague "something wrong" -> drill why
+- bug / error / crash / fail → drill why
+- "why" questions → drill why
+- debug / root cause / stack trace → drill why
+- vague "something wrong" → drill why
 
 **Borderline:** when uncertain, always drill.
 
@@ -485,7 +485,7 @@ why: users got charged twice
 answer: no timeout protection
 ```
 
-### Improvement Ideas
+### Improvement Ideas 
 
 After every 5 whys, generate improvements:
 
@@ -502,27 +502,27 @@ root: no circuit breaker
 
 Prioritize by time vs impact.
 
-- **quick**: <1hr, high impact -> do first
-- **refactor**: >1hr, high impact -> schedule
-- **defer**: >1hr, low impact -> backlog
-- **never**: >1hr, no impact -> skip
+- **quick**: <1hr, high impact → do first
+- **refactor**: >1hr, high impact → schedule
+- **defer**: >1hr, low impact → backlog
+- **never**: >1hr, no impact → skip
 
-## PR / Body Text
+## PR / Body Text 
 
 Auto-applies when writing about code changes.
 
 Examples:
-- PR description / review -> bullet-only
-- pull request / commit message -> bullet-only
+- PR description / review → bullet-only
+- pull request / commit message → bullet-only
 
 Bullet-only. No essays. 2-5 bullets max.
 
-X verbose:
+❌ verbose:
 ```
 I have implemented a new feature that allows users to search for products by their name. This is a very useful feature that was requested by the customer. It uses a database index to make the search fast. Please review.
 ```
 
-OK cove:
+✅ cove:
 ```
 feat: add product search by name
 - uses db index for performance
@@ -530,17 +530,17 @@ feat: add product search by name
 [TITE-123]
 ```
 
-## Tests
+## Tests 
 
 Auto-applies when writing about or showing tests.
 
 Examples:
-- test / assertion / spec -> minimal assertions
-- test code shown -> one concept per test
+- test / assertion / spec → minimal assertions
+- test code shown → one concept per test
 
 Minimal assertions. One concept per test.
 
-X verbose:
+❌ verbose:
 ```python
 def test_when_user_clicks_search_button_and_database_contains_matching_products_then_display_results_in_ui():
     db = setup_test_database()
@@ -552,7 +552,7 @@ def test_when_user_clicks_search_button_and_database_contains_matching_products_
     assertEqual(result[1].name, "Widget_B")
 ```
 
-OK cove:
+✅ cove:
 ```python
 def test_search_returns_matching_products():
     db.insert(Product(name="Widget A", price=100))
@@ -561,22 +561,22 @@ def test_search_returns_matching_products():
     assert result[0].name == "Widget A"
 ```
 
-## Error Messages
+## Error Messages 
 
 Auto-applies when showing or describing errors.
 
 Examples:
-- stack trace / error output -> short, actionable
-- exception / panic / failed -> short, actionable
+- stack trace / error output → short, actionable
+- exception / panic / failed → short, actionable
 
 Short. Actionable. No stack trace novels.
 
-X verbose:
+❌ verbose:
 ```
 We apologize for the inconvenience. An unexpected error occurred while attempting to save your document. This may have been caused by a temporary network issue or a problem with the storage subsystem. Please try saving again, and if the problem persists, contact support with error code 0x80070005.
 ```
 
-OK cove:
+✅ cove:
 ```
 Save failed: disk full. Free 500MB to continue. [ERR_DISK_FULL]
 ```
@@ -586,7 +586,7 @@ Save failed: disk full. Free 500MB to continue. [ERR_DISK_FULL]
 Examples over explanation. Compressed.
 
 Drop:
-- "This command does..." -> just show usage
+- "This command does..." → just show usage
 - paragraphs of description
 - "Usage:" label (obvious from structure)
 - `[options]` when none exist
@@ -599,7 +599,7 @@ Use:
 - exit codes: `0` success, `1` error
 - `--version` support
 
-X verbose:
+❌ verbose:
 ```
 Usage: myapp [command]
 
@@ -617,12 +617,12 @@ Options:
 For more information, visit https://docs.example.com
 ```
 
-OK full:
+✅ full:
 ```
 x build|test|deploy [-h] [-v]
 
 build     compile sources
-test      run suite
+test      run suite  
 deploy    push to prod
 
 -h  help -v  verbose
@@ -647,9 +647,9 @@ Use:
 - TOC if > 3 sections
 - "See full docs at..." link
 
-X verbose:
+❌ verbose:
 ```
-# SuperApp
+# 🚀 SuperApp 
 
 [![Build](https://img.shields.io/badge/build-passing-green)]()
 
@@ -657,12 +657,12 @@ The **most modern** and **fastest** application framework for building scalable 
 
 ## Features
 
-- Lightning fast
-- Secure by default
-- Zero config
-- Multi-cloud
-- Fully tested
-- Excellent documentation
+- ⚡ Lightning fast
+- 🔒 Secure by default
+- 📦 Zero config
+- 🌐 Multi-cloud
+- 🧪 Fully tested
+- 📚 Excellent documentation
 
 ## Getting Started
 
@@ -673,7 +673,7 @@ as a global dependency...
 [continues for 500 more words]
 ```
 
-OK full:
+✅ full:
 ```
 # SuperApp
 
@@ -683,11 +683,11 @@ Build and deploy microservices.
 `npm i -g superapp`
 
 ## Usage
-`superapp build`  compile
+`superapp build`  compile  
 `superapp deploy` push to prod
 
 ## API
-`new App(opts)` create app
+`new App(opts)` create app  
 `app.listen(port)` start server
 
 docs: https://docs.example.com

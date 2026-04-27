@@ -235,11 +235,20 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 - Write tests before backend behavior changes whenever practical.
 - Add or update tests with behavior changes.
 - Prefer focused integration tests in `tests/*.rs` for HTTP and adapter behavior.
+- Keep integration tests only for behavior that genuinely needs the full boundary: auth, user scoping, HTTP status mapping, body/query validation, request size limits, and one simple happy path per endpoint.
+- If an integration test mainly reasserts domain rules, mapping helpers, or service branching that can be covered with a fake-backed unit test, move that coverage below HTTP and delete the redundant REST test.
 - When an integration test target or shared test helper grows large, split it into a directory-based suite such as `tests/<suite>/main.rs` with focused files for support, fixtures, fakes, observability, and behavior groups.
 - Use fakes/test doubles for domain-service tests.
 - Verify user scoping in REST tests whenever endpoints are user-owned.
 - For frontend API tests, mock `fetch` and validate parsed output shapes.
 - For retry-sensitive workflows, test idempotency and recovery behavior, not just happy paths.
+- Treat test memory hygiene as a first-class design constraint. Shared test helpers must not retain unbounded global state across a test binary.
+- If a test starts background work with `tokio::spawn`, `axum::serve`, watches, channels, or timers, wrap that work in an owned helper that aborts or shuts it down in `Drop`. Never leave spawned server tasks unmanaged.
+- Do not store per-test fixtures in global `Vec`s behind `OnceLock`, `Mutex`, or similar globals. If a resource should be shared, share exactly one bounded instance per test binary; otherwise keep it local and clean it up explicitly.
+- For expensive reusable test resources such as `mongodb::Client` or built SPA fixtures, prefer a bounded per-binary singleton via `OnceLock` when isolation does not require per-test instances.
+- Keep per-test database names, collections, and mutable records isolated even when the client is shared.
+- When a test creates temp directories or filesystem fixtures, either reuse one bounded fixture per test binary or guarantee cleanup in `Drop`; do not accumulate unique temp roots without need.
+- When diagnosing suite-level `SIGKILL`, OOM, or memory-pressure failures, rerun heavy test binaries sequentially in failing order. Do not launch multiple heavy `cargo test` targets in parallel because that creates non-diagnostic pressure.
 
 ## Logging / Telemetry Notes
 
@@ -285,6 +294,7 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 
 - Match existing file style before introducing new patterns.
 - Prefer minimal diffs.
+- Treat function size as a hard clean-code rule: aim to keep functions at or below about 100 lines of code. If a function grows past roughly 130 lines, refactor it into smaller logical helpers before adding more behavior.
 - Keep files under 500 lines of code when practical; refactor early into smaller logical modules/components instead of letting one file grow into spaghetti code.
 - Do not keep catch-all support files after a split; move shared helpers into narrowly scoped modules like `app.rs`, `identity.rs`, `settings.rs`, `intervals.rs`, or similar concern-based names.
 - Keep the borrow checker boring; redesign API shapes before introducing extra `clone()`, `Arc`, shared wrappers, or explicit lifetimes.

@@ -13,6 +13,13 @@ pub trait ExternalObservationRepository: Clone + Send + Sync + 'static {
         observation: ExternalObservation,
     ) -> BoxFuture<Result<ExternalObservation, ExternalSyncRepositoryError>>;
 
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        external_object_kind: ExternalObjectKind,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>>;
+
     fn find_by_provider_and_external_id(
         &self,
         user_id: &str,
@@ -87,6 +94,15 @@ impl ExternalObservationRepository for NoopExternalObservationRepository {
         observation: ExternalObservation,
     ) -> BoxFuture<Result<ExternalObservation, ExternalSyncRepositoryError>> {
         Box::pin(async move { Ok(observation) })
+    }
+
+    fn find_by_canonical_entities(
+        &self,
+        _user_id: &str,
+        _external_object_kind: ExternalObjectKind,
+        _canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalObservation>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 
     fn find_by_provider_and_external_id(

@@ -11,12 +11,17 @@ use crate::{
     domain::{
         calendar::{CalendarUseCases, SyncPlannedWorkout},
         calendar_labels::CalendarLabelsUseCases,
+        calendar_view::CalendarEntryViewError,
         intervals::DateRange,
     },
 };
 
+use super::super::user_auth::pseudonymize_user_id;
 use super::{
-    dto::{ListCalendarEventsQuery, SyncPlannedWorkoutPath},
+    dto::{
+        validation_code_message_response, validation_message_response, ListCalendarEventsQuery,
+        ManualCalendarRefreshResponseDto, SyncPlannedWorkoutPath,
+    },
     error::{map_calendar_error, map_calendar_label_error},
     mapping::{map_calendar_event_to_dto, map_calendar_labels_to_dto},
 };
@@ -119,7 +124,14 @@ pub(in crate::adapters::rest) async fn sync_planned_workout(
     };
 
     if !is_valid_date(&path.date) {
-        return StatusCode::BAD_REQUEST.into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(validation_code_message_response(
+                "invalid_date_format",
+                "planned workout date must be in YYYY-MM-DD format",
+            )),
+        )
+            .into_response();
     }
 
     match calendar_service
@@ -134,5 +146,52 @@ pub(in crate::adapters::rest) async fn sync_planned_workout(
     {
         Ok(event) => (StatusCode::OK, Json(map_calendar_event_to_dto(event))).into_response(),
         Err(error) => map_calendar_error(error),
+    }
+}
+
+pub(in crate::adapters::rest) async fn refresh_calendar_view(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+
+    let service = match state.manual_calendar_refresh_service.as_deref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    match service.refresh_calendar_view_for_user(&user_id).await {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(ManualCalendarRefreshResponseDto {
+                oldest: result.oldest,
+                newest: result.newest,
+                rebuilt_entry_count: result.rebuilt_entry_count,
+            }),
+        )
+            .into_response(),
+        Err(CalendarEntryViewError::InvariantViolation(_)) => {
+            tracing::error!(user_id = %pseudonymize_user_id(&user_id), "manual calendar refresh encountered invariant violation");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(validation_message_response(
+                    "failed to refresh calendar view",
+                )),
+            )
+                .into_response()
+        }
+        Err(CalendarEntryViewError::Repository(message)) => {
+            tracing::error!(user_id = %pseudonymize_user_id(&user_id), error = %message, "manual calendar refresh failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(validation_message_response(
+                    "failed to refresh calendar view",
+                )),
+            )
+                .into_response()
+        }
     }
 }

@@ -109,7 +109,7 @@ where
 }
 
 pub fn canonical_completed_workout_id(activity_id: &str) -> String {
-    if activity_id.starts_with("intervals-activity:") {
+    if activity_id.contains(':') {
         activity_id.to_string()
     } else {
         format!("intervals-activity:{activity_id}")
@@ -117,5 +117,7 @@ pub fn canonical_completed_workout_id(activity_id: &str) -> String {
 }
 
 pub fn completed_workout_activity_id(id: &str) -> &str {
-    id.strip_prefix("intervals-activity:").unwrap_or(id)
+    id.strip_prefix("intervals-activity:")
+        .or_else(|| id.strip_prefix("wahoo-workout:"))
+        .unwrap_or(id)
 }

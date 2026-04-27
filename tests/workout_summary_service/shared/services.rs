@@ -1,6 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use aiwattcoach::domain::settings::Weekday;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::*;
 
