@@ -95,37 +95,43 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         ? 1
         : 0;
   const extraItemCount = Math.max(0, pickerVisibleItemCount - visibleItemCount);
-  const title = raceLabel?.payload.name
-    ?? (hasTraining
-      ? buildTitle(visibleActivity, primaryEvent, {
-        workout: t('calendar.workout'),
-        race: t('calendar.eventRace'),
-        ride: t('calendar.eventRide'),
-        run: t('calendar.eventRun'),
-        swim: t('calendar.eventSwim'),
-        unknown: t('calendar.eventOther'),
-      })
-      : t('calendar.restDay'));
-  const subtitle = raceLabel
-    ? formatRaceSubtitle(raceLabel.payload, t)
-    : (hasTraining
-      ? buildSubtitle(visibleActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
-        workout: t('calendar.workout'),
-        race: t('calendar.eventRace'),
-        ride: t('calendar.eventRide'),
-        run: t('calendar.eventRun'),
-        swim: t('calendar.eventSwim'),
-        unknown: t('calendar.eventOther'),
-      })
-      : t('calendar.restDay'));
+  const title = hasCompactRacePrep
+    ? buildCompactPlannedTitle(primaryPlannedWorkoutEvent!, t)
+    : raceLabel?.payload.name
+      ?? (hasTraining
+        ? buildTitle(visibleActivity, primaryEvent, {
+          workout: t('calendar.workout'),
+          race: t('calendar.eventRace'),
+          ride: t('calendar.eventRide'),
+          run: t('calendar.eventRun'),
+          swim: t('calendar.eventSwim'),
+          unknown: t('calendar.eventOther'),
+        })
+        : t('calendar.restDay'));
+  const subtitle = hasCompactRacePrep
+    ? buildCompactPlannedSubtitle(primaryPlannedWorkoutEvent!, locale)
+    : raceLabel
+      ? formatRaceSubtitle(raceLabel.payload, t)
+      : (hasTraining
+        ? buildSubtitle(visibleActivity, isPlannedOnly ? primaryPlannedWorkoutEvent : null, locale, {
+          workout: t('calendar.workout'),
+          race: t('calendar.eventRace'),
+          ride: t('calendar.eventRide'),
+          run: t('calendar.eventRun'),
+          swim: t('calendar.eventSwim'),
+          unknown: t('calendar.eventOther'),
+        })
+        : t('calendar.restDay'));
   const tone: Tone = raceLabel
     ? 'race'
     : hasTraining
       ? getTone(visibleActivity, primaryEvent)
       : 'muted';
-  const bars = raceLabel
-    ? buildRaceBars(raceLabel)
-    : buildBars(visibleActivity, primaryPlannedWorkoutEvent);
+  const bars = hasCompactRacePrep
+    ? buildPlannedWorkoutBars(primaryPlannedWorkoutEvent!)
+    : raceLabel
+      ? buildRaceBars(raceLabel)
+      : buildBars(visibleActivity, primaryPlannedWorkoutEvent);
   const Icon = raceLabel
     ? getRaceIcon(raceLabel.payload.discipline)
     : hasTraining
@@ -134,15 +140,6 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const isSelectable = hasTraining && Boolean(onSelect);
   const plannedSyncVisual = isPredictedPlannedOnly ? getPlannedSyncVisual(plannedSyncStatus, t) : null;
   const racePriorityVisual = raceLabel ? getRacePriorityVisual(raceLabel.payload.priority) : null;
-  const compactPrepTitle = hasCompactRacePrep && primaryPlannedWorkoutEvent
-    ? buildCompactPlannedTitle(primaryPlannedWorkoutEvent, t)
-    : null;
-  const compactPrepSubtitle = hasCompactRacePrep && primaryPlannedWorkoutEvent
-    ? buildCompactPlannedSubtitle(primaryPlannedWorkoutEvent, locale)
-    : null;
-  const compactPrepBars = hasCompactRacePrep && primaryPlannedWorkoutEvent
-    ? buildCompactPlannedBars(primaryPlannedWorkoutEvent)
-    : [];
   const matchedPlanBadgeLabel = hasMatchedPlannedWorkout ? t('calendar.planMatched') : null;
 
   const baseClassName = [
@@ -198,26 +195,6 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
 
       {hasTraining ? (
         <div className="mt-auto">
-          {hasCompactRacePrep ? (
-            <div className="mb-3 rounded-xl border border-[#00e3fd]/20 bg-[#0e1820]/80 px-3 py-2.5 shadow-[0_0_0_1px_rgba(0,227,253,0.04)]">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#00e3fd]">
-                    {t('calendar.prepWorkout')}
-                  </p>
-                  <p className="truncate text-[11px] font-bold text-[#eafcff]">{compactPrepTitle}</p>
-                </div>
-                {compactPrepSubtitle ? (
-                  <p className="shrink-0 text-[10px] font-semibold text-[#9fd8e3]">{compactPrepSubtitle}</p>
-                ) : null}
-              </div>
-              {compactPrepBars.length > 0 ? (
-                <div className="mt-2">
-                  <CalendarMiniChart bars={compactPrepBars} tone="secondary" />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
           <CalendarMiniChart bars={bars} tone={tone} />
           {raceLabel ? (
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -499,14 +476,6 @@ function buildRaceBars(raceLabel: CalendarRaceLabel): Array<number | WorkoutBar>
   ];
 }
 
-function buildCompactPlannedBars(dayEvent: CalendarDayEvent): WorkoutBar[] {
-  return downsampleWorkoutBars(buildPlannedWorkoutBars(dayEvent), 4)
-    .map((bar) => ({
-      ...bar,
-      height: Math.max(26, Math.round(bar.height * 0.72)),
-    }));
-}
-
 function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Array<number | WorkoutBar> {
   if (dayEvent?.restDay) {
     return [18, 12, 20];
@@ -537,47 +506,6 @@ function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEve
 
 function startOfDay(value: Date): Date {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
-
-function downsampleWorkoutBars(bars: WorkoutBar[], maxBars: number): WorkoutBar[] {
-  if (bars.length <= maxBars) {
-    return bars;
-  }
-
-  const totalWidthUnits = bars.reduce((sum, bar) => sum + Math.max(1, bar.widthUnits ?? 1), 0);
-  if (totalWidthUnits <= 0) {
-    return bars.slice(0, maxBars);
-  }
-
-  const targetBucketWidth = totalWidthUnits / maxBars;
-  const groupedBars: WorkoutBar[] = [];
-  let index = 0;
-
-  for (let bucketIndex = 0; bucketIndex < maxBars && index < bars.length; bucketIndex += 1) {
-    let consumedWidth = 0;
-    let dominantBar = bars[index];
-    let dominantHeight = dominantBar.height;
-    let groupWidth = 0;
-
-    while (index < bars.length && (consumedWidth < targetBucketWidth || groupWidth === 0)) {
-      const currentBar = bars[index];
-      const currentWidth = Math.max(1, currentBar.widthUnits ?? 1);
-      consumedWidth += currentWidth;
-      groupWidth += currentWidth;
-      if (currentBar.height >= dominantHeight) {
-        dominantBar = currentBar;
-        dominantHeight = currentBar.height;
-      }
-      index += 1;
-    }
-
-    groupedBars.push({
-      ...dominantBar,
-      widthUnits: groupWidth,
-    });
-  }
-
-  return groupedBars;
 }
 
 function buildCompactPlannedTitle(
