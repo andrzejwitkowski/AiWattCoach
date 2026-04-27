@@ -81,33 +81,6 @@ pub struct WahooWorkoutListResponse {
 }
 
 #[derive(Debug, Serialize)]
-pub struct WahooCreatePlanRequest {
-    pub plan: WahooCreatePlanRequestBody,
-}
-
-#[derive(Debug, Serialize)]
-pub struct WahooCreatePlanRequestBody {
-    pub file: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub filename: Option<String>,
-    pub external_id: String,
-    pub provider_updated_at: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct WahooUpdatePlanRequest {
-    pub plan: WahooUpdatePlanRequestBody,
-}
-
-#[derive(Debug, Serialize)]
-pub struct WahooUpdatePlanRequestBody {
-    pub file: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub filename: Option<String>,
-    pub provider_updated_at: String,
-}
-
-#[derive(Debug, Serialize)]
 pub struct WahooCreateWorkoutRequest {
     pub workout: WahooCreateWorkoutRequestBody,
 }

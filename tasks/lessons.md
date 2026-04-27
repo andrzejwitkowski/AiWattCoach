@@ -45,6 +45,7 @@
 
 ## Small Review Fixes
 
+- For upstream file-upload APIs, do not assume a nested JSON body is equivalent to documented `resource[file]` params. Check whether the provider expects `application/x-www-form-urlencoded` or multipart transport and whether the file field must be wrapped as `data:<mime>;base64,...` instead of raw base64.
 - When simplifying poll-cursor helpers, verify both branches explicitly: existing cursor plus new upstream results should usually advance, while existing cursor plus no new results may need to stay put. Do not drop the data-presence signal unless a regression test proves the simplified semantics are still correct.
 - If a polling loop filters fetched upstream records before import, do not tie cursor advancement only to the filtered subset unless repeated rereads of skipped records are intentional. Cursor/watermark movement usually belongs to the full consumed upstream page.
 - If a paginated provider bootstrap can span many pages, do not defer all durable progress until the entire scan succeeds. A later-page `429` or transient error can otherwise reset the bootstrap to zero forever. Persist a resumable checkpoint such as `next_page` plus the latest seen watermark before returning the failure.

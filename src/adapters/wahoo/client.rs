@@ -9,11 +9,10 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
     adapters::wahoo::dto::{
-        WahooCreatePlanRequest, WahooCreatePlanRequestBody, WahooCreateWorkoutRequest,
-        WahooCreateWorkoutRequestBody, WahooFileReferenceResponse, WahooPlanResponse,
-        WahooTokenResponse, WahooUpdatePlanRequest, WahooUpdatePlanRequestBody,
-        WahooUpdateWorkoutRequest, WahooUpdateWorkoutRequestBody, WahooWorkoutListResponse,
-        WahooWorkoutResponse, WahooWorkoutSummaryResponse,
+        WahooCreateWorkoutRequest, WahooCreateWorkoutRequestBody, WahooFileReferenceResponse,
+        WahooPlanResponse, WahooTokenResponse, WahooUpdateWorkoutRequest,
+        WahooUpdateWorkoutRequestBody, WahooWorkoutListResponse, WahooWorkoutResponse,
+        WahooWorkoutSummaryResponse,
     },
     domain::wahoo::{
         BoxFuture, WahooApiPort, WahooCreatePlan, WahooCreateWorkout, WahooError,
@@ -23,6 +22,7 @@ use crate::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://api.wahooligan.com";
+const PLAN_FILE_MEDIA_TYPE: &str = "application/json";
 
 #[derive(Clone)]
 pub struct WahooOAuthClient {
@@ -196,6 +196,45 @@ fn map_file_reference(file: Option<WahooFileReferenceResponse>) -> Option<WahooF
 
 fn parse_optional_decimal(value: Option<String>) -> Option<f64> {
     value?.trim().parse().ok()
+}
+
+fn encode_base64_data_uri(media_type: &str, base64: &str) -> String {
+    format!("data:{media_type};base64,{base64}")
+}
+
+fn build_create_plan_form(request: WahooCreatePlan) -> Vec<(String, String)> {
+    vec![
+        (
+            "plan[file]".to_string(),
+            encode_base64_data_uri(PLAN_FILE_MEDIA_TYPE, &request.file_base64),
+        ),
+        (
+            "plan[filename]".to_string(),
+            request.filename.unwrap_or_else(|| "plan.json".to_string()),
+        ),
+        ("plan[external_id]".to_string(), request.external_id),
+        (
+            "plan[provider_updated_at]".to_string(),
+            request.provider_updated_at,
+        ),
+    ]
+}
+
+fn build_update_plan_form(request: WahooUpdatePlan) -> Vec<(String, String)> {
+    vec![
+        (
+            "plan[file]".to_string(),
+            encode_base64_data_uri(PLAN_FILE_MEDIA_TYPE, &request.file_base64),
+        ),
+        (
+            "plan[filename]".to_string(),
+            request.filename.unwrap_or_else(|| "plan.json".to_string()),
+        ),
+        (
+            "plan[provider_updated_at]".to_string(),
+            request.provider_updated_at,
+        ),
+    ]
 }
 
 fn map_workout_summary(summary: WahooWorkoutSummaryResponse) -> WahooWorkoutSummary {
@@ -395,18 +434,12 @@ impl WahooApiPort for WahooOAuthClient {
         let client = self.clone();
         let access_token = access_token.to_string();
         Box::pin(async move {
+            let form = build_create_plan_form(request);
             let payload: WahooPlanResponse = client
                 .execute_api_write(
                     client
                         .bearer_post(client.api_url("/v1/plans"), &access_token)
-                        .json(&WahooCreatePlanRequest {
-                            plan: WahooCreatePlanRequestBody {
-                                file: request.file_base64,
-                                filename: request.filename,
-                                external_id: request.external_id,
-                                provider_updated_at: request.provider_updated_at,
-                            },
-                        }),
+                        .form(&form),
                     logging::BodyLoggingMode::Full,
                 )
                 .await?;
@@ -425,6 +458,7 @@ impl WahooApiPort for WahooOAuthClient {
         let client = self.clone();
         let access_token = access_token.to_string();
         Box::pin(async move {
+            let form = build_update_plan_form(request);
             let payload: WahooPlanResponse = client
                 .execute_api_write(
                     client
@@ -432,13 +466,7 @@ impl WahooApiPort for WahooOAuthClient {
                             client.api_url(&format!("/v1/plans/{plan_id}")),
                             &access_token,
                         )
-                        .json(&WahooUpdatePlanRequest {
-                            plan: WahooUpdatePlanRequestBody {
-                                file: request.file_base64,
-                                filename: request.filename,
-                                provider_updated_at: request.provider_updated_at,
-                            },
-                        }),
+                        .form(&form),
                     logging::BodyLoggingMode::Full,
                 )
                 .await?;
@@ -620,7 +648,72 @@ impl WahooApiPort for WahooOAuthClient {
 
 #[cfg(test)]
 mod tests {
-    use super::summarize_error_body;
+    use super::{
+        build_create_plan_form, build_update_plan_form, encode_base64_data_uri,
+        summarize_error_body, PLAN_FILE_MEDIA_TYPE,
+    };
+    use crate::domain::wahoo::{WahooCreatePlan, WahooUpdatePlan};
+
+    #[test]
+    fn encode_base64_data_uri_prefixes_plan_payloads() {
+        assert_eq!(
+            encode_base64_data_uri(PLAN_FILE_MEDIA_TYPE, "eyJ0ZXN0Ijp0cnVlfQ=="),
+            "data:application/json;base64,eyJ0ZXN0Ijp0cnVlfQ=="
+        );
+    }
+
+    #[test]
+    fn create_plan_form_uses_data_uri_and_required_fields() {
+        let form = build_create_plan_form(WahooCreatePlan {
+            file_base64: "eyJoZWFkZXIiOnt9fQ==".to_string(),
+            filename: None,
+            external_id: "planned-workout-1".to_string(),
+            provider_updated_at: "2026-04-27T17:03:21.000Z".to_string(),
+        });
+
+        assert_eq!(
+            form,
+            vec![
+                (
+                    "plan[file]".to_string(),
+                    "data:application/json;base64,eyJoZWFkZXIiOnt9fQ==".to_string()
+                ),
+                ("plan[filename]".to_string(), "plan.json".to_string()),
+                (
+                    "plan[external_id]".to_string(),
+                    "planned-workout-1".to_string()
+                ),
+                (
+                    "plan[provider_updated_at]".to_string(),
+                    "2026-04-27T17:03:21.000Z".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn update_plan_form_keeps_filename_and_uses_data_uri() {
+        let form = build_update_plan_form(WahooUpdatePlan {
+            file_base64: "eyJpbnRlcnZhbHMiOltdfQ==".to_string(),
+            filename: Some("custom-plan.json".to_string()),
+            provider_updated_at: "2026-04-27T17:03:21.000Z".to_string(),
+        });
+
+        assert_eq!(
+            form,
+            vec![
+                (
+                    "plan[file]".to_string(),
+                    "data:application/json;base64,eyJpbnRlcnZhbHMiOltdfQ==".to_string()
+                ),
+                ("plan[filename]".to_string(), "custom-plan.json".to_string()),
+                (
+                    "plan[provider_updated_at]".to_string(),
+                    "2026-04-27T17:03:21.000Z".to_string()
+                ),
+            ]
+        );
+    }
 
     #[test]
     fn summarize_error_body_uses_utf8_preview_when_available() {
