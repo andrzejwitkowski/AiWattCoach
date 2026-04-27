@@ -1323,6 +1323,15 @@ mod dedup_tests {
     }
 
     #[test]
+    fn prefer_completed_workout_for_prompt_falls_back_when_only_one_id_is_numeric() {
+        let candidate = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
+        let existing = sample_workout("completed-1", "2026-05-01T08:00:00Z");
+
+        assert!(prefer_completed_workout_for_prompt(&candidate, &existing));
+        assert!(!prefer_completed_workout_for_prompt(&existing, &candidate));
+    }
+
+    #[test]
     fn prefer_completed_workout_for_prompt_falls_back_to_start_time_when_ids_tie() {
         let candidate = sample_workout("wahoo-workout:10", "2026-05-01T09:00:00Z");
         let existing = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");

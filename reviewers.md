@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | Copilot/CodeRabbit/user | PR #151 follow-up review fixes
+
+- Problem: follow-up review on PR #151 found a few real gaps and one readability issue: power-detail authority ignored `CompletedWorkoutStream.all_null`, Wahoo FIT enrichment still attempted calendar refreshes for malformed `start_date_local`, the sparse-Wahoo calendar regression hid its intent behind mutating an originally detailed fixture, and regenerated graphify artifacts wrote `Graph Report - .` instead of the repo name.
+- Fix: made completed-workout power-detail detection require `!all_null` with a regression, changed Wahoo FIT day refresh to skip malformed dates with a warning instead of calling refresh on an invalid range, introduced a `sample_completed_basic_workout()` fixture plus the inverse calendar authority regression where detailed Wahoo wins back the day, added the asymmetric prompt-dedupe fallback test, and updated the graphify rebuild script to default the project name to `AiWattCoach` before regenerating artifacts.
+- Prevention: when authority rules depend on canonical detail flags, use every semantic field that already exists on the model instead of inferring from sample presence alone. For projection refresh helpers, do not turn malformed local dates into retryable side effects; short-circuit safely and log the invariant break. In tests, prefer fixtures whose names encode the behavioral distinction under review instead of mutating a richer baseline fixture into a sparse one inline.
+
 ### 2026-04-27 | user | calendar/LLM completed-workout selection and Wahoo FIT refresh
 
 - Problem: the calendar and training-context read path still treated Wahoo as authoritative for a whole day even when the Wahoo completed workout was only a sparse summary and Intervals already had richer power details. Separately, successful Wahoo FIT enrichment updated the completed workout but did not automatically refresh `calendar_view`, so the day could stay stale until a manual rebuild.

@@ -1,4 +1,5 @@
 use crate::domain::calendar_view::CalendarEntryViewRefreshPort;
+use tracing::warn;
 
 use super::WahooFitEnrichmentError;
 
@@ -10,7 +11,13 @@ pub async fn refresh_completed_workout_day<Refresh>(
 where
     Refresh: CalendarEntryViewRefreshPort,
 {
-    let day = start_date_local.get(..10).unwrap_or(start_date_local);
+    let Some(day) = start_date_local.get(..10) else {
+        warn!(
+            user_id,
+            start_date_local, "skipping calendar refresh for malformed workout date"
+        );
+        return Ok(());
+    };
     refresh
         .refresh_range_for_user(user_id, day, day)
         .await

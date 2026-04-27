@@ -52,6 +52,7 @@ fn select_day_bucket(
 
 fn stream_has_power_samples(stream: &CompletedWorkoutStream) -> bool {
     stream.stream_type.eq_ignore_ascii_case("watts")
+        && !stream.all_null
         && (series_has_samples(stream.primary_series.as_ref())
             || series_has_samples(stream.secondary_series.as_ref()))
 }
@@ -144,6 +145,14 @@ mod tests {
             "completed-1",
             "2026-05-01"
         )));
+    }
+
+    #[test]
+    fn has_power_details_ignores_all_null_watts_stream() {
+        let mut workout = with_power_stream(sample_workout("completed-1", "2026-05-01"));
+        workout.details.streams[0].all_null = true;
+
+        assert!(!has_power_details(&workout));
     }
 
     #[test]
