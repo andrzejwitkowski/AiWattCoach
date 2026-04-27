@@ -71,6 +71,7 @@
 
 - When one parser reads canonical text produced by another serializer in the same repo, verify structural constructs end to end, not just token-level fields.
 - For repeated workout blocks, add regression tests that assert expanded segment order and total duration so grouped semantics cannot silently collapse back into flat line parsing.
+- If a grouped construct reuses child items parsed by the flat path, preserve child multiplicity too. Outer repeat support is still wrong if inline child repeats are emitted only once per parent iteration.
 
 ## OpenCode Plugin Wiring
 

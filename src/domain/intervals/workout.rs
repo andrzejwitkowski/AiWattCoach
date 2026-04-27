@@ -355,4 +355,18 @@ mod tests {
         assert_eq!(parsed.segments[3].label, "3m 55% #2");
         assert_eq!(parsed.segments[4].label, "5m 50%");
     }
+
+    #[test]
+    fn parse_workout_doc_expands_inline_repeats_inside_canonical_repeat_blocks() {
+        let parsed = parse_workout_doc(Some("Main Set 2x\n- 2x30s 120%\n- 1m 55%"), None);
+
+        assert_eq!(parsed.summary.total_duration_seconds, 240);
+        assert_eq!(parsed.summary.total_segments, 6);
+        assert_eq!(parsed.segments[0].label, "2x30s 120% #1");
+        assert_eq!(parsed.segments[1].label, "2x30s 120% #2");
+        assert_eq!(parsed.segments[2].label, "1m 55% #1");
+        assert_eq!(parsed.segments[3].label, "2x30s 120% #3");
+        assert_eq!(parsed.segments[4].label, "2x30s 120% #4");
+        assert_eq!(parsed.segments[5].label, "1m 55% #2");
+    }
 }

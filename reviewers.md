@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | CodeRabbit | PR #157 planned workout repeat parsing follow-up
+
+- Problem: the first canonical repeat-block fix expanded only the outer repeat header count and ignored inline step-level repeat counts inside the block, so input like `Main Set 2x` plus `- 2x30s 120%` still undercounted duration and segment count inside calendar/workout summaries.
+- Fix: updated repeat-block expansion to iterate each repeated step by its own `repeat_count`, keep per-step occurrence numbering across outer block iterations, and added a regression covering nested repeat expansion inside canonical repeat blocks.
+- Prevention: when adding grouped expansion logic on top of an existing flat parser, audit whether child items already carry their own multiplicity. Outer repeat support is incomplete if nested inline repeats silently collapse back to one segment per child line.
+
 ### 2026-04-27 | user | planned workout calendar duration parsing
 
 - Problem: `parse_workout_doc(...)` treated canonical planned-workout repeat headers like `Main Set 2x` as standalone lines, so the following step lines were not expanded as a repeated block and calendar planned-workout summaries undercounted total duration.

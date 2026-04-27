@@ -37,17 +37,22 @@ pub fn parse_workout_doc(workout_doc: Option<&str>, ftp_watts: Option<i32>) -> P
             if !repeat_steps.is_empty() {
                 let repeat_count = interval.repeat_count;
                 let mut completed = true;
+                let mut step_occurrence_counts = vec![0_usize; repeat_steps.len()];
 
-                'repeat_block: for repeat_index in 0..repeat_count {
-                    for repeated_step in &repeat_steps {
-                        if !append_segment(
-                            repeated_step,
-                            Some(repeat_index + 1),
-                            &mut segments,
-                            &mut start_offset_seconds,
-                        ) {
-                            completed = false;
-                            break 'repeat_block;
+                'repeat_block: for _ in 0..repeat_count {
+                    for (step_index, repeated_step) in repeat_steps.iter().enumerate() {
+                        for _ in 0..repeated_step.repeat_count {
+                            step_occurrence_counts[step_index] += 1;
+
+                            if !append_segment(
+                                repeated_step,
+                                Some(step_occurrence_counts[step_index]),
+                                &mut segments,
+                                &mut start_offset_seconds,
+                            ) {
+                                completed = false;
+                                break 'repeat_block;
+                            }
                         }
                     }
                 }
