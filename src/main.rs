@@ -438,6 +438,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 WahooFitParser,
                 SystemClock,
             )
+            .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone())
             .with_training_load_recompute_service(training_load_recompute_service.clone()),
         )
     });

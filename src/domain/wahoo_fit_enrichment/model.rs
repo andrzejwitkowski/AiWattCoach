@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
+    calendar_view::CalendarEntryViewError,
     completed_workouts::{CompletedWorkoutDetails, CompletedWorkoutMetrics},
     wahoo::WahooError,
 };
@@ -31,6 +32,7 @@ pub enum WahooFitEnrichmentError {
     FitFileRepository(String),
     Scheduler(String),
     TrainingLoad(String),
+    CalendarViewRefresh(String),
 }
 
 impl std::fmt::Display for WahooFitEnrichmentError {
@@ -42,10 +44,17 @@ impl std::fmt::Display for WahooFitEnrichmentError {
             | Self::CompletedWorkoutRepository(message)
             | Self::FitFileRepository(message)
             | Self::Scheduler(message)
-            | Self::TrainingLoad(message) => write!(f, "{message}"),
+            | Self::TrainingLoad(message)
+            | Self::CalendarViewRefresh(message) => write!(f, "{message}"),
             Self::Wahoo(error) => write!(f, "{error}"),
         }
     }
 }
 
 impl std::error::Error for WahooFitEnrichmentError {}
+
+impl From<CalendarEntryViewError> for WahooFitEnrichmentError {
+    fn from(value: CalendarEntryViewError) -> Self {
+        Self::CalendarViewRefresh(value.to_string())
+    }
+}

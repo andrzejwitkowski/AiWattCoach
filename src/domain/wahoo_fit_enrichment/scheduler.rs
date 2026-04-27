@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::domain::{
+    calendar_view::CalendarEntryViewRefreshPort,
     identity::{Clock, IdGenerator},
     task_scheduler::{
         BoxFuture, NewTask, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler,
@@ -198,7 +199,8 @@ fn error_is_retryable(error: &WahooFitEnrichmentError) -> bool {
         WahooFitEnrichmentError::CompletedWorkoutRepository(_)
         | WahooFitEnrichmentError::FitFileRepository(_)
         | WahooFitEnrichmentError::Scheduler(_)
-        | WahooFitEnrichmentError::TrainingLoad(_) => true,
+        | WahooFitEnrichmentError::TrainingLoad(_)
+        | WahooFitEnrichmentError::CalendarViewRefresh(_) => true,
         WahooFitEnrichmentError::Wahoo(error) => {
             matches!(error, WahooError::External(_) | WahooError::Repository(_))
         }
@@ -213,14 +215,15 @@ fn map_task_scheduler_error(error: TaskSchedulerError) -> WahooFitEnrichmentErro
     WahooFitEnrichmentError::Scheduler(error.to_string())
 }
 
-impl<Wahoo, Workouts, FitFiles, Parser, Time> WahooFitEnrichmentExecutionUseCases
-    for super::WahooFitEnrichmentService<Wahoo, Workouts, FitFiles, Parser, Time>
+impl<Wahoo, Workouts, FitFiles, Parser, Time, Refresh> WahooFitEnrichmentExecutionUseCases
+    for super::WahooFitEnrichmentService<Wahoo, Workouts, FitFiles, Parser, Time, Refresh>
 where
     Wahoo: crate::domain::wahoo::WahooUseCases + ?Sized + 'static,
     Workouts: crate::domain::completed_workouts::CompletedWorkoutRepository,
     FitFiles: WahooFitFileRepository,
     Parser: super::WahooFitParserPort,
     Time: Clock + 'static,
+    Refresh: CalendarEntryViewRefreshPort,
 {
     fn enrich_completed_workout(
         &self,

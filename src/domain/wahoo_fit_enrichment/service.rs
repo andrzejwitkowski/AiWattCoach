@@ -2,6 +2,7 @@ use sha2::{Digest, Sha256};
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::domain::{
+    calendar_view::{CalendarEntryViewRefreshPort, NoopCalendarEntryViewRefresh},
     completed_workouts::{
         CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutError, CompletedWorkoutMetrics,
         CompletedWorkoutRepository,
@@ -12,6 +13,7 @@ use crate::domain::{
     wahoo_fit_files::{WahooFitFile, WahooFitFileError, WahooFitFileRepository},
 };
 
+use super::refresh::refresh_completed_workout_day;
 use super::{ParsedWahooFitWorkout, WahooFitEnrichmentError};
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -24,24 +26,32 @@ pub trait WahooFitParserPort: Clone + Send + Sync + 'static {
 }
 
 #[derive(Clone)]
-pub struct WahooFitEnrichmentService<Wahoo, Workouts, FitFiles, Parser, Time>
-where
+pub struct WahooFitEnrichmentService<
+    Wahoo,
+    Workouts,
+    FitFiles,
+    Parser,
+    Time,
+    Refresh = NoopCalendarEntryViewRefresh,
+> where
     Wahoo: WahooUseCases + ?Sized + 'static,
     Workouts: CompletedWorkoutRepository,
     FitFiles: WahooFitFileRepository,
     Parser: WahooFitParserPort,
     Time: Clock + 'static,
+    Refresh: CalendarEntryViewRefreshPort,
 {
     wahoo: Arc<Wahoo>,
     completed_workouts: Workouts,
     fit_files: FitFiles,
     parser: Parser,
     clock: Time,
+    refresh: Refresh,
     training_load_recompute: Option<Arc<dyn TrainingLoadRecomputeUseCases>>,
 }
 
 impl<Wahoo, Workouts, FitFiles, Parser, Time>
-    WahooFitEnrichmentService<Wahoo, Workouts, FitFiles, Parser, Time>
+    WahooFitEnrichmentService<Wahoo, Workouts, FitFiles, Parser, Time, NoopCalendarEntryViewRefresh>
 where
     Wahoo: WahooUseCases + ?Sized + 'static,
     Workouts: CompletedWorkoutRepository,
@@ -62,7 +72,37 @@ where
             fit_files,
             parser,
             clock,
+            refresh: NoopCalendarEntryViewRefresh,
             training_load_recompute: None,
+        }
+    }
+}
+
+impl<Wahoo, Workouts, FitFiles, Parser, Time, Refresh>
+    WahooFitEnrichmentService<Wahoo, Workouts, FitFiles, Parser, Time, Refresh>
+where
+    Wahoo: WahooUseCases + ?Sized + 'static,
+    Workouts: CompletedWorkoutRepository,
+    FitFiles: WahooFitFileRepository,
+    Parser: WahooFitParserPort,
+    Time: Clock + 'static,
+    Refresh: CalendarEntryViewRefreshPort,
+{
+    pub fn with_calendar_view_refresh<NewRefresh>(
+        self,
+        refresh: NewRefresh,
+    ) -> WahooFitEnrichmentService<Wahoo, Workouts, FitFiles, Parser, Time, NewRefresh>
+    where
+        NewRefresh: CalendarEntryViewRefreshPort,
+    {
+        WahooFitEnrichmentService {
+            wahoo: self.wahoo,
+            completed_workouts: self.completed_workouts,
+            fit_files: self.fit_files,
+            parser: self.parser,
+            clock: self.clock,
+            refresh,
+            training_load_recompute: self.training_load_recompute,
         }
     }
 
@@ -85,6 +125,7 @@ where
         let fit_files = self.fit_files.clone();
         let parser = self.parser.clone();
         let clock = self.clock.clone();
+        let refresh = self.refresh.clone();
         let training_load_recompute = self.training_load_recompute.clone();
         let user_id = user_id.to_string();
         let completed_workout_id = completed_workout_id.to_string();
@@ -95,6 +136,7 @@ where
                 fit_files,
                 parser,
                 clock,
+                refresh,
                 training_load_recompute,
             };
             let workout = service
@@ -111,6 +153,9 @@ where
             let enriched_workout = merge_workout_enrichment(workout, parsed);
             service
                 .persist_enriched_workout(enriched_workout.clone())
+                .await?;
+            service
+                .refresh_completed_workout_day(&enriched_workout)
                 .await?;
             service
                 .recompute_training_load_if_needed(&enriched_workout)
@@ -271,6 +316,14 @@ where
             .upsert(fit_file.mark_enriched(self.clock.now_epoch_seconds()))
             .await
             .map_err(map_fit_file_error)
+    }
+
+    async fn refresh_completed_workout_day(
+        &self,
+        workout: &CompletedWorkout,
+    ) -> Result<(), WahooFitEnrichmentError> {
+        refresh_completed_workout_day(&self.refresh, &workout.user_id, &workout.start_date_local)
+            .await
     }
 }
 
