@@ -84,6 +84,8 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       && primaryPlannedWorkoutEvent?.plannedSource === 'predicted',
   );
   const hasCompactRacePrep = Boolean(raceLabel && primaryPlannedWorkoutEvent && !visibleActivity);
+  // Only accessed inside hasCompactRacePrep branches where primaryPlannedWorkoutEvent is guaranteed non-null.
+  const compactPlannedEvent = primaryPlannedWorkoutEvent!;
   const plannedSyncStatus = primaryPlannedWorkoutEvent?.syncStatus ?? null;
   const hasTraining = Boolean(visibleActivity || primaryEvent || raceLabel);
   const pickerVisibleItemCount = dayItems.length;
@@ -96,7 +98,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         : 0;
   const extraItemCount = Math.max(0, pickerVisibleItemCount - visibleItemCount);
   const title = hasCompactRacePrep
-    ? buildCompactPlannedTitle(primaryPlannedWorkoutEvent!, t)
+    ? buildCompactPlannedTitle(compactPlannedEvent, t)
     : raceLabel?.payload.name
       ?? (hasTraining
         ? buildTitle(visibleActivity, primaryEvent, {
@@ -109,7 +111,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
         })
         : t('calendar.restDay'));
   const subtitle = hasCompactRacePrep
-    ? buildCompactPlannedSubtitle(primaryPlannedWorkoutEvent!, locale)
+    ? buildCompactPlannedSubtitle(compactPlannedEvent, locale)
     : raceLabel
       ? formatRaceSubtitle(raceLabel.payload, t)
       : (hasTraining
@@ -128,7 +130,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
       ? getTone(visibleActivity, primaryEvent)
       : 'muted';
   const bars = hasCompactRacePrep
-    ? buildPlannedWorkoutBars(primaryPlannedWorkoutEvent!)
+    ? buildPlannedWorkoutBars(compactPlannedEvent)
     : raceLabel
       ? buildRaceBars(raceLabel)
       : buildBars(visibleActivity, primaryPlannedWorkoutEvent);
@@ -520,6 +522,9 @@ function buildCompactPlannedSubtitle(
   locale: string,
 ): string | null {
   const summary = dayEvent.eventDefinition.summary;
+  if (!summary) {
+    return null;
+  }
   const durationSeconds = summary.totalDurationSeconds;
   const estimatedTss = summary.estimatedTrainingStressScore;
   const durationMinutes = durationSeconds > 0
