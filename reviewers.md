@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | user | calendar/LLM completed-workout selection and Wahoo FIT refresh
+
+- Problem: the calendar and training-context read path still treated Wahoo as authoritative for a whole day even when the Wahoo completed workout was only a sparse summary and Intervals already had richer power details. Separately, successful Wahoo FIT enrichment updated the completed workout but did not automatically refresh `calendar_view`, so the day could stay stale until a manual rebuild.
+- Fix: extracted shared completed-workout day selection that treats "detailed" as a non-empty `watts` stream, wired `AuthoritativeCompletedWorkoutRepository` to use that day-level selector, kept prompt-side dedupe limited to collapsing true duplicate logical activities, and connected `WahooFitEnrichmentService` to `CalendarEntryViewRefreshPort` so a successful enrichment refreshes that workout day automatically. Added focused regressions for authoritative day selection, training-context fallback, calendar-view refresh behavior, and scheduler wiring for the new generic refresh dependency.
+- Prevention: when two read paths must agree on source authority, centralize the authority rule in the repository or shared selector instead of re-encoding provider preference in each consumer. For enrichment flows that materially change read models, verify whether the write path must trigger the corresponding projection refresh immediately after persistence.
+
 ### 2026-04-26 | user | Wahoo bootstrap poller loses all progress on rate limit
 
 - Problem: the Wahoo completed-workouts bootstrap scanned every `/v1/workouts` page before importing anything. For accounts with long history, the poller could get many successful `200` pages and then hit `429 Too Many Requests` before the scan finished, which left `cursor = null`, `last_successful_at = null`, and zero Wahoo observations/completed workouts even though dozens of pages had already been read successfully.

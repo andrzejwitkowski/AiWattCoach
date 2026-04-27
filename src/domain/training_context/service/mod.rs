@@ -884,8 +884,8 @@ fn build_direct_event_matches(
         .collect()
 }
 
-// Inputs are already filtered through authoritative repositories, so this dedupe operates on
-// same-source duplicates only and keeps the most representative row for prompt rendering.
+// Inputs are already filtered through authoritative repositories, so prompt dedupe only needs
+// to collapse true duplicates that share the same logical activity id on the same day.
 fn dedup_completed_workouts_for_prompt(workouts: Vec<CompletedWorkout>) -> Vec<CompletedWorkout> {
     let mut best_by_key = BTreeMap::<(String, String), CompletedWorkout>::new();
 
@@ -912,23 +912,17 @@ fn prefer_completed_workout_for_prompt(
     candidate: &CompletedWorkout,
     existing: &CompletedWorkout,
 ) -> bool {
-    let candidate_is_wahoo = candidate.completed_workout_id.starts_with("wahoo-workout:");
-    let existing_is_wahoo = existing.completed_workout_id.starts_with("wahoo-workout:");
-    match (candidate_is_wahoo, existing_is_wahoo) {
-        (true, false) => true,
-        (false, true) => false,
-        _ => match (
-            numeric_completed_workout_id(candidate),
-            numeric_completed_workout_id(existing),
-        ) {
-            (Some(candidate_id), Some(existing_id)) if candidate_id != existing_id => {
-                candidate_id > existing_id
-            }
-            _ if candidate.start_date_local != existing.start_date_local => {
-                candidate.start_date_local > existing.start_date_local
-            }
-            _ => candidate.completed_workout_id > existing.completed_workout_id,
-        },
+    match (
+        numeric_completed_workout_id(candidate),
+        numeric_completed_workout_id(existing),
+    ) {
+        (Some(candidate_id), Some(existing_id)) if candidate_id != existing_id => {
+            candidate_id > existing_id
+        }
+        _ if candidate.start_date_local != existing.start_date_local => {
+            candidate.start_date_local > existing.start_date_local
+        }
+        _ => candidate.completed_workout_id > existing.completed_workout_id,
     }
 }
 
@@ -1320,7 +1314,7 @@ mod dedup_tests {
     }
 
     #[test]
-    fn prefer_completed_workout_for_prompt_prefers_wahoo_over_other_sources() {
+    fn prefer_completed_workout_for_prompt_falls_back_to_completed_workout_id_order() {
         let candidate = sample_workout("wahoo-workout:10", "2026-05-01T08:00:00Z");
         let existing = sample_workout("intervals-activity:10", "2026-05-01T08:00:00Z");
 

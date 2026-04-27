@@ -1,8 +1,8 @@
 use crate::domain::{
     calendar::{PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository, PlannedWorkoutSyncStatus},
-    completed_workouts::CompletedWorkoutRepository,
     completed_workouts::{
-        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+        AuthoritativeCompletedWorkoutRepository, CompletedWorkout, CompletedWorkoutDetails,
+        CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutSeries,
         CompletedWorkoutStream, CompletedWorkoutZoneTime,
     },
     external_sync::{
@@ -772,6 +772,67 @@ async fn refresh_range_for_user_clears_orphaned_heuristic_links_and_replaces_sta
         .unwrap();
     assert_eq!(persisted.len(), 1);
     assert_eq!(persisted[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+}
+
+#[tokio::test]
+async fn refresh_range_for_user_uses_intervals_completed_workout_when_sparse_wahoo_shares_day() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Wahoo,
+        CanonicalEntityRef::new(
+            CanonicalEntityKind::CompletedWorkout,
+            "wahoo-workout:2".to_string(),
+        ),
+    )
+    .mark_synced("2".to_string(), "hash-1".to_string(), 1_700_000_000)]);
+
+    let mut intervals = sample_completed_workout();
+    intervals.completed_workout_id = "intervals-activity:1".to_string();
+    intervals.source_activity_id = Some("shared-activity".to_string());
+    intervals.planned_workout_id = None;
+    intervals.start_date_local = "2026-05-10T08:00:00".to_string();
+    intervals.name = Some("Intervals detailed".to_string());
+    completed.upsert(intervals).await.unwrap();
+
+    let mut wahoo = sample_completed_workout();
+    wahoo.completed_workout_id = "wahoo-workout:2".to_string();
+    wahoo.source_activity_id = Some("shared-activity".to_string());
+    wahoo.planned_workout_id = None;
+    wahoo.start_date_local = "2026-05-10T08:05:00".to_string();
+    wahoo.name = Some("Wahoo sparse".to_string());
+    wahoo.details.streams.clear();
+    completed.upsert(wahoo).await.unwrap();
+
+    let authoritative_completed =
+        AuthoritativeCompletedWorkoutRepository::new(completed, sync_states);
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        planned_syncs,
+        authoritative_completed,
+        races,
+        special_days,
+        TestExternalSyncStateRepository::default(),
+    );
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+    assert_eq!(
+        refreshed[0].completed_workout_id.as_deref(),
+        Some("intervals-activity:1")
+    );
+    assert_eq!(refreshed[0].title, "Intervals detailed");
 }
 
 #[tokio::test]
