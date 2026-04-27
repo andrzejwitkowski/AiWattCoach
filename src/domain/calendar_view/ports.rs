@@ -8,6 +8,11 @@ use super::{CalendarEntryView, CalendarEntryViewError};
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 pub trait CalendarEntryViewRepository: Clone + Send + Sync + 'static {
+    fn find_oldest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<String>, CalendarEntryViewError>>;
+
     fn list_by_user_id_and_date_range(
         &self,
         user_id: &str,
@@ -43,6 +48,22 @@ pub struct InMemoryCalendarEntryViewRepository {
 
 #[cfg(test)]
 impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
+    fn find_oldest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<String>, CalendarEntryViewError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let stored = stored.lock().expect("calendar view repo mutex poisoned");
+            Ok(stored
+                .iter()
+                .filter(|entry| entry.user_id == user_id)
+                .map(|entry| entry.date.clone())
+                .min())
+        })
+    }
+
     fn list_by_user_id_and_date_range(
         &self,
         user_id: &str,

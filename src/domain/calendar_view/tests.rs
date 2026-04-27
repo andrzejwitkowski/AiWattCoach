@@ -9,6 +9,7 @@ use crate::domain::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError,
         ExternalSyncState, ExternalSyncStateRepository,
     },
+    identity::Clock,
     planned_completed_links::{
         PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkMatchSource,
         PlannedCompletedWorkoutLinkRepository,
@@ -27,8 +28,225 @@ use super::{
     project_completed_workout_entry, project_planned_workout_entry, project_race_entry,
     project_special_day_entry, verify_calendar_entry_integrity, CalendarEntryIntegrityIssue,
     CalendarEntryKind, CalendarEntryViewRefreshPort, CalendarEntryViewRefreshService,
-    CalendarEntryViewRepository, CalendarEntryViewService,
+    CalendarEntryViewRepository, CalendarEntryViewService, ManualCalendarRefreshService,
+    ManualCalendarRefreshUseCases,
 };
+
+#[derive(Clone, Copy)]
+struct FixedClock(i64);
+
+impl Clock for FixedClock {
+    fn now_epoch_seconds(&self) -> i64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingCalendarRefresh {
+    calls: std::sync::Arc<std::sync::Mutex<Vec<(String, String, String)>>>,
+}
+
+impl RecordingCalendarRefresh {
+    fn calls(&self) -> Vec<(String, String, String)> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
+    fn refresh_range_for_user(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> super::BoxFuture<Result<Vec<super::CalendarEntryView>, super::CalendarEntryViewError>>
+    {
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            calls
+                .lock()
+                .unwrap()
+                .push((user_id, oldest, newest.clone()));
+            Ok(vec![sample_calendar_entry_with_date(&newest)])
+        })
+    }
+}
+
+#[tokio::test]
+async fn manual_calendar_refresh_uses_oldest_date_across_sources_and_existing_view() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let refresh = RecordingCalendarRefresh::default();
+
+    views
+        .upsert(sample_calendar_entry_with_date("2026-04-15"))
+        .await
+        .unwrap();
+    planned.upsert(sample_planned_workout()).await.unwrap();
+    let mut completed_workout = sample_completed_workout();
+    completed_workout.start_date_local = "2026-05-09T08:00:00".to_string();
+    completed.upsert(completed_workout).await.unwrap();
+    races.upsert(sample_race()).await.unwrap();
+    special_days.upsert(sample_special_day()).await.unwrap();
+
+    let service = ManualCalendarRefreshService::new(
+        views,
+        planned,
+        completed,
+        races,
+        special_days,
+        FixedClock(1_777_248_000),
+        refresh.clone(),
+    );
+
+    let result = service
+        .refresh_calendar_view_for_user("user-1")
+        .await
+        .unwrap();
+
+    assert_eq!(result.oldest, "2026-04-15");
+    assert_eq!(result.newest, "2026-05-13");
+    assert_eq!(result.rebuilt_entry_count, 1);
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-04-15".to_string(),
+            "2026-05-13".to_string(),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn manual_calendar_refresh_falls_back_to_today_when_user_has_no_calendar_sources() {
+    let service = ManualCalendarRefreshService::new(
+        InMemoryCalendarEntryViewRepository::default(),
+        TestPlannedWorkoutRepository::default(),
+        TestCompletedWorkoutRepository::default(),
+        TestRaceRepository::default(),
+        TestSpecialDayRepository::default(),
+        FixedClock(1_777_248_000),
+        RecordingCalendarRefresh::default(),
+    );
+
+    let result = service
+        .refresh_calendar_view_for_user("user-1")
+        .await
+        .unwrap();
+
+    assert_eq!(result.oldest, "2026-04-27");
+    assert_eq!(result.newest, "2026-04-27");
+}
+
+#[tokio::test]
+async fn manual_calendar_refresh_skips_malformed_completed_workout_dates() {
+    let completed = TestCompletedWorkoutRepository::default();
+    let mut malformed = sample_completed_workout();
+    malformed.start_date_local = "bad-date".to_string();
+    completed.upsert(malformed).await.unwrap();
+
+    let service = ManualCalendarRefreshService::new(
+        InMemoryCalendarEntryViewRepository::default(),
+        TestPlannedWorkoutRepository::default(),
+        completed,
+        TestRaceRepository::default(),
+        TestSpecialDayRepository::default(),
+        FixedClock(1_777_248_000),
+        RecordingCalendarRefresh::default(),
+    );
+
+    let result = service
+        .refresh_calendar_view_for_user("user-1")
+        .await
+        .unwrap();
+
+    assert_eq!(result.oldest, "2026-04-27");
+    assert_eq!(result.newest, "2026-04-27");
+}
+
+#[tokio::test]
+async fn manual_calendar_refresh_extends_newest_for_future_only_calendar_data() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestPlannedWorkoutRepository::default();
+    let refresh = RecordingCalendarRefresh::default();
+
+    let mut future_workout = sample_planned_workout();
+    future_workout.date = "2026-06-02".to_string();
+    future_workout.planned_workout_id = "planned-future".to_string();
+    planned.upsert(future_workout).await.unwrap();
+    views
+        .upsert(sample_calendar_entry_with_date("2026-06-03"))
+        .await
+        .unwrap();
+
+    let service = ManualCalendarRefreshService::new(
+        views,
+        planned,
+        TestCompletedWorkoutRepository::default(),
+        TestRaceRepository::default(),
+        TestSpecialDayRepository::default(),
+        FixedClock(1_777_248_000),
+        refresh.clone(),
+    );
+
+    let result = service
+        .refresh_calendar_view_for_user("user-1")
+        .await
+        .unwrap();
+
+    assert_eq!(result.oldest, "2026-06-02");
+    assert_eq!(result.newest, "2026-06-03");
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-06-02".to_string(),
+            "2026-06-03".to_string(),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn manual_calendar_refresh_preserves_future_only_existing_view_range() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let refresh = RecordingCalendarRefresh::default();
+
+    views
+        .upsert(sample_calendar_entry_with_date("2026-06-05"))
+        .await
+        .unwrap();
+
+    let service = ManualCalendarRefreshService::new(
+        views,
+        TestPlannedWorkoutRepository::default(),
+        TestCompletedWorkoutRepository::default(),
+        TestRaceRepository::default(),
+        TestSpecialDayRepository::default(),
+        FixedClock(1_777_248_000),
+        refresh.clone(),
+    );
+
+    let result = service
+        .refresh_calendar_view_for_user("user-1")
+        .await
+        .unwrap();
+
+    assert_eq!(result.oldest, "2026-06-05");
+    assert_eq!(result.newest, "2026-06-05");
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-06-05".to_string(),
+            "2026-06-05".to_string(),
+        )]
+    );
+}
 
 #[tokio::test]
 async fn calendar_entry_view_service_lists_mixed_entries_by_date_range() {
@@ -2066,6 +2284,29 @@ fn sample_other_special_day() -> SpecialDay {
         Some("Airport day".to_string()),
     )
     .unwrap()
+}
+
+fn sample_calendar_entry_with_date(date: &str) -> super::CalendarEntryView {
+    super::CalendarEntryView {
+        entry_id: format!("special:existing-{date}"),
+        user_id: "user-1".to_string(),
+        entry_kind: CalendarEntryKind::SpecialDay,
+        date: date.to_string(),
+        start_date_local: None,
+        title: "Existing entry".to_string(),
+        subtitle: None,
+        description: None,
+        rest_day: false,
+        rest_day_reason: None,
+        raw_workout_doc: None,
+        planned_workout_id: None,
+        completed_workout_id: None,
+        race_id: None,
+        special_day_id: Some(format!("existing-{date}")),
+        race: None,
+        summary: None,
+        sync: None,
+    }
 }
 
 fn sample_special_day_for_user(user_id: &str) -> SpecialDay {

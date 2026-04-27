@@ -143,3 +143,18 @@ pub(super) fn validation_code_message_response(
         message: message.to_string(),
     }
 }
+
+pub(super) fn validation_message_response(message: &str) -> ValidationMessageResponse {
+    ValidationMessageResponse {
+        code: None,
+        message: message.to_string(),
+    }
+}
+
+#[derive(Serialize)]
+pub(super) struct ManualCalendarRefreshResponseDto {
+    pub oldest: String,
+    pub newest: String,
+    #[serde(rename = "rebuiltEntryCount")]
+    pub rebuilt_entry_count: usize,
+}

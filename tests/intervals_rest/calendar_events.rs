@@ -47,6 +47,122 @@ async fn list_calendar_events_requires_authentication() {
 }
 
 #[tokio::test]
+async fn refresh_calendar_view_requires_authentication() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn refresh_calendar_view_returns_refresh_summary_for_authenticated_user() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    assert_eq!(
+        body.get("oldest").and_then(|value| value.as_str()),
+        Some("2026-01-01")
+    );
+    assert_eq!(
+        body.get("newest").and_then(|value| value.as_str()),
+        Some("2026-04-27")
+    );
+    assert_eq!(
+        body.get("rebuiltEntryCount")
+            .and_then(|value| value.as_u64()),
+        Some(3)
+    );
+}
+
+#[tokio::test]
+async fn refresh_calendar_view_returns_error_message_body_when_refresh_fails() {
+    #[derive(Clone)]
+    struct FailingManualCalendarRefreshService;
+
+    impl aiwattcoach::domain::calendar_view::ManualCalendarRefreshUseCases
+        for FailingManualCalendarRefreshService
+    {
+        fn refresh_calendar_view_for_user(
+            &self,
+            _user_id: &str,
+        ) -> aiwattcoach::domain::calendar_view::BoxFuture<
+            Result<
+                aiwattcoach::domain::calendar_view::ManualCalendarRefreshResult,
+                aiwattcoach::domain::calendar_view::CalendarEntryViewError,
+            >,
+        > {
+            Box::pin(async {
+                Err(
+                    aiwattcoach::domain::calendar_view::CalendarEntryViewError::Repository(
+                        "calendar refresh failed in test".to_string(),
+                    ),
+                )
+            })
+        }
+    }
+
+    let app = crate::app::intervals_test_app_with_manual_calendar_refresh_service(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        std::sync::Arc::new(FailingManualCalendarRefreshService),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    let body: serde_json::Value = get_json(response).await;
+    assert_eq!(
+        body.get("message").and_then(|value| value.as_str()),
+        Some("calendar refresh failed in test")
+    );
+    assert!(body.get("code").is_none());
+}
+
+#[tokio::test]
 async fn list_calendar_events_returns_local_planned_entries_for_authenticated_user() {
     let app = intervals_test_app_with_calendar_entries(
         TestIdentityServiceWithSession::default(),

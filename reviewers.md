@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | Copilot/CodeRabbit/internal review loop | manual calendar refresh review follow-up
+
+- Problem: the first self-service calendar refresh version still hard-capped the rebuild range at `today`, so future calendar entries already stored in `calendar_view` could survive a manual rebuild unchanged and future-only data could collapse into an inverted or incomplete range. The Settings card also surfaced raw `500` fallback text because the endpoint returned a bare status with no structured message, and the frontend POST helper still sent a dummy JSON body to a body-less refresh endpoint.
+- Fix: changed manual refresh range resolution to derive `oldest..newest` from all calendar sources plus persisted `calendar_view` dates, keeping future entries inside the rebuild window; added focused regressions for future-inclusive and future-only existing-view cases; changed `POST /api/calendar/refresh` to return a JSON `{ message }` body on repository failures; taught `CalendarRefreshCard` to redirect on `AuthenticationError`; and made the shared `post(...)` helper accept body-less POST requests so the refresh call no longer sends `{}`.
+- Prevention: for any manual projection rebuild, compute the full effective range from every persisted source that can contribute to the projection, including already-materialized read-model rows when they may extend beyond "today". For frontend-triggered maintenance endpoints, keep the transport contract user-friendly on failure and do not force empty JSON payloads onto body-less routes.
+
 ### 2026-04-27 | Copilot/CodeRabbit/user | PR #151 follow-up review fixes
 
 - Problem: follow-up review on PR #151 found a few real gaps and one readability issue: power-detail authority ignored `CompletedWorkoutStream.all_null`, Wahoo FIT enrichment still attempted calendar refreshes for malformed `start_date_local`, the sparse-Wahoo calendar regression hid its intent behind mutating an originally detailed fixture, and regenerated graphify artifacts wrote `Graph Report - .` instead of the repo name.
