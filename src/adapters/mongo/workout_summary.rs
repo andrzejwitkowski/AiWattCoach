@@ -1,11 +1,15 @@
 use futures::TryStreamExt;
 use mongodb::{
-    bson::{doc, oid::ObjectId, Bson},
+    bson::{doc, oid::ObjectId, Bson, DateTime},
     options::IndexOptions,
     Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
 
+use super::time::{
+    optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds,
+    resolve_required_epoch_seconds,
+};
 use crate::{
     adapters::mongo::error::is_duplicate_key_error,
     domain::workout_summary::{
@@ -31,6 +35,8 @@ struct WorkoutSummaryDocument {
     messages: Vec<ConversationMessageDocument>,
     saved_at_epoch_seconds: Option<i64>,
     #[serde(default)]
+    saved_at: Option<DateTime>,
+    #[serde(default)]
     workout_recap_text: Option<String>,
     #[serde(default)]
     workout_recap_provider: Option<String>,
@@ -38,8 +44,14 @@ struct WorkoutSummaryDocument {
     workout_recap_model: Option<String>,
     #[serde(default)]
     workout_recap_generated_at_epoch_seconds: Option<i64>,
-    created_at_epoch_seconds: i64,
-    updated_at_epoch_seconds: i64,
+    #[serde(default)]
+    workout_recap_generated_at: Option<DateTime>,
+    created_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    created_at: Option<DateTime>,
+    updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -47,7 +59,9 @@ struct ConversationMessageDocument {
     id: String,
     role: String,
     content: String,
-    created_at_epoch_seconds: i64,
+    created_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    created_at: Option<DateTime>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -157,7 +171,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
             else {
                 return Err(WorkoutSummaryError::NotFound);
             };
-            if document.saved_at_epoch_seconds.is_some() {
+            if document_is_locked(&document) {
                 return Err(WorkoutSummaryError::Locked);
             }
 
@@ -168,6 +182,8 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                         "$set": {
                             "rpe": i32::from(rpe),
                             "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at_epoch_seconds), "updated_at")
+                                .map_err(WorkoutSummaryError::Repository)?,
                         }
                     },
                 )
@@ -178,7 +194,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                 let existing = find_preferred_document(&collection, &user_id, &workout_id).await?;
 
                 return match existing {
-                    Some(document) if document.saved_at_epoch_seconds.is_some() => {
+                    Some(document) if document_is_locked(&document) => {
                         Err(WorkoutSummaryError::Locked)
                     }
                     Some(_) => Err(WorkoutSummaryError::NotFound),
@@ -214,7 +230,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
             {
                 return Ok(());
             }
-            if document.saved_at_epoch_seconds.is_some() && message.role == "user" {
+            if document_is_locked(&document) && message.role == "user" {
                 return Err(WorkoutSummaryError::Locked);
             }
 
@@ -223,7 +239,11 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                     with_message_append_filter(document_identity_filter(&document), &message.id),
                     doc! {
                         "$push": { "messages": mongodb::bson::to_bson(&message).map_err(|error| WorkoutSummaryError::Repository(error.to_string()))? },
-                        "$set": { "updated_at_epoch_seconds": updated_at_epoch_seconds },
+                        "$set": {
+                            "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at_epoch_seconds), "updated_at")
+                                .map_err(WorkoutSummaryError::Repository)?,
+                        },
                     },
                 )
                 .await
@@ -241,9 +261,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                     {
                         Ok(())
                     }
-                    Some(document)
-                        if document.saved_at_epoch_seconds.is_some() && message.role == "user" =>
-                    {
+                    Some(document) if document_is_locked(&document) && message.role == "user" => {
                         Err(WorkoutSummaryError::Locked)
                     }
                     Some(_) => Err(WorkoutSummaryError::NotFound),
@@ -278,7 +296,11 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                     doc! {
                         "$set": {
                             "saved_at_epoch_seconds": saved_at_epoch_seconds,
+                            "saved_at": optional_epoch_seconds_to_bson_datetime(saved_at_epoch_seconds, "saved_at")
+                                .map_err(WorkoutSummaryError::Repository)?,
                             "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at_epoch_seconds), "updated_at")
+                                .map_err(WorkoutSummaryError::Repository)?,
                         }
                     },
                 )
@@ -319,7 +341,14 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                             "workout_recap_provider": recap.provider,
                             "workout_recap_model": recap.model,
                             "workout_recap_generated_at_epoch_seconds": recap.generated_at_epoch_seconds,
+                            "workout_recap_generated_at": optional_epoch_seconds_to_bson_datetime(
+                                Some(recap.generated_at_epoch_seconds),
+                                "workout_recap_generated_at",
+                            )
+                            .map_err(WorkoutSummaryError::Repository)?,
                             "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at_epoch_seconds), "updated_at")
+                                .map_err(WorkoutSummaryError::Repository)?,
                         }
                     },
                 )
@@ -484,7 +513,12 @@ fn document_identity_filter(document: &WorkoutSummaryDocument) -> mongodb::bson:
 fn editable_document_identity_filter(document: &WorkoutSummaryDocument) -> mongodb::bson::Document {
     let mut filter = document_identity_filter(document);
     filter.insert("saved_at_epoch_seconds", Bson::Null);
+    filter.insert("saved_at", Bson::Null);
     filter
+}
+
+fn document_is_locked(document: &WorkoutSummaryDocument) -> bool {
+    document.saved_at.is_some() || document.saved_at_epoch_seconds.is_some()
 }
 
 fn current_workout_id_filter(user_id: &str, workout_id: &str) -> mongodb::bson::Document {
@@ -506,6 +540,7 @@ fn with_message_append_filter(
     message_id: &str,
 ) -> mongodb::bson::Document {
     filter.insert("saved_at_epoch_seconds", Bson::Null);
+    filter.insert("saved_at", Bson::Null);
     filter.insert("messages.id", doc! { "$ne": message_id });
     filter
 }
@@ -523,13 +558,29 @@ fn map_document_to_domain(
             .into_iter()
             .map(map_message_to_domain)
             .collect::<Result<Vec<_>, _>>()?,
-        saved_at_epoch_seconds: document.saved_at_epoch_seconds,
+        saved_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.saved_at,
+            document.saved_at_epoch_seconds,
+        ),
         workout_recap_text: document.workout_recap_text,
         workout_recap_provider: document.workout_recap_provider,
         workout_recap_model: document.workout_recap_model,
-        workout_recap_generated_at_epoch_seconds: document.workout_recap_generated_at_epoch_seconds,
-        created_at_epoch_seconds: document.created_at_epoch_seconds,
-        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+        workout_recap_generated_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.workout_recap_generated_at,
+            document.workout_recap_generated_at_epoch_seconds,
+        ),
+        created_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.created_at,
+            document.created_at_epoch_seconds,
+            "created_at",
+        )
+        .map_err(WorkoutSummaryError::Repository)?,
+        updated_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.updated_at,
+            document.updated_at_epoch_seconds,
+            "updated_at",
+        )
+        .map_err(WorkoutSummaryError::Repository)?,
     })
 }
 
@@ -547,12 +598,32 @@ fn map_domain_to_document(summary: &WorkoutSummary) -> WorkoutSummaryDocument {
             .map(map_message_to_document)
             .collect(),
         saved_at_epoch_seconds: summary.saved_at_epoch_seconds,
+        saved_at: optional_epoch_seconds_to_bson_datetime(
+            summary.saved_at_epoch_seconds,
+            "saved_at",
+        )
+        .expect("saved_at should fit BSON DateTime"),
         workout_recap_text: summary.workout_recap_text.clone(),
         workout_recap_provider: summary.workout_recap_provider.clone(),
         workout_recap_model: summary.workout_recap_model.clone(),
         workout_recap_generated_at_epoch_seconds: summary.workout_recap_generated_at_epoch_seconds,
-        created_at_epoch_seconds: summary.created_at_epoch_seconds,
-        updated_at_epoch_seconds: summary.updated_at_epoch_seconds,
+        workout_recap_generated_at: optional_epoch_seconds_to_bson_datetime(
+            summary.workout_recap_generated_at_epoch_seconds,
+            "workout_recap_generated_at",
+        )
+        .expect("workout_recap_generated_at should fit BSON DateTime"),
+        created_at_epoch_seconds: Some(summary.created_at_epoch_seconds),
+        created_at: optional_epoch_seconds_to_bson_datetime(
+            Some(summary.created_at_epoch_seconds),
+            "created_at",
+        )
+        .expect("created_at should fit BSON DateTime"),
+        updated_at_epoch_seconds: Some(summary.updated_at_epoch_seconds),
+        updated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(summary.updated_at_epoch_seconds),
+            "updated_at",
+        )
+        .expect("updated_at should fit BSON DateTime"),
     }
 }
 
@@ -564,7 +635,12 @@ fn map_message_to_document(message: ConversationMessage) -> ConversationMessageD
             MessageRole::Coach => "coach".to_string(),
         },
         content: message.content,
-        created_at_epoch_seconds: message.created_at_epoch_seconds,
+        created_at_epoch_seconds: Some(message.created_at_epoch_seconds),
+        created_at: optional_epoch_seconds_to_bson_datetime(
+            Some(message.created_at_epoch_seconds),
+            "created_at",
+        )
+        .expect("created_at should fit BSON DateTime"),
     }
 }
 
@@ -585,7 +661,12 @@ fn map_message_to_domain(
         id: message.id,
         role,
         content: message.content,
-        created_at_epoch_seconds: message.created_at_epoch_seconds,
+        created_at_epoch_seconds: resolve_required_epoch_seconds(
+            message.created_at,
+            message.created_at_epoch_seconds,
+            "created_at",
+        )
+        .map_err(WorkoutSummaryError::Repository)?,
     })
 }
 

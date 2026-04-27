@@ -1,11 +1,15 @@
 use futures::TryStreamExt;
 use mongodb::{
-    bson::{doc, oid::ObjectId},
+    bson::{doc, oid::ObjectId, DateTime},
     options::IndexOptions,
     Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
 
+use super::time::{
+    optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds,
+    resolve_required_epoch_seconds,
+};
 use crate::domain::llm::LlmProvider;
 use crate::domain::settings::{
     validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, BoxFuture,
@@ -31,8 +35,12 @@ struct SettingsDocument {
     #[serde(default = "default_availability_document")]
     availability: AvailabilityDocument,
     cycling: CyclingDocument,
-    created_at_epoch_seconds: i64,
-    updated_at_epoch_seconds: i64,
+    created_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    created_at: Option<DateTime>,
+    updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -51,6 +59,8 @@ struct IntervalsDocument {
     #[serde(default)]
     connected: bool,
     updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]
@@ -59,8 +69,12 @@ struct WahooDocument {
     refresh_token: Option<String>,
     expires_at_epoch_seconds: Option<i64>,
     #[serde(default)]
+    expires_at: Option<DateTime>,
+    #[serde(default)]
     connected: bool,
     updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
 }
 
 impl std::fmt::Debug for WahooDocument {
@@ -69,8 +83,10 @@ impl std::fmt::Debug for WahooDocument {
             .field("access_token", &RedactedOptionalText(&self.access_token))
             .field("refresh_token", &RedactedOptionalText(&self.refresh_token))
             .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
+            .field("expires_at", &self.expires_at)
             .field("connected", &self.connected)
             .field("updated_at_epoch_seconds", &self.updated_at_epoch_seconds)
+            .field("updated_at", &self.updated_at)
             .finish()
     }
 }
@@ -138,6 +154,8 @@ struct CyclingDocument {
     medications: Option<String>,
     athlete_notes: Option<String>,
     last_zone_update_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_zone_update_at: Option<DateTime>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -193,6 +211,7 @@ impl std::fmt::Debug for CyclingDocument {
                 "last_zone_update_epoch_seconds",
                 &self.last_zone_update_epoch_seconds,
             )
+            .field("last_zone_update_at", &self.last_zone_update_at)
             .finish()
     }
 }
@@ -432,7 +451,7 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                 .find_one(doc! { "user_id": &user_id })
                 .await
                 .map_err(|e| SettingsError::Repository(e.to_string()))?;
-            Ok(doc.map(map_document_to_domain))
+            doc.map(map_document_to_domain).transpose()
         })
     }
 
@@ -470,6 +489,8 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.selected_provider": ai_agents.selected_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.selected_model": &ai_agents.selected_model,
                             "updated_at_epoch_seconds": updated_at,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
+                                .map_err(SettingsError::Repository)?,
                         }
                     },
                 )
@@ -497,7 +518,11 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "intervals.athlete_id": &intervals.athlete_id,
                             "intervals.connected": intervals.connected,
                             "intervals.updated_at_epoch_seconds": updated_at,
+                            "intervals.updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "intervals.updated_at")
+                                .map_err(SettingsError::Repository)?,
                             "updated_at_epoch_seconds": updated_at,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
+                                .map_err(SettingsError::Repository)?,
                         }
                     },
                 )
@@ -523,6 +548,8 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                         "$set": {
                             "options.analyze_without_heart_rate": options.analyze_without_heart_rate,
                             "updated_at_epoch_seconds": updated_at,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
+                                .map_err(SettingsError::Repository)?,
                         }
                     },
                 )
@@ -551,6 +578,8 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "availability.days": mongodb::bson::to_bson(&availability_document.days)
                                 .map_err(|e| SettingsError::Repository(e.to_string()))?,
                             "updated_at_epoch_seconds": updated_at,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
+                                .map_err(SettingsError::Repository)?,
                         }
                     },
                 )
@@ -586,7 +615,14 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "cycling.medications": &cycling_document.medications,
                             "cycling.athlete_notes": &cycling_document.athlete_notes,
                             "cycling.last_zone_update_epoch_seconds": cycling_document.last_zone_update_epoch_seconds,
+                            "cycling.last_zone_update_at": optional_epoch_seconds_to_bson_datetime(
+                                cycling_document.last_zone_update_epoch_seconds,
+                                "cycling.last_zone_update_at",
+                            )
+                            .map_err(SettingsError::Repository)?,
                             "updated_at_epoch_seconds": updated_at,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
+                                .map_err(SettingsError::Repository)?,
                         }
                     },
                 )
@@ -597,8 +633,8 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
     }
 }
 
-fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
-    UserSettings {
+fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, SettingsError> {
+    Ok(UserSettings {
         user_id: doc.user_id,
         ai_agents: AiAgentsConfig {
             openai_api_key: doc.ai_agents.openai_api_key,
@@ -622,15 +658,31 @@ fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
         wahoo: WahooConfig {
             access_token: doc.wahoo.access_token,
             refresh_token: doc.wahoo.refresh_token,
-            expires_at_epoch_seconds: doc.wahoo.expires_at_epoch_seconds,
+            expires_at_epoch_seconds: resolve_optional_epoch_seconds(
+                doc.wahoo.expires_at,
+                doc.wahoo.expires_at_epoch_seconds,
+            ),
             connected: doc.wahoo.connected,
-            updated_at_epoch_seconds: doc.wahoo.updated_at_epoch_seconds,
+            updated_at_epoch_seconds: resolve_optional_epoch_seconds(
+                doc.wahoo.updated_at,
+                doc.wahoo.updated_at_epoch_seconds,
+            ),
         },
         availability: map_document_availability_to_domain(doc.availability),
         cycling: map_document_cycling_to_domain(doc.cycling),
-        created_at_epoch_seconds: doc.created_at_epoch_seconds,
-        updated_at_epoch_seconds: doc.updated_at_epoch_seconds,
-    }
+        created_at_epoch_seconds: resolve_required_epoch_seconds(
+            doc.created_at,
+            doc.created_at_epoch_seconds,
+            "created_at",
+        )
+        .map_err(SettingsError::Repository)?,
+        updated_at_epoch_seconds: resolve_required_epoch_seconds(
+            doc.updated_at,
+            doc.updated_at_epoch_seconds,
+            "updated_at",
+        )
+        .map_err(SettingsError::Repository)?,
+    })
 }
 
 fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
@@ -653,21 +705,42 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
             athlete_id: settings.intervals.athlete_id.clone(),
             connected: settings.intervals.connected,
             updated_at_epoch_seconds: None,
+            updated_at: None,
         },
         wahoo: WahooDocument {
             access_token: settings.wahoo.access_token.clone(),
             refresh_token: settings.wahoo.refresh_token.clone(),
             expires_at_epoch_seconds: settings.wahoo.expires_at_epoch_seconds,
+            expires_at: optional_epoch_seconds_to_bson_datetime(
+                settings.wahoo.expires_at_epoch_seconds,
+                "wahoo.expires_at",
+            )
+            .expect("wahoo.expires_at should fit BSON DateTime"),
             connected: settings.wahoo.connected,
             updated_at_epoch_seconds: settings.wahoo.updated_at_epoch_seconds,
+            updated_at: optional_epoch_seconds_to_bson_datetime(
+                settings.wahoo.updated_at_epoch_seconds,
+                "wahoo.updated_at",
+            )
+            .expect("wahoo.updated_at should fit BSON DateTime"),
         },
         options: OptionsDocument {
             analyze_without_heart_rate: settings.options.analyze_without_heart_rate,
         },
         availability: map_domain_availability_to_document(&settings.availability),
         cycling: map_domain_cycling_to_document(&settings.cycling),
-        created_at_epoch_seconds: settings.created_at_epoch_seconds,
-        updated_at_epoch_seconds: settings.updated_at_epoch_seconds,
+        created_at_epoch_seconds: Some(settings.created_at_epoch_seconds),
+        created_at: optional_epoch_seconds_to_bson_datetime(
+            Some(settings.created_at_epoch_seconds),
+            "created_at",
+        )
+        .expect("created_at should fit BSON DateTime"),
+        updated_at_epoch_seconds: Some(settings.updated_at_epoch_seconds),
+        updated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(settings.updated_at_epoch_seconds),
+            "updated_at",
+        )
+        .expect("updated_at should fit BSON DateTime"),
     }
 }
 
@@ -683,7 +756,10 @@ fn map_document_cycling_to_domain(cycling: CyclingDocument) -> CyclingSettings {
         athlete_prompt: cycling.athlete_prompt,
         medications: cycling.medications,
         athlete_notes: cycling.athlete_notes,
-        last_zone_update_epoch_seconds: cycling.last_zone_update_epoch_seconds,
+        last_zone_update_epoch_seconds: resolve_optional_epoch_seconds(
+            cycling.last_zone_update_at,
+            cycling.last_zone_update_epoch_seconds,
+        ),
     }
 }
 
@@ -700,6 +776,11 @@ fn map_domain_cycling_to_document(cycling: &CyclingSettings) -> CyclingDocument 
         medications: cycling.medications.clone(),
         athlete_notes: cycling.athlete_notes.clone(),
         last_zone_update_epoch_seconds: cycling.last_zone_update_epoch_seconds,
+        last_zone_update_at: optional_epoch_seconds_to_bson_datetime(
+            cycling.last_zone_update_epoch_seconds,
+            "cycling.last_zone_update_at",
+        )
+        .expect("cycling.last_zone_update_at should fit BSON DateTime"),
     }
 }
 
@@ -804,7 +885,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use mongodb::{
-        bson::{doc, oid::ObjectId, to_document, Document},
+        bson::{doc, oid::ObjectId, to_document, DateTime, Document},
         Client,
     };
 
@@ -847,7 +928,9 @@ mod tests {
                 access_token: Some("wahoo-access-token".to_string()),
                 refresh_token: Some("wahoo-refresh-token".to_string()),
                 expires_at_epoch_seconds: Some(123),
+                expires_at: Some(DateTime::from_millis(123_000)),
                 updated_at_epoch_seconds: Some(456),
+                updated_at: Some(DateTime::from_millis(456_000)),
                 connected: true,
             },
             ..build_settings_document("user-1", 1)
@@ -859,6 +942,44 @@ mod tests {
         assert!(!debug.contains("wahoo-access-token"));
         assert!(!debug.contains("wahoo-refresh-token"));
         assert!(debug.contains("expires_at_epoch_seconds"));
+        assert!(debug.contains("expires_at"));
+        assert!(debug.contains("updated_at"));
+    }
+
+    #[test]
+    fn cycling_document_debug_includes_datetime_mirror() {
+        let document = SettingsDocument {
+            cycling: super::CyclingDocument {
+                last_zone_update_epoch_seconds: Some(789),
+                last_zone_update_at: Some(DateTime::from_millis(789_000)),
+                ..super::CyclingDocument::default()
+            },
+            ..build_settings_document("user-1", 1)
+        };
+
+        let debug = format!("{:?}", document.cycling);
+
+        assert!(debug.contains("last_zone_update_epoch_seconds"));
+        assert!(debug.contains("last_zone_update_at"));
+    }
+
+    #[test]
+    fn map_document_to_domain_returns_repository_error_when_required_timestamps_are_missing() {
+        let error = super::map_document_to_domain(SettingsDocument {
+            created_at_epoch_seconds: None,
+            created_at: None,
+            updated_at_epoch_seconds: Some(1),
+            updated_at: None,
+            ..build_settings_document("user-1", 1)
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            crate::domain::settings::SettingsError::Repository(
+                "missing created_at timestamp".to_string()
+            )
+        );
     }
 
     #[test]
@@ -1157,6 +1278,7 @@ mod tests {
                         athlete_id: Some("athlete-1".to_string()),
                         connected: true,
                         updated_at_epoch_seconds: Some(10),
+                        updated_at: None,
                     },
                     ..build_settings_document("connected-user", 10)
                 })
@@ -1167,6 +1289,7 @@ mod tests {
                         athlete_id: Some("legacy-athlete".to_string()),
                         connected: true,
                         updated_at_epoch_seconds: Some(20),
+                        updated_at: None,
                     },
                     ..build_settings_document("connected-user-2", 20)
                 })
@@ -1177,6 +1300,7 @@ mod tests {
                         athlete_id: Some("old-athlete".to_string()),
                         connected: false,
                         updated_at_epoch_seconds: Some(30),
+                        updated_at: None,
                     },
                     ..build_settings_document("explicitly-disconnected-user", 30)
                 })
@@ -1216,6 +1340,7 @@ mod tests {
                         athlete_id: Some("athlete-2".to_string()),
                         connected: true,
                         updated_at_epoch_seconds: Some(50),
+                        updated_at: None,
                     },
                     ..build_settings_document("invalid-connected-user", 50)
                 })
@@ -1406,12 +1531,12 @@ mod tests {
             updated.availability.days[2].max_duration_minutes,
             expected_availability.days[2].max_duration_minutes
         );
-        assert_eq!(updated.updated_at_epoch_seconds, updated_at);
+        assert_eq!(updated.updated_at_epoch_seconds, Some(updated_at));
 
         let default_availability = default_availability_document();
 
         assert_eq!(untouched.user_id, user_2_id);
-        assert_eq!(untouched.updated_at_epoch_seconds, 20);
+        assert_eq!(untouched.updated_at_epoch_seconds, Some(20));
         assert_eq!(
             untouched.availability.configured,
             default_availability.configured
@@ -1437,8 +1562,10 @@ mod tests {
             options: OptionsDocument::default(),
             availability: default_availability_document(),
             cycling: super::CyclingDocument::default(),
-            created_at_epoch_seconds: 1,
-            updated_at_epoch_seconds,
+            created_at_epoch_seconds: Some(1),
+            created_at: None,
+            updated_at_epoch_seconds: Some(updated_at_epoch_seconds),
+            updated_at: None,
         }
     }
 

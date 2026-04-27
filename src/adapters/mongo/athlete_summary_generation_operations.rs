@@ -1,11 +1,12 @@
 use mongodb::{
-    bson::{doc, oid::ObjectId},
+    bson::{doc, oid::ObjectId, DateTime},
     options::IndexOptions,
     Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
 
 use super::error::is_duplicate_key_error;
+use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_required_epoch_seconds};
 use crate::domain::athlete_summary::{
     AthleteSummaryError, AthleteSummaryGenerationClaimResult, AthleteSummaryGenerationOperation,
     AthleteSummaryGenerationOperationRepository, AthleteSummaryGenerationOperationStatus,
@@ -27,11 +28,19 @@ struct AthleteSummaryGenerationOperationDocument {
     provider: Option<String>,
     model: Option<String>,
     error_message: Option<String>,
-    started_at_epoch_seconds: i64,
-    last_attempt_at_epoch_seconds: i64,
+    started_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    started_at: Option<DateTime>,
+    last_attempt_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_attempt_at: Option<DateTime>,
     attempt_count: i64,
-    created_at_epoch_seconds: i64,
-    updated_at_epoch_seconds: i64,
+    created_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    created_at: Option<DateTime>,
+    updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
 }
 
 impl MongoAthleteSummaryGenerationOperationRepository {
@@ -213,11 +222,31 @@ fn map_domain_to_document(
         provider: operation.provider.clone(),
         model: operation.model.clone(),
         error_message: operation.error_message.clone(),
-        started_at_epoch_seconds: operation.started_at_epoch_seconds,
-        last_attempt_at_epoch_seconds: operation.last_attempt_at_epoch_seconds,
+        started_at_epoch_seconds: Some(operation.started_at_epoch_seconds),
+        started_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.started_at_epoch_seconds),
+            "started_at",
+        )
+        .expect("started_at should fit BSON DateTime"),
+        last_attempt_at_epoch_seconds: Some(operation.last_attempt_at_epoch_seconds),
+        last_attempt_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.last_attempt_at_epoch_seconds),
+            "last_attempt_at",
+        )
+        .expect("last_attempt_at should fit BSON DateTime"),
         attempt_count: i64::from(operation.attempt_count),
-        created_at_epoch_seconds: operation.created_at_epoch_seconds,
-        updated_at_epoch_seconds: operation.updated_at_epoch_seconds,
+        created_at_epoch_seconds: Some(operation.created_at_epoch_seconds),
+        created_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.created_at_epoch_seconds),
+            "created_at",
+        )
+        .expect("created_at should fit BSON DateTime"),
+        updated_at_epoch_seconds: Some(operation.updated_at_epoch_seconds),
+        updated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.updated_at_epoch_seconds),
+            "updated_at",
+        )
+        .expect("updated_at should fit BSON DateTime"),
     })
 }
 
@@ -240,14 +269,34 @@ fn map_document_to_domain(
         provider: document.provider,
         model: document.model,
         error_message: document.error_message,
-        started_at_epoch_seconds: document.started_at_epoch_seconds,
-        last_attempt_at_epoch_seconds: document.last_attempt_at_epoch_seconds,
+        started_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.started_at,
+            document.started_at_epoch_seconds,
+            "started_at",
+        )
+        .map_err(AthleteSummaryError::Repository)?,
+        last_attempt_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.last_attempt_at,
+            document.last_attempt_at_epoch_seconds,
+            "last_attempt_at",
+        )
+        .map_err(AthleteSummaryError::Repository)?,
         attempt_count: u32::try_from(document.attempt_count).map_err(|_| {
             AthleteSummaryError::Repository(
                 "invalid athlete summary generation operation attempt count".to_string(),
             )
         })?,
-        created_at_epoch_seconds: document.created_at_epoch_seconds,
-        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+        created_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.created_at,
+            document.created_at_epoch_seconds,
+            "created_at",
+        )
+        .map_err(AthleteSummaryError::Repository)?,
+        updated_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.updated_at,
+            document.updated_at_epoch_seconds,
+            "updated_at",
+        )
+        .map_err(AthleteSummaryError::Repository)?,
     })
 }

@@ -1,7 +1,12 @@
 use futures::TryStreamExt;
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::{doc, DateTime},
+    options::IndexOptions,
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
+use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_required_epoch_seconds};
 use crate::domain::external_sync::{
     BoxFuture, CanonicalEntityKind, CanonicalEntityRef, ExternalObjectKind, ExternalObservation,
     ExternalObservationRepository, ExternalProvider, ExternalSyncRepositoryError,
@@ -22,7 +27,9 @@ struct ExternalObservationDocument {
     canonical_entity_id: String,
     normalized_payload_hash: Option<String>,
     dedup_key: Option<String>,
-    observed_at_epoch_seconds: i64,
+    observed_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    observed_at: Option<DateTime>,
 }
 
 impl MongoExternalObservationRepository {
@@ -129,7 +136,7 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
                 .try_collect::<Vec<_>>()
                 .await
                 .map_err(storage_error)
-                .map(|documents| {
+                .and_then(|documents| {
                     documents
                         .into_iter()
                         .map(map_document_to_observation)
@@ -158,7 +165,7 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
                 .await
                 .map_err(storage_error)?;
 
-            Ok(document.map(map_document_to_observation))
+            document.map(map_document_to_observation).transpose()
         })
     }
 
@@ -184,7 +191,7 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
                 .try_collect::<Vec<_>>()
                 .await
                 .map_err(storage_error)
-                .map(|documents| {
+                .and_then(|documents| {
                     documents
                         .into_iter()
                         .map(map_document_to_observation)
@@ -212,12 +219,19 @@ fn map_observation_to_document(observation: &ExternalObservation) -> ExternalObs
         canonical_entity_id: observation.canonical_entity.entity_id.clone(),
         normalized_payload_hash: observation.normalized_payload_hash.clone(),
         dedup_key: observation.dedup_key.clone(),
-        observed_at_epoch_seconds: observation.observed_at_epoch_seconds,
+        observed_at_epoch_seconds: Some(observation.observed_at_epoch_seconds),
+        observed_at: optional_epoch_seconds_to_bson_datetime(
+            Some(observation.observed_at_epoch_seconds),
+            "observed_at",
+        )
+        .expect("observed_at should fit BSON DateTime"),
     }
 }
 
-fn map_document_to_observation(document: ExternalObservationDocument) -> ExternalObservation {
-    ExternalObservation {
+fn map_document_to_observation(
+    document: ExternalObservationDocument,
+) -> Result<ExternalObservation, ExternalSyncRepositoryError> {
+    Ok(ExternalObservation {
         user_id: document.user_id,
         provider: map_provider(&document.provider),
         external_object_kind: map_external_object_kind(&document.external_object_kind),
@@ -228,8 +242,13 @@ fn map_document_to_observation(document: ExternalObservationDocument) -> Externa
         },
         normalized_payload_hash: document.normalized_payload_hash,
         dedup_key: document.dedup_key,
-        observed_at_epoch_seconds: document.observed_at_epoch_seconds,
-    }
+        observed_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.observed_at,
+            document.observed_at_epoch_seconds,
+            "observed_at",
+        )
+        .map_err(ExternalSyncRepositoryError::Storage)?,
+    })
 }
 
 fn provider_as_str(provider: &ExternalProvider) -> &'static str {
@@ -311,8 +330,33 @@ mod tests {
             observed_at_epoch_seconds: 1_700_000_000,
         });
 
-        let mapped = map_document_to_observation(map_observation_to_document(&observation));
+        let mapped = map_document_to_observation(map_observation_to_document(&observation))
+            .expect("observation should round-trip through document mapping");
 
         assert_eq!(mapped, observation);
+    }
+
+    #[test]
+    fn observation_document_requires_observed_at_timestamp() {
+        let error = map_document_to_observation(super::ExternalObservationDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            external_object_kind: "race".to_string(),
+            external_id: "remote-1".to_string(),
+            canonical_entity_kind: "race".to_string(),
+            canonical_entity_id: "race-1".to_string(),
+            normalized_payload_hash: Some("hash-1".to_string()),
+            dedup_key: Some("dedup-1".to_string()),
+            observed_at_epoch_seconds: None,
+            observed_at: None,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            crate::domain::external_sync::ExternalSyncRepositoryError::Storage(
+                "missing observed_at timestamp".to_string()
+            )
+        );
     }
 }

@@ -1,10 +1,14 @@
 use mongodb::{
-    bson::{doc, spec::BinarySubtype, Binary},
+    bson::{doc, spec::BinarySubtype, Binary, DateTime},
     options::IndexOptions,
     Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
 
+use super::time::{
+    optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds,
+    resolve_required_epoch_seconds,
+};
 use crate::domain::wahoo_fit_files::{
     BoxFuture, WahooFitFile, WahooFitFileError, WahooFitFileRepository, WahooFitFileStage,
 };
@@ -24,10 +28,20 @@ struct WahooFitFileDocument {
     file_hash_sha256: Option<String>,
     raw_fit_bytes: Option<Binary>,
     downloaded_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    downloaded_at: Option<DateTime>,
     stored_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    stored_at: Option<DateTime>,
     parsed_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    parsed_at: Option<DateTime>,
     enriched_at_epoch_seconds: Option<i64>,
-    updated_at_epoch_seconds: i64,
+    #[serde(default)]
+    enriched_at: Option<DateTime>,
+    updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
 }
 
 impl MongoWahooFitFileRepository {
@@ -121,10 +135,35 @@ fn map_fit_file_to_document(fit_file: &WahooFitFile) -> WahooFitFileDocument {
             bytes,
         }),
         downloaded_at_epoch_seconds: fit_file.downloaded_at_epoch_seconds,
+        downloaded_at: optional_epoch_seconds_to_bson_datetime(
+            fit_file.downloaded_at_epoch_seconds,
+            "downloaded_at",
+        )
+        .expect("downloaded_at should fit BSON DateTime"),
         stored_at_epoch_seconds: fit_file.stored_at_epoch_seconds,
+        stored_at: optional_epoch_seconds_to_bson_datetime(
+            fit_file.stored_at_epoch_seconds,
+            "stored_at",
+        )
+        .expect("stored_at should fit BSON DateTime"),
         parsed_at_epoch_seconds: fit_file.parsed_at_epoch_seconds,
+        parsed_at: optional_epoch_seconds_to_bson_datetime(
+            fit_file.parsed_at_epoch_seconds,
+            "parsed_at",
+        )
+        .expect("parsed_at should fit BSON DateTime"),
         enriched_at_epoch_seconds: fit_file.enriched_at_epoch_seconds,
-        updated_at_epoch_seconds: fit_file.updated_at_epoch_seconds,
+        enriched_at: optional_epoch_seconds_to_bson_datetime(
+            fit_file.enriched_at_epoch_seconds,
+            "enriched_at",
+        )
+        .expect("enriched_at should fit BSON DateTime"),
+        updated_at_epoch_seconds: Some(fit_file.updated_at_epoch_seconds),
+        updated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(fit_file.updated_at_epoch_seconds),
+            "updated_at",
+        )
+        .expect("updated_at should fit BSON DateTime"),
     }
 }
 
@@ -139,11 +178,28 @@ fn map_document_to_domain(
         file_url: document.file_url,
         file_hash_sha256: document.file_hash_sha256,
         raw_fit_bytes: document.raw_fit_bytes.map(|binary| binary.bytes),
-        downloaded_at_epoch_seconds: document.downloaded_at_epoch_seconds,
-        stored_at_epoch_seconds: document.stored_at_epoch_seconds,
-        parsed_at_epoch_seconds: document.parsed_at_epoch_seconds,
-        enriched_at_epoch_seconds: document.enriched_at_epoch_seconds,
-        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+        downloaded_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.downloaded_at,
+            document.downloaded_at_epoch_seconds,
+        ),
+        stored_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.stored_at,
+            document.stored_at_epoch_seconds,
+        ),
+        parsed_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.parsed_at,
+            document.parsed_at_epoch_seconds,
+        ),
+        enriched_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.enriched_at,
+            document.enriched_at_epoch_seconds,
+        ),
+        updated_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.updated_at,
+            document.updated_at_epoch_seconds,
+            "updated_at",
+        )
+        .map_err(WahooFitFileError::Repository)?,
     })
 }
 
