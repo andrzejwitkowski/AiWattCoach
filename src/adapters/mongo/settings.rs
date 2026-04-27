@@ -83,8 +83,10 @@ impl std::fmt::Debug for WahooDocument {
             .field("access_token", &RedactedOptionalText(&self.access_token))
             .field("refresh_token", &RedactedOptionalText(&self.refresh_token))
             .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
+            .field("expires_at", &self.expires_at)
             .field("connected", &self.connected)
             .field("updated_at_epoch_seconds", &self.updated_at_epoch_seconds)
+            .field("updated_at", &self.updated_at)
             .finish()
     }
 }
@@ -209,6 +211,7 @@ impl std::fmt::Debug for CyclingDocument {
                 "last_zone_update_epoch_seconds",
                 &self.last_zone_update_epoch_seconds,
             )
+            .field("last_zone_update_at", &self.last_zone_update_at)
             .finish()
     }
 }
@@ -448,7 +451,7 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                 .find_one(doc! { "user_id": &user_id })
                 .await
                 .map_err(|e| SettingsError::Repository(e.to_string()))?;
-            Ok(doc.map(map_document_to_domain))
+            doc.map(map_document_to_domain).transpose()
         })
     }
 
@@ -630,8 +633,8 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
     }
 }
 
-fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
-    UserSettings {
+fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, SettingsError> {
+    Ok(UserSettings {
         user_id: doc.user_id,
         ai_agents: AiAgentsConfig {
             openai_api_key: doc.ai_agents.openai_api_key,
@@ -672,14 +675,14 @@ fn map_document_to_domain(doc: SettingsDocument) -> UserSettings {
             doc.created_at_epoch_seconds,
             "created_at",
         )
-        .expect("settings documents must store created_at"),
+        .map_err(SettingsError::Repository)?,
         updated_at_epoch_seconds: resolve_required_epoch_seconds(
             doc.updated_at,
             doc.updated_at_epoch_seconds,
             "updated_at",
         )
-        .expect("settings documents must store updated_at"),
-    }
+        .map_err(SettingsError::Repository)?,
+    })
 }
 
 fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
@@ -882,7 +885,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use mongodb::{
-        bson::{doc, oid::ObjectId, to_document, Document},
+        bson::{doc, oid::ObjectId, to_document, DateTime, Document},
         Client,
     };
 
@@ -925,9 +928,9 @@ mod tests {
                 access_token: Some("wahoo-access-token".to_string()),
                 refresh_token: Some("wahoo-refresh-token".to_string()),
                 expires_at_epoch_seconds: Some(123),
-                expires_at: None,
+                expires_at: Some(DateTime::from_millis(123_000)),
                 updated_at_epoch_seconds: Some(456),
-                updated_at: None,
+                updated_at: Some(DateTime::from_millis(456_000)),
                 connected: true,
             },
             ..build_settings_document("user-1", 1)
@@ -939,6 +942,44 @@ mod tests {
         assert!(!debug.contains("wahoo-access-token"));
         assert!(!debug.contains("wahoo-refresh-token"));
         assert!(debug.contains("expires_at_epoch_seconds"));
+        assert!(debug.contains("expires_at"));
+        assert!(debug.contains("updated_at"));
+    }
+
+    #[test]
+    fn cycling_document_debug_includes_datetime_mirror() {
+        let document = SettingsDocument {
+            cycling: super::CyclingDocument {
+                last_zone_update_epoch_seconds: Some(789),
+                last_zone_update_at: Some(DateTime::from_millis(789_000)),
+                ..super::CyclingDocument::default()
+            },
+            ..build_settings_document("user-1", 1)
+        };
+
+        let debug = format!("{:?}", document.cycling);
+
+        assert!(debug.contains("last_zone_update_epoch_seconds"));
+        assert!(debug.contains("last_zone_update_at"));
+    }
+
+    #[test]
+    fn map_document_to_domain_returns_repository_error_when_required_timestamps_are_missing() {
+        let error = super::map_document_to_domain(SettingsDocument {
+            created_at_epoch_seconds: None,
+            created_at: None,
+            updated_at_epoch_seconds: Some(1),
+            updated_at: None,
+            ..build_settings_document("user-1", 1)
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            crate::domain::settings::SettingsError::Repository(
+                "missing created_at timestamp".to_string()
+            )
+        );
     }
 
     #[test]

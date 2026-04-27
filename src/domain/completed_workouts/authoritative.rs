@@ -4,6 +4,7 @@ use crate::domain::external_sync::{
     CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncStateRepository,
 };
 
+use super::selection::select_visible_workouts_by_day;
 use super::{BoxFuture, CompletedWorkout, CompletedWorkoutError, CompletedWorkoutRepository};
 
 #[derive(Clone)]
@@ -202,29 +203,17 @@ where
             .into_iter()
             .map(|state| state.canonical_entity.entity_id)
             .collect::<HashSet<_>>();
-        let wahoo_dates = workouts
-            .iter()
-            .filter(|workout| wahoo_entity_ids.contains(&workout.completed_workout_id))
-            .filter_map(|workout| workout.start_date_local.get(..10).map(ToString::to_string))
-            .collect::<HashSet<_>>();
-
-        Ok(workouts
-            .into_iter()
-            .filter(|workout| {
-                let Some(date) = workout.start_date_local.get(..10) else {
-                    return true;
-                };
-                !wahoo_dates.contains(date)
-                    || wahoo_entity_ids.contains(&workout.completed_workout_id)
-            })
-            .collect())
+        Ok(select_visible_workouts_by_day(workouts, &wahoo_entity_ids))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::domain::{
-        completed_workouts::{CompletedWorkoutDetails, CompletedWorkoutMetrics},
+        completed_workouts::{
+            CompletedWorkoutDetails, CompletedWorkoutMetrics, CompletedWorkoutSeries,
+            CompletedWorkoutStream,
+        },
         external_sync::{
             CanonicalEntityKind, CanonicalEntityRef, ConflictStatus, ExternalProvider,
             ExternalSyncState, ExternalSyncStateRepository, ExternalSyncStatus,
@@ -343,34 +332,57 @@ mod tests {
         )
     }
 
+    fn with_power_stream(mut workout: CompletedWorkout) -> CompletedWorkout {
+        workout.details.streams.push(CompletedWorkoutStream {
+            stream_type: "watts".to_string(),
+            name: Some("Power".to_string()),
+            primary_series: Some(CompletedWorkoutSeries::Integers(vec![180, 240, 310])),
+            secondary_series: None,
+            value_type_is_array: false,
+            custom: false,
+            all_null: false,
+        });
+        workout
+    }
+
+    fn wahoo_sync_state(id: &str) -> ExternalSyncState {
+        ExternalSyncState {
+            user_id: "user-1".to_string(),
+            provider: ExternalProvider::Wahoo,
+            canonical_entity: CanonicalEntityRef::new(
+                CanonicalEntityKind::CompletedWorkout,
+                id.to_string(),
+            ),
+            external_id: Some(id.to_string()),
+            sync_status: ExternalSyncStatus::Synced,
+            last_synced_payload_hash: None,
+            last_seen_remote_payload_hash: None,
+            last_error: None,
+            last_synced_at_epoch_seconds: None,
+            last_seen_remote_at_epoch_seconds: None,
+            conflict_status: ConflictStatus::InSync,
+        }
+    }
+
     #[tokio::test]
-    async fn hides_non_wahoo_workouts_on_wahoo_authoritative_day() {
+    async fn keeps_wahoo_visible_when_wahoo_has_power_details() {
         let workouts = super::super::ports::NoopCompletedWorkoutRepository::default();
         workouts
-            .upsert(sample_workout("intervals-activity:1", "2026-05-01"))
+            .upsert(with_power_stream(sample_workout(
+                "intervals-activity:1",
+                "2026-05-01",
+            )))
             .await
             .unwrap();
         workouts
-            .upsert(sample_workout("wahoo-workout:2", "2026-05-01"))
+            .upsert(with_power_stream(sample_workout(
+                "wahoo-workout:2",
+                "2026-05-01",
+            )))
             .await
             .unwrap();
         let sync_states = TestSyncStates {
-            states: vec![ExternalSyncState {
-                user_id: "user-1".to_string(),
-                provider: ExternalProvider::Wahoo,
-                canonical_entity: CanonicalEntityRef::new(
-                    CanonicalEntityKind::CompletedWorkout,
-                    "wahoo-workout:2".to_string(),
-                ),
-                external_id: Some("2".to_string()),
-                sync_status: ExternalSyncStatus::Synced,
-                last_synced_payload_hash: None,
-                last_seen_remote_payload_hash: None,
-                last_error: None,
-                last_synced_at_epoch_seconds: None,
-                last_seen_remote_at_epoch_seconds: None,
-                conflict_status: ConflictStatus::InSync,
-            }],
+            states: vec![wahoo_sync_state("wahoo-workout:2")],
         };
         let repository = AuthoritativeCompletedWorkoutRepository::new(workouts, sync_states);
 
@@ -381,123 +393,114 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn keeps_non_wahoo_workouts_visible_on_day_without_wahoo_authority() {
+    async fn prefers_other_provider_when_wahoo_lacks_power_details() {
+        let workouts = super::super::ports::NoopCompletedWorkoutRepository::default();
+        workouts
+            .upsert(with_power_stream(sample_workout(
+                "intervals-activity:1",
+                "2026-05-01",
+            )))
+            .await
+            .unwrap();
+        workouts
+            .upsert(sample_workout("wahoo-workout:2", "2026-05-01"))
+            .await
+            .unwrap();
+        let sync_states = TestSyncStates {
+            states: vec![wahoo_sync_state("wahoo-workout:2")],
+        };
+        let repository = AuthoritativeCompletedWorkoutRepository::new(workouts, sync_states);
+
+        let visible = repository.list_by_user_id("user-1").await.unwrap();
+
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].completed_workout_id, "intervals-activity:1");
+
+        let by_id = repository
+            .find_by_user_id_and_completed_workout_id("user-1", "intervals-activity:1")
+            .await
+            .unwrap();
+        assert_eq!(
+            by_id
+                .as_ref()
+                .map(|workout| workout.completed_workout_id.as_str()),
+            Some("intervals-activity:1")
+        );
+
+        let hidden_wahoo = repository
+            .find_by_user_id_and_completed_workout_id("user-1", "wahoo-workout:2")
+            .await
+            .unwrap();
+        assert_eq!(hidden_wahoo, None);
+
+        let by_source_activity = repository
+            .find_by_user_id_and_source_activity_id("user-1", "intervals-activity:1")
+            .await
+            .unwrap();
+        assert_eq!(
+            by_source_activity
+                .as_ref()
+                .map(|workout| workout.completed_workout_id.as_str()),
+            Some("intervals-activity:1")
+        );
+    }
+
+    #[tokio::test]
+    async fn prefers_wahoo_when_nobody_has_power_details() {
         let workouts = super::super::ports::NoopCompletedWorkoutRepository::default();
         workouts
             .upsert(sample_workout("intervals-activity:1", "2026-05-01"))
             .await
             .unwrap();
         workouts
-            .upsert(sample_workout("intervals-activity:2", "2026-05-02"))
+            .upsert(sample_workout("wahoo-workout:2", "2026-05-01"))
             .await
             .unwrap();
         let sync_states = TestSyncStates {
-            states: vec![ExternalSyncState {
-                user_id: "user-1".to_string(),
-                provider: ExternalProvider::Wahoo,
-                canonical_entity: CanonicalEntityRef::new(
-                    CanonicalEntityKind::CompletedWorkout,
-                    "wahoo-workout:9".to_string(),
-                ),
-                external_id: Some("9".to_string()),
-                sync_status: ExternalSyncStatus::Synced,
-                last_synced_payload_hash: None,
-                last_seen_remote_payload_hash: None,
-                last_error: None,
-                last_synced_at_epoch_seconds: None,
-                last_seen_remote_at_epoch_seconds: None,
-                conflict_status: ConflictStatus::InSync,
-            }],
+            states: vec![wahoo_sync_state("wahoo-workout:2")],
+        };
+        let repository = AuthoritativeCompletedWorkoutRepository::new(workouts, sync_states);
+
+        let visible = repository.list_by_user_id("user-1").await.unwrap();
+
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].completed_workout_id, "wahoo-workout:2");
+    }
+
+    #[tokio::test]
+    async fn keeps_days_independent() {
+        let workouts = super::super::ports::NoopCompletedWorkoutRepository::default();
+        workouts
+            .upsert(with_power_stream(sample_workout(
+                "intervals-activity:1",
+                "2026-05-01",
+            )))
+            .await
+            .unwrap();
+        workouts
+            .upsert(sample_workout("wahoo-workout:2", "2026-05-01"))
+            .await
+            .unwrap();
+        workouts
+            .upsert(sample_workout("wahoo-workout:3", "2026-05-02"))
+            .await
+            .unwrap();
+        let sync_states = TestSyncStates {
+            states: vec![
+                wahoo_sync_state("wahoo-workout:2"),
+                wahoo_sync_state("wahoo-workout:3"),
+            ],
         };
         let repository = AuthoritativeCompletedWorkoutRepository::new(workouts, sync_states);
 
         let visible = repository.list_by_user_id("user-1").await.unwrap();
 
         assert_eq!(visible.len(), 2);
-        assert_eq!(
-            visible
-                .iter()
-                .map(|workout| workout.completed_workout_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["intervals-activity:1", "intervals-activity:2"]
-        );
-    }
-
-    #[tokio::test]
-    async fn hides_single_completed_workout_lookup_on_wahoo_authoritative_day() {
-        let workouts = super::super::ports::NoopCompletedWorkoutRepository::default();
-        workouts
-            .upsert(sample_workout("intervals-activity:1", "2026-05-01"))
-            .await
-            .unwrap();
-        workouts
-            .upsert(sample_workout("wahoo-workout:2", "2026-05-01"))
-            .await
-            .unwrap();
-        let sync_states = TestSyncStates {
-            states: vec![ExternalSyncState {
-                user_id: "user-1".to_string(),
-                provider: ExternalProvider::Wahoo,
-                canonical_entity: CanonicalEntityRef::new(
-                    CanonicalEntityKind::CompletedWorkout,
-                    "wahoo-workout:2".to_string(),
-                ),
-                external_id: Some("2".to_string()),
-                sync_status: ExternalSyncStatus::Synced,
-                last_synced_payload_hash: None,
-                last_seen_remote_payload_hash: None,
-                last_error: None,
-                last_synced_at_epoch_seconds: None,
-                last_seen_remote_at_epoch_seconds: None,
-                conflict_status: ConflictStatus::InSync,
-            }],
-        };
-        let repository = AuthoritativeCompletedWorkoutRepository::new(workouts, sync_states);
-
-        let visible = repository
-            .find_by_user_id_and_completed_workout_id("user-1", "intervals-activity:1")
-            .await
-            .unwrap();
-
-        assert_eq!(visible, None);
-    }
-
-    #[tokio::test]
-    async fn hides_single_source_activity_lookup_on_wahoo_authoritative_day() {
-        let workouts = super::super::ports::NoopCompletedWorkoutRepository::default();
-        workouts
-            .upsert(sample_workout("intervals-activity:1", "2026-05-01"))
-            .await
-            .unwrap();
-        workouts
-            .upsert(sample_workout("wahoo-workout:2", "2026-05-01"))
-            .await
-            .unwrap();
-        let sync_states = TestSyncStates {
-            states: vec![ExternalSyncState {
-                user_id: "user-1".to_string(),
-                provider: ExternalProvider::Wahoo,
-                canonical_entity: CanonicalEntityRef::new(
-                    CanonicalEntityKind::CompletedWorkout,
-                    "wahoo-workout:2".to_string(),
-                ),
-                external_id: Some("2".to_string()),
-                sync_status: ExternalSyncStatus::Synced,
-                last_synced_payload_hash: None,
-                last_seen_remote_payload_hash: None,
-                last_error: None,
-                last_synced_at_epoch_seconds: None,
-                last_seen_remote_at_epoch_seconds: None,
-                conflict_status: ConflictStatus::InSync,
-            }],
-        };
-        let repository = AuthoritativeCompletedWorkoutRepository::new(workouts, sync_states);
-
-        let visible = repository
-            .find_by_user_id_and_source_activity_id("user-1", "intervals-activity:1")
-            .await
-            .unwrap();
-
-        assert_eq!(visible, None);
+        assert!(visible
+            .iter()
+            .any(|workout| workout.completed_workout_id == "intervals-activity:1"));
+        assert!(visible
+            .iter()
+            .any(|workout| workout.completed_workout_id == "wahoo-workout:3"));
     }
 }

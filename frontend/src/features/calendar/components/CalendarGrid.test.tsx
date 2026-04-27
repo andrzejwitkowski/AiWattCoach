@@ -286,7 +286,7 @@ describe('CalendarGrid', () => {
     const { container } = render(<CalendarGrid apiBaseUrl="" />);
 
     const dayButtons = Array.from(container.querySelectorAll('.calendar-grid button')) as HTMLButtonElement[];
-    const raceDayButton = dayButtons.find((button) => button.textContent?.includes('Grojec'));
+    const raceDayButton = dayButtons.find((button) => button.textContent?.includes('Opener'));
 
     expect(raceDayButton).toBeDefined();
     fireEvent.click(raceDayButton as HTMLButtonElement);

@@ -21,6 +21,10 @@ vi.mock('../features/settings/components/AthleteSummaryCard', () => ({
   AthleteSummaryCard: () => <div>athlete-summary-card</div>,
 }));
 
+vi.mock('../features/settings/components/CalendarRefreshCard', () => ({
+  CalendarRefreshCard: () => <div>calendar-refresh-card</div>,
+}));
+
 vi.mock('../features/settings/components/CyclingSettingsCard', () => ({
   CyclingSettingsCard: () => <div>cycling-settings-card</div>,
 }));
@@ -134,6 +138,7 @@ describe('SettingsPage', () => {
     expect(document.querySelector('.animate-spin')).toBeNull();
     expect(screen.getByText('ai-agents-card')).toBeInTheDocument();
     expect(screen.getByText('wahoo-card')).toBeInTheDocument();
+    expect(screen.getByText('calendar-refresh-card')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^test connection$/i })).toBeInTheDocument();
 
     await act(async () => {
@@ -144,6 +149,7 @@ describe('SettingsPage', () => {
     expect(document.querySelector('.animate-spin')).toBeNull();
     expect(screen.getByText('ai-agents-card')).toBeInTheDocument();
     expect(screen.getByText('wahoo-card')).toBeInTheDocument();
+    expect(screen.getByText('calendar-refresh-card')).toBeInTheDocument();
     expect(intervalsCardMock).toHaveBeenCalled();
   });
 });

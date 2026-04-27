@@ -27,8 +27,18 @@ pub fn optional_epoch_seconds_to_bson_datetime(
         .transpose()
 }
 
+pub fn required_epoch_seconds_to_bson_datetime(
+    epoch_seconds: i64,
+    field_name: &str,
+) -> Option<DateTime> {
+    Some(
+        epoch_seconds_to_bson_datetime_with_field(epoch_seconds, field_name)
+            .unwrap_or_else(|error| panic!("{error}")),
+    )
+}
+
 pub fn bson_datetime_to_epoch_seconds(datetime: DateTime) -> i64 {
-    datetime.timestamp_millis() / 1000
+    datetime.timestamp_millis().div_euclid(1000)
 }
 
 pub fn optional_bson_datetime_to_epoch_seconds(datetime: Option<DateTime>) -> Option<i64> {
@@ -57,13 +67,15 @@ fn bson_range_error(field_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use mongodb::bson::DateTime;
+
     use crate::domain::identity::IdentityError;
 
     use super::{
         bson_datetime_to_epoch_seconds, epoch_seconds_to_bson_datetime,
         epoch_seconds_to_bson_datetime_with_field, optional_bson_datetime_to_epoch_seconds,
-        optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds,
-        resolve_required_epoch_seconds,
+        optional_epoch_seconds_to_bson_datetime, required_epoch_seconds_to_bson_datetime,
+        resolve_optional_epoch_seconds, resolve_required_epoch_seconds,
     };
 
     #[test]
@@ -129,5 +141,22 @@ mod tests {
         let epoch_seconds = resolve_optional_epoch_seconds(Some(datetime), Some(1_700_000_000));
 
         assert_eq!(epoch_seconds, Some(1_700_000_100));
+    }
+
+    #[test]
+    fn converts_required_epoch_seconds_to_bson_datetime() {
+        let datetime = required_epoch_seconds_to_bson_datetime(1_700_000_000, "created_at");
+
+        assert_eq!(
+            optional_bson_datetime_to_epoch_seconds(datetime),
+            Some(1_700_000_000)
+        );
+    }
+
+    #[test]
+    fn converts_negative_bson_datetime_back_to_epoch_seconds_with_flooring() {
+        let datetime = DateTime::from_millis(-1);
+
+        assert_eq!(bson_datetime_to_epoch_seconds(datetime), -1);
     }
 }

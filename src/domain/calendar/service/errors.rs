@@ -24,6 +24,7 @@ pub(super) fn map_planned_workout_token_error(error: PlannedWorkoutTokenError) -
 pub(super) fn map_calendar_entry_view_error(error: CalendarEntryViewError) -> CalendarError {
     match error {
         CalendarEntryViewError::Repository(message) => CalendarError::Internal(message),
+        CalendarEntryViewError::InvariantViolation(message) => CalendarError::Internal(message),
     }
 }
 

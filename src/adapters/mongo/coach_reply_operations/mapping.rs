@@ -77,26 +77,26 @@ pub(super) fn map_operation_to_document(
         cache_usage: operation.cache_usage.clone(),
         response_message: operation.response_message.clone(),
         error_message: operation.error_message.clone(),
-        started_at_epoch_seconds: Some(operation.started_at_epoch_seconds),
+        started_at_epoch_seconds: operation.started_at_epoch_seconds,
         started_at: optional_epoch_seconds_to_bson_datetime(
             Some(operation.started_at_epoch_seconds),
             "started_at",
         )
         .expect("started_at should fit BSON DateTime"),
-        last_attempt_at_epoch_seconds: Some(operation.last_attempt_at_epoch_seconds),
+        last_attempt_at_epoch_seconds: operation.last_attempt_at_epoch_seconds,
         last_attempt_at: optional_epoch_seconds_to_bson_datetime(
             Some(operation.last_attempt_at_epoch_seconds),
             "last_attempt_at",
         )
         .expect("last_attempt_at should fit BSON DateTime"),
         attempt_count: i64::from(operation.attempt_count),
-        created_at_epoch_seconds: Some(operation.created_at_epoch_seconds),
+        created_at_epoch_seconds: operation.created_at_epoch_seconds,
         created_at: optional_epoch_seconds_to_bson_datetime(
             Some(operation.created_at_epoch_seconds),
             "created_at",
         )
         .expect("created_at should fit BSON DateTime"),
-        updated_at_epoch_seconds: Some(operation.updated_at_epoch_seconds),
+        updated_at_epoch_seconds: operation.updated_at_epoch_seconds,
         updated_at: optional_epoch_seconds_to_bson_datetime(
             Some(operation.updated_at_epoch_seconds),
             "updated_at",
@@ -147,13 +147,13 @@ pub(super) fn map_document_to_operation(
         error_message: document.error_message,
         started_at_epoch_seconds: resolve_required_epoch_seconds(
             document.started_at,
-            document.started_at_epoch_seconds,
+            Some(document.started_at_epoch_seconds),
             "started_at",
         )
         .map_err(WorkoutSummaryError::Repository)?,
         last_attempt_at_epoch_seconds: resolve_required_epoch_seconds(
             document.last_attempt_at,
-            document.last_attempt_at_epoch_seconds,
+            Some(document.last_attempt_at_epoch_seconds),
             "last_attempt_at",
         )
         .map_err(WorkoutSummaryError::Repository)?,
@@ -162,13 +162,13 @@ pub(super) fn map_document_to_operation(
         })?,
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             document.created_at,
-            document.created_at_epoch_seconds,
+            Some(document.created_at_epoch_seconds),
             "created_at",
         )
         .map_err(WorkoutSummaryError::Repository)?,
         updated_at_epoch_seconds: resolve_required_epoch_seconds(
             document.updated_at,
-            document.updated_at_epoch_seconds,
+            Some(document.updated_at_epoch_seconds),
             "updated_at",
         )
         .map_err(WorkoutSummaryError::Repository)?,

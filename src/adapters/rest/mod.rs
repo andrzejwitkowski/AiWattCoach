@@ -120,6 +120,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                 .route("/api/calendar/events", get(calendar::list_events))
                 .route("/api/calendar/labels", get(calendar::list_labels))
                 .route(
+                    "/api/calendar/refresh",
+                    post(calendar::refresh_calendar_view),
+                )
+                .route(
                     "/api/completed-workouts",
                     get(completed_workouts::list_completed_workouts),
                 )

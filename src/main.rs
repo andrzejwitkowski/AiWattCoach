@@ -80,7 +80,7 @@ use aiwattcoach::{
     },
     domain::calendar::CalendarService,
     domain::calendar_labels::CalendarLabelsService,
-    domain::calendar_view::CalendarEntryViewRefreshService,
+    domain::calendar_view::{CalendarEntryViewRefreshService, ManualCalendarRefreshService},
     domain::completed_workouts::{
         AuthoritativeCompletedWorkoutRepository, CompletedWorkoutReadService,
     },
@@ -396,6 +396,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )
     .with_cleanup_planned_workouts(planned_workout_repository.clone())
     .with_planned_completed_links(planned_completed_link_repository.clone());
+    let manual_calendar_refresh_service = Arc::new(ManualCalendarRefreshService::new(
+        calendar_entry_view_repository.clone(),
+        authoritative_planned_workout_repository.clone(),
+        authoritative_completed_workout_repository.clone(),
+        authoritative_race_repository.clone(),
+        authoritative_special_day_repository.clone(),
+        SystemClock,
+        calendar_entry_view_refresh_service.clone(),
+    ));
     let intervals_api_client = if dev_intervals_enabled {
         IntervalsApiAdapter::Dev(DevIntervalsClient)
     } else {
@@ -438,6 +447,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 WahooFitParser,
                 SystemClock,
             )
+            .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone())
             .with_training_load_recompute_service(training_load_recompute_service.clone()),
         )
     });
@@ -647,6 +657,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_training_load_dashboard_service(training_load_dashboard_service)
         .with_calendar_service(calendar_service)
         .with_calendar_labels_service(calendar_labels_service)
+        .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
         .with_completed_workout_service(completed_workout_service)
         .with_completed_workout_admin_service(completed_workout_admin_service)
         .with_athlete_summary_service(athlete_summary_service)
