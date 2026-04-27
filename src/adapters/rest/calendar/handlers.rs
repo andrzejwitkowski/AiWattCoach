@@ -16,6 +16,7 @@ use crate::{
     },
 };
 
+use super::super::user_auth::pseudonymize_user_id;
 use super::{
     dto::{
         validation_code_message_response, validation_message_response, ListCalendarEventsQuery,
@@ -172,11 +173,23 @@ pub(in crate::adapters::rest) async fn refresh_calendar_view(
             }),
         )
             .into_response(),
-        Err(CalendarEntryViewError::Repository(message)) => {
-            tracing::error!(user_id, error = %message, "manual calendar refresh failed");
+        Err(CalendarEntryViewError::InvariantViolation(_)) => {
+            tracing::error!(user_id = %pseudonymize_user_id(&user_id), "manual calendar refresh encountered invariant violation");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(validation_message_response(&message)),
+                Json(validation_message_response(
+                    "failed to refresh calendar view",
+                )),
+            )
+                .into_response()
+        }
+        Err(CalendarEntryViewError::Repository(message)) => {
+            tracing::error!(user_id = %pseudonymize_user_id(&user_id), error = %message, "manual calendar refresh failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(validation_message_response(
+                    "failed to refresh calendar view",
+                )),
             )
                 .into_response()
         }

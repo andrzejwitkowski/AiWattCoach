@@ -9,7 +9,7 @@ use crate::config::AppState;
 
 use super::cookies::read_cookie;
 
-fn pseudonymize_user_id(user_id: &str) -> String {
+pub(crate) fn pseudonymize_user_id(user_id: &str) -> String {
     let hash = Sha256::digest(user_id.as_bytes());
     format!("{hash:x}")[..16].to_string()
 }

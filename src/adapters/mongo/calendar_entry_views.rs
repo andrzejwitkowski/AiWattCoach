@@ -124,6 +124,24 @@ impl CalendarEntryViewRepository for MongoCalendarEntryViewRepository {
         })
     }
 
+    fn find_newest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CalendarEntryViewBoxFuture<Result<Option<String>, CalendarEntryViewError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            collection
+                .find_one(doc! {
+                    "user_id": &user_id,
+                })
+                .sort(doc! { "date": -1, "entry_id": -1 })
+                .await
+                .map_err(|error| CalendarEntryViewError::Repository(error.to_string()))
+                .map(|document| document.map(|entry| entry.date))
+        })
+    }
+
     fn list_by_user_id_and_date_range(
         &self,
         user_id: &str,

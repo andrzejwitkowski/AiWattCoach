@@ -157,7 +157,131 @@ async fn refresh_calendar_view_returns_error_message_body_when_refresh_fails() {
     let body: serde_json::Value = get_json(response).await;
     assert_eq!(
         body.get("message").and_then(|value| value.as_str()),
-        Some("calendar refresh failed in test")
+        Some("failed to refresh calendar view")
+    );
+    assert!(body.get("code").is_none());
+}
+
+#[tokio::test]
+async fn refresh_calendar_view_is_scoped_to_authenticated_user() {
+    #[derive(Clone)]
+    struct RecordingManualCalendarRefreshService {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl aiwattcoach::domain::calendar_view::ManualCalendarRefreshUseCases
+        for RecordingManualCalendarRefreshService
+    {
+        fn refresh_calendar_view_for_user(
+            &self,
+            user_id: &str,
+        ) -> aiwattcoach::domain::calendar_view::BoxFuture<
+            Result<
+                aiwattcoach::domain::calendar_view::ManualCalendarRefreshResult,
+                aiwattcoach::domain::calendar_view::CalendarEntryViewError,
+            >,
+        > {
+            let calls = self.calls.clone();
+            let user_id = user_id.to_string();
+            Box::pin(async move {
+                calls.lock().unwrap().push(user_id.clone());
+                Ok(
+                    aiwattcoach::domain::calendar_view::ManualCalendarRefreshResult {
+                        oldest: "2026-01-01".to_string(),
+                        newest: "2026-04-27".to_string(),
+                        rebuilt_entry_count: 1,
+                    },
+                )
+            })
+        }
+    }
+
+    let calls: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let service = RecordingManualCalendarRefreshService {
+        calls: calls.clone(),
+    };
+
+    let app = crate::app::intervals_test_app_with_manual_calendar_refresh_service(
+        SessionMappedIdentityService::with_users([
+            ("session-user-1", "user-1", "user-1@example.com"),
+            ("session-user-2", "user-2", "user-2@example.com"),
+        ]),
+        TestIntervalsService::default(),
+        Arc::new(service),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .header(header::COOKIE, session_cookie("session-user-2"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let recorded = calls.lock().unwrap().clone();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0], "user-2");
+}
+
+#[tokio::test]
+async fn refresh_calendar_view_returns_generic_error_for_invariant_violation() {
+    #[derive(Clone)]
+    struct InvariantViolationRefreshService;
+
+    impl aiwattcoach::domain::calendar_view::ManualCalendarRefreshUseCases
+        for InvariantViolationRefreshService
+    {
+        fn refresh_calendar_view_for_user(
+            &self,
+            _user_id: &str,
+        ) -> aiwattcoach::domain::calendar_view::BoxFuture<
+            Result<
+                aiwattcoach::domain::calendar_view::ManualCalendarRefreshResult,
+                aiwattcoach::domain::calendar_view::CalendarEntryViewError,
+            >,
+        > {
+            Box::pin(async {
+                Err(
+                    aiwattcoach::domain::calendar_view::CalendarEntryViewError::InvariantViolation(
+                        "race data unauthenticated".to_string(),
+                    ),
+                )
+            })
+        }
+    }
+
+    let app = crate::app::intervals_test_app_with_manual_calendar_refresh_service(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        std::sync::Arc::new(InvariantViolationRefreshService),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    let body: serde_json::Value = get_json(response).await;
+    assert_eq!(
+        body.get("message").and_then(|value| value.as_str()),
+        Some("failed to refresh calendar view")
     );
     assert!(body.get("code").is_none());
 }

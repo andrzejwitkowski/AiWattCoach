@@ -143,11 +143,18 @@ where
         user_id: &str,
         today: &str,
     ) -> Result<Option<(String, String)>, CalendarEntryViewError> {
-        let mut source_dates = self.list_source_dates_for_user(user_id).await?;
-        source_dates.extend(self.list_existing_view_dates_for_user(user_id).await?);
-        let oldest = source_dates.iter().min().cloned();
+        let source_dates = self.list_source_dates_for_user(user_id).await?;
+        let oldest_view = self.views.find_oldest_date_by_user_id(user_id).await?;
+        let newest_view = self.views.find_newest_date_by_user_id(user_id).await?;
+
+        let oldest = source_dates
+            .iter()
+            .chain(oldest_view.as_ref())
+            .min()
+            .cloned();
         let newest = source_dates
             .into_iter()
+            .chain(newest_view)
             .max()
             .map(|latest| latest.max(today.to_string()));
 
@@ -206,27 +213,6 @@ where
 
         Ok(dates)
     }
-
-    async fn list_existing_view_dates_for_user(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<String>, CalendarEntryViewError> {
-        let oldest = self.views.find_oldest_date_by_user_id(user_id).await?;
-        let Some(oldest) = oldest else {
-            return Ok(Vec::new());
-        };
-
-        let newest = "9999-12-31".to_string();
-        let persisted_entries = self
-            .views
-            .list_by_user_id_and_date_range(user_id, &oldest, &newest)
-            .await?;
-
-        Ok(persisted_entries
-            .into_iter()
-            .map(|entry| entry.date)
-            .collect())
-    }
 }
 
 fn epoch_seconds_to_date(now_epoch_seconds: i64) -> Result<String, CalendarEntryViewError> {
@@ -261,12 +247,12 @@ fn map_race_error(error: RaceError) -> CalendarEntryViewError {
         RaceError::Validation(message)
         | RaceError::Unavailable(message)
         | RaceError::Internal(message) => CalendarEntryViewError::Repository(message),
-        RaceError::Unauthenticated => CalendarEntryViewError::Repository(
-            "manual calendar refresh unauthenticated race lookup".to_string(),
+        RaceError::Unauthenticated => CalendarEntryViewError::InvariantViolation(
+            "manual calendar refresh encountered unauthenticated race lookup".to_string(),
         ),
-        RaceError::NotFound => {
-            CalendarEntryViewError::Repository("manual calendar refresh race not found".to_string())
-        }
+        RaceError::NotFound => CalendarEntryViewError::InvariantViolation(
+            "manual calendar refresh encountered not-found race lookup".to_string(),
+        ),
     }
 }
 

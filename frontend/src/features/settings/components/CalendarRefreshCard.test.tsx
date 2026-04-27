@@ -42,34 +42,40 @@ describe('CalendarRefreshCard', () => {
   });
 
   it('shows an error message when refresh fails', async () => {
-    refreshCalendarViewMock.mockRejectedValue(new Error('POST /api/calendar/refresh failed: 500'));
+    refreshCalendarViewMock.mockRejectedValue(new Error('failed to refresh calendar view'));
 
     render(<CalendarRefreshCard apiBaseUrl="" />);
 
     fireEvent.click(screen.getByRole('button', { name: /przegeneruj widok kalendarza/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('POST /api/calendar/refresh failed: 500');
+      expect(screen.getByRole('alert')).toHaveTextContent('failed to refresh calendar view');
     });
     expect(invalidateCalendarCacheMock).not.toHaveBeenCalled();
   });
 
   it('redirects to home when refresh returns 401', async () => {
-    const location = window.location;
+    const originalLocation = window.location;
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { ...location, href: '/settings' },
+      value: { ...originalLocation, href: '/settings' },
     });
-    refreshCalendarViewMock.mockRejectedValue(new AuthenticationError());
+    try {
+      refreshCalendarViewMock.mockRejectedValue(new AuthenticationError());
 
-    render(<CalendarRefreshCard apiBaseUrl="" />);
+      render(<CalendarRefreshCard apiBaseUrl="" />);
 
-    fireEvent.click(screen.getByRole('button', { name: /przegeneruj widok kalendarza/i }));
+      fireEvent.click(screen.getByRole('button', { name: /przegeneruj widok kalendarza/i }));
 
-    await waitFor(() => {
-      expect(window.location.href).toBe('/');
-    });
-    expect(invalidateCalendarCacheMock).not.toHaveBeenCalled();
-    Object.defineProperty(window, 'location', { configurable: true, value: location });
+      await waitFor(() => {
+        expect(window.location.href).toBe('/');
+      });
+      expect(invalidateCalendarCacheMock).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
   });
 });

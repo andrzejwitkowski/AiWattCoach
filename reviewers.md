@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | Copilot/CodeRabbit | PR #152 manual calendar refresh review follow-up
+
+- Problem: PR review found five confirmed issues in the self-service calendar refresh feature: the rebuild range still used a full-table scan with a "9999-12-31" sentinel instead of two indexed date lookups, the frontend 401-redirect test restored `window.location` without `try/finally`, the backend handler leaked raw repository error messages and user identifiers in logs, the backend error mapping did not cover the new `InvariantViolation` variant from race/credential errors, and no REST test verified user scoping on the refresh endpoint.
+- Fix: replaced `list_existing_view_dates_for_user` with `find_oldest_date_by_user_id` and `find_newest_date_by_user_id` on the `CalendarEntryViewRepository` trait, implemented both in Mongo (indexed, sorted), in-memory (ports, unit tests, integration test app), and domain test repos; added `CalendarEntryViewError::InvariantViolation(String)` and mapped it to a generic `"failed to refresh calendar view"` response in the REST handler alongside `Repository` errors; extracted `pseudonymize_user_id` as `pub(crate)` and used it in the refresh handler log lines; wrapped the frontend `window.location` mock/restore in `try/finally`; added integration tests for user-scoping and invariant-violation error responses.
+- Prevention: when a new endpoint returns error details, audit both response bodies and log lines for raw identifiers or provider messages before sending for review. When an error enum grows new variants, update all exhaustive match sites including REST error mapping and cross-domain `From` impls. When mocking `window.location` in frontend tests, always restore it in `finally`. When adding repository methods for range computation, prefer targeted index-friendly lookups over full-table scans with sentinel values.
+
 ### 2026-04-27 | Copilot/CodeRabbit/internal review loop | manual calendar refresh review follow-up
 
 - Problem: the first self-service calendar refresh version still hard-capped the rebuild range at `today`, so future calendar entries already stored in `calendar_view` could survive a manual rebuild unchanged and future-only data could collapse into an inverted or incomplete range. The Settings card also surfaced raw `500` fallback text because the endpoint returned a bare status with no structured message, and the frontend POST helper still sent a dummy JSON body to a body-less refresh endpoint.

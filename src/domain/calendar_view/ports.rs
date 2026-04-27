@@ -13,6 +13,11 @@ pub trait CalendarEntryViewRepository: Clone + Send + Sync + 'static {
         user_id: &str,
     ) -> BoxFuture<Result<Option<String>, CalendarEntryViewError>>;
 
+    fn find_newest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<String>, CalendarEntryViewError>>;
+
     fn list_by_user_id_and_date_range(
         &self,
         user_id: &str,
@@ -43,7 +48,7 @@ pub trait CalendarEntryViewRepository: Clone + Send + Sync + 'static {
 #[cfg(test)]
 #[derive(Clone, Default)]
 pub struct InMemoryCalendarEntryViewRepository {
-    stored: Arc<Mutex<Vec<CalendarEntryView>>>,
+    pub stored: Arc<Mutex<Vec<CalendarEntryView>>>,
 }
 
 #[cfg(test)]
@@ -61,6 +66,22 @@ impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
                 .filter(|entry| entry.user_id == user_id)
                 .map(|entry| entry.date.clone())
                 .min())
+        })
+    }
+
+    fn find_newest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Option<String>, CalendarEntryViewError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            let stored = stored.lock().expect("calendar view repo mutex poisoned");
+            Ok(stored
+                .iter()
+                .filter(|entry| entry.user_id == user_id)
+                .map(|entry| entry.date.clone())
+                .max())
         })
     }
 

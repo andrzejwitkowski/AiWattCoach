@@ -517,6 +517,23 @@ impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
         })
     }
 
+    fn find_newest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CalendarBoxFuture<Result<Option<String>, CalendarEntryViewError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| entry.user_id == user_id)
+                .map(|entry| entry.date.clone())
+                .max())
+        })
+    }
+
     fn list_by_user_id_and_date_range(
         &self,
         user_id: &str,
