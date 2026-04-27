@@ -1,6 +1,11 @@
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::{doc, DateTime},
+    options::IndexOptions,
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
+use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_required_epoch_seconds};
 use crate::domain::task_scheduler::{TaskSchedulerError, TaskWorker, TaskWorkerRepository};
 
 #[derive(Clone)]
@@ -15,7 +20,9 @@ struct TaskWorkerDocument {
     is_leader: bool,
     enabled_task_types: Vec<String>,
     active_task_ids: Vec<String>,
-    last_heartbeat_at_epoch_seconds: i64,
+    last_heartbeat_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_heartbeat_at: Option<DateTime>,
 }
 
 impl MongoTaskWorkerRepository {
@@ -65,7 +72,12 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                 is_leader: worker.is_leader,
                 enabled_task_types: worker.enabled_task_types.clone(),
                 active_task_ids: worker.active_task_ids.clone(),
-                last_heartbeat_at_epoch_seconds: worker.last_heartbeat_at_epoch_seconds,
+                last_heartbeat_at_epoch_seconds: Some(worker.last_heartbeat_at_epoch_seconds),
+                last_heartbeat_at: optional_epoch_seconds_to_bson_datetime(
+                    Some(worker.last_heartbeat_at_epoch_seconds),
+                    "last_heartbeat_at",
+                )
+                .expect("last_heartbeat_at should fit BSON DateTime"),
             };
             collection
                 .replace_one(doc! { "_id": &document.worker_id }, &document)
@@ -95,6 +107,11 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                             "enabled_task_types": &enabled_task_types,
                             "active_task_ids": Vec::<String>::new(),
                             "last_heartbeat_at_epoch_seconds": last_heartbeat_at_epoch_seconds,
+                            "last_heartbeat_at": optional_epoch_seconds_to_bson_datetime(
+                                Some(last_heartbeat_at_epoch_seconds),
+                                "last_heartbeat_at",
+                            )
+                            .expect("last_heartbeat_at should fit BSON DateTime"),
                         },
                     },
                 )
@@ -113,7 +130,12 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                 is_leader: updated.is_leader,
                 enabled_task_types: updated.enabled_task_types,
                 active_task_ids: updated.active_task_ids,
-                last_heartbeat_at_epoch_seconds: updated.last_heartbeat_at_epoch_seconds,
+                last_heartbeat_at_epoch_seconds: resolve_required_epoch_seconds(
+                    updated.last_heartbeat_at,
+                    updated.last_heartbeat_at_epoch_seconds,
+                    "last_heartbeat_at",
+                )
+                .expect("task worker documents must store last_heartbeat_at"),
             })
         })
     }
@@ -135,8 +157,46 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                 is_leader: document.is_leader,
                 enabled_task_types: document.enabled_task_types,
                 active_task_ids: document.active_task_ids,
-                last_heartbeat_at_epoch_seconds: document.last_heartbeat_at_epoch_seconds,
+                last_heartbeat_at_epoch_seconds: resolve_required_epoch_seconds(
+                    document.last_heartbeat_at,
+                    document.last_heartbeat_at_epoch_seconds,
+                    "last_heartbeat_at",
+                )
+                .expect("task worker documents must store last_heartbeat_at"),
             }))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TaskWorkerDocument;
+    use crate::domain::task_scheduler::TaskWorker;
+
+    #[test]
+    fn task_worker_document_reads_datetime_field_without_legacy_epoch() {
+        let document = TaskWorkerDocument {
+            worker_id: "worker-1".to_string(),
+            is_leader: true,
+            enabled_task_types: vec!["summary".to_string()],
+            active_task_ids: vec!["task-1".to_string()],
+            last_heartbeat_at_epoch_seconds: None,
+            last_heartbeat_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_000_000)),
+        };
+
+        let worker = TaskWorker {
+            worker_id: document.worker_id,
+            is_leader: document.is_leader,
+            enabled_task_types: document.enabled_task_types,
+            active_task_ids: document.active_task_ids,
+            last_heartbeat_at_epoch_seconds: super::resolve_required_epoch_seconds(
+                document.last_heartbeat_at,
+                document.last_heartbeat_at_epoch_seconds,
+                "last_heartbeat_at",
+            )
+            .expect("datetime-backed task worker should map"),
+        };
+
+        assert_eq!(worker.last_heartbeat_at_epoch_seconds, 1_700_000_000);
     }
 }

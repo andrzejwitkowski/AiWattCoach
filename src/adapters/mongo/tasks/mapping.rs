@@ -1,5 +1,9 @@
 use mongodb::bson::DateTime;
 
+use crate::adapters::mongo::time::{
+    optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds,
+    resolve_required_epoch_seconds,
+};
 use crate::domain::task_scheduler::{RetryStrategy, ScheduledTask, TaskSchedulerError, TaskStatus};
 
 use super::document::{RetryStrategyDocument, TaskDocument};
@@ -174,17 +178,57 @@ pub(super) fn map_task_to_document(
         dedupe_key: task.dedupe_key.clone(),
         error_message: task.error_message.clone(),
         attempt_count: i64::from(task.attempt_count),
-        next_attempt_at_epoch_seconds: task.next_attempt_at_epoch_seconds,
+        next_attempt_at_epoch_seconds: Some(task.next_attempt_at_epoch_seconds),
+        next_attempt_at: optional_epoch_seconds_to_bson_datetime(
+            Some(task.next_attempt_at_epoch_seconds),
+            "next_attempt_at",
+        )
+        .expect("next_attempt_at should fit BSON DateTime"),
         claimed_by: task.claimed_by.clone(),
         lease_expires_at_epoch_seconds: task.lease_expires_at_epoch_seconds,
+        lease_expires_at: optional_epoch_seconds_to_bson_datetime(
+            task.lease_expires_at_epoch_seconds,
+            "lease_expires_at",
+        )
+        .expect("lease_expires_at should fit BSON DateTime"),
         last_heartbeat_at_epoch_seconds: task.last_heartbeat_at_epoch_seconds,
+        last_heartbeat_at: optional_epoch_seconds_to_bson_datetime(
+            task.last_heartbeat_at_epoch_seconds,
+            "last_heartbeat_at",
+        )
+        .expect("last_heartbeat_at should fit BSON DateTime"),
         execution_timeout_seconds: task.execution_timeout_seconds,
         timed_out_at_epoch_seconds: task.timed_out_at_epoch_seconds,
+        timed_out_at: optional_epoch_seconds_to_bson_datetime(
+            task.timed_out_at_epoch_seconds,
+            "timed_out_at",
+        )
+        .expect("timed_out_at should fit BSON DateTime"),
         leader_only: task.leader_only,
-        created_at_epoch_seconds: task.created_at_epoch_seconds,
-        updated_at_epoch_seconds: task.updated_at_epoch_seconds,
+        created_at_epoch_seconds: Some(task.created_at_epoch_seconds),
+        created_at: optional_epoch_seconds_to_bson_datetime(
+            Some(task.created_at_epoch_seconds),
+            "created_at",
+        )
+        .expect("created_at should fit BSON DateTime"),
+        updated_at_epoch_seconds: Some(task.updated_at_epoch_seconds),
+        updated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(task.updated_at_epoch_seconds),
+            "updated_at",
+        )
+        .expect("updated_at should fit BSON DateTime"),
         started_at_epoch_seconds: task.started_at_epoch_seconds,
+        started_at: optional_epoch_seconds_to_bson_datetime(
+            task.started_at_epoch_seconds,
+            "started_at",
+        )
+        .expect("started_at should fit BSON DateTime"),
         finished_at_epoch_seconds: task.finished_at_epoch_seconds,
+        finished_at: optional_epoch_seconds_to_bson_datetime(
+            task.finished_at_epoch_seconds,
+            "finished_at",
+        )
+        .expect("finished_at should fit BSON DateTime"),
         cleanup_after: terminal_task_cleanup_after(&task.status, task.finished_at_epoch_seconds)?,
     })
 }
@@ -211,17 +255,47 @@ pub(super) fn map_document_to_task(
         attempt_count: u32::try_from(document.attempt_count).map_err(|_| {
             TaskSchedulerError::Repository("invalid task attempt_count".to_string())
         })?,
-        next_attempt_at_epoch_seconds: document.next_attempt_at_epoch_seconds,
+        next_attempt_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.next_attempt_at,
+            document.next_attempt_at_epoch_seconds,
+            "next_attempt_at",
+        )
+        .map_err(TaskSchedulerError::Repository)?,
         claimed_by: document.claimed_by,
-        lease_expires_at_epoch_seconds: document.lease_expires_at_epoch_seconds,
-        last_heartbeat_at_epoch_seconds: document.last_heartbeat_at_epoch_seconds,
+        lease_expires_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.lease_expires_at,
+            document.lease_expires_at_epoch_seconds,
+        ),
+        last_heartbeat_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.last_heartbeat_at,
+            document.last_heartbeat_at_epoch_seconds,
+        ),
         execution_timeout_seconds: document.execution_timeout_seconds,
-        timed_out_at_epoch_seconds: document.timed_out_at_epoch_seconds,
+        timed_out_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.timed_out_at,
+            document.timed_out_at_epoch_seconds,
+        ),
         leader_only: document.leader_only,
-        created_at_epoch_seconds: document.created_at_epoch_seconds,
-        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
-        started_at_epoch_seconds: document.started_at_epoch_seconds,
-        finished_at_epoch_seconds: document.finished_at_epoch_seconds,
+        created_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.created_at,
+            document.created_at_epoch_seconds,
+            "created_at",
+        )
+        .map_err(TaskSchedulerError::Repository)?,
+        updated_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.updated_at,
+            document.updated_at_epoch_seconds,
+            "updated_at",
+        )
+        .map_err(TaskSchedulerError::Repository)?,
+        started_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.started_at,
+            document.started_at_epoch_seconds,
+        ),
+        finished_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.finished_at,
+            document.finished_at_epoch_seconds,
+        ),
     })
 }
 
@@ -410,17 +484,25 @@ mod tests {
             dedupe_key: "dedupe-1".to_string(),
             error_message: None,
             attempt_count: 0,
-            next_attempt_at_epoch_seconds: 100,
+            next_attempt_at_epoch_seconds: Some(100),
+            next_attempt_at: None,
             claimed_by: None,
             lease_expires_at_epoch_seconds: None,
+            lease_expires_at: None,
             last_heartbeat_at_epoch_seconds: None,
+            last_heartbeat_at: None,
             execution_timeout_seconds: 30,
             timed_out_at_epoch_seconds: None,
+            timed_out_at: None,
             leader_only: false,
-            created_at_epoch_seconds: 100,
-            updated_at_epoch_seconds: 100,
+            created_at_epoch_seconds: Some(100),
+            created_at: None,
+            updated_at_epoch_seconds: Some(100),
+            updated_at: None,
             started_at_epoch_seconds: None,
+            started_at: None,
             finished_at_epoch_seconds: None,
+            finished_at: None,
             cleanup_after: None,
         }
     }
@@ -449,5 +531,37 @@ mod tests {
             started_at_epoch_seconds: None,
             finished_at_epoch_seconds,
         }
+    }
+
+    #[test]
+    fn map_document_to_task_reads_datetime_fields_without_legacy_epoch() {
+        let mut document = sample_task_document();
+        document.next_attempt_at_epoch_seconds = None;
+        document.next_attempt_at = Some(DateTime::from_millis(1_700_000_000_000));
+        document.lease_expires_at_epoch_seconds = None;
+        document.lease_expires_at = Some(DateTime::from_millis(1_700_000_010_000));
+        document.last_heartbeat_at_epoch_seconds = None;
+        document.last_heartbeat_at = Some(DateTime::from_millis(1_700_000_020_000));
+        document.timed_out_at_epoch_seconds = None;
+        document.timed_out_at = Some(DateTime::from_millis(1_700_000_030_000));
+        document.created_at_epoch_seconds = None;
+        document.created_at = Some(DateTime::from_millis(1_700_000_040_000));
+        document.updated_at_epoch_seconds = None;
+        document.updated_at = Some(DateTime::from_millis(1_700_000_050_000));
+        document.started_at_epoch_seconds = None;
+        document.started_at = Some(DateTime::from_millis(1_700_000_060_000));
+        document.finished_at_epoch_seconds = None;
+        document.finished_at = Some(DateTime::from_millis(1_700_000_070_000));
+
+        let task = map_document_to_task(document).expect("datetime-backed task should map");
+
+        assert_eq!(task.next_attempt_at_epoch_seconds, 1_700_000_000);
+        assert_eq!(task.lease_expires_at_epoch_seconds, Some(1_700_000_010));
+        assert_eq!(task.last_heartbeat_at_epoch_seconds, Some(1_700_000_020));
+        assert_eq!(task.timed_out_at_epoch_seconds, Some(1_700_000_030));
+        assert_eq!(task.created_at_epoch_seconds, 1_700_000_040);
+        assert_eq!(task.updated_at_epoch_seconds, 1_700_000_050);
+        assert_eq!(task.started_at_epoch_seconds, Some(1_700_000_060));
+        assert_eq!(task.finished_at_epoch_seconds, Some(1_700_000_070));
     }
 }

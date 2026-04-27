@@ -45,6 +45,7 @@ use aiwattcoach::{
             planned_workouts::MongoPlannedWorkoutRepository,
             provider_poll_states::MongoProviderPollStateRepository,
             races::MongoRaceRepository,
+            readable_dates_backfill::backfill_mongo_readable_dates,
             sessions::MongoSessionRepository,
             settings::MongoUserSettingsRepository,
             special_days::MongoSpecialDayRepository,
@@ -300,6 +301,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let wahoo_fit_file_repository =
         MongoWahooFitFileRepository::new(mongo_client.clone(), &mongo_database);
     wahoo_fit_file_repository.ensure_indexes().await?;
+    let readable_date_backfilled_documents =
+        backfill_mongo_readable_dates(&mongo_client, &mongo_database).await?;
+    if readable_date_backfilled_documents > 0 {
+        info!(
+            readable_date_backfilled_documents,
+            "Backfilled readable Mongo BSON DateTime mirrors"
+        );
+    }
     let authoritative_completed_workout_repository = AuthoritativeCompletedWorkoutRepository::new(
         completed_workout_repository.clone(),
         external_sync_state_repository.clone(),

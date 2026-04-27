@@ -1,11 +1,12 @@
 use futures::TryStreamExt;
 use mongodb::{
-    bson::{doc, Bson, Document},
+    bson::{doc, Bson, DateTime, Document},
     options::IndexOptions,
     Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
 
+use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds};
 use crate::domain::external_sync::{
     BoxFuture, ExternalProvider, ExternalSyncRepositoryError, ProviderPollState,
     ProviderPollStateRepository, ProviderPollStream,
@@ -22,11 +23,19 @@ struct ProviderPollStateDocument {
     provider: String,
     stream: String,
     cursor: Option<String>,
-    next_due_at_epoch_seconds: i64,
+    next_due_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    next_due_at: Option<DateTime>,
     last_attempted_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_attempted_at: Option<DateTime>,
     last_successful_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_successful_at: Option<DateTime>,
     last_error: Option<String>,
     backoff_until_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    backoff_until_at: Option<DateTime>,
 }
 
 impl MongoProviderPollStateRepository {
@@ -169,11 +178,31 @@ fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDoc
         provider: provider_as_str(&state.provider).to_string(),
         stream: stream_as_str(&state.stream).to_string(),
         cursor: state.cursor.clone(),
-        next_due_at_epoch_seconds: state.next_due_at_epoch_seconds,
+        next_due_at_epoch_seconds: Some(state.next_due_at_epoch_seconds),
+        next_due_at: optional_epoch_seconds_to_bson_datetime(
+            Some(state.next_due_at_epoch_seconds),
+            "next_due_at",
+        )
+        .expect("next_due_at should fit BSON DateTime"),
         last_attempted_at_epoch_seconds: state.last_attempted_at_epoch_seconds,
+        last_attempted_at: optional_epoch_seconds_to_bson_datetime(
+            state.last_attempted_at_epoch_seconds,
+            "last_attempted_at",
+        )
+        .expect("last_attempted_at should fit BSON DateTime"),
         last_successful_at_epoch_seconds: state.last_successful_at_epoch_seconds,
+        last_successful_at: optional_epoch_seconds_to_bson_datetime(
+            state.last_successful_at_epoch_seconds,
+            "last_successful_at",
+        )
+        .expect("last_successful_at should fit BSON DateTime"),
         last_error: state.last_error.clone(),
         backoff_until_epoch_seconds: state.backoff_until_epoch_seconds,
+        backoff_until_at: optional_epoch_seconds_to_bson_datetime(
+            state.backoff_until_epoch_seconds,
+            "backoff_until_at",
+        )
+        .expect("backoff_until_at should fit BSON DateTime"),
     }
 }
 
@@ -185,11 +214,24 @@ fn map_document_to_poll_state(
         provider: map_provider(&document.provider),
         stream: map_stream(&document.stream)?,
         cursor: document.cursor,
-        next_due_at_epoch_seconds: document.next_due_at_epoch_seconds,
-        last_attempted_at_epoch_seconds: document.last_attempted_at_epoch_seconds,
-        last_successful_at_epoch_seconds: document.last_successful_at_epoch_seconds,
+        next_due_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.next_due_at,
+            document.next_due_at_epoch_seconds,
+        )
+        .expect("provider poll state documents must store next_due_at"),
+        last_attempted_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.last_attempted_at,
+            document.last_attempted_at_epoch_seconds,
+        ),
+        last_successful_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.last_successful_at,
+            document.last_successful_at_epoch_seconds,
+        ),
         last_error: document.last_error,
-        backoff_until_epoch_seconds: document.backoff_until_epoch_seconds,
+        backoff_until_epoch_seconds: resolve_optional_epoch_seconds(
+            document.backoff_until_at,
+            document.backoff_until_epoch_seconds,
+        ),
     })
 }
 
@@ -280,11 +322,15 @@ mod tests {
             provider: "intervals".to_string(),
             stream: "mystery".to_string(),
             cursor: None,
-            next_due_at_epoch_seconds: 1_700_000_000,
+            next_due_at_epoch_seconds: Some(1_700_000_000),
+            next_due_at: None,
             last_attempted_at_epoch_seconds: None,
+            last_attempted_at: None,
             last_successful_at_epoch_seconds: None,
+            last_successful_at: None,
             last_error: None,
             backoff_until_epoch_seconds: None,
+            backoff_until_at: None,
         })
         .unwrap_err();
 
@@ -312,5 +358,30 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn poll_state_document_reads_datetime_fields_without_legacy_epoch() {
+        let mapped = map_document_to_poll_state(ProviderPollStateDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            stream: "calendar".to_string(),
+            cursor: Some("cursor-1".to_string()),
+            next_due_at_epoch_seconds: None,
+            next_due_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_000_000)),
+            last_attempted_at_epoch_seconds: None,
+            last_attempted_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_010_000)),
+            last_successful_at_epoch_seconds: None,
+            last_successful_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_020_000)),
+            last_error: Some("temporary upstream error".to_string()),
+            backoff_until_epoch_seconds: None,
+            backoff_until_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_030_000)),
+        })
+        .expect("datetime-backed poll state should map");
+
+        assert_eq!(mapped.next_due_at_epoch_seconds, 1_700_000_000);
+        assert_eq!(mapped.last_attempted_at_epoch_seconds, Some(1_700_000_010));
+        assert_eq!(mapped.last_successful_at_epoch_seconds, Some(1_700_000_020));
+        assert_eq!(mapped.backoff_until_epoch_seconds, Some(1_700_000_030));
     }
 }

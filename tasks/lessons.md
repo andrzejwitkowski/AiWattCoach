@@ -45,6 +45,8 @@
 
 ## Small Review Fixes
 
+- In a dual-read/dual-write timestamp migration, every field that is required at the domain level must be verified against a `DateTime`-only persisted document, not just legacy-plus-new mixed documents. If the persistence struct still uses a non-optional legacy epoch field, the migration is incomplete even when normal writes succeed.
+- When promising a staged migration with a later backfill step, complete the backfill before calling the rollout done. Readability improvements are not actually delivered for existing Mongo rows until the historical documents are updated too.
 - When simplifying poll-cursor helpers, verify both branches explicitly: existing cursor plus new upstream results should usually advance, while existing cursor plus no new results may need to stay put. Do not drop the data-presence signal unless a regression test proves the simplified semantics are still correct.
 - If a polling loop filters fetched upstream records before import, do not tie cursor advancement only to the filtered subset unless repeated rereads of skipped records are intentional. Cursor/watermark movement usually belongs to the full consumed upstream page.
 - If a paginated provider bootstrap can span many pages, do not defer all durable progress until the entire scan succeeds. A later-page `429` or transient error can otherwise reset the bootstrap to zero forever. Persist a resumable checkpoint such as `next_page` plus the latest seen watermark before returning the failure.

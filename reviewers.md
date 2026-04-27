@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | user | readable Mongo dates rollout PR2/PR3
+
+- Problem: after the initial readable-date rollout reached `provider_poll_states` and `tasks`, some fields that were conceptually required still used non-optional legacy epoch document fields, so a truly `DateTime`-only migrated document could not deserialize through those adapters. The rollout also still lacked the promised idempotent backfill for pre-existing Mongo documents.
+- Fix: changed the technical Mongo documents to dual-read required timestamps from either the new BSON `*_at` mirrors or legacy `*_epoch_seconds`, added focused regressions for `DateTime`-only reads in `provider_poll_states`, `task_workers`, and `tasks`, and implemented a startup backfill that idempotently populates readable BSON datetime mirrors across the PR1 and PR2 collections, including nested settings fields and array items like `messages[]` and `attempts[]`.
+- Prevention: when doing a staged dual-read/dual-write timestamp migration, do not stop at adding mirror fields to writes. Re-check every required read path against a `DateTime`-only document shape, especially where the persistence struct still uses non-optional legacy epoch fields, and ship the promised backfill before calling the rollout complete.
+
 ### 2026-04-26 | user | Wahoo bootstrap poller loses all progress on rate limit
 
 - Problem: the Wahoo completed-workouts bootstrap scanned every `/v1/workouts` page before importing anything. For accounts with long history, the poller could get many successful `200` pages and then hit `429 Too Many Requests` before the scan finished, which left `cursor = null`, `last_successful_at = null`, and zero Wahoo observations/completed workouts even though dozens of pages had already been read successfully.
