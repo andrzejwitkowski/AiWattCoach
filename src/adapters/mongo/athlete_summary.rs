@@ -1,10 +1,11 @@
 use mongodb::{
-    bson::{doc, oid::ObjectId},
+    bson::{doc, oid::ObjectId, DateTime},
     options::IndexOptions,
     Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
 
+use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_required_epoch_seconds};
 use crate::domain::athlete_summary::{
     AthleteSummary, AthleteSummaryError, AthleteSummaryRepository, BoxFuture,
 };
@@ -20,9 +21,15 @@ struct AthleteSummaryDocument {
     id: Option<ObjectId>,
     user_id: String,
     summary_text: String,
-    generated_at_epoch_seconds: i64,
-    created_at_epoch_seconds: i64,
-    updated_at_epoch_seconds: i64,
+    generated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    generated_at: Option<DateTime>,
+    created_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    created_at: Option<DateTime>,
+    updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
     provider: Option<String>,
     model: Option<String>,
 }
@@ -91,9 +98,24 @@ fn map_document_to_domain(document: AthleteSummaryDocument) -> AthleteSummary {
     AthleteSummary {
         user_id: document.user_id,
         summary_text: document.summary_text,
-        generated_at_epoch_seconds: document.generated_at_epoch_seconds,
-        created_at_epoch_seconds: document.created_at_epoch_seconds,
-        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+        generated_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.generated_at,
+            document.generated_at_epoch_seconds,
+            "generated_at",
+        )
+        .expect("athlete summary documents must store generated_at"),
+        created_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.created_at,
+            document.created_at_epoch_seconds,
+            "created_at",
+        )
+        .expect("athlete summary documents must store created_at"),
+        updated_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.updated_at,
+            document.updated_at_epoch_seconds,
+            "updated_at",
+        )
+        .expect("athlete summary documents must store updated_at"),
         provider: document.provider,
         model: document.model,
     }
@@ -104,9 +126,24 @@ fn map_domain_to_document(summary: &AthleteSummary) -> AthleteSummaryDocument {
         id: None,
         user_id: summary.user_id.clone(),
         summary_text: summary.summary_text.clone(),
-        generated_at_epoch_seconds: summary.generated_at_epoch_seconds,
-        created_at_epoch_seconds: summary.created_at_epoch_seconds,
-        updated_at_epoch_seconds: summary.updated_at_epoch_seconds,
+        generated_at_epoch_seconds: Some(summary.generated_at_epoch_seconds),
+        generated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(summary.generated_at_epoch_seconds),
+            "generated_at",
+        )
+        .expect("generated_at should fit BSON DateTime"),
+        created_at_epoch_seconds: Some(summary.created_at_epoch_seconds),
+        created_at: optional_epoch_seconds_to_bson_datetime(
+            Some(summary.created_at_epoch_seconds),
+            "created_at",
+        )
+        .expect("created_at should fit BSON DateTime"),
+        updated_at_epoch_seconds: Some(summary.updated_at_epoch_seconds),
+        updated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(summary.updated_at_epoch_seconds),
+            "updated_at",
+        )
+        .expect("updated_at should fit BSON DateTime"),
         provider: summary.provider.clone(),
         model: summary.model.clone(),
     }

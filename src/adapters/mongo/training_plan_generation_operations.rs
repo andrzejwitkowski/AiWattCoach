@@ -1,4 +1,8 @@
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::{doc, DateTime},
+    options::IndexOptions,
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
@@ -10,6 +14,10 @@ use crate::domain::{
 };
 
 use super::error::is_duplicate_key_error;
+use super::time::{
+    optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds,
+    resolve_required_epoch_seconds,
+};
 
 #[derive(Clone)]
 pub struct MongoTrainingPlanGenerationOperationRepository {
@@ -21,30 +29,46 @@ struct TrainingPlanGenerationOperationDocument {
     operation_key: String,
     user_id: String,
     workout_id: String,
-    saved_at_epoch_seconds: i64,
+    saved_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    saved_at: Option<DateTime>,
     status: String,
     workout_recap_text: Option<String>,
     workout_recap_provider: Option<String>,
     workout_recap_model: Option<String>,
     workout_recap_generated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    workout_recap_generated_at: Option<DateTime>,
     projection_persisted_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    projection_persisted_at: Option<DateTime>,
     raw_plan_response: Option<String>,
     raw_correction_response: Option<String>,
     validation_issues: Vec<ValidationIssueDocument>,
     attempts: Vec<AttemptRecordDocument>,
     failure: Option<TrainingPlanFailureStateDocument>,
-    started_at_epoch_seconds: i64,
-    last_attempt_at_epoch_seconds: i64,
+    started_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    started_at: Option<DateTime>,
+    last_attempt_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_attempt_at: Option<DateTime>,
     attempt_count: i64,
-    created_at_epoch_seconds: i64,
-    updated_at_epoch_seconds: i64,
+    created_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    created_at: Option<DateTime>,
+    updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct AttemptRecordDocument {
     phase: String,
     attempt_number: i64,
-    recorded_at_epoch_seconds: i64,
+    recorded_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    recorded_at: Option<DateTime>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -208,14 +232,29 @@ fn map_operation_to_document(
         operation_key: operation.operation_key.clone(),
         user_id: operation.user_id.clone(),
         workout_id: operation.workout_id.clone(),
-        saved_at_epoch_seconds: operation.saved_at_epoch_seconds,
+        saved_at_epoch_seconds: Some(operation.saved_at_epoch_seconds),
+        saved_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.saved_at_epoch_seconds),
+            "saved_at",
+        )
+        .expect("saved_at should fit BSON DateTime"),
         status: map_status_to_document(&operation.status).to_string(),
         workout_recap_text: operation.workout_recap_text.clone(),
         workout_recap_provider: operation.workout_recap_provider.clone(),
         workout_recap_model: operation.workout_recap_model.clone(),
         workout_recap_generated_at_epoch_seconds: operation
             .workout_recap_generated_at_epoch_seconds,
+        workout_recap_generated_at: optional_epoch_seconds_to_bson_datetime(
+            operation.workout_recap_generated_at_epoch_seconds,
+            "workout_recap_generated_at",
+        )
+        .expect("workout_recap_generated_at should fit BSON DateTime"),
         projection_persisted_at_epoch_seconds: operation.projection_persisted_at_epoch_seconds,
+        projection_persisted_at: optional_epoch_seconds_to_bson_datetime(
+            operation.projection_persisted_at_epoch_seconds,
+            "projection_persisted_at",
+        )
+        .expect("projection_persisted_at should fit BSON DateTime"),
         raw_plan_response: operation.raw_plan_response.clone(),
         raw_correction_response: operation.raw_correction_response.clone(),
         validation_issues: operation
@@ -229,11 +268,31 @@ fn map_operation_to_document(
             .map(map_attempt_to_document)
             .collect::<Result<Vec<_>, _>>()?,
         failure: operation.failure.as_ref().map(map_failure_to_document),
-        started_at_epoch_seconds: operation.started_at_epoch_seconds,
-        last_attempt_at_epoch_seconds: operation.last_attempt_at_epoch_seconds,
+        started_at_epoch_seconds: Some(operation.started_at_epoch_seconds),
+        started_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.started_at_epoch_seconds),
+            "started_at",
+        )
+        .expect("started_at should fit BSON DateTime"),
+        last_attempt_at_epoch_seconds: Some(operation.last_attempt_at_epoch_seconds),
+        last_attempt_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.last_attempt_at_epoch_seconds),
+            "last_attempt_at",
+        )
+        .expect("last_attempt_at should fit BSON DateTime"),
         attempt_count: i64::from(operation.attempt_count),
-        created_at_epoch_seconds: operation.created_at_epoch_seconds,
-        updated_at_epoch_seconds: operation.updated_at_epoch_seconds,
+        created_at_epoch_seconds: Some(operation.created_at_epoch_seconds),
+        created_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.created_at_epoch_seconds),
+            "created_at",
+        )
+        .expect("created_at should fit BSON DateTime"),
+        updated_at_epoch_seconds: Some(operation.updated_at_epoch_seconds),
+        updated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(operation.updated_at_epoch_seconds),
+            "updated_at",
+        )
+        .expect("updated_at should fit BSON DateTime"),
     })
 }
 
@@ -244,13 +303,24 @@ fn map_document_to_operation(
         operation_key: document.operation_key,
         user_id: document.user_id,
         workout_id: document.workout_id,
-        saved_at_epoch_seconds: document.saved_at_epoch_seconds,
+        saved_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.saved_at,
+            document.saved_at_epoch_seconds,
+            "saved_at",
+        )
+        .map_err(TrainingPlanError::Repository)?,
         status: map_document_to_status(&document.status)?,
         workout_recap_text: document.workout_recap_text,
         workout_recap_provider: document.workout_recap_provider,
         workout_recap_model: document.workout_recap_model,
-        workout_recap_generated_at_epoch_seconds: document.workout_recap_generated_at_epoch_seconds,
-        projection_persisted_at_epoch_seconds: document.projection_persisted_at_epoch_seconds,
+        workout_recap_generated_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.workout_recap_generated_at,
+            document.workout_recap_generated_at_epoch_seconds,
+        ),
+        projection_persisted_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.projection_persisted_at,
+            document.projection_persisted_at_epoch_seconds,
+        ),
         raw_plan_response: document.raw_plan_response,
         raw_correction_response: document.raw_correction_response,
         validation_issues: document
@@ -264,13 +334,33 @@ fn map_document_to_operation(
             .map(map_document_to_attempt)
             .collect::<Result<Vec<_>, _>>()?,
         failure: document.failure.map(map_document_to_failure).transpose()?,
-        started_at_epoch_seconds: document.started_at_epoch_seconds,
-        last_attempt_at_epoch_seconds: document.last_attempt_at_epoch_seconds,
+        started_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.started_at,
+            document.started_at_epoch_seconds,
+            "started_at",
+        )
+        .map_err(TrainingPlanError::Repository)?,
+        last_attempt_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.last_attempt_at,
+            document.last_attempt_at_epoch_seconds,
+            "last_attempt_at",
+        )
+        .map_err(TrainingPlanError::Repository)?,
         attempt_count: u32::try_from(document.attempt_count).map_err(|_| {
             TrainingPlanError::Repository("invalid training plan attempt count".to_string())
         })?,
-        created_at_epoch_seconds: document.created_at_epoch_seconds,
-        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+        created_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.created_at,
+            document.created_at_epoch_seconds,
+            "created_at",
+        )
+        .map_err(TrainingPlanError::Repository)?,
+        updated_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.updated_at,
+            document.updated_at_epoch_seconds,
+            "updated_at",
+        )
+        .map_err(TrainingPlanError::Repository)?,
     })
 }
 
@@ -294,7 +384,12 @@ fn map_attempt_to_document(
     Ok(AttemptRecordDocument {
         phase: map_phase_to_document(&attempt.phase).to_string(),
         attempt_number: i64::from(attempt.attempt_number),
-        recorded_at_epoch_seconds: attempt.recorded_at_epoch_seconds,
+        recorded_at_epoch_seconds: Some(attempt.recorded_at_epoch_seconds),
+        recorded_at: optional_epoch_seconds_to_bson_datetime(
+            Some(attempt.recorded_at_epoch_seconds),
+            "recorded_at",
+        )
+        .expect("recorded_at should fit BSON DateTime"),
     })
 }
 
@@ -305,7 +400,12 @@ fn map_document_to_attempt(
         phase: map_document_to_phase(&document.phase)?,
         attempt_number: u32::try_from(document.attempt_number)
             .map_err(|_| TrainingPlanError::Repository("invalid attempt number".to_string()))?,
-        recorded_at_epoch_seconds: document.recorded_at_epoch_seconds,
+        recorded_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.recorded_at,
+            document.recorded_at_epoch_seconds,
+            "recorded_at",
+        )
+        .map_err(TrainingPlanError::Repository)?,
     })
 }
 

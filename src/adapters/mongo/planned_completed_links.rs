@@ -1,7 +1,12 @@
 use futures::TryStreamExt;
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::{doc, DateTime},
+    options::IndexOptions,
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
+use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_required_epoch_seconds};
 use crate::domain::planned_completed_links::{
     BoxFuture as PlannedCompletedWorkoutLinkBoxFuture, PlannedCompletedWorkoutLink,
     PlannedCompletedWorkoutLinkError, PlannedCompletedWorkoutLinkMatchSource,
@@ -19,7 +24,9 @@ struct PlannedCompletedWorkoutLinkDocument {
     planned_workout_id: String,
     completed_workout_id: String,
     match_source: String,
-    matched_at_epoch_seconds: i64,
+    matched_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    matched_at: Option<DateTime>,
 }
 
 impl MongoPlannedCompletedWorkoutLinkRepository {
@@ -195,7 +202,12 @@ fn map_domain_to_document(
         planned_workout_id: link.planned_workout_id.clone(),
         completed_workout_id: link.completed_workout_id.clone(),
         match_source: match_source_as_str(&link.match_source).to_string(),
-        matched_at_epoch_seconds: link.matched_at_epoch_seconds,
+        matched_at_epoch_seconds: Some(link.matched_at_epoch_seconds),
+        matched_at: optional_epoch_seconds_to_bson_datetime(
+            Some(link.matched_at_epoch_seconds),
+            "matched_at",
+        )
+        .expect("matched_at should fit BSON DateTime"),
     }
 }
 
@@ -207,7 +219,12 @@ fn map_document_to_domain(
         document.planned_workout_id,
         document.completed_workout_id,
         match_source_from_str(&document.match_source)?,
-        document.matched_at_epoch_seconds,
+        resolve_required_epoch_seconds(
+            document.matched_at,
+            document.matched_at_epoch_seconds,
+            "matched_at",
+        )
+        .map_err(PlannedCompletedWorkoutLinkError::Repository)?,
     ))
 }
 
