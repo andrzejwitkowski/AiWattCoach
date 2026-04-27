@@ -438,7 +438,7 @@ describe('CalendarDayCell content', () => {
     expect(dayCell.className).toContain('border-[#cda56b]/30');
   });
 
-  it('shows a compact prep strip above the race details when a race day also has a planned workout', () => {
+  it('renders a race day with its planned workout using race colours and no nested prep card', () => {
     const day = makeCalendarDay({
       date: new Date(2026, 3, 12),
       dateKey: '2026-04-12',
@@ -476,11 +476,12 @@ describe('CalendarDayCell content', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const dayCell = container.firstElementChild as HTMLElement;
 
-    expect(within(dayCell).getByText('Prep')).toBeInTheDocument();
+    expect(dayCell.className).toContain('border-[#cda56b]/30');
     expect(within(dayCell).getByText('Opener Grojec')).toBeInTheDocument();
     expect(within(dayCell).getByText('19 min • 16 TSS')).toBeInTheDocument();
     expect(within(dayCell).getByText('Race Day')).toBeInTheDocument();
-    expect(within(dayCell).getByText('Grojec')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Road')).toBeInTheDocument();
+    expect(within(dayCell).getByText('B')).toBeInTheDocument();
     expect(
       within(dayCell).queryByText(/View \d+ item/),
     ).not.toBeInTheDocument();
@@ -667,7 +668,7 @@ describe('CalendarDayCell content', () => {
       within(dayCell).queryByText(/View \d+ item/),
     ).not.toBeInTheDocument();
     expect(within(dayCell).getByText('Opener Grojec')).toBeInTheDocument();
-    expect(within(dayCell).getByText('Grojec')).toBeInTheDocument();
+    expect(within(dayCell).getByText('Race Day')).toBeInTheDocument();
   });
 
   it('keeps a plan-matched badge for planned events enriched with actual workout data', () => {

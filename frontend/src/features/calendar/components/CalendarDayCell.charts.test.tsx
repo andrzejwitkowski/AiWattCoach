@@ -261,9 +261,8 @@ describe('CalendarDayCell charts', () => {
     const chartBars = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
     const backgroundColors = chartBars.map((bar) => bar.style.backgroundColor).filter(Boolean);
 
-    expect(chartBars.length).toBe(6);
+    expect(chartBars.length).toBe(3);
     expect(backgroundColors).toContain('rgb(0, 227, 253)');
-    expect(backgroundColors).toContain('rgb(240, 211, 155)');
-    expect(backgroundColors).toContain('rgb(212, 156, 69)');
+    expect(backgroundColors).toContain('rgb(210, 255, 154)');
   });
 });
