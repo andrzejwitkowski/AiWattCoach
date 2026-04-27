@@ -1,4 +1,5 @@
 mod integrity;
+mod manual_refresh;
 mod model;
 mod ports;
 mod projection;
@@ -10,6 +11,9 @@ mod tests;
 
 pub use integrity::{
     verify_calendar_entry_integrity, CalendarEntryIntegrityIssue, CalendarEntryIntegrityReport,
+};
+pub use manual_refresh::{
+    ManualCalendarRefreshResult, ManualCalendarRefreshService, ManualCalendarRefreshUseCases,
 };
 pub use model::{
     CalendarEntryKind, CalendarEntryRace, CalendarEntrySummary, CalendarEntrySync,
