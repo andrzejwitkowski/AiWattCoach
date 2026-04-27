@@ -197,6 +197,67 @@ async fn list_calendar_events_parse_event_definition_from_description_when_worko
 }
 
 #[tokio::test]
+async fn list_calendar_events_expands_canonical_repeat_blocks_in_event_definition_summary() {
+    let app = intervals_test_app_with_calendar_entries(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        InMemoryCalendarEntryViewRepository::with_entries(vec![sample_planned_calendar_entry(
+            "planned:intervals-event:14",
+            "2026-03-22",
+            "Repeatability Under Fatigue",
+            "Main Set 2x\n- 10m 95%\n- 3m 55%\nCooldown\n- 5m 50%",
+        )]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    let event = &body.as_array().unwrap()[0];
+    let event_definition = event.get("eventDefinition").unwrap();
+    let summary = event_definition.get("summary").unwrap();
+    let segments = event_definition
+        .get("segments")
+        .unwrap()
+        .as_array()
+        .unwrap();
+
+    assert_eq!(
+        summary.get("totalDurationSeconds").unwrap().as_i64(),
+        Some(1_860)
+    );
+    assert_eq!(summary.get("totalSegments").unwrap().as_u64(), Some(5));
+    assert_eq!(
+        segments[0].get("label").unwrap().as_str(),
+        Some("10m 95% #1")
+    );
+    assert_eq!(
+        segments[1].get("label").unwrap().as_str(),
+        Some("3m 55% #1")
+    );
+    assert_eq!(
+        segments[2].get("label").unwrap().as_str(),
+        Some("10m 95% #2")
+    );
+    assert_eq!(
+        segments[3].get("label").unwrap().as_str(),
+        Some("3m 55% #2")
+    );
+    assert_eq!(segments[4].get("label").unwrap().as_str(), Some("5m 50%"));
+}
+
+#[tokio::test]
 async fn list_calendar_events_does_not_return_completed_calendar_entries_as_standalone_events() {
     let app = intervals_test_app_with_calendar_entries(
         TestIdentityServiceWithSession::default(),

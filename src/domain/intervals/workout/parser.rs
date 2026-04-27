@@ -13,47 +13,55 @@ pub fn parse_workout_doc(workout_doc: Option<&str>, ftp_watts: Option<i32>) -> P
 
     let mut segments = Vec::new();
     let mut start_offset_seconds: i32 = 0;
+    let mut index = 0;
 
-    'intervals: for interval in &intervals {
-        let Some(duration_seconds) = interval.duration_seconds else {
-            continue;
-        };
+    while index < intervals.len() {
+        let interval = &intervals[index];
 
-        for repeat_index in 0..interval.repeat_count {
-            if segments.len() >= MAX_PARSED_SEGMENTS {
-                break 'intervals;
+        if interval.duration_seconds.is_some() {
+            if !append_interval_segments(interval, &mut segments, &mut start_offset_seconds) {
+                break;
             }
-
-            let label = if interval.repeat_count > 1 {
-                format!(
-                    "{} #{}",
-                    normalize_definition(&interval.definition),
-                    repeat_index + 1
-                )
-            } else {
-                normalize_definition(&interval.definition)
-            };
-
-            let Some(end_offset_seconds) = start_offset_seconds.checked_add(duration_seconds)
-            else {
-                break 'intervals;
-            };
-            segments.push(WorkoutSegment {
-                order: segments.len(),
-                label,
-                duration_seconds,
-                start_offset_seconds,
-                end_offset_seconds,
-                target_percent_ftp: mean_target_percent_from_bounds(
-                    interval.min_target_percent_ftp,
-                    interval.max_target_percent_ftp,
-                ),
-                min_target_percent_ftp: interval.min_target_percent_ftp,
-                max_target_percent_ftp: interval.max_target_percent_ftp,
-                zone_id: interval.zone_id,
-            });
-            start_offset_seconds = end_offset_seconds;
+            index += 1;
+            continue;
         }
+
+        // Canonical planned workouts serialize repeat headers on their own line,
+        // followed by the steps that should be repeated as a block.
+        if interval.repeat_count > 1 {
+            let repeat_steps = intervals[index + 1..]
+                .iter()
+                .take_while(|candidate| candidate.duration_seconds.is_some())
+                .collect::<Vec<_>>();
+
+            if !repeat_steps.is_empty() {
+                let repeat_count = interval.repeat_count;
+                let mut completed = true;
+
+                'repeat_block: for repeat_index in 0..repeat_count {
+                    for repeated_step in &repeat_steps {
+                        if !append_segment(
+                            repeated_step,
+                            Some(repeat_index + 1),
+                            &mut segments,
+                            &mut start_offset_seconds,
+                        ) {
+                            completed = false;
+                            break 'repeat_block;
+                        }
+                    }
+                }
+
+                if !completed {
+                    break;
+                }
+
+                index += repeat_steps.len() + 1;
+                continue;
+            }
+        }
+
+        index += 1;
     }
 
     let summary = build_workout_summary(&segments, ftp_watts);
@@ -69,7 +77,11 @@ fn parse_workout_line(definition: &str) -> WorkoutIntervalDefinition {
     let normalized_definition = definition.trim().to_string();
     let clean = normalize_definition(definition);
     let tokens = clean.split_whitespace().collect::<Vec<_>>();
-    let (repeat_count, duration_seconds) = parse_repeat_and_duration(&tokens).unwrap_or((1, None));
+    let (mut repeat_count, duration_seconds) =
+        parse_repeat_and_duration(&tokens).unwrap_or((1, None));
+    if duration_seconds.is_none() {
+        repeat_count = parse_repeat_header_count(&tokens).unwrap_or(repeat_count);
+    }
     let (min_target_percent_ftp, max_target_percent_ftp) = tokens
         .iter()
         .find_map(|token| parse_target_percent_range(token))
@@ -119,6 +131,18 @@ fn parse_repeat_and_duration(tokens: &[&str]) -> Option<(usize, Option<i32>)> {
         1,
         tokens.first().and_then(|token| parse_duration_token(token)),
     ))
+}
+
+fn parse_repeat_header_count(tokens: &[&str]) -> Option<usize> {
+    let last = tokens.last()?.trim().trim_end_matches(',');
+    let count_text = last.strip_suffix('x')?;
+
+    if count_text.is_empty() || !count_text.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+
+    let repeat_count = count_text.parse::<usize>().ok()?;
+    (repeat_count > 0).then_some(repeat_count)
 }
 
 fn parse_duration_token(token: &str) -> Option<i32> {
@@ -184,6 +208,67 @@ fn parse_zone_token(token: &str) -> Option<i32> {
 
 fn normalize_definition(definition: &str) -> String {
     definition.trim().trim_start_matches('-').trim().to_string()
+}
+
+fn append_interval_segments(
+    interval: &WorkoutIntervalDefinition,
+    segments: &mut Vec<WorkoutSegment>,
+    start_offset_seconds: &mut i32,
+) -> bool {
+    for repeat_index in 0..interval.repeat_count {
+        let label_repeat_index = (interval.repeat_count > 1).then_some(repeat_index + 1);
+
+        if !append_segment(interval, label_repeat_index, segments, start_offset_seconds) {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn append_segment(
+    interval: &WorkoutIntervalDefinition,
+    label_repeat_index: Option<usize>,
+    segments: &mut Vec<WorkoutSegment>,
+    start_offset_seconds: &mut i32,
+) -> bool {
+    let Some(duration_seconds) = interval.duration_seconds else {
+        return true;
+    };
+    if segments.len() >= MAX_PARSED_SEGMENTS {
+        return false;
+    }
+
+    let label = match label_repeat_index {
+        Some(repeat_index) => format!(
+            "{} #{}",
+            normalize_definition(&interval.definition),
+            repeat_index
+        ),
+        None => normalize_definition(&interval.definition),
+    };
+
+    let Some(end_offset_seconds) = start_offset_seconds.checked_add(duration_seconds) else {
+        return false;
+    };
+
+    segments.push(WorkoutSegment {
+        order: segments.len(),
+        label,
+        duration_seconds,
+        start_offset_seconds: *start_offset_seconds,
+        end_offset_seconds,
+        target_percent_ftp: mean_target_percent_from_bounds(
+            interval.min_target_percent_ftp,
+            interval.max_target_percent_ftp,
+        ),
+        min_target_percent_ftp: interval.min_target_percent_ftp,
+        max_target_percent_ftp: interval.max_target_percent_ftp,
+        zone_id: interval.zone_id,
+    });
+    *start_offset_seconds = end_offset_seconds;
+
+    true
 }
 
 fn zone_for_percent(percent: f64) -> i32 {

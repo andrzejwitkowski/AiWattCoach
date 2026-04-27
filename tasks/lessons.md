@@ -34,3 +34,8 @@
 
 - When review feedback asks to make adapter constants environment-configurable, route the values through the centralized startup settings parser with explicit defaults instead of reading `std::env` inside the adapter.
 - After adding new env-backed settings, update the env key loader, sample env file, and focused settings tests in the same change so the new configuration path is actually exercised.
+
+## Canonical Parser Pairs
+
+- When one parser reads canonical text produced by another serializer in the same repo, verify structural constructs end to end, not just token-level fields.
+- For repeated workout blocks, add regression tests that assert expanded segment order and total duration so grouped semantics cannot silently collapse back into flat line parsing.

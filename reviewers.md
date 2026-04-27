@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | user | planned workout calendar duration parsing
+
+- Problem: `parse_workout_doc(...)` treated canonical planned-workout repeat headers like `Main Set 2x` as standalone lines, so the following step lines were not expanded as a repeated block and calendar planned-workout summaries undercounted total duration.
+- Fix: taught the workout parser to recognize canonical repeat-header lines without inline durations, expand the following contiguous timed steps as a repeated block when building segments, and added a regression test for the full repeated duration/segment labels.
+- Prevention: when one parser consumes text emitted by another canonical serializer, add regression coverage for structural constructs like repeat headers instead of assuming a flat line-by-line parser preserves grouped semantics.
+
 ### 2026-04-24 | CodeRabbit/Copilot | PR #141 Wahoo OAuth review follow-up
 
 - Problem: the first Wahoo OAuth connect version duplicated security-sensitive `returnTo` sanitization, used a misleading `NotConfigured` error for missing per-user Wahoo credentials, built the live reqwest client with `.expect(...)`, leaked Wahoo tokens through Mongo `Debug`, discarded all token-endpoint error detail, and accepted callback state consumption without binding it to the authenticated app user.
