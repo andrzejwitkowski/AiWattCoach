@@ -171,7 +171,15 @@ async fn run_task_worker_loop<Tasks, Workers, Time>(
     idle_ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let active_tasks = Arc::new(Mutex::new(Vec::new()));
 
-    persist_worker_state(&scheduler, &worker_id, &config, &registry, &runtime_state).await;
+    persist_worker_state_with_retry(
+        &scheduler,
+        &worker_id,
+        &config,
+        &registry,
+        &runtime_state,
+        &mut shutdown,
+    )
+    .await;
 
     loop {
         if *shutdown.borrow() {
@@ -622,6 +630,62 @@ async fn persist_worker_state<Tasks, Workers, Time>(
     .await;
 }
 
+async fn persist_worker_state_with_retry<Tasks, Workers, Time>(
+    scheduler: &TaskSchedulerService<Tasks, Workers, Time>,
+    worker_id: &str,
+    config: &TaskWorkerConfig,
+    registry: &TaskHandlerRegistry,
+    runtime_state: &Arc<WorkerRuntimeState>,
+    shutdown: &mut watch::Receiver<bool>,
+) where
+    Tasks: TaskRepository,
+    Workers: TaskWorkerRepository,
+    Time: Clock,
+{
+    let mut backoff_seconds: u64 = 1;
+    let max_backoff_seconds: u64 = 30;
+
+    loop {
+        let active_task_ids = runtime_state.active_task_ids.lock().await.clone();
+        match scheduler
+            .heartbeat_worker(
+                worker_id,
+                config.is_leader,
+                registry.enabled_task_types.clone(),
+                active_task_ids,
+            )
+            .await
+        {
+            Ok(worker) => {
+                tracing::info!(
+                    worker_id = %worker.worker_id,
+                    is_leader = worker.is_leader,
+                    enabled_task_types = ?worker.enabled_task_types,
+                    "task worker startup state persisted"
+                );
+                break;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    worker_id = %worker_id,
+                    backoff_seconds,
+                    %error,
+                    "failed to persist task worker startup state; retrying"
+                );
+            }
+        }
+
+        tokio::select! {
+            _ = shutdown.changed() => {
+                return;
+            }
+            _ = tokio::time::sleep(Duration::from_secs(backoff_seconds)) => {}
+        }
+
+        backoff_seconds = (backoff_seconds.saturating_mul(2)).min(max_backoff_seconds);
+    }
+}
+
 async fn persist_worker_heartbeat<Tasks, Workers, Time>(
     scheduler: &TaskSchedulerService<Tasks, Workers, Time>,
     worker_id: &str,
@@ -633,6 +697,7 @@ async fn persist_worker_heartbeat<Tasks, Workers, Time>(
     Workers: TaskWorkerRepository,
     Time: Clock,
 {
+    let active_task_count = active_task_ids.len();
     if let Err(error) = scheduler
         .heartbeat_worker(
             worker_id,
@@ -647,6 +712,13 @@ async fn persist_worker_heartbeat<Tasks, Workers, Time>(
             enabled_task_types = ?enabled_task_types,
             %error,
             "failed to persist task worker heartbeat"
+        );
+    } else {
+        tracing::debug!(
+            worker_id = %worker_id,
+            is_leader,
+            active_task_count,
+            "task worker state persisted"
         );
     }
 }
