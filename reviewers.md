@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | user | Wahoo planned-workout sync invalid file
+
+- Problem: Wahoo planned-workout sync sent `POST/PUT /v1/plans` as JSON with a raw base64 string in `plan.file`, while the Wahoo Plans API expects form-encoded fields and a file value wrapped as `data:application/json;base64,...`. That made valid generated `plan.json` payloads fail upstream with `422 Unprocessable Entity (oauth_error=Invalid file)`.
+- Fix: changed the Wahoo client plan create/update paths to send form bodies with `plan[file]`, `plan[filename]`, and provider metadata exactly as documented, wrapped the base64 payload in a JSON data URI, removed the now-dead plan JSON request DTOs, and added focused client tests for both create and update plan form construction.
+- Prevention: when an upstream API describes file uploads as `resource[file]` parameters, verify both the transport encoding (`form` vs `json`) and the exact file wrapper format (`data:<mime>;base64,...` vs raw base64) before assuming a nested JSON request body is acceptable.
+
 ### 2026-04-27 | Copilot/CodeRabbit | PR #152 manual calendar refresh review follow-up
 
 - Problem: PR review found five confirmed issues in the self-service calendar refresh feature: the rebuild range still used a full-table scan with a "9999-12-31" sentinel instead of two indexed date lookups, the frontend 401-redirect test restored `window.location` without `try/finally`, the backend handler leaked raw repository error messages and user identifiers in logs, the backend error mapping did not cover the new `InvariantViolation` variant from race/credential errors, and no REST test verified user scoping on the refresh endpoint.
