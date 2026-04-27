@@ -399,7 +399,7 @@ impl WahooApiPort for WahooOAuthClient {
                 .execute_api_write(
                     client
                         .bearer_post(client.api_url("/v1/plans"), &access_token)
-                        .form(&WahooCreatePlanRequest {
+                        .json(&WahooCreatePlanRequest {
                             plan: WahooCreatePlanRequestBody {
                                 file: request.file_base64,
                                 filename: request.filename,
@@ -432,7 +432,7 @@ impl WahooApiPort for WahooOAuthClient {
                             client.api_url(&format!("/v1/plans/{plan_id}")),
                             &access_token,
                         )
-                        .form(&WahooUpdatePlanRequest {
+                        .json(&WahooUpdatePlanRequest {
                             plan: WahooUpdatePlanRequestBody {
                                 file: request.file_base64,
                                 filename: request.filename,
@@ -529,7 +529,7 @@ impl WahooApiPort for WahooOAuthClient {
                 .execute_api_write(
                     client
                         .bearer_post(client.api_url("/v1/workouts"), &access_token)
-                        .form(&WahooCreateWorkoutRequest {
+                        .json(&WahooCreateWorkoutRequest {
                             workout: WahooCreateWorkoutRequestBody {
                                 name: request.name,
                                 workout_token: request.workout_token,
@@ -562,7 +562,7 @@ impl WahooApiPort for WahooOAuthClient {
                             client.api_url(&format!("/v1/workouts/{workout_id}")),
                             &access_token,
                         )
-                        .form(&WahooUpdateWorkoutRequest {
+                        .json(&WahooUpdateWorkoutRequest {
                             workout: WahooUpdateWorkoutRequestBody {
                                 name: request.name,
                                 workout_token: request.workout_token,
