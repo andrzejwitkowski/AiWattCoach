@@ -207,8 +207,8 @@ fn serialize_projected_workout_line(line: &crate::domain::intervals::PlannedWork
     match line {
         crate::domain::intervals::PlannedWorkoutLine::Text(text) => text.text.clone(),
         crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => match &repeat.title {
-            Some(title) => format!("{title} {}x", repeat.count),
-            None => format!("{}x", repeat.count),
+            Some(title) if !title.trim().is_empty() => format!("{title} {}x", repeat.count),
+            _ => format!("{}x", repeat.count),
         },
         crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
             let duration = format_projected_step_duration(step.duration_seconds);
