@@ -250,11 +250,12 @@ fn map_planned_workout_sync_states(
         return None;
     }
 
+    let current_payload_hash = current_planned_payload_hash(workout);
     if sync_states.iter().any(|state| {
         state
             .last_synced_payload_hash
             .as_deref()
-            .is_some_and(|hash| hash != current_planned_payload_hash(workout))
+            .is_some_and(|hash| hash != current_payload_hash)
     }) {
         let linked_intervals_event_id = sync_states
             .iter()
@@ -407,11 +408,10 @@ fn linked_intervals_event_id(state: &ExternalSyncState) -> Option<i64> {
         return None;
     }
 
-    state.external_id.as_deref().map(|value| {
-        value.parse::<i64>().unwrap_or_else(|error| {
-            panic!("intervals sync state external_id must parse as i64, got '{value}': {error}")
-        })
-    })
+    state
+        .external_id
+        .as_deref()
+        .and_then(|value| value.parse::<i64>().ok())
 }
 
 fn date_prefix(value: &str) -> &str {

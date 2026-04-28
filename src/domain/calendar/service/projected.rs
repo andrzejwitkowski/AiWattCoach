@@ -199,13 +199,8 @@ fn linked_intervals_event_id(
     sync_states_for_status(sync_states, just_synced_state)
         .into_iter()
         .find(|state| state.provider == ExternalProvider::Intervals)
-        .and_then(|state| {
-            state.external_id.as_deref().map(|value| {
-                value.parse::<i64>().unwrap_or_else(|error| {
-                    panic!("intervals sync state external_id must parse as i64, got '{value}': {error}")
-                })
-            })
-        })
+        .and_then(|state| state.external_id.as_deref())
+        .and_then(|value| value.parse::<i64>().ok())
 }
 
 fn serialize_projected_workout_line(line: &crate::domain::intervals::PlannedWorkoutLine) -> String {

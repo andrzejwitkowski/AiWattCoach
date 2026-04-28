@@ -275,9 +275,8 @@ fn linked_intervals_event_id(state: &ExternalSyncState) -> Option<i64> {
         return None;
     }
 
-    state.external_id.as_deref().map(|value| {
-        value.parse::<i64>().unwrap_or_else(|error| {
-            panic!("intervals sync state external_id must parse as i64, got '{value}': {error}")
-        })
-    })
+    state
+        .external_id
+        .as_deref()
+        .and_then(|value| value.parse::<i64>().ok())
 }

@@ -363,7 +363,7 @@ struct InMemoryExternalSyncStateRepository {
 }
 
 #[tokio::test]
-async fn sync_planned_workout_adds_match_marker_to_created_event_description() {
+async fn sync_planned_workout_to_wahoo_adds_workout_token() {
     let intervals = FakeIntervalsService::with_created_event(Event {
         id: 77,
         start_date_local: "2023-11-14T00:00:00".to_string(),

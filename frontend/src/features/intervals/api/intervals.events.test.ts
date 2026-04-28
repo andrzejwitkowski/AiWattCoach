@@ -269,7 +269,7 @@ describe('intervals api events', () => {
       createFetchMock().mockResolvedValue(
         new Response(
           JSON.stringify({
-            id: 0,
+            id: 5906112577594034,
             calendarEntryId: 'predicted:training-plan:user-1:w1:1:2026-03-26',
             startDateLocal: '2026-03-26',
             name: 'Predicted Build',

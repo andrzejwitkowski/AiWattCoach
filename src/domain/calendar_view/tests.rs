@@ -2067,8 +2067,7 @@ fn race_projection_keeps_label_shape_and_sync_metadata() {
 }
 
 #[test]
-#[should_panic(expected = "intervals sync state external_id must parse as i64")]
-fn race_projection_panics_when_intervals_external_id_is_not_numeric() {
+fn race_projection_handles_non_numeric_intervals_external_id_gracefully() {
     let sync_state = ExternalSyncState::new(
         "user-1".to_string(),
         ExternalProvider::Intervals,
@@ -2080,7 +2079,21 @@ fn race_projection_panics_when_intervals_external_id_is_not_numeric() {
         1_700_000_000,
     );
 
-    let _ = project_race_entry(&sample_race(), Some(&sync_state));
+    let entry = project_race_entry(&sample_race(), Some(&sync_state));
+    assert_eq!(
+        entry
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        None
+    );
+    assert_eq!(
+        entry
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("synced")
+    );
 }
 
 #[test]

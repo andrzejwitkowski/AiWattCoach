@@ -72,6 +72,10 @@ impl MongoExternalSyncStateRepository {
                     .options(
                         IndexOptions::builder()
                             .name("external_sync_states_user_provider_wahoo_plan_id".to_string())
+                            .unique(true)
+                            .partial_filter_expression(doc! {
+                                "wahoo_plan_id": { "$exists": true, "$ne": null }
+                            })
                             .build(),
                     )
                     .build(),
@@ -80,6 +84,10 @@ impl MongoExternalSyncStateRepository {
                     .options(
                         IndexOptions::builder()
                             .name("external_sync_states_user_provider_wahoo_workout_token".to_string())
+                            .unique(true)
+                            .partial_filter_expression(doc! {
+                                "wahoo_workout_token": { "$exists": true, "$ne": null }
+                            })
                             .build(),
                     )
                     .build(),
