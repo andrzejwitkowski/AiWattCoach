@@ -534,7 +534,7 @@ async fn rebuild_for_user_uses_external_sync_state_for_imported_planned_workouts
             .sync
             .as_ref()
             .and_then(|sync| sync.sync_status.as_deref()),
-        Some("synced")
+        Some("modified")
     );
 }
 
@@ -771,7 +771,7 @@ async fn refresh_range_for_user_uses_external_sync_states_for_planned_entries() 
             .sync
             .as_ref()
             .and_then(|sync| sync.sync_status.as_deref()),
-        Some("synced")
+        Some("modified")
     );
 }
 
@@ -829,7 +829,7 @@ async fn refresh_range_for_user_uses_external_sync_state_for_imported_planned_wo
             .sync
             .as_ref()
             .and_then(|sync| sync.sync_status.as_deref()),
-        Some("synced")
+        Some("modified")
     );
 }
 
