@@ -1125,6 +1125,7 @@ fn map_wahoo_sync_record_to_state(record: PlannedWorkoutWahooSyncRecord) -> Exte
         | crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Unsynced
         | crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Modified => {
             let mut state = state.mark_wahoo_pending(record.wahoo_plan_external_id);
+            state.external_id = record.wahoo_workout_id.map(|id| id.to_string());
             state.wahoo_plan_id = record.wahoo_plan_id;
             state.wahoo_workout_id = record.wahoo_workout_id;
             state.wahoo_workout_token = record.wahoo_workout_token;
@@ -1134,6 +1135,52 @@ fn map_wahoo_sync_record_to_state(record: PlannedWorkoutWahooSyncRecord) -> Exte
             state
         }
     }
+}
+
+#[test]
+fn map_wahoo_sync_record_to_state_preserves_external_id_for_pending_record_with_remote_workout() {
+    let mut record = PlannedWorkoutWahooSyncRecord::pending(
+        "user-1".to_string(),
+        "training-plan:user-1:w1:1".to_string(),
+        "2026-05-11".to_string(),
+        "planned-imported-1".to_string(),
+        "source-workout-1".to_string(),
+        "planned-imported-1".to_string(),
+        1_700_000_000,
+    );
+    record.wahoo_plan_id = Some(5_001);
+    record.wahoo_workout_id = Some(60_001);
+    record.wahoo_workout_token = Some("[AIWATTCOACH:pw=WAH001TOKN]".to_string());
+    record.payload_hash = Some("payload-hash-1".to_string());
+    record.last_synced_at_epoch_seconds = Some(1_700_000_010);
+
+    let state = map_wahoo_sync_record_to_state(record);
+
+    assert_eq!(state.external_id.as_deref(), Some("60001"));
+}
+
+#[test]
+fn map_wahoo_sync_record_to_state_preserves_external_id_for_modified_record_with_remote_workout() {
+    let mut record = PlannedWorkoutWahooSyncRecord::pending(
+        "user-1".to_string(),
+        "training-plan:user-1:w1:1".to_string(),
+        "2026-05-11".to_string(),
+        "planned-imported-1".to_string(),
+        "source-workout-1".to_string(),
+        "planned-imported-1".to_string(),
+        1_700_000_000,
+    );
+    record.status =
+        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Modified;
+    record.wahoo_plan_id = Some(5_001);
+    record.wahoo_workout_id = Some(60_001);
+    record.wahoo_workout_token = Some("[AIWATTCOACH:pw=WAH001TOKN]".to_string());
+    record.payload_hash = Some("payload-hash-1".to_string());
+    record.last_synced_at_epoch_seconds = Some(1_700_000_010);
+
+    let state = map_wahoo_sync_record_to_state(record);
+
+    assert_eq!(state.external_id.as_deref(), Some("60001"));
 }
 
 pub(super) fn sample_planned_workout_wahoo_sync_record(

@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-28 | CodeRabbit | PR #158 second review follow-up
+
+- Problem: the new Wahoo retry/dedupe recovery still only searched page 1 of `list_workouts(...)`, so an older remote workout with the planned-workout marker could be missed and recreated on retry. Separately, the legacy Wahoo sync test-seeding mapper still left `external_id` empty for pending/modified records even when `wahoo_workout_id` was present, reducing fidelity versus real `ExternalSyncState` rows.
+- Fix: paginated `resolve_existing_workout(...)` across Wahoo workout pages until the marker is found or the remote list is exhausted, updated the Wahoo test double to paginate the seeded list, added a regression that finds the token on page 2, and populated `external_id` from `wahoo_workout_id` in the pending/modified legacy Wahoo sync-state mapper with focused mapper regressions.
+- Prevention: when a lookup becomes the dedupe path for retries or stale-id recovery, verify it searches the full upstream result set rather than one convenient page. For legacy-to-current test mappers, mirror every derived identifier field that runtime persistence would populate, not just the provider-specific side fields.
+
 ### 2026-04-28 | user | CI follow-up for planned-workout sync split
 
 - Problem: two Rust tests still assumed pre-refactor behavior after the provider-split sync changes. The Wahoo update-path test used a fake client with no discoverable remote workout, so the new recovery flow legitimately recreated instead of updating. The `calendar_view` rebuild test still expected planned-workout sync metadata to survive purely from existing `calendar_view` rows even though rebuild now intentionally sources planned sync only from authoritative `ExternalSyncState` records and clears stale view-only planned sync.

@@ -670,6 +670,101 @@ async fn sync_planned_workout_to_wahoo_reuses_remote_workout_found_by_token() {
 }
 
 #[tokio::test]
+async fn sync_planned_workout_to_wahoo_reuses_remote_workout_found_by_token_on_later_page() {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Build Session".to_string()),
+        category: EventCategory::Workout,
+        description: Some("- 60m 70%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    });
+    let match_token = crate::domain::planned_workout_tokens::build_planned_workout_match_token(
+        "training-plan:user-1:w1:1:2023-11-14",
+    );
+    let workout_token =
+        crate::domain::planned_workout_tokens::format_planned_workout_marker(&match_token);
+    let mut workouts = (0..100)
+        .map(|index| WahooWorkout {
+            id: 8_000 + index,
+            starts: "2023-11-13T00:00:00.000Z".to_string(),
+            minutes: Some(60),
+            name: Some(format!("Other Session {index}")),
+            plan_id: Some(5_000 + index),
+            plan_ids: vec![5_000 + index],
+            route_id: None,
+            workout_token: Some(format!("[AIWATTCOACH:pw=OTHER{index:05}]")),
+            workout_type_id: Some(0),
+            workout_summary: None,
+            created_at: None,
+            updated_at: None,
+        })
+        .collect::<Vec<_>>();
+    workouts.push(WahooWorkout {
+        id: 9001,
+        starts: "2023-11-14T00:00:00.000Z".to_string(),
+        minutes: Some(60),
+        name: Some("Build Session".to_string()),
+        plan_id: Some(5001),
+        plan_ids: vec![5001],
+        route_id: None,
+        workout_token: Some(workout_token.clone()),
+        workout_type_id: Some(0),
+        workout_summary: None,
+        created_at: None,
+        updated_at: None,
+    });
+    let wahoo = RecordingWahooService::with_listed_workouts(workouts);
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Wahoo,
+                planned_workout_entity("training-plan:user-1:w1:1", "2023-11-14"),
+            )
+            .mark_wahoo_pending("training-plan:user-1:w1:1:2023-11-14".to_string()),
+        )
+        .await
+        .unwrap();
+
+    let service = CalendarService::new(
+        intervals,
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        sync_states,
+        FixedClock,
+    )
+    .with_wahoo(wahoo.clone(), InMemoryUserSettingsRepository::with_ftp(295))
+    .with_planned_workout_tokens(FixedPlannedWorkoutTokenRepository::new(&match_token));
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Wahoo,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(wahoo.workout_create_calls(), 0);
+    let updated_workouts = wahoo.updated_workouts();
+    assert_eq!(updated_workouts.len(), 1);
+    assert_eq!(updated_workouts[0].0, 9001);
+}
+
+#[tokio::test]
 async fn sync_planned_workout_to_wahoo_recreates_workout_after_stale_remote_id_not_found() {
     let intervals = FakeIntervalsService::with_created_event(Event {
         id: 77,
@@ -1636,17 +1731,24 @@ impl WahooUseCases for RecordingWahooService {
     fn list_workouts(
         &self,
         _user_id: &str,
-        _page: usize,
-        _per_page: usize,
+        page: usize,
+        per_page: usize,
     ) -> crate::domain::wahoo::BoxFuture<Result<WahooWorkoutList, WahooError>> {
         let listed_workouts = self.listed_workouts.clone();
         Box::pin(async move {
             let workouts = listed_workouts.lock().unwrap().clone();
+            let start = per_page.saturating_mul(page.saturating_sub(1));
+            let page_workouts = workouts
+                .iter()
+                .skip(start)
+                .take(per_page)
+                .cloned()
+                .collect::<Vec<_>>();
             Ok(WahooWorkoutList {
                 total: workouts.len(),
-                workouts,
-                page: 1,
-                per_page: 100,
+                workouts: page_workouts,
+                page,
+                per_page,
                 order: None,
                 sort: None,
             })

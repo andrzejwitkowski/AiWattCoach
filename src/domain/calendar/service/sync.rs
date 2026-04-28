@@ -610,6 +610,8 @@ async fn resolve_existing_workout<Wahoo>(
 where
     Wahoo: crate::domain::wahoo::WahooUseCases,
 {
+    const WAHOO_WORKOUT_LOOKUP_PAGE_SIZE: usize = 100;
+
     if let Some(wahoo_workout_id) = state.wahoo_workout_id {
         match wahoo.get_workout(user_id, wahoo_workout_id).await {
             Ok(workout) => return Ok(Some(workout)),
@@ -618,15 +620,28 @@ where
         }
     }
 
-    let workouts = wahoo
-        .list_workouts(user_id, 1, 100)
-        .await
-        .map_err(map_wahoo_error)?;
+    let mut page = 1;
+    loop {
+        let workouts = wahoo
+            .list_workouts(user_id, page, WAHOO_WORKOUT_LOOKUP_PAGE_SIZE)
+            .await
+            .map_err(map_wahoo_error)?;
 
-    Ok(workouts
-        .workouts
-        .into_iter()
-        .find(|workout| workout.workout_token.as_deref() == Some(workout_token)))
+        let returned_count = workouts.workouts.len();
+        if let Some(workout) = workouts
+            .workouts
+            .into_iter()
+            .find(|workout| workout.workout_token.as_deref() == Some(workout_token))
+        {
+            return Ok(Some(workout));
+        }
+
+        if returned_count < WAHOO_WORKOUT_LOOKUP_PAGE_SIZE {
+            return Ok(None);
+        }
+
+        page += 1;
+    }
 }
 
 fn clear_stale_wahoo_workout_id(state: &ExternalSyncState) -> ExternalSyncState {
