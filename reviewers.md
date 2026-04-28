@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-27 | CodeRabbit | PR #157 planned workout repeat parsing follow-up
+
+- Problem: the first canonical repeat-block fix expanded only the outer repeat header count and ignored inline step-level repeat counts inside the block, so input like `Main Set 2x` plus `- 2x30s 120%` still undercounted duration and segment count inside calendar/workout summaries.
+- Fix: updated repeat-block expansion to iterate each repeated step by its own `repeat_count`, keep per-step occurrence numbering across outer block iterations, and added a regression covering nested repeat expansion inside canonical repeat blocks.
+- Prevention: when adding grouped expansion logic on top of an existing flat parser, audit whether child items already carry their own multiplicity. Outer repeat support is incomplete if nested inline repeats silently collapse back to one segment per child line.
+
+### 2026-04-27 | user | planned workout calendar duration parsing
+
+- Problem: `parse_workout_doc(...)` treated canonical planned-workout repeat headers like `Main Set 2x` as standalone lines, so the following step lines were not expanded as a repeated block and calendar planned-workout summaries undercounted total duration.
+- Fix: taught the workout parser to recognize canonical repeat-header lines without inline durations, expand the following contiguous timed steps as a repeated block when building segments, and added a regression test for the full repeated duration/segment labels.
+- Prevention: when one parser consumes text emitted by another canonical serializer, add regression coverage for structural constructs like repeat headers instead of assuming a flat line-by-line parser preserves grouped semantics.
+
 ### 2026-04-27 | Copilot/CodeRabbit | PR #148 readable Mongo dates review follow-up
 
 - Problem: the readable-Mongo-dates branch had several real review gaps: multiple Mongo read mappers (`settings`, `athlete_summary`, `external_observations`) still used `expect(...)` on required timestamps and could panic on malformed dual-format documents; `workout_summary` lock enforcement and update filters only checked legacy `saved_at_epoch_seconds`, so a DateTime-only `saved_at` mirror could leave a locked summary editable; BSON-to-epoch conversion truncated toward zero for negative millisecond values; debug output in `settings` omitted the new readable DateTime mirrors; and the branch still conflicted with `origin/main` in regenerated `graphify-out` artifacts.

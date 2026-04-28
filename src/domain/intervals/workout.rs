@@ -93,6 +93,7 @@ fn round_to(value: f64, decimals: u32) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use super::parse_workout_doc;
     use super::pest_parser::{
         parse_workout_ast, CadenceRange, ParserTarget, StepAmount, StepKind, WorkoutItem,
     };
@@ -337,5 +338,35 @@ mod tests {
             .expect_err("parse should fail");
 
         assert!(!error.to_string().is_empty());
+    }
+
+    #[test]
+    fn parse_workout_doc_expands_canonical_repeat_blocks_into_full_duration() {
+        let parsed = parse_workout_doc(
+            Some("Main Set 2x\n- 10m 95%\n- 3m 55%\nCooldown\n- 5m 50%"),
+            None,
+        );
+
+        assert_eq!(parsed.summary.total_duration_seconds, 1_860);
+        assert_eq!(parsed.summary.total_segments, 5);
+        assert_eq!(parsed.segments[0].label, "10m 95% #1");
+        assert_eq!(parsed.segments[1].label, "3m 55% #1");
+        assert_eq!(parsed.segments[2].label, "10m 95% #2");
+        assert_eq!(parsed.segments[3].label, "3m 55% #2");
+        assert_eq!(parsed.segments[4].label, "5m 50%");
+    }
+
+    #[test]
+    fn parse_workout_doc_expands_inline_repeats_inside_canonical_repeat_blocks() {
+        let parsed = parse_workout_doc(Some("Main Set 2x\n- 2x30s 120%\n- 1m 55%"), None);
+
+        assert_eq!(parsed.summary.total_duration_seconds, 240);
+        assert_eq!(parsed.summary.total_segments, 6);
+        assert_eq!(parsed.segments[0].label, "2x30s 120% #1");
+        assert_eq!(parsed.segments[1].label, "2x30s 120% #2");
+        assert_eq!(parsed.segments[2].label, "1m 55% #1");
+        assert_eq!(parsed.segments[3].label, "2x30s 120% #3");
+        assert_eq!(parsed.segments[4].label, "2x30s 120% #4");
+        assert_eq!(parsed.segments[5].label, "1m 55% #2");
     }
 }

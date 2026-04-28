@@ -71,6 +71,12 @@
 - When review feedback asks to make adapter constants environment-configurable, route the values through the centralized startup settings parser with explicit defaults instead of reading `std::env` inside the adapter.
 - After adding new env-backed settings, update the env key loader, sample env file, and focused settings tests in the same change so the new configuration path is actually exercised.
 
+## Canonical Parser Pairs
+
+- When one parser reads canonical text produced by another serializer in the same repo, verify structural constructs end to end, not just token-level fields.
+- For repeated workout blocks, add regression tests that assert expanded segment order and total duration so grouped semantics cannot silently collapse back into flat line parsing.
+- If a grouped construct reuses child items parsed by the flat path, preserve child multiplicity too. Outer repeat support is still wrong if inline child repeats are emitted only once per parent iteration.
+
 ## OpenCode Plugin Wiring
 
 - When a repo-local OpenCode plugin is configured in `opencode.json`, verify that the plugin file exports the module in the shape expected by the installed plugin API, not just a conveniently named helper like `GraphifyPlugin`.
