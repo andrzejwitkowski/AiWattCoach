@@ -350,7 +350,12 @@ async fn rebuild_for_user_replaces_stale_entries_and_stays_idempotent() {
 #[tokio::test]
 async fn rebuild_for_user_preserves_existing_sync_metadata() {
     let repository = InMemoryCalendarEntryViewRepository::default();
-    let service = CalendarEntryViewService::new(repository.clone());
+    let service = CalendarEntryViewService::new(repository.clone()).with_sync_states(
+        TestExternalSyncStateRepository::with_states(vec![
+            sample_planned_sync_state(),
+            sample_race_sync_state(),
+        ]),
+    );
 
     repository
         .upsert(project_planned_workout_entry(

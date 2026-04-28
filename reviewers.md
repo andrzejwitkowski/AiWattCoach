@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-28 | user | CI follow-up for planned-workout sync split
+
+- Problem: two Rust tests still assumed pre-refactor behavior after the provider-split sync changes. The Wahoo update-path test used a fake client with no discoverable remote workout, so the new recovery flow legitimately recreated instead of updating. The `calendar_view` rebuild test still expected planned-workout sync metadata to survive purely from existing `calendar_view` rows even though rebuild now intentionally sources planned sync only from authoritative `ExternalSyncState` records and clears stale view-only planned sync.
+- Fix: seeded the Wahoo test with a listed remote workout carrying the expected marker so the update path is exercised under the new lookup flow, and changed the rebuild test to wire `TestExternalSyncStateRepository` with the planned/race sync states it expects instead of relying on stale persisted view sync.
+- Prevention: when a workflow gains recovery/discovery steps, re-check whether test doubles still model the real upstream preconditions for the intended branch. For `calendar_view` rebuilds, planned-workout sync expectations must come from authoritative external sync fixtures, not from previously persisted read-model rows.
+
 ### 2026-04-28 | Copilot/CodeRabbit | PR #158 planned-workout provider split review follow-up
 
 - Problem: the provider-split branch had several lingering review gaps after earlier fixes: provider-agnostic `find_by_canonical_entities(...)` still had no matching Mongo index shape, the Wahoo uniqueness indexes did not exclude `null` values in their partial filters, the planned-workout failure banner regressed to weak/incorrect copy, indoor predicted workouts still exposed an Intervals sync action even though the backend would rewrite them as outdoor, the Wahoo sync API test no longer asserted the positive-id contract, and the external-sync import test seeding path still replaced optional Wahoo metadata with sentinel defaults instead of mirroring persisted `ExternalSyncState` rows.

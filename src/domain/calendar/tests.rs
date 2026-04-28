@@ -502,7 +502,20 @@ async fn sync_planned_workout_preserves_single_marker_when_updating_existing_eve
         color: Some("blue".to_string()),
         workout_doc: None,
     });
-    let wahoo = RecordingWahooService::successful();
+    let wahoo = RecordingWahooService::with_listed_workouts(vec![WahooWorkout {
+        id: 6001,
+        starts: "2023-11-14T00:00:00.000Z".to_string(),
+        minutes: Some(60),
+        name: Some("Build Session".to_string()),
+        plan_id: Some(5001),
+        plan_ids: vec![5001],
+        route_id: None,
+        workout_token: Some("[AIWATTCOACH:pw=ABC123EF45]".to_string()),
+        workout_type_id: Some(0),
+        workout_summary: None,
+        created_at: None,
+        updated_at: None,
+    }]);
     let sync_states = InMemoryExternalSyncStateRepository::default();
     sync_states
         .upsert(
@@ -1550,6 +1563,7 @@ struct RecordingWahooService {
 }
 
 impl RecordingWahooService {
+    #[allow(dead_code)]
     fn successful() -> Self {
         Self::default()
     }
