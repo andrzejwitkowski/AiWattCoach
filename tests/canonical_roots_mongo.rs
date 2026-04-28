@@ -13,7 +13,6 @@ use aiwattcoach::{
         training_plan_projections::MongoTrainingPlanProjectionRepository,
     },
     domain::{
-        calendar::NoopPlannedWorkoutSyncRepository,
         calendar_view::{
             CalendarEntryKind, CalendarEntryViewRefreshPort, CalendarEntryViewRefreshService,
             CalendarEntryViewRepository,
@@ -159,7 +158,6 @@ async fn calendar_entry_view_refresh_includes_projected_workout_on_snapshot_star
     let refresh = CalendarEntryViewRefreshService::new(
         calendar_repository.clone(),
         planned_repository,
-        NoopPlannedWorkoutSyncRepository,
         (),
         EmptyRaceRepository,
         EmptySpecialDayRepository,

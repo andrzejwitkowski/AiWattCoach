@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import {AuthenticationError, HttpError} from '../../../lib/httpClient';
-import {syncPlannedWorkout} from '../../intervals/api/intervals';
+import {syncPlannedWorkoutToIntervals, syncPlannedWorkoutToWahoo} from '../../intervals/api/intervals';
 import type {IntervalEvent} from '../../intervals/types';
 import {
   buildPlannedWorkoutBars,
@@ -17,8 +17,10 @@ import {PowerChart} from './WorkoutDetailPowerChart';
 type PlannedWorkoutDetailModalProps = {
   apiBaseUrl: string;
   event: IntervalEvent;
-  syncing: boolean;
-  onSyncingChange: (syncing: boolean) => void;
+  syncingToIntervals: boolean;
+  syncingToWahoo: boolean;
+  onSyncingToIntervalsChange: (syncing: boolean) => void;
+  onSyncingToWahooChange: (syncing: boolean) => void;
   onEventSynced: (event: IntervalEvent) => void;
   onSyncError: (message: string | null) => void;
 };
@@ -26,8 +28,10 @@ type PlannedWorkoutDetailModalProps = {
 export function PlannedWorkoutDetailModal({
   apiBaseUrl,
   event,
-  syncing,
-  onSyncingChange,
+  syncingToIntervals,
+  syncingToWahoo,
+  onSyncingToIntervalsChange,
+  onSyncingToWahooChange,
   onEventSynced,
   onSyncError,
 }: PlannedWorkoutDetailModalProps) {
@@ -45,24 +49,62 @@ export function PlannedWorkoutDetailModal({
     : null;
   const activeInterval = chartIntervals.find((interval) => interval.id === highlightedIntervalKey) ?? null;
   const syncStatus = event.plannedSource === 'predicted' ? (event.syncStatus ?? 'unsynced') : null;
-  const canSync = Boolean(event.projectedWorkout) && !event.restDay && !event.projectedWorkout?.restDay && !event.indoor;
+  const canSync = Boolean(event.projectedWorkout) && !event.restDay && !event.projectedWorkout?.restDay;
+  const canSyncToWahoo = canSync && !event.indoor;
   const isInWahooSyncWindow = event.projectedWorkout ? isDateWithinWahooSyncWindow(event.projectedWorkout.date) : false;
-  const syncDisabledReason = canSync && !isInWahooSyncWindow ? t('calendar.syncToWahooWindowMessage') : null;
+  const syncDisabledReason = canSyncToWahoo && !isInWahooSyncWindow ? t('calendar.syncToWahooWindowMessage') : null;
+  const syncing = syncingToIntervals || syncingToWahoo;
 
   useEffect(() => {
     setHoveredIntervalKey(null);
     setSelectedIntervalKey(null);
   }, [event.id, event.projectedWorkout?.projectedWorkoutId]);
 
-  const handleSync = async () => {
+  const handleIntervalsSync = async () => {
+    if (!event.projectedWorkout || syncing) {
+      return;
+    }
+
+    try {
+      onSyncingToIntervalsChange(true);
+      onSyncError(null);
+      const syncedEvent = await syncPlannedWorkoutToIntervals(
+        apiBaseUrl,
+        event.projectedWorkout.operationKey,
+        event.projectedWorkout.date,
+      );
+      onEventSynced(syncedEvent);
+    } catch (error: unknown) {
+      if (error instanceof AuthenticationError) {
+        window.location.href = '/';
+        return;
+      }
+
+      if (error instanceof HttpError && error.status === 422) {
+        onSyncError(mapIntervalsSyncError(error, t));
+        return;
+      }
+
+      if (error instanceof HttpError && error.status === 400) {
+        onSyncError(t('calendar.syncToIntervalsFailedMessage'));
+        return;
+      }
+
+      onSyncError(t('calendar.syncToIntervalsFailedMessage'));
+    } finally {
+      onSyncingToIntervalsChange(false);
+    }
+  };
+
+  const handleWahooSync = async () => {
     if (!event.projectedWorkout || syncing || !isInWahooSyncWindow) {
       return;
     }
 
     try {
-      onSyncingChange(true);
+      onSyncingToWahooChange(true);
       onSyncError(null);
-      const syncedEvent = await syncPlannedWorkout(
+      const syncedEvent = await syncPlannedWorkoutToWahoo(
         apiBaseUrl,
         event.projectedWorkout.operationKey,
         event.projectedWorkout.date,
@@ -80,13 +122,13 @@ export function PlannedWorkoutDetailModal({
       }
 
       if (error instanceof HttpError && error.status === 400) {
-        onSyncError(mapPlannedWorkoutSyncValidationError(error, t));
+        onSyncError(mapWahooSyncValidationError(error, t));
         return;
       }
 
       onSyncError(t('calendar.syncFailedMessage'));
     } finally {
-      onSyncingChange(false);
+      onSyncingToWahooChange(false);
     }
   };
 
@@ -107,12 +149,22 @@ export function PlannedWorkoutDetailModal({
           <>
             <button
               type="button"
-              onClick={() => void handleSync()}
-              disabled={syncing || !isInWahooSyncWindow}
+              onClick={() => void handleIntervalsSync()}
+              disabled={syncing}
               className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {syncing ? t('calendar.syncingToWahoo') : t('calendar.syncToWahoo')}
+              {syncingToIntervals ? t('calendar.syncingToIntervals') : t('calendar.syncToIntervals')}
             </button>
+            {canSyncToWahoo ? (
+              <button
+                type="button"
+                onClick={() => void handleWahooSync()}
+                disabled={syncing || !isInWahooSyncWindow}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {syncingToWahoo ? t('calendar.syncingToWahoo') : t('calendar.syncToWahoo')}
+              </button>
+            ) : null}
             {syncDisabledReason ? (
               <div className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-100">
                 {syncDisabledReason}
@@ -210,7 +262,7 @@ export function PlannedWorkoutDetailModal({
       ) : null}
       {syncStatus === 'failed' ? (
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
-          {t('calendar.syncFailedMessage')}
+          {t('calendar.syncFailed')}
         </div>
       ) : null}
     </div>
@@ -233,7 +285,7 @@ function toUtcDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function mapPlannedWorkoutSyncValidationError(
+function mapWahooSyncValidationError(
   error: HttpError,
   t: ReturnType<typeof useTranslation>['t'],
 ): string {
@@ -266,6 +318,21 @@ function mapPlannedWorkoutSyncValidationError(
   }
 
   return t('calendar.syncFailedMessage');
+}
+
+function mapIntervalsSyncError(
+  error: HttpError,
+  t: ReturnType<typeof useTranslation>['t'],
+): string {
+  const errorCode = typeof error.body === 'object' && error.body !== null && 'code' in error.body
+    ? (error.body as { code?: unknown }).code
+    : undefined;
+
+  if (errorCode === 'intervals_not_connected' || errorCode === 'credentials_not_configured') {
+    return t('calendar.intervalsConnectionRequired');
+  }
+
+  return t('calendar.syncToIntervalsFailedMessage');
 }
 
 function buildRawWorkoutNoteLines(rawWorkoutDoc: string | null): string[] {

@@ -68,6 +68,21 @@ impl PlannedWorkoutSyncStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlannedWorkoutSyncProvider {
+    Intervals,
+    Wahoo,
+}
+
+impl PlannedWorkoutSyncProvider {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Intervals => "intervals",
+            Self::Wahoo => "wahoo",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlannedWorkoutSyncRecord {
     pub user_id: String,
     pub operation_key: String,
@@ -279,4 +294,5 @@ pub struct CalendarEvent {
 pub struct SyncPlannedWorkout {
     pub operation_key: String,
     pub date: String,
+    pub provider: PlannedWorkoutSyncProvider,
 }

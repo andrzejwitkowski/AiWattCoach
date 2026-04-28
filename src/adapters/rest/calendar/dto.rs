@@ -14,6 +14,12 @@ pub(in crate::adapters::rest) struct SyncPlannedWorkoutPath {
     pub date: String,
 }
 
+#[derive(Clone, Copy)]
+pub(in crate::adapters::rest) enum SyncPlannedWorkoutProviderPath {
+    Intervals,
+    Wahoo,
+}
+
 #[derive(Serialize)]
 pub(super) struct CalendarLabelsResponseDto {
     #[serde(rename = "labelsByDate")]

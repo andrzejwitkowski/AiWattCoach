@@ -328,10 +328,11 @@ describe('WorkoutDetailModal planned mode', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /sync to wahoo/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /sync to intervals/i })).toBeInTheDocument());
 
     expect(screen.getByText(/planned workout/i)).toBeInTheDocument();
     expect(screen.getByText(/synced/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sync to intervals/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sync to wahoo/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /download fit/i })).toBeInTheDocument();
     expect(screen.getByText('Predicted Build')).toBeInTheDocument();
@@ -530,6 +531,7 @@ describe('WorkoutDetailModal planned mode', () => {
     await waitFor(() => expect(within(metricCard('Duration')).getByText('19m')).toBeInTheDocument());
 
     expect(screen.queryByText(/not synced/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sync to intervals/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sync to wahoo/i })).not.toBeInTheDocument();
   });
 });

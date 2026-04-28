@@ -5,13 +5,20 @@ use axum::{
 };
 use tracing::Level;
 
-use crate::domain::calendar::CalendarError;
+use crate::domain::calendar::{CalendarError, PlannedWorkoutSyncProvider};
 use crate::domain::calendar_labels::CalendarLabelError;
 
 use super::super::logging::status_class;
 use super::dto::validation_code_message_response;
 
 pub(super) fn map_calendar_error(error: CalendarError) -> Response {
+    map_calendar_error_for_provider(error, None)
+}
+
+pub(super) fn map_calendar_error_for_provider(
+    error: CalendarError,
+    provider: Option<PlannedWorkoutSyncProvider>,
+) -> Response {
     match error {
         CalendarError::NotFound => {
             log_calendar_error(Level::WARN, StatusCode::NOT_FOUND, &error);
@@ -23,12 +30,16 @@ pub(super) fn map_calendar_error(error: CalendarError) -> Response {
         }
         CalendarError::CredentialsNotConfigured => {
             log_calendar_error(Level::WARN, StatusCode::UNPROCESSABLE_ENTITY, &error);
+            let (code, message) = match provider {
+                Some(PlannedWorkoutSyncProvider::Intervals) => (
+                    "intervals_not_connected",
+                    "Intervals.icu credentials not configured",
+                ),
+                _ => ("wahoo_not_connected", "Wahoo credentials not configured"),
+            };
             (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(validation_code_message_response(
-                    "wahoo_not_connected",
-                    "Wahoo credentials not configured",
-                )),
+                Json(validation_code_message_response(code, message)),
             )
                 .into_response()
         }

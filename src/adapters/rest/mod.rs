@@ -136,8 +136,12 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     get(dashboard::get_training_load_dashboard),
                 )
                 .route(
-                    "/api/calendar/planned-workouts/{operation_key}/{date}/sync",
+                    "/api/calendar/planned-workouts/{operation_key}/{date}/intervals/sync",
                     post(calendar::sync_planned_workout),
+                )
+                .route(
+                    "/api/calendar/planned-workouts/{operation_key}/{date}/wahoo/sync",
+                    post(calendar::sync_planned_workout_to_wahoo),
                 )
                 .route(
                     "/api/races",

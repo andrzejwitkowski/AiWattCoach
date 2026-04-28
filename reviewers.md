@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-28 | user | planned-workout sync split review loop follow-up
+
+- Problem: the provider-split planned-workout sync work left a real read-model regression where `calendar_view` refresh/rebuild paths collapsed previously modified planned workouts back to coarse `synced/pending/failed` status, so the frontend could lose the `scheduleChanged` badge after a refresh. The planned-workout modal also still showed the Wahoo-only sync-window warning for indoor workouts even though the Wahoo button was intentionally hidden there.
+- Fix: moved planned-workout `modified` detection into the shared `calendar_view` planned-workout projection logic, aligned `rebuild_for_user(...)` to reuse that projection behavior for planned entries, added focused calendar-view regressions for the modified case, and gated the Wahoo sync-window warning on the same `canSyncToWahoo` condition used to render the Wahoo button.
+- Prevention: when a sync-state refactor changes how planned-workout status is aggregated, verify every read-model path that materializes planned entries, not only the live domain-event path. If a UI warning belongs to one provider action, key it off the exact render condition for that action so hidden controls do not leave orphaned helper text behind.
+
+### 2026-04-28 | user | planned-workout sync-state cutover follow-up
+
+- Problem: the provider-specific planned-workout sync cutover left several stale test and wiring paths on the removed per-provider sync repositories, and the failure path in `src/domain/calendar/service/sync.rs` persisted failed sync state without refreshing `calendar_view`, so failed Wahoo sync badges would stay stale until a later rebuild.
+- Fix: migrated runtime and tests to the shared `ExternalSyncStateRepository`, updated REST/test wiring and Mongo sync-state fixtures for the new Wahoo metadata fields, converted calendar/calendar-view tests to provider-aware `SyncPlannedWorkout` requests plus shared sync-state fixtures, and refreshed the planned-workout day after both successful and failed sync attempts so persisted failure state shows up immediately in the calendar view.
+- Prevention: when replacing a provider-specific persistence seam with a shared external-sync model, grep both runtime and test code for the removed repository types and constructor arities before calling the refactor complete. For sync workflows that persist local failure state, verify the read-model refresh runs on both success and failure paths, not only on the happy path.
+
 ### 2026-04-27 | CodeRabbit | PR #157 planned workout repeat parsing follow-up
 
 - Problem: the first canonical repeat-block fix expanded only the outer repeat header count and ignored inline step-level repeat counts inside the block, so input like `Main Set 2x` plus `- 2x30s 120%` still undercounted duration and segment count inside calendar/workout summaries.

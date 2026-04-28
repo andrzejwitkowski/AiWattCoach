@@ -8,20 +8,18 @@ use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
     domain::{
-        calendar::{
-            BoxFuture as CalendarBoxFuture, CalendarError, CalendarService,
-            HiddenCalendarEventSource, PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository,
-        },
+        calendar::{CalendarService, HiddenCalendarEventSource},
         calendar_labels::{CalendarLabelSource, CalendarLabelsService},
         calendar_view::{
-            CalendarEntryKind, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
-            CalendarEntryViewRepository, ManualCalendarRefreshResult,
-            ManualCalendarRefreshUseCases,
+            BoxFuture as CalendarBoxFuture, CalendarEntryKind, CalendarEntrySync,
+            CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRepository,
+            ManualCalendarRefreshResult, ManualCalendarRefreshUseCases,
         },
         completed_workouts::{
             CompletedWorkout, CompletedWorkoutError, CompletedWorkoutReadService,
             CompletedWorkoutRepository,
         },
+        external_sync::NoopExternalSyncStateRepository,
         identity::{Clock, IdentityUseCases},
         intervals::{DateRange, IntervalsUseCases},
         races::RaceUseCases,
@@ -95,7 +93,7 @@ pub(crate) async fn intervals_test_app_with_manual_calendar_refresh_service(
             intervals_service.clone(),
             InMemoryCalendarEntryViewRepository::default(),
             EmptyTrainingPlanProjectionRepository,
-            InMemoryPlannedWorkoutSyncRepository,
+            NoopExternalSyncStateRepository,
             TestClock,
         )
         .with_completed_workouts(completed_workout_repository.clone()),
@@ -175,7 +173,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
             intervals_service.clone(),
             calendar_entry_views,
             projections,
-            InMemoryPlannedWorkoutSyncRepository,
+            NoopExternalSyncStateRepository,
             TestClock,
         )
         .with_completed_workouts(completed_workout_repository.clone()),
@@ -223,7 +221,7 @@ pub(crate) async fn intervals_test_app_with_all_services(
             intervals_service.clone(),
             InMemoryCalendarEntryViewRepository::default(),
             projections,
-            InMemoryPlannedWorkoutSyncRepository,
+            NoopExternalSyncStateRepository,
             TestClock,
         )
         .with_completed_workouts(InMemoryCompletedWorkoutRepository::default()),
@@ -302,35 +300,6 @@ impl TrainingPlanProjectionRepository for EmptyTrainingPlanProjectionRepository 
                 superseded_date_range: None,
             })
         })
-    }
-}
-
-#[derive(Clone, Default)]
-struct InMemoryPlannedWorkoutSyncRepository;
-
-impl PlannedWorkoutSyncRepository for InMemoryPlannedWorkoutSyncRepository {
-    fn find_by_user_id_and_projection(
-        &self,
-        _user_id: &str,
-        _operation_key: &str,
-        _date: &str,
-    ) -> CalendarBoxFuture<Result<Option<PlannedWorkoutSyncRecord>, CalendarError>> {
-        Box::pin(async { Ok(None) })
-    }
-
-    fn list_by_user_id_and_range(
-        &self,
-        _user_id: &str,
-        _range: &DateRange,
-    ) -> CalendarBoxFuture<Result<Vec<PlannedWorkoutSyncRecord>, CalendarError>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-
-    fn upsert(
-        &self,
-        record: PlannedWorkoutSyncRecord,
-    ) -> CalendarBoxFuture<Result<PlannedWorkoutSyncRecord, CalendarError>> {
-        Box::pin(async move { Ok(record) })
     }
 }
 

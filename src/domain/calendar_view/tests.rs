@@ -1,5 +1,4 @@
 use crate::domain::{
-    calendar::{PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository, PlannedWorkoutSyncStatus},
     completed_workouts::{
         AuthoritativeCompletedWorkoutRepository, CompletedWorkout, CompletedWorkoutDetails,
         CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutSeries,
@@ -254,7 +253,7 @@ async fn calendar_entry_view_service_lists_mixed_entries_by_date_range() {
     let service = CalendarEntryViewService::new(repository.clone());
 
     service
-        .upsert_planned_workout(&sample_planned_workout(), None)
+        .upsert_planned_workout(&sample_planned_workout(), &[])
         .await
         .unwrap();
     service
@@ -356,7 +355,7 @@ async fn rebuild_for_user_preserves_existing_sync_metadata() {
     repository
         .upsert(project_planned_workout_entry(
             &sample_planned_workout(),
-            Some(&sample_planned_sync_state()),
+            std::slice::from_ref(&sample_planned_sync_state()),
         ))
         .await
         .unwrap();
@@ -400,7 +399,7 @@ async fn rebuild_for_user_preserves_existing_sync_metadata() {
             .sync
             .as_ref()
             .and_then(|sync| sync.sync_status.as_deref()),
-        Some("synced")
+        Some("modified")
     );
     assert_eq!(
         race.sync
@@ -410,31 +409,48 @@ async fn rebuild_for_user_preserves_existing_sync_metadata() {
     );
 }
 
+#[test]
+fn planned_workout_projection_marks_entry_modified_when_payload_hash_changed() {
+    let entry =
+        project_planned_workout_entry(&sample_planned_workout(), &[sample_planned_sync_state()]);
+
+    assert_eq!(
+        entry
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.linked_intervals_event_id),
+        Some(77)
+    );
+    assert_eq!(
+        entry
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("modified")
+    );
+}
+
 #[tokio::test]
 async fn rebuild_for_user_uses_authoritative_sync_when_view_store_is_empty() {
     let repository = InMemoryCalendarEntryViewRepository::default();
-    let planned_syncs =
-        TestPlannedWorkoutSyncRepository::with_records(vec![PlannedWorkoutSyncRecord {
-            user_id: "user-1".to_string(),
-            operation_key: "plan-op-1".to_string(),
-            date: "2026-05-10".to_string(),
-            source_workout_id: "source-1".to_string(),
-            intervals_event_id: Some(88),
-            status: PlannedWorkoutSyncStatus::Synced,
-            synced_payload_hash: Some("hash-1".to_string()),
-            last_error: None,
-            created_at_epoch_seconds: 1,
-            updated_at_epoch_seconds: 2,
-            last_synced_at_epoch_seconds: Some(2),
-        }]);
-    let sync_states = TestExternalSyncStateRepository::with_states(vec![ExternalSyncState::new(
-        "user-1".to_string(),
-        ExternalProvider::Intervals,
-        CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
-    )
-    .mark_synced("42".to_string(), "hash-2".to_string(), 3)]);
-    let service =
-        CalendarEntryViewService::new(repository).with_sync_sources(planned_syncs, sync_states);
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![
+        ExternalSyncState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            CanonicalEntityRef::new(
+                CanonicalEntityKind::PlannedWorkout,
+                "plan-op-1:2026-05-10".to_string(),
+            ),
+        )
+        .mark_synced("88".to_string(), "hash-1".to_string(), 2),
+        ExternalSyncState::new(
+            "user-1".to_string(),
+            ExternalProvider::Intervals,
+            CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+        )
+        .mark_synced("42".to_string(), "hash-2".to_string(), 3),
+    ]);
+    let service = CalendarEntryViewService::new(repository).with_sync_states(sync_states);
 
     let rebuilt = service
         .rebuild_for_user(
@@ -483,8 +499,7 @@ async fn rebuild_for_user_uses_external_sync_state_for_imported_planned_workouts
         ),
     )
     .mark_synced("144".to_string(), "hash-1".to_string(), 2)]);
-    let service = CalendarEntryViewService::new(repository)
-        .with_sync_sources(TestPlannedWorkoutSyncRepository::default(), sync_states);
+    let service = CalendarEntryViewService::new(repository).with_sync_states(sync_states);
 
     let rebuilt = service
         .rebuild_for_user(
@@ -526,22 +541,8 @@ async fn rebuild_for_user_uses_external_sync_state_for_imported_planned_workouts
 #[tokio::test]
 async fn rebuild_for_user_keeps_sync_on_merged_planned_entry_without_standalone_completed_entry() {
     let repository = InMemoryCalendarEntryViewRepository::default();
-    let planned_syncs =
-        TestPlannedWorkoutSyncRepository::with_records(vec![PlannedWorkoutSyncRecord {
-            user_id: "user-1".to_string(),
-            operation_key: "planned".to_string(),
-            date: "2026-05-10".to_string(),
-            source_workout_id: "source-1".to_string(),
-            intervals_event_id: Some(88),
-            status: PlannedWorkoutSyncStatus::Synced,
-            synced_payload_hash: Some("hash-1".to_string()),
-            last_error: None,
-            created_at_epoch_seconds: 1,
-            updated_at_epoch_seconds: 2,
-            last_synced_at_epoch_seconds: Some(2),
-        }]);
     let service = CalendarEntryViewService::new(repository)
-        .with_sync_sources(planned_syncs, TestExternalSyncStateRepository::default());
+        .with_sync_states(TestExternalSyncStateRepository::default());
 
     let rebuilt = service
         .rebuild_for_user(
@@ -573,7 +574,7 @@ async fn replace_range_for_user_replaces_only_target_range_and_handles_date_move
     repository
         .upsert(project_planned_workout_entry(
             &sample_planned_workout(),
-            None,
+            &[],
         ))
         .await
         .unwrap();
@@ -594,7 +595,7 @@ async fn replace_range_for_user_replaces_only_target_range_and_handles_date_move
             "user-1",
             "2026-05-10",
             "2026-05-12",
-            vec![project_planned_workout_entry(&moved_planned, None)],
+            vec![project_planned_workout_entry(&moved_planned, &[])],
         )
         .await
         .unwrap();
@@ -670,7 +671,6 @@ async fn refresh_range_for_user_rebuilds_only_requested_dates() {
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
     let sync_states = TestExternalSyncStateRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
 
     planned.upsert(sample_planned_workout()).await.unwrap();
     completed.upsert(sample_completed_workout()).await.unwrap();
@@ -684,7 +684,6 @@ async fn refresh_range_for_user_rebuilds_only_requested_dates() {
     let refresher = CalendarEntryViewRefreshService::new(
         views.clone(),
         planned,
-        planned_syncs,
         completed,
         races,
         special_days,
@@ -724,40 +723,30 @@ async fn refresh_range_for_user_rebuilds_only_requested_dates() {
 }
 
 #[tokio::test]
-async fn refresh_range_for_user_uses_planned_workout_sync_records_for_planned_entries() {
+async fn refresh_range_for_user_uses_external_sync_states_for_planned_entries() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
-    let sync_states = TestExternalSyncStateRepository::default();
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(
+            CanonicalEntityKind::PlannedWorkout,
+            "plan-op-1:2026-05-10".to_string(),
+        ),
+    )
+    .mark_synced("55".to_string(), "hash-1".to_string(), 2)]);
 
     planned
         .upsert(sample_bridged_planned_workout("plan-op-1", "2026-05-10"))
-        .await
-        .unwrap();
-    planned_syncs
-        .upsert(PlannedWorkoutSyncRecord {
-            user_id: "user-1".to_string(),
-            operation_key: "plan-op-1".to_string(),
-            date: "2026-05-10".to_string(),
-            source_workout_id: "source-1".to_string(),
-            intervals_event_id: Some(55),
-            status: PlannedWorkoutSyncStatus::Synced,
-            synced_payload_hash: Some("hash-1".to_string()),
-            last_error: None,
-            created_at_epoch_seconds: 1,
-            updated_at_epoch_seconds: 2,
-            last_synced_at_epoch_seconds: Some(2),
-        })
         .await
         .unwrap();
 
     let refresher = CalendarEntryViewRefreshService::new(
         views.clone(),
         planned,
-        planned_syncs,
         completed,
         races,
         special_days,
@@ -790,7 +779,6 @@ async fn refresh_range_for_user_uses_planned_workout_sync_records_for_planned_en
 async fn refresh_range_for_user_uses_external_sync_state_for_imported_planned_workouts() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
@@ -817,7 +805,6 @@ async fn refresh_range_for_user_uses_external_sync_state_for_imported_planned_wo
     let refresher = CalendarEntryViewRefreshService::new(
         views,
         planned,
-        planned_syncs,
         completed,
         races,
         special_days,
@@ -850,7 +837,6 @@ async fn refresh_range_for_user_uses_external_sync_state_for_imported_planned_wo
 async fn refresh_range_for_user_batches_planned_workout_sync_state_lookups() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
@@ -897,7 +883,6 @@ async fn refresh_range_for_user_batches_planned_workout_sync_state_lookups() {
     let refresher = CalendarEntryViewRefreshService::new(
         views,
         planned,
-        planned_syncs,
         completed,
         races,
         special_days,
@@ -920,7 +905,6 @@ async fn refresh_range_for_user_clears_orphaned_heuristic_links_and_replaces_sta
 {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
@@ -943,7 +927,7 @@ async fn refresh_range_for_user_clears_orphaned_heuristic_links_and_replaces_sta
     views
         .upsert(project_planned_workout_entry(
             &sample_planned_workout(),
-            None,
+            &[],
         ))
         .await
         .unwrap();
@@ -951,7 +935,6 @@ async fn refresh_range_for_user_clears_orphaned_heuristic_links_and_replaces_sta
     let refresher = CalendarEntryViewRefreshService::new(
         views.clone(),
         planned,
-        planned_syncs,
         completed.clone(),
         races,
         special_days,
@@ -996,7 +979,6 @@ async fn refresh_range_for_user_clears_orphaned_heuristic_links_and_replaces_sta
 async fn refresh_range_for_user_uses_intervals_completed_workout_when_sparse_wahoo_shares_day() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
@@ -1032,7 +1014,6 @@ async fn refresh_range_for_user_uses_intervals_completed_workout_when_sparse_wah
     let refresher = CalendarEntryViewRefreshService::new(
         views,
         planned,
-        planned_syncs,
         authoritative_completed,
         races,
         special_days,
@@ -1057,7 +1038,6 @@ async fn refresh_range_for_user_uses_intervals_completed_workout_when_sparse_wah
 async fn refresh_range_for_user_prefers_wahoo_completed_workout_when_wahoo_has_power_details() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
@@ -1093,7 +1073,6 @@ async fn refresh_range_for_user_prefers_wahoo_completed_workout_when_wahoo_has_p
     let refresher = CalendarEntryViewRefreshService::new(
         views,
         planned,
-        planned_syncs,
         authoritative_completed,
         races,
         special_days,
@@ -1118,7 +1097,6 @@ async fn refresh_range_for_user_prefers_wahoo_completed_workout_when_wahoo_has_p
 async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
@@ -1142,7 +1120,6 @@ async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
     let refresher = CalendarEntryViewRefreshService::new(
         views,
         planned,
-        planned_syncs,
         completed.clone(),
         races,
         special_days,
@@ -1188,7 +1165,6 @@ async fn refresh_range_for_user_preserves_heuristic_link_when_planned_workout_ex
 {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
@@ -1216,7 +1192,6 @@ async fn refresh_range_for_user_preserves_heuristic_link_when_planned_workout_ex
     let refresher = CalendarEntryViewRefreshService::new(
         views,
         planned,
-        planned_syncs,
         completed.clone(),
         races,
         special_days,
@@ -1261,7 +1236,6 @@ async fn refresh_range_for_user_preserves_heuristic_link_when_planned_workout_ex
 async fn refresh_range_for_user_clears_legacy_orphaned_planned_id_without_link_row() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestPlannedWorkoutRepository::default();
-    let planned_syncs = TestPlannedWorkoutSyncRepository::default();
     let completed = TestCompletedWorkoutRepository::default();
     let races = TestRaceRepository::default();
     let special_days = TestSpecialDayRepository::default();
@@ -1275,7 +1249,6 @@ async fn refresh_range_for_user_clears_legacy_orphaned_planned_id_without_link_r
     let refresher = CalendarEntryViewRefreshService::new(
         views,
         planned,
-        planned_syncs,
         completed.clone(),
         races,
         special_days,
@@ -1376,89 +1349,6 @@ struct TestCompletedWorkoutRepository {
 #[derive(Clone, Default)]
 struct TestPlannedCompletedWorkoutLinkRepository {
     stored: std::sync::Arc<std::sync::Mutex<Vec<PlannedCompletedWorkoutLink>>>,
-}
-
-#[derive(Clone, Default)]
-struct TestPlannedWorkoutSyncRepository {
-    stored: std::sync::Arc<std::sync::Mutex<Vec<PlannedWorkoutSyncRecord>>>,
-}
-
-impl TestPlannedWorkoutSyncRepository {
-    fn with_records(records: Vec<PlannedWorkoutSyncRecord>) -> Self {
-        Self {
-            stored: std::sync::Arc::new(std::sync::Mutex::new(records)),
-        }
-    }
-}
-
-impl PlannedWorkoutSyncRepository for TestPlannedWorkoutSyncRepository {
-    fn find_by_user_id_and_projection(
-        &self,
-        user_id: &str,
-        operation_key: &str,
-        date: &str,
-    ) -> crate::domain::calendar::BoxFuture<
-        Result<Option<PlannedWorkoutSyncRecord>, crate::domain::calendar::CalendarError>,
-    > {
-        let stored = self.stored.clone();
-        let user_id = user_id.to_string();
-        let operation_key = operation_key.to_string();
-        let date = date.to_string();
-        Box::pin(async move {
-            Ok(stored
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|record| {
-                    record.user_id == user_id
-                        && record.operation_key == operation_key
-                        && record.date == date
-                })
-                .cloned())
-        })
-    }
-
-    fn list_by_user_id_and_range(
-        &self,
-        user_id: &str,
-        range: &crate::domain::intervals::DateRange,
-    ) -> crate::domain::calendar::BoxFuture<
-        Result<Vec<PlannedWorkoutSyncRecord>, crate::domain::calendar::CalendarError>,
-    > {
-        let stored = self.stored.clone();
-        let user_id = user_id.to_string();
-        let oldest = range.oldest.clone();
-        let newest = range.newest.clone();
-        Box::pin(async move {
-            Ok(stored
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|record| record.user_id == user_id)
-                .filter(|record| record.date >= oldest && record.date <= newest)
-                .cloned()
-                .collect())
-        })
-    }
-
-    fn upsert(
-        &self,
-        record: PlannedWorkoutSyncRecord,
-    ) -> crate::domain::calendar::BoxFuture<
-        Result<PlannedWorkoutSyncRecord, crate::domain::calendar::CalendarError>,
-    > {
-        let stored = self.stored.clone();
-        Box::pin(async move {
-            let mut stored = stored.lock().unwrap();
-            stored.retain(|existing| {
-                !(existing.user_id == record.user_id
-                    && existing.operation_key == record.operation_key
-                    && existing.date == record.date)
-            });
-            stored.push(record.clone());
-            Ok(record)
-        })
-    }
 }
 
 impl CompletedWorkoutRepository for TestCompletedWorkoutRepository {
@@ -1907,6 +1797,30 @@ impl ExternalSyncStateRepository for TestExternalSyncStateRepository {
         Box::pin(async move { Ok(state) })
     }
 
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let batch_lookup_count = self.batch_lookup_count.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            batch_lookup_count.fetch_add(1, Ordering::Relaxed);
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|state| state.user_id == user_id)
+                .filter(|state| canonical_entities.contains(&state.canonical_entity))
+                .cloned()
+                .collect())
+        })
+    }
+
     fn find_by_provider_and_canonical_entity(
         &self,
         user_id: &str,
@@ -1970,13 +1884,65 @@ impl ExternalSyncStateRepository for TestExternalSyncStateRepository {
     ) -> crate::domain::external_sync::BoxFuture<Result<(), ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(()) })
     }
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        user_id: &str,
+        wahoo_plan_id: i64,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let single_lookup_count = self.single_lookup_count.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            single_lookup_count.fetch_add(1, Ordering::Relaxed);
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == ExternalProvider::Wahoo
+                        && state.wahoo_plan_id == Some(wahoo_plan_id)
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        user_id: &str,
+        wahoo_workout_token: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let single_lookup_count = self.single_lookup_count.clone();
+        let user_id = user_id.to_string();
+        let wahoo_workout_token = wahoo_workout_token.to_string();
+        Box::pin(async move {
+            single_lookup_count.fetch_add(1, Ordering::Relaxed);
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == ExternalProvider::Wahoo
+                        && state.wahoo_workout_token.as_deref()
+                            == Some(wahoo_workout_token.as_str())
+                })
+                .cloned())
+        })
+    }
 }
 
 #[test]
 fn integrity_report_flags_missing_duplicate_type_mismatch_and_orphan_rows() {
     let expected = vec![project_planned_workout_entry(
         &sample_planned_workout(),
-        None,
+        &[],
     )];
     let actual = vec![
         project_completed_workout_entry(&sample_completed_workout()),
@@ -2014,7 +1980,7 @@ fn integrity_report_flags_missing_duplicate_type_mismatch_and_orphan_rows() {
 
 #[test]
 fn planned_workout_projection_builds_local_entry() {
-    let entry = project_planned_workout_entry(&sample_planned_workout(), None);
+    let entry = project_planned_workout_entry(&sample_planned_workout(), &[]);
 
     assert_eq!(entry.entry_id, "planned:planned-1");
     assert_eq!(entry.title, "Threshold builder");
@@ -2038,7 +2004,7 @@ fn planned_workout_projection_serializes_equal_watts_targets_in_round_trip_safe_
         },
     );
 
-    let entry = project_planned_workout_entry(&workout, None);
+    let entry = project_planned_workout_entry(&workout, &[]);
 
     assert_eq!(entry.raw_workout_doc.as_deref(), Some("- 5m 250-250W"));
 }
