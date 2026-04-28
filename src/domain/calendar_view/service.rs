@@ -186,23 +186,26 @@ where
                 .collect::<std::collections::HashMap<_, _>>();
             for entry in &mut entries {
                 if entry.entry_kind == CalendarEntryKind::PlannedWorkout {
-                    if let Some(planned_workout_id) = &entry.planned_workout_id {
-                        let planned_entity = CanonicalEntityRef::new(
-                            CanonicalEntityKind::PlannedWorkout,
-                            planned_workout_id.clone(),
-                        );
-                        if let Some(sync_states) =
-                            planned_sync_states_by_entity.get(&planned_entity)
-                        {
-                            entry.sync = planned_workouts_by_id
-                                .get(planned_workout_id)
-                                .and_then(|workout| {
-                                    project_planned_workout_entry(workout, sync_states).sync
-                                })
-                                .or_else(|| map_external_sync_states(sync_states));
-                            continue;
-                        }
-                    }
+                    entry.sync = entry
+                        .planned_workout_id
+                        .as_ref()
+                        .and_then(|planned_workout_id| {
+                            let planned_entity = CanonicalEntityRef::new(
+                                CanonicalEntityKind::PlannedWorkout,
+                                planned_workout_id.clone(),
+                            );
+                            planned_sync_states_by_entity.get(&planned_entity).and_then(
+                                |sync_states| {
+                                    planned_workouts_by_id
+                                        .get(planned_workout_id)
+                                        .and_then(|workout| {
+                                            project_planned_workout_entry(workout, sync_states).sync
+                                        })
+                                        .or_else(|| map_external_sync_states(sync_states))
+                                },
+                            )
+                        });
+                    continue;
                 }
                 if let Some(race_id) = &entry.race_id {
                     if let Some(sync_state) = race_syncs_by_id.get(race_id) {

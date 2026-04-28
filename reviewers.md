@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-28 | Copilot/CodeRabbit | PR #158 planned-workout provider split review follow-up
+
+- Problem: the provider-split branch had several lingering review gaps after earlier fixes: provider-agnostic `find_by_canonical_entities(...)` still had no matching Mongo index shape, the Wahoo uniqueness indexes did not exclude `null` values in their partial filters, the planned-workout failure banner regressed to weak/incorrect copy, indoor predicted workouts still exposed an Intervals sync action even though the backend would rewrite them as outdoor, the Wahoo sync API test no longer asserted the positive-id contract, and the external-sync import test seeding path still replaced optional Wahoo metadata with sentinel defaults instead of mirroring persisted `ExternalSyncState` rows.
+- Fix: added a supporting `{ user_id, canonical_entity_kind, canonical_entity_id }` Mongo index for batch canonical-entity lookups, tightened the Wahoo partial-unique indexes to exclude `Bson::Null`, restored the indoor sync guard in the modal until backend indoor preservation exists, introduced a neutral persistent sync-failure banner copy, strengthened the Wahoo sync API test to assert the parsed positive id, and updated the legacy Wahoo-sync test seeding helper to preserve optional ids, hashes, and timestamps without `unwrap_or_default()` sentinels.
+- Prevention: when review feedback points at repository performance or uniqueness invariants, compare the exact query filters against the declared index prefixes and partial-filter semantics instead of assuming a nearby provider-scoped index is sufficient. For UI sync affordances, re-check the backend payload contract before exposing new provider paths, and keep test-seeded compatibility adapters semantically identical to runtime persistence so review-driven regressions do not hide in test-only helpers.
+
 ### 2026-04-28 | user | planned-workout sync split review loop follow-up
 
 - Problem: the provider-split planned-workout sync work left a real read-model regression where `calendar_view` refresh/rebuild paths collapsed previously modified planned workouts back to coarse `synced/pending/failed` status, so the frontend could lose the `scheduleChanged` badge after a refresh. The planned-workout modal also still showed the Wahoo-only sync-window warning for indoor workouts even though the Wahoo button was intentionally hidden there.

@@ -35,7 +35,10 @@ pub(super) fn map_calendar_error_for_provider(
                     "intervals_not_connected",
                     "Intervals.icu credentials not configured",
                 ),
-                _ => ("wahoo_not_connected", "Wahoo credentials not configured"),
+                Some(PlannedWorkoutSyncProvider::Wahoo) => {
+                    ("wahoo_not_connected", "Wahoo credentials not configured")
+                }
+                None => ("credentials_not_configured", "Credentials not configured"),
             };
             (
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -154,5 +157,36 @@ fn log_calendar_label_error(level: Level, status: StatusCode, error: &CalendarLa
             "calendar labels request failed"
         ),
         _ => unreachable!("unexpected log level"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{body::to_bytes, http::StatusCode};
+    use serde_json::Value;
+
+    use crate::domain::calendar::CalendarError;
+
+    use super::map_calendar_error;
+
+    #[tokio::test]
+    async fn map_calendar_error_returns_generic_credentials_payload_without_provider() {
+        let response = map_calendar_error(CalendarError::CredentialsNotConfigured);
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("calendar error body");
+        let json: Value = serde_json::from_slice(&body).expect("json body");
+
+        assert_eq!(
+            json.get("code").and_then(Value::as_str),
+            Some("credentials_not_configured")
+        );
+        assert_eq!(
+            json.get("message").and_then(Value::as_str),
+            Some("Credentials not configured")
+        );
     }
 }

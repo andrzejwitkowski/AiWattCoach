@@ -321,38 +321,76 @@ where
             };
             let starts = projected_workout_start_at(&request.date);
             let minutes = workout_minutes(&projected_day)?;
-            let workout = if let Some(wahoo_workout_id) = pending_state.wahoo_workout_id {
-                self.wahoo
-                    .update_workout(
-                        user_id,
-                        wahoo_workout_id,
-                        WahooUpdateWorkout {
-                            name: projected_workout_name(&projected_day),
-                            workout_token: Some(workout_token.clone()),
-                            workout_type_id: Some(0),
-                            starts: Some(starts),
-                            minutes: Some(minutes),
-                            plan_id: Some(plan.id),
-                        },
-                    )
+            let update_request = WahooUpdateWorkout {
+                name: projected_workout_name(&projected_day),
+                workout_token: Some(workout_token.clone()),
+                workout_type_id: Some(0),
+                starts: Some(starts.clone()),
+                minutes: Some(minutes),
+                plan_id: Some(plan.id),
+            };
+            let workout = match resolve_existing_workout(
+                &self.wahoo,
+                user_id,
+                &pending_state,
+                &workout_token,
+            )
+            .await?
+            {
+                Some(existing_workout) => match self
+                    .wahoo
+                    .update_workout(user_id, existing_workout.id, update_request)
                     .await
-                    .map_err(map_wahoo_error)?
-            } else {
-                self.wahoo
-                    .create_workout(
-                        user_id,
-                        WahooCreateWorkout {
-                            name: projected_workout_name(&projected_day)
-                                .unwrap_or_else(|| "Planned workout".to_string()),
-                            workout_token: workout_token.clone(),
-                            workout_type_id: 0,
-                            starts,
-                            minutes,
-                            plan_id: Some(plan.id),
-                        },
-                    )
-                    .await
-                    .map_err(map_wahoo_error)?
+                {
+                    Ok(workout) => workout,
+                    Err(crate::domain::wahoo::WahooError::NotFound) => {
+                        let recovered_state = clear_stale_wahoo_workout_id(&pending_state);
+                        self.sync_states
+                            .upsert(recovered_state)
+                            .await
+                            .map_err(map_external_sync_error)?;
+                        self.wahoo
+                            .create_workout(
+                                user_id,
+                                WahooCreateWorkout {
+                                    name: projected_workout_name(&projected_day)
+                                        .unwrap_or_else(|| "Planned workout".to_string()),
+                                    workout_token: workout_token.clone(),
+                                    workout_type_id: 0,
+                                    starts,
+                                    minutes,
+                                    plan_id: Some(plan.id),
+                                },
+                            )
+                            .await
+                            .map_err(map_wahoo_error)?
+                    }
+                    Err(error) => return Err(map_wahoo_error(error)),
+                },
+                None => {
+                    if pending_state.wahoo_workout_id.is_some() {
+                        let recovered_state = clear_stale_wahoo_workout_id(&pending_state);
+                        self.sync_states
+                            .upsert(recovered_state)
+                            .await
+                            .map_err(map_external_sync_error)?;
+                    }
+                    self.wahoo
+                        .create_workout(
+                            user_id,
+                            WahooCreateWorkout {
+                                name: projected_workout_name(&projected_day)
+                                    .unwrap_or_else(|| "Planned workout".to_string()),
+                                workout_token: workout_token.clone(),
+                                workout_type_id: 0,
+                                starts,
+                                minutes,
+                                plan_id: Some(plan.id),
+                            },
+                        )
+                        .await
+                        .map_err(map_wahoo_error)?
+                }
             };
 
             Ok((plan, workout, workout_token))
@@ -561,6 +599,41 @@ fn intervals_event_id(state: &ExternalSyncState) -> Option<i64> {
         .external_id
         .as_deref()
         .and_then(|value| value.parse::<i64>().ok())
+}
+
+async fn resolve_existing_workout<Wahoo>(
+    wahoo: &Wahoo,
+    user_id: &str,
+    state: &ExternalSyncState,
+    workout_token: &str,
+) -> Result<Option<crate::domain::wahoo::WahooWorkout>, CalendarError>
+where
+    Wahoo: crate::domain::wahoo::WahooUseCases,
+{
+    if let Some(wahoo_workout_id) = state.wahoo_workout_id {
+        match wahoo.get_workout(user_id, wahoo_workout_id).await {
+            Ok(workout) => return Ok(Some(workout)),
+            Err(crate::domain::wahoo::WahooError::NotFound) => {}
+            Err(error) => return Err(map_wahoo_error(error)),
+        }
+    }
+
+    let workouts = wahoo
+        .list_workouts(user_id, 1, 100)
+        .await
+        .map_err(map_wahoo_error)?;
+
+    Ok(workouts
+        .workouts
+        .into_iter()
+        .find(|workout| workout.workout_token.as_deref() == Some(workout_token)))
+}
+
+fn clear_stale_wahoo_workout_id(state: &ExternalSyncState) -> ExternalSyncState {
+    let mut recovered = state.clone();
+    recovered.external_id = None;
+    recovered.wahoo_workout_id = None;
+    recovered
 }
 
 async fn resolve_existing_plan<Wahoo>(

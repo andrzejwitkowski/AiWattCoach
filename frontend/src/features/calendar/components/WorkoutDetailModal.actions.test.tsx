@@ -157,7 +157,7 @@ describe('WorkoutDetailModal actions', () => {
         indoor: false,
         plannedSource: 'predicted',
         syncStatus: 'synced',
-        linkedIntervalsEventId: 91,
+        linkedIntervalsEventId: null,
         projectedWorkout: {
           projectedWorkoutId: `training-plan:user-1:w1:1:${workoutDate}`,
           operationKey: 'training-plan:user-1:w1:1',
@@ -752,7 +752,7 @@ describe('WorkoutDetailModal actions', () => {
 
     await waitFor(() => expect(screen.getByText('Indoor Trainer Session')).toBeInTheDocument());
 
-    expect(screen.getByRole('button', { name: /sync to intervals/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sync to intervals/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sync to wahoo/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/only planned workouts scheduled between today and the next 6 days can sync to wahoo/i)).not.toBeInTheDocument();
     expect(mockedSyncPlannedWorkoutToWahoo).not.toHaveBeenCalled();

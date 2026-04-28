@@ -1084,24 +1084,43 @@ fn map_wahoo_sync_record_to_state(record: PlannedWorkoutWahooSyncRecord) -> Exte
     );
     let state = ExternalSyncState::new(record.user_id, ExternalProvider::Wahoo, canonical_entity);
     match record.status {
-        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Synced => state
-            .mark_wahoo_synced(
-                record.payload_hash.unwrap_or_default(),
-                record
-                    .last_synced_at_epoch_seconds
-                    .unwrap_or(record.updated_at_epoch_seconds),
-                record.wahoo_plan_external_id,
-                record.wahoo_plan_id.unwrap_or_default(),
-                record.wahoo_workout_id.unwrap_or_default(),
-                record.wahoo_workout_token.unwrap_or_default(),
-            ),
-        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Failed => state
-            .mark_wahoo_pending(record.wahoo_plan_external_id)
-            .mark_failed(
-                record
-                    .last_error
-                    .unwrap_or_else(|| "wahoo sync failed".to_string()),
-            ),
+        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Synced => {
+            let mut state = state.mark_pending_push();
+            state.sync_status = crate::domain::external_sync::ExternalSyncStatus::Synced;
+            state.conflict_status = crate::domain::external_sync::ConflictStatus::InSync;
+            state.external_id = record.wahoo_workout_id.map(|id| id.to_string());
+            state.wahoo_plan_external_id = Some(record.wahoo_plan_external_id);
+            state.wahoo_plan_id = record.wahoo_plan_id;
+            state.wahoo_workout_id = record.wahoo_workout_id;
+            state.wahoo_workout_token = record.wahoo_workout_token;
+            state.last_synced_payload_hash = record.payload_hash.clone();
+            state.last_seen_remote_payload_hash = record.payload_hash;
+            state.last_error = None;
+            state.last_synced_at_epoch_seconds = record
+                .last_synced_at_epoch_seconds
+                .or(Some(record.updated_at_epoch_seconds));
+            state.last_seen_remote_at_epoch_seconds = state.last_synced_at_epoch_seconds;
+            state
+        }
+        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Failed => {
+            let mut state = state
+                .mark_wahoo_pending(record.wahoo_plan_external_id)
+                .mark_failed(
+                    record
+                        .last_error
+                        .clone()
+                        .unwrap_or_else(|| "wahoo sync failed".to_string()),
+                );
+            state.external_id = record.wahoo_workout_id.map(|id| id.to_string());
+            state.wahoo_plan_id = record.wahoo_plan_id;
+            state.wahoo_workout_id = record.wahoo_workout_id;
+            state.wahoo_workout_token = record.wahoo_workout_token;
+            state.last_synced_payload_hash = record.payload_hash.clone();
+            state.last_seen_remote_payload_hash = record.payload_hash;
+            state.last_synced_at_epoch_seconds = record.last_synced_at_epoch_seconds;
+            state.last_seen_remote_at_epoch_seconds = record.last_synced_at_epoch_seconds;
+            state
+        }
         crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Pending
         | crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Unsynced
         | crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Modified => {

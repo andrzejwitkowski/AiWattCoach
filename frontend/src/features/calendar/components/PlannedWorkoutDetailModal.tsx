@@ -49,8 +49,8 @@ export function PlannedWorkoutDetailModal({
     : null;
   const activeInterval = chartIntervals.find((interval) => interval.id === highlightedIntervalKey) ?? null;
   const syncStatus = event.plannedSource === 'predicted' ? (event.syncStatus ?? 'unsynced') : null;
-  const canSync = Boolean(event.projectedWorkout) && !event.restDay && !event.projectedWorkout?.restDay;
-  const canSyncToWahoo = canSync && !event.indoor;
+  const canSync = Boolean(event.projectedWorkout) && !event.restDay && !event.projectedWorkout?.restDay && !event.indoor;
+  const canSyncToWahoo = canSync;
   const isInWahooSyncWindow = event.projectedWorkout ? isDateWithinWahooSyncWindow(event.projectedWorkout.date) : false;
   const syncDisabledReason = canSyncToWahoo && !isInWahooSyncWindow ? t('calendar.syncToWahooWindowMessage') : null;
   const syncing = syncingToIntervals || syncingToWahoo;
@@ -262,7 +262,7 @@ export function PlannedWorkoutDetailModal({
       ) : null}
       {syncStatus === 'failed' ? (
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
-          {t('calendar.syncFailed')}
+          {t('calendar.syncFailedBannerMessage')}
         </div>
       ) : null}
     </div>

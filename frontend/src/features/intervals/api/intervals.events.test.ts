@@ -311,5 +311,7 @@ describe('intervals api events', () => {
       body: undefined,
     });
     expect(result.syncStatus).toBe('synced');
+    expect(result.id).toBe(5906112577594034);
+    expect(result.linkedIntervalsEventId).toBeNull();
   });
 });

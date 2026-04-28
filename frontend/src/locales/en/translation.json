@@ -192,6 +192,7 @@
     "notDone": "Not Done",
     "syncPending": "Sync Pending",
     "syncFailed": "Sync Failed",
+    "syncFailedBannerMessage": "Unable to sync this planned workout right now.",
     "syncToIntervals": "Sync to Intervals",
     "syncingToIntervals": "Syncing to Intervals",
     "intervalsConnectionRequired": "Connect Intervals.icu in Settings before syncing this planned workout.",

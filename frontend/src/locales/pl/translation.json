@@ -194,6 +194,7 @@
     "notDone": "Nie zrobiono",
     "syncPending": "Synchronizacja w toku",
     "syncFailed": "Synchronizacja nieudana",
+    "syncFailedBannerMessage": "Nie udało się teraz zsynchronizować tego planowanego treningu.",
     "syncToIntervals": "Synchronizuj z Intervals",
     "syncingToIntervals": "Synchronizacja z Intervals",
     "intervalsConnectionRequired": "Połącz Intervals.icu w Ustawieniach przed synchronizacją tego planowanego treningu.",
