@@ -1,7 +1,12 @@
 use futures::TryStreamExt;
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::{doc, DateTime},
+    options::IndexOptions,
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
+use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds};
 use crate::domain::external_sync::{
     BoxFuture, CanonicalEntityKind, CanonicalEntityRef, ConflictStatus, ExternalProvider,
     ExternalSyncRepositoryError, ExternalSyncState, ExternalSyncStateRepository,
@@ -25,7 +30,11 @@ struct ExternalSyncStateDocument {
     last_seen_remote_payload_hash: Option<String>,
     last_error: Option<String>,
     last_synced_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_synced_at: Option<DateTime>,
     last_seen_remote_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_seen_remote_at: Option<DateTime>,
     conflict_status: String,
 }
 
@@ -197,7 +206,17 @@ fn map_sync_state_to_document(state: &ExternalSyncState) -> ExternalSyncStateDoc
         last_seen_remote_payload_hash: state.last_seen_remote_payload_hash.clone(),
         last_error: state.last_error.clone(),
         last_synced_at_epoch_seconds: state.last_synced_at_epoch_seconds,
+        last_synced_at: optional_epoch_seconds_to_bson_datetime(
+            state.last_synced_at_epoch_seconds,
+            "last_synced_at",
+        )
+        .expect("last_synced_at should fit BSON DateTime"),
         last_seen_remote_at_epoch_seconds: state.last_seen_remote_at_epoch_seconds,
+        last_seen_remote_at: optional_epoch_seconds_to_bson_datetime(
+            state.last_seen_remote_at_epoch_seconds,
+            "last_seen_remote_at",
+        )
+        .expect("last_seen_remote_at should fit BSON DateTime"),
         conflict_status: conflict_status_as_str(&state.conflict_status).to_string(),
     }
 }
@@ -217,8 +236,14 @@ fn map_document_to_sync_state(
         last_synced_payload_hash: document.last_synced_payload_hash,
         last_seen_remote_payload_hash: document.last_seen_remote_payload_hash,
         last_error: document.last_error,
-        last_synced_at_epoch_seconds: document.last_synced_at_epoch_seconds,
-        last_seen_remote_at_epoch_seconds: document.last_seen_remote_at_epoch_seconds,
+        last_synced_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.last_synced_at,
+            document.last_synced_at_epoch_seconds,
+        ),
+        last_seen_remote_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.last_seen_remote_at,
+            document.last_seen_remote_at_epoch_seconds,
+        ),
         conflict_status: map_conflict_status(&document.conflict_status)?,
     })
 }
@@ -349,7 +374,9 @@ mod tests {
             last_seen_remote_payload_hash: Some("hash-1".to_string()),
             last_error: None,
             last_synced_at_epoch_seconds: Some(1_700_000_000),
+            last_synced_at: None,
             last_seen_remote_at_epoch_seconds: Some(1_700_000_000),
+            last_seen_remote_at: None,
             conflict_status: "in_sync".to_string(),
         })
         .unwrap_err();
@@ -370,11 +397,40 @@ mod tests {
             last_seen_remote_payload_hash: Some("hash-1".to_string()),
             last_error: None,
             last_synced_at_epoch_seconds: Some(1_700_000_000),
+            last_synced_at: None,
             last_seen_remote_at_epoch_seconds: Some(1_700_000_000),
+            last_seen_remote_at: None,
             conflict_status: "in_sync".to_string(),
         })
         .unwrap_err();
 
         assert!(matches!(error, ExternalSyncRepositoryError::CorruptData(_)));
+    }
+
+    #[test]
+    fn sync_state_document_reads_datetime_fields_without_legacy_epoch() {
+        let mapped = map_document_to_sync_state(ExternalSyncStateDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            canonical_entity_kind: "race".to_string(),
+            canonical_entity_id: "race-1".to_string(),
+            external_id: Some("77".to_string()),
+            sync_status: "synced".to_string(),
+            last_synced_payload_hash: Some("hash-1".to_string()),
+            last_seen_remote_payload_hash: Some("hash-2".to_string()),
+            last_error: None,
+            last_synced_at_epoch_seconds: None,
+            last_synced_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_000_000)),
+            last_seen_remote_at_epoch_seconds: None,
+            last_seen_remote_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_100_000)),
+            conflict_status: "conflict_detected".to_string(),
+        })
+        .expect("datetime-backed sync state should map");
+
+        assert_eq!(mapped.last_synced_at_epoch_seconds, Some(1_700_000_000));
+        assert_eq!(
+            mapped.last_seen_remote_at_epoch_seconds,
+            Some(1_700_000_100)
+        );
     }
 }

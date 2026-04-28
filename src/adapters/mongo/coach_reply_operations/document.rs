@@ -1,3 +1,4 @@
+use mongodb::bson::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -18,8 +19,16 @@ pub(super) struct CoachReplyOperationDocument {
     pub(super) response_message: Option<String>,
     pub(super) error_message: Option<String>,
     pub(super) started_at_epoch_seconds: i64,
+    #[serde(default)]
+    pub(super) started_at: Option<DateTime>,
     pub(super) last_attempt_at_epoch_seconds: i64,
+    #[serde(default)]
+    pub(super) last_attempt_at: Option<DateTime>,
     pub(super) attempt_count: i64,
     pub(super) created_at_epoch_seconds: i64,
+    #[serde(default)]
+    pub(super) created_at: Option<DateTime>,
     pub(super) updated_at_epoch_seconds: i64,
+    #[serde(default)]
+    pub(super) updated_at: Option<DateTime>,
 }

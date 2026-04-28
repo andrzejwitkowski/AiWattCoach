@@ -1,6 +1,14 @@
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::{doc, DateTime},
+    options::IndexOptions,
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
+use super::time::{
+    optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds,
+    resolve_required_epoch_seconds,
+};
 use crate::domain::planned_workout_wahoo_syncs::{
     BoxFuture, PlannedWorkoutWahooSyncError, PlannedWorkoutWahooSyncRecord,
     PlannedWorkoutWahooSyncRepository, PlannedWorkoutWahooSyncStatus,
@@ -25,9 +33,15 @@ struct PlannedWorkoutWahooSyncDocument {
     wahoo_workout_id: Option<i64>,
     wahoo_workout_token: Option<String>,
     last_error: Option<String>,
-    created_at_epoch_seconds: i64,
-    updated_at_epoch_seconds: i64,
+    created_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    created_at: Option<DateTime>,
+    updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<DateTime>,
     last_synced_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_synced_at: Option<DateTime>,
 }
 
 impl MongoPlannedWorkoutWahooSyncRepository {
@@ -180,9 +194,24 @@ fn map_domain_to_document(
         wahoo_workout_id: record.wahoo_workout_id,
         wahoo_workout_token: record.wahoo_workout_token.clone(),
         last_error: record.last_error.clone(),
-        created_at_epoch_seconds: record.created_at_epoch_seconds,
-        updated_at_epoch_seconds: record.updated_at_epoch_seconds,
+        created_at_epoch_seconds: Some(record.created_at_epoch_seconds),
+        created_at: optional_epoch_seconds_to_bson_datetime(
+            Some(record.created_at_epoch_seconds),
+            "created_at",
+        )
+        .expect("created_at should fit BSON DateTime"),
+        updated_at_epoch_seconds: Some(record.updated_at_epoch_seconds),
+        updated_at: optional_epoch_seconds_to_bson_datetime(
+            Some(record.updated_at_epoch_seconds),
+            "updated_at",
+        )
+        .expect("updated_at should fit BSON DateTime"),
         last_synced_at_epoch_seconds: record.last_synced_at_epoch_seconds,
+        last_synced_at: optional_epoch_seconds_to_bson_datetime(
+            record.last_synced_at_epoch_seconds,
+            "last_synced_at",
+        )
+        .expect("last_synced_at should fit BSON DateTime"),
     }
 }
 
@@ -202,9 +231,22 @@ fn map_document_to_domain(
         wahoo_workout_id: document.wahoo_workout_id,
         wahoo_workout_token: document.wahoo_workout_token,
         last_error: document.last_error,
-        created_at_epoch_seconds: document.created_at_epoch_seconds,
-        updated_at_epoch_seconds: document.updated_at_epoch_seconds,
-        last_synced_at_epoch_seconds: document.last_synced_at_epoch_seconds,
+        created_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.created_at,
+            document.created_at_epoch_seconds,
+            "created_at",
+        )
+        .map_err(PlannedWorkoutWahooSyncError::Repository)?,
+        updated_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.updated_at,
+            document.updated_at_epoch_seconds,
+            "updated_at",
+        )
+        .map_err(PlannedWorkoutWahooSyncError::Repository)?,
+        last_synced_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.last_synced_at,
+            document.last_synced_at_epoch_seconds,
+        ),
     })
 }
 
