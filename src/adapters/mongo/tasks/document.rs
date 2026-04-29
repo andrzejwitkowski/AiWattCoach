@@ -14,17 +14,33 @@ pub(super) struct TaskDocument {
     pub(super) dedupe_key: String,
     pub(super) error_message: Option<String>,
     pub(super) attempt_count: i64,
-    pub(super) next_attempt_at_epoch_seconds: i64,
+    pub(super) next_attempt_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    pub(super) next_attempt_at: Option<DateTime>,
     pub(super) claimed_by: Option<String>,
     pub(super) lease_expires_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    pub(super) lease_expires_at: Option<DateTime>,
     pub(super) last_heartbeat_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    pub(super) last_heartbeat_at: Option<DateTime>,
     pub(super) execution_timeout_seconds: i64,
     pub(super) timed_out_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    pub(super) timed_out_at: Option<DateTime>,
     pub(super) leader_only: bool,
-    pub(super) created_at_epoch_seconds: i64,
-    pub(super) updated_at_epoch_seconds: i64,
+    pub(super) created_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    pub(super) created_at: Option<DateTime>,
+    pub(super) updated_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    pub(super) updated_at: Option<DateTime>,
     pub(super) started_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    pub(super) started_at: Option<DateTime>,
     pub(super) finished_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    pub(super) finished_at: Option<DateTime>,
     pub(super) cleanup_after: Option<DateTime>,
 }
 

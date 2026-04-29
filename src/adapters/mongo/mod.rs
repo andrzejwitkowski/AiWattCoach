@@ -21,6 +21,7 @@ pub mod planned_workout_wahoo_syncs;
 pub mod planned_workouts;
 pub mod provider_poll_states;
 pub mod races;
+pub mod readable_dates_backfill;
 pub mod sessions;
 pub mod settings;
 pub mod special_days;

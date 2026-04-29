@@ -21,11 +21,23 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-29 | Copilot | PR #150 readable Mongo dates follow-up
+
+- Problem: the readable-date follow-up branch still had unresolved review gaps in Mongo timestamp migration paths and then picked up merge drift in `src/main.rs`, where old planned-workout sync repository wiring no longer matched the merged calendar/external-sync service signatures.
+- Fix: kept the backfill startup path opt-in via `RUN_MONGO_READABLE_DATES_BACKFILL=true`, tightened the backfill updater to use compare-and-set filters, removed panic-based Mongo read paths in `provider_poll_states`, `task_workers`, and `tasks`, preserved dual-write BSON `*_at` lifecycle fields for task updates, fixed `main.rs` to use the current `CalendarEntryViewRefreshService`, `CalendarService`, and `ExternalImportService` wiring, and added focused regressions for missing `next_due_at` plus Mongo task `started_at` / `finished_at` datetime mirrors.
+- Prevention: after merging `main` into a long-lived review branch, re-read the current constructor and builder signatures before reusing old composition-root wiring. For staged Mongo timestamp migrations, verify both read-side corrupt-data handling and write-side datetime mirrors with focused regressions instead of relying on compile success alone.
+
 ### 2026-04-29 | user | PR #158 conflict resolution
 
 - Problem: the branch had diverged from the latest `origin/main`, so PR #158 still showed merge conflicts even though the feature branch itself was otherwise up to date. The conflict landed in `reviewers.md`, where both branches had added new top-of-file entries.
 - Fix: fetched `origin/main`, merged it into `feature/planned-workout-provider-split`, resolved `reviewers.md` by preserving both branches' entries in newest-first order, kept the already auto-merged lesson updates, and verified the merged branch before pushing.
 - Prevention: when a PR shows conflicts, do the real merge against the latest remote base branch and treat rolling logs like `reviewers.md` as append-only history that must preserve both sides in reverse-chronological order.
+
+### 2026-04-27 | user | readable Mongo dates rollout PR2/PR3
+
+- Problem: after the initial readable-date rollout reached `provider_poll_states` and `tasks`, some fields that were conceptually required still used non-optional legacy epoch document fields, so a truly `DateTime`-only migrated document could not deserialize through those adapters. The rollout also still lacked the promised idempotent backfill for pre-existing Mongo documents.
+- Fix: changed the technical Mongo documents to dual-read required timestamps from either the new BSON `*_at` mirrors or legacy `*_epoch_seconds`, added focused regressions for `DateTime`-only reads in `provider_poll_states`, `task_workers`, and `tasks`, and implemented a startup backfill that idempotently populates readable BSON datetime mirrors across the PR1 and PR2 collections, including nested settings fields and array items like `messages[]` and `attempts[]`.
+- Prevention: when doing a staged dual-read/dual-write timestamp migration, do not stop at adding mirror fields to writes. Re-check every required read path against a `DateTime`-only document shape, especially where the persistence struct still uses non-optional legacy epoch fields, and ship the promised backfill before calling the rollout complete.
 
 ### 2026-04-29 | user | frontend calendar mini chart workout bars
 
@@ -122,6 +134,7 @@ Read this file before planning and before implementation.
 - Problem: the calendar and training-context read path still treated Wahoo as authoritative for a whole day even when the Wahoo completed workout was only a sparse summary and Intervals already had richer power details. Separately, successful Wahoo FIT enrichment updated the completed workout but did not automatically refresh `calendar_view`, so the day could stay stale until a manual rebuild.
 - Fix: extracted shared completed-workout day selection that treats "detailed" as a non-empty `watts` stream, wired `AuthoritativeCompletedWorkoutRepository` to use that day-level selector, kept prompt-side dedupe limited to collapsing true duplicate logical activities, and connected `WahooFitEnrichmentService` to `CalendarEntryViewRefreshPort` so a successful enrichment refreshes that workout day automatically. Added focused regressions for authoritative day selection, training-context fallback, calendar-view refresh behavior, and scheduler wiring for the new generic refresh dependency.
 - Prevention: when two read paths must agree on source authority, centralize the authority rule in the repository or shared selector instead of re-encoding provider preference in each consumer. For enrichment flows that materially change read models, verify whether the write path must trigger the corresponding projection refresh immediately after persistence.
+>>>>>>> origin/main
 
 ### 2026-04-26 | user | Wahoo bootstrap poller loses all progress on rate limit
 

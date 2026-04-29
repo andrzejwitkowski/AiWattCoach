@@ -47,6 +47,8 @@
 
 ## Small Review Fixes
 
+- In a dual-read/dual-write timestamp migration, every field that is required at the domain level must be verified against a `DateTime`-only persisted document, not just legacy-plus-new mixed documents. If the persistence struct still uses a non-optional legacy epoch field, the migration is incomplete even when normal writes succeed.
+- When promising a staged migration with a later backfill step, complete the backfill before calling the rollout done. Readability improvements are not actually delivered for existing Mongo rows until the historical documents are updated too.
 - For dense UI mini-charts, keep the canonical sequence intact and apply any width compression only in the rendering layer. Sampling or equal-width fallbacks are likely to destroy either temporal order or duration meaning.
 - When frontend UX explicitly wants to use stylized planned-workout zone heights, do not silently revert to raw `%FTP` heights to make old tests pass. Update the tests to the intended visual contract instead.
 

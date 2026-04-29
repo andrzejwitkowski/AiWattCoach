@@ -1,11 +1,12 @@
 use futures::TryStreamExt;
 use mongodb::{
-    bson::{doc, Bson, Document},
+    bson::{doc, Bson, DateTime, Document},
     options::IndexOptions,
     Collection, IndexModel,
 };
 use serde::{Deserialize, Serialize};
 
+use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds};
 use crate::domain::external_sync::{
     BoxFuture, ExternalProvider, ExternalSyncRepositoryError, ProviderPollState,
     ProviderPollStateRepository, ProviderPollStream,
@@ -22,11 +23,19 @@ struct ProviderPollStateDocument {
     provider: String,
     stream: String,
     cursor: Option<String>,
-    next_due_at_epoch_seconds: i64,
+    next_due_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    next_due_at: Option<DateTime>,
     last_attempted_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_attempted_at: Option<DateTime>,
     last_successful_at_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    last_successful_at: Option<DateTime>,
     last_error: Option<String>,
     backoff_until_epoch_seconds: Option<i64>,
+    #[serde(default)]
+    backoff_until_at: Option<DateTime>,
 }
 
 impl MongoProviderPollStateRepository {
@@ -169,11 +178,21 @@ fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDoc
         provider: provider_as_str(&state.provider).to_string(),
         stream: stream_as_str(&state.stream).to_string(),
         cursor: state.cursor.clone(),
-        next_due_at_epoch_seconds: state.next_due_at_epoch_seconds,
+        next_due_at_epoch_seconds: Some(state.next_due_at_epoch_seconds),
+        next_due_at: datetime_or_panic(Some(state.next_due_at_epoch_seconds), "next_due_at"),
         last_attempted_at_epoch_seconds: state.last_attempted_at_epoch_seconds,
+        last_attempted_at: datetime_or_panic(
+            state.last_attempted_at_epoch_seconds,
+            "last_attempted_at",
+        ),
         last_successful_at_epoch_seconds: state.last_successful_at_epoch_seconds,
+        last_successful_at: datetime_or_panic(
+            state.last_successful_at_epoch_seconds,
+            "last_successful_at",
+        ),
         last_error: state.last_error.clone(),
         backoff_until_epoch_seconds: state.backoff_until_epoch_seconds,
+        backoff_until_at: datetime_or_panic(state.backoff_until_epoch_seconds, "backoff_until_at"),
     }
 }
 
@@ -185,12 +204,32 @@ fn map_document_to_poll_state(
         provider: map_provider(&document.provider),
         stream: map_stream(&document.stream)?,
         cursor: document.cursor,
-        next_due_at_epoch_seconds: document.next_due_at_epoch_seconds,
-        last_attempted_at_epoch_seconds: document.last_attempted_at_epoch_seconds,
-        last_successful_at_epoch_seconds: document.last_successful_at_epoch_seconds,
+        next_due_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.next_due_at,
+            document.next_due_at_epoch_seconds,
+        )
+        .ok_or_else(|| {
+            ExternalSyncRepositoryError::CorruptData("missing next_due_at timestamp".to_string())
+        })?,
+        last_attempted_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.last_attempted_at,
+            document.last_attempted_at_epoch_seconds,
+        ),
+        last_successful_at_epoch_seconds: resolve_optional_epoch_seconds(
+            document.last_successful_at,
+            document.last_successful_at_epoch_seconds,
+        ),
         last_error: document.last_error,
-        backoff_until_epoch_seconds: document.backoff_until_epoch_seconds,
+        backoff_until_epoch_seconds: resolve_optional_epoch_seconds(
+            document.backoff_until_at,
+            document.backoff_until_epoch_seconds,
+        ),
     })
+}
+
+fn datetime_or_panic(epoch_seconds: Option<i64>, field_name: &str) -> Option<DateTime> {
+    optional_epoch_seconds_to_bson_datetime(epoch_seconds, field_name)
+        .unwrap_or_else(|error| panic!("{error}"))
 }
 
 fn provider_as_str(provider: &ExternalProvider) -> &'static str {
@@ -280,11 +319,15 @@ mod tests {
             provider: "intervals".to_string(),
             stream: "mystery".to_string(),
             cursor: None,
-            next_due_at_epoch_seconds: 1_700_000_000,
+            next_due_at_epoch_seconds: Some(1_700_000_000),
+            next_due_at: None,
             last_attempted_at_epoch_seconds: None,
+            last_attempted_at: None,
             last_successful_at_epoch_seconds: None,
+            last_successful_at: None,
             last_error: None,
             backoff_until_epoch_seconds: None,
+            backoff_until_at: None,
         })
         .unwrap_err();
 
@@ -312,5 +355,56 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn poll_state_document_reads_datetime_fields_without_legacy_epoch() {
+        let mapped = map_document_to_poll_state(ProviderPollStateDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            stream: "calendar".to_string(),
+            cursor: Some("cursor-1".to_string()),
+            next_due_at_epoch_seconds: None,
+            next_due_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_000_000)),
+            last_attempted_at_epoch_seconds: None,
+            last_attempted_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_010_000)),
+            last_successful_at_epoch_seconds: None,
+            last_successful_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_020_000)),
+            last_error: Some("temporary upstream error".to_string()),
+            backoff_until_epoch_seconds: None,
+            backoff_until_at: Some(mongodb::bson::DateTime::from_millis(1_700_000_030_000)),
+        })
+        .expect("datetime-backed poll state should map");
+
+        assert_eq!(mapped.next_due_at_epoch_seconds, 1_700_000_000);
+        assert_eq!(mapped.last_attempted_at_epoch_seconds, Some(1_700_000_010));
+        assert_eq!(mapped.last_successful_at_epoch_seconds, Some(1_700_000_020));
+        assert_eq!(mapped.backoff_until_epoch_seconds, Some(1_700_000_030));
+    }
+
+    #[test]
+    fn poll_state_document_rejects_missing_next_due_at_timestamp() {
+        let error = map_document_to_poll_state(ProviderPollStateDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            stream: "calendar".to_string(),
+            cursor: None,
+            next_due_at_epoch_seconds: None,
+            next_due_at: None,
+            last_attempted_at_epoch_seconds: None,
+            last_attempted_at: None,
+            last_successful_at_epoch_seconds: None,
+            last_successful_at: None,
+            last_error: None,
+            backoff_until_epoch_seconds: None,
+            backoff_until_at: None,
+        })
+        .expect_err("poll state without next_due_at should be rejected");
+
+        assert!(matches!(
+            error,
+            crate::domain::external_sync::ExternalSyncRepositoryError::CorruptData(message)
+                if message == "missing next_due_at timestamp"
+        ));
     }
 }
