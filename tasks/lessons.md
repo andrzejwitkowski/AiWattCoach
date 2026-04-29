@@ -10,6 +10,7 @@
 ## PR Conflict Verification
 
 - When resolving PR conflicts, fetch the current base branch ref and test the merge against that exact `origin/<base>` immediately before calling the PR conflict-free. A branch can be clean and synced with its remote head branch while still conflicting if the base branch advanced.
+- When resolving conflicts in rolling logs like `reviewers.md` or `tasks/lessons.md`, preserve entries from both branches and restore newest-first ordering instead of picking one side and dropping history.
 
 ## Signature Change Verification
 
@@ -45,6 +46,9 @@
 - When a scheduled-task success path must serialize a persisted checkpoint, do not swallow serialization failures with `.ok()`. Convert them into explicit task failure so result handlers surface the real cause.
 
 ## Small Review Fixes
+
+- For dense UI mini-charts, keep the canonical sequence intact and apply any width compression only in the rendering layer. Sampling or equal-width fallbacks are likely to destroy either temporal order or duration meaning.
+- When frontend UX explicitly wants to use stylized planned-workout zone heights, do not silently revert to raw `%FTP` heights to make old tests pass. Update the tests to the intended visual contract instead.
 
 - For upstream file-upload APIs, do not assume a nested JSON body is equivalent to documented `resource[file]` params. Check whether the provider expects `application/x-www-form-urlencoded` or multipart transport and whether the file field must be wrapped as `data:<mime>;base64,...` instead of raw base64.
 - When migrating Mongo documents from one timestamp representation to dual epoch-plus-DateTime storage, remove `expect(...)` from read mappers for any collection that can contain legacy or manually corrupted rows. Missing required timestamps should surface as repository/storage errors, not panic the request or worker.

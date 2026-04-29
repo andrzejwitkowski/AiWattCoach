@@ -6,7 +6,7 @@ export function WorkoutBars({bars}: { bars: WorkoutBar[] }) {
   }
 
   return (
-    <div className="flex h-48 items-end gap-1 rounded-2xl border border-white/6 bg-[#171a1d] p-4">
+    <div className="flex h-48 items-end gap-[3px] rounded-2xl border border-white/6 bg-[#171a1d] p-4">
       {bars.map((bar, index) => (
         <div
           key={`${bar.color}-${index}-${bar.height}-${bar.widthUnits ?? 1}`}
@@ -17,6 +17,7 @@ export function WorkoutBars({bars}: { bars: WorkoutBar[] }) {
             flexGrow: Math.max(1, bar.widthUnits ?? 1),
             height: `${bar.height}%`,
             backgroundColor: bar.color,
+            borderRight: '2px solid #0d1012',
           }}
         />
       ))}

@@ -5,8 +5,9 @@ import { buildDayItems, isInteractiveDayItem } from '../dayItems';
 import { formatRaceSubtitle, mapRaceDisciplineLabel } from '../racePresentation';
 import type { CalendarDay, CalendarRaceLabel } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
-import { buildCompletedWorkoutPreviewBars, buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
+import { buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
 import { CalendarMiniChart } from './CalendarMiniChart';
+import { buildBars } from './calendarDayBars';
 
 type CalendarDayCellProps = {
   day: CalendarDay;
@@ -476,34 +477,6 @@ function buildRaceBars(raceLabel: CalendarRaceLabel): Array<number | WorkoutBar>
     { height: peak, color: '#d49c45', widthUnits: 1 },
     { height: Math.max(40, peak - 8), color: '#8d5d23', widthUnits: 1 },
   ];
-}
-
-function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Array<number | WorkoutBar> {
-  if (dayEvent?.restDay) {
-    return [18, 12, 20];
-  }
-
-  if (dayActivity) {
-    const bars = buildCompletedWorkoutPreviewBars(dayActivity);
-    if (bars.length > 0) {
-      return bars;
-    }
-  }
-
-  if (dayEvent) {
-    const bars = buildPlannedWorkoutBars(dayEvent);
-    if (bars.length > 0) {
-      return bars;
-    }
-  }
-
-  const tss = dayActivity?.metrics.trainingStressScore ?? 0;
-  if (tss > 0) {
-    const peak = Math.min(100, Math.max(30, tss));
-    return [Math.max(20, peak - 25), peak, Math.max(25, peak - 10)];
-  }
-
-  return [35, 55, 75, 55];
 }
 
 function startOfDay(value: Date): Date {
