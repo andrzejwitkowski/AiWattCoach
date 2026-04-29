@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-29 | user | provider_poll_states parked sentinel crash
+
+- Problem: parked provider poll states intentionally used `next_due_at_epoch_seconds = i64::MAX` as a disabled sentinel, but the Mongo write mapper still tried to mirror that value into BSON `next_due_at`, which exceeds the `DateTime` range and panicked the release on startup.
+- Fix: taught `map_poll_state_to_document(...)` in `src/adapters/mongo/provider_poll_states.rs` to skip the readable `next_due_at` mirror when the parked sentinel is present, preserved the epoch sentinel for runtime behavior, and added a focused regression proving the parked state no longer attempts BSON datetime serialization.
+- Prevention: when dual-writing readable BSON datetimes beside epoch sentinel fields, audit every sentinel value before mirroring it into `DateTime`. Values that encode "disabled" or "parked" state must stay in the epoch field only unless they are valid BSON timestamps.
+
 ### 2026-04-29 | Copilot | PR #150 readable Mongo dates follow-up
 
 - Problem: the readable-date follow-up branch still had unresolved review gaps in Mongo timestamp migration paths and then picked up merge drift in `src/main.rs`, where old planned-workout sync repository wiring no longer matched the merged calendar/external-sync service signatures.

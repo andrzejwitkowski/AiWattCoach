@@ -173,13 +173,19 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
 }
 
 fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDocument {
+    let next_due_at = if state.next_due_at_epoch_seconds == i64::MAX {
+        None
+    } else {
+        datetime_or_panic(Some(state.next_due_at_epoch_seconds), "next_due_at")
+    };
+
     ProviderPollStateDocument {
         user_id: state.user_id.clone(),
         provider: provider_as_str(&state.provider).to_string(),
         stream: stream_as_str(&state.stream).to_string(),
         cursor: state.cursor.clone(),
         next_due_at_epoch_seconds: Some(state.next_due_at_epoch_seconds),
-        next_due_at: datetime_or_panic(Some(state.next_due_at_epoch_seconds), "next_due_at"),
+        next_due_at,
         last_attempted_at_epoch_seconds: state.last_attempted_at_epoch_seconds,
         last_attempted_at: datetime_or_panic(
             state.last_attempted_at_epoch_seconds,
@@ -406,5 +412,23 @@ mod tests {
             crate::domain::external_sync::ExternalSyncRepositoryError::CorruptData(message)
                 if message == "missing next_due_at timestamp"
         ));
+    }
+
+    #[test]
+    fn poll_state_document_keeps_parked_sentinel_without_datetime_mirror() {
+        let document = map_poll_state_to_document(&ProviderPollState {
+            user_id: "user-1".to_string(),
+            provider: ExternalProvider::Intervals,
+            stream: ProviderPollStream::Calendar,
+            cursor: None,
+            next_due_at_epoch_seconds: i64::MAX,
+            last_attempted_at_epoch_seconds: None,
+            last_successful_at_epoch_seconds: None,
+            last_error: None,
+            backoff_until_epoch_seconds: None,
+        });
+
+        assert_eq!(document.next_due_at_epoch_seconds, Some(i64::MAX));
+        assert_eq!(document.next_due_at, None);
     }
 }
