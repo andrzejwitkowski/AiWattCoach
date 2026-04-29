@@ -1,5 +1,14 @@
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
 
+import {
+  completedIntervalDurationSeconds,
+  heightForPercent,
+  heightForPower,
+  matchedIntervalDurationSeconds,
+  normalizeBarHeights,
+  normalizeSkylineWidths,
+} from './workoutBarScaling';
+
 export type WorkoutDetailSelection = {
   dateKey: string;
   event: IntervalEvent | null;
@@ -93,9 +102,6 @@ const ZONE_VISUAL_HEIGHT_PERCENT: Record<number, number> = {
   6: 97,
   7: 100,
 };
-
-const BAR_HEIGHT_FLOOR = 2;
-const BAR_HEIGHT_CEIL = 100;
 
 export function isPlannedWorkoutEvent(
   event: IntervalEvent | null | undefined,
@@ -785,8 +791,9 @@ function plannedBarHeight(
   targetPercentFtp: number | null | undefined,
   zoneId: number | null | undefined,
 ): number {
-  if (zoneId) {
-    return ZONE_VISUAL_HEIGHT_PERCENT[zoneId] ?? 10;
+  const visualHeight = zoneId ? ZONE_VISUAL_HEIGHT_PERCENT[zoneId] : undefined;
+  if (visualHeight !== undefined) {
+    return visualHeight;
   }
 
   if (targetPercentFtp !== null && targetPercentFtp !== undefined && targetPercentFtp > 0) {
@@ -1056,72 +1063,6 @@ function readVarint(bytes: Uint8Array, offset: number): { value: number; nextOff
   return null;
 }
 
-function normalizeSkylineWidths(widths: number[], barCount: number): number[] {
-  if (barCount === 0) {
-    return [];
-  }
-
-  const rawWidths = Array.from({length: barCount}, (_, index) => widths[index] ?? 1);
-  const maxWidth = Math.max(...rawWidths, 1);
-
-  return rawWidths.map((width) => {
-    const normalized = maxWidth > 512 ? Math.round(width / 109) : width;
-    return Math.max(1, normalized);
-  });
-}
-
-function completedIntervalDurationSeconds(interval: IntervalActivity['details']['intervals'][number]): number {
-  const inferredDuration = interval.startTimeSeconds !== null && interval.endTimeSeconds !== null
-    ? interval.endTimeSeconds - interval.startTimeSeconds
-    : null;
-
-  return normalizeWidthUnits(interval.movingTimeSeconds ?? interval.elapsedTimeSeconds ?? inferredDuration);
-}
-
-function matchedIntervalDurationSeconds(interval: NonNullable<IntervalEvent['actualWorkout']>['matchedIntervals'][number]): number {
-  const inferredDuration = interval.actualStartTimeSeconds !== null && interval.actualEndTimeSeconds !== null
-    ? interval.actualEndTimeSeconds - interval.actualStartTimeSeconds
-    : null;
-
-  return normalizeWidthUnits(inferredDuration ?? interval.plannedDurationSeconds);
-}
-
-function heightForPercent(percent: number | null | undefined): number {
-  if (!percent || percent <= 0) {
-    return 4;
-  }
-
-  return Math.max(2, Math.min(100, Math.round(percent)));
-}
-
-function heightForPower(power: number): number {
-  if (!Number.isFinite(power) || power <= 0) {
-    return 4;
-  }
-
-  return Math.max(2, Math.min(100, Math.round(power / 13)));
-}
-
-function normalizeBarHeights(bars: WorkoutBar[]): WorkoutBar[] {
-  if (bars.length <= 1) {
-    return bars;
-  }
-
-  const heights = bars.map((b) => b.height);
-  const min = Math.min(...heights);
-  const max = Math.max(...heights);
-  if (max <= min) {
-    return bars;
-  }
-
-  const scale = (BAR_HEIGHT_CEIL - BAR_HEIGHT_FLOOR) / (max - min);
-
-  return bars.map((b) => ({
-    ...b,
-    height: BAR_HEIGHT_FLOOR + (b.height - min) * scale,
-  }));
-}
-
 function inferZoneFromPower(power: number | null | undefined, ftpWatts: number | null | undefined): number {
   if (!power || !ftpWatts || ftpWatts <= 0) {
     return 4;
@@ -1131,7 +1072,11 @@ function inferZoneFromPower(power: number | null | undefined, ftpWatts: number |
 }
 
 function resolveCompletedZoneId(power: number | null | undefined, ftpWatts: number | null | undefined): number | null {
-  if (!power || !ftpWatts || ftpWatts <= 0) {
+  if (power === null || power === undefined || ftpWatts === null || ftpWatts === undefined) {
+    return null;
+  }
+
+  if (!Number.isFinite(power) || power <= 0 || !Number.isFinite(ftpWatts) || ftpWatts <= 0) {
     return null;
   }
 

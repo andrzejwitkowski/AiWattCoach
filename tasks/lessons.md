@@ -46,7 +46,7 @@
 ## Small Review Fixes
 
 - For dense UI mini-charts, keep the canonical sequence intact and apply any width compression only in the rendering layer. Sampling or equal-width fallbacks are likely to destroy either temporal order or duration meaning.
-- When frontend UX explicitly wants stylized planned-workout zone heights, do not silently revert to raw `%FTP` heights to make old tests pass. Update the tests to the intended visual contract instead.
+- When frontend UX explicitly wants to use stylized planned-workout zone heights, do not silently revert to raw `%FTP` heights to make old tests pass. Update the tests to the intended visual contract instead.
 
 - For upstream file-upload APIs, do not assume a nested JSON body is equivalent to documented `resource[file]` params. Check whether the provider expects `application/x-www-form-urlencoded` or multipart transport and whether the file field must be wrapped as `data:<mime>;base64,...` instead of raw base64.
 - When migrating Mongo documents from one timestamp representation to dual epoch-plus-DateTime storage, remove `expect(...)` from read mappers for any collection that can contain legacy or manually corrupted rows. Missing required timestamps should surface as repository/storage errors, not panic the request or worker.
