@@ -127,6 +127,11 @@ export function CompletedWorkoutDetailModal({
         onToggleSelectedInterval={handleToggleSelectedInterval}
         totalDurationSeconds={matchedIntervalTotalDurationSeconds}
       />
+      <WorkoutSummarySection
+        isLoading={isSummaryLoading}
+        summary={workoutSummary}
+        summaryError={summaryError}
+      />
       {isCompletedActivityOnly ? (
         <CompletedIntervalsSection
           activity={activity}
@@ -138,11 +143,6 @@ export function CompletedWorkoutDetailModal({
           totalDurationSeconds={completedIntervalTotalDurationSeconds}
         />
       ) : null}
-      <WorkoutSummarySection
-        isLoading={isSummaryLoading}
-        summary={workoutSummary}
-        summaryError={summaryError}
-      />
       {detailsUnavailableMessage ? (
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
           {detailsUnavailableMessage ?? t('calendar.importedWorkoutDetailsUnavailable')}
