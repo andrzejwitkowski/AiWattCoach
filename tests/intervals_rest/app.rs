@@ -27,6 +27,11 @@ use aiwattcoach::{
             BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, TrainingPlanProjectedDay,
             TrainingPlanProjectionRepository, TrainingPlanReplacementResult, TrainingPlanSnapshot,
         },
+        workout_summary::{
+            BoxFuture as WorkoutSummaryBoxFuture, ConversationMessage, SaveSummaryResult,
+            SendMessageResult, WorkoutRecap, WorkoutSummary, WorkoutSummaryError,
+            WorkoutSummaryUseCases,
+        },
     },
     Settings,
 };
@@ -46,6 +51,7 @@ pub(crate) async fn intervals_test_app(
         EmptyTrainingPlanProjectionRepository,
         InMemoryCalendarEntryViewRepository::default(),
         InMemoryCompletedWorkoutRepository::default(),
+        TestWorkoutSummaryService::default(),
     )
     .await
 }
@@ -61,6 +67,7 @@ pub(crate) async fn intervals_test_app_with_projections(
         projections,
         InMemoryCalendarEntryViewRepository::default(),
         InMemoryCompletedWorkoutRepository::default(),
+        TestWorkoutSummaryService::default(),
     )
     .await
 }
@@ -76,6 +83,7 @@ pub(crate) async fn intervals_test_app_with_calendar_entries(
         EmptyTrainingPlanProjectionRepository,
         calendar_entry_views,
         InMemoryCompletedWorkoutRepository::default(),
+        TestWorkoutSummaryService::default(),
     )
     .await
 }
@@ -131,12 +139,30 @@ pub(crate) async fn intervals_test_app_with_calendar_entries_and_completed_worko
     calendar_entry_views: impl CalendarEntryViewRepository + 'static,
     completed_workouts: impl CompletedWorkoutRepository + 'static,
 ) -> axum::Router {
+    intervals_test_app_with_calendar_entries_completed_workouts_and_summary_service(
+        identity_service,
+        intervals_service,
+        calendar_entry_views,
+        completed_workouts,
+        TestWorkoutSummaryService::default(),
+    )
+    .await
+}
+
+pub(crate) async fn intervals_test_app_with_calendar_entries_completed_workouts_and_summary_service(
+    identity_service: impl IdentityUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+    calendar_entry_views: impl CalendarEntryViewRepository + 'static,
+    completed_workouts: impl CompletedWorkoutRepository + 'static,
+    workout_summary_service: impl WorkoutSummaryUseCases + 'static,
+) -> axum::Router {
     intervals_test_app_with_projections_calendar_entries_and_completed_workouts(
         identity_service,
         intervals_service,
         EmptyTrainingPlanProjectionRepository,
         calendar_entry_views,
         completed_workouts,
+        workout_summary_service,
     )
     .await
 }
@@ -147,6 +173,7 @@ async fn intervals_test_app_with_projections_calendar_entries_and_completed_work
     projections: impl TrainingPlanProjectionRepository + Clone + 'static,
     calendar_entry_views: impl CalendarEntryViewRepository + 'static,
     completed_workouts: impl CompletedWorkoutRepository + 'static,
+    workout_summary_service: impl WorkoutSummaryUseCases + 'static,
 ) -> axum::Router {
     intervals_test_app_with_projections_and_calendar_entries(
         identity_service,
@@ -154,6 +181,7 @@ async fn intervals_test_app_with_projections_calendar_entries_and_completed_work
         projections,
         calendar_entry_views,
         completed_workouts,
+        workout_summary_service,
     )
     .await
 }
@@ -164,6 +192,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
     projections: impl TrainingPlanProjectionRepository + Clone + 'static,
     calendar_entry_views: impl CalendarEntryViewRepository + 'static,
     completed_workouts: impl CompletedWorkoutRepository + 'static,
+    workout_summary_service: impl WorkoutSummaryUseCases + 'static,
 ) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = shared_frontend_fixture();
@@ -201,6 +230,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
         .with_calendar_labels_service(calendar_labels_service)
         .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
         .with_completed_workout_service(completed_workout_service)
+        .with_workout_summary_service(Arc::new(workout_summary_service))
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
     )
@@ -316,6 +346,174 @@ impl InMemoryCompletedWorkoutRepository {
         Self {
             stored: Arc::new(std::sync::Mutex::new(workouts)),
         }
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TestWorkoutSummaryService {
+    stored: Arc<std::sync::Mutex<Vec<WorkoutSummary>>>,
+}
+
+impl TestWorkoutSummaryService {
+    pub(crate) fn with_summaries(summaries: Vec<WorkoutSummary>) -> Self {
+        Self {
+            stored: Arc::new(std::sync::Mutex::new(summaries)),
+        }
+    }
+}
+
+impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
+    fn get_summary(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> WorkoutSummaryBoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|summary| summary.user_id == user_id && summary.workout_id == workout_id)
+                .cloned()
+                .ok_or(WorkoutSummaryError::NotFound)
+        })
+    }
+
+    fn create_summary(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> WorkoutSummaryBoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+
+    fn list_summaries(
+        &self,
+        _user_id: &str,
+        _workout_ids: Vec<String>,
+    ) -> WorkoutSummaryBoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+
+    fn update_rpe(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _rpe: u8,
+    ) -> WorkoutSummaryBoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+
+    fn mark_saved(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> WorkoutSummaryBoxFuture<Result<SaveSummaryResult, WorkoutSummaryError>> {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+
+    fn reopen_summary(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+    ) -> WorkoutSummaryBoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+
+    fn persist_workout_recap(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _recap: WorkoutRecap,
+    ) -> WorkoutSummaryBoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+
+    fn send_message(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _content: String,
+    ) -> WorkoutSummaryBoxFuture<Result<SendMessageResult, WorkoutSummaryError>> {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+
+    fn append_user_message(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _content: String,
+    ) -> WorkoutSummaryBoxFuture<
+        Result<aiwattcoach::domain::workout_summary::PersistedUserMessage, WorkoutSummaryError>,
+    > {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+
+    fn generate_coach_reply(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _user_message_id: String,
+    ) -> WorkoutSummaryBoxFuture<
+        Result<aiwattcoach::domain::workout_summary::CoachReply, WorkoutSummaryError>,
+    > {
+        Box::pin(async {
+            Err(WorkoutSummaryError::Repository(
+                "not implemented in test".to_string(),
+            ))
+        })
+    }
+}
+
+pub(crate) fn sample_workout_summary(user_id: &str, workout_id: &str) -> WorkoutSummary {
+    WorkoutSummary {
+        id: format!("summary-{workout_id}"),
+        user_id: user_id.to_string(),
+        workout_id: workout_id.to_string(),
+        rpe: Some(6),
+        messages: Vec::<ConversationMessage>::new(),
+        saved_at_epoch_seconds: Some(1_700_000_100),
+        workout_recap_text: None,
+        workout_recap_provider: None,
+        workout_recap_model: None,
+        workout_recap_generated_at_epoch_seconds: None,
+        created_at_epoch_seconds: 1_700_000_000,
+        updated_at_epoch_seconds: 1_700_000_100,
     }
 }
 

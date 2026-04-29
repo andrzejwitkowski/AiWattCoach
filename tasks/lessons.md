@@ -47,6 +47,14 @@
 
 ## Small Review Fixes
 
+- If a component can render once with `selection = null` and later with real data, keep every hook call unconditional across both renders. Do not put new hooks after an early return that is skipped when the modal opens, or React will crash with a hook-order error.
+- When moving data loading into a modal/container, add a regression that renders the component with `selection={null}` first and then rerenders with a selected entity. That transition catches real open-modal hook order bugs that steady-state tests miss.
+- For detail modals, keep data fetching in a dedicated hook or container-level component and keep the rendered detail panel presentational. Do not thread transport/config props like `apiBaseUrl` into a child just to power one late-added fetch.
+- When adding a new section to an existing detail view, verify whether the requirement is additive or substitutive before deleting the previous section. If an existing section still carries distinct user value, preserve it and add the new section alongside it.
+- For completed-workout recap loading, derive the lookup id from the most authoritative completed-workout source available (`actualWorkout.activityId` before a best-effort loaded activity object) so partial activity-load failures do not suppress recap data.
+- Do not surface raw `HttpError` transport strings like `GET /api/... failed: 503` directly in UI state. Map expected HTTP failures to user-facing localized copy unless the raw message is explicitly intended for the user.
+- When adding a REST sub-route beside an existing resource route, match the surrounding path parameter name (`activity_id` vs `workout_id`) unless there is a real semantic distinction. Mismatched names create avoidable confusion in handlers, tests, and debugging.
+
 - In a dual-read/dual-write timestamp migration, every field that is required at the domain level must be verified against a `DateTime`-only persisted document, not just legacy-plus-new mixed documents. If the persistence struct still uses a non-optional legacy epoch field, the migration is incomplete even when normal writes succeed.
 - When promising a staged migration with a later backfill step, complete the backfill before calling the rollout done. Readability improvements are not actually delivered for existing Mongo rows until the historical documents are updated too.
 - For dense UI mini-charts, keep the canonical sequence intact and apply any width compression only in the rendering layer. Sampling or equal-width fallbacks are likely to destroy either temporal order or duration meaning.

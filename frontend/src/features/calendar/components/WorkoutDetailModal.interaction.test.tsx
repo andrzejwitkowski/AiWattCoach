@@ -69,7 +69,7 @@ describe('WorkoutDetailModal interval interaction', () => {
 
     const activeChip = screen.getAllByText('Ride 2').find((element) => element.getAttribute('data-interval-chip-active') === 'true');
     expect(activeChip).toBeTruthy();
-    expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
+    expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('240 W');
   });
 
   it('does not auto-scroll the interval list when chart hover changes the active ride', async () => {
@@ -116,7 +116,7 @@ describe('WorkoutDetailModal interval interaction', () => {
       setChartRect(chart);
       fireEvent.mouseMove(chart, { clientX: 750, clientY: 80 });
 
-      expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
+      expect(screen.getAllByText('Ride 2').some((element) => element.getAttribute('data-interval-chip-active') === 'true')).toBe(true);
       expect(scrollIntoView).not.toHaveBeenCalled();
     } finally {
       HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
@@ -164,14 +164,13 @@ describe('WorkoutDetailModal interval interaction', () => {
     fireEvent.mouseEnter(ride2Chip as Element);
 
     expect(screen.getAllByText('Ride 2').some((element) => element.getAttribute('data-interval-chip-active') === 'true')).toBe(true);
-    expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
     expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('240 W');
 
-    const ride1Row = Array.from(document.querySelectorAll('[data-interval-row-active]')).find((element) => element.textContent?.includes('Ride 1')) as HTMLElement;
-    fireEvent.click(ride1Row);
+    fireEvent.click(ride2Chip as Element);
+    expect(ride2Chip).toHaveAttribute('aria-pressed', 'true');
 
-    expect(document.querySelectorAll('[data-interval-row-active="true"]').length).toBeGreaterThan(0);
-    fireEvent.mouseEnter(ride1Row);
+    const ride1Chip = screen.getAllByRole('button', { name: 'Ride 1' }).find((element) => element.getAttribute('data-interval-chip-active') === 'false') as HTMLButtonElement;
+    fireEvent.mouseEnter(ride1Chip);
     expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('200 W');
   });
 
@@ -215,7 +214,7 @@ describe('WorkoutDetailModal interval interaction', () => {
     setChartRect(chart);
     fireEvent.mouseMove(chart, { clientX: 400, clientY: 80 });
 
-    expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 1');
+    expect(screen.getAllByText('Ride 1').some((element) => element.getAttribute('data-interval-chip-active') === 'true')).toBe(true);
     expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('220 W');
   });
 
@@ -260,14 +259,14 @@ describe('WorkoutDetailModal interval interaction', () => {
     ride2Chip.focus();
     await user.keyboard('{Enter}');
 
-    expect(document.querySelector('[data-interval-row-active="true"]')).toHaveTextContent('Ride 2');
+    expect(ride2Chip).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('[data-hover-power-readout="true"]')).toHaveTextContent('240 W');
 
-    const ride1Row = Array.from(document.querySelectorAll('[data-interval-row-active]')).find((element) => element.textContent?.includes('Ride 1')) as HTMLElement;
-    ride1Row.focus();
-    fireEvent.keyDown(ride1Row, { key: ' ' });
+    const ride1Chip = screen.getAllByRole('button', { name: 'Ride 1' }).find((element) => element.getAttribute('data-interval-chip-active') === 'false') as HTMLButtonElement;
+    ride1Chip.focus();
+    await user.keyboard('{Enter}');
 
-    const activeRows = Array.from(document.querySelectorAll('[data-interval-row-active="true"]'));
-    expect(activeRows.some((element) => element.textContent?.includes('Ride 1'))).toBe(true);
+    expect(ride1Chip).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('renders interval chips as toggle buttons with pressed state', async () => {

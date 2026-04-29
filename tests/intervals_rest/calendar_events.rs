@@ -18,7 +18,7 @@ use crate::{
         intervals_test_app_with_projections,
         intervals_test_app_with_projections_and_calendar_entries, sample_calendar_entry,
         sample_planned_calendar_entry, InMemoryCalendarEntryViewRepository,
-        InMemoryCompletedWorkoutRepository,
+        InMemoryCompletedWorkoutRepository, TestWorkoutSummaryService,
     },
     fixtures::{get_json, session_cookie},
     identity_fakes::{SessionMappedIdentityService, TestIdentityServiceWithSession},
@@ -587,6 +587,7 @@ async fn list_calendar_events_returns_predicted_events_with_positive_safe_ids() 
             "Build Session\n- 60m 70%",
         )]),
         InMemoryCompletedWorkoutRepository::default(),
+        TestWorkoutSummaryService::default(),
     )
     .await;
 

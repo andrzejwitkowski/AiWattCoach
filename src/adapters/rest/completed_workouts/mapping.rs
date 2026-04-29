@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
@@ -11,11 +12,42 @@ use crate::{
             Activity, ActivityDetails, ActivityInterval, ActivityIntervalGroup, ActivityMetrics,
             ActivityStream, ActivityZoneTime,
         },
+        workout_summary::WorkoutSummary,
     },
 };
 
+#[derive(Serialize)]
+pub(crate) struct CompletedWorkoutSummaryDto {
+    #[serde(rename = "workoutId")]
+    workout_id: String,
+    text: String,
+    provider: Option<String>,
+    model: Option<String>,
+    #[serde(rename = "generatedAtEpochSeconds")]
+    generated_at_epoch_seconds: i64,
+}
+
 pub(super) fn map_completed_workout_to_dto(workout: CompletedWorkout) -> ActivityDto {
     map_activity_to_dto(map_completed_workout_to_activity(workout))
+}
+
+pub(super) fn map_completed_workout_summary_to_dto(
+    summary: WorkoutSummary,
+) -> Option<CompletedWorkoutSummaryDto> {
+    let text = summary.workout_recap_text?.trim().to_string();
+    let generated_at_epoch_seconds = summary.workout_recap_generated_at_epoch_seconds?;
+
+    if text.is_empty() {
+        return None;
+    }
+
+    Some(CompletedWorkoutSummaryDto {
+        workout_id: summary.workout_id,
+        text,
+        provider: summary.workout_recap_provider,
+        model: summary.workout_recap_model,
+        generated_at_epoch_seconds,
+    })
 }
 
 fn map_completed_workout_to_activity(workout: CompletedWorkout) -> Activity {

@@ -5,6 +5,7 @@ import {useTranslation} from 'react-i18next';
 import {downloadFit, loadActivity, loadEvent} from '../../intervals/api/intervals';
 import {AuthenticationError} from '../../../lib/httpClient';
 import type {IntervalEvent} from '../../intervals/types';
+import {useCompletedWorkoutSummary} from '../hooks/useCompletedWorkoutSummary';
 import type {WorkoutDetailSelection} from '../workoutDetails';
 import {CompletedWorkoutDetailModal} from './CompletedWorkoutDetailModal';
 import {PlannedWorkoutDetailModal} from './PlannedWorkoutDetailModal';
@@ -72,16 +73,27 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
         };
     }, [apiBaseUrl, selection]);
 
-    if (!selection) {
-        return null;
-    }
-
-    const event = state.event;
-    const activity = state.activity;
+    const event = selection ? state.event : null;
+    const activity = selection ? state.activity : null;
     const actualWorkout = event?.actualWorkout ?? null;
     const isCompletedActivityOnly = Boolean(!event && activity);
     const isPlannedVsActual = Boolean(event && actualWorkout);
     const isCompleted = Boolean(actualWorkout || isCompletedActivityOnly);
+    const summaryTargetActivityId = selection
+        ? event?.actualWorkout?.activityId ?? activity?.id ?? null
+        : null;
+    const {
+        summary: workoutSummary,
+        isLoading: isSummaryLoading,
+        summaryError,
+    } = useCompletedWorkoutSummary({
+        activityId: summaryTargetActivityId,
+        apiBaseUrl,
+    });
+
+    if (!selection) {
+        return null;
+    }
     const title = isCompletedActivityOnly
         ? activity?.name ?? activity?.activityType ?? t('calendar.workout')
         : isPlannedVsActual
@@ -155,7 +167,13 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
                     {state.loading ? (
                         <p className="text-sm text-slate-400">{t('calendar.loadingWorkoutDetails')}</p>
                     ) : isCompleted ? (
-                        <CompletedWorkoutDetailModal event={event} activity={activity}/>
+                        <CompletedWorkoutDetailModal
+                            event={event}
+                            activity={activity}
+                            workoutSummary={workoutSummary}
+                            isSummaryLoading={isSummaryLoading}
+                            summaryError={summaryError}
+                        />
                     ) : event ? (
                         <PlannedWorkoutDetailModal
                             apiBaseUrl={apiBaseUrl}

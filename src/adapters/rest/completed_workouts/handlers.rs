@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::config::AppState;
 
-use super::mapping::map_completed_workout_to_dto;
+use super::mapping::{map_completed_workout_summary_to_dto, map_completed_workout_to_dto};
 
 #[derive(Deserialize)]
 pub(crate) struct ListCompletedWorkoutsQuery {
@@ -18,6 +18,11 @@ pub(crate) struct ListCompletedWorkoutsQuery {
 
 #[derive(Deserialize)]
 pub(crate) struct CompletedWorkoutPath {
+    pub activity_id: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CompletedWorkoutSummaryPath {
     pub activity_id: String,
 }
 
@@ -83,6 +88,52 @@ pub(crate) async fn get_completed_workout(
     {
         Ok(Some(workout)) => Json(map_completed_workout_to_dto(workout)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub(crate) async fn get_completed_workout_summary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<CompletedWorkoutSummaryPath>,
+) -> Response {
+    let user_id = match resolve_user_id(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
+    };
+
+    let completed_workout_service = match state.completed_workout_service.as_ref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+    let workout_summary_service = match state.workout_summary_service.as_ref() {
+        Some(service) => service,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    match completed_workout_service
+        .get_completed_workout(&user_id, &path.activity_id)
+        .await
+    {
+        Ok(Some(_)) => {}
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+
+    match workout_summary_service
+        .get_summary(&user_id, &path.activity_id)
+        .await
+    {
+        Ok(summary) => match map_completed_workout_summary_to_dto(summary) {
+            Some(summary) => Json(summary).into_response(),
+            None => StatusCode::NOT_FOUND.into_response(),
+        },
+        Err(crate::domain::workout_summary::WorkoutSummaryError::NotFound) => {
+            StatusCode::NOT_FOUND.into_response()
+        }
+        Err(crate::domain::workout_summary::WorkoutSummaryError::Repository(_)) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

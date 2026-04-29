@@ -256,6 +256,14 @@ export const intervalActivitySchema = z.object({
 
 export const intervalActivitiesResponseSchema = z.array(intervalActivitySchema);
 
+export const completedWorkoutSummarySchema = z.object({
+  workoutId: z.string(),
+  text: z.string(),
+  provider: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
+  generatedAtEpochSeconds: z.number().int(),
+});
+
 export const uploadActivityRequestSchema = z.object({
   filename: z.string(),
   fileContentsBase64: z.string(),
@@ -283,6 +291,7 @@ export const updateActivityRequestSchema = z.object({
 
 export type IntervalEvent = z.infer<typeof intervalEventSchema>;
 export type IntervalActivity = z.infer<typeof intervalActivitySchema>;
+export type CompletedWorkoutSummary = z.infer<typeof completedWorkoutSummarySchema>;
 export type ListEventsQuery = z.infer<typeof listEventsQuerySchema>;
 export type CreateIntervalEventRequest = z.infer<typeof createIntervalEventRequestSchema>;
 export type UpdateIntervalEventRequest = z.infer<typeof updateIntervalEventRequestSchema>;

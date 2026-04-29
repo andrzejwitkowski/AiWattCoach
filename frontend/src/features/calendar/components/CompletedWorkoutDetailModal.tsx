@@ -1,7 +1,7 @@
 import {useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
-import type {IntervalActivity, IntervalEvent} from '../../intervals/types';
+import type {CompletedWorkoutSummary, IntervalActivity, IntervalEvent} from '../../intervals/types';
 import {
   buildCompletedWorkoutPreviewBars,
   buildFiveSecondAveragePowerSeries,
@@ -20,11 +20,23 @@ import {
 } from './WorkoutDetailIntervalSections';
 import {MetricCard, WorkoutBars} from './WorkoutDetailPanelPrimitives';
 import {PowerChart} from './WorkoutDetailPowerChart';
+import {WorkoutSummarySection} from './WorkoutDetailSummarySection';
 
-export function CompletedWorkoutDetailModal({event, activity}: {
+type CompletedWorkoutDetailModalProps = {
   event: IntervalEvent | null;
   activity: IntervalActivity | null;
-}) {
+  workoutSummary: CompletedWorkoutSummary | null;
+  isSummaryLoading: boolean;
+  summaryError: string | null;
+};
+
+export function CompletedWorkoutDetailModal({
+  event,
+  activity,
+  workoutSummary,
+  isSummaryLoading,
+  summaryError,
+}: CompletedWorkoutDetailModalProps) {
   const {t} = useTranslation();
   const actualWorkout = event?.actualWorkout ?? null;
   const isCompletedActivityOnly = Boolean(!event && activity);
@@ -42,7 +54,6 @@ export function CompletedWorkoutDetailModal({event, activity}: {
       ? buildMatchedWorkoutBars(actualWorkout)
       : [];
   const compliance = actualWorkout ? `${Math.round(actualWorkout.complianceScore * 100)}% ${t('calendar.compliance')}` : null;
-  const completedIntervals = !actualWorkout ? getDisplayableCompletedIntervals(activity) : [];
   const actualWorkoutDurationSeconds = actualWorkout?.matchedIntervals.reduce((maxDuration, interval) => {
     const intervalEnd = typeof interval.actualEndTimeSeconds === 'number' ? interval.actualEndTimeSeconds : 0;
     return Math.max(maxDuration, intervalEnd);
@@ -56,6 +67,7 @@ export function CompletedWorkoutDetailModal({event, activity}: {
         actualWorkoutDurationSeconds || undefined,
       )
       : 0;
+  const completedIntervals = getDisplayableCompletedIntervals(activity);
   const completedIntervalTotalDurationSeconds = completedIntervalsTotalDuration(completedIntervals, durationSeconds);
   const matchedIntervalTotalDurationSeconds = matchedIntervalsTotalDuration(actualWorkout?.matchedIntervals ?? [], durationSeconds);
   const chartIntervalOverlays = buildChartIntervals(event, actualWorkout, activity);
@@ -115,15 +127,22 @@ export function CompletedWorkoutDetailModal({event, activity}: {
         onToggleSelectedInterval={handleToggleSelectedInterval}
         totalDurationSeconds={matchedIntervalTotalDurationSeconds}
       />
-      <CompletedIntervalsSection
-        activity={activity}
-        highlightedIntervalKey={highlightedIntervalKey}
-        intervalRowRefs={intervalRowRefs.current}
-        intervals={completedIntervals}
-        onHoverIntervalChange={setHoveredIntervalKey}
-        onToggleSelectedInterval={handleToggleSelectedInterval}
-        totalDurationSeconds={completedIntervalTotalDurationSeconds}
+      <WorkoutSummarySection
+        isLoading={isSummaryLoading}
+        summary={workoutSummary}
+        summaryError={summaryError}
       />
+      {isCompletedActivityOnly ? (
+        <CompletedIntervalsSection
+          activity={activity}
+          highlightedIntervalKey={highlightedIntervalKey}
+          intervalRowRefs={intervalRowRefs.current}
+          intervals={completedIntervals}
+          onHoverIntervalChange={setHoveredIntervalKey}
+          onToggleSelectedInterval={handleToggleSelectedInterval}
+          totalDurationSeconds={completedIntervalTotalDurationSeconds}
+        />
+      ) : null}
       {detailsUnavailableMessage ? (
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
           {detailsUnavailableMessage ?? t('calendar.importedWorkoutDetailsUnavailable')}
