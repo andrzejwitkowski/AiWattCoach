@@ -124,6 +124,10 @@ pub struct ExternalSyncState {
     pub provider: ExternalProvider,
     pub canonical_entity: CanonicalEntityRef,
     pub external_id: Option<String>,
+    pub wahoo_plan_external_id: Option<String>,
+    pub wahoo_plan_id: Option<i64>,
+    pub wahoo_workout_id: Option<i64>,
+    pub wahoo_workout_token: Option<String>,
     pub sync_status: ExternalSyncStatus,
     pub last_synced_payload_hash: Option<String>,
     pub last_seen_remote_payload_hash: Option<String>,
@@ -144,6 +148,10 @@ impl ExternalSyncState {
             provider,
             canonical_entity,
             external_id: None,
+            wahoo_plan_external_id: None,
+            wahoo_plan_id: None,
+            wahoo_workout_id: None,
+            wahoo_workout_token: None,
             sync_status: ExternalSyncStatus::Pending,
             last_synced_payload_hash: None,
             last_seen_remote_payload_hash: None,
@@ -157,6 +165,13 @@ impl ExternalSyncState {
     pub fn mark_pending_push(mut self) -> Self {
         self.sync_status = ExternalSyncStatus::Pending;
         self.last_error = None;
+        self
+    }
+
+    pub fn mark_wahoo_pending(mut self, wahoo_plan_external_id: String) -> Self {
+        self.sync_status = ExternalSyncStatus::Pending;
+        self.last_error = None;
+        self.wahoo_plan_external_id = Some(wahoo_plan_external_id);
         self
     }
 
@@ -176,6 +191,30 @@ impl ExternalSyncState {
         synced_at_epoch_seconds: i64,
     ) -> Self {
         self.external_id = Some(external_id);
+        self.sync_status = ExternalSyncStatus::Synced;
+        self.last_synced_payload_hash = Some(payload_hash.clone());
+        self.last_seen_remote_payload_hash = Some(payload_hash);
+        self.last_error = None;
+        self.last_synced_at_epoch_seconds = Some(synced_at_epoch_seconds);
+        self.last_seen_remote_at_epoch_seconds = Some(synced_at_epoch_seconds);
+        self.conflict_status = ConflictStatus::InSync;
+        self
+    }
+
+    pub fn mark_wahoo_synced(
+        mut self,
+        payload_hash: String,
+        synced_at_epoch_seconds: i64,
+        wahoo_plan_external_id: String,
+        wahoo_plan_id: i64,
+        wahoo_workout_id: i64,
+        wahoo_workout_token: String,
+    ) -> Self {
+        self.external_id = Some(wahoo_workout_id.to_string());
+        self.wahoo_plan_external_id = Some(wahoo_plan_external_id);
+        self.wahoo_plan_id = Some(wahoo_plan_id);
+        self.wahoo_workout_id = Some(wahoo_workout_id);
+        self.wahoo_workout_token = Some(wahoo_workout_token);
         self.sync_status = ExternalSyncStatus::Synced;
         self.last_synced_payload_hash = Some(payload_hash.clone());
         self.last_seen_remote_payload_hash = Some(payload_hash);

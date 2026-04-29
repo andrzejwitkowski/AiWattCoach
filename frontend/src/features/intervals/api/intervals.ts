@@ -44,14 +44,27 @@ export async function loadEvent(apiBaseUrl: string, eventId: number) {
   return intervalEventSchema.parse(data);
 }
 
-export async function syncPlannedWorkout(apiBaseUrl: string, operationKey: string, date: string) {
+async function syncPlannedWorkoutForProvider(
+  apiBaseUrl: string,
+  operationKey: string,
+  date: string,
+  provider: 'intervals' | 'wahoo',
+) {
   const validated = listEventsQuerySchema.pick({ oldest: true }).parse({ oldest: date });
   const result = await post<undefined, unknown>(
     apiBaseUrl,
-    `/api/calendar/planned-workouts/${encodeURIComponent(operationKey)}/${encodeURIComponent(validated.oldest)}/sync`,
+    `/api/calendar/planned-workouts/${encodeURIComponent(operationKey)}/${encodeURIComponent(validated.oldest)}/${provider}/sync`,
     undefined,
   );
   return intervalEventSchema.parse(result);
+}
+
+export async function syncPlannedWorkoutToIntervals(apiBaseUrl: string, operationKey: string, date: string) {
+  return syncPlannedWorkoutForProvider(apiBaseUrl, operationKey, date, 'intervals');
+}
+
+export async function syncPlannedWorkoutToWahoo(apiBaseUrl: string, operationKey: string, date: string) {
+  return syncPlannedWorkoutForProvider(apiBaseUrl, operationKey, date, 'wahoo');
 }
 
 export async function createEvent(apiBaseUrl: string, data: unknown) {

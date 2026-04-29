@@ -1,6 +1,6 @@
 use futures::TryStreamExt;
 use mongodb::{
-    bson::{doc, DateTime},
+    bson::{doc, Bson, DateTime},
     options::IndexOptions,
     Collection, IndexModel,
 };
@@ -25,6 +25,14 @@ struct ExternalSyncStateDocument {
     canonical_entity_kind: String,
     canonical_entity_id: String,
     external_id: Option<String>,
+    #[serde(default)]
+    wahoo_plan_external_id: Option<String>,
+    #[serde(default)]
+    wahoo_plan_id: Option<i64>,
+    #[serde(default)]
+    wahoo_workout_id: Option<i64>,
+    #[serde(default)]
+    wahoo_workout_token: Option<String>,
     sync_status: String,
     last_synced_payload_hash: Option<String>,
     last_seen_remote_payload_hash: Option<String>,
@@ -59,6 +67,38 @@ impl MongoExternalSyncStateRepository {
                             .build(),
                     )
                     .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "canonical_entity_kind": 1, "canonical_entity_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("external_sync_states_user_entity".to_string())
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "provider": 1, "wahoo_plan_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("external_sync_states_user_provider_wahoo_plan_id".to_string())
+                            .unique(true)
+                            .partial_filter_expression(doc! {
+                                "wahoo_plan_id": { "$exists": true, "$ne": Bson::Null }
+                            })
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "provider": 1, "wahoo_workout_token": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("external_sync_states_user_provider_wahoo_workout_token".to_string())
+                            .unique(true)
+                            .partial_filter_expression(doc! {
+                                "wahoo_workout_token": { "$exists": true, "$ne": Bson::Null }
+                            })
+                            .build(),
+                    )
+                    .build(),
             ])
             .await
             .map_err(storage_error)?;
@@ -88,6 +128,47 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
                 .await
                 .map_err(storage_error)?;
             Ok(state)
+        })
+    }
+
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            if canonical_entities.is_empty() {
+                return Ok(Vec::new());
+            }
+
+            let entity_filters = canonical_entities
+                .into_iter()
+                .map(|canonical_entity| {
+                    doc! {
+                        "canonical_entity_kind": canonical_entity_kind_as_str(&canonical_entity.entity_kind),
+                        "canonical_entity_id": canonical_entity.entity_id,
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let documents = collection
+                .find(doc! {
+                    "user_id": &user_id,
+                    "$or": entity_filters,
+                })
+                .await
+                .map_err(storage_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(storage_error)?;
+
+            documents
+                .into_iter()
+                .map(map_document_to_sync_state)
+                .collect::<Result<Vec<_>, _>>()
         })
     }
 
@@ -187,6 +268,49 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
             Ok(())
         })
     }
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        user_id: &str,
+        wahoo_plan_id: i64,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            find_unique_sync_state(
+                &collection,
+                doc! {
+                    "user_id": &user_id,
+                    "provider": "wahoo",
+                    "wahoo_plan_id": wahoo_plan_id,
+                },
+                "wahoo plan id",
+            )
+            .await
+        })
+    }
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        user_id: &str,
+        wahoo_workout_token: &str,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let wahoo_workout_token = wahoo_workout_token.to_string();
+        Box::pin(async move {
+            find_unique_sync_state(
+                &collection,
+                doc! {
+                    "user_id": &user_id,
+                    "provider": "wahoo",
+                    "wahoo_workout_token": &wahoo_workout_token,
+                },
+                "wahoo workout token",
+            )
+            .await
+        })
+    }
 }
 
 fn storage_error(error: mongodb::error::Error) -> ExternalSyncRepositoryError {
@@ -201,6 +325,10 @@ fn map_sync_state_to_document(state: &ExternalSyncState) -> ExternalSyncStateDoc
             .to_string(),
         canonical_entity_id: state.canonical_entity.entity_id.clone(),
         external_id: state.external_id.clone(),
+        wahoo_plan_external_id: state.wahoo_plan_external_id.clone(),
+        wahoo_plan_id: state.wahoo_plan_id,
+        wahoo_workout_id: state.wahoo_workout_id,
+        wahoo_workout_token: state.wahoo_workout_token.clone(),
         sync_status: sync_status_as_str(&state.sync_status).to_string(),
         last_synced_payload_hash: state.last_synced_payload_hash.clone(),
         last_seen_remote_payload_hash: state.last_seen_remote_payload_hash.clone(),
@@ -232,6 +360,10 @@ fn map_document_to_sync_state(
             entity_id: document.canonical_entity_id,
         },
         external_id: document.external_id,
+        wahoo_plan_external_id: document.wahoo_plan_external_id,
+        wahoo_plan_id: document.wahoo_plan_id,
+        wahoo_workout_id: document.wahoo_workout_id,
+        wahoo_workout_token: document.wahoo_workout_token,
         sync_status: map_sync_status(&document.sync_status)?,
         last_synced_payload_hash: document.last_synced_payload_hash,
         last_seen_remote_payload_hash: document.last_seen_remote_payload_hash,
@@ -246,6 +378,28 @@ fn map_document_to_sync_state(
         ),
         conflict_status: map_conflict_status(&document.conflict_status)?,
     })
+}
+
+async fn find_unique_sync_state(
+    collection: &Collection<ExternalSyncStateDocument>,
+    filter: mongodb::bson::Document,
+    lookup_kind: &str,
+) -> Result<Option<ExternalSyncState>, ExternalSyncRepositoryError> {
+    let documents = collection
+        .find(filter)
+        .await
+        .map_err(storage_error)?
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(storage_error)?;
+
+    match documents.as_slice() {
+        [] => Ok(None),
+        [document] => map_document_to_sync_state(document.clone()).map(Some),
+        _ => Err(ExternalSyncRepositoryError::CorruptData(format!(
+            "multiple external sync states found for {lookup_kind} lookup"
+        ))),
+    }
 }
 
 fn provider_as_str(provider: &ExternalProvider) -> &'static str {
@@ -369,6 +523,10 @@ mod tests {
             canonical_entity_kind: "race".to_string(),
             canonical_entity_id: "race-1".to_string(),
             external_id: Some("77".to_string()),
+            wahoo_plan_external_id: None,
+            wahoo_plan_id: None,
+            wahoo_workout_id: None,
+            wahoo_workout_token: None,
             sync_status: "synced".to_string(),
             last_synced_payload_hash: Some("hash-1".to_string()),
             last_seen_remote_payload_hash: Some("hash-1".to_string()),
@@ -392,6 +550,10 @@ mod tests {
             canonical_entity_kind: "race".to_string(),
             canonical_entity_id: "race-1".to_string(),
             external_id: Some("77".to_string()),
+            wahoo_plan_external_id: None,
+            wahoo_plan_id: None,
+            wahoo_workout_id: None,
+            wahoo_workout_token: None,
             sync_status: "mystery".to_string(),
             last_synced_payload_hash: Some("hash-1".to_string()),
             last_seen_remote_payload_hash: Some("hash-1".to_string()),
@@ -415,6 +577,10 @@ mod tests {
             canonical_entity_kind: "race".to_string(),
             canonical_entity_id: "race-1".to_string(),
             external_id: Some("77".to_string()),
+            wahoo_plan_external_id: None,
+            wahoo_plan_id: None,
+            wahoo_workout_id: None,
+            wahoo_workout_token: None,
             sync_status: "synced".to_string(),
             last_synced_payload_hash: Some("hash-1".to_string()),
             last_seen_remote_payload_hash: Some("hash-2".to_string()),

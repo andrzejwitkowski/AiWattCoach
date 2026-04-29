@@ -2,22 +2,22 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 
 use crate::domain::{
-    calendar::{CalendarError, CalendarEvent, PlannedWorkoutSyncRecord, SyncPlannedWorkout},
-    intervals::PlannedWorkoutLine,
+    calendar::{CalendarError, CalendarEvent, PlannedWorkoutSyncProvider, SyncPlannedWorkout},
+    external_sync::{CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState},
+    intervals::{CreateEvent, Event, EventCategory, IntervalsError, UpdateEvent},
     planned_workout_tokens::{build_planned_workout_match_token, PlannedWorkoutToken},
-    planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncRecord,
     training_plan::TrainingPlanProjectedDay,
     wahoo::{WahooCreatePlan, WahooCreateWorkout, WahooUpdatePlan, WahooUpdateWorkout},
 };
 
 use super::{
     errors::{
-        map_planned_workout_token_error, map_settings_error, map_training_plan_error,
-        map_wahoo_error, map_wahoo_sync_error,
+        map_external_sync_error, map_intervals_error, map_planned_workout_token_error,
+        map_settings_error, map_training_plan_error, map_wahoo_error,
     },
     projected::{
-        build_projected_calendar_event, projected_day_payload_hash, projected_workout_id,
-        projected_workout_name,
+        build_projected_calendar_event, projected_day_payload_hash, projected_event_payload_hash,
+        projected_event_sync_body, projected_workout_id, projected_workout_name,
     },
     CalendarService,
 };
@@ -32,10 +32,9 @@ impl<
         Intervals,
         Entries,
         Projections,
-        Syncs,
+        SyncStates,
         Time,
         Wahoo,
-        WahooSyncs,
         Settings,
         Tokens,
         Refresh,
@@ -45,10 +44,9 @@ impl<
         Intervals,
         Entries,
         Projections,
-        Syncs,
+        SyncStates,
         Time,
         Wahoo,
-        WahooSyncs,
         Settings,
         Tokens,
         Refresh,
@@ -59,11 +57,9 @@ where
     Entries: crate::domain::calendar_view::CalendarEntryViewRepository + Clone,
     Completed: crate::domain::completed_workouts::CompletedWorkoutRepository + Clone,
     Projections: crate::domain::training_plan::TrainingPlanProjectionRepository + Clone,
-    Syncs: crate::domain::calendar::PlannedWorkoutSyncRepository + Clone,
+    SyncStates: crate::domain::external_sync::ExternalSyncStateRepository + Clone,
     Time: crate::domain::identity::Clock + Clone,
     Wahoo: crate::domain::wahoo::WahooUseCases + Clone,
-    WahooSyncs:
-        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncRepository + Clone,
     Settings: crate::domain::settings::UserSettingsRepository + Clone,
     Tokens: crate::domain::planned_workout_tokens::PlannedWorkoutTokenRepository + Clone,
     Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort + Clone,
@@ -81,59 +77,177 @@ where
             .into_iter()
             .find(|day| day.date == request.date)
             .ok_or(CalendarError::NotFound)?;
-        let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
 
         if projected_day.rest_day || projected_day.workout.is_none() {
             return Err(CalendarError::Validation(
                 "Only planned workout days can be synchronized".to_string(),
             ));
         }
-        ensure_sync_window(&self.clock, &request.date)?;
 
+        let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
+        let canonical_entity = CanonicalEntityRef::new(
+            CanonicalEntityKind::PlannedWorkout,
+            planned_workout_id.clone(),
+        );
+
+        let synced_event = match request.provider {
+            PlannedWorkoutSyncProvider::Intervals => {
+                self.sync_planned_workout_to_intervals(
+                    user_id,
+                    &request,
+                    projected_day,
+                    canonical_entity,
+                )
+                .await?
+            }
+            PlannedWorkoutSyncProvider::Wahoo => {
+                ensure_sync_window(&self.clock, &request.date)?;
+                self.sync_planned_workout_to_wahoo(
+                    user_id,
+                    &request,
+                    projected_day,
+                    canonical_entity,
+                    &planned_workout_id,
+                )
+                .await?
+            }
+        };
+
+        refresh_planned_workout_day(&self.refresh, user_id, &request).await;
+
+        Ok(synced_event)
+    }
+
+    async fn sync_planned_workout_to_intervals(
+        &self,
+        user_id: &str,
+        request: &SyncPlannedWorkout,
+        projected_day: TrainingPlanProjectedDay,
+        canonical_entity: CanonicalEntityRef,
+    ) -> Result<CalendarEvent, CalendarError> {
+        let payload_hash = projected_day_payload_hash(&projected_day);
+        let existing_state = self
+            .sync_states
+            .find_by_provider_and_canonical_entity(
+                user_id,
+                ExternalProvider::Intervals,
+                &canonical_entity,
+            )
+            .await
+            .map_err(map_external_sync_error)?
+            .unwrap_or_else(|| {
+                ExternalSyncState::new(
+                    user_id.to_string(),
+                    ExternalProvider::Intervals,
+                    canonical_entity.clone(),
+                )
+            });
+
+        let pending_state = self
+            .sync_states
+            .upsert(existing_state.mark_pending_push())
+            .await
+            .map_err(map_external_sync_error)?;
+
+        let sync_result = async {
+            let existing_remote_event = if let Some(intervals_event_id) =
+                intervals_event_id(&pending_state)
+            {
+                match self.intervals.get_event(user_id, intervals_event_id).await {
+                    Ok(event) => Some(event),
+                    Err(IntervalsError::NotFound) => None,
+                    Err(error) => return Err(map_intervals_error(error)),
+                }
+            } else {
+                find_existing_remote_event(&self.intervals, user_id, &projected_day, &payload_hash)
+                    .await?
+            };
+
+            let remote_event = if let Some(existing_remote_event) = existing_remote_event {
+                self.intervals
+                    .update_event(
+                        user_id,
+                        existing_remote_event.id,
+                        build_update_event(&projected_day),
+                    )
+                    .await
+                    .map_err(map_intervals_error)?
+            } else {
+                self.intervals
+                    .create_event(user_id, build_create_event(&projected_day))
+                    .await
+                    .map_err(map_intervals_error)?
+            };
+
+            Ok(remote_event)
+        }
+        .await;
+
+        match sync_result {
+            Ok(remote_event) => {
+                let synced_state = self
+                    .sync_states
+                    .upsert(pending_state.mark_synced(
+                        remote_event.id.to_string(),
+                        payload_hash,
+                        self.clock.now_epoch_seconds(),
+                    ))
+                    .await
+                    .map_err(map_external_sync_error)?;
+                let all_states = self
+                    .planned_workout_sync_states(user_id, &canonical_entity)
+                    .await?;
+                Ok(build_projected_calendar_event(
+                    projected_day,
+                    &all_states,
+                    Some(synced_state),
+                ))
+            }
+            Err(error) => {
+                persist_failed_sync_state(
+                    &self.sync_states,
+                    pending_state.mark_failed(error.to_string()),
+                    user_id,
+                    request,
+                )
+                .await;
+                refresh_planned_workout_day(&self.refresh, user_id, request).await;
+                Err(error)
+            }
+        }
+    }
+
+    async fn sync_planned_workout_to_wahoo(
+        &self,
+        user_id: &str,
+        request: &SyncPlannedWorkout,
+        projected_day: TrainingPlanProjectedDay,
+        canonical_entity: CanonicalEntityRef,
+        planned_workout_id: &str,
+    ) -> Result<CalendarEvent, CalendarError> {
         let payload_hash = projected_day_payload_hash(&projected_day);
         let now = self.clock.now_epoch_seconds();
-        let sync_record = self
-            .syncs
-            .find_by_user_id_and_projection(user_id, &request.operation_key, &request.date)
-            .await?
-            .unwrap_or_else(|| {
-                PlannedWorkoutSyncRecord::pending(
-                    user_id.to_string(),
-                    request.operation_key.clone(),
-                    request.date.clone(),
-                    projected_day.workout_id.clone(),
-                    now,
-                )
-            });
-        let wahoo_sync_record = self
-            .wahoo_syncs
-            .find_by_planned_workout_id(user_id, &planned_workout_id)
-            .await
-            .map_err(map_wahoo_sync_error)?
-            .unwrap_or_else(|| {
-                PlannedWorkoutWahooSyncRecord::pending(
-                    user_id.to_string(),
-                    request.operation_key.clone(),
-                    request.date.clone(),
-                    planned_workout_id.clone(),
-                    projected_day.workout_id.clone(),
-                    planned_workout_id.clone(),
-                    now,
-                )
-            });
-
-        let pending_record = self
-            .syncs
-            .upsert(
-                sync_record
-                    .mark_pending_without_remote_event(projected_day.workout_id.clone(), now),
+        let existing_state = self
+            .sync_states
+            .find_by_provider_and_canonical_entity(
+                user_id,
+                ExternalProvider::Wahoo,
+                &canonical_entity,
             )
-            .await?;
-        let pending_wahoo_record = self
-            .wahoo_syncs
-            .upsert(wahoo_sync_record.mark_pending(now))
             .await
-            .map_err(map_wahoo_sync_error)?;
+            .map_err(map_external_sync_error)?
+            .unwrap_or_else(|| {
+                ExternalSyncState::new(
+                    user_id.to_string(),
+                    ExternalProvider::Wahoo,
+                    canonical_entity.clone(),
+                )
+            });
+        let pending_state = self
+            .sync_states
+            .upsert(existing_state.mark_wahoo_pending(planned_workout_id.to_string()))
+            .await
+            .map_err(map_external_sync_error)?;
 
         let sync_result: Result<
             (
@@ -156,10 +270,10 @@ where
             let planned_workout_marker = ensure_planned_workout_marker(
                 &self.planned_workout_tokens,
                 user_id,
-                &planned_workout_id,
+                planned_workout_id,
             )
             .await?;
-            let workout_token = pending_wahoo_record
+            let workout_token = pending_state
                 .wahoo_workout_token
                 .clone()
                 .unwrap_or_else(|| planned_workout_marker.clone());
@@ -173,8 +287,8 @@ where
             let plan = match resolve_existing_plan(
                 &self.wahoo,
                 user_id,
-                &pending_wahoo_record,
-                &planned_workout_id,
+                &pending_state,
+                planned_workout_id,
             )
             .await?
             {
@@ -185,7 +299,7 @@ where
                         existing_plan.id,
                         WahooUpdatePlan {
                             file_base64: plan_file_base64,
-                            filename: Some(plan_filename(&planned_workout_id)),
+                            filename: Some(plan_filename(planned_workout_id)),
                             provider_updated_at: provider_updated_at.clone(),
                         },
                     )
@@ -197,8 +311,8 @@ where
                         user_id,
                         WahooCreatePlan {
                             file_base64: plan_file_base64,
-                            filename: Some(plan_filename(&planned_workout_id)),
-                            external_id: planned_workout_id.clone(),
+                            filename: Some(plan_filename(planned_workout_id)),
+                            external_id: planned_workout_id.to_string(),
                             provider_updated_at: provider_updated_at.clone(),
                         },
                     )
@@ -207,38 +321,76 @@ where
             };
             let starts = projected_workout_start_at(&request.date);
             let minutes = workout_minutes(&projected_day)?;
-            let workout = if let Some(wahoo_workout_id) = pending_wahoo_record.wahoo_workout_id {
-                self.wahoo
-                    .update_workout(
-                        user_id,
-                        wahoo_workout_id,
-                        WahooUpdateWorkout {
-                            name: projected_workout_name(&projected_day),
-                            workout_token: Some(workout_token.clone()),
-                            workout_type_id: Some(0),
-                            starts: Some(starts),
-                            minutes: Some(minutes),
-                            plan_id: Some(plan.id),
-                        },
-                    )
+            let update_request = WahooUpdateWorkout {
+                name: projected_workout_name(&projected_day),
+                workout_token: Some(workout_token.clone()),
+                workout_type_id: Some(0),
+                starts: Some(starts.clone()),
+                minutes: Some(minutes),
+                plan_id: Some(plan.id),
+            };
+            let workout = match resolve_existing_workout(
+                &self.wahoo,
+                user_id,
+                &pending_state,
+                &workout_token,
+            )
+            .await?
+            {
+                Some(existing_workout) => match self
+                    .wahoo
+                    .update_workout(user_id, existing_workout.id, update_request)
                     .await
-                    .map_err(map_wahoo_error)?
-            } else {
-                self.wahoo
-                    .create_workout(
-                        user_id,
-                        WahooCreateWorkout {
-                            name: projected_workout_name(&projected_day)
-                                .unwrap_or_else(|| "Planned workout".to_string()),
-                            workout_token: workout_token.clone(),
-                            workout_type_id: 0,
-                            starts,
-                            minutes,
-                            plan_id: Some(plan.id),
-                        },
-                    )
-                    .await
-                    .map_err(map_wahoo_error)?
+                {
+                    Ok(workout) => workout,
+                    Err(crate::domain::wahoo::WahooError::NotFound) => {
+                        let recovered_state = clear_stale_wahoo_workout_id(&pending_state);
+                        self.sync_states
+                            .upsert(recovered_state)
+                            .await
+                            .map_err(map_external_sync_error)?;
+                        self.wahoo
+                            .create_workout(
+                                user_id,
+                                WahooCreateWorkout {
+                                    name: projected_workout_name(&projected_day)
+                                        .unwrap_or_else(|| "Planned workout".to_string()),
+                                    workout_token: workout_token.clone(),
+                                    workout_type_id: 0,
+                                    starts,
+                                    minutes,
+                                    plan_id: Some(plan.id),
+                                },
+                            )
+                            .await
+                            .map_err(map_wahoo_error)?
+                    }
+                    Err(error) => return Err(map_wahoo_error(error)),
+                },
+                None => {
+                    if pending_state.wahoo_workout_id.is_some() {
+                        let recovered_state = clear_stale_wahoo_workout_id(&pending_state);
+                        self.sync_states
+                            .upsert(recovered_state)
+                            .await
+                            .map_err(map_external_sync_error)?;
+                    }
+                    self.wahoo
+                        .create_workout(
+                            user_id,
+                            WahooCreateWorkout {
+                                name: projected_workout_name(&projected_day)
+                                    .unwrap_or_else(|| "Planned workout".to_string()),
+                                workout_token: workout_token.clone(),
+                                workout_type_id: 0,
+                                starts,
+                                minutes,
+                                plan_id: Some(plan.id),
+                            },
+                        )
+                        .await
+                        .map_err(map_wahoo_error)?
+                }
             };
 
             Ok((plan, workout, workout_token))
@@ -247,102 +399,92 @@ where
 
         match sync_result {
             Ok((plan, workout, workout_token)) => {
-                // Wahoo sync records intentionally clear any prior Intervals event link because
-                // this flow no longer creates or updates a remote Intervals event.
-                self.wahoo_syncs
-                    .upsert(pending_wahoo_record.mark_synced(
-                        payload_hash.clone(),
+                let synced_state = self
+                    .sync_states
+                    .upsert(pending_state.mark_wahoo_synced(
+                        payload_hash,
+                        self.clock.now_epoch_seconds(),
+                        planned_workout_id.to_string(),
                         plan.id,
                         workout.id,
                         workout_token,
-                        self.clock.now_epoch_seconds(),
                     ))
                     .await
-                    .map_err(map_wahoo_sync_error)?;
-                let synced_record = self
-                    .syncs
-                    .upsert(pending_record.mark_synced_without_remote_event(
-                        projected_day.workout_id.clone(),
-                        payload_hash,
-                        self.clock.now_epoch_seconds(),
-                    ))
+                    .map_err(map_external_sync_error)?;
+                let all_states = self
+                    .planned_workout_sync_states(user_id, &canonical_entity)
                     .await?;
-                if let Err(error) = self
-                    .refresh
-                    .refresh_range_for_user(user_id, &request.date, &request.date)
-                    .await
-                {
-                    tracing::warn!(
-                        %user_id,
-                        operation_key = %request.operation_key,
-                        date = %request.date,
-                        %error,
-                        "planned workout sync succeeded but calendar view refresh failed"
-                    );
-                }
                 Ok(build_projected_calendar_event(
                     projected_day,
-                    Some(&synced_record),
+                    &all_states,
+                    Some(synced_state),
                 ))
             }
             Err(error) => {
-                let sync_action = if pending_wahoo_record.wahoo_workout_id.is_some() {
-                    "update"
-                } else {
-                    "create"
-                };
-                tracing::warn!(
+                persist_failed_sync_state(
+                    &self.sync_states,
+                    pending_state.mark_failed(error.to_string()),
                     user_id,
-                    operation_key = %request.operation_key,
-                    date = %request.date,
-                    sync_action,
-                    linked_wahoo_plan_id = pending_wahoo_record.wahoo_plan_id,
-                    linked_wahoo_workout_id = pending_wahoo_record.wahoo_workout_id,
-                    payload_hash = %payload_hash,
-                    workout_name = projected_workout_name(&projected_day).as_deref().unwrap_or_default(),
-                    error = %error,
-                    "planned workout sync failed"
-                );
-                let failed_record = pending_record.mark_failed(
-                    projected_day.workout_id.clone(),
-                    error.to_string(),
-                    self.clock.now_epoch_seconds(),
-                );
-                let failed_wahoo_record = pending_wahoo_record
-                    .mark_failed(error.to_string(), self.clock.now_epoch_seconds());
-                if let Err(persist_error) = self.syncs.upsert(failed_record).await {
-                    tracing::error!(
-                        user_id,
-                        operation_key = %request.operation_key,
-                        date = %request.date,
-                        error = %persist_error,
-                        "failed to persist planned workout sync failure state"
-                    );
-                }
-                if let Err(persist_error) = self.wahoo_syncs.upsert(failed_wahoo_record).await {
-                    tracing::error!(
-                        user_id,
-                        operation_key = %request.operation_key,
-                        date = %request.date,
-                        error = %persist_error,
-                        "failed to persist planned workout Wahoo sync failure state"
-                    );
-                } else if let Err(refresh_error) = self
-                    .refresh
-                    .refresh_range_for_user(user_id, &request.date, &request.date)
-                    .await
-                {
-                    tracing::warn!(
-                        %user_id,
-                        operation_key = %request.operation_key,
-                        date = %request.date,
-                        %refresh_error,
-                        "planned workout sync failure state persisted but calendar view refresh failed"
-                    );
-                }
+                    request,
+                )
+                .await;
+                refresh_planned_workout_day(&self.refresh, user_id, request).await;
                 Err(error)
             }
         }
+    }
+
+    async fn planned_workout_sync_states(
+        &self,
+        user_id: &str,
+        canonical_entity: &CanonicalEntityRef,
+    ) -> Result<Vec<ExternalSyncState>, CalendarError> {
+        self.sync_states
+            .find_by_canonical_entities(user_id, std::slice::from_ref(canonical_entity))
+            .await
+            .map_err(map_external_sync_error)
+    }
+}
+
+async fn persist_failed_sync_state<SyncStates>(
+    sync_states: &SyncStates,
+    failed_state: ExternalSyncState,
+    user_id: &str,
+    request: &SyncPlannedWorkout,
+) where
+    SyncStates: crate::domain::external_sync::ExternalSyncStateRepository,
+{
+    if let Err(error) = sync_states.upsert(failed_state).await {
+        tracing::error!(
+            %user_id,
+            provider = request.provider.as_str(),
+            operation_key = %request.operation_key,
+            date = %request.date,
+            %error,
+            "failed to persist planned workout sync failure state"
+        );
+    }
+}
+
+async fn refresh_planned_workout_day<Refresh>(
+    refresh: &Refresh,
+    user_id: &str,
+    request: &SyncPlannedWorkout,
+) where
+    Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort,
+{
+    if let Err(error) = refresh
+        .refresh_range_for_user(user_id, &request.date, &request.date)
+        .await
+    {
+        tracing::warn!(
+            %user_id,
+            provider = request.provider.as_str(),
+            operation_key = %request.operation_key,
+            date = %request.date,
+            %error,
+            "planned workout sync state persisted but calendar view refresh failed"
+        );
     }
 }
 
@@ -395,16 +537,130 @@ where
     Ok(())
 }
 
+async fn find_existing_remote_event<Intervals>(
+    intervals: &Intervals,
+    user_id: &str,
+    projected_day: &TrainingPlanProjectedDay,
+    payload_hash: &str,
+) -> Result<Option<Event>, CalendarError>
+where
+    Intervals: crate::domain::intervals::IntervalsUseCases,
+{
+    let date_range = crate::domain::intervals::DateRange {
+        oldest: projected_day.date.clone(),
+        newest: projected_day.date.clone(),
+    };
+    let events = intervals
+        .list_events(user_id, &date_range)
+        .await
+        .map_err(map_intervals_error)?;
+
+    Ok(events.into_iter().find(|event| {
+        event.category == EventCategory::Workout
+            && event.start_date_local.starts_with(&projected_day.date)
+            && projected_event_payload_hash(
+                &projected_day.date,
+                event.name.as_deref(),
+                event.structured_workout_text(),
+            ) == payload_hash
+    }))
+}
+
+fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
+    CreateEvent {
+        category: EventCategory::Workout,
+        start_date_local: day.date.clone(),
+        event_type: Some("Ride".to_string()),
+        name: projected_workout_name(day),
+        description: projected_event_sync_body(day),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+        file_upload: None,
+    }
+}
+
+fn build_update_event(day: &TrainingPlanProjectedDay) -> UpdateEvent {
+    UpdateEvent {
+        category: Some(EventCategory::Workout),
+        start_date_local: Some(day.date.clone()),
+        event_type: Some("Ride".to_string()),
+        name: projected_workout_name(day),
+        description: projected_event_sync_body(day),
+        indoor: Some(false),
+        color: None,
+        workout_doc: None,
+        file_upload: None,
+    }
+}
+
+fn intervals_event_id(state: &ExternalSyncState) -> Option<i64> {
+    state
+        .external_id
+        .as_deref()
+        .and_then(|value| value.parse::<i64>().ok())
+}
+
+async fn resolve_existing_workout<Wahoo>(
+    wahoo: &Wahoo,
+    user_id: &str,
+    state: &ExternalSyncState,
+    workout_token: &str,
+) -> Result<Option<crate::domain::wahoo::WahooWorkout>, CalendarError>
+where
+    Wahoo: crate::domain::wahoo::WahooUseCases,
+{
+    const WAHOO_WORKOUT_LOOKUP_PAGE_SIZE: usize = 100;
+
+    if let Some(wahoo_workout_id) = state.wahoo_workout_id {
+        match wahoo.get_workout(user_id, wahoo_workout_id).await {
+            Ok(workout) => return Ok(Some(workout)),
+            Err(crate::domain::wahoo::WahooError::NotFound) => {}
+            Err(error) => return Err(map_wahoo_error(error)),
+        }
+    }
+
+    let mut page = 1;
+    loop {
+        let workouts = wahoo
+            .list_workouts(user_id, page, WAHOO_WORKOUT_LOOKUP_PAGE_SIZE)
+            .await
+            .map_err(map_wahoo_error)?;
+
+        let returned_count = workouts.workouts.len();
+        if let Some(workout) = workouts
+            .workouts
+            .into_iter()
+            .find(|workout| workout.workout_token.as_deref() == Some(workout_token))
+        {
+            return Ok(Some(workout));
+        }
+
+        if returned_count < WAHOO_WORKOUT_LOOKUP_PAGE_SIZE {
+            return Ok(None);
+        }
+
+        page += 1;
+    }
+}
+
+fn clear_stale_wahoo_workout_id(state: &ExternalSyncState) -> ExternalSyncState {
+    let mut recovered = state.clone();
+    recovered.external_id = None;
+    recovered.wahoo_workout_id = None;
+    recovered
+}
+
 async fn resolve_existing_plan<Wahoo>(
     wahoo: &Wahoo,
     user_id: &str,
-    record: &PlannedWorkoutWahooSyncRecord,
+    state: &ExternalSyncState,
     planned_workout_id: &str,
 ) -> Result<Option<crate::domain::wahoo::WahooPlan>, CalendarError>
 where
     Wahoo: crate::domain::wahoo::WahooUseCases,
 {
-    if let Some(wahoo_plan_id) = record.wahoo_plan_id {
+    if let Some(wahoo_plan_id) = state.wahoo_plan_id {
         let existing = wahoo
             .find_plan_by_external_id(user_id, planned_workout_id)
             .await
@@ -447,7 +703,7 @@ fn workout_minutes(projected_day: &TrainingPlanProjectedDay) -> Result<i32, Cale
         .lines
         .iter()
         .filter_map(|line| match line {
-            PlannedWorkoutLine::Step(step) => Some(step.duration_seconds),
+            crate::domain::intervals::PlannedWorkoutLine::Step(step) => Some(step.duration_seconds),
             _ => None,
         })
         .sum();

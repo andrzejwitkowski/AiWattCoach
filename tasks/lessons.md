@@ -10,6 +10,7 @@
 ## PR Conflict Verification
 
 - When resolving PR conflicts, fetch the current base branch ref and test the merge against that exact `origin/<base>` immediately before calling the PR conflict-free. A branch can be clean and synced with its remote head branch while still conflicting if the base branch advanced.
+- When resolving conflicts in rolling logs like `reviewers.md` or `tasks/lessons.md`, preserve entries from both branches and restore newest-first ordering instead of picking one side and dropping history.
 
 ## Signature Change Verification
 
@@ -27,6 +28,7 @@
 
 ## Test Doubles And Shapes
 
+- When a sync workflow adds a discovery or recovery step before the previous happy path, revisit the touched test doubles immediately. A fake that used to be sufficient can silently stop modeling the branch the test name claims to exercise.
 - In tests, avoid tuple aliases for multi-field call records when the field meaning matters. Use named structs or named sub-structs so assertions stay self-explanatory.
 - When a function grows past a few distinct phases, split it into small helpers named after each phase instead of leaving one long orchestration block.
 - When a test file grows large, split it by behavior group and extract shared fakes/fixtures into a local `support` module.
@@ -116,6 +118,7 @@
 
 - If a persisted snapshot exposes `start_date`, `end_date`, and a concrete `days` list, verify whether `start_date` is inclusive before writing bridge readers or tests. Do not silently encode `date > start_date` unless the model explicitly defines `start_date` as an anchor outside the visible plan.
 - When a calendar/read-model row is missing, compare the durable source collection with the first canonical reader that reconstructs domain objects from it before changing refresh or cleanup logic. A missing read-model row can be caused upstream by an over-filtering root adapter, not by the projector itself.
+- Planned-workout rebuild assertions must source sync metadata from `ExternalSyncStateRepository`, not from previously materialized `calendar_view` rows. Existing view sync may still be a fallback for other entry kinds, but planned entries intentionally clear stale view-only sync when authoritative external state is missing.
 
 ## Integration Test Scope
 

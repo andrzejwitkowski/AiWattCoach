@@ -17,7 +17,7 @@ pub fn rebuild_calendar_entries(
     let mut entries = merge_workout_entries(
         planned_workouts
             .iter()
-            .map(|workout| project_planned_workout_entry(workout, None))
+            .map(|workout| project_planned_workout_entry(workout, &[]))
             .collect(),
         completed_workouts,
     );

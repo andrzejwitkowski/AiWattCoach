@@ -390,6 +390,28 @@ mod tests {
             Box::pin(async move { Ok(state) })
         }
 
+        fn find_by_canonical_entities(
+            &self,
+            user_id: &str,
+            canonical_entities: &[CanonicalEntityRef],
+        ) -> crate::domain::external_sync::BoxFuture<
+            Result<
+                Vec<ExternalSyncState>,
+                crate::domain::external_sync::ExternalSyncRepositoryError,
+            >,
+        > {
+            let states = self.states.clone();
+            let user_id = user_id.to_string();
+            let canonical_entities = canonical_entities.to_vec();
+            Box::pin(async move {
+                Ok(states
+                    .into_iter()
+                    .filter(|state| state.user_id == user_id)
+                    .filter(|state| canonical_entities.contains(&state.canonical_entity))
+                    .collect())
+            })
+        }
+
         fn find_by_provider_and_canonical_entity(
             &self,
             _user_id: &str,
@@ -437,6 +459,50 @@ mod tests {
             Result<(), crate::domain::external_sync::ExternalSyncRepositoryError>,
         > {
             Box::pin(async { Ok(()) })
+        }
+
+        fn find_by_wahoo_plan_id(
+            &self,
+            user_id: &str,
+            wahoo_plan_id: i64,
+        ) -> crate::domain::external_sync::BoxFuture<
+            Result<
+                Option<ExternalSyncState>,
+                crate::domain::external_sync::ExternalSyncRepositoryError,
+            >,
+        > {
+            let states = self.states.clone();
+            let user_id = user_id.to_string();
+            Box::pin(async move {
+                Ok(states.into_iter().find(|state| {
+                    state.user_id == user_id
+                        && state.provider == ExternalProvider::Wahoo
+                        && state.wahoo_plan_id == Some(wahoo_plan_id)
+                }))
+            })
+        }
+
+        fn find_by_wahoo_workout_token(
+            &self,
+            user_id: &str,
+            wahoo_workout_token: &str,
+        ) -> crate::domain::external_sync::BoxFuture<
+            Result<
+                Option<ExternalSyncState>,
+                crate::domain::external_sync::ExternalSyncRepositoryError,
+            >,
+        > {
+            let states = self.states.clone();
+            let user_id = user_id.to_string();
+            let wahoo_workout_token = wahoo_workout_token.to_string();
+            Box::pin(async move {
+                Ok(states.into_iter().find(|state| {
+                    state.user_id == user_id
+                        && state.provider == ExternalProvider::Wahoo
+                        && state.wahoo_workout_token.as_deref()
+                            == Some(wahoo_workout_token.as_str())
+                }))
+            })
         }
     }
 
@@ -614,6 +680,10 @@ mod tests {
                     "wahoo-workout:1".to_string(),
                 ),
                 external_id: Some("1".to_string()),
+                wahoo_plan_external_id: None,
+                wahoo_plan_id: None,
+                wahoo_workout_id: None,
+                wahoo_workout_token: None,
                 sync_status: ExternalSyncStatus::Synced,
                 last_synced_payload_hash: None,
                 last_seen_remote_payload_hash: None,
@@ -679,6 +749,10 @@ mod tests {
                     "wahoo-workout:1".to_string(),
                 ),
                 external_id: Some("1".to_string()),
+                wahoo_plan_external_id: None,
+                wahoo_plan_id: None,
+                wahoo_workout_id: None,
+                wahoo_workout_token: None,
                 sync_status: ExternalSyncStatus::Synced,
                 last_synced_payload_hash: None,
                 last_seen_remote_payload_hash: None,
@@ -733,6 +807,10 @@ mod tests {
                     "wahoo-workout:1".to_string(),
                 ),
                 external_id: Some("1".to_string()),
+                wahoo_plan_external_id: None,
+                wahoo_plan_id: None,
+                wahoo_workout_id: None,
+                wahoo_workout_token: None,
                 sync_status: ExternalSyncStatus::Synced,
                 last_synced_payload_hash: None,
                 last_seen_remote_payload_hash: None,

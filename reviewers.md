@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-29 | user | PR #158 conflict resolution
+
+- Problem: the branch had diverged from the latest `origin/main`, so PR #158 still showed merge conflicts even though the feature branch itself was otherwise up to date. The conflict landed in `reviewers.md`, where both branches had added new top-of-file entries.
+- Fix: fetched `origin/main`, merged it into `feature/planned-workout-provider-split`, resolved `reviewers.md` by preserving both branches' entries in newest-first order, kept the already auto-merged lesson updates, and verified the merged branch before pushing.
+- Prevention: when a PR shows conflicts, do the real merge against the latest remote base branch and treat rolling logs like `reviewers.md` as append-only history that must preserve both sides in reverse-chronological order.
+
 ### 2026-04-29 | user | frontend calendar mini chart workout bars
 
 - Problem: I kept oscillating between sampling, equal-width bars, and capped raw-duration widths in `CalendarMiniChart`, which repeatedly broke either temporal order, duration proportion, or visible height differences. I also reverted planned workout heights back to raw `%FTP`, which made zone differences too subtle in the mini chart.
@@ -38,6 +44,36 @@ Read this file before planning and before implementation.
 - Problem: removing local normalization was still not enough for older completed workouts because many real interval powers cluster in a narrow watt band, so absolute `0..1300W` heights still looked visually flat in both the overview card and the detail modal.
 - Fix: switched interval-based completed bars and matched-workout bars to the same zone-visual height scale used for planned workouts when zone data exists or can be derived from FTP. Kept skyline and raw stream fallbacks on their existing normalization path.
 - Prevention: for compact visual charts, absolute watts are often too compressed to be legible across normal cycling ranges. If the UI goal is quick visual differentiation, prefer a zone-based visual scale for interval bars and reserve absolute scaling for detailed numeric charts.
+
+### 2026-04-28 | CodeRabbit | PR #158 second review follow-up
+
+- Problem: the new Wahoo retry/dedupe recovery still only searched page 1 of `list_workouts(...)`, so an older remote workout with the planned-workout marker could be missed and recreated on retry. Separately, the legacy Wahoo sync test-seeding mapper still left `external_id` empty for pending/modified records even when `wahoo_workout_id` was present, reducing fidelity versus real `ExternalSyncState` rows.
+- Fix: paginated `resolve_existing_workout(...)` across Wahoo workout pages until the marker is found or the remote list is exhausted, updated the Wahoo test double to paginate the seeded list, added a regression that finds the token on page 2, and populated `external_id` from `wahoo_workout_id` in the pending/modified legacy Wahoo sync-state mapper with focused mapper regressions.
+- Prevention: when a lookup becomes the dedupe path for retries or stale-id recovery, verify it searches the full upstream result set rather than one convenient page. For legacy-to-current test mappers, mirror every derived identifier field that runtime persistence would populate, not just the provider-specific side fields.
+
+### 2026-04-28 | user | CI follow-up for planned-workout sync split
+
+- Problem: two Rust tests still assumed pre-refactor behavior after the provider-split sync changes. The Wahoo update-path test used a fake client with no discoverable remote workout, so the new recovery flow legitimately recreated instead of updating. The `calendar_view` rebuild test still expected planned-workout sync metadata to survive purely from existing `calendar_view` rows even though rebuild now intentionally sources planned sync only from authoritative `ExternalSyncState` records and clears stale view-only planned sync.
+- Fix: seeded the Wahoo test with a listed remote workout carrying the expected marker so the update path is exercised under the new lookup flow, and changed the rebuild test to wire `TestExternalSyncStateRepository` with the planned/race sync states it expects instead of relying on stale persisted view sync.
+- Prevention: when a workflow gains recovery/discovery steps, re-check whether test doubles still model the real upstream preconditions for the intended branch. For `calendar_view` rebuilds, planned-workout sync expectations must come from authoritative external sync fixtures, not from previously persisted read-model rows.
+
+### 2026-04-28 | Copilot/CodeRabbit | PR #158 planned-workout provider split review follow-up
+
+- Problem: the provider-split branch had several lingering review gaps after earlier fixes: provider-agnostic `find_by_canonical_entities(...)` still had no matching Mongo index shape, the Wahoo uniqueness indexes did not exclude `null` values in their partial filters, the planned-workout failure banner regressed to weak/incorrect copy, indoor predicted workouts still exposed an Intervals sync action even though the backend would rewrite them as outdoor, the Wahoo sync API test no longer asserted the positive-id contract, and the external-sync import test seeding path still replaced optional Wahoo metadata with sentinel defaults instead of mirroring persisted `ExternalSyncState` rows.
+- Fix: added a supporting `{ user_id, canonical_entity_kind, canonical_entity_id }` Mongo index for batch canonical-entity lookups, tightened the Wahoo partial-unique indexes to exclude `Bson::Null`, restored the indoor sync guard in the modal until backend indoor preservation exists, introduced a neutral persistent sync-failure banner copy, strengthened the Wahoo sync API test to assert the parsed positive id, and updated the legacy Wahoo-sync test seeding helper to preserve optional ids, hashes, and timestamps without `unwrap_or_default()` sentinels.
+- Prevention: when review feedback points at repository performance or uniqueness invariants, compare the exact query filters against the declared index prefixes and partial-filter semantics instead of assuming a nearby provider-scoped index is sufficient. For UI sync affordances, re-check the backend payload contract before exposing new provider paths, and keep test-seeded compatibility adapters semantically identical to runtime persistence so review-driven regressions do not hide in test-only helpers.
+
+### 2026-04-28 | user | planned-workout sync split review loop follow-up
+
+- Problem: the provider-split planned-workout sync work left a real read-model regression where `calendar_view` refresh/rebuild paths collapsed previously modified planned workouts back to coarse `synced/pending/failed` status, so the frontend could lose the `scheduleChanged` badge after a refresh. The planned-workout modal also still showed the Wahoo-only sync-window warning for indoor workouts even though the Wahoo button was intentionally hidden there.
+- Fix: moved planned-workout `modified` detection into the shared `calendar_view` planned-workout projection logic, aligned `rebuild_for_user(...)` to reuse that projection behavior for planned entries, added focused calendar-view regressions for the modified case, and gated the Wahoo sync-window warning on the same `canSyncToWahoo` condition used to render the Wahoo button.
+- Prevention: when a sync-state refactor changes how planned-workout status is aggregated, verify every read-model path that materializes planned entries, not only the live domain-event path. If a UI warning belongs to one provider action, key it off the exact render condition for that action so hidden controls do not leave orphaned helper text behind.
+
+### 2026-04-28 | user | planned-workout sync-state cutover follow-up
+
+- Problem: the provider-specific planned-workout sync cutover left several stale test and wiring paths on the removed per-provider sync repositories, and the failure path in `src/domain/calendar/service/sync.rs` persisted failed sync state without refreshing `calendar_view`, so failed Wahoo sync badges would stay stale until a later rebuild.
+- Fix: migrated runtime and tests to the shared `ExternalSyncStateRepository`, updated REST/test wiring and Mongo sync-state fixtures for the new Wahoo metadata fields, converted calendar/calendar-view tests to provider-aware `SyncPlannedWorkout` requests plus shared sync-state fixtures, and refreshed the planned-workout day after both successful and failed sync attempts so persisted failure state shows up immediately in the calendar view.
+- Prevention: when replacing a provider-specific persistence seam with a shared external-sync model, grep both runtime and test code for the removed repository types and constructor arities before calling the refactor complete. For sync workflows that persist local failure state, verify the read-model refresh runs on both success and failure paths, not only on the happy path.
 
 ### 2026-04-27 | CodeRabbit | PR #157 planned workout repeat parsing follow-up
 

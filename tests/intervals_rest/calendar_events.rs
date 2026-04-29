@@ -634,7 +634,7 @@ async fn sync_planned_workout_requires_cycling_ftp_settings() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/2023-11-16/sync")
+                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/2023-11-16/wahoo/sync")
                 .header(header::COOKIE, session_cookie("session-1"))
                 .body(Body::empty())
                 .unwrap(),
@@ -672,7 +672,7 @@ async fn sync_planned_workout_is_scoped_to_authenticated_user() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/calendar/planned-workouts/shared-operation/2023-11-16/sync")
+                .uri("/api/calendar/planned-workouts/shared-operation/2023-11-16/intervals/sync")
                 .header(header::COOKIE, session_cookie("session-user-2"))
                 .body(Body::empty())
                 .unwrap(),
@@ -696,7 +696,7 @@ async fn sync_planned_workout_returns_validation_message_for_invalid_date() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/not-a-date/sync")
+                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/not-a-date/intervals/sync")
                 .header(header::COOKIE, session_cookie("session-1"))
                 .body(Body::empty())
                 .unwrap(),

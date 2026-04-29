@@ -39,9 +39,7 @@ use aiwattcoach::{
             llm_context_cache::MongoLlmContextCacheRepository,
             login_state::MongoLoginStateRepository,
             planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
-            planned_workout_syncs::MongoPlannedWorkoutSyncRepository,
             planned_workout_tokens::MongoPlannedWorkoutTokenRepository,
-            planned_workout_wahoo_syncs::MongoPlannedWorkoutWahooSyncRepository,
             planned_workouts::MongoPlannedWorkoutRepository,
             provider_poll_states::MongoProviderPollStateRepository,
             races::MongoRaceRepository,
@@ -244,14 +242,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     training_plan_generation_operation_repository
         .ensure_indexes()
         .await?;
-    let planned_workout_sync_repository =
-        MongoPlannedWorkoutSyncRepository::new(mongo_client.clone(), &mongo_database);
-    planned_workout_sync_repository.ensure_indexes().await?;
-    let planned_workout_wahoo_sync_repository =
-        MongoPlannedWorkoutWahooSyncRepository::new(mongo_client.clone(), &mongo_database);
-    planned_workout_wahoo_sync_repository
-        .ensure_indexes()
-        .await?;
     // These repositories are bootstrapped at startup so their durable collections
     // have indexes in place before background sync workflows start using them.
     let external_observation_repository =
@@ -388,7 +378,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let calendar_entry_view_refresh_service = CalendarEntryViewRefreshService::new(
         calendar_entry_view_repository.clone(),
         authoritative_planned_workout_repository.clone(),
-        planned_workout_sync_repository.clone(),
         authoritative_completed_workout_repository.clone(),
         authoritative_race_repository.clone(),
         authoritative_special_day_repository.clone(),
@@ -426,7 +415,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         external_sync_state_repository.clone(),
         SystemClock,
     )
-    .with_planned_workout_wahoo_syncs(planned_workout_wahoo_sync_repository.clone())
     .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone());
     let provider_polling_service = ProviderPollingService::new(
         intervals_api_client.clone(),
@@ -587,14 +575,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             (*intervals_service).clone(),
             calendar_entry_view_repository.clone(),
             training_plan_projection_repository.clone(),
-            planned_workout_sync_repository,
+            external_sync_state_repository.clone(),
             SystemClock,
         )
         .with_wahoo(
             wahoo_service
                 .clone()
                 .unwrap_or_else(|| Arc::new(aiwattcoach::domain::calendar::NoopWahooUseCases)),
-            planned_workout_wahoo_sync_repository,
             settings_repository.clone(),
         )
         .with_planned_workout_tokens(planned_workout_token_repository)

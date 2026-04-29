@@ -1,10 +1,11 @@
 use crate::domain::{
     completed_workouts::CompletedWorkout,
-    external_sync::{ExternalProvider, ExternalSyncState},
+    external_sync::{ExternalProvider, ExternalSyncState, ExternalSyncStatus},
     planned_workouts::PlannedWorkout,
     races::Race,
     special_days::{SpecialDay, SpecialDayKind},
 };
+use sha2::{Digest, Sha256};
 
 use super::{
     CalendarEntryKind, CalendarEntryRace, CalendarEntrySummary, CalendarEntrySync,
@@ -13,7 +14,7 @@ use super::{
 
 pub fn project_planned_workout_entry(
     workout: &PlannedWorkout,
-    sync_state: Option<&ExternalSyncState>,
+    sync_states: &[ExternalSyncState],
 ) -> CalendarEntryView {
     let raw_workout_doc = if workout.rest_day {
         None
@@ -47,7 +48,7 @@ pub fn project_planned_workout_entry(
         special_day_id: None,
         race: None,
         summary: None,
-        sync: map_sync_state(sync_state),
+        sync: map_planned_workout_sync_states(workout, sync_states),
     }
 }
 
@@ -241,16 +242,176 @@ fn map_sync_state(sync_state: Option<&ExternalSyncState>) -> Option<CalendarEntr
     })
 }
 
+fn map_planned_workout_sync_states(
+    workout: &PlannedWorkout,
+    sync_states: &[ExternalSyncState],
+) -> Option<CalendarEntrySync> {
+    if sync_states.is_empty() {
+        return None;
+    }
+
+    let current_payload_hash = current_planned_payload_hash(workout);
+    if sync_states.iter().any(|state| {
+        state
+            .last_synced_payload_hash
+            .as_deref()
+            .is_some_and(|hash| hash != current_payload_hash)
+    }) {
+        let linked_intervals_event_id = sync_states
+            .iter()
+            .find(|state| state.provider == ExternalProvider::Intervals)
+            .and_then(linked_intervals_event_id);
+
+        return Some(CalendarEntrySync {
+            linked_intervals_event_id,
+            sync_status: Some("modified".to_string()),
+        });
+    }
+
+    let sync_status = if sync_states
+        .iter()
+        .any(|state| state.sync_status == ExternalSyncStatus::Synced)
+    {
+        "synced"
+    } else if sync_states
+        .iter()
+        .any(|state| state.sync_status == ExternalSyncStatus::Pending)
+    {
+        "pending"
+    } else if sync_states
+        .iter()
+        .any(|state| state.sync_status == ExternalSyncStatus::Failed)
+    {
+        "failed"
+    } else {
+        return None;
+    };
+
+    let linked_intervals_event_id = sync_states
+        .iter()
+        .find(|state| state.provider == ExternalProvider::Intervals)
+        .and_then(linked_intervals_event_id);
+
+    Some(CalendarEntrySync {
+        linked_intervals_event_id,
+        sync_status: Some(sync_status.to_string()),
+    })
+}
+
+fn current_planned_payload_hash(workout: &PlannedWorkout) -> String {
+    let workout_name = planned_workout_sync_name(workout);
+    let workout_body = planned_workout_sync_body(workout);
+    let digest = Sha256::digest(format!(
+        "{}\n{}\n{}",
+        workout.date,
+        workout_name.as_deref().unwrap_or_default(),
+        workout_body.as_deref().unwrap_or_default()
+    ));
+    format!("{digest:x}")
+}
+
+fn planned_workout_sync_name(workout: &PlannedWorkout) -> Option<String> {
+    if workout.rest_day {
+        return Some("Rest Day".to_string());
+    }
+
+    workout.workout.lines.iter().find_map(|line| match line {
+        crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => Some(text.text.clone()),
+        _ => None,
+    })
+}
+
+fn planned_workout_sync_body(workout: &PlannedWorkout) -> Option<String> {
+    if workout.rest_day {
+        return None;
+    }
+
+    let workout_name = planned_workout_sync_name(workout);
+    let lines = workout
+        .workout
+        .lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let is_title_line = index == 0
+                && matches!(line, crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) if workout_name.as_deref().is_some_and(|name| text.text == name));
+
+            (!is_title_line).then(|| serialize_planned_workout_line(line))
+        })
+        .collect::<Vec<_>>();
+
+    if lines.is_empty() {
+        workout_name
+    } else {
+        Some(lines.join("\n"))
+    }
+}
+
+fn serialize_planned_workout_line(
+    line: &crate::domain::planned_workouts::PlannedWorkoutLine,
+) -> String {
+    match line {
+        crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => text.text.clone(),
+        crate::domain::planned_workouts::PlannedWorkoutLine::Repeat(repeat) => {
+            match &repeat.title {
+                Some(title) if !title.trim().is_empty() => format!("{title} {}x", repeat.count),
+                _ => format!("{}x", repeat.count),
+            }
+        }
+        crate::domain::planned_workouts::PlannedWorkoutLine::Step(step) => {
+            let duration_label = format_projected_step_duration(step.duration_seconds);
+            let ramp_label = match step.kind {
+                crate::domain::planned_workouts::PlannedWorkoutStepKind::Steady => "",
+                crate::domain::planned_workouts::PlannedWorkoutStepKind::Ramp => " ramp",
+            };
+            let target_label = match step.target {
+                crate::domain::planned_workouts::PlannedWorkoutTarget::PercentFtp { min, max } => {
+                    if (min - max).abs() < f64::EPSILON {
+                        format!("{}%", trim_decimal(min))
+                    } else {
+                        format!("{}-{}%", trim_decimal(min), trim_decimal(max))
+                    }
+                }
+                crate::domain::planned_workouts::PlannedWorkoutTarget::WattsRange { min, max } => {
+                    if min == max {
+                        format!("{min}W")
+                    } else {
+                        format!("{min}-{max}W")
+                    }
+                }
+            };
+
+            format!("- {duration_label}{ramp_label} {target_label}")
+        }
+    }
+}
+
+fn format_projected_step_duration(duration_seconds: i32) -> String {
+    if duration_seconds % 60 == 0 {
+        format!("{}m", duration_seconds / 60)
+    } else {
+        format!("{duration_seconds}s")
+    }
+}
+
+fn trim_decimal(value: f64) -> String {
+    let rounded = (value * 10.0).round() / 10.0;
+    if (rounded.fract()).abs() < f64::EPSILON {
+        format!("{rounded:.0}")
+    } else {
+        format!("{rounded:.1}")
+    }
+}
+
 fn linked_intervals_event_id(state: &ExternalSyncState) -> Option<i64> {
     if state.provider != ExternalProvider::Intervals {
         return None;
     }
 
-    state.external_id.as_deref().map(|value| {
-        value.parse::<i64>().unwrap_or_else(|error| {
-            panic!("intervals sync state external_id must parse as i64, got '{value}': {error}")
-        })
-    })
+    state
+        .external_id
+        .as_deref()
+        .and_then(|value| value.parse::<i64>().ok())
 }
 
 fn date_prefix(value: &str) -> &str {

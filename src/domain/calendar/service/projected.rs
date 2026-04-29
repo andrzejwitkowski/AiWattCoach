@@ -3,18 +3,21 @@ use sha2::{Digest, Sha256};
 use crate::domain::{
     calendar::{
         CalendarEvent, CalendarEventCategory, CalendarEventSource, CalendarProjectedWorkout,
-        PlannedWorkoutSyncRecord, PlannedWorkoutSyncStatus,
+        PlannedWorkoutSyncStatus,
     },
+    external_sync::{ExternalProvider, ExternalSyncState, ExternalSyncStatus},
     training_plan::TrainingPlanProjectedDay,
 };
 
 pub(super) fn build_projected_calendar_event(
     day: TrainingPlanProjectedDay,
-    sync_record: Option<&PlannedWorkoutSyncRecord>,
+    sync_states: &[ExternalSyncState],
+    just_synced_state: Option<ExternalSyncState>,
 ) -> CalendarEvent {
     let payload_hash = projected_day_payload_hash(&day);
-    let linked_intervals_event_id = sync_record.and_then(|record| record.intervals_event_id);
-    let status = projected_day_sync_status(sync_record, &payload_hash);
+    let linked_intervals_event_id =
+        linked_intervals_event_id(sync_states, just_synced_state.as_ref());
+    let status = projected_day_sync_status(sync_states, just_synced_state.as_ref(), &payload_hash);
     let event_id = linked_intervals_event_id
         .unwrap_or_else(|| synthetic_event_id(&day.operation_key, &day.date));
     let projected_workout_id = projected_workout_id(&day.operation_key, &day.date);
@@ -70,27 +73,46 @@ pub(super) fn serialize_projected_workout(
 }
 
 pub(super) fn projected_day_sync_status(
-    sync_record: Option<&PlannedWorkoutSyncRecord>,
+    sync_states: &[ExternalSyncState],
+    just_synced_state: Option<&ExternalSyncState>,
     payload_hash: &str,
 ) -> PlannedWorkoutSyncStatus {
-    match sync_record {
-        None => PlannedWorkoutSyncStatus::Unsynced,
-        Some(record)
-            if record
-                .synced_payload_hash
-                .as_deref()
-                .is_some_and(|hash| hash != payload_hash) =>
-        {
-            PlannedWorkoutSyncStatus::Modified
-        }
-        Some(record) => match record.status {
-            PlannedWorkoutSyncStatus::Pending => PlannedWorkoutSyncStatus::Pending,
-            PlannedWorkoutSyncStatus::Failed => PlannedWorkoutSyncStatus::Failed,
-            PlannedWorkoutSyncStatus::Synced => PlannedWorkoutSyncStatus::Synced,
-            PlannedWorkoutSyncStatus::Modified => PlannedWorkoutSyncStatus::Modified,
-            PlannedWorkoutSyncStatus::Unsynced => PlannedWorkoutSyncStatus::Unsynced,
-        },
+    let relevant_states = sync_states_for_status(sync_states, just_synced_state);
+    if relevant_states.is_empty() {
+        return PlannedWorkoutSyncStatus::Unsynced;
     }
+
+    if relevant_states.iter().any(|state| {
+        state
+            .last_synced_payload_hash
+            .as_deref()
+            .is_some_and(|hash| hash != payload_hash)
+    }) {
+        return PlannedWorkoutSyncStatus::Modified;
+    }
+
+    if relevant_states
+        .iter()
+        .any(|state| state.sync_status == ExternalSyncStatus::Synced)
+    {
+        return PlannedWorkoutSyncStatus::Synced;
+    }
+
+    if relevant_states
+        .iter()
+        .any(|state| state.sync_status == ExternalSyncStatus::Pending)
+    {
+        return PlannedWorkoutSyncStatus::Pending;
+    }
+
+    if relevant_states
+        .iter()
+        .any(|state| state.sync_status == ExternalSyncStatus::Failed)
+    {
+        return PlannedWorkoutSyncStatus::Failed;
+    }
+
+    PlannedWorkoutSyncStatus::Unsynced
 }
 
 pub(super) fn projected_day_payload_hash(day: &TrainingPlanProjectedDay) -> String {
@@ -154,12 +176,39 @@ pub(super) fn projected_workout_sync_body(day: &TrainingPlanProjectedDay) -> Opt
     }
 }
 
+pub(super) fn projected_event_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
+    projected_workout_sync_body(day)
+}
+
+fn sync_states_for_status<'a>(
+    sync_states: &'a [ExternalSyncState],
+    just_synced_state: Option<&'a ExternalSyncState>,
+) -> Vec<&'a ExternalSyncState> {
+    let mut states = sync_states.iter().collect::<Vec<_>>();
+    if let Some(just_synced_state) = just_synced_state {
+        states.retain(|state| state.provider != just_synced_state.provider);
+        states.push(just_synced_state);
+    }
+    states
+}
+
+fn linked_intervals_event_id(
+    sync_states: &[ExternalSyncState],
+    just_synced_state: Option<&ExternalSyncState>,
+) -> Option<i64> {
+    sync_states_for_status(sync_states, just_synced_state)
+        .into_iter()
+        .find(|state| state.provider == ExternalProvider::Intervals)
+        .and_then(|state| state.external_id.as_deref())
+        .and_then(|value| value.parse::<i64>().ok())
+}
+
 fn serialize_projected_workout_line(line: &crate::domain::intervals::PlannedWorkoutLine) -> String {
     match line {
         crate::domain::intervals::PlannedWorkoutLine::Text(text) => text.text.clone(),
         crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => match &repeat.title {
-            Some(title) => format!("{title} {}x", repeat.count),
-            None => format!("{}x", repeat.count),
+            Some(title) if !title.trim().is_empty() => format!("{title} {}x", repeat.count),
+            _ => format!("{}x", repeat.count),
         },
         crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
             let duration = format_projected_step_duration(step.duration_seconds);

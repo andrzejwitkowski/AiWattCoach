@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
-import { createEvent, deleteEvent, downloadFit, listCalendarEvents, listEvents, loadEvent, syncPlannedWorkout, updateEvent } from './intervals';
+import {
+  createEvent,
+  deleteEvent,
+  downloadFit,
+  listCalendarEvents,
+  listEvents,
+  loadEvent,
+  syncPlannedWorkoutToIntervals,
+  syncPlannedWorkoutToWahoo,
+  updateEvent,
+} from './intervals';
 import { createFetchMock, useFetchMock } from './testHelpers';
 
 describe('intervals api events', () => {
@@ -204,7 +214,7 @@ describe('intervals api events', () => {
     await expect(downloadFit('', 4)).rejects.toBeInstanceOf(HttpError);
   });
 
-  it('syncs one predicted planned workout', async () => {
+  it('syncs one predicted planned workout to Intervals', async () => {
     const fetchMock = useFetchMock(
       createFetchMock().mockResolvedValue(
         new Response(
@@ -239,9 +249,9 @@ describe('intervals api events', () => {
       ),
     );
 
-    const result = await syncPlannedWorkout('', 'training-plan:user-1:w1:1', '2026-03-26');
+    const result = await syncPlannedWorkoutToIntervals('', 'training-plan:user-1:w1:1', '2026-03-26');
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/calendar/planned-workouts/training-plan%3Auser-1%3Aw1%3A1/2026-03-26/sync', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/calendar/planned-workouts/training-plan%3Auser-1%3Aw1%3A1/2026-03-26/intervals/sync', {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -252,5 +262,56 @@ describe('intervals api events', () => {
     });
     expect(result.syncStatus).toBe('synced');
     expect(result.linkedIntervalsEventId).toBe(91);
+  });
+
+  it('syncs one predicted planned workout to Wahoo', async () => {
+    const fetchMock = useFetchMock(
+      createFetchMock().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 5906112577594034,
+            calendarEntryId: 'predicted:training-plan:user-1:w1:1:2026-03-26',
+            startDateLocal: '2026-03-26',
+            name: 'Predicted Build',
+            category: 'WORKOUT',
+            description: null,
+            indoor: false,
+            color: null,
+            eventDefinition: {
+              rawWorkoutDoc: '- 60min endurance',
+              intervals: [],
+              segments: [],
+              summary: { totalSegments: 1, totalDurationSeconds: 3600, estimatedNormalizedPowerWatts: null, estimatedAveragePowerWatts: null, estimatedIntensityFactor: null, estimatedTrainingStressScore: null },
+            },
+            actualWorkout: null,
+            plannedSource: 'predicted',
+            syncStatus: 'synced',
+            linkedIntervalsEventId: null,
+            projectedWorkout: {
+              projectedWorkoutId: 'training-plan:user-1:w1:1:2026-03-26',
+              operationKey: 'training-plan:user-1:w1:1',
+              date: '2026-03-26',
+              sourceWorkoutId: 'w1',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const result = await syncPlannedWorkoutToWahoo('', 'training-plan:user-1:w1:1', '2026-03-26');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/calendar/planned-workouts/training-plan%3Auser-1%3Aw1%3A1/2026-03-26/wahoo/sync', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: undefined,
+    });
+    expect(result.syncStatus).toBe('synced');
+    expect(result.id).toBe(5906112577594034);
+    expect(result.linkedIntervalsEventId).toBeNull();
   });
 });

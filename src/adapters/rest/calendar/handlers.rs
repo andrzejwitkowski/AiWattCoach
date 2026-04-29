@@ -9,7 +9,7 @@ use crate::adapters::rest::intervals::is_valid_date;
 use crate::{
     config::AppState,
     domain::{
-        calendar::{CalendarUseCases, SyncPlannedWorkout},
+        calendar::{CalendarUseCases, PlannedWorkoutSyncProvider, SyncPlannedWorkout},
         calendar_labels::CalendarLabelsUseCases,
         calendar_view::CalendarEntryViewError,
         intervals::DateRange,
@@ -20,9 +20,9 @@ use super::super::user_auth::pseudonymize_user_id;
 use super::{
     dto::{
         validation_code_message_response, validation_message_response, ListCalendarEventsQuery,
-        ManualCalendarRefreshResponseDto, SyncPlannedWorkoutPath,
+        ManualCalendarRefreshResponseDto, SyncPlannedWorkoutPath, SyncPlannedWorkoutProviderPath,
     },
-    error::{map_calendar_error, map_calendar_label_error},
+    error::{map_calendar_error, map_calendar_error_for_provider, map_calendar_label_error},
     mapping::{map_calendar_event_to_dto, map_calendar_labels_to_dto},
 };
 
@@ -118,6 +118,30 @@ pub(in crate::adapters::rest) async fn sync_planned_workout(
     headers: HeaderMap,
     Path(path): Path<SyncPlannedWorkoutPath>,
 ) -> Response {
+    sync_planned_workout_for_provider(
+        state,
+        headers,
+        path,
+        SyncPlannedWorkoutProviderPath::Intervals,
+    )
+    .await
+}
+
+pub(in crate::adapters::rest) async fn sync_planned_workout_to_wahoo(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<SyncPlannedWorkoutPath>,
+) -> Response {
+    sync_planned_workout_for_provider(state, headers, path, SyncPlannedWorkoutProviderPath::Wahoo)
+        .await
+}
+
+async fn sync_planned_workout_for_provider(
+    state: AppState,
+    headers: HeaderMap,
+    path: SyncPlannedWorkoutPath,
+    provider: SyncPlannedWorkoutProviderPath,
+) -> Response {
     let (user_id, calendar_service) = match auth_and_get_calendar_service(&state, &headers).await {
         Ok(pair) => pair,
         Err(response) => return response,
@@ -140,12 +164,24 @@ pub(in crate::adapters::rest) async fn sync_planned_workout(
             SyncPlannedWorkout {
                 operation_key: path.operation_key,
                 date: path.date,
+                provider: match provider {
+                    SyncPlannedWorkoutProviderPath::Intervals => {
+                        PlannedWorkoutSyncProvider::Intervals
+                    }
+                    SyncPlannedWorkoutProviderPath::Wahoo => PlannedWorkoutSyncProvider::Wahoo,
+                },
             },
         )
         .await
     {
         Ok(event) => (StatusCode::OK, Json(map_calendar_event_to_dto(event))).into_response(),
-        Err(error) => map_calendar_error(error),
+        Err(error) => map_calendar_error_for_provider(
+            error,
+            Some(match provider {
+                SyncPlannedWorkoutProviderPath::Intervals => PlannedWorkoutSyncProvider::Intervals,
+                SyncPlannedWorkoutProviderPath::Wahoo => PlannedWorkoutSyncProvider::Wahoo,
+            }),
+        ),
     }
 }
 
