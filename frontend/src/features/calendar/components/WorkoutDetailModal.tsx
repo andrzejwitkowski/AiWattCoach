@@ -155,7 +155,7 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
                     {state.loading ? (
                         <p className="text-sm text-slate-400">{t('calendar.loadingWorkoutDetails')}</p>
                     ) : isCompleted ? (
-                        <CompletedWorkoutDetailModal event={event} activity={activity}/>
+                        <CompletedWorkoutDetailModal apiBaseUrl={apiBaseUrl} event={event} activity={activity}/>
                     ) : event ? (
                         <PlannedWorkoutDetailModal
                             apiBaseUrl={apiBaseUrl}

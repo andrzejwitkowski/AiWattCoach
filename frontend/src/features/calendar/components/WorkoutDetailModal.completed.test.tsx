@@ -14,8 +14,9 @@ import {
   makeWorkoutSegment,
   makeWorkoutSummary,
 } from '../testData';
-import { metricCard, mockedLoadActivity, mockedLoadEvent } from './WorkoutDetailModal.testHelpers';
+import { metricCard, mockedLoadActivity, mockedLoadCompletedWorkoutSummary, mockedLoadEvent } from './WorkoutDetailModal.testHelpers';
 import { WorkoutDetailModal } from './WorkoutDetailModal';
+import { HttpError } from '../../../lib/httpClient';
 
 afterEach(() => {
   cleanup();
@@ -24,6 +25,13 @@ afterEach(() => {
 
 describe('WorkoutDetailModal completed mode', () => {
   it('loads and renders a completed workout detail view with comparison data', async () => {
+    mockedLoadCompletedWorkoutSummary.mockResolvedValue({
+      workoutId: 'a21',
+      text: 'Strong aerobic control with only a small fade near the end.',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      generatedAtEpochSeconds: 1_700_000_200,
+    });
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
         id: 21,
@@ -110,7 +118,10 @@ describe('WorkoutDetailModal completed mode', () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText(/completed workout/i)).toBeInTheDocument());
+    await waitFor(() => {
+      expect(screen.getByText(/completed workout/i)).toBeInTheDocument();
+      expect(screen.getByText('Strong aerobic control with only a small fade near the end.')).toBeInTheDocument();
+    });
 
     expect(screen.getByText('Threshold Ride')).toBeInTheDocument();
     expect(within(metricCard('Duration')).getByText('1h 00m')).toBeInTheDocument();
@@ -118,6 +129,8 @@ describe('WorkoutDetailModal completed mode', () => {
     expect(within(metricCard('TSS')).getByText('35 TSS')).toBeInTheDocument();
     expect(screen.queryByText('78 TSS')).not.toBeInTheDocument();
     expect(screen.getAllByText(/91% compliance/i)).toHaveLength(2);
+    expect(screen.getByText('Strong aerobic control with only a small fade near the end.')).toBeInTheDocument();
+    expect(screen.getByText('openai / gpt-4.1')).toBeInTheDocument();
     expect(document.querySelectorAll('[data-chart-bar="detail"]')).toHaveLength(1);
     const [bar] = Array.from(document.querySelectorAll('[data-chart-bar="detail"]')) as HTMLDivElement[];
     expect(bar.style.flexGrow).toBe('1200');
@@ -127,6 +140,7 @@ describe('WorkoutDetailModal completed mode', () => {
   });
 
   it('keeps selected activity details visible when activity reload fails for an activity-only day', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockRejectedValue(new Error('activity fetch failed'));
 
@@ -156,9 +170,11 @@ describe('WorkoutDetailModal completed mode', () => {
     expect(screen.getByText('Solo ride')).toBeInTheDocument();
     expect(screen.getByText('228 W')).toBeInTheDocument();
     expect(screen.getByText('62 TSS')).toBeInTheDocument();
+    expect(screen.getByText('No AI workout summary yet.')).toBeInTheDocument();
   });
 
   it('renders completed metrics from event actual workout when detailed activity is unavailable', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(
       makeEvent({
         id: 22,
@@ -209,6 +225,7 @@ describe('WorkoutDetailModal completed mode', () => {
   });
 
   it('shows imported activity details unavailable hint for sparse completed imports', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(
       makeActivity({
@@ -248,6 +265,7 @@ describe('WorkoutDetailModal completed mode', () => {
   });
 
   it('renders completed activity bars from skyline chart payloads', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(
       makeActivity({
@@ -287,7 +305,8 @@ describe('WorkoutDetailModal completed mode', () => {
     expect(bar.style.height).toBe('64%');
   });
 
-  it('shows seconds for sub-minute completed intervals', async () => {
+  it('shows neutral empty state for short completed workouts without AI summary', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(
       makeActivity({
@@ -320,6 +339,36 @@ describe('WorkoutDetailModal completed mode', () => {
 
     await waitFor(() => expect(screen.getByText(/completed workout/i)).toBeInTheDocument());
 
-    expect(screen.getByText('45s')).toBeInTheDocument();
+    expect(screen.getByText('No AI workout summary yet.')).toBeInTheDocument();
+  });
+
+  it('shows neutral empty state when workout summary endpoint returns 404', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a77',
+        startDateLocal: '2026-04-07T08:00:00',
+        name: 'Endurance Ride',
+        movingTimeSeconds: 3600,
+        elapsedTimeSeconds: 3600,
+        metrics: { trainingStressScore: 55, normalizedPowerWatts: 210 },
+        details: { streams: [makeActivityStream({ data: [180, 200, 220] })] },
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-04-07',
+          activity: makeActivity({ id: 'a77', startDateLocal: '2026-04-07T08:00:00', name: 'Endurance Ride' }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('No AI workout summary yet.')).toBeInTheDocument());
+    expect(screen.queryByText(/GET \/api\/completed-workouts\/a77\/summary failed/i)).not.toBeInTheDocument();
   });
 });

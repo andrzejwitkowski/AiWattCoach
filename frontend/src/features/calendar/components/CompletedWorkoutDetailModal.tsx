@@ -1,7 +1,9 @@
-import {useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
-import type {IntervalActivity, IntervalEvent} from '../../intervals/types';
+import {HttpError} from '../../../lib/httpClient';
+import {loadCompletedWorkoutSummary} from '../../intervals/api/intervals';
+import type {CompletedWorkoutSummary, IntervalActivity, IntervalEvent} from '../../intervals/types';
 import {
   buildCompletedWorkoutPreviewBars,
   buildFiveSecondAveragePowerSeries,
@@ -11,25 +13,28 @@ import {
 } from '../workoutDetails';
 import {
   buildChartIntervals,
-  CompletedIntervalsSection,
-  completedIntervalsTotalDuration,
   firstPositiveValue,
-  getDisplayableCompletedIntervals,
   matchedIntervalsTotalDuration,
   MatchedIntervalsSection,
 } from './WorkoutDetailIntervalSections';
 import {MetricCard, WorkoutBars} from './WorkoutDetailPanelPrimitives';
 import {PowerChart} from './WorkoutDetailPowerChart';
 
-export function CompletedWorkoutDetailModal({event, activity}: {
+type CompletedWorkoutDetailModalProps = {
+  apiBaseUrl: string;
   event: IntervalEvent | null;
   activity: IntervalActivity | null;
-}) {
+};
+
+export function CompletedWorkoutDetailModal({apiBaseUrl, event, activity}: CompletedWorkoutDetailModalProps) {
   const {t} = useTranslation();
   const actualWorkout = event?.actualWorkout ?? null;
   const isCompletedActivityOnly = Boolean(!event && activity);
   const isPlannedVsActual = Boolean(event && actualWorkout);
   const detailsUnavailableMessage = !actualWorkout ? activity?.detailsUnavailableReason : null;
+  const [workoutSummary, setWorkoutSummary] = useState<CompletedWorkoutSummary | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const powerSeries = actualWorkout?.powerValues.length
     ? buildFiveSecondAveragePowerSeries(actualWorkout.powerValues)
     : activity
@@ -42,7 +47,6 @@ export function CompletedWorkoutDetailModal({event, activity}: {
       ? buildMatchedWorkoutBars(actualWorkout)
       : [];
   const compliance = actualWorkout ? `${Math.round(actualWorkout.complianceScore * 100)}% ${t('calendar.compliance')}` : null;
-  const completedIntervals = !actualWorkout ? getDisplayableCompletedIntervals(activity) : [];
   const actualWorkoutDurationSeconds = actualWorkout?.matchedIntervals.reduce((maxDuration, interval) => {
     const intervalEnd = typeof interval.actualEndTimeSeconds === 'number' ? interval.actualEndTimeSeconds : 0;
     return Math.max(maxDuration, intervalEnd);
@@ -56,7 +60,6 @@ export function CompletedWorkoutDetailModal({event, activity}: {
         actualWorkoutDurationSeconds || undefined,
       )
       : 0;
-  const completedIntervalTotalDurationSeconds = completedIntervalsTotalDuration(completedIntervals, durationSeconds);
   const matchedIntervalTotalDurationSeconds = matchedIntervalsTotalDuration(actualWorkout?.matchedIntervals ?? [], durationSeconds);
   const chartIntervalOverlays = buildChartIntervals(event, actualWorkout, activity);
   const intervalRowRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -66,6 +69,47 @@ export function CompletedWorkoutDetailModal({event, activity}: {
     ? (hoveredIntervalKey ?? selectedIntervalKey)
     : null;
   const activeInterval = chartIntervalOverlays.find((interval) => interval.id === highlightedIntervalKey) ?? null;
+
+  useEffect(() => {
+    const workoutId = activity?.id ?? null;
+
+    setWorkoutSummary(null);
+    setSummaryError(null);
+
+    if (!workoutId) {
+      setIsSummaryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSummaryLoading(true);
+
+    void loadCompletedWorkoutSummary(apiBaseUrl, workoutId)
+      .then((summary) => {
+        if (cancelled) {
+          return;
+        }
+        setWorkoutSummary(summary);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        if (error instanceof HttpError && error.status === 404) {
+          return;
+        }
+        setSummaryError(error instanceof Error ? error.message : t('calendar.workoutSummaryUnavailable'));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsSummaryLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activity?.id, apiBaseUrl, t]);
 
   const normalizedPowerLabel = isCompletedActivityOnly
     ? activity?.metrics.normalizedPowerWatts !== null && activity?.metrics.normalizedPowerWatts !== undefined
@@ -115,20 +159,50 @@ export function CompletedWorkoutDetailModal({event, activity}: {
         onToggleSelectedInterval={handleToggleSelectedInterval}
         totalDurationSeconds={matchedIntervalTotalDurationSeconds}
       />
-      <CompletedIntervalsSection
-        activity={activity}
-        highlightedIntervalKey={highlightedIntervalKey}
-        intervalRowRefs={intervalRowRefs.current}
-        intervals={completedIntervals}
-        onHoverIntervalChange={setHoveredIntervalKey}
-        onToggleSelectedInterval={handleToggleSelectedInterval}
-        totalDurationSeconds={completedIntervalTotalDurationSeconds}
+      <WorkoutSummarySection
+        isLoading={isSummaryLoading}
+        summary={workoutSummary}
+        summaryError={summaryError}
       />
       {detailsUnavailableMessage ? (
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
           {detailsUnavailableMessage ?? t('calendar.importedWorkoutDetailsUnavailable')}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function WorkoutSummarySection({
+  isLoading,
+  summary,
+  summaryError,
+}: {
+  isLoading: boolean;
+  summary: CompletedWorkoutSummary | null;
+  summaryError: string | null;
+}) {
+  const {t} = useTranslation();
+
+  return (
+    <div className="rounded-2xl border border-white/6 bg-[#171a1d] p-4">
+      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">{t('calendar.workoutSummary')}</p>
+      {isLoading ? (
+        <p className="mt-4 text-sm text-slate-400">{t('calendar.loadingWorkoutSummary')}</p>
+      ) : summary ? (
+        <>
+          <div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-100">{summary.text}</div>
+          {summary.provider || summary.model ? (
+            <p className="mt-4 text-xs text-slate-500">
+              {[summary.provider, summary.model].filter(Boolean).join(' / ')}
+            </p>
+          ) : null}
+        </>
+      ) : summaryError ? (
+        <p className="mt-4 text-sm text-amber-100">{summaryError}</p>
+      ) : (
+        <p className="mt-4 text-sm text-slate-400">{t('calendar.workoutSummaryNotReady')}</p>
+      )}
     </div>
   );
 }

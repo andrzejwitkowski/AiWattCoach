@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import '../../../i18n';
 import {
   downloadFit,
+  loadCompletedWorkoutSummary,
   loadActivity,
   loadEvent,
   syncPlannedWorkoutToIntervals,
@@ -16,6 +17,7 @@ import { WorkoutDetailModal } from './WorkoutDetailModal';
 
 vi.mock('../../intervals/api/intervals', () => ({
   downloadFit: vi.fn(),
+  loadCompletedWorkoutSummary: vi.fn(),
   loadEvent: vi.fn(),
   loadActivity: vi.fn(),
   syncPlannedWorkoutToIntervals: vi.fn(),
@@ -23,6 +25,7 @@ vi.mock('../../intervals/api/intervals', () => ({
 }));
 
 export const mockedDownloadFit = vi.mocked(downloadFit);
+export const mockedLoadCompletedWorkoutSummary = vi.mocked(loadCompletedWorkoutSummary);
 export const mockedLoadActivity = vi.mocked(loadActivity);
 export const mockedLoadEvent = vi.mocked(loadEvent);
 export const mockedSyncPlannedWorkoutToIntervals = vi.mocked(syncPlannedWorkoutToIntervals);

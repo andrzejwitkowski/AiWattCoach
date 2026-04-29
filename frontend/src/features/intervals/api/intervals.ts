@@ -8,6 +8,7 @@ import {
   put,
 } from '../../../lib/httpClient';
 import {
+  completedWorkoutSummarySchema,
   createIntervalEventRequestSchema,
   intervalActivitiesResponseSchema,
   intervalActivitySchema,
@@ -97,6 +98,11 @@ export async function listActivities(apiBaseUrl: string, query: unknown) {
 export async function loadActivity(apiBaseUrl: string, activityId: string) {
   const data = await get(apiBaseUrl, `/api/completed-workouts/${activityId}`);
   return intervalActivitySchema.parse(data);
+}
+
+export async function loadCompletedWorkoutSummary(apiBaseUrl: string, workoutId: string) {
+  const data = await get(apiBaseUrl, `/api/completed-workouts/${workoutId}/summary`);
+  return completedWorkoutSummarySchema.parse(data);
 }
 
 export async function uploadActivity(apiBaseUrl: string, data: unknown) {
