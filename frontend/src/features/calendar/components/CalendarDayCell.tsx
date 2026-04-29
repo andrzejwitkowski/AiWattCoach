@@ -5,7 +5,7 @@ import { buildDayItems, isInteractiveDayItem } from '../dayItems';
 import { formatRaceSubtitle, mapRaceDisciplineLabel } from '../racePresentation';
 import type { CalendarDay, CalendarRaceLabel } from '../types';
 import { formatDayLabel } from '../utils/dateUtils';
-import { buildCompletedWorkoutPreviewBars, buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
+import { buildCompletedWorkoutPreviewBars, buildMatchedWorkoutBars, buildPlannedWorkoutBars, isPlannedWorkoutEvent, type WorkoutBar } from '../workoutDetails';
 import { CalendarMiniChart } from './CalendarMiniChart';
 
 type CalendarDayCellProps = {
@@ -481,6 +481,13 @@ function buildRaceBars(raceLabel: CalendarRaceLabel): Array<number | WorkoutBar>
 function buildBars(dayActivity: CalendarDay['activities'][number] | null, dayEvent: CalendarDay['events'][number] | null): Array<number | WorkoutBar> {
   if (dayEvent?.restDay) {
     return [18, 12, 20];
+  }
+
+  if (dayEvent?.actualWorkout?.matchedIntervals.length) {
+    const bars = buildMatchedWorkoutBars(dayEvent.actualWorkout);
+    if (bars.length > 0) {
+      return bars;
+    }
   }
 
   if (dayActivity) {
