@@ -47,6 +47,8 @@
 
 ## Small Review Fixes
 
+- If a component can render once with `selection = null` and later with real data, keep every hook call unconditional across both renders. Do not put new hooks after an early return that is skipped when the modal opens, or React will crash with a hook-order error.
+- When moving data loading into a modal/container, add a regression that renders the component with `selection={null}` first and then rerenders with a selected entity. That transition catches real open-modal hook order bugs that steady-state tests miss.
 - For detail modals, keep data fetching in a dedicated hook or container-level component and keep the rendered detail panel presentational. Do not thread transport/config props like `apiBaseUrl` into a child just to power one late-added fetch.
 - When adding a new section to an existing detail view, verify whether the requirement is additive or substitutive before deleting the previous section. If an existing section still carries distinct user value, preserve it and add the new section alongside it.
 - For completed-workout recap loading, derive the lookup id from the most authoritative completed-workout source available (`actualWorkout.activityId` before a best-effort loaded activity object) so partial activity-load failures do not suppress recap data.

@@ -73,12 +73,8 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
         };
     }, [apiBaseUrl, selection]);
 
-    if (!selection) {
-        return null;
-    }
-
-    const event = state.event;
-    const activity = state.activity;
+    const event = selection ? state.event : null;
+    const activity = selection ? state.activity : null;
     const actualWorkout = event?.actualWorkout ?? null;
     const isCompletedActivityOnly = Boolean(!event && activity);
     const isPlannedVsActual = Boolean(event && actualWorkout);
@@ -94,6 +90,10 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
         activityId: summaryTargetActivityId,
         apiBaseUrl,
     });
+
+    if (!selection) {
+        return null;
+    }
     const title = isCompletedActivityOnly
         ? activity?.name ?? activity?.activityType ?? t('calendar.workout')
         : isPlannedVsActual

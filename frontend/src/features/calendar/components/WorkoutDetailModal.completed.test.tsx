@@ -139,6 +139,54 @@ describe('WorkoutDetailModal completed mode', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('opens a completed workout from an empty selection without crashing', async () => {
+    mockedLoadCompletedWorkoutSummary.mockResolvedValue({
+      workoutId: 'a21',
+      text: 'Stable summary after opening the modal.',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      generatedAtEpochSeconds: 1_700_000_200,
+    });
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a21',
+        name: 'Threshold Ride',
+        movingTimeSeconds: 3600,
+        elapsedTimeSeconds: 3650,
+        hasHeartRate: true,
+        streamTypes: ['watts'],
+        metrics: { trainingStressScore: 78, normalizedPowerWatts: 280, intensityFactor: 0.93, averagePowerWatts: 271, ftpWatts: 300 },
+        details: {
+          streams: [makeActivityStream({ streamType: 'watts', data: [150, 210, 290, 275] })],
+        },
+      }),
+    );
+
+    const selection = makeSelection({
+      activity: makeActivity({ id: 'a21', name: 'Threshold Ride', hasHeartRate: true }),
+    });
+
+    const {rerender} = render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={null}
+        onClose={vi.fn()}
+      />,
+    );
+
+    rerender(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={selection}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Stable summary after opening the modal.')).toBeInTheDocument());
+    expect(screen.getByText(/completed workout/i)).toBeInTheDocument();
+  });
+
   it('keeps selected activity details visible when activity reload fails for an activity-only day', async () => {
     mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);

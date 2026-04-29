@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-29 | user | workout detail modal black screen after summary refactor
+
+- Problem: after moving completed-workout summary loading into `WorkoutDetailModal`, the new `useCompletedWorkoutSummary(...)` call sat below `if (!selection) return null`. Opening workout details changes the modal from `selection = null` to a real selection, so React saw a different number of hooks between renders and crashed the page with a minified hook-order error.
+- Fix: moved the derived detail state and `useCompletedWorkoutSummary(...)` above the early return, passed `activityId: null` when no selection exists, and added a focused frontend regression that renders the modal with `selection={null}` first and then rerenders with a completed workout.
+- Prevention: whenever a modal or detail container can mount empty and later receive a selection, verify hook order across that exact transition. New hooks must stay unconditional across both renders, and the test suite should include a `null -> selected` rerender case.
+
 ### 2026-04-29 | user/Copilot | PR #162 completed workout summary review
 
 - Problem: the completed-workout summary change put network fetching directly inside `CompletedWorkoutDetailModal`, drilled `apiBaseUrl` into a child view just for that fetch, removed the existing completed-only interval breakdown instead of adding the recap alongside it, relied only on `activity?.id` so summary loading broke when the detailed activity fetch failed but `actualWorkout.activityId` was still known, surfaced raw `HttpError` text to the UI, and used `{workout_id}` on the new completed-workout summary route even though the surrounding REST surface already names that path segment `{activity_id}`.
