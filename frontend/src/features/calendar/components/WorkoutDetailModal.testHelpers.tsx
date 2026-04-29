@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import '../../../i18n';
+import { HttpError } from '../../../lib/httpClient';
 import {
   downloadFit,
   loadCompletedWorkoutSummary,
@@ -30,6 +31,10 @@ export const mockedLoadActivity = vi.mocked(loadActivity);
 export const mockedLoadEvent = vi.mocked(loadEvent);
 export const mockedSyncPlannedWorkoutToIntervals = vi.mocked(syncPlannedWorkoutToIntervals);
 export const mockedSyncPlannedWorkoutToWahoo = vi.mocked(syncPlannedWorkoutToWahoo);
+
+mockedLoadCompletedWorkoutSummary.mockImplementation(async () => {
+  throw new HttpError(404, 'missing');
+});
 
 type RenderWorkoutDetailModalOptions = {
   selection?: WorkoutDetailSelection;

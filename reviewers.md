@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-29 | user/Copilot | PR #162 completed workout summary review
+
+- Problem: the completed-workout summary change put network fetching directly inside `CompletedWorkoutDetailModal`, drilled `apiBaseUrl` into a child view just for that fetch, removed the existing completed-only interval breakdown instead of adding the recap alongside it, relied only on `activity?.id` so summary loading broke when the detailed activity fetch failed but `actualWorkout.activityId` was still known, surfaced raw `HttpError` text to the UI, and used `{workout_id}` on the new completed-workout summary route even though the surrounding REST surface already names that path segment `{activity_id}`.
+- Fix: extracted `useCompletedWorkoutSummary(...)` in `frontend/src/features/calendar/hooks/useCompletedWorkoutSummary.ts` and moved summary loading back to `WorkoutDetailModal`, made `CompletedWorkoutDetailModal` presentational again, restored `CompletedIntervalsSection` for activity-only completed workouts while keeping the AI summary section, resolved the summary target id from `event.actualWorkout.activityId ?? activity?.id`, mapped non-404 `HttpError` failures to the localized `calendar.workoutSummaryUnavailable` message, renamed the route/path field to `{activity_id}`, and added focused frontend regressions plus backend route verification.
+- Prevention: when adding a new data fetch to a modal/detail flow, keep container components responsible for loading and keep child detail panels presentational. Before removing an existing detail section, verify the user explicitly wants replacement rather than addition, and re-check identifier source, friendly error copy, and REST path naming consistency against neighboring endpoints before sending the PR.
+
 ### 2026-04-29 | user | provider_poll_states parked sentinel crash
 
 - Problem: parked provider poll states intentionally used `next_due_at_epoch_seconds = i64::MAX` as a disabled sentinel, but the Mongo write mapper still tried to mirror that value into BSON `next_due_at`, which exceeds the `DateTime` range and panicked the release on startup.

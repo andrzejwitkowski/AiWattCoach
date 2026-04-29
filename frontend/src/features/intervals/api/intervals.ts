@@ -100,8 +100,8 @@ export async function loadActivity(apiBaseUrl: string, activityId: string) {
   return intervalActivitySchema.parse(data);
 }
 
-export async function loadCompletedWorkoutSummary(apiBaseUrl: string, workoutId: string) {
-  const data = await get(apiBaseUrl, `/api/completed-workouts/${workoutId}/summary`);
+export async function loadCompletedWorkoutSummary(apiBaseUrl: string, activityId: string) {
+  const data = await get(apiBaseUrl, `/api/completed-workouts/${activityId}/summary`);
   return completedWorkoutSummarySchema.parse(data);
 }
 

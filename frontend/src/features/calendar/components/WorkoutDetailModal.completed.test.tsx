@@ -224,6 +224,52 @@ describe('WorkoutDetailModal completed mode', () => {
     expect(within(metricCard('Duration')).getByText('24m')).toBeInTheDocument();
   });
 
+  it('loads workout summary using actual workout activity id when detailed activity is unavailable', async () => {
+    mockedLoadCompletedWorkoutSummary.mockResolvedValue({
+      workoutId: 'a22',
+      text: 'Recap loaded from actual workout fallback id.',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      generatedAtEpochSeconds: 1_700_000_200,
+    });
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 22,
+        startDateLocal: '2026-03-26',
+        name: 'Over-Unders',
+        indoor: false,
+        eventDefinition: makeEventDefinition({ rawWorkoutDoc: '- 4x6min' }),
+        actualWorkout: makeActualWorkout({
+          activityId: 'a22',
+          activityName: 'Executed Over-Unders',
+          powerValues: [200, 260, 310],
+          trainingStressScore: 81,
+          normalizedPowerWatts: 272,
+          complianceScore: 0.87,
+          matchedIntervals: [
+            makeMatchedInterval({ plannedLabel: 'Over 1', actualStartTimeSeconds: 0, actualEndTimeSeconds: 720 }),
+          ],
+        }),
+      }),
+    );
+    mockedLoadActivity.mockRejectedValue(new Error('activity fetch failed'));
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-03-26',
+          event: makeEvent({ id: 22, startDateLocal: '2026-03-26', name: 'Over-Unders', indoor: false }),
+          activity: makeActivity({ id: 'missing-activity', startDateLocal: '2026-03-26T08:00:00', name: null, hasHeartRate: false }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Recap loaded from actual workout fallback id.')).toBeInTheDocument());
+    expect(mockedLoadCompletedWorkoutSummary).toHaveBeenCalledWith('', 'a22');
+  });
+
   it('shows imported activity details unavailable hint for sparse completed imports', async () => {
     mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);
@@ -370,5 +416,35 @@ describe('WorkoutDetailModal completed mode', () => {
 
     await waitFor(() => expect(screen.getByText('No AI workout summary yet.')).toBeInTheDocument());
     expect(screen.queryByText(/GET \/api\/completed-workouts\/a77\/summary failed/i)).not.toBeInTheDocument();
+  });
+
+  it('shows friendly summary error for non-404 http failures', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(503, 'GET /api/completed-workouts/a77/summary failed: 503'));
+    mockedLoadEvent.mockResolvedValue(undefined as never);
+    mockedLoadActivity.mockResolvedValue(
+      makeActivity({
+        id: 'a88',
+        startDateLocal: '2026-04-08T08:00:00',
+        name: 'Service Error Ride',
+        movingTimeSeconds: 3600,
+        elapsedTimeSeconds: 3600,
+        metrics: { trainingStressScore: 55, normalizedPowerWatts: 210 },
+        details: { streams: [makeActivityStream({ data: [180, 200, 220] })] },
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: '2026-04-08',
+          activity: makeActivity({ id: 'a88', startDateLocal: '2026-04-08T08:00:00', name: 'Service Error Ride' }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Unable to load the AI workout summary right now.')).toBeInTheDocument());
+    expect(screen.queryByText(/GET \/api\/completed-workouts\/a88\/summary failed/i)).not.toBeInTheDocument();
   });
 });

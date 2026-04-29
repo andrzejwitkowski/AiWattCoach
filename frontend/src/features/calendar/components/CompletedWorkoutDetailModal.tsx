@@ -1,8 +1,6 @@
-import {useEffect, useRef, useState} from 'react';
+import {useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
-import {HttpError} from '../../../lib/httpClient';
-import {loadCompletedWorkoutSummary} from '../../intervals/api/intervals';
 import type {CompletedWorkoutSummary, IntervalActivity, IntervalEvent} from '../../intervals/types';
 import {
   buildCompletedWorkoutPreviewBars,
@@ -13,7 +11,10 @@ import {
 } from '../workoutDetails';
 import {
   buildChartIntervals,
+  CompletedIntervalsSection,
+  completedIntervalsTotalDuration,
   firstPositiveValue,
+  getDisplayableCompletedIntervals,
   matchedIntervalsTotalDuration,
   MatchedIntervalsSection,
 } from './WorkoutDetailIntervalSections';
@@ -21,20 +22,25 @@ import {MetricCard, WorkoutBars} from './WorkoutDetailPanelPrimitives';
 import {PowerChart} from './WorkoutDetailPowerChart';
 
 type CompletedWorkoutDetailModalProps = {
-  apiBaseUrl: string;
   event: IntervalEvent | null;
   activity: IntervalActivity | null;
+  workoutSummary: CompletedWorkoutSummary | null;
+  isSummaryLoading: boolean;
+  summaryError: string | null;
 };
 
-export function CompletedWorkoutDetailModal({apiBaseUrl, event, activity}: CompletedWorkoutDetailModalProps) {
+export function CompletedWorkoutDetailModal({
+  event,
+  activity,
+  workoutSummary,
+  isSummaryLoading,
+  summaryError,
+}: CompletedWorkoutDetailModalProps) {
   const {t} = useTranslation();
   const actualWorkout = event?.actualWorkout ?? null;
   const isCompletedActivityOnly = Boolean(!event && activity);
   const isPlannedVsActual = Boolean(event && actualWorkout);
   const detailsUnavailableMessage = !actualWorkout ? activity?.detailsUnavailableReason : null;
-  const [workoutSummary, setWorkoutSummary] = useState<CompletedWorkoutSummary | null>(null);
-  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
   const powerSeries = actualWorkout?.powerValues.length
     ? buildFiveSecondAveragePowerSeries(actualWorkout.powerValues)
     : activity
@@ -60,6 +66,8 @@ export function CompletedWorkoutDetailModal({apiBaseUrl, event, activity}: Compl
         actualWorkoutDurationSeconds || undefined,
       )
       : 0;
+  const completedIntervals = getDisplayableCompletedIntervals(activity);
+  const completedIntervalTotalDurationSeconds = completedIntervalsTotalDuration(completedIntervals, durationSeconds);
   const matchedIntervalTotalDurationSeconds = matchedIntervalsTotalDuration(actualWorkout?.matchedIntervals ?? [], durationSeconds);
   const chartIntervalOverlays = buildChartIntervals(event, actualWorkout, activity);
   const intervalRowRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -69,47 +77,6 @@ export function CompletedWorkoutDetailModal({apiBaseUrl, event, activity}: Compl
     ? (hoveredIntervalKey ?? selectedIntervalKey)
     : null;
   const activeInterval = chartIntervalOverlays.find((interval) => interval.id === highlightedIntervalKey) ?? null;
-
-  useEffect(() => {
-    const workoutId = activity?.id ?? null;
-
-    setWorkoutSummary(null);
-    setSummaryError(null);
-
-    if (!workoutId) {
-      setIsSummaryLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsSummaryLoading(true);
-
-    void loadCompletedWorkoutSummary(apiBaseUrl, workoutId)
-      .then((summary) => {
-        if (cancelled) {
-          return;
-        }
-        setWorkoutSummary(summary);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        if (error instanceof HttpError && error.status === 404) {
-          return;
-        }
-        setSummaryError(error instanceof Error ? error.message : t('calendar.workoutSummaryUnavailable'));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsSummaryLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activity?.id, apiBaseUrl, t]);
 
   const normalizedPowerLabel = isCompletedActivityOnly
     ? activity?.metrics.normalizedPowerWatts !== null && activity?.metrics.normalizedPowerWatts !== undefined
@@ -159,6 +126,17 @@ export function CompletedWorkoutDetailModal({apiBaseUrl, event, activity}: Compl
         onToggleSelectedInterval={handleToggleSelectedInterval}
         totalDurationSeconds={matchedIntervalTotalDurationSeconds}
       />
+      {isCompletedActivityOnly ? (
+        <CompletedIntervalsSection
+          activity={activity}
+          highlightedIntervalKey={highlightedIntervalKey}
+          intervalRowRefs={intervalRowRefs.current}
+          intervals={completedIntervals}
+          onHoverIntervalChange={setHoveredIntervalKey}
+          onToggleSelectedInterval={handleToggleSelectedInterval}
+          totalDurationSeconds={completedIntervalTotalDurationSeconds}
+        />
+      ) : null}
       <WorkoutSummarySection
         isLoading={isSummaryLoading}
         summary={workoutSummary}

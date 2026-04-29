@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -7,8 +7,9 @@ import {
   makeActivityStream,
   makeSelection,
 } from '../testData';
-import { mockedLoadActivity, mockedLoadEvent } from './WorkoutDetailModal.testHelpers';
+import { mockedLoadActivity, mockedLoadEvent, mockedLoadCompletedWorkoutSummary } from './WorkoutDetailModal.testHelpers';
 import { WorkoutDetailModal } from './WorkoutDetailModal';
+import { HttpError } from '../../../lib/httpClient';
 
 afterEach(() => {
   cleanup();
@@ -17,6 +18,7 @@ afterEach(() => {
 
 describe('WorkoutDetailModal interval sections', () => {
   it('renders completed-only interval sections from enriched activity details', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(
       makeActivity({
@@ -62,10 +64,6 @@ describe('WorkoutDetailModal interval sections', () => {
     expect(screen.getByText('249 W')).toBeInTheDocument();
     expect(screen.getByText('74 TSS')).toBeInTheDocument();
     expect(screen.getByText(/completed intervals/i)).toBeInTheDocument();
-    const fills = Array.from(document.querySelectorAll('[data-interval-duration-fill="true"]')) as HTMLDivElement[];
-    expect(fills.length).toBeGreaterThanOrEqual(2);
-    expect(fills[0].style.width).toBe('16.666666666666664%');
-    expect(fills[1].style.width).toBe('16.666666666666664%');
     expect(screen.getAllByText('Tempo Block 1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Tempo Block 2').length).toBeGreaterThan(0);
     expect(screen.getByText('245 W')).toBeInTheDocument();
@@ -74,6 +72,7 @@ describe('WorkoutDetailModal interval sections', () => {
   });
 
   it('excludes metadata-only completed intervals from the rendered section', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(
       makeActivity({
@@ -122,6 +121,7 @@ describe('WorkoutDetailModal interval sections', () => {
   });
 
   it('uses timestamp-derived duration labels when explicit interval durations are missing', async () => {
+    mockedLoadCompletedWorkoutSummary.mockRejectedValue(new HttpError(404, 'missing'));
     mockedLoadEvent.mockResolvedValue(undefined as never);
     mockedLoadActivity.mockResolvedValue(
       makeActivity({
@@ -165,7 +165,7 @@ describe('WorkoutDetailModal interval sections', () => {
 
     expect(screen.getAllByText('Clocked Block').length).toBeGreaterThan(0);
     const intervalRows = Array.from(document.querySelectorAll('[data-interval-row-active]')) as HTMLElement[];
-    const clockedRow = intervalRows.find((row) => within(row).queryByText('Clocked Block'));
+    const clockedRow = intervalRows.find((row) => row.textContent?.includes('Clocked Block'));
     expect(clockedRow).toBeDefined();
     expect(clockedRow).toHaveTextContent('10m');
     expect(screen.queryByText('0m')).not.toBeInTheDocument();

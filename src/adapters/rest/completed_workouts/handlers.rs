@@ -23,7 +23,7 @@ pub(crate) struct CompletedWorkoutPath {
 
 #[derive(Deserialize)]
 pub(crate) struct CompletedWorkoutSummaryPath {
-    pub workout_id: String,
+    pub activity_id: String,
 }
 
 async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Result<String, Response> {
@@ -112,7 +112,7 @@ pub(crate) async fn get_completed_workout_summary(
     };
 
     match completed_workout_service
-        .get_completed_workout(&user_id, &path.workout_id)
+        .get_completed_workout(&user_id, &path.activity_id)
         .await
     {
         Ok(Some(_)) => {}
@@ -121,7 +121,7 @@ pub(crate) async fn get_completed_workout_summary(
     }
 
     match workout_summary_service
-        .get_summary(&user_id, &path.workout_id)
+        .get_summary(&user_id, &path.activity_id)
         .await
     {
         Ok(summary) => match map_completed_workout_summary_to_dto(summary) {

@@ -132,7 +132,7 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     get(completed_workouts::get_completed_workout),
                 )
                 .route(
-                    "/api/completed-workouts/{workout_id}/summary",
+                    "/api/completed-workouts/{activity_id}/summary",
                     get(completed_workouts::get_completed_workout_summary),
                 )
                 .route(
