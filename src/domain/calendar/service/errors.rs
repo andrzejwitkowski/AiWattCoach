@@ -1,7 +1,7 @@
 use crate::domain::{
     calendar_view::CalendarEntryViewError, completed_workouts::CompletedWorkoutError,
-    planned_workout_tokens::PlannedWorkoutTokenError,
-    planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncError, settings::SettingsError,
+    external_sync::ExternalSyncRepositoryError, intervals::IntervalsError,
+    planned_workout_tokens::PlannedWorkoutTokenError, settings::SettingsError,
     training_plan::TrainingPlanError, wahoo::WahooError,
 };
 
@@ -24,12 +24,25 @@ pub(super) fn map_planned_workout_token_error(error: PlannedWorkoutTokenError) -
 pub(super) fn map_calendar_entry_view_error(error: CalendarEntryViewError) -> CalendarError {
     match error {
         CalendarEntryViewError::Repository(message) => CalendarError::Internal(message),
+        CalendarEntryViewError::InvariantViolation(message) => CalendarError::Internal(message),
     }
 }
 
 pub(super) fn map_completed_workout_error(error: CompletedWorkoutError) -> CalendarError {
     match error {
         CompletedWorkoutError::Repository(message) => CalendarError::Internal(message),
+    }
+}
+
+pub(super) fn map_intervals_error(error: IntervalsError) -> CalendarError {
+    match error {
+        IntervalsError::Unauthenticated => CalendarError::Unauthenticated,
+        IntervalsError::CredentialsNotConfigured => CalendarError::CredentialsNotConfigured,
+        IntervalsError::ApiError(message) | IntervalsError::ConnectionError(message) => {
+            CalendarError::Unavailable(message)
+        }
+        IntervalsError::NotFound => CalendarError::NotFound,
+        IntervalsError::Internal(message) => CalendarError::Internal(message),
     }
 }
 
@@ -46,9 +59,10 @@ pub(super) fn map_wahoo_error(error: WahooError) -> CalendarError {
     }
 }
 
-pub(super) fn map_wahoo_sync_error(error: PlannedWorkoutWahooSyncError) -> CalendarError {
+pub(super) fn map_external_sync_error(error: ExternalSyncRepositoryError) -> CalendarError {
     match error {
-        PlannedWorkoutWahooSyncError::Repository(message) => CalendarError::Internal(message),
+        ExternalSyncRepositoryError::Storage(message)
+        | ExternalSyncRepositoryError::CorruptData(message) => CalendarError::Internal(message),
     }
 }
 

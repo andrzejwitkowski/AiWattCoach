@@ -1,9 +1,9 @@
 use futures::TryStreamExt;
-use mongodb::bson::{doc, Bson};
+use mongodb::bson::{doc, Bson, DateTime};
 
 use super::super::error::is_duplicate_key_error;
 use super::mapping::{
-    map_document_to_task, map_task_to_document, status_as_str, storage_error,
+    bson_datetime, map_document_to_task, map_task_to_document, status_as_str, storage_error,
     terminal_task_cleanup_bson,
 };
 use super::MongoTaskRepository;
@@ -85,11 +85,25 @@ impl TaskRepository for MongoTaskRepository {
                             "status": status_as_str(&TaskStatus::Running),
                             "claimed_by": &request.worker_id,
                             "lease_expires_at_epoch_seconds": request.lease_expires_at_epoch_seconds,
+                            "lease_expires_at": bson_or_null(
+                                bson_datetime(Some(request.lease_expires_at_epoch_seconds), "lease_expires_at")?
+                            ),
                             "last_heartbeat_at_epoch_seconds": request.now_epoch_seconds,
+                            "last_heartbeat_at": bson_or_null(
+                                bson_datetime(Some(request.now_epoch_seconds), "last_heartbeat_at")?
+                            ),
                             "updated_at_epoch_seconds": request.now_epoch_seconds,
+                            "updated_at": bson_or_null(
+                                bson_datetime(Some(request.now_epoch_seconds), "updated_at")?
+                            ),
                             "started_at_epoch_seconds": request.now_epoch_seconds,
+                            "started_at": bson_or_null(
+                                bson_datetime(Some(request.now_epoch_seconds), "started_at")?
+                            ),
                             "finished_at_epoch_seconds": Bson::Null,
+                            "finished_at": Bson::Null,
                             "timed_out_at_epoch_seconds": Bson::Null,
+                            "timed_out_at": Bson::Null,
                             "cleanup_after": Bson::Null,
                         },
                         "$inc": { "attempt_count": 1_i64 },
@@ -122,8 +136,17 @@ impl TaskRepository for MongoTaskRepository {
                     doc! {
                         "$set": {
                             "last_heartbeat_at_epoch_seconds": request.last_heartbeat_at_epoch_seconds,
+                            "last_heartbeat_at": bson_or_null(
+                                bson_datetime(Some(request.last_heartbeat_at_epoch_seconds), "last_heartbeat_at")?
+                            ),
                             "lease_expires_at_epoch_seconds": request.lease_expires_at_epoch_seconds,
+                            "lease_expires_at": bson_or_null(
+                                bson_datetime(Some(request.lease_expires_at_epoch_seconds), "lease_expires_at")?
+                            ),
                             "updated_at_epoch_seconds": request.last_heartbeat_at_epoch_seconds,
+                            "updated_at": bson_or_null(
+                                bson_datetime(Some(request.last_heartbeat_at_epoch_seconds), "updated_at")?
+                            ),
                         },
                     },
                 )
@@ -154,6 +177,9 @@ impl TaskRepository for MongoTaskRepository {
                         "$set": {
                             "checkpoint": mongodb::bson::to_bson(&request.checkpoint).map_err(|error| TaskSchedulerError::Repository(error.to_string()))?,
                             "updated_at_epoch_seconds": request.updated_at_epoch_seconds,
+                            "updated_at": bson_or_null(
+                                bson_datetime(Some(request.updated_at_epoch_seconds), "updated_at")?
+                            ),
                         },
                     },
                 )
@@ -176,8 +202,15 @@ impl TaskRepository for MongoTaskRepository {
             let mut set = doc! {
                 "status": status_as_str(&TaskStatus::Completed),
                 "updated_at_epoch_seconds": request.completed_at_epoch_seconds,
+                "updated_at": bson_or_null(
+                    bson_datetime(Some(request.completed_at_epoch_seconds), "updated_at")?
+                ),
                 "finished_at_epoch_seconds": request.completed_at_epoch_seconds,
+                "finished_at": bson_or_null(
+                    bson_datetime(Some(request.completed_at_epoch_seconds), "finished_at")?
+                ),
                 "timed_out_at_epoch_seconds": Bson::Null,
+                "timed_out_at": Bson::Null,
                 "cleanup_after": terminal_task_cleanup_bson(&TaskStatus::Completed, request.completed_at_epoch_seconds)?,
             };
             if let Some(checkpoint) = request.checkpoint {
@@ -200,7 +233,9 @@ impl TaskRepository for MongoTaskRepository {
                         "$unset": {
                             "claimed_by": "",
                             "lease_expires_at_epoch_seconds": "",
+                            "lease_expires_at": "",
                             "last_heartbeat_at_epoch_seconds": "",
+                            "last_heartbeat_at": "",
                             "error_message": "",
                         },
                     },
@@ -231,8 +266,22 @@ impl TaskRepository for MongoTaskRepository {
                 "status": status_as_str(&next_status),
                 "error_message": request.error_message,
                 "updated_at_epoch_seconds": request.failed_at_epoch_seconds,
+                "updated_at": bson_or_null(
+                    bson_datetime(Some(request.failed_at_epoch_seconds), "updated_at")?
+                ),
                 "next_attempt_at_epoch_seconds": request.retry_at_epoch_seconds.unwrap_or(request.failed_at_epoch_seconds),
+                "next_attempt_at": bson_or_null(
+                    bson_datetime(
+                        Some(request.retry_at_epoch_seconds.unwrap_or(request.failed_at_epoch_seconds)),
+                        "next_attempt_at",
+                    )?
+                ),
                 "finished_at_epoch_seconds": if matches!(next_status, TaskStatus::Failed) { Bson::Int64(request.failed_at_epoch_seconds) } else { Bson::Null },
+                "finished_at": if matches!(next_status, TaskStatus::Failed) {
+                    bson_or_null(bson_datetime(Some(request.failed_at_epoch_seconds), "finished_at")?)
+                } else {
+                    Bson::Null
+                },
                 "cleanup_after": if matches!(next_status, TaskStatus::Failed) { terminal_task_cleanup_bson(&TaskStatus::Failed, request.failed_at_epoch_seconds)? } else { Bson::Null },
             };
             if let Some(checkpoint) = request.checkpoint {
@@ -255,7 +304,9 @@ impl TaskRepository for MongoTaskRepository {
                         "$unset": {
                             "claimed_by": "",
                             "lease_expires_at_epoch_seconds": "",
+                            "lease_expires_at": "",
                             "last_heartbeat_at_epoch_seconds": "",
+                            "last_heartbeat_at": "",
                         },
                     },
                 )
@@ -333,14 +384,25 @@ impl TaskRepository for MongoTaskRepository {
                         "$set": {
                             "status": status_as_str(&TaskStatus::TimedOut),
                             "timed_out_at_epoch_seconds": request.timed_out_at_epoch_seconds,
+                            "timed_out_at": bson_or_null(
+                                bson_datetime(Some(request.timed_out_at_epoch_seconds), "timed_out_at")?
+                            ),
                             "updated_at_epoch_seconds": request.timed_out_at_epoch_seconds,
+                            "updated_at": bson_or_null(
+                                bson_datetime(Some(request.timed_out_at_epoch_seconds), "updated_at")?
+                            ),
                             "finished_at_epoch_seconds": request.timed_out_at_epoch_seconds,
+                            "finished_at": bson_or_null(
+                                bson_datetime(Some(request.timed_out_at_epoch_seconds), "finished_at")?
+                            ),
                             "cleanup_after": terminal_task_cleanup_bson(&TaskStatus::TimedOut, request.timed_out_at_epoch_seconds)?,
                         },
                         "$unset": {
                             "claimed_by": "",
                             "lease_expires_at_epoch_seconds": "",
+                            "lease_expires_at": "",
                             "last_heartbeat_at_epoch_seconds": "",
+                            "last_heartbeat_at": "",
                         },
                     },
                 )
@@ -385,16 +447,27 @@ impl TaskRepository for MongoTaskRepository {
                         "$set": {
                             "status": status_as_str(&TaskStatus::RetryScheduled),
                             "next_attempt_at_epoch_seconds": request.recovered_at_epoch_seconds,
+                            "next_attempt_at": bson_or_null(
+                                bson_datetime(Some(request.recovered_at_epoch_seconds), "next_attempt_at")?
+                            ),
                             "updated_at_epoch_seconds": request.recovered_at_epoch_seconds,
+                            "updated_at": bson_or_null(
+                                bson_datetime(Some(request.recovered_at_epoch_seconds), "updated_at")?
+                            ),
                             "started_at_epoch_seconds": Bson::Null,
+                            "started_at": Bson::Null,
                             "finished_at_epoch_seconds": Bson::Null,
+                            "finished_at": Bson::Null,
                             "timed_out_at_epoch_seconds": Bson::Null,
+                            "timed_out_at": Bson::Null,
                             "cleanup_after": Bson::Null,
                         },
                         "$unset": {
                             "claimed_by": "",
                             "lease_expires_at_epoch_seconds": "",
+                            "lease_expires_at": "",
                             "last_heartbeat_at_epoch_seconds": "",
+                            "last_heartbeat_at": "",
                         },
                     },
                 )
@@ -428,15 +501,25 @@ impl TaskRepository for MongoTaskRepository {
                         "$set": {
                             "status": status_as_str(&TaskStatus::Queued),
                             "next_attempt_at_epoch_seconds": request.retried_at_epoch_seconds,
+                            "next_attempt_at": bson_or_null(
+                                bson_datetime(Some(request.retried_at_epoch_seconds), "next_attempt_at")?
+                            ),
                             "updated_at_epoch_seconds": request.retried_at_epoch_seconds,
+                            "updated_at": bson_or_null(
+                                bson_datetime(Some(request.retried_at_epoch_seconds), "updated_at")?
+                            ),
                             "timed_out_at_epoch_seconds": Bson::Null,
+                            "timed_out_at": Bson::Null,
                             "started_at_epoch_seconds": Bson::Null,
+                            "started_at": Bson::Null,
                             "finished_at_epoch_seconds": Bson::Null,
+                            "finished_at": Bson::Null,
                             "cleanup_after": Bson::Null,
                         },
                         "$unset": {
                             "claimed_by": "",
                             "lease_expires_at_epoch_seconds": "",
+                            "lease_expires_at": "",
                             "error_message": "",
                         },
                     },
@@ -509,4 +592,8 @@ impl TaskRepository for MongoTaskRepository {
                 .collect::<Result<Vec<_>, _>>()
         })
     }
+}
+
+fn bson_or_null(value: Option<DateTime>) -> Bson {
+    value.map(Bson::DateTime).unwrap_or(Bson::Null)
 }

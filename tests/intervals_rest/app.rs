@@ -8,19 +8,18 @@ use aiwattcoach::{
     build_app_with_frontend_dist,
     config::AppState,
     domain::{
-        calendar::{
-            BoxFuture as CalendarBoxFuture, CalendarError, CalendarService,
-            HiddenCalendarEventSource, PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository,
-        },
+        calendar::{CalendarService, HiddenCalendarEventSource},
         calendar_labels::{CalendarLabelSource, CalendarLabelsService},
         calendar_view::{
-            CalendarEntryKind, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
-            CalendarEntryViewRepository,
+            BoxFuture as CalendarBoxFuture, CalendarEntryKind, CalendarEntrySync,
+            CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRepository,
+            ManualCalendarRefreshResult, ManualCalendarRefreshUseCases,
         },
         completed_workouts::{
             CompletedWorkout, CompletedWorkoutError, CompletedWorkoutReadService,
             CompletedWorkoutRepository,
         },
+        external_sync::NoopExternalSyncStateRepository,
         identity::{Clock, IdentityUseCases},
         intervals::{DateRange, IntervalsUseCases},
         races::RaceUseCases,
@@ -81,6 +80,51 @@ pub(crate) async fn intervals_test_app_with_calendar_entries(
     .await
 }
 
+pub(crate) async fn intervals_test_app_with_manual_calendar_refresh_service(
+    identity_service: impl IdentityUseCases + 'static,
+    intervals_service: impl IntervalsUseCases + Clone + 'static,
+    manual_calendar_refresh_service: Arc<dyn ManualCalendarRefreshUseCases>,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let fixture = shared_frontend_fixture();
+    let completed_workout_repository = InMemoryCompletedWorkoutRepository::default();
+    let calendar_service = Arc::new(
+        CalendarService::new(
+            intervals_service.clone(),
+            InMemoryCalendarEntryViewRepository::default(),
+            EmptyTrainingPlanProjectionRepository,
+            NoopExternalSyncStateRepository,
+            TestClock,
+        )
+        .with_completed_workouts(completed_workout_repository.clone()),
+    );
+    let calendar_labels_service = Arc::new(CalendarLabelsService::new(EmptyCalendarLabelSource));
+    let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
+        completed_workout_repository,
+    ));
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_identity_service(
+            Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_calendar_service(calendar_service)
+        .with_calendar_labels_service(calendar_labels_service)
+        .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
+        .with_completed_workout_service(completed_workout_service)
+        .with_intervals_service(Arc::new(intervals_service)),
+        fixture.dist_dir(),
+    )
+}
+
 pub(crate) async fn intervals_test_app_with_calendar_entries_and_completed_workouts(
     identity_service: impl IdentityUseCases + 'static,
     intervals_service: impl IntervalsUseCases + Clone + 'static,
@@ -129,12 +173,13 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
             intervals_service.clone(),
             calendar_entry_views,
             projections,
-            InMemoryPlannedWorkoutSyncRepository,
+            NoopExternalSyncStateRepository,
             TestClock,
         )
         .with_completed_workouts(completed_workout_repository.clone()),
     );
     let calendar_labels_service = Arc::new(CalendarLabelsService::new(EmptyCalendarLabelSource));
+    let manual_calendar_refresh_service = Arc::new(TestManualCalendarRefreshService);
     let completed_workout_service = Arc::new(CompletedWorkoutReadService::new(
         completed_workout_repository,
     ));
@@ -154,6 +199,7 @@ pub(crate) async fn intervals_test_app_with_projections_and_calendar_entries(
         )
         .with_calendar_service(calendar_service)
         .with_calendar_labels_service(calendar_labels_service)
+        .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
         .with_completed_workout_service(completed_workout_service)
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
@@ -175,12 +221,13 @@ pub(crate) async fn intervals_test_app_with_all_services(
             intervals_service.clone(),
             InMemoryCalendarEntryViewRepository::default(),
             projections,
-            InMemoryPlannedWorkoutSyncRepository,
+            NoopExternalSyncStateRepository,
             TestClock,
         )
         .with_completed_workouts(InMemoryCompletedWorkoutRepository::default()),
     );
     let calendar_labels_service = Arc::new(CalendarLabelsService::new(calendar_label_source));
+    let manual_calendar_refresh_service = Arc::new(TestManualCalendarRefreshService);
 
     build_app_with_frontend_dist(
         AppState::new(
@@ -197,6 +244,7 @@ pub(crate) async fn intervals_test_app_with_all_services(
         )
         .with_calendar_service(calendar_service)
         .with_calendar_labels_service(calendar_labels_service)
+        .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
         .with_race_service(Arc::new(race_service))
         .with_intervals_service(Arc::new(intervals_service)),
         fixture.dist_dir(),
@@ -252,35 +300,6 @@ impl TrainingPlanProjectionRepository for EmptyTrainingPlanProjectionRepository 
                 superseded_date_range: None,
             })
         })
-    }
-}
-
-#[derive(Clone, Default)]
-struct InMemoryPlannedWorkoutSyncRepository;
-
-impl PlannedWorkoutSyncRepository for InMemoryPlannedWorkoutSyncRepository {
-    fn find_by_user_id_and_projection(
-        &self,
-        _user_id: &str,
-        _operation_key: &str,
-        _date: &str,
-    ) -> CalendarBoxFuture<Result<Option<PlannedWorkoutSyncRecord>, CalendarError>> {
-        Box::pin(async { Ok(None) })
-    }
-
-    fn list_by_user_id_and_range(
-        &self,
-        _user_id: &str,
-        _range: &DateRange,
-    ) -> CalendarBoxFuture<Result<Vec<PlannedWorkoutSyncRecord>, CalendarError>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-
-    fn upsert(
-        &self,
-        record: PlannedWorkoutSyncRecord,
-    ) -> CalendarBoxFuture<Result<PlannedWorkoutSyncRecord, CalendarError>> {
-        Box::pin(async move { Ok(record) })
     }
 }
 
@@ -450,6 +469,40 @@ pub(crate) struct InMemoryCalendarEntryViewRepository {
 }
 
 impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
+    fn find_oldest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CalendarBoxFuture<Result<Option<String>, CalendarEntryViewError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| entry.user_id == user_id)
+                .map(|entry| entry.date.clone())
+                .min())
+        })
+    }
+
+    fn find_newest_date_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> CalendarBoxFuture<Result<Option<String>, CalendarEntryViewError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| entry.user_id == user_id)
+                .map(|entry| entry.date.clone())
+                .max())
+        })
+    }
+
     fn list_by_user_id_and_date_range(
         &self,
         user_id: &str,
@@ -528,6 +581,24 @@ impl CalendarEntryViewRepository for InMemoryCalendarEntryViewRepository {
             });
             stored.extend(entries.clone());
             Ok(entries)
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+struct TestManualCalendarRefreshService;
+
+impl ManualCalendarRefreshUseCases for TestManualCalendarRefreshService {
+    fn refresh_calendar_view_for_user(
+        &self,
+        _user_id: &str,
+    ) -> CalendarBoxFuture<Result<ManualCalendarRefreshResult, CalendarEntryViewError>> {
+        Box::pin(async {
+            Ok(ManualCalendarRefreshResult {
+                oldest: "2026-01-01".to_string(),
+                newest: "2026-04-27".to_string(),
+                rebuilt_entry_count: 3,
+            })
         })
     }
 }

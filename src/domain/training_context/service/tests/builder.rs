@@ -3,6 +3,11 @@ use std::sync::Arc;
 use chrono::{Duration, NaiveDate};
 
 use crate::domain::{
+    completed_workouts::AuthoritativeCompletedWorkoutRepository,
+    external_sync::{
+        CanonicalEntityKind, CanonicalEntityRef, ConflictStatus, ExternalProvider,
+        ExternalSyncState, ExternalSyncStateRepository, ExternalSyncStatus,
+    },
     training_context::TrainingContextBuilder,
     training_load::{
         FtpHistoryEntry, FtpHistoryRepository, FtpSource, InMemoryFtpHistoryRepository,
@@ -24,6 +29,153 @@ use super::{
         TestWorkoutSummaryRepository,
     },
 };
+
+#[derive(Clone, Default)]
+struct TestSyncStates {
+    states: Vec<ExternalSyncState>,
+}
+
+impl ExternalSyncStateRepository for TestSyncStates {
+    fn upsert(
+        &self,
+        state: ExternalSyncState,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<ExternalSyncState, crate::domain::external_sync::ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async move { Ok(state) })
+    }
+
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, crate::domain::external_sync::ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            Ok(states
+                .into_iter()
+                .filter(|state| state.user_id == user_id)
+                .filter(|state| canonical_entities.contains(&state.canonical_entity))
+                .collect())
+        })
+    }
+
+    fn find_by_provider_and_canonical_entity(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entity: &CanonicalEntityRef,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<
+            Option<ExternalSyncState>,
+            crate::domain::external_sync::ExternalSyncRepositoryError,
+        >,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, crate::domain::external_sync::ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            Ok(states
+                .into_iter()
+                .filter(|state| state.user_id == user_id)
+                .filter(|state| state.provider == provider)
+                .filter(|state| canonical_entities.contains(&state.canonical_entity))
+                .collect())
+        })
+    }
+
+    fn delete_by_provider_and_canonical_entity(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entity: &CanonicalEntityRef,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<(), crate::domain::external_sync::ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        user_id: &str,
+        wahoo_plan_id: i64,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<
+            Option<ExternalSyncState>,
+            crate::domain::external_sync::ExternalSyncRepositoryError,
+        >,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(states.into_iter().find(|state| {
+                state.user_id == user_id
+                    && state.provider == ExternalProvider::Wahoo
+                    && state.wahoo_plan_id == Some(wahoo_plan_id)
+            }))
+        })
+    }
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        user_id: &str,
+        wahoo_workout_token: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<
+            Option<ExternalSyncState>,
+            crate::domain::external_sync::ExternalSyncRepositoryError,
+        >,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        let wahoo_workout_token = wahoo_workout_token.to_string();
+        Box::pin(async move {
+            Ok(states.into_iter().find(|state| {
+                state.user_id == user_id
+                    && state.provider == ExternalProvider::Wahoo
+                    && state.wahoo_workout_token.as_deref() == Some(wahoo_workout_token.as_str())
+            }))
+        })
+    }
+}
+
+fn wahoo_sync_state(id: &str) -> ExternalSyncState {
+    ExternalSyncState {
+        user_id: "user-1".to_string(),
+        provider: ExternalProvider::Wahoo,
+        canonical_entity: CanonicalEntityRef::new(
+            CanonicalEntityKind::CompletedWorkout,
+            id.to_string(),
+        ),
+        external_id: Some(id.to_string()),
+        wahoo_plan_external_id: None,
+        wahoo_plan_id: None,
+        wahoo_workout_id: None,
+        wahoo_workout_token: None,
+        sync_status: ExternalSyncStatus::Synced,
+        last_synced_payload_hash: None,
+        last_seen_remote_payload_hash: None,
+        last_error: None,
+        last_synced_at_epoch_seconds: None,
+        last_seen_remote_at_epoch_seconds: None,
+        conflict_status: ConflictStatus::InSync,
+    }
+}
 
 #[tokio::test]
 async fn builder_renders_recent_and_historical_context() {
@@ -286,7 +438,19 @@ async fn builder_dedups_matched_recent_planned_workout_from_day_plans() {
 }
 
 #[tokio::test]
-async fn builder_prefers_wahoo_completed_workout_when_same_activity_exists_twice() {
+async fn builder_prompt_dedupe_keeps_later_duplicate_when_authority_is_already_equal() {
+    let mut wahoo = crate::domain::completed_workouts::CompletedWorkout {
+        completed_workout_id: "wahoo-workout:ride-1".to_string(),
+        source_activity_id: Some("ride-1".to_string()),
+        ..sample_completed_workout_on_date_with_ftp(
+            "ride-1",
+            "2026-04-03T08:00:00",
+            Some(305),
+            Some("intervals-event:101".to_string()),
+        )
+    };
+    wahoo.name = Some("Wahoo winner".to_string());
+
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),
         Arc::new(TestWorkoutSummaryRepository),
@@ -299,16 +463,7 @@ async fn builder_prefers_wahoo_completed_workout_when_same_activity_exists_twice
             Some(300),
             Some("intervals-event:101".to_string()),
         ),
-        crate::domain::completed_workouts::CompletedWorkout {
-            completed_workout_id: "wahoo-workout:ride-1".to_string(),
-            source_activity_id: Some("ride-1".to_string()),
-            ..sample_completed_workout_on_date_with_ftp(
-                "ride-1",
-                "2026-04-03T08:00:00",
-                Some(305),
-                Some("intervals-event:101".to_string()),
-            )
-        },
+        wahoo,
     ]))
     .with_planned_workout_repository(TestPlannedWorkoutRepository::default())
     .with_special_day_repository(TestSpecialDayRepository::default());
@@ -322,7 +477,59 @@ async fn builder_prefers_wahoo_completed_workout_when_same_activity_exists_twice
         .expect("recent day should exist");
 
     assert_eq!(recent_day.workouts.len(), 1);
+    assert_eq!(recent_day.workouts[0].name.as_deref(), Some("Wahoo winner"));
     assert_eq!(result.context.history.activity_count, 1);
+}
+
+#[tokio::test]
+async fn builder_keeps_intervals_completed_workout_when_wahoo_lacks_power_details() {
+    let mut detailed_intervals = sample_completed_workout_on_date_with_ftp(
+        "ride-1",
+        "2026-04-03T08:00:00",
+        Some(300),
+        Some("intervals-event:101".to_string()),
+    );
+    let mut sparse_wahoo = crate::domain::completed_workouts::CompletedWorkout {
+        completed_workout_id: "wahoo-workout:ride-1".to_string(),
+        source_activity_id: Some("ride-1".to_string()),
+        ..sample_completed_workout_on_date_with_ftp(
+            "ride-1",
+            "2026-04-03T08:00:00",
+            Some(305),
+            Some("intervals-event:101".to_string()),
+        )
+    };
+    sparse_wahoo.details.streams.clear();
+    detailed_intervals.name = Some("Intervals winner".to_string());
+    let authoritative = AuthoritativeCompletedWorkoutRepository::new(
+        TestCompletedWorkoutRepository::with_workouts(vec![detailed_intervals, sparse_wahoo]),
+        TestSyncStates {
+            states: vec![wahoo_sync_state("wahoo-workout:ride-1")],
+        },
+    );
+
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(TestWorkoutSummaryRepository),
+        FixedClock,
+    )
+    .with_completed_workout_repository(authoritative)
+    .with_planned_workout_repository(TestPlannedWorkoutRepository::default())
+    .with_special_day_repository(TestSpecialDayRepository::default());
+
+    let result = builder.build("user-1", "ride-1").await.unwrap();
+    let recent_day = result
+        .context
+        .recent_days
+        .iter()
+        .find(|day| day.date == "2026-04-03")
+        .expect("recent day should exist");
+
+    assert_eq!(recent_day.workouts.len(), 1);
+    assert_eq!(
+        recent_day.workouts[0].name.as_deref(),
+        Some("Intervals winner")
+    );
 }
 
 #[tokio::test]

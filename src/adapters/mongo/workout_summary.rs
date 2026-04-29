@@ -171,7 +171,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
             else {
                 return Err(WorkoutSummaryError::NotFound);
             };
-            if document.saved_at_epoch_seconds.is_some() {
+            if document_is_locked(&document) {
                 return Err(WorkoutSummaryError::Locked);
             }
 
@@ -194,7 +194,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                 let existing = find_preferred_document(&collection, &user_id, &workout_id).await?;
 
                 return match existing {
-                    Some(document) if document.saved_at_epoch_seconds.is_some() => {
+                    Some(document) if document_is_locked(&document) => {
                         Err(WorkoutSummaryError::Locked)
                     }
                     Some(_) => Err(WorkoutSummaryError::NotFound),
@@ -230,7 +230,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
             {
                 return Ok(());
             }
-            if document.saved_at_epoch_seconds.is_some() && message.role == "user" {
+            if document_is_locked(&document) && message.role == "user" {
                 return Err(WorkoutSummaryError::Locked);
             }
 
@@ -261,9 +261,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                     {
                         Ok(())
                     }
-                    Some(document)
-                        if document.saved_at_epoch_seconds.is_some() && message.role == "user" =>
-                    {
+                    Some(document) if document_is_locked(&document) && message.role == "user" => {
                         Err(WorkoutSummaryError::Locked)
                     }
                     Some(_) => Err(WorkoutSummaryError::NotFound),
@@ -515,7 +513,12 @@ fn document_identity_filter(document: &WorkoutSummaryDocument) -> mongodb::bson:
 fn editable_document_identity_filter(document: &WorkoutSummaryDocument) -> mongodb::bson::Document {
     let mut filter = document_identity_filter(document);
     filter.insert("saved_at_epoch_seconds", Bson::Null);
+    filter.insert("saved_at", Bson::Null);
     filter
+}
+
+fn document_is_locked(document: &WorkoutSummaryDocument) -> bool {
+    document.saved_at.is_some() || document.saved_at_epoch_seconds.is_some()
 }
 
 fn current_workout_id_filter(user_id: &str, workout_id: &str) -> mongodb::bson::Document {
@@ -537,6 +540,7 @@ fn with_message_append_filter(
     message_id: &str,
 ) -> mongodb::bson::Document {
     filter.insert("saved_at_epoch_seconds", Bson::Null);
+    filter.insert("saved_at", Bson::Null);
     filter.insert("messages.id", doc! { "$ne": message_id });
     filter
 }

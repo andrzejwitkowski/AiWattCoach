@@ -72,7 +72,7 @@ impl AthleteSummaryRepository for MongoAthleteSummaryRepository {
                 .find_one(doc! { "user_id": &user_id })
                 .await
                 .map_err(|error| AthleteSummaryError::Repository(error.to_string()))?;
-            Ok(document.map(map_document_to_domain))
+            document.map(map_document_to_domain).transpose()
         })
     }
 
@@ -94,8 +94,10 @@ impl AthleteSummaryRepository for MongoAthleteSummaryRepository {
     }
 }
 
-fn map_document_to_domain(document: AthleteSummaryDocument) -> AthleteSummary {
-    AthleteSummary {
+fn map_document_to_domain(
+    document: AthleteSummaryDocument,
+) -> Result<AthleteSummary, AthleteSummaryError> {
+    Ok(AthleteSummary {
         user_id: document.user_id,
         summary_text: document.summary_text,
         generated_at_epoch_seconds: resolve_required_epoch_seconds(
@@ -103,22 +105,22 @@ fn map_document_to_domain(document: AthleteSummaryDocument) -> AthleteSummary {
             document.generated_at_epoch_seconds,
             "generated_at",
         )
-        .expect("athlete summary documents must store generated_at"),
+        .map_err(AthleteSummaryError::Repository)?,
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             document.created_at,
             document.created_at_epoch_seconds,
             "created_at",
         )
-        .expect("athlete summary documents must store created_at"),
+        .map_err(AthleteSummaryError::Repository)?,
         updated_at_epoch_seconds: resolve_required_epoch_seconds(
             document.updated_at,
             document.updated_at_epoch_seconds,
             "updated_at",
         )
-        .expect("athlete summary documents must store updated_at"),
+        .map_err(AthleteSummaryError::Repository)?,
         provider: document.provider,
         model: document.model,
-    }
+    })
 }
 
 fn map_domain_to_document(summary: &AthleteSummary) -> AthleteSummaryDocument {
@@ -146,5 +148,34 @@ fn map_domain_to_document(summary: &AthleteSummary) -> AthleteSummaryDocument {
         .expect("updated_at should fit BSON DateTime"),
         provider: summary.provider.clone(),
         model: summary.model.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{map_document_to_domain, AthleteSummaryDocument};
+    use crate::domain::athlete_summary::AthleteSummaryError;
+
+    #[test]
+    fn map_document_to_domain_returns_repository_error_when_generated_at_is_missing() {
+        let error = map_document_to_domain(AthleteSummaryDocument {
+            id: None,
+            user_id: "user-1".to_string(),
+            summary_text: "summary".to_string(),
+            generated_at_epoch_seconds: None,
+            generated_at: None,
+            created_at_epoch_seconds: Some(1),
+            created_at: None,
+            updated_at_epoch_seconds: Some(2),
+            updated_at: None,
+            provider: Some("openai".to_string()),
+            model: Some("gpt-5".to_string()),
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            AthleteSummaryError::Repository("missing generated_at timestamp".to_string())
+        );
     }
 }

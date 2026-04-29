@@ -10,6 +10,7 @@
 ## PR Conflict Verification
 
 - When resolving PR conflicts, fetch the current base branch ref and test the merge against that exact `origin/<base>` immediately before calling the PR conflict-free. A branch can be clean and synced with its remote head branch while still conflicting if the base branch advanced.
+- When resolving conflicts in rolling logs like `reviewers.md` or `tasks/lessons.md`, preserve entries from both branches and restore newest-first ordering instead of picking one side and dropping history.
 
 ## Signature Change Verification
 
@@ -27,6 +28,7 @@
 
 ## Test Doubles And Shapes
 
+- When a sync workflow adds a discovery or recovery step before the previous happy path, revisit the touched test doubles immediately. A fake that used to be sufficient can silently stop modeling the branch the test name claims to exercise.
 - In tests, avoid tuple aliases for multi-field call records when the field meaning matters. Use named structs or named sub-structs so assertions stay self-explanatory.
 - When a function grows past a few distinct phases, split it into small helpers named after each phase instead of leaving one long orchestration block.
 - When a test file grows large, split it by behavior group and extract shared fakes/fixtures into a local `support` module.
@@ -47,6 +49,14 @@
 
 - In a dual-read/dual-write timestamp migration, every field that is required at the domain level must be verified against a `DateTime`-only persisted document, not just legacy-plus-new mixed documents. If the persistence struct still uses a non-optional legacy epoch field, the migration is incomplete even when normal writes succeed.
 - When promising a staged migration with a later backfill step, complete the backfill before calling the rollout done. Readability improvements are not actually delivered for existing Mongo rows until the historical documents are updated too.
+- For dense UI mini-charts, keep the canonical sequence intact and apply any width compression only in the rendering layer. Sampling or equal-width fallbacks are likely to destroy either temporal order or duration meaning.
+- When frontend UX explicitly wants to use stylized planned-workout zone heights, do not silently revert to raw `%FTP` heights to make old tests pass. Update the tests to the intended visual contract instead.
+
+- For upstream file-upload APIs, do not assume a nested JSON body is equivalent to documented `resource[file]` params. Check whether the provider expects `application/x-www-form-urlencoded` or multipart transport and whether the file field must be wrapped as `data:<mime>;base64,...` instead of raw base64.
+- When migrating Mongo documents from one timestamp representation to dual epoch-plus-DateTime storage, remove `expect(...)` from read mappers for any collection that can contain legacy or manually corrupted rows. Missing required timestamps should surface as repository/storage errors, not panic the request or worker.
+- If a write lock or optimistic update filter previously keyed off one persisted timestamp field, update it to consider every persisted representation of that state. A new DateTime mirror field can otherwise reopen writes that should remain locked.
+- For BSON `DateTime` to epoch-second conversion, use euclidean division on milliseconds so negative timestamps floor correctly instead of truncating toward zero.
+- If a Mongo collection is known to be brand new with no legacy rows, do not weaken required document fields to `Option<T>` just to match a broader migration pattern. Keep serde-level guarantees where backward compatibility is not actually needed.
 - When simplifying poll-cursor helpers, verify both branches explicitly: existing cursor plus new upstream results should usually advance, while existing cursor plus no new results may need to stay put. Do not drop the data-presence signal unless a regression test proves the simplified semantics are still correct.
 - If a polling loop filters fetched upstream records before import, do not tie cursor advancement only to the filtered subset unless repeated rereads of skipped records are intentional. Cursor/watermark movement usually belongs to the full consumed upstream page.
 - If a paginated provider bootstrap can span many pages, do not defer all durable progress until the entire scan succeeds. A later-page `429` or transient error can otherwise reset the bootstrap to zero forever. Persist a resumable checkpoint such as `next_page` plus the latest seen watermark before returning the failure.
@@ -67,6 +77,12 @@
 
 - When review feedback asks to make adapter constants environment-configurable, route the values through the centralized startup settings parser with explicit defaults instead of reading `std::env` inside the adapter.
 - After adding new env-backed settings, update the env key loader, sample env file, and focused settings tests in the same change so the new configuration path is actually exercised.
+
+## Canonical Parser Pairs
+
+- When one parser reads canonical text produced by another serializer in the same repo, verify structural constructs end to end, not just token-level fields.
+- For repeated workout blocks, add regression tests that assert expanded segment order and total duration so grouped semantics cannot silently collapse back into flat line parsing.
+- If a grouped construct reuses child items parsed by the flat path, preserve child multiplicity too. Outer repeat support is still wrong if inline child repeats are emitted only once per parent iteration.
 
 ## OpenCode Plugin Wiring
 
@@ -104,6 +120,7 @@
 
 - If a persisted snapshot exposes `start_date`, `end_date`, and a concrete `days` list, verify whether `start_date` is inclusive before writing bridge readers or tests. Do not silently encode `date > start_date` unless the model explicitly defines `start_date` as an anchor outside the visible plan.
 - When a calendar/read-model row is missing, compare the durable source collection with the first canonical reader that reconstructs domain objects from it before changing refresh or cleanup logic. A missing read-model row can be caused upstream by an over-filtering root adapter, not by the projector itself.
+- Planned-workout rebuild assertions must source sync metadata from `ExternalSyncStateRepository`, not from previously materialized `calendar_view` rows. Existing view sync may still be a fallback for other entry kinds, but planned entries intentionally clear stale view-only sync when authoritative external state is missing.
 
 ## Integration Test Scope
 

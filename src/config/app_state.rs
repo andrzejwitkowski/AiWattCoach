@@ -9,6 +9,7 @@ use mongodb::Client;
 use crate::domain::athlete_summary::AthleteSummaryUseCases;
 use crate::domain::calendar::CalendarUseCases;
 use crate::domain::calendar_labels::CalendarLabelsUseCases;
+use crate::domain::calendar_view::ManualCalendarRefreshUseCases;
 use crate::domain::completed_workouts::{
     CompletedWorkoutAdminUseCases, CompletedWorkoutReadUseCases,
 };
@@ -30,6 +31,7 @@ pub struct AppState {
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub calendar_service: Option<Arc<dyn CalendarUseCases>>,
     pub calendar_labels_service: Option<Arc<dyn CalendarLabelsUseCases>>,
+    pub manual_calendar_refresh_service: Option<Arc<dyn ManualCalendarRefreshUseCases>>,
     pub completed_workout_service: Option<Arc<dyn CompletedWorkoutReadUseCases>>,
     pub completed_workout_admin_service: Option<Arc<dyn CompletedWorkoutAdminUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
@@ -107,6 +109,7 @@ impl AppState {
             identity_service: None,
             calendar_service: None,
             calendar_labels_service: None,
+            manual_calendar_refresh_service: None,
             completed_workout_service: None,
             completed_workout_admin_service: None,
             intervals_service: None,
@@ -170,6 +173,14 @@ impl AppState {
         calendar_labels_service: Arc<dyn CalendarLabelsUseCases>,
     ) -> Self {
         self.calendar_labels_service = Some(calendar_labels_service);
+        self
+    }
+
+    pub fn with_manual_calendar_refresh_service(
+        mut self,
+        manual_calendar_refresh_service: Arc<dyn ManualCalendarRefreshUseCases>,
+    ) -> Self {
+        self.manual_calendar_refresh_service = Some(manual_calendar_refresh_service);
         self
     }
 

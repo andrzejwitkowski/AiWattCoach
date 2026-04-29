@@ -41,6 +41,12 @@ pub trait ExternalSyncStateRepository: Clone + Send + Sync + 'static {
         state: ExternalSyncState,
     ) -> BoxFuture<Result<ExternalSyncState, ExternalSyncRepositoryError>>;
 
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>>;
+
     fn find_by_provider_and_canonical_entity(
         &self,
         user_id: &str,
@@ -61,6 +67,18 @@ pub trait ExternalSyncStateRepository: Clone + Send + Sync + 'static {
         provider: ExternalProvider,
         canonical_entity: &CanonicalEntityRef,
     ) -> BoxFuture<Result<(), ExternalSyncRepositoryError>>;
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        user_id: &str,
+        wahoo_plan_id: i64,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>>;
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        user_id: &str,
+        wahoo_workout_token: &str,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>>;
 }
 
 pub trait ProviderPollStateRepository: Clone + Send + Sync + 'static {
@@ -135,6 +153,14 @@ impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
         Box::pin(async move { Ok(state) })
     }
 
+    fn find_by_canonical_entities(
+        &self,
+        _user_id: &str,
+        _canonical_entities: &[CanonicalEntityRef],
+    ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
     fn find_by_provider_and_canonical_entity(
         &self,
         _user_id: &str,
@@ -160,6 +186,22 @@ impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
         _canonical_entity: &CanonicalEntityRef,
     ) -> BoxFuture<Result<(), ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(()) })
+    }
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        _user_id: &str,
+        _wahoo_plan_id: i64,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        _user_id: &str,
+        _wahoo_workout_token: &str,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(None) })
     }
 }
 

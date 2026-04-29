@@ -810,6 +810,28 @@ impl ExternalSyncStateRepository for InMemorySyncStateRepository {
         })
     }
 
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let canonical_entities = canonical_entities.to_vec();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|state| state.user_id == user_id)
+                .filter(|state| canonical_entities.contains(&state.canonical_entity))
+                .cloned()
+                .collect())
+        })
+    }
+
     fn find_by_provider_and_canonical_entity(
         &self,
         user_id: &str,
@@ -879,6 +901,54 @@ impl ExternalSyncStateRepository for InMemorySyncStateRepository {
             Ok(())
         })
     }
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        user_id: &str,
+        wahoo_plan_id: i64,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == ExternalProvider::Wahoo
+                        && state.wahoo_plan_id == Some(wahoo_plan_id)
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        user_id: &str,
+        wahoo_workout_token: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let wahoo_workout_token = wahoo_workout_token.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == ExternalProvider::Wahoo
+                        && state.wahoo_workout_token.as_deref()
+                            == Some(wahoo_workout_token.as_str())
+                })
+                .cloned())
+        })
+    }
 }
 
 #[derive(Clone, Default)]
@@ -923,7 +993,7 @@ pub(super) fn external_import_service(
     planned_completed_links: InMemoryPlannedCompletedWorkoutLinkRepository,
     planned_workout_wahoo_syncs: InMemoryPlannedWorkoutWahooSyncRepository,
     observations: InMemoryObservationRepository,
-    sync_states: InMemorySyncStateRepository,
+    mut sync_states: InMemorySyncStateRepository,
     refresh: RecordingRefresh,
 ) -> ExternalImportService<
     InMemoryPlannedWorkoutRepository,
@@ -932,12 +1002,12 @@ pub(super) fn external_import_service(
     InMemorySpecialDayRepository,
     InMemoryPlannedWorkoutTokenRepository,
     InMemoryPlannedCompletedWorkoutLinkRepository,
-    InMemoryPlannedWorkoutWahooSyncRepository,
     InMemoryObservationRepository,
     InMemorySyncStateRepository,
     FixedClock,
     RecordingRefresh,
 > {
+    seed_wahoo_sync_states(&planned_workout_wahoo_syncs, &mut sync_states);
     ExternalImportService::new(
         planned_workouts,
         completed_workouts,
@@ -949,7 +1019,6 @@ pub(super) fn external_import_service(
         sync_states,
         FixedClock,
     )
-    .with_planned_workout_wahoo_syncs(planned_workout_wahoo_syncs)
     .with_calendar_view_refresh(refresh)
 }
 
@@ -966,7 +1035,7 @@ pub(super) fn external_import_service_without_refresh(
     planned_completed_links: InMemoryPlannedCompletedWorkoutLinkRepository,
     planned_workout_wahoo_syncs: InMemoryPlannedWorkoutWahooSyncRepository,
     observations: InMemoryObservationRepository,
-    sync_states: InMemorySyncStateRepository,
+    mut sync_states: InMemorySyncStateRepository,
 ) -> ExternalImportService<
     InMemoryPlannedWorkoutRepository,
     InMemoryCompletedWorkoutRepository,
@@ -974,11 +1043,11 @@ pub(super) fn external_import_service_without_refresh(
     InMemorySpecialDayRepository,
     InMemoryPlannedWorkoutTokenRepository,
     InMemoryPlannedCompletedWorkoutLinkRepository,
-    InMemoryPlannedWorkoutWahooSyncRepository,
     InMemoryObservationRepository,
     InMemorySyncStateRepository,
     FixedClock,
 > {
+    seed_wahoo_sync_states(&planned_workout_wahoo_syncs, &mut sync_states);
     ExternalImportService::new(
         planned_workouts,
         completed_workouts,
@@ -990,7 +1059,128 @@ pub(super) fn external_import_service_without_refresh(
         sync_states,
         FixedClock,
     )
-    .with_planned_workout_wahoo_syncs(planned_workout_wahoo_syncs)
+}
+
+fn seed_wahoo_sync_states(
+    planned_workout_wahoo_syncs: &InMemoryPlannedWorkoutWahooSyncRepository,
+    sync_states: &mut InMemorySyncStateRepository,
+) {
+    let states = planned_workout_wahoo_syncs
+        .stored
+        .lock()
+        .unwrap()
+        .iter()
+        .cloned()
+        .map(map_wahoo_sync_record_to_state)
+        .collect::<Vec<_>>();
+
+    sync_states.stored.lock().unwrap().extend(states);
+}
+
+fn map_wahoo_sync_record_to_state(record: PlannedWorkoutWahooSyncRecord) -> ExternalSyncState {
+    let canonical_entity = CanonicalEntityRef::new(
+        crate::domain::external_sync::CanonicalEntityKind::PlannedWorkout,
+        record.planned_workout_id.clone(),
+    );
+    let state = ExternalSyncState::new(record.user_id, ExternalProvider::Wahoo, canonical_entity);
+    match record.status {
+        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Synced => {
+            let mut state = state.mark_pending_push();
+            state.sync_status = crate::domain::external_sync::ExternalSyncStatus::Synced;
+            state.conflict_status = crate::domain::external_sync::ConflictStatus::InSync;
+            state.external_id = record.wahoo_workout_id.map(|id| id.to_string());
+            state.wahoo_plan_external_id = Some(record.wahoo_plan_external_id);
+            state.wahoo_plan_id = record.wahoo_plan_id;
+            state.wahoo_workout_id = record.wahoo_workout_id;
+            state.wahoo_workout_token = record.wahoo_workout_token;
+            state.last_synced_payload_hash = record.payload_hash.clone();
+            state.last_seen_remote_payload_hash = record.payload_hash;
+            state.last_error = None;
+            state.last_synced_at_epoch_seconds = record
+                .last_synced_at_epoch_seconds
+                .or(Some(record.updated_at_epoch_seconds));
+            state.last_seen_remote_at_epoch_seconds = state.last_synced_at_epoch_seconds;
+            state
+        }
+        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Failed => {
+            let mut state = state
+                .mark_wahoo_pending(record.wahoo_plan_external_id)
+                .mark_failed(
+                    record
+                        .last_error
+                        .clone()
+                        .unwrap_or_else(|| "wahoo sync failed".to_string()),
+                );
+            state.external_id = record.wahoo_workout_id.map(|id| id.to_string());
+            state.wahoo_plan_id = record.wahoo_plan_id;
+            state.wahoo_workout_id = record.wahoo_workout_id;
+            state.wahoo_workout_token = record.wahoo_workout_token;
+            state.last_synced_payload_hash = record.payload_hash.clone();
+            state.last_seen_remote_payload_hash = record.payload_hash;
+            state.last_synced_at_epoch_seconds = record.last_synced_at_epoch_seconds;
+            state.last_seen_remote_at_epoch_seconds = record.last_synced_at_epoch_seconds;
+            state
+        }
+        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Pending
+        | crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Unsynced
+        | crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Modified => {
+            let mut state = state.mark_wahoo_pending(record.wahoo_plan_external_id);
+            state.external_id = record.wahoo_workout_id.map(|id| id.to_string());
+            state.wahoo_plan_id = record.wahoo_plan_id;
+            state.wahoo_workout_id = record.wahoo_workout_id;
+            state.wahoo_workout_token = record.wahoo_workout_token;
+            state.last_synced_payload_hash = record.payload_hash;
+            state.last_error = record.last_error;
+            state.last_synced_at_epoch_seconds = record.last_synced_at_epoch_seconds;
+            state
+        }
+    }
+}
+
+#[test]
+fn map_wahoo_sync_record_to_state_preserves_external_id_for_pending_record_with_remote_workout() {
+    let mut record = PlannedWorkoutWahooSyncRecord::pending(
+        "user-1".to_string(),
+        "training-plan:user-1:w1:1".to_string(),
+        "2026-05-11".to_string(),
+        "planned-imported-1".to_string(),
+        "source-workout-1".to_string(),
+        "planned-imported-1".to_string(),
+        1_700_000_000,
+    );
+    record.wahoo_plan_id = Some(5_001);
+    record.wahoo_workout_id = Some(60_001);
+    record.wahoo_workout_token = Some("[AIWATTCOACH:pw=WAH001TOKN]".to_string());
+    record.payload_hash = Some("payload-hash-1".to_string());
+    record.last_synced_at_epoch_seconds = Some(1_700_000_010);
+
+    let state = map_wahoo_sync_record_to_state(record);
+
+    assert_eq!(state.external_id.as_deref(), Some("60001"));
+}
+
+#[test]
+fn map_wahoo_sync_record_to_state_preserves_external_id_for_modified_record_with_remote_workout() {
+    let mut record = PlannedWorkoutWahooSyncRecord::pending(
+        "user-1".to_string(),
+        "training-plan:user-1:w1:1".to_string(),
+        "2026-05-11".to_string(),
+        "planned-imported-1".to_string(),
+        "source-workout-1".to_string(),
+        "planned-imported-1".to_string(),
+        1_700_000_000,
+    );
+    record.status =
+        crate::domain::planned_workout_wahoo_syncs::PlannedWorkoutWahooSyncStatus::Modified;
+    record.wahoo_plan_id = Some(5_001);
+    record.wahoo_workout_id = Some(60_001);
+    record.wahoo_workout_token = Some("[AIWATTCOACH:pw=WAH001TOKN]".to_string());
+    record.payload_hash = Some("payload-hash-1".to_string());
+    record.last_synced_at_epoch_seconds = Some(1_700_000_010);
+
+    let state = map_wahoo_sync_record_to_state(record);
+
+    assert_eq!(state.external_id.as_deref(), Some("60001"));
 }
 
 pub(super) fn sample_planned_workout_wahoo_sync_record(

@@ -73,11 +73,10 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                 enabled_task_types: worker.enabled_task_types.clone(),
                 active_task_ids: worker.active_task_ids.clone(),
                 last_heartbeat_at_epoch_seconds: Some(worker.last_heartbeat_at_epoch_seconds),
-                last_heartbeat_at: optional_epoch_seconds_to_bson_datetime(
+                last_heartbeat_at: bson_datetime(
                     Some(worker.last_heartbeat_at_epoch_seconds),
                     "last_heartbeat_at",
-                )
-                .expect("last_heartbeat_at should fit BSON DateTime"),
+                )?,
             };
             collection
                 .replace_one(doc! { "_id": &document.worker_id }, &document)
@@ -107,11 +106,10 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                             "enabled_task_types": &enabled_task_types,
                             "active_task_ids": Vec::<String>::new(),
                             "last_heartbeat_at_epoch_seconds": last_heartbeat_at_epoch_seconds,
-                            "last_heartbeat_at": optional_epoch_seconds_to_bson_datetime(
+                            "last_heartbeat_at": bson_datetime(
                                 Some(last_heartbeat_at_epoch_seconds),
                                 "last_heartbeat_at",
-                            )
-                            .expect("last_heartbeat_at should fit BSON DateTime"),
+                            )?,
                         },
                     },
                 )
@@ -125,18 +123,7 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                     )
                 })?;
 
-            Ok(TaskWorker {
-                worker_id: updated.worker_id,
-                is_leader: updated.is_leader,
-                enabled_task_types: updated.enabled_task_types,
-                active_task_ids: updated.active_task_ids,
-                last_heartbeat_at_epoch_seconds: resolve_required_epoch_seconds(
-                    updated.last_heartbeat_at,
-                    updated.last_heartbeat_at_epoch_seconds,
-                    "last_heartbeat_at",
-                )
-                .expect("task worker documents must store last_heartbeat_at"),
-            })
+            map_document_to_worker(updated)
         })
     }
 
@@ -152,20 +139,32 @@ impl TaskWorkerRepository for MongoTaskWorkerRepository {
                 .find_one(doc! { "_id": &worker_id })
                 .await
                 .map_err(|error| TaskSchedulerError::Repository(error.to_string()))?;
-            Ok(document.map(|document| TaskWorker {
-                worker_id: document.worker_id,
-                is_leader: document.is_leader,
-                enabled_task_types: document.enabled_task_types,
-                active_task_ids: document.active_task_ids,
-                last_heartbeat_at_epoch_seconds: resolve_required_epoch_seconds(
-                    document.last_heartbeat_at,
-                    document.last_heartbeat_at_epoch_seconds,
-                    "last_heartbeat_at",
-                )
-                .expect("task worker documents must store last_heartbeat_at"),
-            }))
+            document.map(map_document_to_worker).transpose()
         })
     }
+}
+
+fn bson_datetime(
+    epoch_seconds: Option<i64>,
+    field_name: &str,
+) -> Result<Option<DateTime>, TaskSchedulerError> {
+    optional_epoch_seconds_to_bson_datetime(epoch_seconds, field_name)
+        .map_err(TaskSchedulerError::Repository)
+}
+
+fn map_document_to_worker(document: TaskWorkerDocument) -> Result<TaskWorker, TaskSchedulerError> {
+    Ok(TaskWorker {
+        worker_id: document.worker_id,
+        is_leader: document.is_leader,
+        enabled_task_types: document.enabled_task_types,
+        active_task_ids: document.active_task_ids,
+        last_heartbeat_at_epoch_seconds: resolve_required_epoch_seconds(
+            document.last_heartbeat_at,
+            document.last_heartbeat_at_epoch_seconds,
+            "last_heartbeat_at",
+        )
+        .map_err(TaskSchedulerError::Repository)?,
+    })
 }
 
 #[cfg(test)]

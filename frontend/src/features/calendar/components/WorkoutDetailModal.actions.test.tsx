@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import { makeActualWorkout, makeEvent, makeEventDefinition, makeSelection, makeWorkoutSummary } from '../testData';
 import { HttpError } from '../../../lib/httpClient';
-import { mockedDownloadFit, mockedLoadActivity, mockedLoadEvent, mockedSyncPlannedWorkout } from './WorkoutDetailModal.testHelpers';
+import {
+  mockedDownloadFit,
+  mockedLoadActivity,
+  mockedLoadEvent,
+  mockedSyncPlannedWorkoutToIntervals,
+  mockedSyncPlannedWorkoutToWahoo,
+} from './WorkoutDetailModal.testHelpers';
 import { WorkoutDetailModal } from './WorkoutDetailModal';
 
 afterEach(() => {
@@ -119,7 +125,7 @@ describe('WorkoutDetailModal actions', () => {
     URL.revokeObjectURL = originalRevokeObjectURL;
   });
 
-  it('syncs a planned workout from the modal action', async () => {
+  it('syncs a planned workout to Wahoo from the modal action', async () => {
     const workoutDate = dateKeyFromUtcOffset(2);
 
     mockedLoadEvent.mockResolvedValue(
@@ -143,7 +149,7 @@ describe('WorkoutDetailModal actions', () => {
       }),
     );
     mockedLoadActivity.mockResolvedValue(undefined as never);
-    mockedSyncPlannedWorkout.mockResolvedValue(
+    mockedSyncPlannedWorkoutToWahoo.mockResolvedValue(
       makeEvent({
         id: 91,
         startDateLocal: workoutDate,
@@ -151,7 +157,7 @@ describe('WorkoutDetailModal actions', () => {
         indoor: false,
         plannedSource: 'predicted',
         syncStatus: 'synced',
-        linkedIntervalsEventId: 91,
+        linkedIntervalsEventId: null,
         projectedWorkout: {
           projectedWorkoutId: `training-plan:user-1:w1:1:${workoutDate}`,
           operationKey: 'training-plan:user-1:w1:1',
@@ -193,11 +199,89 @@ describe('WorkoutDetailModal actions', () => {
 
     await userEvent.click(syncButton);
 
-    await waitFor(() => expect(mockedSyncPlannedWorkout).toHaveBeenCalledWith('', 'training-plan:user-1:w1:1', workoutDate));
+    await waitFor(() => expect(mockedSyncPlannedWorkoutToWahoo).toHaveBeenCalledWith('', 'training-plan:user-1:w1:1', workoutDate));
     await waitFor(() => expect(screen.getByText(/synced/i)).toBeInTheDocument());
   });
 
-  it('shows sync failure feedback when the planned workout sync request fails', async () => {
+  it('syncs a planned workout to Intervals from the modal action', async () => {
+    const workoutDate = dateKeyFromUtcOffset(2);
+
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 911,
+        startDateLocal: workoutDate,
+        name: 'Predicted Build',
+        indoor: false,
+        plannedSource: 'predicted',
+        syncStatus: 'modified',
+        projectedWorkout: {
+          projectedWorkoutId: `training-plan:user-1:w1:9:${workoutDate}`,
+          operationKey: 'training-plan:user-1:w1:9',
+          date: workoutDate,
+          sourceWorkoutId: 'w9',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 60min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 3600 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+    mockedSyncPlannedWorkoutToIntervals.mockResolvedValue(
+      makeEvent({
+        id: 191,
+        startDateLocal: workoutDate,
+        name: 'Predicted Build',
+        indoor: false,
+        plannedSource: 'predicted',
+        syncStatus: 'synced',
+        linkedIntervalsEventId: 191,
+        projectedWorkout: {
+          projectedWorkoutId: `training-plan:user-1:w1:9:${workoutDate}`,
+          operationKey: 'training-plan:user-1:w1:9',
+          date: workoutDate,
+          sourceWorkoutId: 'w9',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 60min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 3600 }),
+        }),
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: workoutDate,
+          event: makeEvent({
+            id: 911,
+            startDateLocal: workoutDate,
+            name: 'Predicted Build',
+            indoor: false,
+            plannedSource: 'predicted',
+            syncStatus: 'modified',
+            projectedWorkout: {
+              projectedWorkoutId: `training-plan:user-1:w1:9:${workoutDate}`,
+              operationKey: 'training-plan:user-1:w1:9',
+              date: workoutDate,
+              sourceWorkoutId: 'w9',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const syncButton = await screen.findByRole('button', { name: /sync to intervals/i });
+
+    await userEvent.click(syncButton);
+
+    await waitFor(() => expect(mockedSyncPlannedWorkoutToIntervals).toHaveBeenCalledWith('', 'training-plan:user-1:w1:9', workoutDate));
+    await waitFor(() => expect(screen.getByText(/synced/i)).toBeInTheDocument());
+  });
+
+  it('shows Wahoo sync failure feedback when the planned workout sync request fails', async () => {
     const workoutDate = dateKeyFromUtcOffset(3);
 
     mockedLoadEvent.mockResolvedValue(
@@ -221,7 +305,7 @@ describe('WorkoutDetailModal actions', () => {
       }),
     );
     mockedLoadActivity.mockResolvedValue(undefined as never);
-    mockedSyncPlannedWorkout.mockRejectedValue(new HttpError(502, 'bad gateway'));
+    mockedSyncPlannedWorkoutToWahoo.mockRejectedValue(new HttpError(502, 'bad gateway'));
 
     render(
       <WorkoutDetailModal
@@ -254,6 +338,68 @@ describe('WorkoutDetailModal actions', () => {
     await waitFor(() => expect(screen.getByText(/unable to sync this planned workout to wahoo right now/i)).toBeInTheDocument());
   });
 
+  it('shows the Intervals connection warning when intervals sync returns 422', async () => {
+    const workoutDate = dateKeyFromUtcOffset(3);
+
+    mockedLoadEvent.mockResolvedValue(
+      makeEvent({
+        id: 903,
+        startDateLocal: workoutDate,
+        name: 'Connect Intervals First',
+        indoor: false,
+        plannedSource: 'predicted',
+        syncStatus: 'unsynced',
+        projectedWorkout: {
+          projectedWorkoutId: `training-plan:user-1:w1:3:${workoutDate}`,
+          operationKey: 'training-plan:user-1:w1:3',
+          date: workoutDate,
+          sourceWorkoutId: 'w3',
+        },
+        eventDefinition: makeEventDefinition({
+          rawWorkoutDoc: '- 45min endurance',
+          summary: makeWorkoutSummary({ totalDurationSeconds: 2700 }),
+        }),
+      }),
+    );
+    mockedLoadActivity.mockResolvedValue(undefined as never);
+    mockedSyncPlannedWorkoutToIntervals.mockRejectedValue(
+      new HttpError(422, 'unprocessable entity', {
+        code: 'intervals_not_connected',
+        message: 'Intervals.icu credentials not configured',
+      }),
+    );
+
+    render(
+      <WorkoutDetailModal
+        apiBaseUrl=""
+        selection={makeSelection({
+          dateKey: workoutDate,
+          event: makeEvent({
+            id: 903,
+            startDateLocal: workoutDate,
+            name: 'Connect Intervals First',
+            indoor: false,
+            plannedSource: 'predicted',
+            syncStatus: 'unsynced',
+            projectedWorkout: {
+              projectedWorkoutId: `training-plan:user-1:w1:3:${workoutDate}`,
+              operationKey: 'training-plan:user-1:w1:3',
+              date: workoutDate,
+              sourceWorkoutId: 'w3',
+            },
+          }),
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const syncButton = await screen.findByRole('button', { name: /sync to intervals/i });
+
+    await userEvent.click(syncButton);
+
+    await waitFor(() => expect(screen.getByText(/connect intervals.icu in settings before syncing this planned workout/i)).toBeInTheDocument());
+  });
+
   it('shows the ftp warning when Wahoo sync requires cycling ftp settings', async () => {
     const workoutDate = dateKeyFromUtcOffset(3);
 
@@ -278,7 +424,7 @@ describe('WorkoutDetailModal actions', () => {
       }),
     );
     mockedLoadActivity.mockResolvedValue(undefined as never);
-    mockedSyncPlannedWorkout.mockRejectedValue(
+    mockedSyncPlannedWorkoutToWahoo.mockRejectedValue(
       new HttpError(400, 'Set your cycling FTP in Settings before syncing to Wahoo', {
         message: 'Set your cycling FTP in Settings before syncing to Wahoo',
       }),
@@ -339,7 +485,7 @@ describe('WorkoutDetailModal actions', () => {
       }),
     );
     mockedLoadActivity.mockResolvedValue(undefined as never);
-    mockedSyncPlannedWorkout.mockRejectedValue(new HttpError(422, 'unprocessable entity'));
+    mockedSyncPlannedWorkoutToWahoo.mockRejectedValue(new HttpError(422, 'unprocessable entity'));
 
     render(
       <WorkoutDetailModal
@@ -425,7 +571,7 @@ describe('WorkoutDetailModal actions', () => {
 
     expect(syncButton).toBeDisabled();
     expect(screen.getByText(/only workouts scheduled for today through the next 6 days can sync to wahoo/i)).toBeInTheDocument();
-    expect(mockedSyncPlannedWorkout).not.toHaveBeenCalled();
+    expect(mockedSyncPlannedWorkoutToWahoo).not.toHaveBeenCalled();
   });
 
   it('does not show Wahoo sync for projected rest days', async () => {
@@ -487,7 +633,7 @@ describe('WorkoutDetailModal actions', () => {
     await waitFor(() => expect(screen.getByText('Rest Day')).toBeInTheDocument());
 
     expect(screen.queryByRole('button', { name: /sync to wahoo/i })).not.toBeInTheDocument();
-    expect(mockedSyncPlannedWorkout).not.toHaveBeenCalled();
+    expect(mockedSyncPlannedWorkoutToWahoo).not.toHaveBeenCalled();
   });
 
   it('does not request event details for unsynced predicted workouts', async () => {
@@ -606,7 +752,9 @@ describe('WorkoutDetailModal actions', () => {
 
     await waitFor(() => expect(screen.getByText('Indoor Trainer Session')).toBeInTheDocument());
 
+    expect(screen.queryByRole('button', { name: /sync to intervals/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sync to wahoo/i })).not.toBeInTheDocument();
-    expect(mockedSyncPlannedWorkout).not.toHaveBeenCalled();
+    expect(screen.queryByText(/only planned workouts scheduled between today and the next 6 days can sync to wahoo/i)).not.toBeInTheDocument();
+    expect(mockedSyncPlannedWorkoutToWahoo).not.toHaveBeenCalled();
   });
 });

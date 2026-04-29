@@ -1,6 +1,10 @@
 use std::sync::{Arc, Mutex};
 
 use crate::domain::{
+    calendar_view::{
+        BoxFuture as CalendarViewBoxFuture, CalendarEntryView, CalendarEntryViewError,
+        CalendarEntryViewRefreshPort,
+    },
     completed_workouts::{
         BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutDetails,
         CompletedWorkoutError, CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics,
@@ -28,6 +32,53 @@ struct FixedClock;
 impl Clock for FixedClock {
     fn now_epoch_seconds(&self) -> i64 {
         1_700_000_000
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingCalendarRefresh {
+    calls: Arc<Mutex<Vec<(String, String, String)>>>,
+}
+
+impl RecordingCalendarRefresh {
+    fn calls(&self) -> Vec<(String, String, String)> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
+    fn refresh_range_for_user(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> CalendarViewBoxFuture<Result<Vec<CalendarEntryView>, CalendarEntryViewError>> {
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            calls.lock().unwrap().push((user_id, oldest, newest));
+            Ok(Vec::new())
+        })
+    }
+}
+
+#[derive(Clone)]
+struct FailingCalendarRefresh;
+
+impl CalendarEntryViewRefreshPort for FailingCalendarRefresh {
+    fn refresh_range_for_user(
+        &self,
+        _user_id: &str,
+        _oldest: &str,
+        _newest: &str,
+    ) -> CalendarViewBoxFuture<Result<Vec<CalendarEntryView>, CalendarEntryViewError>> {
+        Box::pin(async {
+            Err(CalendarEntryViewError::Repository(
+                "refresh failed".to_string(),
+            ))
+        })
     }
 }
 
@@ -549,6 +600,67 @@ async fn enrich_completed_workout_updates_workout_and_fit_file() {
     );
     assert_eq!(fit_file.raw_fit_bytes, Some(vec![1, 2, 3, 4]));
     assert_eq!(recompute.calls().len(), 1);
+}
+
+#[tokio::test]
+async fn enrich_completed_workout_refreshes_calendar_day() {
+    let workouts = InMemoryCompletedWorkoutRepository::with_workout(sample_workout());
+    let fit_files = InMemoryWahooFitFileRepository::default();
+    let refresh = RecordingCalendarRefresh::default();
+    let service = WahooFitEnrichmentService::new(
+        Arc::new(FakeWahooService::with_file(
+            "https://example.test/workout.fit",
+            vec![1, 2, 3, 4],
+        )),
+        workouts,
+        fit_files,
+        FakeParser::with_responses(vec![Ok(parsed_workout())]),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(refresh.clone());
+
+    service
+        .enrich_completed_workout("user-1", "wahoo-workout:42", 42)
+        .await
+        .expect("fit enrichment should succeed");
+
+    assert_eq!(
+        refresh.calls(),
+        vec![(
+            "user-1".to_string(),
+            "2026-05-01".to_string(),
+            "2026-05-01".to_string(),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn enrich_completed_workout_returns_retryable_error_when_calendar_refresh_fails() {
+    let workouts = InMemoryCompletedWorkoutRepository::with_workout(sample_workout());
+    let fit_files = InMemoryWahooFitFileRepository::default();
+    let service = WahooFitEnrichmentService::new(
+        Arc::new(FakeWahooService::with_file(
+            "https://example.test/workout.fit",
+            vec![1, 2, 3, 4],
+        )),
+        workouts.clone(),
+        fit_files.clone(),
+        FakeParser::with_responses(vec![Ok(parsed_workout())]),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(FailingCalendarRefresh);
+
+    let error = service
+        .enrich_completed_workout("user-1", "wahoo-workout:42", 42)
+        .await
+        .expect_err("fit enrichment should fail when refresh fails");
+
+    assert!(matches!(
+        error,
+        WahooFitEnrichmentError::CalendarViewRefresh(_)
+    ));
+    assert_eq!(workouts.only_workout().details_unavailable_reason, None);
+    assert_eq!(fit_files.only_fit_file().stage, WahooFitFileStage::Parsed);
 }
 
 #[tokio::test]

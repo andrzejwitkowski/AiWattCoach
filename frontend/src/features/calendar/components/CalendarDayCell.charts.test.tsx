@@ -88,7 +88,7 @@ describe('CalendarDayCell charts', () => {
     const [bar] = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
 
     expect(bar).toBeDefined();
-    expect(bar.style.flexGrow).toBe('82');
+    expect(bar.style.flexGrow).toBe('9');
     expect(bar.style.height).toBe('64%');
     expect(bar.style.backgroundColor).toBe('rgb(0, 227, 253)');
   });
@@ -152,8 +152,8 @@ describe('CalendarDayCell charts', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const [firstBar, secondBar] = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
 
-    expect(firstBar.style.flexGrow).toBe('1200');
-    expect(secondBar.style.flexGrow).toBe('300');
+    expect(firstBar.style.flexGrow).toBe('35');
+    expect(secondBar.style.flexGrow).toBe('17');
   });
 
   it('uses the same expanded planned interval source as the detail modal mini-chart', () => {
@@ -261,9 +261,8 @@ describe('CalendarDayCell charts', () => {
     const chartBars = Array.from(container.querySelectorAll('[data-chart-bar="mini"]')) as HTMLDivElement[];
     const backgroundColors = chartBars.map((bar) => bar.style.backgroundColor).filter(Boolean);
 
-    expect(chartBars.length).toBe(6);
+    expect(chartBars.length).toBe(3);
     expect(backgroundColors).toContain('rgb(0, 227, 253)');
-    expect(backgroundColors).toContain('rgb(240, 211, 155)');
-    expect(backgroundColors).toContain('rgb(212, 156, 69)');
+    expect(backgroundColors).toContain('rgb(210, 255, 154)');
   });
 });

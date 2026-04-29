@@ -14,6 +14,12 @@ pub(in crate::adapters::rest) struct SyncPlannedWorkoutPath {
     pub date: String,
 }
 
+#[derive(Clone, Copy)]
+pub(in crate::adapters::rest) enum SyncPlannedWorkoutProviderPath {
+    Intervals,
+    Wahoo,
+}
+
 #[derive(Serialize)]
 pub(super) struct CalendarLabelsResponseDto {
     #[serde(rename = "labelsByDate")]
@@ -142,4 +148,19 @@ pub(super) fn validation_code_message_response(
         code: Some(code.to_string()),
         message: message.to_string(),
     }
+}
+
+pub(super) fn validation_message_response(message: &str) -> ValidationMessageResponse {
+    ValidationMessageResponse {
+        code: None,
+        message: message.to_string(),
+    }
+}
+
+#[derive(Serialize)]
+pub(super) struct ManualCalendarRefreshResponseDto {
+    pub oldest: String,
+    pub newest: String,
+    #[serde(rename = "rebuiltEntryCount")]
+    pub rebuilt_entry_count: usize,
 }

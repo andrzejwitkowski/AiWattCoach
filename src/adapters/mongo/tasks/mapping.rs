@@ -179,58 +179,40 @@ pub(super) fn map_task_to_document(
         error_message: task.error_message.clone(),
         attempt_count: i64::from(task.attempt_count),
         next_attempt_at_epoch_seconds: Some(task.next_attempt_at_epoch_seconds),
-        next_attempt_at: optional_epoch_seconds_to_bson_datetime(
+        next_attempt_at: bson_datetime(
             Some(task.next_attempt_at_epoch_seconds),
             "next_attempt_at",
-        )
-        .expect("next_attempt_at should fit BSON DateTime"),
+        )?,
         claimed_by: task.claimed_by.clone(),
         lease_expires_at_epoch_seconds: task.lease_expires_at_epoch_seconds,
-        lease_expires_at: optional_epoch_seconds_to_bson_datetime(
-            task.lease_expires_at_epoch_seconds,
-            "lease_expires_at",
-        )
-        .expect("lease_expires_at should fit BSON DateTime"),
+        lease_expires_at: bson_datetime(task.lease_expires_at_epoch_seconds, "lease_expires_at")?,
         last_heartbeat_at_epoch_seconds: task.last_heartbeat_at_epoch_seconds,
-        last_heartbeat_at: optional_epoch_seconds_to_bson_datetime(
+        last_heartbeat_at: bson_datetime(
             task.last_heartbeat_at_epoch_seconds,
             "last_heartbeat_at",
-        )
-        .expect("last_heartbeat_at should fit BSON DateTime"),
+        )?,
         execution_timeout_seconds: task.execution_timeout_seconds,
         timed_out_at_epoch_seconds: task.timed_out_at_epoch_seconds,
-        timed_out_at: optional_epoch_seconds_to_bson_datetime(
-            task.timed_out_at_epoch_seconds,
-            "timed_out_at",
-        )
-        .expect("timed_out_at should fit BSON DateTime"),
+        timed_out_at: bson_datetime(task.timed_out_at_epoch_seconds, "timed_out_at")?,
         leader_only: task.leader_only,
         created_at_epoch_seconds: Some(task.created_at_epoch_seconds),
-        created_at: optional_epoch_seconds_to_bson_datetime(
-            Some(task.created_at_epoch_seconds),
-            "created_at",
-        )
-        .expect("created_at should fit BSON DateTime"),
+        created_at: bson_datetime(Some(task.created_at_epoch_seconds), "created_at")?,
         updated_at_epoch_seconds: Some(task.updated_at_epoch_seconds),
-        updated_at: optional_epoch_seconds_to_bson_datetime(
-            Some(task.updated_at_epoch_seconds),
-            "updated_at",
-        )
-        .expect("updated_at should fit BSON DateTime"),
+        updated_at: bson_datetime(Some(task.updated_at_epoch_seconds), "updated_at")?,
         started_at_epoch_seconds: task.started_at_epoch_seconds,
-        started_at: optional_epoch_seconds_to_bson_datetime(
-            task.started_at_epoch_seconds,
-            "started_at",
-        )
-        .expect("started_at should fit BSON DateTime"),
+        started_at: bson_datetime(task.started_at_epoch_seconds, "started_at")?,
         finished_at_epoch_seconds: task.finished_at_epoch_seconds,
-        finished_at: optional_epoch_seconds_to_bson_datetime(
-            task.finished_at_epoch_seconds,
-            "finished_at",
-        )
-        .expect("finished_at should fit BSON DateTime"),
+        finished_at: bson_datetime(task.finished_at_epoch_seconds, "finished_at")?,
         cleanup_after: terminal_task_cleanup_after(&task.status, task.finished_at_epoch_seconds)?,
     })
+}
+
+pub(super) fn bson_datetime(
+    epoch_seconds: Option<i64>,
+    field_name: &str,
+) -> Result<Option<DateTime>, TaskSchedulerError> {
+    optional_epoch_seconds_to_bson_datetime(epoch_seconds, field_name)
+        .map_err(TaskSchedulerError::Repository)
 }
 
 pub(super) fn map_document_to_task(

@@ -47,6 +47,246 @@ async fn list_calendar_events_requires_authentication() {
 }
 
 #[tokio::test]
+async fn refresh_calendar_view_requires_authentication() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn refresh_calendar_view_returns_refresh_summary_for_authenticated_user() {
+    let app = intervals_test_app(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    assert_eq!(
+        body.get("oldest").and_then(|value| value.as_str()),
+        Some("2026-01-01")
+    );
+    assert_eq!(
+        body.get("newest").and_then(|value| value.as_str()),
+        Some("2026-04-27")
+    );
+    assert_eq!(
+        body.get("rebuiltEntryCount")
+            .and_then(|value| value.as_u64()),
+        Some(3)
+    );
+}
+
+#[tokio::test]
+async fn refresh_calendar_view_returns_error_message_body_when_refresh_fails() {
+    #[derive(Clone)]
+    struct FailingManualCalendarRefreshService;
+
+    impl aiwattcoach::domain::calendar_view::ManualCalendarRefreshUseCases
+        for FailingManualCalendarRefreshService
+    {
+        fn refresh_calendar_view_for_user(
+            &self,
+            _user_id: &str,
+        ) -> aiwattcoach::domain::calendar_view::BoxFuture<
+            Result<
+                aiwattcoach::domain::calendar_view::ManualCalendarRefreshResult,
+                aiwattcoach::domain::calendar_view::CalendarEntryViewError,
+            >,
+        > {
+            Box::pin(async {
+                Err(
+                    aiwattcoach::domain::calendar_view::CalendarEntryViewError::Repository(
+                        "calendar refresh failed in test".to_string(),
+                    ),
+                )
+            })
+        }
+    }
+
+    let app = crate::app::intervals_test_app_with_manual_calendar_refresh_service(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        std::sync::Arc::new(FailingManualCalendarRefreshService),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    let body: serde_json::Value = get_json(response).await;
+    assert_eq!(
+        body.get("message").and_then(|value| value.as_str()),
+        Some("failed to refresh calendar view")
+    );
+    assert!(body.get("code").is_none());
+}
+
+#[tokio::test]
+async fn refresh_calendar_view_is_scoped_to_authenticated_user() {
+    #[derive(Clone)]
+    struct RecordingManualCalendarRefreshService {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl aiwattcoach::domain::calendar_view::ManualCalendarRefreshUseCases
+        for RecordingManualCalendarRefreshService
+    {
+        fn refresh_calendar_view_for_user(
+            &self,
+            user_id: &str,
+        ) -> aiwattcoach::domain::calendar_view::BoxFuture<
+            Result<
+                aiwattcoach::domain::calendar_view::ManualCalendarRefreshResult,
+                aiwattcoach::domain::calendar_view::CalendarEntryViewError,
+            >,
+        > {
+            let calls = self.calls.clone();
+            let user_id = user_id.to_string();
+            Box::pin(async move {
+                calls.lock().unwrap().push(user_id.clone());
+                Ok(
+                    aiwattcoach::domain::calendar_view::ManualCalendarRefreshResult {
+                        oldest: "2026-01-01".to_string(),
+                        newest: "2026-04-27".to_string(),
+                        rebuilt_entry_count: 1,
+                    },
+                )
+            })
+        }
+    }
+
+    let calls: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let service = RecordingManualCalendarRefreshService {
+        calls: calls.clone(),
+    };
+
+    let app = crate::app::intervals_test_app_with_manual_calendar_refresh_service(
+        SessionMappedIdentityService::with_users([
+            ("session-user-1", "user-1", "user-1@example.com"),
+            ("session-user-2", "user-2", "user-2@example.com"),
+        ]),
+        TestIntervalsService::default(),
+        Arc::new(service),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .header(header::COOKIE, session_cookie("session-user-2"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let recorded = calls.lock().unwrap().clone();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0], "user-2");
+}
+
+#[tokio::test]
+async fn refresh_calendar_view_returns_generic_error_for_invariant_violation() {
+    #[derive(Clone)]
+    struct InvariantViolationRefreshService;
+
+    impl aiwattcoach::domain::calendar_view::ManualCalendarRefreshUseCases
+        for InvariantViolationRefreshService
+    {
+        fn refresh_calendar_view_for_user(
+            &self,
+            _user_id: &str,
+        ) -> aiwattcoach::domain::calendar_view::BoxFuture<
+            Result<
+                aiwattcoach::domain::calendar_view::ManualCalendarRefreshResult,
+                aiwattcoach::domain::calendar_view::CalendarEntryViewError,
+            >,
+        > {
+            Box::pin(async {
+                Err(
+                    aiwattcoach::domain::calendar_view::CalendarEntryViewError::InvariantViolation(
+                        "race data unauthenticated".to_string(),
+                    ),
+                )
+            })
+        }
+    }
+
+    let app = crate::app::intervals_test_app_with_manual_calendar_refresh_service(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        std::sync::Arc::new(InvariantViolationRefreshService),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/calendar/refresh")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    let body: serde_json::Value = get_json(response).await;
+    assert_eq!(
+        body.get("message").and_then(|value| value.as_str()),
+        Some("failed to refresh calendar view")
+    );
+    assert!(body.get("code").is_none());
+}
+
+#[tokio::test]
 async fn list_calendar_events_returns_local_planned_entries_for_authenticated_user() {
     let app = intervals_test_app_with_calendar_entries(
         TestIdentityServiceWithSession::default(),
@@ -140,6 +380,97 @@ async fn list_calendar_events_parse_event_definition_from_description_when_worko
             .as_str(),
         Some("  \n\t ")
     );
+}
+
+#[tokio::test]
+async fn list_calendar_events_expands_canonical_repeat_blocks_in_event_definition_summary() {
+    let app = intervals_test_app_with_calendar_entries(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        InMemoryCalendarEntryViewRepository::with_entries(vec![sample_planned_calendar_entry(
+            "planned:intervals-event:14",
+            "2026-03-22",
+            "Repeatability Under Fatigue",
+            "Main Set 2x\n- 10m 95%\n- 3m 55%\nCooldown\n- 5m 50%",
+        )]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    let event = &body.as_array().unwrap()[0];
+    let event_definition = event.get("eventDefinition").unwrap();
+    let summary = event_definition.get("summary").unwrap();
+    let segments = event_definition
+        .get("segments")
+        .unwrap()
+        .as_array()
+        .unwrap();
+
+    assert_eq!(
+        summary.get("totalDurationSeconds").unwrap().as_i64(),
+        Some(1_860)
+    );
+    assert_eq!(summary.get("totalSegments").unwrap().as_u64(), Some(5));
+    assert_eq!(
+        segments[0].get("label").unwrap().as_str(),
+        Some("10m 95% #1")
+    );
+    assert_eq!(
+        segments[1].get("label").unwrap().as_str(),
+        Some("3m 55% #1")
+    );
+    assert_eq!(
+        segments[2].get("label").unwrap().as_str(),
+        Some("10m 95% #2")
+    );
+    assert_eq!(
+        segments[3].get("label").unwrap().as_str(),
+        Some("3m 55% #2")
+    );
+    assert_eq!(segments[4].get("label").unwrap().as_str(), Some("5m 50%"));
+}
+
+#[tokio::test]
+async fn list_calendar_events_does_not_return_completed_calendar_entries_as_standalone_events() {
+    let app = intervals_test_app_with_calendar_entries(
+        TestIdentityServiceWithSession::default(),
+        TestIntervalsService::default(),
+        InMemoryCalendarEntryViewRepository::with_entries(vec![sample_calendar_entry(
+            "completed:completed-1",
+            CalendarEntryKind::CompletedWorkout,
+            "2026-03-22",
+        )]),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/calendar/events?oldest=2026-03-01&newest=2026-03-31")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: serde_json::Value = get_json(response).await;
+    assert_eq!(body.as_array().unwrap().len(), 0);
 }
 
 #[tokio::test]
@@ -303,7 +634,7 @@ async fn sync_planned_workout_requires_cycling_ftp_settings() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/2023-11-16/sync")
+                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/2023-11-16/wahoo/sync")
                 .header(header::COOKIE, session_cookie("session-1"))
                 .body(Body::empty())
                 .unwrap(),
@@ -341,7 +672,7 @@ async fn sync_planned_workout_is_scoped_to_authenticated_user() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/calendar/planned-workouts/shared-operation/2023-11-16/sync")
+                .uri("/api/calendar/planned-workouts/shared-operation/2023-11-16/intervals/sync")
                 .header(header::COOKIE, session_cookie("session-user-2"))
                 .body(Body::empty())
                 .unwrap(),
@@ -365,7 +696,7 @@ async fn sync_planned_workout_returns_validation_message_for_invalid_date() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/not-a-date/sync")
+                .uri("/api/calendar/planned-workouts/training-plan:user-1:w1:1/not-a-date/intervals/sync")
                 .header(header::COOKIE, session_cookie("session-1"))
                 .body(Body::empty())
                 .unwrap(),

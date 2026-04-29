@@ -18,17 +18,17 @@ pub(super) struct CoachReplyOperationDocument {
     pub(super) cache_usage: Option<crate::domain::llm::LlmCacheUsage>,
     pub(super) response_message: Option<String>,
     pub(super) error_message: Option<String>,
-    pub(super) started_at_epoch_seconds: Option<i64>,
+    pub(super) started_at_epoch_seconds: i64,
     #[serde(default)]
     pub(super) started_at: Option<DateTime>,
-    pub(super) last_attempt_at_epoch_seconds: Option<i64>,
+    pub(super) last_attempt_at_epoch_seconds: i64,
     #[serde(default)]
     pub(super) last_attempt_at: Option<DateTime>,
     pub(super) attempt_count: i64,
-    pub(super) created_at_epoch_seconds: Option<i64>,
+    pub(super) created_at_epoch_seconds: i64,
     #[serde(default)]
     pub(super) created_at: Option<DateTime>,
-    pub(super) updated_at_epoch_seconds: Option<i64>,
+    pub(super) updated_at_epoch_seconds: i64,
     #[serde(default)]
     pub(super) updated_at: Option<DateTime>,
 }

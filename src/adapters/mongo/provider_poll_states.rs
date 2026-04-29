@@ -179,30 +179,20 @@ fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDoc
         stream: stream_as_str(&state.stream).to_string(),
         cursor: state.cursor.clone(),
         next_due_at_epoch_seconds: Some(state.next_due_at_epoch_seconds),
-        next_due_at: optional_epoch_seconds_to_bson_datetime(
-            Some(state.next_due_at_epoch_seconds),
-            "next_due_at",
-        )
-        .expect("next_due_at should fit BSON DateTime"),
+        next_due_at: datetime_or_panic(Some(state.next_due_at_epoch_seconds), "next_due_at"),
         last_attempted_at_epoch_seconds: state.last_attempted_at_epoch_seconds,
-        last_attempted_at: optional_epoch_seconds_to_bson_datetime(
+        last_attempted_at: datetime_or_panic(
             state.last_attempted_at_epoch_seconds,
             "last_attempted_at",
-        )
-        .expect("last_attempted_at should fit BSON DateTime"),
+        ),
         last_successful_at_epoch_seconds: state.last_successful_at_epoch_seconds,
-        last_successful_at: optional_epoch_seconds_to_bson_datetime(
+        last_successful_at: datetime_or_panic(
             state.last_successful_at_epoch_seconds,
             "last_successful_at",
-        )
-        .expect("last_successful_at should fit BSON DateTime"),
+        ),
         last_error: state.last_error.clone(),
         backoff_until_epoch_seconds: state.backoff_until_epoch_seconds,
-        backoff_until_at: optional_epoch_seconds_to_bson_datetime(
-            state.backoff_until_epoch_seconds,
-            "backoff_until_at",
-        )
-        .expect("backoff_until_at should fit BSON DateTime"),
+        backoff_until_at: datetime_or_panic(state.backoff_until_epoch_seconds, "backoff_until_at"),
     }
 }
 
@@ -218,7 +208,9 @@ fn map_document_to_poll_state(
             document.next_due_at,
             document.next_due_at_epoch_seconds,
         )
-        .expect("provider poll state documents must store next_due_at"),
+        .ok_or_else(|| {
+            ExternalSyncRepositoryError::CorruptData("missing next_due_at timestamp".to_string())
+        })?,
         last_attempted_at_epoch_seconds: resolve_optional_epoch_seconds(
             document.last_attempted_at,
             document.last_attempted_at_epoch_seconds,
@@ -233,6 +225,11 @@ fn map_document_to_poll_state(
             document.backoff_until_epoch_seconds,
         ),
     })
+}
+
+fn datetime_or_panic(epoch_seconds: Option<i64>, field_name: &str) -> Option<DateTime> {
+    optional_epoch_seconds_to_bson_datetime(epoch_seconds, field_name)
+        .unwrap_or_else(|error| panic!("{error}"))
 }
 
 fn provider_as_str(provider: &ExternalProvider) -> &'static str {
@@ -383,5 +380,31 @@ mod tests {
         assert_eq!(mapped.last_attempted_at_epoch_seconds, Some(1_700_000_010));
         assert_eq!(mapped.last_successful_at_epoch_seconds, Some(1_700_000_020));
         assert_eq!(mapped.backoff_until_epoch_seconds, Some(1_700_000_030));
+    }
+
+    #[test]
+    fn poll_state_document_rejects_missing_next_due_at_timestamp() {
+        let error = map_document_to_poll_state(ProviderPollStateDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            stream: "calendar".to_string(),
+            cursor: None,
+            next_due_at_epoch_seconds: None,
+            next_due_at: None,
+            last_attempted_at_epoch_seconds: None,
+            last_attempted_at: None,
+            last_successful_at_epoch_seconds: None,
+            last_successful_at: None,
+            last_error: None,
+            backoff_until_epoch_seconds: None,
+            backoff_until_at: None,
+        })
+        .expect_err("poll state without next_due_at should be rejected");
+
+        assert!(matches!(
+            error,
+            crate::domain::external_sync::ExternalSyncRepositoryError::CorruptData(message)
+                if message == "missing next_due_at timestamp"
+        ));
     }
 }

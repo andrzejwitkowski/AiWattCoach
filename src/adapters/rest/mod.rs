@@ -120,6 +120,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                 .route("/api/calendar/events", get(calendar::list_events))
                 .route("/api/calendar/labels", get(calendar::list_labels))
                 .route(
+                    "/api/calendar/refresh",
+                    post(calendar::refresh_calendar_view),
+                )
+                .route(
                     "/api/completed-workouts",
                     get(completed_workouts::list_completed_workouts),
                 )
@@ -132,8 +136,12 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     get(dashboard::get_training_load_dashboard),
                 )
                 .route(
-                    "/api/calendar/planned-workouts/{operation_key}/{date}/sync",
+                    "/api/calendar/planned-workouts/{operation_key}/{date}/intervals/sync",
                     post(calendar::sync_planned_workout),
+                )
+                .route(
+                    "/api/calendar/planned-workouts/{operation_key}/{date}/wahoo/sync",
+                    post(calendar::sync_planned_workout_to_wahoo),
                 )
                 .route(
                     "/api/races",

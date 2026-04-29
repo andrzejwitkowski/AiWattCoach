@@ -1,8 +1,9 @@
 use mongodb::bson::{doc, from_document, Bson, DateTime};
 
 use super::{
-    current_workout_id_filter, document_identity_filter, legacy_event_id_filter,
-    map_document_to_domain, map_domain_to_document, ConversationMessageDocument,
+    current_workout_id_filter, document_identity_filter, document_is_locked,
+    editable_document_identity_filter, legacy_event_id_filter, map_document_to_domain,
+    map_domain_to_document, with_message_append_filter, ConversationMessageDocument,
     WorkoutSummaryDocument,
 };
 use crate::domain::workout_summary::{WorkoutSummary, WorkoutSummaryError};
@@ -222,5 +223,70 @@ fn document_identity_filter_falls_back_to_summary_and_user() {
             "summary_id": "summary-1",
             "user_id": "user-1",
         }
+    );
+}
+
+#[test]
+fn document_is_locked_when_saved_at_datetime_exists_without_legacy_epoch() {
+    let document = WorkoutSummaryDocument {
+        id: None,
+        summary_id: "summary-1".to_string(),
+        user_id: "user-1".to_string(),
+        workout_id: "workout-1".to_string(),
+        rpe: None,
+        messages: Vec::new(),
+        saved_at_epoch_seconds: None,
+        saved_at: Some(DateTime::from_millis(1_700_000_000_000)),
+        workout_recap_text: None,
+        workout_recap_provider: None,
+        workout_recap_model: None,
+        workout_recap_generated_at_epoch_seconds: None,
+        workout_recap_generated_at: None,
+        created_at_epoch_seconds: Some(1),
+        created_at: None,
+        updated_at_epoch_seconds: Some(1),
+        updated_at: None,
+    };
+
+    assert!(document_is_locked(&document));
+}
+
+#[test]
+fn editable_document_identity_filter_requires_datetime_mirror_to_be_null() {
+    let document = WorkoutSummaryDocument {
+        id: None,
+        summary_id: "summary-1".to_string(),
+        user_id: "user-1".to_string(),
+        workout_id: "workout-1".to_string(),
+        rpe: None,
+        messages: Vec::new(),
+        saved_at_epoch_seconds: None,
+        saved_at: None,
+        workout_recap_text: None,
+        workout_recap_provider: None,
+        workout_recap_model: None,
+        workout_recap_generated_at_epoch_seconds: None,
+        workout_recap_generated_at: None,
+        created_at_epoch_seconds: Some(1),
+        created_at: None,
+        updated_at_epoch_seconds: Some(1),
+        updated_at: None,
+    };
+
+    let filter = editable_document_identity_filter(&document);
+
+    assert_eq!(filter.get("saved_at_epoch_seconds"), Some(&Bson::Null));
+    assert_eq!(filter.get("saved_at"), Some(&Bson::Null));
+}
+
+#[test]
+fn message_append_filter_requires_datetime_mirror_to_be_null() {
+    let filter = with_message_append_filter(doc! { "summary_id": "summary-1" }, "message-1");
+
+    assert_eq!(filter.get("saved_at_epoch_seconds"), Some(&Bson::Null));
+    assert_eq!(filter.get("saved_at"), Some(&Bson::Null));
+    assert_eq!(
+        filter.get_document("messages.id").unwrap(),
+        &doc! { "$ne": "message-1" }
     );
 }

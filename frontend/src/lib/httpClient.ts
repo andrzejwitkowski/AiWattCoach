@@ -115,7 +115,7 @@ export function get<TRes>(apiBaseUrl: string, path: string, options?: RequestOpt
 export function post<TReq, TRes>(
   apiBaseUrl: string,
   path: string,
-  body: TReq,
+  body?: TReq,
   options?: RequestOptions,
 ): Promise<TRes> {
   return request<TRes>('POST', apiBaseUrl, path, body, options);

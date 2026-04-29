@@ -136,7 +136,7 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
                 .try_collect::<Vec<_>>()
                 .await
                 .map_err(storage_error)
-                .map(|documents| {
+                .and_then(|documents| {
                     documents
                         .into_iter()
                         .map(map_document_to_observation)
@@ -165,7 +165,7 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
                 .await
                 .map_err(storage_error)?;
 
-            Ok(document.map(map_document_to_observation))
+            document.map(map_document_to_observation).transpose()
         })
     }
 
@@ -191,7 +191,7 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
                 .try_collect::<Vec<_>>()
                 .await
                 .map_err(storage_error)
-                .map(|documents| {
+                .and_then(|documents| {
                     documents
                         .into_iter()
                         .map(map_document_to_observation)
@@ -228,8 +228,10 @@ fn map_observation_to_document(observation: &ExternalObservation) -> ExternalObs
     }
 }
 
-fn map_document_to_observation(document: ExternalObservationDocument) -> ExternalObservation {
-    ExternalObservation {
+fn map_document_to_observation(
+    document: ExternalObservationDocument,
+) -> Result<ExternalObservation, ExternalSyncRepositoryError> {
+    Ok(ExternalObservation {
         user_id: document.user_id,
         provider: map_provider(&document.provider),
         external_object_kind: map_external_object_kind(&document.external_object_kind),
@@ -245,8 +247,8 @@ fn map_document_to_observation(document: ExternalObservationDocument) -> Externa
             document.observed_at_epoch_seconds,
             "observed_at",
         )
-        .expect("external observation documents must store observed_at"),
-    }
+        .map_err(ExternalSyncRepositoryError::Storage)?,
+    })
 }
 
 fn provider_as_str(provider: &ExternalProvider) -> &'static str {
@@ -328,8 +330,33 @@ mod tests {
             observed_at_epoch_seconds: 1_700_000_000,
         });
 
-        let mapped = map_document_to_observation(map_observation_to_document(&observation));
+        let mapped = map_document_to_observation(map_observation_to_document(&observation))
+            .expect("observation should round-trip through document mapping");
 
         assert_eq!(mapped, observation);
+    }
+
+    #[test]
+    fn observation_document_requires_observed_at_timestamp() {
+        let error = map_document_to_observation(super::ExternalObservationDocument {
+            user_id: "user-1".to_string(),
+            provider: "intervals".to_string(),
+            external_object_kind: "race".to_string(),
+            external_id: "remote-1".to_string(),
+            canonical_entity_kind: "race".to_string(),
+            canonical_entity_id: "race-1".to_string(),
+            normalized_payload_hash: Some("hash-1".to_string()),
+            dedup_key: Some("dedup-1".to_string()),
+            observed_at_epoch_seconds: None,
+            observed_at: None,
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            crate::domain::external_sync::ExternalSyncRepositoryError::Storage(
+                "missing observed_at timestamp".to_string()
+            )
+        );
     }
 }

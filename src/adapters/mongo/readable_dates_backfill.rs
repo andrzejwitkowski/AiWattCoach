@@ -392,10 +392,13 @@ async fn backfill_collection(
             continue;
         };
 
-        collection
-            .update_one(doc! { "_id": id }, doc! { "$set": set_updates })
+        let update_result = collection
+            .update_one(
+                build_compare_and_set_filter(id, &document, spec),
+                doc! { "$set": set_updates },
+            )
             .await?;
-        modified_documents += 1;
+        modified_documents += update_result.modified_count;
     }
 
     Ok(modified_documents)
@@ -438,6 +441,36 @@ fn build_set_updates(
         Ok(None)
     } else {
         Ok(Some(set_updates))
+    }
+}
+
+fn build_compare_and_set_filter(
+    id: Bson,
+    document: &Document,
+    spec: &CollectionBackfillSpec,
+) -> Document {
+    let mut filter = doc! { "_id": id };
+
+    for field in spec.root_fields {
+        insert_filter_value_for_path(&mut filter, document, field.epoch_path);
+        insert_filter_value_for_path(&mut filter, document, field.datetime_path);
+    }
+
+    for field in spec.array_fields {
+        insert_filter_value_for_path(&mut filter, document, field.array_path);
+    }
+
+    filter
+}
+
+fn insert_filter_value_for_path(filter: &mut Document, document: &Document, path: &str) {
+    match get_owned_bson_at_path(document, path) {
+        Some(value) => {
+            filter.insert(path, value);
+        }
+        None => {
+            filter.insert(path, doc! { "$exists": false });
+        }
     }
 }
 
@@ -513,6 +546,10 @@ fn get_array_at_path(document: &Document, path: &str) -> Option<Vec<Bson>> {
 
 fn path_is_missing_or_null(document: &Document, path: &str) -> bool {
     matches!(get_bson_at_path(document, path), None | Some(Bson::Null))
+}
+
+fn get_owned_bson_at_path(document: &Document, path: &str) -> Option<Bson> {
+    get_bson_at_path(document, path).cloned()
 }
 
 fn get_bson_at_path<'a>(document: &'a Document, path: &str) -> Option<&'a Bson> {

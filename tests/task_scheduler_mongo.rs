@@ -126,6 +126,14 @@ async fn mongo_task_repository_sets_cleanup_after_for_completed_tasks() {
         .await
         .unwrap()
         .unwrap();
+    let started_at = stored
+        .get_datetime("started_at")
+        .expect("claimed task should have started_at datetime mirror");
+    assert_eq!(started_at.timestamp_millis(), 100_000);
+    let finished_at = stored
+        .get_datetime("finished_at")
+        .expect("completed task should have finished_at datetime mirror");
+    assert_eq!(finished_at.timestamp_millis(), 200_000);
     let cleanup_after = stored
         .get_datetime("cleanup_after")
         .expect("completed task should have cleanup_after");

@@ -1,5 +1,4 @@
 use crate::domain::{
-    calendar::{PlannedWorkoutSyncRecord, PlannedWorkoutSyncRepository},
     completed_workouts::CompletedWorkoutRepository,
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncStateRepository,
@@ -14,8 +13,8 @@ use crate::domain::{
 
 use super::{
     merge_workout_entries, project_planned_workout_entry, project_race_entry,
-    project_special_day_entry, BoxFuture, CalendarEntrySync, CalendarEntryView,
-    CalendarEntryViewError, CalendarEntryViewRepository,
+    project_special_day_entry, BoxFuture, CalendarEntryView, CalendarEntryViewError,
+    CalendarEntryViewRepository,
 };
 
 pub trait CalendarEntryViewRefreshPort: Clone + Send + Sync + 'static {
@@ -111,7 +110,6 @@ impl PlannedCompletedWorkoutLinkRepository for NoopPlannedCompletedWorkoutLinkRe
 pub struct CalendarEntryViewRefreshService<
     Views,
     Planned,
-    PlannedSyncs,
     Completed,
     Races,
     SpecialDays,
@@ -121,7 +119,6 @@ pub struct CalendarEntryViewRefreshService<
 > where
     Views: CalendarEntryViewRepository + Clone,
     Planned: PlannedWorkoutRepository + Clone,
-    PlannedSyncs: PlannedWorkoutSyncRepository + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -132,7 +129,6 @@ pub struct CalendarEntryViewRefreshService<
     views: Views,
     planned_workouts: Planned,
     cleanup_planned_workouts: CleanupPlanned,
-    planned_workout_syncs: PlannedSyncs,
     completed_workouts: Completed,
     races: Races,
     special_days: SpecialDays,
@@ -140,11 +136,10 @@ pub struct CalendarEntryViewRefreshService<
     planned_completed_links: PlannedCompletedLinks,
 }
 
-impl<Views, Planned, PlannedSyncs, Completed, Races, SpecialDays, SyncStates>
+impl<Views, Planned, Completed, Races, SpecialDays, SyncStates>
     CalendarEntryViewRefreshService<
         Views,
         Planned,
-        PlannedSyncs,
         Completed,
         Races,
         SpecialDays,
@@ -155,7 +150,6 @@ impl<Views, Planned, PlannedSyncs, Completed, Races, SpecialDays, SyncStates>
 where
     Views: CalendarEntryViewRepository + Clone,
     Planned: PlannedWorkoutRepository + Clone,
-    PlannedSyncs: PlannedWorkoutSyncRepository + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -164,7 +158,6 @@ where
     pub fn new(
         views: Views,
         planned_workouts: Planned,
-        planned_workout_syncs: PlannedSyncs,
         completed_workouts: Completed,
         races: Races,
         special_days: SpecialDays,
@@ -174,7 +167,6 @@ where
             views,
             cleanup_planned_workouts: planned_workouts.clone(),
             planned_workouts,
-            planned_workout_syncs,
             completed_workouts,
             races,
             special_days,
@@ -187,7 +179,6 @@ where
 impl<
         Views,
         Planned,
-        PlannedSyncs,
         Completed,
         Races,
         SpecialDays,
@@ -198,7 +189,6 @@ impl<
     CalendarEntryViewRefreshService<
         Views,
         Planned,
-        PlannedSyncs,
         Completed,
         Races,
         SpecialDays,
@@ -209,7 +199,6 @@ impl<
 where
     Views: CalendarEntryViewRepository + Clone,
     Planned: PlannedWorkoutRepository + Clone,
-    PlannedSyncs: PlannedWorkoutSyncRepository + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -223,7 +212,6 @@ where
     ) -> CalendarEntryViewRefreshService<
         Views,
         Planned,
-        PlannedSyncs,
         Completed,
         Races,
         SpecialDays,
@@ -238,7 +226,6 @@ where
             views: self.views,
             planned_workouts: self.planned_workouts,
             cleanup_planned_workouts,
-            planned_workout_syncs: self.planned_workout_syncs,
             completed_workouts: self.completed_workouts,
             races: self.races,
             special_days: self.special_days,
@@ -253,7 +240,6 @@ where
     ) -> CalendarEntryViewRefreshService<
         Views,
         Planned,
-        PlannedSyncs,
         Completed,
         Races,
         SpecialDays,
@@ -268,7 +254,6 @@ where
             views: self.views,
             planned_workouts: self.planned_workouts,
             cleanup_planned_workouts: self.cleanup_planned_workouts,
-            planned_workout_syncs: self.planned_workout_syncs,
             completed_workouts: self.completed_workouts,
             races: self.races,
             special_days: self.special_days,
@@ -281,7 +266,6 @@ where
 impl<
         Views,
         Planned,
-        PlannedSyncs,
         Completed,
         Races,
         SpecialDays,
@@ -292,7 +276,6 @@ impl<
     for CalendarEntryViewRefreshService<
         Views,
         Planned,
-        PlannedSyncs,
         Completed,
         Races,
         SpecialDays,
@@ -303,7 +286,6 @@ impl<
 where
     Views: CalendarEntryViewRepository + Clone,
     Planned: PlannedWorkoutRepository + Clone,
-    PlannedSyncs: PlannedWorkoutSyncRepository + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -320,7 +302,6 @@ where
         let views = self.views.clone();
         let planned_workouts = self.planned_workouts.clone();
         let cleanup_planned_workouts = self.cleanup_planned_workouts.clone();
-        let planned_workout_syncs = self.planned_workout_syncs.clone();
         let completed_workouts = self.completed_workouts.clone();
         let races = self.races.clone();
         let special_days = self.special_days.clone();
@@ -380,16 +361,6 @@ where
                 .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
                 .map_err(map_completed_error)?;
-            let planned_syncs = planned_workout_syncs
-                .list_by_user_id_and_range(
-                    &user_id,
-                    &crate::domain::intervals::DateRange {
-                        oldest: oldest.clone(),
-                        newest: newest.clone(),
-                    },
-                )
-                .await
-                .map_err(map_planned_sync_error)?;
             let races = races
                 .list_by_user_id_and_range(
                     &user_id,
@@ -405,11 +376,6 @@ where
                 .await
                 .map_err(map_special_day_error)?;
 
-            let planned_syncs_by_id = planned_syncs
-                .into_iter()
-                .map(|record| (format!("{}:{}", record.operation_key, record.date), record))
-                .collect::<std::collections::HashMap<_, _>>();
-
             let planned_entities = planned
                 .iter()
                 .map(|workout| {
@@ -420,16 +386,22 @@ where
                 })
                 .collect::<Vec<_>>();
             let planned_sync_states_by_entity = sync_states
-                .find_by_provider_and_canonical_entities(
-                    &user_id,
-                    ExternalProvider::Intervals,
-                    &planned_entities,
-                )
+                .find_by_canonical_entities(&user_id, &planned_entities)
                 .await
                 .map_err(map_sync_error)?
                 .into_iter()
-                .map(|state| (state.canonical_entity.clone(), state))
-                .collect::<std::collections::HashMap<_, _>>();
+                .fold(
+                    std::collections::HashMap::<
+                        CanonicalEntityRef,
+                        Vec<crate::domain::external_sync::ExternalSyncState>,
+                    >::new(),
+                    |mut acc, state| {
+                        acc.entry(state.canonical_entity.clone())
+                            .or_default()
+                            .push(state);
+                        acc
+                    },
+                );
 
             let mut projected_planned = Vec::with_capacity(planned.len());
             for workout in &planned {
@@ -437,15 +409,11 @@ where
                     CanonicalEntityKind::PlannedWorkout,
                     workout.planned_workout_id.clone(),
                 );
-                let mut entry = project_planned_workout_entry(
-                    workout,
-                    planned_sync_states_by_entity.get(&planned_entity),
-                );
-                if entry.sync.is_none() {
-                    entry.sync = planned_syncs_by_id
-                        .get(&workout.planned_workout_id)
-                        .map(map_planned_sync_record_to_calendar_entry_sync);
-                }
+                let sync_states = planned_sync_states_by_entity
+                    .get(&planned_entity)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                let entry = project_planned_workout_entry(workout, sync_states);
                 projected_planned.push(entry);
             }
             let mut projected = merge_workout_entries(projected_planned, &completed);
@@ -540,35 +508,5 @@ fn map_planned_completed_link_error(
         crate::domain::planned_completed_links::PlannedCompletedWorkoutLinkError::Repository(
             message,
         ) => CalendarEntryViewError::Repository(message),
-    }
-}
-
-fn map_planned_sync_error(error: crate::domain::calendar::CalendarError) -> CalendarEntryViewError {
-    match error {
-        crate::domain::calendar::CalendarError::NotFound => {
-            CalendarEntryViewError::Repository("planned workout sync not found".to_string())
-        }
-        crate::domain::calendar::CalendarError::Unauthenticated => {
-            CalendarEntryViewError::Repository("planned workout sync unauthenticated".to_string())
-        }
-        crate::domain::calendar::CalendarError::CredentialsNotConfigured => {
-            CalendarEntryViewError::Repository(
-                "planned workout sync credentials not configured".to_string(),
-            )
-        }
-        crate::domain::calendar::CalendarError::Validation(message)
-        | crate::domain::calendar::CalendarError::Unavailable(message)
-        | crate::domain::calendar::CalendarError::Internal(message) => {
-            CalendarEntryViewError::Repository(message)
-        }
-    }
-}
-
-fn map_planned_sync_record_to_calendar_entry_sync(
-    record: &PlannedWorkoutSyncRecord,
-) -> CalendarEntrySync {
-    CalendarEntrySync {
-        linked_intervals_event_id: record.intervals_event_id,
-        sync_status: Some(record.status.as_str().to_string()),
     }
 }

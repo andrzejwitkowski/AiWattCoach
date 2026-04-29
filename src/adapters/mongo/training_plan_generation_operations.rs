@@ -15,8 +15,8 @@ use crate::domain::{
 
 use super::error::is_duplicate_key_error;
 use super::time::{
-    optional_epoch_seconds_to_bson_datetime, resolve_optional_epoch_seconds,
-    resolve_required_epoch_seconds,
+    optional_epoch_seconds_to_bson_datetime, required_epoch_seconds_to_bson_datetime,
+    resolve_optional_epoch_seconds, resolve_required_epoch_seconds,
 };
 
 #[derive(Clone)]
@@ -233,11 +233,10 @@ fn map_operation_to_document(
         user_id: operation.user_id.clone(),
         workout_id: operation.workout_id.clone(),
         saved_at_epoch_seconds: Some(operation.saved_at_epoch_seconds),
-        saved_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.saved_at_epoch_seconds),
+        saved_at: required_epoch_seconds_to_bson_datetime(
+            operation.saved_at_epoch_seconds,
             "saved_at",
-        )
-        .expect("saved_at should fit BSON DateTime"),
+        ),
         status: map_status_to_document(&operation.status).to_string(),
         workout_recap_text: operation.workout_recap_text.clone(),
         workout_recap_provider: operation.workout_recap_provider.clone(),
@@ -269,30 +268,26 @@ fn map_operation_to_document(
             .collect::<Result<Vec<_>, _>>()?,
         failure: operation.failure.as_ref().map(map_failure_to_document),
         started_at_epoch_seconds: Some(operation.started_at_epoch_seconds),
-        started_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.started_at_epoch_seconds),
+        started_at: required_epoch_seconds_to_bson_datetime(
+            operation.started_at_epoch_seconds,
             "started_at",
-        )
-        .expect("started_at should fit BSON DateTime"),
+        ),
         last_attempt_at_epoch_seconds: Some(operation.last_attempt_at_epoch_seconds),
-        last_attempt_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.last_attempt_at_epoch_seconds),
+        last_attempt_at: required_epoch_seconds_to_bson_datetime(
+            operation.last_attempt_at_epoch_seconds,
             "last_attempt_at",
-        )
-        .expect("last_attempt_at should fit BSON DateTime"),
+        ),
         attempt_count: i64::from(operation.attempt_count),
         created_at_epoch_seconds: Some(operation.created_at_epoch_seconds),
-        created_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.created_at_epoch_seconds),
+        created_at: required_epoch_seconds_to_bson_datetime(
+            operation.created_at_epoch_seconds,
             "created_at",
-        )
-        .expect("created_at should fit BSON DateTime"),
+        ),
         updated_at_epoch_seconds: Some(operation.updated_at_epoch_seconds),
-        updated_at: optional_epoch_seconds_to_bson_datetime(
-            Some(operation.updated_at_epoch_seconds),
+        updated_at: required_epoch_seconds_to_bson_datetime(
+            operation.updated_at_epoch_seconds,
             "updated_at",
-        )
-        .expect("updated_at should fit BSON DateTime"),
+        ),
     })
 }
 
@@ -385,11 +380,10 @@ fn map_attempt_to_document(
         phase: map_phase_to_document(&attempt.phase).to_string(),
         attempt_number: i64::from(attempt.attempt_number),
         recorded_at_epoch_seconds: Some(attempt.recorded_at_epoch_seconds),
-        recorded_at: optional_epoch_seconds_to_bson_datetime(
-            Some(attempt.recorded_at_epoch_seconds),
+        recorded_at: required_epoch_seconds_to_bson_datetime(
+            attempt.recorded_at_epoch_seconds,
             "recorded_at",
-        )
-        .expect("recorded_at should fit BSON DateTime"),
+        ),
     })
 }
 
