@@ -1,6 +1,6 @@
 use futures::TryStreamExt;
 use mongodb::{
-    bson::{doc, Bson, DateTime},
+    bson::{doc, DateTime},
     options::IndexOptions,
     Collection, IndexModel,
 };
@@ -82,7 +82,7 @@ impl MongoExternalSyncStateRepository {
                             .name("external_sync_states_user_provider_wahoo_plan_id".to_string())
                             .unique(true)
                             .partial_filter_expression(doc! {
-                                "wahoo_plan_id": { "$exists": true, "$ne": Bson::Null }
+                                "wahoo_plan_id": { "$type": ["int", "long", "double", "decimal"] }
                             })
                             .build(),
                     )
@@ -94,7 +94,7 @@ impl MongoExternalSyncStateRepository {
                             .name("external_sync_states_user_provider_wahoo_workout_token".to_string())
                             .unique(true)
                             .partial_filter_expression(doc! {
-                                "wahoo_workout_token": { "$exists": true, "$ne": Bson::Null }
+                                "wahoo_workout_token": { "$type": "string" }
                             })
                             .build(),
                     )
