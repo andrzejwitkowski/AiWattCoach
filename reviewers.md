@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-29 | user | frontend calendar mini chart workout bars
+
+- Problem: I kept oscillating between sampling, equal-width bars, and capped raw-duration widths in `CalendarMiniChart`, which repeatedly broke either temporal order, duration proportion, or visible height differences. I also reverted planned workout heights back to raw `%FTP`, which made zone differences too subtle in the mini chart.
+- Fix: restored planned workout bar heights to use `ZONE_VISUAL_HEIGHT_PERCENT` whenever `zoneId` exists, and changed the mini-chart renderer to preserve the full bar sequence while compressing `widthUnits` with a square-root scale for display only. Updated focused frontend tests to assert the compressed mini-chart widths instead of raw durations.
+- Prevention: for dense sparkline-style charts, keep canonical bar data unchanged and do any visibility compression only in the renderer. Do not fix a width-visibility issue by changing bar order or by switching the renderer to equal-width bars. When a UX requirement says planned workouts should use visual zone heights, do not revert to raw `%FTP` just to satisfy stale tests.
+
+### 2026-04-29 | user | completed workout chart height normalization
+
+- Problem: completed workouts with many high-power intervals looked like nearly flat same-height bars in both overview and detail because `normalizeBarHeights(...)` stretched interval-based completed data relative to that workout's local min/max instead of preserving a visible absolute power scale.
+- Fix: stopped applying `normalizeBarHeights(...)` to interval-based completed workouts and matched-workout intervals, keeping their heights on the existing absolute `0..1300W -> 0..100%` mapping while leaving fallback stream/skyline paths unchanged.
+- Prevention: for completed intervals that already carry meaningful absolute watt targets, avoid per-workout min/max normalization. Use local normalization only for fallback dense streams where absolute heights would otherwise become unreadable.
+
+### 2026-04-29 | user | completed workout interval visual scale follow-up
+
+- Problem: removing local normalization was still not enough for older completed workouts because many real interval powers cluster in a narrow watt band, so absolute `0..1300W` heights still looked visually flat in both the overview card and the detail modal.
+- Fix: switched interval-based completed bars and matched-workout bars to the same zone-visual height scale used for planned workouts when zone data exists or can be derived from FTP. Kept skyline and raw stream fallbacks on their existing normalization path.
+- Prevention: for compact visual charts, absolute watts are often too compressed to be legible across normal cycling ranges. If the UI goal is quick visual differentiation, prefer a zone-based visual scale for interval bars and reserve absolute scaling for detailed numeric charts.
+
 ### 2026-04-27 | CodeRabbit | PR #157 planned workout repeat parsing follow-up
 
 - Problem: the first canonical repeat-block fix expanded only the outer repeat header count and ignored inline step-level repeat counts inside the block, so input like `Main Set 2x` plus `- 2x30s 120%` still undercounted duration and segment count inside calendar/workout summaries.

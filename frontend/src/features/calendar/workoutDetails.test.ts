@@ -50,7 +50,7 @@ describe('workoutDetails', () => {
     const bars = buildPlannedWorkoutBars(event);
 
     expect(bars).toHaveLength(4);
-    expect(bars[0]).toEqual({ height: 100, color: '#facc15', widthUnits: 240 });
+    expect(bars[0]).toEqual({ height: 90, color: '#facc15', widthUnits: 240 });
   });
 
   it('builds interval-only planned bars from target intensity instead of index order', () => {
@@ -89,7 +89,7 @@ describe('workoutDetails', () => {
     };
 
     expect(buildPlannedWorkoutBars(event)).toEqual([
-      { height: 90, color: '#52c41a', widthUnits: 2400 },
+      { height: 50, color: '#52c41a', widthUnits: 2400 },
     ]);
   });
 
@@ -139,7 +139,7 @@ describe('workoutDetails', () => {
     };
 
     expect(buildPlannedWorkoutBars(event)).toEqual([
-      { height: 70, color: '#00e3fd', widthUnits: 600 },
+      { height: 28, color: '#00e3fd', widthUnits: 600 },
     ]);
   });
 
@@ -179,7 +179,7 @@ describe('workoutDetails', () => {
     };
 
     expect(buildPlannedWorkoutBars(event)).toEqual([
-      { height: 45, color: '#6b7280', widthUnits: 600 },
+      { height: 10, color: '#6b7280', widthUnits: 600 },
     ]);
   });
 
@@ -312,7 +312,7 @@ describe('workoutDetails', () => {
     const bars = buildCompletedWorkoutBars(activity);
 
     expect(bars).toHaveLength(1);
-    expect(bars[0]).toEqual({ height: 71, color: '#d2ff9a', widthUnits: 360 });
+    expect(bars[0]).toEqual({ height: 75, color: '#d2ff9a', widthUnits: 360 });
   });
 
   it('builds completed preview bars from skyline chart data before generic fallbacks', () => {
@@ -427,8 +427,8 @@ describe('workoutDetails', () => {
     });
 
     expect(bars).toEqual([
-      { height: 68, color: '#d2ff9a', widthUnits: 1200 },
-      { height: 60, color: '#52c41a', widthUnits: 300 },
+      { height: 75, color: '#d2ff9a', widthUnits: 1200 },
+      { height: 50, color: '#52c41a', widthUnits: 300 },
     ]);
   });
 

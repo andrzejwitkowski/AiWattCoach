@@ -1,5 +1,14 @@
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
 
+import {
+  completedIntervalDurationSeconds,
+  heightForPercent,
+  heightForPower,
+  matchedIntervalDurationSeconds,
+  normalizeBarHeights,
+  normalizeSkylineWidths,
+} from './workoutBarScaling';
+
 export type WorkoutDetailSelection = {
   dateKey: string;
   event: IntervalEvent | null;
@@ -84,6 +93,16 @@ const DEFAULT_ZONE_TARGET_PERCENT: Record<number, number> = {
   7: 150,
 };
 
+const ZONE_VISUAL_HEIGHT_PERCENT: Record<number, number> = {
+  1: 8,
+  2: 28,
+  3: 50,
+  4: 75,
+  5: 90,
+  6: 97,
+  7: 100,
+};
+
 export function isPlannedWorkoutEvent(
   event: IntervalEvent | null | undefined,
 ): event is IntervalEvent {
@@ -132,10 +151,14 @@ export function buildCompletedWorkoutBars(activity: IntervalActivity): WorkoutBa
   const intervals = activity.details.intervals.filter((interval) => interval.averagePowerWatts !== null);
   if (intervals.length > 0) {
     return intervals.slice(0, 12).map((interval) => ({
-      height: heightForPower(interval.averagePowerWatts ?? activity.metrics.averagePowerWatts ?? 0),
-      color: POWER_ZONE_COLORS[interval.zone ?? inferZoneFromPower(interval.averagePowerWatts, activity.metrics.ftpWatts)] ?? POWER_ZONE_COLORS[4],
-      widthUnits: completedIntervalDurationSeconds(interval),
-    }));
+        height: completedBarHeight(
+          interval.averagePowerWatts ?? activity.metrics.averagePowerWatts ?? 0,
+          interval.zone,
+          activity.metrics.ftpWatts,
+        ),
+        color: POWER_ZONE_COLORS[interval.zone ?? inferZoneFromPower(interval.averagePowerWatts, activity.metrics.ftpWatts)] ?? POWER_ZONE_COLORS[4],
+        widthUnits: completedIntervalDurationSeconds(interval),
+      }));
   }
 
   const values = extractCompletedPowerValues(activity).slice(0, 24);
@@ -143,17 +166,19 @@ export function buildCompletedWorkoutBars(activity: IntervalActivity): WorkoutBa
     return [];
   }
 
-  return values.map((value) => ({
-    height: heightForPower(value),
-    color: POWER_ZONE_COLORS[inferZoneFromPower(value, activity.metrics.ftpWatts)] ?? POWER_ZONE_COLORS[4],
-    widthUnits: 1,
-  }));
+  return normalizeBarHeights(
+    values.map((value) => ({
+      height: heightForPower(value),
+      color: POWER_ZONE_COLORS[inferZoneFromPower(value, activity.metrics.ftpWatts)] ?? POWER_ZONE_COLORS[4],
+      widthUnits: 1,
+    })),
+  );
 }
 
 export function buildCompletedWorkoutPreviewBars(activity: IntervalActivity): WorkoutBar[] {
   const skylineBars = buildSkylineChartBars(activity.details.skylineChart);
   if (skylineBars.length > 0) {
-    return skylineBars;
+    return normalizeBarHeights(skylineBars);
   }
 
   return buildCompletedWorkoutBars(activity);
@@ -161,18 +186,24 @@ export function buildCompletedWorkoutPreviewBars(activity: IntervalActivity): Wo
 
 export function buildMatchedWorkoutBars(actualWorkout: IntervalEvent['actualWorkout']): WorkoutBar[] {
   if (!actualWorkout?.matchedIntervals.length) {
-    return actualWorkout?.powerValues.slice(0, 24).map((value) => ({
-      height: heightForPower(value),
-      color: POWER_ZONE_COLORS[4],
-      widthUnits: 1,
-    })) ?? [];
+    return normalizeBarHeights(
+      actualWorkout?.powerValues.slice(0, 24).map((value) => ({
+        height: heightForPower(value),
+        color: POWER_ZONE_COLORS[4],
+        widthUnits: 1,
+      })) ?? [],
+    );
   }
 
   return actualWorkout.matchedIntervals.map((interval) => ({
-    height: heightForPower(interval.averagePowerWatts ?? interval.normalizedPowerWatts ?? 0),
-    color: POWER_ZONE_COLORS[interval.zoneId ?? 4] ?? POWER_ZONE_COLORS[4],
-    widthUnits: normalizeWidthUnits(matchedIntervalDurationSeconds(interval)),
-  }));
+      height: completedBarHeight(
+        interval.averagePowerWatts ?? interval.normalizedPowerWatts ?? 0,
+        interval.zoneId ?? null,
+        null,
+      ),
+      color: POWER_ZONE_COLORS[interval.zoneId ?? 4] ?? POWER_ZONE_COLORS[4],
+      widthUnits: normalizeWidthUnits(matchedIntervalDurationSeconds(interval)),
+    }));
 }
 
 export function buildPlannedWorkoutPowerSeries(
@@ -760,8 +791,16 @@ function plannedBarHeight(
   targetPercentFtp: number | null | undefined,
   zoneId: number | null | undefined,
 ): number {
-  const targetValue = plannedTargetValueOrNull(targetPercentFtp, zoneId);
-  return targetValue !== null ? heightForPercent(targetValue) : 45;
+  const visualHeight = zoneId ? ZONE_VISUAL_HEIGHT_PERCENT[zoneId] : undefined;
+  if (visualHeight !== undefined) {
+    return visualHeight;
+  }
+
+  if (targetPercentFtp !== null && targetPercentFtp !== undefined && targetPercentFtp > 0) {
+    return heightForPercent(targetPercentFtp);
+  }
+
+  return 10;
 }
 
 function plannedBarColor(
@@ -770,6 +809,19 @@ function plannedBarColor(
 ): string {
   const derivedZoneId = resolvePlannedZoneId(targetPercentFtp, zoneId);
   return derivedZoneId ? POWER_ZONE_COLORS[derivedZoneId] ?? POWER_ZONE_COLORS[4] : POWER_ZONE_COLORS[1];
+}
+
+function completedBarHeight(
+  power: number,
+  zoneId: number | null | undefined,
+  ftpWatts: number | null | undefined,
+): number {
+  const resolvedZoneId = zoneId ?? resolveCompletedZoneId(power, ftpWatts);
+  if (resolvedZoneId) {
+    return ZONE_VISUAL_HEIGHT_PERCENT[resolvedZoneId] ?? heightForPower(power);
+  }
+
+  return heightForPower(power);
 }
 
 function plannedTargetValueOrNull(
@@ -1011,55 +1063,21 @@ function readVarint(bytes: Uint8Array, offset: number): { value: number; nextOff
   return null;
 }
 
-function normalizeSkylineWidths(widths: number[], barCount: number): number[] {
-  if (barCount === 0) {
-    return [];
-  }
-
-  const rawWidths = Array.from({length: barCount}, (_, index) => widths[index] ?? 1);
-  const maxWidth = Math.max(...rawWidths, 1);
-
-  return rawWidths.map((width) => {
-    const normalized = maxWidth > 512 ? Math.round(width / 109) : width;
-    return Math.max(1, normalized);
-  });
-}
-
-function completedIntervalDurationSeconds(interval: IntervalActivity['details']['intervals'][number]): number {
-  const inferredDuration = interval.startTimeSeconds !== null && interval.endTimeSeconds !== null
-    ? interval.endTimeSeconds - interval.startTimeSeconds
-    : null;
-
-  return normalizeWidthUnits(interval.movingTimeSeconds ?? interval.elapsedTimeSeconds ?? inferredDuration);
-}
-
-function matchedIntervalDurationSeconds(interval: NonNullable<IntervalEvent['actualWorkout']>['matchedIntervals'][number]): number {
-  const inferredDuration = interval.actualStartTimeSeconds !== null && interval.actualEndTimeSeconds !== null
-    ? interval.actualEndTimeSeconds - interval.actualStartTimeSeconds
-    : null;
-
-  return normalizeWidthUnits(inferredDuration ?? interval.plannedDurationSeconds);
-}
-
-function heightForPercent(percent: number | null | undefined): number {
-  if (!percent || percent <= 0) {
-    return 25;
-  }
-
-  return Math.max(20, Math.min(100, Math.round(percent)));
-}
-
-function heightForPower(power: number): number {
-  if (!Number.isFinite(power) || power <= 0) {
-    return 25;
-  }
-
-  return Math.max(20, Math.min(100, Math.round(power / 4)));
-}
-
 function inferZoneFromPower(power: number | null | undefined, ftpWatts: number | null | undefined): number {
   if (!power || !ftpWatts || ftpWatts <= 0) {
     return 4;
+  }
+
+  return resolveCompletedZoneId(power, ftpWatts) ?? 4;
+}
+
+function resolveCompletedZoneId(power: number | null | undefined, ftpWatts: number | null | undefined): number | null {
+  if (power === null || power === undefined || ftpWatts === null || ftpWatts === undefined) {
+    return null;
+  }
+
+  if (!Number.isFinite(power) || power <= 0 || !Number.isFinite(ftpWatts) || ftpWatts <= 0) {
+    return null;
   }
 
   const percent = (power / ftpWatts) * 100;
