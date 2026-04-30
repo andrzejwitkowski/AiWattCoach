@@ -572,10 +572,10 @@ fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
         start_date_local: day.date.clone(),
         event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
-        description: projected_event_sync_body(day),
+        description: None,
         indoor: false,
         color: None,
-        workout_doc: None,
+        workout_doc: projected_event_sync_body(day),
         file_upload: None,
     }
 }
@@ -586,10 +586,10 @@ fn build_update_event(day: &TrainingPlanProjectedDay) -> UpdateEvent {
         start_date_local: Some(day.date.clone()),
         event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
-        description: projected_event_sync_body(day),
+        description: None,
         indoor: Some(false),
         color: None,
-        workout_doc: None,
+        workout_doc: projected_event_sync_body(day),
         file_upload: None,
     }
 }

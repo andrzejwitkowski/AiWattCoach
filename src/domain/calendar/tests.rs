@@ -165,6 +165,51 @@ async fn sync_planned_workout_refreshes_calendar_view_for_failed_day_after_persi
 }
 
 #[tokio::test]
+async fn sync_planned_workout_to_intervals_sends_structured_workout_as_workout_doc() {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Build Session".to_string()),
+        category: EventCategory::Workout,
+        description: None,
+        indoor: false,
+        color: None,
+        workout_doc: Some("- 60m 70%".to_string()),
+    });
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        InMemoryExternalSyncStateRepository::default(),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    let created = intervals.created_events.lock().unwrap().clone();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].description, None);
+    assert_eq!(created[0].workout_doc.as_deref(), Some("- 60m 70%"));
+}
+
+#[tokio::test]
 async fn sync_planned_workout_returns_credentials_not_configured_when_wahoo_is_not_connected() {
     let sync_states = InMemoryExternalSyncStateRepository::default();
     let service = CalendarService::new(
