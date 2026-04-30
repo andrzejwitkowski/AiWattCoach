@@ -1,5 +1,5 @@
 import { Bot, SendHorizontal, Sparkles, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type CalendarCoachModalProps = {
@@ -15,26 +15,74 @@ const QUICK_ACTION_KEYS = [
 
 export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps) {
   const { t } = useTranslation();
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const savedTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       return undefined;
     }
 
+    savedTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
-    const handleKeyDown = (event: KeyboardEvent) => {
+    closeButtonRef.current?.focus();
+
+    const trapFocus = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const dialog = dialogRef.current;
+      if (!dialog) {
+        return;
+      }
+
+      const focusableElements = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute('disabled'));
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (!firstElement || !lastElement) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const activeElement = document.activeElement;
+
+      if (event.shiftKey) {
+        if (activeElement === firstElement || !dialog.contains(activeElement)) {
+          event.preventDefault();
+          lastElement.focus();
+        }
+        return;
+      }
+
+      if (activeElement === lastElement || !dialog.contains(activeElement)) {
+        event.preventDefault();
+        firstElement.focus();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', trapFocus);
 
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', trapFocus);
+      savedTriggerRef.current?.focus();
     };
   }, [isOpen, onClose]);
 
@@ -51,6 +99,8 @@ export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps)
         role="dialog"
         aria-modal="true"
         aria-labelledby="calendar-coach-title"
+        ref={dialogRef}
+        tabIndex={-1}
         className="flex max-h-[min(88vh,58rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[1.75rem] border border-white/8 bg-[linear-gradient(180deg,rgba(28,32,36,0.98),rgba(15,18,20,0.98))] shadow-[0_40px_120px_rgba(0,0,0,0.58)]"
         onClick={(event) => {
           event.stopPropagation();
@@ -72,6 +122,7 @@ export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps)
             </div>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label={t('calendar.closeCoach')}

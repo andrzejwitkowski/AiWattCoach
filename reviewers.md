@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | Copilot | PR #163 calendar AI coach review follow-up
+
+- Problem: the calendar coach preview PR still had review gaps around modal accessibility and polish: opening the dialog did not move focus into it or restore focus on close, the dialog did not trap keyboard focus, a few Polish UI strings still used English/product-review wording, and the page test suite only reset the i18n language in `afterEach`, which left avoidable order sensitivity.
+- Fix: added focus capture/restore plus a `Tab` trap in `frontend/src/features/calendar/components/CalendarCoachModal.tsx`, strengthened `frontend/src/pages/CalendarPage.test.tsx` with `beforeEach` language reset and focus-behavior assertions, and finished the remaining Polish copy in `frontend/src/locales/pl/translation.json`.
+- Prevention: for modal-only preview UIs, verify keyboard behavior explicitly before sending the PR: focus should enter the dialog, remain trapped within enabled controls, and return to the trigger on close. When tests depend on a global i18n singleton, reset language before each test as well as during cleanup so order-dependent failures cannot hide.
+
 ### 2026-04-30 | user | Dockerfile Cargo registry cache in container build
 
 - Problem: after a frontend-only change, the dev container build failed in the Rust stage while downloading `strsim v0.11.1` with `no targets specified in the manifest`. The crate itself was valid; the failure came from a corrupted cached unpacked source tree under the shared BuildKit mount at `/usr/local/cargo/registry/src`.

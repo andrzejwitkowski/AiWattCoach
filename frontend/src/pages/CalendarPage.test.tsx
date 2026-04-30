@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import i18n from '../i18n';
 import { CalendarPage } from './CalendarPage';
@@ -12,6 +12,10 @@ vi.mock('../features/calendar/components/CalendarGrid', () => ({
 }));
 
 describe('CalendarPage', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
   afterEach(async () => {
     cleanup();
     await i18n.changeLanguage('en');
@@ -39,10 +43,12 @@ describe('CalendarPage', () => {
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
     expect(screen.getByRole('heading', { name: /ai coach - calendar review/i })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /calendar coach message preview/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /close calendar coach preview/i })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: /close calendar coach preview/i }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open ai coach preview/i })).toHaveFocus();
   });
 
   it('closes the modal on escape', async () => {
@@ -56,5 +62,26 @@ describe('CalendarPage', () => {
     await user.keyboard('{Escape}');
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('traps focus inside the modal while tabbing', async () => {
+    const user = userEvent.setup();
+
+    render(<CalendarPage apiBaseUrl="" />);
+
+    await user.click(screen.getByRole('button', { name: /open ai coach preview/i }));
+
+    const closeButton = screen.getByRole('button', { name: /close calendar coach preview/i });
+
+    expect(closeButton).toHaveFocus();
+
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(closeButton).toHaveFocus();
   });
 });
