@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | Copilot/CodeRabbit | PR #165 alias + projection follow-up
+
+- Problem: the completed-workout alias batch lookup still computed missing ids before alias remapping and only normalized the stored id side, so requests like `intervals-activity:...` could miss prefetched alias hits and do unnecessary legacy fallback work. The in-memory summary repository fallback also searched across all users, which could hide tenant-scoping bugs in tests. Separately, the in-memory training-plan projection repo derived superseded refresh ranges from unsorted same-operation dates, so replay tests could compute the wrong min/max window depending on insertion order.
+- Fix: changed Mongo batch lookup to compute missing ids after alias-aware matching and normalize the requested id as well as the stored id, restricted the in-memory summary alias fallback to the requested user and aligned its normalization, and switched the in-memory training-plan projection repo to derive same-operation refresh bounds via min/max rather than unsorted first/last. Added focused regressions for prefetched alias requests, user-scoped alias fallback, and same-operation stale-leading-day supersedence.
+- Prevention: when adding alias-aware batch lookup, verify both sides of normalization and compute fallback sets only after checking alias matches, not just exact keys. Any in-memory repo used to validate persistence semantics must preserve user scoping and ordering/min-max behavior from production rather than relying on incidental iteration order.
+
 ### 2026-04-30 | internal review loop | workout summary alias follow-up
 
 - Problem: the first completed-workout summary alias patch still had four confirmed review gaps: missing-`source_activity_id` fallback collapsed canonical ids to stripped activity ids, saved-workout side effects used the preferred alias instead of the persisted storage key and could drift operation ids on retry, `list_summaries(...)` could return the same summary twice when both aliases were requested, and batch `find_by_user_id_and_workout_ids(...)` no longer matched equivalent completed-workout aliases needed by `training_context`.

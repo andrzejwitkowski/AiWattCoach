@@ -454,7 +454,11 @@ async fn find_preferred_documents(
 
     let missing_workout_ids = workout_ids
         .iter()
-        .filter(|workout_id| !preferred_by_storage_workout_id.contains_key(workout_id.as_str()))
+        .filter(|workout_id| {
+            !preferred_by_storage_workout_id
+                .values()
+                .any(|document| matches_requested_workout_id(document, workout_id))
+        })
         .cloned()
         .collect::<Vec<_>>();
 
@@ -506,9 +510,10 @@ fn matches_requested_workout_id(
     document: &WorkoutSummaryDocument,
     requested_workout_id: &str,
 ) -> bool {
+    let requested_activity_id = completed_workout_activity_id(requested_workout_id);
     document.workout_id == requested_workout_id
         || document.workout_id == canonical_completed_workout_id(requested_workout_id)
-        || completed_workout_activity_id(&document.workout_id) == requested_workout_id
+        || completed_workout_activity_id(&document.workout_id) == requested_activity_id
 }
 
 fn current_lookup_ids_for_request(requested_workout_id: &str) -> Vec<String> {

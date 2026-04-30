@@ -205,6 +205,8 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 })
                 .map(|day| day.date.clone())
                 .collect::<Vec<_>>();
+            let same_operation_start_date = same_operation_active_date_range.iter().min().cloned();
+            let same_operation_end_date = same_operation_active_date_range.iter().max().cloned();
 
             let max_active_date = stored
                 .iter()
@@ -219,14 +221,14 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 .map(|date| std::cmp::max(snapshot.end_date.as_str(), date.as_str()))
                 .unwrap_or(snapshot.end_date.as_str())
                 .to_string();
-            let superseded_refresh_start = same_operation_active_date_range
-                .first()
-                .map(|start| std::cmp::min(superseded_range_start, start.as_str()))
+            let superseded_refresh_start = same_operation_start_date
+                .as_deref()
+                .map(|start| std::cmp::min(superseded_range_start, start))
                 .unwrap_or(superseded_range_start)
                 .to_string();
-            let superseded_refresh_end = same_operation_active_date_range
-                .last()
-                .map(|end| std::cmp::max(superseded_range_end.as_str(), end.as_str()))
+            let superseded_refresh_end = same_operation_end_date
+                .as_deref()
+                .map(|end| std::cmp::max(superseded_range_end.as_str(), end))
                 .unwrap_or(superseded_range_end.as_str())
                 .to_string();
 

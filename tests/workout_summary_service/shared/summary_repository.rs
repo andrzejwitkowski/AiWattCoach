@@ -72,7 +72,10 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
                         .or_else(|| {
                             summaries
                                 .values()
-                                .find(|summary| matches_requested_workout_id(summary, &workout_id))
+                                .find(|summary| {
+                                    summary.user_id.as_str() == user_id.as_str()
+                                        && matches_requested_workout_id(summary, &workout_id)
+                                })
                                 .cloned()
                         })?;
                     summary.workout_id = workout_id;
@@ -249,7 +252,8 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
 }
 
 fn matches_requested_workout_id(summary: &WorkoutSummary, requested_workout_id: &str) -> bool {
+    let requested_activity_id = completed_workout_activity_id(requested_workout_id);
     summary.workout_id == requested_workout_id
         || summary.workout_id == canonical_completed_workout_id(requested_workout_id)
-        || completed_workout_activity_id(&summary.workout_id) == requested_workout_id
+        || completed_workout_activity_id(&summary.workout_id) == requested_activity_id
 }

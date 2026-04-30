@@ -625,6 +625,32 @@ async fn batch_lookup_reuses_equivalent_completed_workout_alias_for_requested_ac
 }
 
 #[tokio::test]
+async fn batch_lookup_keeps_alias_fallback_scoped_to_requested_user() {
+    let mut user_one_summary = existing_summary();
+    user_one_summary.id = "summary-user-1".to_string();
+    user_one_summary.user_id = "user-1".to_string();
+    user_one_summary.workout_id = "wahoo-workout:450868242".to_string();
+
+    let mut user_two_summary = existing_summary();
+    user_two_summary.id = "summary-user-2".to_string();
+    user_two_summary.user_id = "user-2".to_string();
+    user_two_summary.workout_id = "wahoo-workout:450868242".to_string();
+
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(user_one_summary);
+    repository.overwrite_summary(user_two_summary);
+
+    let summaries = repository
+        .find_by_user_id_and_workout_ids("user-1", vec!["450868242".to_string()])
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].id, "summary-user-1");
+    assert_eq!(summaries[0].user_id, "user-1");
+    assert_eq!(summaries[0].workout_id, "450868242");
+}
+
+#[tokio::test]
 async fn persist_workout_recap_updates_existing_equivalent_alias_summary() {
     let mut summary = existing_summary();
     summary.workout_id = "wahoo-workout:450868242".to_string();
