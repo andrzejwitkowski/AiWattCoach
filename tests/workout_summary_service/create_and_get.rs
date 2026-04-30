@@ -675,6 +675,84 @@ async fn batch_lookup_reuses_equivalent_completed_workout_alias_for_requested_ac
 }
 
 #[tokio::test]
+async fn batch_lookup_reuses_intervals_alias_for_requested_wahoo_completed_workout_id() {
+    let mut summary = existing_summary();
+    summary.id = "summary-alias".to_string();
+    summary.workout_id = "intervals-activity:450868242".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+
+    let summaries = repository
+        .find_by_user_id_and_workout_ids("user-1", vec!["wahoo-workout:450868242".to_string()])
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].workout_id, "wahoo-workout:450868242");
+}
+
+#[tokio::test]
+async fn list_summaries_reuses_batch_lookup_for_equivalent_completed_workout_aliases() {
+    let mut summary = existing_summary();
+    summary.id = "summary-alias".to_string();
+    summary.workout_id = "wahoo-workout:450868242".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[
+        (
+            "450868242",
+            "i144331018",
+            &["i144331018", "wahoo-workout:450868242"],
+        ),
+        (
+            "wahoo-workout:450868242",
+            "i144331018",
+            &["i144331018", "wahoo-workout:450868242"],
+        ),
+    ]);
+    let service = WorkoutSummaryService::new(
+        repository.clone(),
+        crate::shared::InMemoryCoachReplyOperationRepository::default(),
+        crate::shared::TestClock,
+        crate::shared::TestIdGenerator::default(),
+    )
+    .with_completed_workout_target_service(std::sync::Arc::new(completed_target.clone()));
+
+    let summaries = service
+        .list_summaries(
+            "user-1",
+            vec![
+                "450868242".to_string(),
+                "wahoo-workout:450868242".to_string(),
+            ],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].id, "summary-alias");
+    assert_eq!(summaries[0].workout_id, "450868242");
+    assert_eq!(
+        repository.read_calls(),
+        vec![
+            "find_by_user_id_and_workout_ids:user-1:i144331018,450868242,wahoo-workout:450868242"
+                .to_string(),
+        ],
+        "list_summaries should reuse one batch summary fetch"
+    );
+    assert_eq!(
+        repository.calls(),
+        Vec::<String>::new(),
+        "list_summaries should reuse one batch fetch without write-side repo calls"
+    );
+    assert_eq!(
+        completed_target.calls(),
+        vec![
+            "resolve_completed_workout_target:user-1:450868242".to_string(),
+            "resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn batch_lookup_keeps_alias_fallback_scoped_to_requested_user() {
     let mut user_one_summary = existing_summary();
     user_one_summary.id = "summary-user-1".to_string();

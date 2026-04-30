@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | Copilot | PR #166 workout summary list/read follow-up
+
+- Problem: the previous alias fix left two review-confirmed gaps. Mongo batch lookup still did not prefetch the `intervals-activity:{id}` alias when the request arrived as `wahoo-workout:{id}`, so a summary stored under the Intervals-prefixed alias could be missed entirely before alias matching ran. Separately, `list_summaries_impl(...)` had switched from one repository batch fetch to per-id `resolve_workout_summary_target(...)` point reads, which turned completed-workout alias listing into an avoidable N-times lookup path.
+- Fix: extended `current_lookup_ids_for_request(...)` to include both provider-prefixed aliases derived from the stripped activity id, restored `list_summaries_impl(...)` to resolve requested/completed-workout aliases first and then reuse a single `find_by_user_id_and_workout_ids(...)` batch fetch, and added focused Mongo plus in-memory regressions covering the missing Intervals-prefixed alias and the restored batch-read path.
+- Prevention: for alias-aware batch lookup, verify that prefetch ids cover every persisted alias family before relying on later normalization. When a list/read use case already has a batch repository method, preserve that batch boundary and layer alias resolution around it instead of falling back to repeated single-item reads.
+
 ### 2026-04-30 | Copilot/CodeRabbit | PR #165 alias + projection follow-up
 
 - Problem: the completed-workout alias batch lookup still computed missing ids before alias remapping and only normalized the stored id side, so requests like `intervals-activity:...` could miss prefetched alias hits and do unnecessary legacy fallback work. The in-memory summary repository fallback also searched across all users, which could hide tenant-scoping bugs in tests. Separately, the in-memory training-plan projection repo derived superseded refresh ranges from unsorted same-operation dates, so replay tests could compute the wrong min/max window depending on insertion order.

@@ -527,6 +527,7 @@ fn current_lookup_ids_for_request(requested_workout_id: &str) -> Vec<String> {
         canonical_completed_workout_id(requested_workout_id),
     );
     push_unique_lookup_id(&mut lookup_ids, format!("wahoo-workout:{activity_id}"));
+    push_unique_lookup_id(&mut lookup_ids, format!("intervals-activity:{activity_id}"));
 
     lookup_ids
 }
