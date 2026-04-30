@@ -1,5 +1,9 @@
 use super::*;
 
+use aiwattcoach::domain::completed_workouts::{
+    canonical_completed_workout_id, completed_workout_activity_id,
+};
+
 #[derive(Clone, Default)]
 pub(crate) struct InMemoryWorkoutSummaryRepository {
     summaries: Arc<Mutex<BTreeMap<(String, String), WorkoutSummary>>>,
@@ -61,7 +65,19 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             let summaries = summaries.lock().unwrap();
             Ok(workout_ids
                 .into_iter()
-                .filter_map(|workout_id| summaries.get(&(user_id.clone(), workout_id)).cloned())
+                .filter_map(|workout_id| {
+                    let mut summary = summaries
+                        .get(&(user_id.clone(), workout_id.clone()))
+                        .cloned()
+                        .or_else(|| {
+                            summaries
+                                .values()
+                                .find(|summary| matches_requested_workout_id(summary, &workout_id))
+                                .cloned()
+                        })?;
+                    summary.workout_id = workout_id;
+                    Some(summary)
+                })
                 .collect())
         })
     }
@@ -230,4 +246,10 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
                 }))
         })
     }
+}
+
+fn matches_requested_workout_id(summary: &WorkoutSummary, requested_workout_id: &str) -> bool {
+    summary.workout_id == requested_workout_id
+        || summary.workout_id == canonical_completed_workout_id(requested_workout_id)
+        || completed_workout_activity_id(&summary.workout_id) == requested_workout_id
 }

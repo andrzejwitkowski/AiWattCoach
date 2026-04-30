@@ -20,35 +20,77 @@ where
             .ok_or(WorkoutSummaryError::NotFound)
     }
 
+    pub(super) async fn resolve_workout_summary_target(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> Result<ResolvedWorkoutSummaryTarget, WorkoutSummaryError> {
+        let Some(service) = &self.completed_workout_target_service else {
+            let existing_summary = self
+                .repository
+                .find_by_user_id_and_workout_id(user_id, workout_id)
+                .await?;
+            return Ok(ResolvedWorkoutSummaryTarget {
+                requested_workout_id: workout_id.to_string(),
+                preferred_workout_id: workout_id.to_string(),
+                summary_workout_id: workout_id.to_string(),
+                storage_workout_id: workout_id.to_string(),
+                existing_summary,
+            });
+        };
+
+        let Some(resolved_target) = service
+            .resolve_completed_workout_target(user_id, workout_id)
+            .await?
+        else {
+            return Err(WorkoutSummaryError::Validation(
+                "workout summary is only available for completed workouts".to_string(),
+            ));
+        };
+
+        let mut candidate_workout_ids = Vec::new();
+        push_unique_workout_id(
+            &mut candidate_workout_ids,
+            resolved_target.preferred_workout_id.clone(),
+        );
+        push_unique_workout_id(&mut candidate_workout_ids, workout_id.to_string());
+        for equivalent_workout_id in &resolved_target.equivalent_workout_ids {
+            push_unique_workout_id(&mut candidate_workout_ids, equivalent_workout_id.clone());
+        }
+
+        let mut existing_summary = None;
+        let mut summary_workout_id = resolved_target.preferred_workout_id.clone();
+        let mut storage_workout_id = resolved_target.preferred_workout_id.clone();
+        for candidate_workout_id in candidate_workout_ids {
+            if let Some(summary) = self
+                .repository
+                .find_by_user_id_and_workout_id(user_id, &candidate_workout_id)
+                .await?
+            {
+                storage_workout_id = candidate_workout_id;
+                summary_workout_id = summary.workout_id.clone();
+                existing_summary = Some(summary);
+                break;
+            }
+        }
+
+        Ok(ResolvedWorkoutSummaryTarget {
+            requested_workout_id: workout_id.to_string(),
+            preferred_workout_id: resolved_target.preferred_workout_id,
+            summary_workout_id,
+            storage_workout_id,
+            existing_summary,
+        })
+    }
+
     pub(super) async fn validate_completed_workout_target(
         &self,
         user_id: &str,
         workout_id: &str,
     ) -> Result<(), WorkoutSummaryError> {
-        let is_completed_target = self
-            .is_completed_workout_target(user_id, workout_id)
-            .await?;
-        if is_completed_target {
-            Ok(())
-        } else {
-            Err(WorkoutSummaryError::Validation(
-                "workout summary is only available for completed workouts".to_string(),
-            ))
-        }
-    }
-
-    pub(super) async fn is_completed_workout_target(
-        &self,
-        user_id: &str,
-        workout_id: &str,
-    ) -> Result<bool, WorkoutSummaryError> {
-        let Some(service) = &self.completed_workout_target_service else {
-            return Ok(true);
-        };
-
-        service
-            .is_completed_workout_target(user_id, workout_id)
+        self.resolve_workout_summary_target(user_id, workout_id)
             .await
+            .map(|_| ())
     }
 
     pub(super) async fn append_message_with_role(
@@ -171,6 +213,42 @@ where
             coach_message,
             athlete_summary_was_regenerated: false,
         })
+    }
+
+    pub(super) fn present_summary(
+        &self,
+        mut summary: WorkoutSummary,
+        requested_workout_id: &str,
+    ) -> WorkoutSummary {
+        summary.workout_id = requested_workout_id.to_string();
+        summary
+    }
+
+    pub(super) fn present_persisted_user_message(
+        &self,
+        mut persisted: PersistedUserMessage,
+        requested_workout_id: &str,
+    ) -> PersistedUserMessage {
+        persisted.summary = self.present_summary(persisted.summary, requested_workout_id);
+        persisted
+    }
+
+    pub(super) fn present_coach_reply(
+        &self,
+        mut reply: CoachReply,
+        requested_workout_id: &str,
+    ) -> CoachReply {
+        reply.summary = self.present_summary(reply.summary, requested_workout_id);
+        reply
+    }
+
+    pub(super) fn present_save_summary_result(
+        &self,
+        mut result: SaveSummaryResult,
+        requested_workout_id: &str,
+    ) -> SaveSummaryResult {
+        result.summary = self.present_summary(result.summary, requested_workout_id);
+        result
     }
 
     pub(super) fn map_existing_llm_failure(
@@ -336,5 +414,11 @@ where
         };
 
         Ok((Some(ensured.summary.summary_text), ensured.was_regenerated))
+    }
+}
+
+fn push_unique_workout_id(workout_ids: &mut Vec<String>, workout_id: String) {
+    if !workout_ids.contains(&workout_id) {
+        workout_ids.push(workout_id);
     }
 }

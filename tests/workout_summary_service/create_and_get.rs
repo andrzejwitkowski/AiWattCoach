@@ -396,7 +396,7 @@ async fn mark_saved_rejects_planned_workout_targets() {
     assert!(latest_activity.calls().is_empty());
     assert_eq!(
         completed_target.calls(),
-        vec!["is_completed_workout_target:user-1:workout-1".to_string()]
+        vec!["resolve_completed_workout_target:user-1:workout-1".to_string()]
     );
 }
 
@@ -429,9 +429,240 @@ async fn list_summaries_ignores_non_completed_workout_targets() {
     assert_eq!(
         completed_target.calls(),
         vec![
-            "is_completed_workout_target:user-1:workout-1".to_string(),
-            "is_completed_workout_target:user-1:activity-1".to_string(),
+            "resolve_completed_workout_target:user-1:workout-1".to_string(),
+            "resolve_completed_workout_target:user-1:activity-1".to_string(),
         ]
+    );
+}
+
+#[tokio::test]
+async fn get_summary_reuses_equivalent_completed_workout_alias_without_duplicate_create() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "i144331018".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
+        "wahoo-workout:450868242",
+        "i144331018",
+        &["i144331018", "wahoo-workout:450868242"],
+    )]);
+    let service = WorkoutSummaryService::new(
+        repository.clone(),
+        crate::shared::InMemoryCoachReplyOperationRepository::default(),
+        crate::shared::TestClock,
+        crate::shared::TestIdGenerator::default(),
+    )
+    .with_completed_workout_target_service(std::sync::Arc::new(completed_target.clone()));
+
+    let fetched = service
+        .get_summary("user-1", "wahoo-workout:450868242")
+        .await
+        .unwrap();
+    let created = service
+        .create_summary("user-1", "wahoo-workout:450868242")
+        .await
+        .unwrap();
+
+    assert_eq!(fetched.id, "summary-1");
+    assert_eq!(fetched.workout_id, "wahoo-workout:450868242");
+    assert_eq!(created.id, "summary-1");
+    assert_eq!(created.workout_id, "wahoo-workout:450868242");
+    assert!(repository.calls().is_empty());
+    assert_eq!(
+        completed_target.calls(),
+        vec![
+            "resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string(),
+            "resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "i144331018".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    training_plan.succeed_next(aiwattcoach::domain::training_plan::GeneratedTrainingPlan {
+        snapshot: aiwattcoach::domain::training_plan::TrainingPlanSnapshot {
+            user_id: "user-1".to_string(),
+            workout_id: "i144331018".to_string(),
+            operation_key: "training-plan:user-1:i144331018:1700000000".to_string(),
+            saved_at_epoch_seconds: 1_700_000_000,
+            start_date: "2026-04-06".to_string(),
+            end_date: "2026-04-19".to_string(),
+            days: Vec::new(),
+            created_at_epoch_seconds: 1_700_000_000,
+        },
+        active_projected_days: Vec::new(),
+        was_generated: true,
+    });
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("i144331018"));
+    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
+        "wahoo-workout:450868242",
+        "i144331018",
+        &["i144331018", "wahoo-workout:450868242"],
+    )]);
+    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+        repository.clone(),
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity.clone()),
+        std::sync::Arc::new(completed_target.clone()),
+    );
+
+    let result = service
+        .mark_saved("user-1", "wahoo-workout:450868242")
+        .await
+        .unwrap();
+
+    assert_eq!(result.summary.workout_id, "wahoo-workout:450868242");
+    assert_eq!(
+        repository.calls(),
+        vec!["set_saved_state:i144331018:Some(1700000000)".to_string()]
+    );
+    assert_eq!(
+        training_plan.calls(),
+        vec![
+            "generate_recap_for_saved_workout:user-1:i144331018:1700000000".to_string(),
+            "generate_for_saved_workout:user-1:i144331018:1700000000".to_string(),
+        ]
+    );
+    assert_eq!(
+        latest_activity.calls(),
+        vec!["latest_completed_activity_id:user-1".to_string()]
+    );
+    assert_eq!(
+        completed_target.calls(),
+        vec!["resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_retries_side_effects_with_existing_alias_storage_workout_id() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "wahoo-workout:450868242".to_string();
+    summary.saved_at_epoch_seconds = Some(1_700_000_000);
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("i144331018"));
+    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
+        "i144331018",
+        "i144331018",
+        &["i144331018", "wahoo-workout:450868242"],
+    )]);
+    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+        repository,
+        std::sync::Arc::new(training_plan.clone()),
+        std::sync::Arc::new(latest_activity),
+        std::sync::Arc::new(completed_target),
+    );
+
+    let result = service.mark_saved("user-1", "i144331018").await.unwrap();
+
+    assert_eq!(result.summary.workout_id, "i144331018");
+    assert_eq!(result.workflow.plan_status.as_str(), "failed");
+    assert_eq!(
+        training_plan.calls(),
+        vec!["generate_for_saved_workout:user-1:wahoo-workout:450868242:1700000000".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn list_summaries_dedupes_equivalent_completed_workout_aliases() {
+    let mut summary = existing_summary();
+    summary.id = "summary-alias".to_string();
+    summary.workout_id = "i144331018".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[
+        (
+            "i144331018",
+            "i144331018",
+            &["i144331018", "wahoo-workout:450868242"],
+        ),
+        (
+            "wahoo-workout:450868242",
+            "i144331018",
+            &["i144331018", "wahoo-workout:450868242"],
+        ),
+    ]);
+    let service = WorkoutSummaryService::new(
+        repository,
+        crate::shared::InMemoryCoachReplyOperationRepository::default(),
+        crate::shared::TestClock,
+        crate::shared::TestIdGenerator::default(),
+    )
+    .with_completed_workout_target_service(std::sync::Arc::new(completed_target));
+
+    let summaries = service
+        .list_summaries(
+            "user-1",
+            vec![
+                "i144331018".to_string(),
+                "wahoo-workout:450868242".to_string(),
+            ],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].id, "summary-alias");
+    assert_eq!(summaries[0].workout_id, "i144331018");
+}
+
+#[tokio::test]
+async fn batch_lookup_reuses_equivalent_completed_workout_alias_for_requested_activity_id() {
+    let mut summary = existing_summary();
+    summary.id = "summary-alias".to_string();
+    summary.workout_id = "wahoo-workout:450868242".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+
+    let summaries = repository
+        .find_by_user_id_and_workout_ids("user-1", vec!["450868242".to_string()])
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].workout_id, "450868242");
+}
+
+#[tokio::test]
+async fn persist_workout_recap_updates_existing_equivalent_alias_summary() {
+    let mut summary = existing_summary();
+    summary.workout_id = "wahoo-workout:450868242".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
+        "i144331018",
+        "i144331018",
+        &["i144331018", "wahoo-workout:450868242"],
+    )]);
+    let service = WorkoutSummaryService::new(
+        repository.clone(),
+        crate::shared::InMemoryCoachReplyOperationRepository::default(),
+        crate::shared::TestClock,
+        crate::shared::TestIdGenerator::default(),
+    )
+    .with_completed_workout_target_service(std::sync::Arc::new(completed_target.clone()));
+
+    let updated = service
+        .persist_workout_recap(
+            "user-1",
+            "i144331018",
+            WorkoutRecap::generated("Recovered recap", "openrouter", "gemini", 1_700_000_010),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated.workout_id, "i144331018");
+    assert_eq!(
+        updated.workout_recap_text.as_deref(),
+        Some("Recovered recap")
+    );
+    assert_eq!(
+        repository.calls(),
+        vec!["persist_workout_recap:wahoo-workout:450868242".to_string()]
+    );
+    assert_eq!(
+        completed_target.calls(),
+        vec!["resolve_completed_workout_target:user-1:i144331018".to_string()]
     );
 }
 

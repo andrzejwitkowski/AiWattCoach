@@ -15,8 +15,8 @@ use aiwattcoach::domain::{
     workout_summary::{
         BoxFuture, CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
         CoachReplyOperationStatus, CompletedWorkoutTargetUseCases, ConversationMessage,
-        MessageRole, WorkoutCoach, WorkoutRecap, WorkoutSummary, WorkoutSummaryError,
-        WorkoutSummaryRepository, WorkoutSummaryService,
+        MessageRole, ResolvedCompletedWorkoutTarget, WorkoutCoach, WorkoutRecap, WorkoutSummary,
+        WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
     },
 };
 

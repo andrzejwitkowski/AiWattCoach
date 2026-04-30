@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | internal review loop | workout summary alias follow-up
+
+- Problem: the first completed-workout summary alias patch still had four confirmed review gaps: missing-`source_activity_id` fallback collapsed canonical ids to stripped activity ids, saved-workout side effects used the preferred alias instead of the persisted storage key and could drift operation ids on retry, `list_summaries(...)` could return the same summary twice when both aliases were requested, and batch `find_by_user_id_and_workout_ids(...)` no longer matched equivalent completed-workout aliases needed by `training_context`.
+- Fix: kept missing-`source_activity_id` targets on `completed_workout_id`, tracked the matched repository storage key inside `ResolvedWorkoutSummaryTarget`, drove saved-workout recap/plan side effects from that storage key, deduped `list_summaries(...)` by summary id after alias resolution, and taught batch summary lookup in both Mongo and in-memory test repositories to match equivalent completed-workout aliases.
+- Prevention: when adding alias resolution above a repository boundary, verify three separate surfaces before review: fallback identity selection when canonical metadata is missing, side effects that derive operation keys from ids, and batch lookup/list APIs used by downstream read models. Single-item get/create coverage is not enough.
+
 ### 2026-04-29 | user | workout detail modal black screen after summary refactor
 
 - Problem: after moving completed-workout summary loading into `WorkoutDetailModal`, the new `useCompletedWorkoutSummary(...)` call sat below `if (!selection) return null`. Opening workout details changes the modal from `selection = null` to a real selection, so React saw a different number of hooks between renders and crashed the page with a minified hook-order error.

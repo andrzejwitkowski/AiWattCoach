@@ -196,6 +196,15 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
 
             let superseded_range_start =
                 std::cmp::max(today.as_str(), snapshot.start_date.as_str());
+            let same_operation_active_date_range = stored
+                .iter()
+                .filter(|day| {
+                    day.user_id == snapshot.user_id
+                        && day.operation_key == snapshot.operation_key
+                        && day.superseded_at_epoch_seconds.is_none()
+                })
+                .map(|day| day.date.clone())
+                .collect::<Vec<_>>();
 
             let max_active_date = stored
                 .iter()
@@ -210,6 +219,16 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 .map(|date| std::cmp::max(snapshot.end_date.as_str(), date.as_str()))
                 .unwrap_or(snapshot.end_date.as_str())
                 .to_string();
+            let superseded_refresh_start = same_operation_active_date_range
+                .first()
+                .map(|start| std::cmp::min(superseded_range_start, start.as_str()))
+                .unwrap_or(superseded_range_start)
+                .to_string();
+            let superseded_refresh_end = same_operation_active_date_range
+                .last()
+                .map(|end| std::cmp::max(superseded_range_end.as_str(), end.as_str()))
+                .unwrap_or(superseded_range_end.as_str())
+                .to_string();
 
             let mut superseded_dates = Vec::new();
             for day in stored.iter_mut() {
@@ -219,9 +238,10 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 if day.user_id != snapshot.user_id {
                     continue;
                 }
-                if day.date.as_str() < superseded_range_start
-                    || day.date.as_str() > superseded_range_end.as_str()
-                {
+                let overlaps_replaced_range = day.date.as_str() >= superseded_range_start
+                    && day.date.as_str() <= superseded_range_end.as_str();
+                let is_same_operation_replay = day.operation_key == snapshot.operation_key;
+                if !overlaps_replaced_range && !is_same_operation_replay {
                     continue;
                 }
                 superseded_dates.push(day.date.clone());
@@ -254,11 +274,7 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
             let superseded_date_range = if superseded_dates.is_empty() {
                 None
             } else {
-                superseded_dates.sort();
-                superseded_dates
-                    .first()
-                    .cloned()
-                    .zip(superseded_dates.last().cloned())
+                Some((superseded_refresh_start, superseded_refresh_end))
             };
 
             Ok(TrainingPlanReplacementResult {
