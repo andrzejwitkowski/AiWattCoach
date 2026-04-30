@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | user | Dockerfile Cargo registry cache in container build
+
+- Problem: after a frontend-only change, the dev container build failed in the Rust stage while downloading `strsim v0.11.1` with `no targets specified in the manifest`. The crate itself was valid; the failure came from a corrupted cached unpacked source tree under the shared BuildKit mount at `/usr/local/cargo/registry/src`.
+- Fix: changed the Dockerfile cache mounts to persist only `/usr/local/cargo/registry/cache` and `/usr/local/cargo/registry/index`, leaving `registry/src` ephemeral inside each build stage so Cargo always re-extracts crate sources from the cached tarballs instead of reusing a potentially half-written unpacked directory.
+- Prevention: when Docker/Podman Rust builds fail on a well-known crates.io package with an impossible manifest error, verify the same dependency builds locally before touching `Cargo.lock`. If local Cargo works, treat the failure as a corrupted container cache and avoid caching `cargo/registry/src` across builds.
+
 ### 2026-04-29 | user | workout detail modal black screen after summary refactor
 
 - Problem: after moving completed-workout summary loading into `WorkoutDetailModal`, the new `useCompletedWorkoutSummary(...)` call sat below `if (!selection) return null`. Opening workout details changes the modal from `selection = null` to a real selection, so React saw a different number of hooks between renders and crashed the page with a minified hook-order error.
