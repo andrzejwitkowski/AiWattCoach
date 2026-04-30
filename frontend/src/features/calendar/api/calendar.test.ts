@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { listCalendarLabels } from './calendar';
+import {
+  getCalendarCoachConversation,
+  getCurrentCalendarCoachConversation,
+  listCalendarLabels,
+  sendCalendarCoachMessage,
+  startNewCalendarCoachConversation,
+} from './calendar';
 import { createFetchMock, useFetchMock } from '../../intervals/api/testHelpers';
 
 describe('calendar api', () => {
@@ -51,5 +57,138 @@ describe('calendar api', () => {
     if (raceLabel?.kind === 'race') {
       expect(raceLabel.payload.raceId).toBe('race-1');
     }
+  });
+
+  it('loads current calendar coach conversation', async () => {
+    useFetchMock(
+      createFetchMock().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              conversationId: 'conversation-1',
+              surface: 'calendar',
+              status: 'active',
+              focus: 'overview',
+              createdAtEpochSeconds: 1,
+              updatedAtEpochSeconds: 2,
+            },
+            messages: [],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const result = await getCurrentCalendarCoachConversation('');
+
+    expect(result.conversation.conversationId).toBe('conversation-1');
+  });
+
+  it('starts a new calendar coach conversation', async () => {
+    const fetchMock = useFetchMock(
+      createFetchMock().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              conversationId: 'conversation-2',
+              surface: 'calendar',
+              status: 'active',
+              focus: 'overview',
+              createdAtEpochSeconds: 1,
+              updatedAtEpochSeconds: 1,
+            },
+            messages: [],
+          }),
+          { status: 201, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const result = await startNewCalendarCoachConversation('');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/calendar/coach/conversations', expect.objectContaining({ method: 'POST' }));
+    expect(result.conversation.conversationId).toBe('conversation-2');
+  });
+
+  it('loads a specific calendar coach conversation', async () => {
+    useFetchMock(
+      createFetchMock().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              conversationId: 'conversation-2',
+              surface: 'calendar',
+              status: 'active',
+              focus: 'overview',
+              createdAtEpochSeconds: 1,
+              updatedAtEpochSeconds: 2,
+            },
+            messages: [],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const result = await getCalendarCoachConversation('', 'conversation-2');
+
+    expect(result.conversation.conversationId).toBe('conversation-2');
+  });
+
+  it('sends a calendar coach message', async () => {
+    const fetchMock = useFetchMock(
+      createFetchMock().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            conversation: {
+              conversationId: 'conversation-1',
+              surface: 'calendar',
+              status: 'active',
+              focus: 'overview',
+              createdAtEpochSeconds: 1,
+              updatedAtEpochSeconds: 3,
+            },
+            messages: [
+              {
+                id: 'message-user-1',
+                role: 'user',
+                content: 'How is the week balanced?',
+                createdAtEpochSeconds: 2,
+              },
+              {
+                id: 'message-coach-2',
+                role: 'coach',
+                content: 'The week is front-loaded.',
+                createdAtEpochSeconds: 3,
+              },
+            ],
+            userMessage: {
+              id: 'message-user-1',
+              role: 'user',
+              content: 'How is the week balanced?',
+              createdAtEpochSeconds: 2,
+            },
+            coachMessage: {
+              id: 'message-coach-2',
+              role: 'coach',
+              content: 'The week is front-loaded.',
+              createdAtEpochSeconds: 3,
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const result = await sendCalendarCoachMessage('', 'conversation-1', { content: 'How is the week balanced?' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/calendar/coach/conversations/conversation-1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ content: 'How is the week balanced?' }),
+      }),
+    );
+    expect(result.coachMessage.content).toBe('The week is front-loaded.');
   });
 });

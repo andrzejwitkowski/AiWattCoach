@@ -8,6 +8,7 @@ use mongodb::Client;
 
 use crate::domain::athlete_summary::AthleteSummaryUseCases;
 use crate::domain::calendar::CalendarUseCases;
+use crate::domain::calendar_coach::CalendarCoachUseCases;
 use crate::domain::calendar_labels::CalendarLabelsUseCases;
 use crate::domain::calendar_view::ManualCalendarRefreshUseCases;
 use crate::domain::completed_workouts::{
@@ -30,6 +31,7 @@ pub struct AppState {
     pub client_log_ingestion_enabled: bool,
     pub identity_service: Option<Arc<dyn IdentityUseCases>>,
     pub calendar_service: Option<Arc<dyn CalendarUseCases>>,
+    pub calendar_coach_service: Option<Arc<dyn CalendarCoachUseCases>>,
     pub calendar_labels_service: Option<Arc<dyn CalendarLabelsUseCases>>,
     pub manual_calendar_refresh_service: Option<Arc<dyn ManualCalendarRefreshUseCases>>,
     pub completed_workout_service: Option<Arc<dyn CompletedWorkoutReadUseCases>>,
@@ -108,6 +110,7 @@ impl AppState {
             client_log_ingestion_enabled: false,
             identity_service: None,
             calendar_service: None,
+            calendar_coach_service: None,
             calendar_labels_service: None,
             manual_calendar_refresh_service: None,
             completed_workout_service: None,
@@ -165,6 +168,14 @@ impl AppState {
 
     pub fn with_calendar_service(mut self, calendar_service: Arc<dyn CalendarUseCases>) -> Self {
         self.calendar_service = Some(calendar_service);
+        self
+    }
+
+    pub fn with_calendar_coach_service(
+        mut self,
+        calendar_coach_service: Arc<dyn CalendarCoachUseCases>,
+    ) -> Self {
+        self.calendar_coach_service = Some(calendar_coach_service);
         self
     }
 

@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | user | calendar coach summary-style context regression
+
+- Problem: the new calendar coach reused too much of the athlete-summary flow: it built packed context through the synthetic `athlete-summary` target, regenerated athlete summaries before replies, and surfaced a websocket system message about summary generation. That biased the prompt toward a generic overview and contradicted the intended calendar-chat behavior with no summary side effects.
+- Fix: changed `src/domain/coach_conversation/service/mod.rs` to request a dedicated calendar-overview training context instead of `build_athlete_summary_context(...)`, stopped calling athlete-summary regeneration in the calendar coach path, kept the append/reply flags hard-false for summary regeneration, removed the calendar websocket `system_message("First the summary is being generated - wait a moment")`, and added focused regressions for the new training-context entry point plus the calendar-coach service path.
+- Prevention: when reusing an adjacent LLM workflow, verify which parts are truly shared behavior versus product-specific side effects. For calendar- or chat-only coach surfaces, inspect the actual prompt builder entry point and websocket status messages before shipping so summary-generation hints and synthetic `athlete-summary` focus do not leak into a non-summary conversation.
+
 ### 2026-04-30 | Copilot | PR #163 calendar AI coach review follow-up
 
 - Problem: the calendar coach preview PR still had review gaps around modal accessibility and polish: opening the dialog did not move focus into it or restore focus on close, the dialog did not trap keyboard focus, a few Polish UI strings still used English/product-review wording, and the page test suite only reset the i18n language in `afterEach`, which left avoidable order sensitivity.

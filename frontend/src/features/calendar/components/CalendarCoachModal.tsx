@@ -1,23 +1,32 @@
-import { Bot, SendHorizontal, Sparkles, X } from 'lucide-react';
+import { Bot, Plus, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { ChatInput } from '../../coach/components/ChatInput';
+import { ChatMessageList } from '../../coach/components/ChatMessageList';
+import { useCalendarCoachChat } from '../hooks/useCalendarCoachChat';
+
 type CalendarCoachModalProps = {
+  apiBaseUrl: string;
   isOpen: boolean;
   onClose: () => void;
 };
 
-const QUICK_ACTION_KEYS = [
-  'calendar.coachQuickActionWeek',
-  'calendar.coachQuickActionRecovery',
-  'calendar.coachQuickActionReplan',
-] as const;
-
-export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps) {
+export function CalendarCoachModal({ apiBaseUrl, isOpen, onClose }: CalendarCoachModalProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const savedTriggerRef = useRef<HTMLElement | null>(null);
+  const {
+    messages,
+    isLoading,
+    isStartingNewConversation,
+    isConnected,
+    isCoachTyping,
+    error,
+    sendMessage,
+    startNewConversation,
+  } = useCalendarCoachChat({ apiBaseUrl, isOpen });
 
   useEffect(() => {
     if (!isOpen) {
@@ -90,6 +99,18 @@ export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps)
     return null;
   }
 
+  const statusLabel = isLoading
+    ? t('calendar.coachModalStatusLoading')
+    : isCoachTyping
+      ? t('calendar.coachModalStatusTyping')
+      : isConnected
+        ? t('calendar.coachModalStatusConnected')
+        : t('calendar.coachModalStatusReady');
+
+  const actionDisabled = isLoading || isStartingNewConversation;
+  const inputDisabled = isLoading || isStartingNewConversation;
+  const hasMessages = messages.length > 0;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#05070a]/78 px-4 py-6 backdrop-blur-sm"
@@ -116,20 +137,33 @@ export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps)
                 {t('calendar.coachModalTitle')}
               </h2>
               <p className="mt-2 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.28em] text-[#d2ff9a]">
-                <span className="h-2 w-2 rounded-full bg-[#d2ff9a]" />
-                {t('calendar.coachModalStatus')}
+                <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-[#d2ff9a]' : 'bg-slate-500'}`} />
+                <span aria-live="polite">{statusLabel}</span>
               </p>
             </div>
           </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={onClose}
-            aria-label={t('calendar.closeCoach')}
-            className="rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void startNewConversation();
+              }}
+              disabled={actionDisabled}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus size={16} />
+              {t('calendar.coachNewConversation')}
+            </button>
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={onClose}
+              aria-label={t('calendar.closeCoach')}
+              className="rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col bg-[#111417]">
@@ -148,52 +182,37 @@ export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps)
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <div className="max-w-3xl rounded-[1.6rem] border border-[#7ea855]/35 bg-[#1f261c] px-6 py-5 text-base leading-8 text-[#e4f4b7] shadow-[0_16px_35px_rgba(0,0,0,0.18)]">
-                  {t('calendar.coachModalReplyPreview')}
+              {error ? (
+                <div aria-live="polite" className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {error}
                 </div>
-              </div>
+              ) : null}
+
+              {hasMessages ? (
+                <div className="rounded-[1.6rem] border border-white/8 bg-[#14181b] shadow-[0_16px_35px_rgba(0,0,0,0.18)]">
+                  <ChatMessageList messages={messages} isCoachTyping={isCoachTyping} />
+                </div>
+              ) : (
+                <div className="flex justify-end">
+                  <div className="max-w-3xl rounded-[1.6rem] border border-[#7ea855]/35 bg-[#1f261c] px-6 py-5 text-base leading-8 text-[#e4f4b7] shadow-[0_16px_35px_rgba(0,0,0,0.18)]">
+                    {isLoading ? t('calendar.coachConversationLoading') : t('calendar.coachConversationEmptyState')}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="border-t border-white/6 bg-[#15191c] px-6 py-5 md:px-8">
             <div className="mx-auto max-w-4xl">
-              <div className="rounded-[1.4rem] border border-white/8 bg-[#262a2e] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-                <div className="flex items-center gap-3 rounded-[1.1rem] bg-transparent px-2 py-2">
-                  <input
-                    type="text"
-                    disabled
-                    value=""
-                    aria-label={t('calendar.coachModalInputLabel')}
-                    placeholder={t('calendar.coachModalPlaceholder')}
-                    className="min-w-0 flex-1 bg-transparent px-3 py-3 text-base text-slate-200 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed"
-                  />
-                  <button
-                    type="button"
-                    disabled
-                    aria-label={t('calendar.coachSend')}
-                    className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-[#d2ff9a] px-5 py-3 text-sm font-bold text-[#243113] opacity-60"
-                  >
-                    {t('calendar.coachSend')}
-                    <SendHorizontal size={16} />
-                  </button>
-                </div>
-              </div>
+              <ChatInput
+                disabled={inputDisabled}
+                ariaLabel={t('calendar.coachModalInputLabel')}
+                placeholder={t('calendar.coachModalPlaceholder')}
+                sendAriaLabel={t('calendar.coachSend')}
+                onSend={sendMessage}
+              />
 
-              <p className="mt-3 text-sm text-slate-400">{t('calendar.coachModalPreviewNote')}</p>
-
-              <div className="mt-4 flex flex-wrap gap-3">
-                {QUICK_ACTION_KEYS.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled
-                    className="rounded-full border border-white/8 bg-transparent px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 opacity-70"
-                  >
-                    {t(key)}
-                  </button>
-                ))}
-              </div>
+              <p className="mt-3 text-sm text-slate-400">{t('calendar.coachModalNote')}</p>
             </div>
           </div>
         </div>
