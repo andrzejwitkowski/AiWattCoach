@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | user | planned-workout Intervals sync datetime follow-up
+
+- Problem: after moving planned-workout sync text into `workout_doc`, the Intervals create/update payload still sent `start_date_local` as a bare `YYYY-MM-DD` date while the surrounding Intervals event flows in this repo use `YYYY-MM-DDT00:00:00` for projected all-day events. Live logs confirmed the backend was still sending `start_date_local="2026-05-01"`, and Intervals kept rejecting the request with `400 Bad Request`.
+- Fix: introduced a shared `projected_event_start_date_local(...)` helper for calendar planned-workout sync, used it for both create and update Intervals event payloads, and extended the planned-workout sync regression to assert the outgoing `start_date_local` shape alongside `workout_doc`.
+- Prevention: when a domain flow builds provider event payloads from projected calendar days, keep the datetime shape aligned with the repo's other Intervals event writers instead of mixing bare dates and midnight datetimes. When debugging upstream `400`/`422` responses, compare live request logs against adjacent successful payload builders before assuming the remaining issue is in the body content.
+
 ### 2026-04-30 | Copilot | PR #166 perf and migration-script follow-up
 
 - Problem: the first batch-read restoration in `list_summaries_impl(...)` still deduped lookup ids with repeated `Vec::contains`, which turned large `workoutIds=...` requests into avoidable O(n^2) list building. Separately, `load_active_operation_date_range(...)` still loaded every active projected-day document for an operation key just to compute min/max dates, and the legacy Wahoo cleanup scripts compared BSON numeric wrapper values with strict identity semantics, which could report false mismatches and skip eligible cleanup rows.

@@ -569,7 +569,7 @@ where
 fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
     CreateEvent {
         category: EventCategory::Workout,
-        start_date_local: day.date.clone(),
+        start_date_local: projected_event_start_date_local(&day.date),
         event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
         description: None,
@@ -583,7 +583,7 @@ fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
 fn build_update_event(day: &TrainingPlanProjectedDay) -> UpdateEvent {
     UpdateEvent {
         category: Some(EventCategory::Workout),
-        start_date_local: Some(day.date.clone()),
+        start_date_local: Some(projected_event_start_date_local(&day.date)),
         event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
         description: None,
@@ -693,6 +693,10 @@ fn plan_filename(planned_workout_id: &str) -> String {
 
 fn projected_workout_start_at(date: &str) -> String {
     format!("{date}T00:00:00.000Z")
+}
+
+fn projected_event_start_date_local(date: &str) -> String {
+    format!("{date}T00:00:00")
 }
 
 fn workout_minutes(projected_day: &TrainingPlanProjectedDay) -> Result<i32, CalendarError> {

@@ -205,6 +205,7 @@ async fn sync_planned_workout_to_intervals_sends_structured_workout_as_workout_d
 
     let created = intervals.created_events.lock().unwrap().clone();
     assert_eq!(created.len(), 1);
+    assert_eq!(created[0].start_date_local, "2023-11-14T00:00:00");
     assert_eq!(created[0].description, None);
     assert_eq!(created[0].workout_doc.as_deref(), Some("- 60m 70%"));
 }

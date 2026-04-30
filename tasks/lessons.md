@@ -47,6 +47,7 @@
 
 ## Small Review Fixes
 
+- For Intervals planned-event writes, keep projected all-day `start_date_local` values on the same `YYYY-MM-DDT00:00:00` shape used by the repo's other Intervals event flows. Do not silently send bare `YYYY-MM-DD` dates from one code path while create/update payloads elsewhere use midnight datetimes.
 - If a component can render once with `selection = null` and later with real data, keep every hook call unconditional across both renders. Do not put new hooks after an early return that is skipped when the modal opens, or React will crash with a hook-order error.
 - When moving data loading into a modal/container, add a regression that renders the component with `selection={null}` first and then rerenders with a selected entity. That transition catches real open-modal hook order bugs that steady-state tests miss.
 - For detail modals, keep data fetching in a dedicated hook or container-level component and keep the rendered detail panel presentational. Do not thread transport/config props like `apiBaseUrl` into a child just to power one late-added fetch.
