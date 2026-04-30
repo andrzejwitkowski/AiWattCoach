@@ -1,0 +1,169 @@
+import { Bot, SendHorizontal, Sparkles, X } from 'lucide-react';
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+
+type CalendarCoachModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+};
+
+const QUICK_ACTION_KEYS = [
+  'calendar.coachQuickActionWeek',
+  'calendar.coachQuickActionRecovery',
+  'calendar.coachQuickActionReplan',
+] as const;
+
+export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#05070a]/78 px-4 py-6 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="calendar-coach-title"
+        className="flex max-h-[min(88vh,58rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[1.75rem] border border-white/8 bg-[linear-gradient(180deg,rgba(28,32,36,0.98),rgba(15,18,20,0.98))] shadow-[0_40px_120px_rgba(0,0,0,0.58)]"
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/6 px-6 py-5 md:px-8">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#d2ff9a]/30 bg-[#263122] text-[#d2ff9a] shadow-[0_0_28px_rgba(210,255,154,0.14)]">
+              <Bot size={24} />
+            </div>
+            <div className="min-w-0">
+              <h2 id="calendar-coach-title" className="text-2xl font-black tracking-tight text-[#f9f9fd] md:text-[2rem]">
+                {t('calendar.coachModalTitle')}
+              </h2>
+              <p className="mt-2 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.28em] text-[#d2ff9a]">
+                <span className="h-2 w-2 rounded-full bg-[#d2ff9a]" />
+                {t('calendar.coachModalStatus')}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('calendar.closeCoach')}
+            className="rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col bg-[#111417]">
+          <div className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8">
+            <div className="mx-auto flex max-w-4xl flex-col gap-8">
+              <div className="flex items-start gap-4">
+                <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/8 bg-white/5 text-[#d2ff9a]">
+                  <Sparkles size={16} />
+                </div>
+                <div className="max-w-3xl rounded-[1.75rem] border border-white/6 bg-[#23272b] px-6 py-5 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+                  <p className="text-base leading-8 text-[#f3f4f6]">{t('calendar.coachModalIntro')}</p>
+                  <div className="mt-5 grid gap-4 border-t border-white/6 pt-4 text-left sm:grid-cols-2">
+                    <MetricPreview label={t('calendar.coachMetricFocus')} value={t('calendar.coachMetricFocusValue')} accent="text-[#00e3fd]" />
+                    <MetricPreview label={t('calendar.coachMetricMode')} value={t('calendar.coachMetricModeValue')} accent="text-[#d2ff9a]" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <div className="max-w-3xl rounded-[1.6rem] border border-[#7ea855]/35 bg-[#1f261c] px-6 py-5 text-base leading-8 text-[#e4f4b7] shadow-[0_16px_35px_rgba(0,0,0,0.18)]">
+                  {t('calendar.coachModalReplyPreview')}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/6 bg-[#15191c] px-6 py-5 md:px-8">
+            <div className="mx-auto max-w-4xl">
+              <div className="rounded-[1.4rem] border border-white/8 bg-[#262a2e] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                <div className="flex items-center gap-3 rounded-[1.1rem] bg-transparent px-2 py-2">
+                  <input
+                    type="text"
+                    disabled
+                    value=""
+                    aria-label={t('calendar.coachModalInputLabel')}
+                    placeholder={t('calendar.coachModalPlaceholder')}
+                    className="min-w-0 flex-1 bg-transparent px-3 py-3 text-base text-slate-200 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    disabled
+                    aria-label={t('calendar.coachSend')}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-[#d2ff9a] px-5 py-3 text-sm font-bold text-[#243113] opacity-60"
+                  >
+                    {t('calendar.coachSend')}
+                    <SendHorizontal size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm text-slate-400">{t('calendar.coachModalPreviewNote')}</p>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                {QUICK_ACTION_KEYS.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled
+                    className="rounded-full border border-white/8 bg-transparent px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 opacity-70"
+                  >
+                    {t(key)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricPreview({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">{label}</p>
+      <p className={`mt-2 text-3xl font-black tracking-tight ${accent}`}>{value}</p>
+    </div>
+  );
+}
