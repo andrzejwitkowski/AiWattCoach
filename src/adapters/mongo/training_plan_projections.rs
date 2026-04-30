@@ -363,26 +363,33 @@ async fn load_active_operation_date_range(
     user_id: &str,
     operation_key: &str,
 ) -> Result<Option<(String, String)>, TrainingPlanError> {
-    let dates = collection
+    let lookup_collection = collection
         .clone()
-        .clone_with_type::<mongodb::bson::Document>()
-        .find(doc! {
-            "user_id": user_id,
-            "operation_key": operation_key,
-            "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
-        })
+        .clone_with_type::<mongodb::bson::Document>();
+    let filter = doc! {
+        "user_id": user_id,
+        "operation_key": operation_key,
+        "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+    };
+
+    let first_date = lookup_collection
+        .find_one(filter.clone())
         .sort(doc! { "date": 1 })
         .projection(doc! { "date": 1, "_id": 0 })
         .await
         .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
-        .try_collect::<Vec<_>>()
+        .and_then(|doc| doc.get_str("date").ok().map(String::from));
+    let last_date = collection
+        .clone()
+        .clone_with_type::<mongodb::bson::Document>()
+        .find_one(filter)
+        .sort(doc! { "date": -1 })
+        .projection(doc! { "date": 1, "_id": 0 })
         .await
         .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
-        .into_iter()
-        .filter_map(|doc| doc.get_str("date").ok().map(String::from))
-        .collect::<Vec<_>>();
+        .and_then(|doc| doc.get_str("date").ok().map(String::from));
 
-    Ok(dates.first().cloned().zip(dates.last().cloned()))
+    Ok(first_date.zip(last_date))
 }
 
 fn map_projected_day_to_document(

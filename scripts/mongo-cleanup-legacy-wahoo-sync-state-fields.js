@@ -340,8 +340,53 @@ function diffMigratedDocument(expected, actual) {
   return diffs;
 }
 
+function toComparableNumericString(value) {
+  if (typeof value === "number" || typeof value === "bigint") {
+    return String(value);
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  if (
+    value._bsontype === "Long" ||
+    value._bsontype === "Int32" ||
+    value._bsontype === "Double" ||
+    value._bsontype === "Decimal128"
+  ) {
+    return typeof value.toString === "function" ? value.toString() : null;
+  }
+
+  if (typeof value.toNumber === "function") {
+    return typeof value.toString === "function"
+      ? value.toString()
+      : String(value.toNumber());
+  }
+
+  const primitiveValue =
+    typeof value.valueOf === "function" ? value.valueOf() : value;
+
+  if (typeof primitiveValue === "number" || typeof primitiveValue === "bigint") {
+    return String(primitiveValue);
+  }
+
+  return null;
+}
+
+function areComparableValuesEqual(expected, actual) {
+  const expectedNumeric = toComparableNumericString(expected);
+  const actualNumeric = toComparableNumericString(actual);
+
+  if (expectedNumeric !== null && actualNumeric !== null) {
+    return expectedNumeric === actualNumeric;
+  }
+
+  return expected === actual;
+}
+
 function compareField(diffs, fieldName, expected, actual) {
-  if (expected !== actual) {
+  if (!areComparableValuesEqual(expected, actual)) {
     diffs.push({ field: fieldName, expected, actual });
   }
 }

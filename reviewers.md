@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | Copilot | PR #166 perf and migration-script follow-up
+
+- Problem: the first batch-read restoration in `list_summaries_impl(...)` still deduped lookup ids with repeated `Vec::contains`, which turned large `workoutIds=...` requests into avoidable O(n^2) list building. Separately, `load_active_operation_date_range(...)` still loaded every active projected-day document for an operation key just to compute min/max dates, and the legacy Wahoo cleanup scripts compared BSON numeric wrapper values with strict identity semantics, which could report false mismatches and skip eligible cleanup rows.
+- Fix: changed workout-summary lookup id dedupe to keep insertion order while using a `HashSet` for O(1) membership, rewrote `load_active_operation_date_range(...)` to fetch only the first and last active dates via two sorted `find_one(...)` queries, and normalized numeric/BSON wrapper comparisons in both legacy Wahoo cleanup scripts before diffing migrated rows. Re-ran focused Rust regressions plus `bun run verify:scripts`.
+- Prevention: after restoring a batch path, re-check helper dedupe structures for hidden O(n^2) work on unbounded request lists. When a repository only needs min/max values, do not materialize the whole matching set. For Mongo migration scripts, treat BSON numeric wrappers as value types and normalize them before equality checks.
+
 ### 2026-04-30 | Copilot | PR #166 workout summary list/read follow-up
 
 - Problem: the previous alias fix left two review-confirmed gaps. Mongo batch lookup still did not prefetch the `intervals-activity:{id}` alias when the request arrived as `wahoo-workout:{id}`, so a summary stored under the Intervals-prefixed alias could be missed entirely before alias matching ran. Separately, `list_summaries_impl(...)` had switched from one repository batch fetch to per-id `resolve_workout_summary_target(...)` point reads, which turned completed-workout alias listing into an avoidable N-times lookup path.

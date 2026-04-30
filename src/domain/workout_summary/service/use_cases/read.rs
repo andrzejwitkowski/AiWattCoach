@@ -87,10 +87,12 @@ where
         .collect::<Vec<_>>();
 
         let mut lookup_workout_ids = Vec::new();
+        let mut seen_lookup_workout_ids = HashSet::new();
         for request in &lookup_requests {
             for workout_id in &request.lookup_workout_ids {
                 push_unique_list_summary_lookup_workout_id(
                     &mut lookup_workout_ids,
+                    &mut seen_lookup_workout_ids,
                     workout_id.clone(),
                 );
             }
@@ -152,14 +154,21 @@ where
         };
 
         let mut lookup_workout_ids = Vec::new();
+        let mut seen_lookup_workout_ids = HashSet::new();
         push_unique_list_summary_lookup_workout_id(
             &mut lookup_workout_ids,
+            &mut seen_lookup_workout_ids,
             resolved_target.preferred_workout_id,
         );
-        push_unique_list_summary_lookup_workout_id(&mut lookup_workout_ids, workout_id.clone());
+        push_unique_list_summary_lookup_workout_id(
+            &mut lookup_workout_ids,
+            &mut seen_lookup_workout_ids,
+            workout_id.clone(),
+        );
         for equivalent_workout_id in resolved_target.equivalent_workout_ids {
             push_unique_list_summary_lookup_workout_id(
                 &mut lookup_workout_ids,
+                &mut seen_lookup_workout_ids,
                 equivalent_workout_id,
             );
         }
@@ -252,8 +261,12 @@ where
     }
 }
 
-fn push_unique_list_summary_lookup_workout_id(workout_ids: &mut Vec<String>, workout_id: String) {
-    if !workout_ids.contains(&workout_id) {
+fn push_unique_list_summary_lookup_workout_id(
+    workout_ids: &mut Vec<String>,
+    seen_workout_ids: &mut HashSet<String>,
+    workout_id: String,
+) {
+    if seen_workout_ids.insert(workout_id.clone()) {
         workout_ids.push(workout_id);
     }
 }
