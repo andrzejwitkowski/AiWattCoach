@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-04-30 | user | planned-workout Intervals sync workout_doc grammar follow-up
+
+- Problem: after fixing `workout_doc` placement and `start_date_local`, planned-workout Intervals sync still built the outbound `workout_doc` from a stripped body-only serializer in `src/domain/calendar/service/projected.rs`. Live request previews showed only `- 60m 50%` for `Active Recovery`, while adjacent canonical planned-workout paths in `calendar_view` and `training_context` serialize the full workout text including the title line. That left the remaining live `400 Bad Request` most likely caused by a grammar mismatch between the sync payload and the repo's canonical planned-workout text shape.
+- Fix: changed the Intervals planned-workout sync path to send the canonical serialized workout text via `projected_event_sync_body(...)` while leaving the sync-state payload-hash semantics unchanged, updated the calendar sync regression to assert the full canonical `workout_doc`, and added an adapter regression that verifies the JSON create-event payload carries canonical `workout_doc` with no fallback `description`.
+- Prevention: when one outbound provider payload carries canonical workout text, reuse the same serializer already used by the repo's other canonical planned-workout paths instead of maintaining a near-duplicate body-only formatter. If live previews show a shorter-than-expected `workout_doc`, compare its byte length against the canonical serializer output before debugging upstream grammar blindly.
+
 ### 2026-04-30 | user | planned-workout Intervals sync datetime follow-up
 
 - Problem: after moving planned-workout sync text into `workout_doc`, the Intervals create/update payload still sent `start_date_local` as a bare `YYYY-MM-DD` date while the surrounding Intervals event flows in this repo use `YYYY-MM-DDT00:00:00` for projected all-day events. Live logs confirmed the backend was still sending `start_date_local="2026-05-01"`, and Intervals kept rejecting the request with `400 Bad Request`.

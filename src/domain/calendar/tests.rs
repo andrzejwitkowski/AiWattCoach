@@ -175,7 +175,7 @@ async fn sync_planned_workout_to_intervals_sends_structured_workout_as_workout_d
         description: None,
         indoor: false,
         color: None,
-        workout_doc: Some("- 60m 70%".to_string()),
+        workout_doc: Some("Build Session\n- 60m 70%".to_string()),
     });
     let service = CalendarService::new(
         intervals.clone(),
@@ -207,7 +207,7 @@ async fn sync_planned_workout_to_intervals_sends_structured_workout_as_workout_d
     assert_eq!(created.len(), 1);
     assert_eq!(created[0].start_date_local, "2023-11-14T00:00:00");
     assert_eq!(created[0].description, None);
-    assert_eq!(created[0].workout_doc.as_deref(), Some("- 60m 70%"));
+    assert_eq!(created[0].workout_doc.as_deref(), Some("Build Session\n- 60m 70%"));
 }
 
 #[tokio::test]

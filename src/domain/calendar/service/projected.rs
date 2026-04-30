@@ -177,7 +177,7 @@ pub(super) fn projected_workout_sync_body(day: &TrainingPlanProjectedDay) -> Opt
 }
 
 pub(super) fn projected_event_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
-    projected_workout_sync_body(day)
+    day.workout.as_ref().map(serialize_projected_workout)
 }
 
 fn sync_states_for_status<'a>(
