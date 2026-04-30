@@ -39,6 +39,12 @@ fn status_message(
     }
 }
 
+fn matches_latest_completed_activity_id(latest_activity_id: &str, workout_id: &str) -> bool {
+    latest_activity_id == workout_id
+        || latest_activity_id
+            == crate::domain::completed_workouts::completed_workout_activity_id(workout_id)
+}
+
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
 where
     Repo: WorkoutSummaryRepository + Clone,
@@ -60,7 +66,9 @@ where
             .latest_completed_activity_id(user_id)
             .await?
             .as_deref()
-            == Some(workout_id))
+            .is_some_and(|latest_activity_id| {
+                matches_latest_completed_activity_id(latest_activity_id, workout_id)
+            }))
     }
 
     pub(super) async fn mark_saved_impl(
