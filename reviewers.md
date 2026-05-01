@@ -23,6 +23,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-01 | user | Intervals paired_event_id import follow-up
+
+- Problem: after adding explicit Intervals planned-to-completed linking by `paired_event_id`, I changed shared backend shapes without sweeping every dependent test seam. The branch stayed red on missing `ExternalSyncStateRepository::find_by_provider_and_external_id(...)` implementations, missing `Activity.paired_event_id` fixture fields, and a new import helper that tripped clippy's argument-count limit.
+- Fix: added the missing sync-state lookup method to every affected in-memory/test repository, added the lenient `paired_event_id` DTO deserializer, filled `intervals_paired_event_id: None` into older completed-import fixtures, updated remaining `Activity` fixture/merge constructors to preserve `paired_event_id`, and packed completed-workout planned-link lookup inputs into a small struct so `cargo clippy -D warnings` stays green.
+- Prevention: whenever a shared trait or domain model gains a new method/field, immediately grep all impls, merge helpers, and test fixtures before chasing behavior bugs. Re-run clippy early after the shape change so helper-argument growth and test-double fallout are caught before broader verification.
+
+### 2026-05-01 | user | sandbox docker workflow
+
+- Problem: I added the sandbox runtime as a giant inline `bun -e` script in `package.json`, which buried Docker build/run configuration inside shell-escaped code instead of using the repo's existing compose-based Docker workflow.
+- Fix: replaced the inline script with a dedicated `docker-compose-sandbox.yml` and changed `sandbox:docker` to run `docker compose -f docker-compose-sandbox.yml up --build`.
+- Prevention: when a local runtime needs the same shape as the repo's existing Docker setup with only environment differences, add a dedicated compose file instead of embedding `docker build` and `docker run` orchestration inside `package.json`.
+
+### 2026-05-01 | user | sandbox auth usability
+
+- Problem: the first sandbox compose still used the generic dev-auth identity, which hit the normal whitelist/pending-approval flow for a first-time mock user and made the local sandbox effectively unusable despite `DEV_AUTH_ENABLED=true`.
+- Fix: pointed sandbox dev auth at the real existing sandbox user identity already present in `aiwatt.app_users`, so the same-origin dev OAuth flow now signs into the actual sandbox account and lands in the app without needing a live Google callback.
+- Prevention: when wiring a sandbox against a shared real database, verify not only that mock OAuth redirects locally but also that the configured dev-auth identity maps to a real allowed user in that database. A generic fake account can still fail product-level approval gates.
+
 ### 2026-04-30 | user | calendar coach summary-style context regression
 
 - Problem: the new calendar coach reused too much of the athlete-summary flow: it built packed context through the synthetic `athlete-summary` target, regenerated athlete summaries before replies, and surfaced a websocket system message about summary generation. That biased the prompt toward a generic overview and contradicted the intended calendar-chat behavior with no summary side effects.

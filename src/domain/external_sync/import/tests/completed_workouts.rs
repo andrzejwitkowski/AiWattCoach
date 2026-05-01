@@ -3,7 +3,7 @@ use crate::domain::{
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalImportCommand, ExternalObjectKind,
         ExternalObservation, ExternalObservationParams, ExternalObservationRepository,
-        ExternalProvider,
+        ExternalProvider, ExternalSyncStateRepository,
     },
     planned_completed_links::{
         PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkMatchSource,
@@ -50,6 +50,7 @@ async fn import_completed_workout_persists_canonical_state_and_refreshes_start_d
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -122,6 +123,7 @@ async fn import_completed_workout_returns_error_for_stale_dedup_mapping() {
                 provider: ExternalProvider::Wahoo,
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -186,6 +188,7 @@ async fn import_completed_workout_reuses_existing_canonical_workout_for_matching
                 provider: ExternalProvider::Wahoo,
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -234,6 +237,7 @@ async fn import_completed_workout_refreshes_old_and_new_dates_when_existing_cano
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-intervals-2".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -297,6 +301,7 @@ async fn import_completed_workout_merges_enriched_details_into_existing_sparse_r
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-enriched-details".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -331,6 +336,7 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
                 provider: ExternalProvider::Wahoo,
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -349,6 +355,7 @@ async fn import_completed_workout_matches_even_when_other_provider_arrives_first
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-intervals-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -384,6 +391,7 @@ async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-intervals-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -398,6 +406,7 @@ async fn import_completed_workout_uses_fingerprint_when_external_ids_do_not_help
                 provider: ExternalProvider::Other,
                 external_id: "provider-b-77".to_string(),
                 normalized_payload_hash: "hash-provider-b-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -473,6 +482,7 @@ async fn import_completed_workout_rejects_ambiguous_fingerprint_match() {
                 provider: ExternalProvider::Other,
                 external_id: "provider-c-1".to_string(),
                 normalized_payload_hash: "hash-provider-c-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -528,6 +538,7 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-1".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=AB123CDE45]".to_string()],
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -552,6 +563,83 @@ async fn import_completed_workout_links_by_match_token_and_persists_link() {
     assert_eq!(
         link.match_source,
         PlannedCompletedWorkoutLinkMatchSource::Token
+    );
+}
+
+#[tokio::test]
+async fn import_completed_workout_links_intervals_activity_by_paired_event_id_as_explicit() {
+    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(sample_planned_workout_on_date(
+            "planned-intervals-explicit",
+            "2026-05-11",
+        ))
+        .await
+        .unwrap();
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let sync_states = InMemorySyncStateRepository::default();
+    sync_states
+        .upsert(
+            crate::domain::external_sync::ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(
+                    CanonicalEntityKind::PlannedWorkout,
+                    "planned-intervals-explicit".to_string(),
+                ),
+            )
+            .mark_synced(
+                "107538052".to_string(),
+                "hash-planned-explicit".to_string(),
+                1_700_000_000,
+            ),
+        )
+        .await
+        .unwrap();
+    let service = external_import_service_without_refresh(
+        planned_workouts,
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
+        InMemoryObservationRepository::default(),
+        sync_states,
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-intervals-explicit".to_string(),
+                intervals_paired_event_id: Some(107538052),
+                marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
+                workout: sample_completed_workout_named("Completely Different Name"),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(
+        stored[0].planned_workout_id.as_deref(),
+        Some("planned-intervals-explicit")
+    );
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-imported-1")
+        .await
+        .unwrap()
+        .expect("planned-completed link");
+    assert_eq!(link.planned_workout_id, "planned-intervals-explicit");
+    assert_eq!(
+        link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Explicit
     );
 }
 
@@ -592,6 +680,7 @@ async fn import_completed_workout_links_wahoo_activity_by_plan_id_as_explicit() 
                 provider: ExternalProvider::Wahoo,
                 external_id: "wahoo-activity-1".to_string(),
                 normalized_payload_hash: "hash-wahoo-plan-id".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: Some(5_001),
                 wahoo_workout_token: None,
@@ -660,6 +749,7 @@ async fn import_completed_workout_falls_back_to_wahoo_workout_token_when_plan_id
                 provider: ExternalProvider::Wahoo,
                 external_id: "wahoo-activity-token-only".to_string(),
                 normalized_payload_hash: "hash-wahoo-token-only".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: Some("[AIWATTCOACH:pw=WAH001TOKN]".to_string()),
@@ -722,6 +812,7 @@ async fn import_completed_workout_links_single_same_day_planned_workout_as_heuri
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-heuristic".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -780,6 +871,7 @@ async fn import_completed_workout_does_not_link_same_day_planned_workout_when_na
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-no-heuristic".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -838,6 +930,7 @@ async fn import_completed_workout_prefers_token_match_source_over_same_day_fallb
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-token-priority".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=AB123CDE45]".to_string()],
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -908,6 +1001,7 @@ async fn import_completed_workout_does_not_downgrade_existing_explicit_link_matc
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-explicit".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -977,6 +1071,7 @@ async fn import_completed_workout_does_not_inherit_explicit_match_source_from_di
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-new-pair".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -1048,6 +1143,7 @@ async fn import_completed_workout_preserves_existing_completed_workout_link_over
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-preserve-existing-link".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -1109,6 +1205,7 @@ async fn import_completed_workout_preserves_legacy_planned_id_when_no_better_mat
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-drop-legacy-planned-id".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -1161,6 +1258,7 @@ async fn import_completed_workout_persists_existing_legacy_planned_id_when_no_re
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-preserve-legacy-planned-id".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: Vec::new(),
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,
@@ -1248,6 +1346,7 @@ async fn import_completed_workout_upgrades_existing_heuristic_link_when_token_ma
                 provider: ExternalProvider::Intervals,
                 external_id: "intervals-activity-77".to_string(),
                 normalized_payload_hash: "hash-completed-upgrade-to-token".to_string(),
+                intervals_paired_event_id: None,
                 marker_sources: vec!["Warmup notes\n[AIWATTCOACH:pw=AB123CDE45]".to_string()],
                 wahoo_plan_id: None,
                 wahoo_workout_token: None,

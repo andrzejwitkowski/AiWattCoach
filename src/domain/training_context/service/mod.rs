@@ -1002,6 +1002,7 @@ fn map_special_day_to_event(day: &SpecialDay) -> Event {
 fn map_completed_workout_to_activity(workout: &CompletedWorkout) -> Activity {
     Activity {
         id: legacy_activity_id(&workout.completed_workout_id).to_string(),
+        paired_event_id: None,
         athlete_id: None,
         start_date_local: workout.start_date_local.clone(),
         start_date: None,

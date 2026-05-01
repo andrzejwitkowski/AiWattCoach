@@ -949,6 +949,31 @@ impl ExternalSyncStateRepository for InMemorySyncStateRepository {
                 .cloned())
         })
     }
+
+    fn find_by_provider_and_external_id(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        external_id: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == provider
+                        && state.external_id.as_deref() == Some(external_id.as_str())
+                })
+                .cloned())
+        })
+    }
 }
 
 #[derive(Clone, Default)]

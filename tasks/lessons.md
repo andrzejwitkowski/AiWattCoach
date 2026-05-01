@@ -47,6 +47,10 @@
 
 ## Small Review Fixes
 
+- When a shared trait or widely used domain struct changes shape, grep all implementations, merge helpers, and test fixtures immediately. Do not wait for compile errors to surface one file at a time.
+- After adding one more input to an already busy helper, run clippy early and prefer a small input struct over crossing the repo's function-argument limit.
+- When a local app runtime is just another environment variant of the existing Docker setup, express it as a dedicated `docker-compose*.yml` file and keep `package.json` scripts as thin wrappers around `docker compose`. Do not hide build/run orchestration in long inline `bun -e` scripts.
+- For dev-auth against a shared sandbox database, do not stop after verifying the OAuth redirect is local-only. Also verify that the configured mock identity corresponds to an existing allowed user in that database, or the app can still land in `pending approval` and be unusable.
 - For Intervals planned-event writes, keep projected all-day `start_date_local` values on the same `YYYY-MM-DDT00:00:00` shape used by the repo's other Intervals event flows. Do not silently send bare `YYYY-MM-DD` dates from one code path while create/update payloads elsewhere use midnight datetimes.
 - For provider workout text payloads, do not keep a custom near-duplicate serializer beside an existing canonical planned-workout serializer. If `calendar_view`, prompt-building, and provider sync all represent the same planned workout, make the outbound payload reuse the same canonical text shape unless there is a verified provider-specific exception.
 - If a live provider write keeps failing and the repo has older working code for the same flow, diff against that exact historical implementation before inventing a new payload shape. A provider-specific contract that already worked in production is stronger evidence than a cleaner local abstraction.

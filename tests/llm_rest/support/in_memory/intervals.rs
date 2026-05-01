@@ -242,6 +242,7 @@ impl ActivityRepositoryPort for InMemoryIntervalsService {
 pub(crate) fn sample_activity(user_id: &str, activity_id: &str) -> Activity {
     Activity {
         id: activity_id.to_string(),
+        paired_event_id: None,
         athlete_id: Some(user_id.to_string()),
         start_date_local: format!("{}T08:00:00", Utc::now().format("%Y-%m-%d")),
         start_date: None,

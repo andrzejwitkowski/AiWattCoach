@@ -1,12 +1,14 @@
 use crate::domain::{
-    completed_workouts::CompletedWorkoutRepository,
+    calendar_view::{select_visible_planned_workout_candidates, CalendarPlannedWorkoutSource},
+    completed_workouts::{CompletedWorkout, CompletedWorkoutRepository},
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncStateRepository,
     },
     planned_completed_links::{
-        PlannedCompletedWorkoutLinkMatchSource, PlannedCompletedWorkoutLinkRepository,
+        PlannedCompletedWorkoutLink, PlannedCompletedWorkoutLinkMatchSource,
+        PlannedCompletedWorkoutLinkRepository,
     },
-    planned_workouts::PlannedWorkoutRepository,
+    planned_workouts::PlannedWorkout,
     races::RaceRepository,
     special_days::SpecialDayRepository,
 };
@@ -118,12 +120,12 @@ pub struct CalendarEntryViewRefreshService<
     PlannedCompletedLinks = NoopPlannedCompletedWorkoutLinkRepository,
 > where
     Views: CalendarEntryViewRepository + Clone,
-    Planned: PlannedWorkoutRepository + Clone,
+    Planned: CalendarPlannedWorkoutSource + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
-    CleanupPlanned: PlannedWorkoutRepository + Clone,
+    CleanupPlanned: CalendarPlannedWorkoutSource + Clone,
     PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
 {
     views: Views,
@@ -149,7 +151,7 @@ impl<Views, Planned, Completed, Races, SpecialDays, SyncStates>
     >
 where
     Views: CalendarEntryViewRepository + Clone,
-    Planned: PlannedWorkoutRepository + Clone,
+    Planned: CalendarPlannedWorkoutSource + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -198,12 +200,12 @@ impl<
     >
 where
     Views: CalendarEntryViewRepository + Clone,
-    Planned: PlannedWorkoutRepository + Clone,
+    Planned: CalendarPlannedWorkoutSource + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
-    CleanupPlanned: PlannedWorkoutRepository + Clone,
+    CleanupPlanned: CalendarPlannedWorkoutSource + Clone,
     PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
 {
     pub fn with_cleanup_planned_workouts<NewCleanupPlanned>(
@@ -220,7 +222,7 @@ where
         PlannedCompletedLinks,
     >
     where
-        NewCleanupPlanned: PlannedWorkoutRepository + Clone,
+        NewCleanupPlanned: CalendarPlannedWorkoutSource + Clone,
     {
         CalendarEntryViewRefreshService {
             views: self.views,
@@ -285,12 +287,12 @@ impl<
     >
 where
     Views: CalendarEntryViewRepository + Clone,
-    Planned: PlannedWorkoutRepository + Clone,
+    Planned: CalendarPlannedWorkoutSource + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
-    CleanupPlanned: PlannedWorkoutRepository + Clone,
+    CleanupPlanned: CalendarPlannedWorkoutSource + Clone,
     PlannedCompletedLinks: PlannedCompletedWorkoutLinkRepository + Clone,
 {
     fn refresh_range_for_user(
@@ -312,31 +314,84 @@ where
         let newest = newest.to_string();
         Box::pin(async move {
             let all_planned_ids = cleanup_planned_workouts
-                .list_by_user_id(&user_id)
+                .list_candidates_by_user_id_and_date_range(&user_id, "0000-01-01", "9999-12-31")
                 .await
                 .map_err(map_planned_error)?
                 .into_iter()
-                .map(|workout| workout.planned_workout_id)
+                .map(|candidate| candidate.workout.planned_workout_id)
                 .collect::<std::collections::HashSet<_>>();
-            let planned = planned_workouts
-                .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
-                .await
-                .map_err(map_planned_error)?;
+            let planned = select_visible_planned_workout_candidates(
+                planned_workouts
+                    .list_candidates_by_user_id_and_date_range(&user_id, &oldest, &newest)
+                    .await
+                    .map_err(map_planned_error)?,
+            )
+            .into_iter()
+            .map(|candidate| candidate.workout)
+            .collect::<Vec<_>>();
             let completed = completed_workouts
                 .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
                 .map_err(map_completed_error)?;
             for workout in &completed {
+                let existing_link = planned_completed_links
+                    .find_by_completed_workout_id(&user_id, &workout.completed_workout_id)
+                    .await
+                    .map_err(map_planned_completed_link_error)?;
+
+                if let Some(link) = existing_link.as_ref().filter(|link| {
+                    link.match_source != PlannedCompletedWorkoutLinkMatchSource::Heuristic
+                }) {
+                    if workout.planned_workout_id.as_deref()
+                        != Some(link.planned_workout_id.as_str())
+                    {
+                        let mut updated = workout.clone();
+                        updated.planned_workout_id = Some(link.planned_workout_id.clone());
+                        completed_workouts
+                            .upsert(updated)
+                            .await
+                            .map_err(map_completed_error)?;
+                    }
+                    continue;
+                }
+
+                if let Some(relinked_planned_workout_id) =
+                    resolve_unique_same_day_planned_workout_id(&planned, workout)
+                {
+                    if workout.planned_workout_id.as_deref()
+                        != Some(relinked_planned_workout_id.as_str())
+                        || existing_link
+                            .as_ref()
+                            .map(|link| link.planned_workout_id.as_str())
+                            != Some(relinked_planned_workout_id.as_str())
+                    {
+                        let mut updated = workout.clone();
+                        updated.planned_workout_id = Some(relinked_planned_workout_id.clone());
+                        completed_workouts
+                            .upsert(updated.clone())
+                            .await
+                            .map_err(map_completed_error)?;
+                        planned_completed_links
+                            .upsert(PlannedCompletedWorkoutLink::new(
+                                user_id.clone(),
+                                relinked_planned_workout_id,
+                                updated.completed_workout_id.clone(),
+                                PlannedCompletedWorkoutLinkMatchSource::Heuristic,
+                                0,
+                            ))
+                            .await
+                            .map_err(map_planned_completed_link_error)?;
+                    }
+                    continue;
+                }
+
                 let Some(planned_workout_id) = workout.planned_workout_id.as_deref() else {
                     continue;
                 };
                 if all_planned_ids.contains(planned_workout_id) {
                     continue;
                 }
-                let link = planned_completed_links
-                    .find_by_completed_workout_id(&user_id, &workout.completed_workout_id)
-                    .await
-                    .map_err(map_planned_completed_link_error)?;
+                let link = existing_link;
                 if matches!(
                     link.as_ref().map(|link| &link.match_source),
                     Some(source) if source != &PlannedCompletedWorkoutLinkMatchSource::Heuristic
@@ -509,4 +564,59 @@ fn map_planned_completed_link_error(
             message,
         ) => CalendarEntryViewError::Repository(message),
     }
+}
+
+fn resolve_unique_same_day_planned_workout_id(
+    planned_workouts: &[PlannedWorkout],
+    completed_workout: &CompletedWorkout,
+) -> Option<String> {
+    let completed_name = normalize_workout_name(completed_workout.name.as_deref())?;
+    let completed_date = completed_workout
+        .start_date_local
+        .get(..10)
+        .unwrap_or(completed_workout.start_date_local.as_str());
+
+    let mut matches = planned_workouts
+        .iter()
+        .filter(|planned_workout| planned_workout.date == completed_date)
+        .filter(|planned_workout| {
+            normalize_workout_name(planned_workout_match_name(planned_workout).as_deref())
+                .as_deref()
+                == Some(completed_name.as_str())
+        })
+        .map(|planned_workout| planned_workout.planned_workout_id.clone())
+        .collect::<Vec<_>>();
+    matches.sort();
+    matches.dedup();
+
+    match matches.as_slice() {
+        [planned_workout_id] => Some(planned_workout_id.clone()),
+        _ => None,
+    }
+}
+
+fn planned_workout_match_name(workout: &PlannedWorkout) -> Option<String> {
+    workout.name.clone().or_else(|| {
+        workout.workout.lines.iter().find_map(|line| match line {
+            crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => {
+                Some(text.text.clone())
+            }
+            _ => None,
+        })
+    })
+}
+
+fn normalize_workout_name(value: Option<&str>) -> Option<String> {
+    let normalized = value?.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+
+    Some(
+        normalized
+            .to_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
 }

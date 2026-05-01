@@ -1,0 +1,46 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_DEV_AUTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:3002:3002"
+    environment:
+      APP_NAME: AiWattCoach
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 3002
+      MONGODB_URI: mongodb://root:1u80pAGMtuoKA50j4sVAloE6AqR3EG9HWeAjgz4DbkuaP6rAVd8qAccOig4pxFFQ@192.168.0.64:27017/?retryWrites=true&loadBalanced=false&serverSelectionTimeoutMS=5000&connectTimeoutMS=10000&authSource=admin&authMechanism=SCRAM-SHA-256
+      MONGODB_DATABASE: aiwatt
+      GOOGLE_OAUTH_CLIENT_ID: dev-google-client-id.apps.googleusercontent.com
+      GOOGLE_OAUTH_CLIENT_SECRET: dev-google-client-secret
+      GOOGLE_OAUTH_REDIRECT_URL: http://localhost:3002/api/auth/google/callback
+      DEV_AUTH_ENABLED: "true"
+      DEV_AUTH_GOOGLE_SUBJECT: "106588762446278776876"
+      DEV_AUTH_EMAIL: andrzej.witkowski@gmail.com
+      DEV_AUTH_DISPLAY_NAME: Andrzej Witkowski
+      DEV_AUTH_AVATAR_URL: ""
+      DEV_INTERVALS_ENABLED: "false"
+      SESSION_COOKIE_NAME: aiwattcoach_session
+      SESSION_COOKIE_SAME_SITE: lax
+      SESSION_TTL_HOURS: 24
+      SESSION_COOKIE_SECURE: "false"
+      ADMIN_EMAILS: dev@aiwattcoach.local
+      ENABLE_CLIENT_LOG_INGESTION: "true"
+      RUST_LOG: info,axum=info,tower_http=info
+      OTEL_SERVICE_NAME: aiwattcoach-backend
+      OTEL_EXPORTER_OTLP_ENDPOINT: ""
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:3002/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"

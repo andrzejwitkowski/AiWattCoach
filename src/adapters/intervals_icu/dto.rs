@@ -76,6 +76,11 @@ pub struct UpdateEventRequest {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActivityResponse {
     pub id: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_i64_from_string_or_number"
+    )]
+    pub paired_event_id: Option<i64>,
     pub start_date_local: String,
     pub start_date: Option<String>,
     #[serde(rename = "type")]
@@ -213,6 +218,27 @@ where
                 .ok_or_else(|| serde::de::Error::custom("expected numeric value")),
             other => Err(serde::de::Error::custom(format!(
                 "expected string or number, got {other}"
+            ))),
+        })
+        .transpose()
+}
+
+fn deserialize_optional_i64_from_string_or_number<'de, D>(
+    deserializer: D,
+) -> Result<Option<i64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+
+    value
+        .map(|value| match value {
+            Value::String(value) => value.parse::<i64>().map_err(serde::de::Error::custom),
+            Value::Number(value) => value
+                .as_i64()
+                .ok_or_else(|| serde::de::Error::custom("expected integer number")),
+            other => Err(serde::de::Error::custom(format!(
+                "expected string or integer number, got {other}"
             ))),
         })
         .transpose()

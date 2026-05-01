@@ -276,6 +276,7 @@ fn infer_event_id_hint_checks_description_after_non_matching_external_id() {
 fn sparse_activity_stub(id: &str) -> Activity {
     Activity {
         id: id.to_string(),
+        paired_event_id: None,
         athlete_id: None,
         start_date_local: "2026-03-22T08:00:00".to_string(),
         start_date: None,
@@ -335,6 +336,7 @@ fn sparse_activity_stub(id: &str) -> Activity {
 fn enriched_activity() -> Activity {
     Activity {
         id: "i78".to_string(),
+        paired_event_id: Some(4321),
         athlete_id: Some("athlete-42".to_string()),
         start_date_local: "2026-03-22T08:00:00".to_string(),
         start_date: Some("2026-03-22T07:00:00Z".to_string()),

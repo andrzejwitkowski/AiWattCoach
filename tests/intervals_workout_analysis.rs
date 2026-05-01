@@ -155,6 +155,7 @@ fn parse_workout_doc_stops_before_offset_overflow() {
 fn sample_activity() -> Activity {
     Activity {
         id: "ride-1".to_string(),
+        paired_event_id: None,
         athlete_id: Some("athlete-42".to_string()),
         start_date_local: "2026-03-22T08:00:00".to_string(),
         start_date: Some("2026-03-22T07:00:00Z".to_string()),

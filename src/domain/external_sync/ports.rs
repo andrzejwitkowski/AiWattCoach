@@ -79,6 +79,13 @@ pub trait ExternalSyncStateRepository: Clone + Send + Sync + 'static {
         user_id: &str,
         wahoo_workout_token: &str,
     ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>>;
+
+    fn find_by_provider_and_external_id(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>>;
 }
 
 pub trait ProviderPollStateRepository: Clone + Send + Sync + 'static {
@@ -200,6 +207,15 @@ impl ExternalSyncStateRepository for NoopExternalSyncStateRepository {
         &self,
         _user_id: &str,
         _wahoo_workout_token: &str,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_provider_and_external_id(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _external_id: &str,
     ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
         Box::pin(async { Ok(None) })
     }

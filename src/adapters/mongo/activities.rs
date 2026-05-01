@@ -137,6 +137,7 @@ fn merge_activity_for_storage(existing: Option<Activity>, incoming: Activity) ->
 
     Activity {
         id: incoming.id,
+        paired_event_id: incoming.paired_event_id.or(existing.paired_event_id),
         athlete_id: incoming.athlete_id.or(existing.athlete_id),
         start_date_local: incoming.start_date_local,
         start_date: incoming.start_date.or(existing.start_date),

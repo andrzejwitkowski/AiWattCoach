@@ -875,6 +875,7 @@ impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
 pub(super) fn sample_activity(activity_id: &str) -> Activity {
     Activity {
         id: activity_id.to_string(),
+        paired_event_id: None,
         athlete_id: None,
         start_date_local: "2023-11-14T08:00:00".to_string(),
         start_date: None,

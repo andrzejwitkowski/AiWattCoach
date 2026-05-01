@@ -40,6 +40,15 @@ struct ResolvedCompletedWorkoutTarget {
     refresh_dates: Vec<String>,
 }
 
+struct PlannedWorkoutLinkLookup<'a> {
+    provider: ExternalProvider,
+    intervals_paired_event_id: Option<i64>,
+    marker_sources: &'a [String],
+    wahoo_plan_id: Option<i64>,
+    wahoo_workout_token: Option<&'a str>,
+    workout: &'a CompletedWorkout,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExternalImportCommand {
     UpsertPlannedWorkout(ExternalPlannedWorkoutImport),
@@ -70,6 +79,7 @@ pub struct ExternalCompletedWorkoutImport {
     pub provider: ExternalProvider,
     pub external_id: String,
     pub normalized_payload_hash: String,
+    pub intervals_paired_event_id: Option<i64>,
     pub marker_sources: Vec<String>,
     pub wahoo_plan_id: Option<i64>,
     pub wahoo_workout_token: Option<String>,
@@ -359,10 +369,14 @@ where
         let resolved_link = self
             .resolve_planned_workout_id_for_completed_workout(
                 &command.workout.user_id,
-                &command.marker_sources,
-                command.wahoo_plan_id,
-                command.wahoo_workout_token.as_deref(),
-                &command.workout,
+                PlannedWorkoutLinkLookup {
+                    provider: command.provider.clone(),
+                    intervals_paired_event_id: command.intervals_paired_event_id,
+                    marker_sources: &command.marker_sources,
+                    wahoo_plan_id: command.wahoo_plan_id,
+                    wahoo_workout_token: command.wahoo_workout_token.as_deref(),
+                    workout: &command.workout,
+                },
             )
             .await?;
         let resolved_target = self
@@ -629,12 +643,29 @@ where
     async fn resolve_planned_workout_id_for_completed_workout(
         &self,
         user_id: &str,
-        marker_sources: &[String],
-        wahoo_plan_id: Option<i64>,
-        wahoo_workout_token: Option<&str>,
-        workout: &CompletedWorkout,
+        lookup: PlannedWorkoutLinkLookup<'_>,
     ) -> Result<Option<ResolvedPlannedWorkoutLink>, ExternalImportError> {
-        if let Some(wahoo_plan_id) = wahoo_plan_id {
+        if lookup.provider == ExternalProvider::Intervals {
+            if let Some(paired_event_id) = lookup.intervals_paired_event_id {
+                let sync = self
+                    .sync_states
+                    .find_by_provider_and_external_id(
+                        user_id,
+                        ExternalProvider::Intervals,
+                        &paired_event_id.to_string(),
+                    )
+                    .await
+                    .map_err(map_repository_error)?;
+                if let Some(sync) = sync {
+                    return Ok(Some(ResolvedPlannedWorkoutLink {
+                        planned_workout_id: sync.canonical_entity.entity_id,
+                        match_source: PlannedCompletedWorkoutLinkMatchSource::Explicit,
+                    }));
+                }
+            }
+        }
+
+        if let Some(wahoo_plan_id) = lookup.wahoo_plan_id {
             let sync = self
                 .sync_states
                 .find_by_wahoo_plan_id(user_id, wahoo_plan_id)
@@ -652,7 +683,7 @@ where
             }
         }
 
-        if let Some(wahoo_workout_token) = wahoo_workout_token {
+        if let Some(wahoo_workout_token) = lookup.wahoo_workout_token {
             let sync = self
                 .sync_states
                 .find_by_wahoo_workout_token(user_id, wahoo_workout_token)
@@ -670,7 +701,7 @@ where
             }
         }
 
-        for source in marker_sources {
+        for source in lookup.marker_sources {
             let Some(match_token) = extract_planned_workout_marker(source) else {
                 continue;
             };
@@ -687,7 +718,7 @@ where
             }
         }
 
-        let workout_date = date_key(&workout.start_date_local).to_string();
+        let workout_date = date_key(&lookup.workout.start_date_local).to_string();
         let same_day_planned_workouts = self
             .planned_workouts
             .list_by_user_id_and_date_range(user_id, &workout_date, &workout_date)
@@ -696,7 +727,10 @@ where
         let matching_name_planned_workouts = same_day_planned_workouts
             .into_iter()
             .filter(|planned_workout| {
-                same_workout_name(planned_workout.name.as_deref(), workout.name.as_deref())
+                same_workout_name(
+                    planned_workout.name.as_deref(),
+                    lookup.workout.name.as_deref(),
+                )
             })
             .collect::<Vec<_>>();
 

@@ -25,6 +25,7 @@ pub(super) fn map_event_response(response: EventResponse) -> Event {
 pub(super) fn map_activity_response(response: ActivityResponse) -> Activity {
     Activity {
         id: response.id,
+        paired_event_id: response.paired_event_id,
         athlete_id: response.icu_athlete_id,
         start_date_local: response.start_date_local,
         start_date: response.start_date,

@@ -4,6 +4,7 @@ pub mod athlete_summary;
 pub mod athlete_summary_generation_operations;
 pub mod calendar_entry_view_calendar;
 pub mod calendar_entry_views;
+pub mod calendar_planned_workouts;
 pub mod client;
 pub mod coach_conversation_messages;
 pub mod coach_conversation_reply_operations;
