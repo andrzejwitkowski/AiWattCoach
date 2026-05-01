@@ -94,12 +94,12 @@ where
 
         let now = self.clock.now_epoch_seconds();
         self.repository
-            .set_saved_state(user_id, &target.summary_workout_id, Some(now), now)
+            .set_saved_state(user_id, &target.storage_workout_id, Some(now), now)
             .await?;
 
         if !has_finished_conversation(&existing) {
             let summary = self
-                .get_existing_summary(user_id, &target.summary_workout_id)
+                .get_existing_summary(user_id, &target.storage_workout_id)
                 .await?;
             return Ok(self.present_save_summary_result(
                 SaveSummaryResult {
@@ -165,7 +165,7 @@ where
         };
 
         let summary = self
-            .get_existing_summary(user_id, &target.summary_workout_id)
+            .get_existing_summary(user_id, &target.storage_workout_id)
             .await?;
         Ok(self.present_save_summary_result(
             SaveSummaryResult {
@@ -258,7 +258,7 @@ where
             {
                 Ok(generated_plan) => {
                     let summary = self
-                        .get_existing_summary(user_id, &target.summary_workout_id)
+                        .get_existing_summary(user_id, &target.storage_workout_id)
                         .await?;
                     let recap_status =
                         if RecapSnapshot::from_summary(&summary) != recap_before_retry {
@@ -304,7 +304,7 @@ where
                     );
 
                     let summary = self
-                        .get_existing_summary(user_id, &target.summary_workout_id)
+                        .get_existing_summary(user_id, &target.storage_workout_id)
                         .await?;
                     let recap_status =
                         if RecapSnapshot::from_summary(&summary) != recap_before_retry {

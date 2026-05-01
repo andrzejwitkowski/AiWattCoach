@@ -198,10 +198,10 @@ where
         let now = self.clock.now_epoch_seconds();
 
         self.repository
-            .update_rpe(user_id, &target.summary_workout_id, rpe, now)
+            .update_rpe(user_id, &target.storage_workout_id, rpe, now)
             .await?;
 
-        self.get_existing_summary(user_id, &target.summary_workout_id)
+        self.get_existing_summary(user_id, &target.storage_workout_id)
             .await
             .map(|summary| self.present_summary(summary, &target.requested_workout_id))
     }
@@ -222,10 +222,10 @@ where
         }
         let now = self.clock.now_epoch_seconds();
         self.repository
-            .set_saved_state(user_id, &target.summary_workout_id, None, now)
+            .set_saved_state(user_id, &target.storage_workout_id, None, now)
             .await?;
 
-        self.get_existing_summary(user_id, &target.summary_workout_id)
+        self.get_existing_summary(user_id, &target.storage_workout_id)
             .await
             .map(|summary| self.present_summary(summary, &target.requested_workout_id))
     }
@@ -252,10 +252,10 @@ where
         }
         let now = self.clock.now_epoch_seconds();
         self.repository
-            .persist_workout_recap(user_id, &target.summary_workout_id, recap, now)
+            .persist_workout_recap(user_id, &target.storage_workout_id, recap, now)
             .await?;
 
-        self.get_existing_summary(user_id, &target.summary_workout_id)
+        self.get_existing_summary(user_id, &target.storage_workout_id)
             .await
             .map(|summary| self.present_summary(summary, &target.requested_workout_id))
     }

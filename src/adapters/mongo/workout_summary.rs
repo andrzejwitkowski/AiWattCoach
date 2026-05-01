@@ -452,12 +452,22 @@ async fn find_preferred_documents(
     // Legacy documents are fetched by `event_id` only for missing workout ids,
     // and `or_insert` keeps the current `workout_id` match preferred when both exist.
 
+    let stored_ids = preferred_by_storage_workout_id
+        .keys()
+        .cloned()
+        .collect::<std::collections::HashSet<_>>();
+    let stored_activity_ids = stored_ids
+        .iter()
+        .map(|id| completed_workout_activity_id(id))
+        .collect::<std::collections::HashSet<_>>();
+
     let missing_workout_ids = workout_ids
         .iter()
         .filter(|workout_id| {
-            !preferred_by_storage_workout_id
-                .values()
-                .any(|document| matches_requested_workout_id(document, workout_id))
+            let activity_id = completed_workout_activity_id(workout_id);
+            !stored_ids.contains(workout_id.as_str())
+                && !stored_ids.contains(&canonical_completed_workout_id(workout_id))
+                && !stored_activity_ids.contains(activity_id)
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -490,11 +500,10 @@ async fn find_preferred_documents(
             continue;
         }
 
-        if let Some(mut document) = preferred_by_storage_workout_id
-            .values()
-            .find(|document| matches_requested_workout_id(document, workout_id))
-            .cloned()
-        {
+        let document = current_lookup_ids_for_request(workout_id)
+            .into_iter()
+            .find_map(|candidate| preferred_by_storage_workout_id.remove(&candidate));
+        if let Some(mut document) = document {
             document.workout_id = workout_id.clone();
             preferred_by_requested_workout_id.insert(workout_id.clone(), document);
         }
@@ -504,16 +513,6 @@ async fn find_preferred_documents(
         .iter()
         .filter_map(|workout_id| preferred_by_requested_workout_id.remove(workout_id))
         .collect())
-}
-
-fn matches_requested_workout_id(
-    document: &WorkoutSummaryDocument,
-    requested_workout_id: &str,
-) -> bool {
-    let requested_activity_id = completed_workout_activity_id(requested_workout_id);
-    document.workout_id == requested_workout_id
-        || document.workout_id == canonical_completed_workout_id(requested_workout_id)
-        || completed_workout_activity_id(&document.workout_id) == requested_activity_id
 }
 
 fn current_lookup_ids_for_request(requested_workout_id: &str) -> Vec<String> {

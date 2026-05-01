@@ -51,14 +51,14 @@ where
         let user_message = self
             .append_message_with_role(
                 user_id,
-                &target.summary_workout_id,
+                &target.storage_workout_id,
                 MessageRole::User,
                 content,
             )
             .await?;
 
         let summary = self
-            .get_existing_summary(user_id, &target.summary_workout_id)
+            .get_existing_summary(user_id, &target.storage_workout_id)
             .await?;
         let athlete_summary_may_regenerate_before_reply =
             if let Some(athlete_summary_service) = &self.athlete_summary_service {
@@ -99,10 +99,10 @@ where
             .await?;
 
         let user_message = self
-            .load_persisted_user_message(user_id, &target.summary_workout_id, &user_message_id)
+            .load_persisted_user_message(user_id, &target.storage_workout_id, &user_message_id)
             .await?;
         let operation = match self
-            .claim_coach_reply_operation(user_id, &target.summary_workout_id, &user_message)
+            .claim_coach_reply_operation(user_id, &target.storage_workout_id, &user_message)
             .await?
         {
             CoachReplyOperationResolution::Continue(operation) => operation,
@@ -113,7 +113,7 @@ where
         };
 
         info!(
-            workout_id = %target.summary_workout_id,
+            workout_id = %target.storage_workout_id,
             user_message_id = %user_message.id,
             attempt_count = operation.attempt_count,
             "requesting workout summary coach reply"
@@ -122,7 +122,7 @@ where
         let (operation, llm_response, athlete_summary_was_regenerated) = self
             .request_and_checkpoint_coach_reply(
                 user_id,
-                &target.summary_workout_id,
+                &target.storage_workout_id,
                 &user_message,
                 operation,
             )
@@ -130,7 +130,7 @@ where
         let coach_message = self
             .append_coach_reply_message(
                 user_id,
-                &target.summary_workout_id,
+                &target.storage_workout_id,
                 &operation,
                 &llm_response,
             )
@@ -140,7 +140,7 @@ where
 
         self.build_coach_reply_result(
             user_id,
-            &target.summary_workout_id,
+            &target.storage_workout_id,
             coach_message,
             athlete_summary_was_regenerated,
         )

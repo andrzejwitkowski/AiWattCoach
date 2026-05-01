@@ -51,7 +51,7 @@ MIGRATION_APPLY=true MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file 
 MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file scripts/mongo-verify-wahoo-sync-states.js
 ```
 
-### 4. Cleanup Dry Run
+### 4. Field Cleanup Dry Run
 
 Field-only cleanup dry run:
 
@@ -65,13 +65,13 @@ MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file scripts/mongo-cleanup
 MIGRATION_APPLY=true MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-state-fields.js
 ```
 
-### 6. Cleanup Dry Run
+### 6. Row Cleanup Dry Run
 
 ```bash
 MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-states.js
 ```
 
-### 7. Apply Cleanup
+### 7. Apply Row Cleanup
 
 ```bash
 MIGRATION_APPLY=true MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-states.js

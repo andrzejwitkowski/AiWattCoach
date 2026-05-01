@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-01 | Copilot/CodeRabbit | PR #166 alias resolution and storage-id follow-up
+
+- Problem: PR #166 review still pointed at several real gaps after earlier batch-read fixes: alias resolution in `resolve_workout_summary_target` preferred the resolved `preferred_workout_id` over the caller's exact `workout_id`, mutation/reload paths in `read.rs`, `save.rs`, and `chat.rs` used `target.summary_workout_id` instead of `target.storage_workout_id` for existing-summary operations, Mongo batch lookup still used O(n²) scanned alias matching and `BTreeMap`-ordered fallback for missing ids, and the Wahoo sync-state migration doc had ambiguous duplicate headings.
+- Fix: reordered candidate ids in `resolve_workout_summary_target` so the exact requested `workout_id` is checked first before falling back to preferred and equivalent aliases; changed all existing-summary mutations and reloads to use `target.storage_workout_id` in `use_cases/read.rs`, `use_cases/save.rs`, and `use_cases/chat.rs`; rewrote Mongo batch missing-detection to use HashSet-based O(1) lookups and replaced `BTreeMap.values().find(...)` alias fallback with candidate-order iteration via `current_lookup_ids_for_request`; disambiguated migration doc headings to `Field Cleanup Dry Run`, `Row Cleanup Dry Run`, and `Apply Row Cleanup`. Removed now-unused `matches_requested_workout_id` in the Mongo adapter.
+- Prevention: when alias resolution produces both a `preferred_workout_id` and a `storage_workout_id`, every mutation path that targets an existing persisted entity must use the storage key for repository calls, and the resolver must try the exact caller-provided id first so the last alias in a rollout does not silently rebind the caller's conversation.
+
 ### 2026-05-01 | user | planned-workout Intervals sync history-backed revert
 
 - Problem: I chased the remaining live Intervals `400 Bad Request` by switching planned-workout sync from `description` to canonical `workout_doc`, but the live failure persisted and the user pointed out that the repo history already contained a previously working Intervals push shape. Re-reading the older working calendar service at commit `4b7b545` showed planned-workout Intervals sync historically sent body-only workout text in `description`, left `workout_doc` empty, and preserved existing event metadata on updates.

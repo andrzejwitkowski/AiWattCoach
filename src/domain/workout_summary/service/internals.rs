@@ -49,11 +49,11 @@ where
         };
 
         let mut candidate_workout_ids = Vec::new();
+        push_unique_workout_id(&mut candidate_workout_ids, workout_id.to_string());
         push_unique_workout_id(
             &mut candidate_workout_ids,
             resolved_target.preferred_workout_id.clone(),
         );
-        push_unique_workout_id(&mut candidate_workout_ids, workout_id.to_string());
         for equivalent_workout_id in &resolved_target.equivalent_workout_ids {
             push_unique_workout_id(&mut candidate_workout_ids, equivalent_workout_id.clone());
         }
