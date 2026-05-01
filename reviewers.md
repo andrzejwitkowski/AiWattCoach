@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-01 | user | Windows Obsidian vault path correction
+
+- Problem: the repo instructions in `AGENTS.md` said to check the Windows Obsidian vault under `E:\obsidian\vault`, which is too broad and caused me to look in the wrong place for the OpenCode handbook links.
+- Fix: narrowed the Windows path in `AGENTS.md` to the actual handbook location `E:\obsidian\vault\opencode` so future sessions open the correct note tree first.
+- Prevention: when documenting platform-specific note locations, point to the exact subfolder that contains the required handbook entry, not just the vault root. If the first linked note is under a known subtree like `opencode`, encode that full path directly in the repo instructions.
+
+### 2026-05-01 | user | sandbox rollout fix for external sync unique index
+
+- Problem: the new `external_sync_states_user_provider_kind_external_id_unique` index was only partial on `external_id` type, so rollout tried to enforce `(user_id, provider, canonical_entity_kind, external_id)` uniqueness for every entity kind. Real sandbox data already contained historical duplicate `race` rows for the same external id, so Mongo index creation failed at startup with duplicate-key errors before the app could boot.
+- Fix: narrowed that unique index in `src/adapters/mongo/external_sync_states.rs` to rows where `canonical_entity_kind = "planned_workout"` and `external_id` is a string, preserving the planned-workout explicit-link invariant without imposing a new global uniqueness requirement on older `race` history. Added Mongo regressions that assert the partial filter and that duplicate non-planned external ids still round-trip.
+- Prevention: when adding a new unique index to an existing shared collection, scope the partial filter to the exact entity kind or rollout invariant that actually needs protection. Before shipping, compare the proposed uniqueness domain against plausible historical production rows so startup index builds do not fail on unrelated legacy duplicates.
+
 ### 2026-05-01 | Copilot/CodeRabbit | PR #172 calendar cleanup and explicit Intervals follow-up
 
 - Problem: the first paired-event and calendar duplicate fix left three real review gaps. Calendar refresh recreated heuristic links with `matched_at_epoch_seconds = 0`, cleanup still loaded full planned-workout candidates across all history just to compute live ids, and the new Intervals explicit relink path still relied on an unscoped provider+external_id lookup that could collide with non-planned sync rows.

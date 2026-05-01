@@ -6,6 +6,7 @@
 - Each `reviewers.md` entry must state both the problem that was identified and the fix that was applied.
 - The purpose of this loop is to reduce repeated PR and review mistakes over time.
 - I must read `reviewers.md` before writing a plan and before starting implementation work.
+- When repo instructions point at an Obsidian vault on Windows, store the exact subtree that contains the handbook notes, not only the vault root. A too-broad path wastes time and leads to false "file not found" lookups.
 
 ## PR Conflict Verification
 
@@ -47,6 +48,7 @@
 
 ## Small Review Fixes
 
+- When adding a unique index to a shared sync-state collection, scope the partial filter to the exact canonical entity kind that requires the invariant. A broader `external_id`-only partial filter can turn harmless historical duplicates in other kinds into a startup rollout failure.
 - When a shared trait or widely used domain struct changes shape, grep all implementations, merge helpers, and test fixtures immediately. Do not wait for compile errors to surface one file at a time.
 - After adding one more input to an already busy helper, run clippy early and prefer a small input struct over crossing the repo's function-argument limit.
 - When replacing a full-history cleanup read with a lighter port method, verify the new adapter really narrows the fetched Mongo document shape. A new method name is not enough if it still materializes full payloads or builds the same huge `$in` set behind the scenes.

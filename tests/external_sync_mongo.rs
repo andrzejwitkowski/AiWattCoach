@@ -150,6 +150,62 @@ async fn external_sync_state_repository_scopes_planned_workout_lookup_by_entity_
 }
 
 #[tokio::test]
+async fn external_sync_state_repository_allows_duplicate_external_ids_for_non_planned_rows() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoExternalSyncStateRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let first_race = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+    )
+    .mark_synced(
+        "shared-1".to_string(),
+        "hash-race-1".to_string(),
+        1_700_000_000,
+    );
+    let second_race = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-2".to_string()),
+    )
+    .mark_synced(
+        "shared-1".to_string(),
+        "hash-race-2".to_string(),
+        1_700_000_001,
+    );
+
+    repository.upsert(first_race.clone()).await.unwrap();
+    repository.upsert(second_race.clone()).await.unwrap();
+
+    let found_first = repository
+        .find_by_provider_and_canonical_entity(
+            "user-1",
+            ExternalProvider::Intervals,
+            &first_race.canonical_entity,
+        )
+        .await
+        .unwrap();
+    assert_eq!(found_first, Some(first_race));
+
+    let found_second = repository
+        .find_by_provider_and_canonical_entity(
+            "user-1",
+            ExternalProvider::Intervals,
+            &second_race.canonical_entity,
+        )
+        .await
+        .unwrap();
+    assert_eq!(found_second, Some(second_race));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
 async fn provider_poll_state_repository_lists_due_items_and_round_trips_by_stream() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
@@ -257,6 +313,14 @@ async fn external_sync_repositories_create_expected_indexes() {
             == Some("external_sync_states_user_provider_kind_external_id_unique")
             && index.keys
                 == doc! { "user_id": 1, "provider": 1, "canonical_entity_kind": 1, "external_id": 1 }
+            && index
+                .options
+                .as_ref()
+                .and_then(|options| options.partial_filter_expression.as_ref())
+                == Some(&doc! {
+                    "canonical_entity_kind": "planned_workout",
+                    "external_id": { "$type": "string" }
+                })
     }));
 
     let poll_state_indexes = fixture
