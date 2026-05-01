@@ -180,6 +180,100 @@ async fn workout_summary_repository_creates_legacy_event_id_index() {
     fixture.cleanup().await;
 }
 
+#[tokio::test]
+async fn workout_summary_repository_batch_lookup_matches_aliases_for_requested_activity_ids() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoWorkoutSummaryRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .create(sample_summary(
+            "summary-alias",
+            "user-1",
+            "wahoo-workout:450868242",
+            Some(6),
+            10,
+        ))
+        .await
+        .unwrap();
+
+    let summaries = repository
+        .find_by_user_id_and_workout_ids("user-1", vec!["450868242".to_string()])
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].id, "summary-alias");
+    assert_eq!(summaries[0].workout_id, "450868242");
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn workout_summary_repository_batch_lookup_matches_prefetched_alias_requests_without_legacy_query(
+) {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoWorkoutSummaryRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .create(sample_summary(
+            "summary-alias",
+            "user-1",
+            "wahoo-workout:450868242",
+            Some(6),
+            10,
+        ))
+        .await
+        .unwrap();
+
+    let summaries = repository
+        .find_by_user_id_and_workout_ids("user-1", vec!["intervals-activity:450868242".to_string()])
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].id, "summary-alias");
+    assert_eq!(summaries[0].workout_id, "intervals-activity:450868242");
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn workout_summary_repository_batch_lookup_matches_wahoo_request_to_intervals_alias() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoWorkoutSummaryRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .create(sample_summary(
+            "summary-alias",
+            "user-1",
+            "intervals-activity:450868242",
+            Some(6),
+            10,
+        ))
+        .await
+        .unwrap();
+
+    let summaries = repository
+        .find_by_user_id_and_workout_ids("user-1", vec!["wahoo-workout:450868242".to_string()])
+        .await
+        .unwrap();
+
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].id, "summary-alias");
+    assert_eq!(summaries[0].workout_id, "wahoo-workout:450868242");
+
+    fixture.cleanup().await;
+}
+
 struct MongoFixture {
     client: Client,
     database: String,

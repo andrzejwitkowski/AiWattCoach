@@ -2,28 +2,41 @@
 Usage:
 
   Dry run (default):
-    MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-states.js
+    MONGODB_DATABASE=aiwatt mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-state-fields.js
 
-  Apply cleanup:
-    MIGRATION_APPLY=true MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-states.js
+  Apply field cleanup:
+    MIGRATION_APPLY=true MONGODB_DATABASE=aiwatt mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-state-fields.js
 
   Cleanup one user only:
-    MIGRATION_APPLY=true MIGRATION_USER_ID=user-1 MONGODB_DATABASE=aiwattcoach mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-states.js
+    MIGRATION_APPLY=true MIGRATION_USER_ID=user-1 MONGODB_DATABASE=aiwatt mongosh "$MONGODB_URI" --file scripts/mongo-cleanup-legacy-wahoo-sync-state-fields.js
 
 Environment variables:
   MONGODB_DATABASE            Optional. Uses the current db when omitted.
   MIGRATION_SOURCE_COLLECTION Optional. Default: planned_workout_wahoo_syncs
   MIGRATION_TARGET_COLLECTION Optional. Default: external_sync_states
   MIGRATION_USER_ID           Optional. Limit cleanup to one user.
-  MIGRATION_APPLY             Optional. Set to true to delete rows.
+  MIGRATION_APPLY             Optional. Set to true to write changes.
 
 Safety:
   - Dry run is the default.
-  - Deletes only legacy rows that already have a matching migrated target row.
-  - Leaves unmatched legacy rows in place and reports them.
+  - Unsets only legacy fields that have already been migrated into external_sync_states.
+  - Touches only source rows whose migrated target row exists and matches the expected migrated shape.
+  - Leaves unmatched or mismatched legacy rows unchanged and reports them.
 */
 
-(function cleanupLegacyWahooSyncStates() {
+const LEGACY_FIELDS_TO_UNSET = [
+  "payload_hash",
+  "status",
+  "wahoo_plan_external_id",
+  "wahoo_plan_id",
+  "wahoo_workout_id",
+  "wahoo_workout_token",
+  "last_error",
+  "last_synced_at_epoch_seconds",
+  "last_synced_at",
+];
+
+(function cleanupLegacyWahooSyncStateFields() {
   const config = readConfig();
   const database = resolveDatabase(config.databaseName);
   const source = database.getCollection(config.sourceCollection);
@@ -37,20 +50,24 @@ Safety:
     targetCollection: config.targetCollection,
     userId: config.userId,
     apply: config.apply,
+    fieldsToUnset: LEGACY_FIELDS_TO_UNSET,
   });
 
   const summary = {
     scanned: 0,
-    eligibleForDelete: 0,
-    deleted: 0,
+    eligibleForUnset: 0,
+    alreadyClean: 0,
     missingTarget: 0,
     mismatch: 0,
+    bulkWriteOps: 0,
+    matchedCount: 0,
+    modifiedCount: 0,
     eligibleSamples: [],
+    alreadyCleanSamples: [],
     missingTargetSamples: [],
     mismatchSamples: [],
   };
-
-  const deleteIds = [];
+  const operations = [];
   const cursor = source.find(sourceFilter).sort({ user_id: 1, planned_workout_id: 1 });
 
   while (cursor.hasNext()) {
@@ -82,28 +99,50 @@ Safety:
       continue;
     }
 
-    summary.eligibleForDelete += 1;
+    const unsetSpec = buildUnsetSpec(legacy);
+    if (!unsetSpec) {
+      summary.alreadyClean += 1;
+      pushSample(summary.alreadyCleanSamples, {
+        legacy_id: legacy._id,
+        user_id: legacy.user_id,
+        planned_workout_id: legacy.planned_workout_id,
+      });
+      continue;
+    }
+
+    summary.eligibleForUnset += 1;
     pushSample(summary.eligibleSamples, {
       legacy_id: legacy._id,
       user_id: legacy.user_id,
       planned_workout_id: legacy.planned_workout_id,
+      fields: Object.keys(unsetSpec),
     });
 
-    if (config.apply) {
-      deleteIds.push(legacy._id);
+    if (!config.apply) {
+      continue;
+    }
+
+    operations.push({
+      updateOne: {
+        filter: { _id: legacy._id },
+        update: { $unset: unsetSpec },
+      },
+    });
+
+    if (operations.length >= 500) {
+      flushOperations(source, operations, summary);
     }
   }
 
-  if (config.apply && deleteIds.length > 0) {
-    const result = source.deleteMany({ _id: { $in: deleteIds } });
-    summary.deleted = result.deletedCount ?? 0;
+  if (config.apply) {
+    flushOperations(source, operations, summary);
   }
 
-  printSection(config.apply ? "Cleanup Summary" : "Cleanup Dry Run Summary");
+  printSection(config.apply ? "Field Cleanup Summary" : "Field Cleanup Dry Run Summary");
   printjson(summary);
 
   if (!config.apply) {
-    print("Dry run only. Re-run with MIGRATION_APPLY=true to delete eligible legacy rows.");
+    print("Dry run only. Re-run with MIGRATION_APPLY=true to unset eligible legacy fields.");
   }
 })();
 
@@ -141,6 +180,18 @@ function buildTargetFilter(migrated) {
     canonical_entity_kind: migrated.canonical_entity_kind,
     canonical_entity_id: migrated.canonical_entity_id,
   };
+}
+
+function buildUnsetSpec(legacy) {
+  const unsetSpec = {};
+
+  LEGACY_FIELDS_TO_UNSET.forEach((fieldName) => {
+    if (Object.prototype.hasOwnProperty.call(legacy, fieldName)) {
+      unsetSpec[fieldName] = "";
+    }
+  });
+
+  return Object.keys(unsetSpec).length > 0 ? unsetSpec : null;
 }
 
 function mapLegacySyncDocument(legacy) {
@@ -338,6 +389,18 @@ function compareField(diffs, fieldName, expected, actual) {
   if (!areComparableValuesEqual(expected, actual)) {
     diffs.push({ field: fieldName, expected, actual });
   }
+}
+
+function flushOperations(source, operations, summary) {
+  if (operations.length === 0) {
+    return;
+  }
+
+  const result = source.bulkWrite(operations, { ordered: false });
+  summary.bulkWriteOps += operations.length;
+  summary.matchedCount += result.matchedCount ?? 0;
+  summary.modifiedCount += result.modifiedCount ?? 0;
+  operations.length = 0;
 }
 
 function pushSample(samples, sample) {

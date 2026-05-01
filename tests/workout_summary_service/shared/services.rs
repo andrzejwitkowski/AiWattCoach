@@ -390,7 +390,7 @@ pub(crate) struct RecordingLatestCompletedActivityService {
 
 #[derive(Clone, Default)]
 pub(crate) struct RecordingCompletedWorkoutTargetService {
-    allowed_workout_ids: Arc<Mutex<Vec<String>>>,
+    resolved_targets: Arc<Mutex<BTreeMap<String, ResolvedCompletedWorkoutTarget>>>,
     calls: Arc<Mutex<Vec<String>>>,
 }
 
@@ -410,10 +410,44 @@ impl RecordingLatestCompletedActivityService {
 impl RecordingCompletedWorkoutTargetService {
     pub(crate) fn allowing(workout_ids: &[&str]) -> Self {
         Self {
-            allowed_workout_ids: Arc::new(Mutex::new(
+            resolved_targets: Arc::new(Mutex::new(
                 workout_ids
                     .iter()
-                    .map(|value| (*value).to_string())
+                    .map(|value| {
+                        let workout_id = (*value).to_string();
+                        (
+                            workout_id.clone(),
+                            ResolvedCompletedWorkoutTarget {
+                                preferred_workout_id: workout_id.clone(),
+                                equivalent_workout_ids: vec![workout_id],
+                            },
+                        )
+                    })
+                    .collect(),
+            )),
+            calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub(crate) fn resolving(entries: &[(&str, &str, &[&str])]) -> Self {
+        Self {
+            resolved_targets: Arc::new(Mutex::new(
+                entries
+                    .iter()
+                    .map(
+                        |(requested_workout_id, preferred_workout_id, equivalent_workout_ids)| {
+                            (
+                                (*requested_workout_id).to_string(),
+                                ResolvedCompletedWorkoutTarget {
+                                    preferred_workout_id: (*preferred_workout_id).to_string(),
+                                    equivalent_workout_ids: equivalent_workout_ids
+                                        .iter()
+                                        .map(|value| (*value).to_string())
+                                        .collect(),
+                                },
+                            )
+                        },
+                    )
                     .collect(),
             )),
             calls: Arc::new(Mutex::new(Vec::new())),
@@ -452,7 +486,7 @@ impl CompletedWorkoutTargetUseCases for RecordingCompletedWorkoutTargetService {
         user_id: &str,
         workout_id: &str,
     ) -> aiwattcoach::domain::workout_summary::BoxFuture<Result<bool, WorkoutSummaryError>> {
-        let allowed_workout_ids = self.allowed_workout_ids.lock().unwrap().clone();
+        let resolved_targets = self.resolved_targets.lock().unwrap().clone();
         let calls = self.calls.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -460,7 +494,26 @@ impl CompletedWorkoutTargetUseCases for RecordingCompletedWorkoutTargetService {
             calls.lock().unwrap().push(format!(
                 "is_completed_workout_target:{user_id}:{workout_id}"
             ));
-            Ok(allowed_workout_ids.contains(&workout_id))
+            Ok(resolved_targets.contains_key(&workout_id))
+        })
+    }
+
+    fn resolve_completed_workout_target(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> aiwattcoach::domain::workout_summary::BoxFuture<
+        Result<Option<ResolvedCompletedWorkoutTarget>, WorkoutSummaryError>,
+    > {
+        let resolved_targets = self.resolved_targets.lock().unwrap().clone();
+        let calls = self.calls.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            calls.lock().unwrap().push(format!(
+                "resolve_completed_workout_target:{user_id}:{workout_id}"
+            ));
+            Ok(resolved_targets.get(&workout_id).cloned())
         })
     }
 }

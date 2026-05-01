@@ -13,7 +13,7 @@ pub use model::{
 pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
 pub use service::{
     spawn_workout_summary_coach_reply_task_runner, workout_summary_coach_reply_task_handler,
-    CompletedWorkoutTargetUseCases, LatestCompletedActivityUseCases, SaveSummaryResult,
-    SaveWorkflowResult, SaveWorkflowStatus, SchedulerBackedWorkoutSummaryService,
-    WorkoutSummaryService, WorkoutSummaryUseCases,
+    CompletedWorkoutTargetUseCases, LatestCompletedActivityUseCases,
+    ResolvedCompletedWorkoutTarget, SaveSummaryResult, SaveWorkflowResult, SaveWorkflowStatus,
+    SchedulerBackedWorkoutSummaryService, WorkoutSummaryService, WorkoutSummaryUseCases,
 };

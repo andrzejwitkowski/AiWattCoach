@@ -430,9 +430,12 @@ impl RaceRepository for InMemoryRaceRepository {
 #[derive(Clone, Default)]
 struct RecordingIntervalsService {
     created_events: Arc<Mutex<Vec<CreateEvent>>>,
+    create_event_user_ids: Arc<Mutex<Vec<String>>>,
     updated_events: Arc<Mutex<Vec<(i64, UpdateEvent)>>>,
+    update_event_user_ids: Arc<Mutex<Vec<String>>>,
     deleted_event_ids: Arc<Mutex<Vec<i64>>>,
     listed_events: Arc<Mutex<Vec<Event>>>,
+    list_event_user_ids: Arc<Mutex<Vec<String>>>,
     fail_updates: bool,
 }
 
@@ -486,11 +489,16 @@ impl RecordingIntervalsService {
 impl IntervalsUseCases for RecordingIntervalsService {
     fn list_events(
         &self,
-        _user_id: &str,
+        user_id: &str,
         _range: &DateRange,
     ) -> IntervalsBoxFuture<Result<Vec<Event>, IntervalsError>> {
         let listed_events = self.listed_events.clone();
-        Box::pin(async move { Ok(listed_events.lock().unwrap().clone()) })
+        let list_event_user_ids = self.list_event_user_ids.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            list_event_user_ids.lock().unwrap().push(user_id);
+            Ok(listed_events.lock().unwrap().clone())
+        })
     }
 
     fn get_event(
@@ -503,11 +511,14 @@ impl IntervalsUseCases for RecordingIntervalsService {
 
     fn create_event(
         &self,
-        _user_id: &str,
+        user_id: &str,
         event: CreateEvent,
     ) -> IntervalsBoxFuture<Result<Event, IntervalsError>> {
         let created_events = self.created_events.clone();
+        let create_event_user_ids = self.create_event_user_ids.clone();
+        let user_id = user_id.to_string();
         Box::pin(async move {
+            create_event_user_ids.lock().unwrap().push(user_id);
             created_events.lock().unwrap().push(event.clone());
             Ok(Event {
                 id: 77,
@@ -525,16 +536,19 @@ impl IntervalsUseCases for RecordingIntervalsService {
 
     fn update_event(
         &self,
-        _user_id: &str,
+        user_id: &str,
         event_id: i64,
         event: UpdateEvent,
     ) -> IntervalsBoxFuture<Result<Event, IntervalsError>> {
         let updated_events = self.updated_events.clone();
+        let update_event_user_ids = self.update_event_user_ids.clone();
         let fail_updates = self.fail_updates;
+        let user_id = user_id.to_string();
         Box::pin(async move {
             if fail_updates {
                 return Err(IntervalsError::ConnectionError("boom".to_string()));
             }
+            update_event_user_ids.lock().unwrap().push(user_id);
             updated_events
                 .lock()
                 .unwrap()
@@ -907,6 +921,77 @@ async fn create_race_retry_without_external_id_reuses_existing_remote_event() {
     let stored_sync = sync_states.stored();
     assert_eq!(stored_sync.len(), 1);
     assert_eq!(stored_sync[0].external_id.as_deref(), Some("77"));
+}
+
+#[tokio::test]
+async fn update_race_ignores_other_users_sync_state_and_calls_intervals_with_current_user() {
+    let repository = InMemoryRaceRepository::with_races(vec![Race {
+        race_id: "race-123".to_string(),
+        user_id: "user-1".to_string(),
+        date: "2026-09-12".to_string(),
+        name: "Gravel Attack".to_string(),
+        distance_meters: 120_000,
+        discipline: RaceDiscipline::Gravel,
+        priority: RacePriority::B,
+        result: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 1,
+    }]);
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    let race_ref = CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-123".to_string());
+    sync_states
+        .upsert(
+            ExternalSyncState::new("user-2".to_string(), ExternalProvider::Intervals, race_ref)
+                .mark_synced("88".to_string(), "hash".to_string(), 2),
+        )
+        .await
+        .expect("infallible sync state upsert");
+    let intervals = RecordingIntervalsService::default();
+    let service = RaceService::new(
+        repository,
+        intervals.clone(),
+        sync_states.clone(),
+        TestClock,
+        TestIdGenerator::default(),
+    );
+
+    service
+        .update_race(
+            "user-1",
+            "race-123",
+            UpdateRace {
+                date: "2026-09-12".to_string(),
+                name: "Updated Gravel Attack".to_string(),
+                distance_meters: 125_000,
+                discipline: RaceDiscipline::Road,
+                priority: RacePriority::A,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(intervals.created_events.lock().unwrap().len(), 1);
+    assert_eq!(intervals.updated_events.lock().unwrap().len(), 0);
+    assert_eq!(
+        *intervals.list_event_user_ids.lock().unwrap(),
+        vec!["user-1".to_string()]
+    );
+    assert_eq!(
+        *intervals.create_event_user_ids.lock().unwrap(),
+        vec!["user-1".to_string()]
+    );
+    assert!(intervals.update_event_user_ids.lock().unwrap().is_empty());
+
+    let stored_sync = sync_states.stored();
+    assert_eq!(stored_sync.len(), 2);
+    assert!(stored_sync
+        .iter()
+        .any(|state| { state.user_id == "user-2" && state.external_id.as_deref() == Some("88") }));
+    assert!(stored_sync.iter().any(|state| {
+        state.user_id == "user-1"
+            && state.external_id.as_deref() == Some("77")
+            && state.sync_status == ExternalSyncStatus::Synced
+    }));
 }
 
 #[tokio::test]

@@ -456,6 +456,76 @@ async fn training_plan_projection_repository_replay_heals_partial_same_operation
 }
 
 #[tokio::test]
+async fn training_plan_projection_repository_supersedes_stale_leading_days_for_same_operation_key()
+{
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoTrainingPlanProjectionRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let original_snapshot =
+        sample_snapshot("training-plan:user-1:workout-1:1700000000", "2026-05-01");
+    repository
+        .replace_window(
+            original_snapshot.clone(),
+            sample_projected_days(&original_snapshot, "2026-05-01"),
+            "2026-05-01",
+            1_700_000_000,
+        )
+        .await
+        .unwrap();
+
+    let replacement_snapshot =
+        sample_snapshot("training-plan:user-1:workout-1:1700000000", "2026-05-02");
+    repository
+        .replace_window(
+            replacement_snapshot.clone(),
+            sample_projected_days(&replacement_snapshot, "2026-05-02"),
+            "2026-05-02",
+            1_700_086_400,
+        )
+        .await
+        .unwrap();
+
+    let stored_days = fixture
+        .client
+        .database(&fixture.database)
+        .collection::<mongodb::bson::Document>("training_plan_projected_days")
+        .find(doc! { "operation_key": &replacement_snapshot.operation_key })
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+
+    let stale_leading_day = stored_days
+        .iter()
+        .find(|day| day.get_str("date").ok() == Some("2026-05-01"))
+        .expect("expected old leading day to remain stored for audit trail");
+    assert_eq!(
+        stale_leading_day
+            .get_i64("superseded_at_epoch_seconds")
+            .ok(),
+        Some(1_700_086_400)
+    );
+
+    let active_for_operation = repository
+        .find_active_by_operation_key(&replacement_snapshot.operation_key)
+        .await
+        .unwrap();
+    assert!(!active_for_operation
+        .iter()
+        .any(|day| day.date == "2026-05-01"));
+    assert!(active_for_operation
+        .iter()
+        .any(|day| day.date == "2026-05-02"));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
 async fn training_plan_projection_repository_creates_operation_unsuperseded_date_index() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;

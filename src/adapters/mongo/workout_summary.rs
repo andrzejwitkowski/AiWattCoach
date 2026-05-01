@@ -12,9 +12,12 @@ use super::time::{
 };
 use crate::{
     adapters::mongo::error::is_duplicate_key_error,
-    domain::workout_summary::{
-        BoxFuture, ConversationMessage, MessageRole, WorkoutRecap, WorkoutSummary,
-        WorkoutSummaryError, WorkoutSummaryRepository,
+    domain::{
+        completed_workouts::{canonical_completed_workout_id, completed_workout_activity_id},
+        workout_summary::{
+            BoxFuture, ConversationMessage, MessageRole, WorkoutRecap, WorkoutSummary,
+            WorkoutSummaryError, WorkoutSummaryRepository,
+        },
     },
 };
 
@@ -422,10 +425,17 @@ async fn find_preferred_documents(
         return Ok(Vec::new());
     }
 
+    let current_lookup_ids = workout_ids
+        .iter()
+        .flat_map(|workout_id| current_lookup_ids_for_request(workout_id))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+
     let current_documents = collection
         .find(doc! {
             "user_id": user_id,
-            "workout_id": { "$in": workout_ids },
+            "workout_id": { "$in": current_lookup_ids },
         })
         .await
         .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?
@@ -433,7 +443,7 @@ async fn find_preferred_documents(
         .await
         .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
-    let mut preferred_by_workout_id = current_documents
+    let mut preferred_by_storage_workout_id = current_documents
         .into_iter()
         .map(|document| (document.workout_id.clone(), document))
         .collect::<std::collections::BTreeMap<_, _>>();
@@ -442,9 +452,23 @@ async fn find_preferred_documents(
     // Legacy documents are fetched by `event_id` only for missing workout ids,
     // and `or_insert` keeps the current `workout_id` match preferred when both exist.
 
+    let stored_ids = preferred_by_storage_workout_id
+        .keys()
+        .cloned()
+        .collect::<std::collections::HashSet<_>>();
+    let stored_activity_ids = stored_ids
+        .iter()
+        .map(|id| completed_workout_activity_id(id))
+        .collect::<std::collections::HashSet<_>>();
+
     let missing_workout_ids = workout_ids
         .iter()
-        .filter(|workout_id| !preferred_by_workout_id.contains_key(workout_id.as_str()))
+        .filter(|workout_id| {
+            let activity_id = completed_workout_activity_id(workout_id);
+            !stored_ids.contains(workout_id.as_str())
+                && !stored_ids.contains(&canonical_completed_workout_id(workout_id))
+                && !stored_activity_ids.contains(activity_id)
+        })
         .cloned()
         .collect::<Vec<_>>();
 
@@ -461,16 +485,56 @@ async fn find_preferred_documents(
             .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
         for document in legacy_documents {
-            preferred_by_workout_id
+            preferred_by_storage_workout_id
                 .entry(document.workout_id.clone())
                 .or_insert(document);
         }
     }
 
+    let mut preferred_by_requested_workout_id = std::collections::BTreeMap::new();
+
+    for workout_id in workout_ids {
+        if let Some(mut document) = preferred_by_storage_workout_id.remove(workout_id) {
+            document.workout_id = workout_id.clone();
+            preferred_by_requested_workout_id.insert(workout_id.clone(), document);
+            continue;
+        }
+
+        let document = current_lookup_ids_for_request(workout_id)
+            .into_iter()
+            .find_map(|candidate| preferred_by_storage_workout_id.remove(&candidate));
+        if let Some(mut document) = document {
+            document.workout_id = workout_id.clone();
+            preferred_by_requested_workout_id.insert(workout_id.clone(), document);
+        }
+    }
+
     Ok(workout_ids
         .iter()
-        .filter_map(|workout_id| preferred_by_workout_id.remove(workout_id))
+        .filter_map(|workout_id| preferred_by_requested_workout_id.remove(workout_id))
         .collect())
+}
+
+fn current_lookup_ids_for_request(requested_workout_id: &str) -> Vec<String> {
+    let mut lookup_ids = Vec::new();
+    let activity_id = completed_workout_activity_id(requested_workout_id);
+
+    push_unique_lookup_id(&mut lookup_ids, requested_workout_id.to_string());
+    push_unique_lookup_id(&mut lookup_ids, activity_id.to_string());
+    push_unique_lookup_id(
+        &mut lookup_ids,
+        canonical_completed_workout_id(requested_workout_id),
+    );
+    push_unique_lookup_id(&mut lookup_ids, format!("wahoo-workout:{activity_id}"));
+    push_unique_lookup_id(&mut lookup_ids, format!("intervals-activity:{activity_id}"));
+
+    lookup_ids
+}
+
+fn push_unique_lookup_id(lookup_ids: &mut Vec<String>, workout_id: String) {
+    if !lookup_ids.contains(&workout_id) {
+        lookup_ids.push(workout_id);
+    }
 }
 
 async fn find_preferred_message_lookup_document(
