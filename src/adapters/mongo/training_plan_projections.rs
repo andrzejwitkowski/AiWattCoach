@@ -252,6 +252,12 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
 
             let superseded_range_start =
                 std::cmp::max(today.as_str(), snapshot.start_date.as_str());
+            let same_operation_active_date_range = load_active_operation_date_range(
+                &collection,
+                &snapshot.user_id,
+                &snapshot.operation_key,
+            )
+            .await?;
 
             let max_active_date: Option<String> = collection
                 .clone()
@@ -275,16 +281,33 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 .map(|date| std::cmp::max(snapshot.end_date.as_str(), date.as_str()))
                 .unwrap_or(snapshot.end_date.as_str())
                 .to_string();
+            let superseded_refresh_start = same_operation_active_date_range
+                .as_ref()
+                .map(|(start, _)| std::cmp::min(superseded_range_start, start.as_str()))
+                .unwrap_or(superseded_range_start)
+                .to_string();
+            let superseded_refresh_end = same_operation_active_date_range
+                .as_ref()
+                .map(|(_, end)| std::cmp::max(superseded_range_end.as_str(), end.as_str()))
+                .unwrap_or(superseded_range_end.as_str())
+                .to_string();
 
             let update_result = collection
                 .update_many(
                     doc! {
                         "user_id": &snapshot.user_id,
                         "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
-                        "date": {
-                            "$gte": superseded_range_start,
-                            "$lte": &superseded_range_end,
-                        },
+                        "$or": [
+                            {
+                                "date": {
+                                    "$gte": superseded_range_start,
+                                    "$lte": &superseded_range_end,
+                                },
+                            },
+                            {
+                                "operation_key": &snapshot.operation_key,
+                            },
+                        ],
                     },
                     doc! {
                         "$set": {
@@ -299,10 +322,7 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
             let superseded_date_range = if update_result.matched_count == 0 {
                 None
             } else {
-                Some((
-                    superseded_range_start.to_string(),
-                    superseded_range_end.clone(),
-                ))
+                Some((superseded_refresh_start, superseded_refresh_end))
             };
 
             snapshot_collection
@@ -336,6 +356,40 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
             })
         })
     }
+}
+
+async fn load_active_operation_date_range(
+    collection: &Collection<TrainingPlanProjectedDayDocument>,
+    user_id: &str,
+    operation_key: &str,
+) -> Result<Option<(String, String)>, TrainingPlanError> {
+    let lookup_collection = collection
+        .clone()
+        .clone_with_type::<mongodb::bson::Document>();
+    let filter = doc! {
+        "user_id": user_id,
+        "operation_key": operation_key,
+        "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+    };
+
+    let first_date = lookup_collection
+        .find_one(filter.clone())
+        .sort(doc! { "date": 1 })
+        .projection(doc! { "date": 1, "_id": 0 })
+        .await
+        .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+        .and_then(|doc| doc.get_str("date").ok().map(String::from));
+    let last_date = collection
+        .clone()
+        .clone_with_type::<mongodb::bson::Document>()
+        .find_one(filter)
+        .sort(doc! { "date": -1 })
+        .projection(doc! { "date": 1, "_id": 0 })
+        .await
+        .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+        .and_then(|doc| doc.get_str("date").ok().map(String::from));
+
+    Ok(first_date.zip(last_date))
 }
 
 fn map_projected_day_to_document(

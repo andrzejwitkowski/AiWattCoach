@@ -104,12 +104,45 @@ pub trait LatestCompletedActivityUseCases: Send + Sync {
     ) -> BoxFuture<Result<Option<String>, WorkoutSummaryError>>;
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedCompletedWorkoutTarget {
+    pub preferred_workout_id: String,
+    pub equivalent_workout_ids: Vec<String>,
+}
+
 pub trait CompletedWorkoutTargetUseCases: Send + Sync {
     fn is_completed_workout_target(
         &self,
         user_id: &str,
         workout_id: &str,
     ) -> BoxFuture<Result<bool, WorkoutSummaryError>>;
+
+    fn resolve_completed_workout_target(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+    ) -> BoxFuture<Result<Option<ResolvedCompletedWorkoutTarget>, WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let is_completed = self.is_completed_workout_target(&user_id, &workout_id);
+        Box::pin(async move {
+            Ok(is_completed
+                .await?
+                .then_some(ResolvedCompletedWorkoutTarget {
+                    preferred_workout_id: workout_id.clone(),
+                    equivalent_workout_ids: vec![workout_id],
+                }))
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ResolvedWorkoutSummaryTarget {
+    requested_workout_id: String,
+    preferred_workout_id: String,
+    summary_workout_id: String,
+    storage_workout_id: String,
+    existing_summary: Option<WorkoutSummary>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

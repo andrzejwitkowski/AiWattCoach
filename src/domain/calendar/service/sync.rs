@@ -168,7 +168,7 @@ where
                     .update_event(
                         user_id,
                         existing_remote_event.id,
-                        build_update_event(&projected_day),
+                        build_update_event(&projected_day, &existing_remote_event),
                     )
                     .await
                     .map_err(map_intervals_error)?
@@ -569,7 +569,7 @@ where
 fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
     CreateEvent {
         category: EventCategory::Workout,
-        start_date_local: day.date.clone(),
+        start_date_local: projected_event_start_date_local(&day.date),
         event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
         description: projected_event_sync_body(day),
@@ -580,17 +580,38 @@ fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
     }
 }
 
-fn build_update_event(day: &TrainingPlanProjectedDay) -> UpdateEvent {
+fn build_update_event(day: &TrainingPlanProjectedDay, existing_event: &Event) -> UpdateEvent {
     UpdateEvent {
         category: Some(EventCategory::Workout),
-        start_date_local: Some(day.date.clone()),
-        event_type: Some("Ride".to_string()),
+        start_date_local: Some(projected_event_start_date_local(&day.date)),
+        event_type: existing_event
+            .event_type
+            .clone()
+            .or_else(|| Some("Ride".to_string())),
         name: projected_workout_name(day),
-        description: projected_event_sync_body(day),
-        indoor: Some(false),
-        color: None,
+        description: merge_event_description(
+            existing_event.description.as_deref(),
+            projected_event_sync_body(day).as_deref(),
+        ),
+        indoor: Some(existing_event.indoor),
+        color: existing_event.color.clone(),
         workout_doc: None,
         file_upload: None,
+    }
+}
+
+fn merge_event_description(existing: Option<&str>, projected: Option<&str>) -> Option<String> {
+    match (
+        existing.map(str::trim).filter(|value| !value.is_empty()),
+        projected,
+    ) {
+        (None, None) => None,
+        (Some(existing), None) => Some(existing.to_string()),
+        (None, Some(projected)) => Some(projected.to_string()),
+        (Some(existing), Some(projected)) if existing.contains(projected) => {
+            Some(existing.to_string())
+        }
+        (Some(existing), Some(projected)) => Some(format!("{existing}\n\n{projected}")),
     }
 }
 
@@ -693,6 +714,10 @@ fn plan_filename(planned_workout_id: &str) -> String {
 
 fn projected_workout_start_at(date: &str) -> String {
     format!("{date}T00:00:00.000Z")
+}
+
+fn projected_event_start_date_local(date: &str) -> String {
+    format!("{date}T00:00:00")
 }
 
 fn workout_minutes(projected_day: &TrainingPlanProjectedDay) -> Result<i32, CalendarError> {

@@ -937,6 +937,160 @@ async fn builder_falls_back_to_event_id_summary_when_activity_id_summary_is_miss
 }
 
 #[tokio::test]
+async fn builder_uses_alias_backed_summary_for_recent_activity_context() {
+    #[derive(Clone)]
+    struct AliasSummaryRepository;
+
+    impl crate::domain::workout_summary::WorkoutSummaryRepository for AliasSummaryRepository {
+        fn find_by_user_id_and_workout_id(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<
+                Option<crate::domain::workout_summary::WorkoutSummary>,
+                crate::domain::workout_summary::WorkoutSummaryError,
+            >,
+        > {
+            Box::pin(async { Ok(None) })
+        }
+
+        fn find_by_user_id_and_workout_ids(
+            &self,
+            _user_id: &str,
+            workout_ids: Vec<String>,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<
+                Vec<crate::domain::workout_summary::WorkoutSummary>,
+                crate::domain::workout_summary::WorkoutSummaryError,
+            >,
+        > {
+            Box::pin(async move {
+                Ok(workout_ids
+                    .into_iter()
+                    .filter(|id| id == "ride-1")
+                    .map(|id| {
+                        let mut summary = crate::domain::workout_summary::WorkoutSummary {
+                            id: "summary-wahoo-alias".to_string(),
+                            user_id: "user-1".to_string(),
+                            workout_id: "wahoo-workout:ride-1".to_string(),
+                            rpe: Some(9),
+                            messages: Vec::new(),
+                            saved_at_epoch_seconds: None,
+                            workout_recap_text: Some("Recovered alias-backed recap".to_string()),
+                            workout_recap_provider: Some("openrouter".to_string()),
+                            workout_recap_model: Some("test-model".to_string()),
+                            workout_recap_generated_at_epoch_seconds: Some(1),
+                            created_at_epoch_seconds: 1,
+                            updated_at_epoch_seconds: 1,
+                        };
+                        summary.workout_id = id;
+                        summary
+                    })
+                    .collect())
+            })
+        }
+
+        fn create(
+            &self,
+            _summary: crate::domain::workout_summary::WorkoutSummary,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<
+                crate::domain::workout_summary::WorkoutSummary,
+                crate::domain::workout_summary::WorkoutSummaryError,
+            >,
+        > {
+            unreachable!()
+        }
+
+        fn update_rpe(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _rpe: u8,
+            _updated_at_epoch_seconds: i64,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<(), crate::domain::workout_summary::WorkoutSummaryError>,
+        > {
+            unreachable!()
+        }
+
+        fn append_message(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _message: crate::domain::workout_summary::ConversationMessage,
+            _updated_at_epoch_seconds: i64,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<(), crate::domain::workout_summary::WorkoutSummaryError>,
+        > {
+            unreachable!()
+        }
+
+        fn find_message_by_id(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _message_id: &str,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<
+                Option<crate::domain::workout_summary::ConversationMessage>,
+                crate::domain::workout_summary::WorkoutSummaryError,
+            >,
+        > {
+            unreachable!()
+        }
+
+        fn set_saved_state(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _saved_at_epoch_seconds: Option<i64>,
+            _updated_at_epoch_seconds: i64,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<(), crate::domain::workout_summary::WorkoutSummaryError>,
+        > {
+            unreachable!()
+        }
+
+        fn persist_workout_recap(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _recap: crate::domain::workout_summary::WorkoutRecap,
+            _updated_at_epoch_seconds: i64,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<(), crate::domain::workout_summary::WorkoutSummaryError>,
+        > {
+            unreachable!()
+        }
+    }
+
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(AliasSummaryRepository),
+        FixedClock,
+    )
+    .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
+    .with_planned_workout_repository(TestPlannedWorkoutRepository::default())
+    .with_special_day_repository(TestSpecialDayRepository::default());
+
+    let result = builder.build("user-1", "ride-1").await.unwrap();
+    let recent_day = result
+        .context
+        .recent_days
+        .iter()
+        .find(|day| day.date == "2026-04-03")
+        .expect("recent day should exist");
+
+    assert_eq!(recent_day.workouts[0].rpe, Some(9));
+    assert_eq!(
+        recent_day.workouts[0].workout_recap.as_deref(),
+        Some("Recovered alias-backed recap")
+    );
+}
+
+#[tokio::test]
 async fn builder_uses_configured_ftp_when_activity_ftp_is_missing() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),

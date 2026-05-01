@@ -1,9 +1,14 @@
 use super::*;
 
+use aiwattcoach::domain::completed_workouts::{
+    canonical_completed_workout_id, completed_workout_activity_id,
+};
+
 #[derive(Clone, Default)]
 pub(crate) struct InMemoryWorkoutSummaryRepository {
     summaries: Arc<Mutex<BTreeMap<(String, String), WorkoutSummary>>>,
     calls: Arc<Mutex<Vec<String>>>,
+    read_calls: Arc<Mutex<Vec<String>>>,
 }
 
 impl InMemoryWorkoutSummaryRepository {
@@ -17,11 +22,16 @@ impl InMemoryWorkoutSummaryRepository {
         Self {
             summaries: Arc::new(Mutex::new(summaries)),
             calls: Arc::new(Mutex::new(Vec::new())),
+            read_calls: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
     pub(crate) fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
+    }
+
+    pub(crate) fn read_calls(&self) -> Vec<String> {
+        self.read_calls.lock().unwrap().clone()
     }
 
     pub(crate) fn overwrite_summary(&self, summary: WorkoutSummary) {
@@ -41,7 +51,11 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         let summaries = self.summaries.clone();
+        let read_calls = self.read_calls.clone();
         Box::pin(async move {
+            read_calls.lock().unwrap().push(format!(
+                "find_by_user_id_and_workout_id:{user_id}:{workout_id}"
+            ));
             Ok(summaries
                 .lock()
                 .unwrap()
@@ -57,11 +71,31 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
     ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
         let user_id = user_id.to_string();
         let summaries = self.summaries.clone();
+        let read_calls = self.read_calls.clone();
         Box::pin(async move {
+            read_calls.lock().unwrap().push(format!(
+                "find_by_user_id_and_workout_ids:{user_id}:{}",
+                workout_ids.join(",")
+            ));
             let summaries = summaries.lock().unwrap();
             Ok(workout_ids
                 .into_iter()
-                .filter_map(|workout_id| summaries.get(&(user_id.clone(), workout_id)).cloned())
+                .filter_map(|workout_id| {
+                    let mut summary = summaries
+                        .get(&(user_id.clone(), workout_id.clone()))
+                        .cloned()
+                        .or_else(|| {
+                            summaries
+                                .values()
+                                .find(|summary| {
+                                    summary.user_id.as_str() == user_id.as_str()
+                                        && matches_requested_workout_id(summary, &workout_id)
+                                })
+                                .cloned()
+                        })?;
+                    summary.workout_id = workout_id;
+                    Some(summary)
+                })
                 .collect())
         })
     }
@@ -230,4 +264,11 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
                 }))
         })
     }
+}
+
+fn matches_requested_workout_id(summary: &WorkoutSummary, requested_workout_id: &str) -> bool {
+    let requested_activity_id = completed_workout_activity_id(requested_workout_id);
+    summary.workout_id == requested_workout_id
+        || summary.workout_id == canonical_completed_workout_id(requested_workout_id)
+        || completed_workout_activity_id(&summary.workout_id) == requested_activity_id
 }
