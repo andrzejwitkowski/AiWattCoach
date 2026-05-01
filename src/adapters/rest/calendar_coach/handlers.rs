@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use std::sync::Arc;
 
 use crate::{config::AppState, domain::calendar_coach::CalendarCoachUseCases};
 
@@ -20,21 +21,25 @@ pub(super) async fn resolve_user_id(
     super::super::user_auth::resolve_user_id(state, headers).await
 }
 
-fn calendar_coach_service(state: &AppState) -> Option<&std::sync::Arc<dyn CalendarCoachUseCases>> {
-    state.calendar_coach_service.as_ref()
+async fn resolve_calendar_coach(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(String, Arc<dyn CalendarCoachUseCases>), Response> {
+    let user_id = super::super::user_auth::resolve_user_id(state, headers).await?;
+    let service = state
+        .calendar_coach_service
+        .clone()
+        .ok_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+    Ok((user_id, service))
 }
 
 pub async fn get_current_conversation(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
-        Ok(user_id) => user_id,
+    let (user_id, service) = match resolve_calendar_coach(&state, &headers).await {
+        Ok(resolved) => resolved,
         Err(response) => return response,
-    };
-    let service = match calendar_coach_service(&state) {
-        Some(service) => service,
-        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
     match service.get_current_conversation(&user_id).await {
@@ -46,13 +51,9 @@ pub async fn get_current_conversation(
 }
 
 pub async fn start_new_conversation(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
-        Ok(user_id) => user_id,
+    let (user_id, service) = match resolve_calendar_coach(&state, &headers).await {
+        Ok(resolved) => resolved,
         Err(response) => return response,
-    };
-    let service = match calendar_coach_service(&state) {
-        Some(service) => service,
-        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
     match service.start_new_conversation(&user_id).await {
@@ -70,13 +71,9 @@ pub async fn get_conversation(
     headers: HeaderMap,
     Path(path): Path<CalendarCoachConversationPath>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
-        Ok(user_id) => user_id,
+    let (user_id, service) = match resolve_calendar_coach(&state, &headers).await {
+        Ok(resolved) => resolved,
         Err(response) => return response,
-    };
-    let service = match calendar_coach_service(&state) {
-        Some(service) => service,
-        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
     match service
@@ -96,13 +93,9 @@ pub async fn send_message(
     Path(path): Path<CalendarCoachConversationPath>,
     Json(body): Json<SendMessageRequest>,
 ) -> Response {
-    let user_id = match resolve_user_id(&state, &headers).await {
-        Ok(user_id) => user_id,
+    let (user_id, service) = match resolve_calendar_coach(&state, &headers).await {
+        Ok(resolved) => resolved,
         Err(response) => return response,
-    };
-    let service = match calendar_coach_service(&state) {
-        Some(service) => service,
-        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
 
     match service

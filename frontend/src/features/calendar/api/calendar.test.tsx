@@ -1,13 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
-import {
-  getCalendarCoachConversation,
-  getCurrentCalendarCoachConversation,
-  listCalendarLabels,
-  sendCalendarCoachMessage,
-  startNewCalendarCoachConversation,
-} from './calendar';
+import { ApiBaseUrlProvider } from '../../../lib/apiBaseUrl';
+import { useCalendarCoachApi, listCalendarLabels } from './calendar';
 import { createFetchMock, useFetchMock } from '../../intervals/api/testHelpers';
+
+function wrapper(apiBaseUrl: string) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <ApiBaseUrlProvider value={apiBaseUrl}>{children}</ApiBaseUrlProvider>;
+  };
+}
 
 describe('calendar api', () => {
   it('loads race labels grouped by date', async () => {
@@ -79,9 +81,11 @@ describe('calendar api', () => {
       ),
     );
 
-    const result = await getCurrentCalendarCoachConversation('');
+    const { result } = renderHook(() => useCalendarCoachApi(), { wrapper: wrapper('') });
 
-    expect(result.conversation.conversationId).toBe('conversation-1');
+    const conversation = await result.current.getCurrentCalendarCoachConversation();
+
+    expect(conversation.conversation.conversationId).toBe('conversation-1');
   });
 
   it('starts a new calendar coach conversation', async () => {
@@ -104,10 +108,12 @@ describe('calendar api', () => {
       ),
     );
 
-    const result = await startNewCalendarCoachConversation('');
+    const { result } = renderHook(() => useCalendarCoachApi(), { wrapper: wrapper('') });
+
+    const conversation = await result.current.startNewCalendarCoachConversation();
 
     expect(fetchMock).toHaveBeenCalledWith('/api/calendar/coach/conversations', expect.objectContaining({ method: 'POST' }));
-    expect(result.conversation.conversationId).toBe('conversation-2');
+    expect(conversation.conversation.conversationId).toBe('conversation-2');
   });
 
   it('loads a specific calendar coach conversation', async () => {
@@ -130,9 +136,11 @@ describe('calendar api', () => {
       ),
     );
 
-    const result = await getCalendarCoachConversation('', 'conversation-2');
+    const { result } = renderHook(() => useCalendarCoachApi(), { wrapper: wrapper('') });
 
-    expect(result.conversation.conversationId).toBe('conversation-2');
+    const conversation = await result.current.getCalendarCoachConversation('conversation-2');
+
+    expect(conversation.conversation.conversationId).toBe('conversation-2');
   });
 
   it('sends a calendar coach message', async () => {
@@ -180,7 +188,9 @@ describe('calendar api', () => {
       ),
     );
 
-    const result = await sendCalendarCoachMessage('', 'conversation-1', { content: 'How is the week balanced?' });
+    const { result } = renderHook(() => useCalendarCoachApi(), { wrapper: wrapper('') });
+
+    const response = await result.current.sendCalendarCoachMessage('conversation-1', { content: 'How is the week balanced?' });
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/calendar/coach/conversations/conversation-1/messages',
@@ -189,6 +199,6 @@ describe('calendar api', () => {
         body: JSON.stringify({ content: 'How is the week balanced?' }),
       }),
     );
-    expect(result.coachMessage.content).toBe('The week is front-loaded.');
+    expect(response.coachMessage.content).toBe('The week is front-loaded.');
   });
 });

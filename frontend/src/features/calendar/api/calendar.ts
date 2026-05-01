@@ -1,5 +1,7 @@
+import { useCallback } from 'react';
 import { z } from 'zod';
 
+import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
 import { get, post } from '../../../lib/httpClient';
 import { listEventsQuerySchema } from '../../intervals/types';
 import {
@@ -32,27 +34,44 @@ export async function refreshCalendarView(apiBaseUrl: string) {
   return manualCalendarRefreshResponseSchema.parse(data);
 }
 
-export async function getCurrentCalendarCoachConversation(apiBaseUrl: string) {
-  const data = await get(apiBaseUrl, '/api/calendar/coach/current');
-  return calendarCoachConversationResponseSchema.parse(data);
-}
+export function useCalendarCoachApi() {
+  const apiBaseUrl = useApiBaseUrl();
 
-export async function startNewCalendarCoachConversation(apiBaseUrl: string) {
-  const data = await post<undefined, unknown>(apiBaseUrl, '/api/calendar/coach/conversations');
-  return calendarCoachConversationResponseSchema.parse(data);
-}
+  const getCurrentCalendarCoachConversation = useCallback(async () => {
+    const data = await get(apiBaseUrl, '/api/calendar/coach/current');
+    return calendarCoachConversationResponseSchema.parse(data);
+  }, [apiBaseUrl]);
 
-export async function getCalendarCoachConversation(apiBaseUrl: string, conversationId: string) {
-  const data = await get(apiBaseUrl, `/api/calendar/coach/conversations/${conversationId}`);
-  return calendarCoachConversationResponseSchema.parse(data);
-}
+  const startNewCalendarCoachConversation = useCallback(async () => {
+    const data = await post<undefined, unknown>(apiBaseUrl, '/api/calendar/coach/conversations');
+    return calendarCoachConversationResponseSchema.parse(data);
+  }, [apiBaseUrl]);
 
-export async function sendCalendarCoachMessage(apiBaseUrl: string, conversationId: string, payload: unknown) {
-  const validated = calendarCoachSendMessageRequestSchema.parse(payload);
-  const data = await post<typeof validated, unknown>(
-    apiBaseUrl,
-    `/api/calendar/coach/conversations/${conversationId}/messages`,
-    validated,
+  const getCalendarCoachConversation = useCallback(
+    async (conversationId: string) => {
+      const data = await get(apiBaseUrl, `/api/calendar/coach/conversations/${conversationId}`);
+      return calendarCoachConversationResponseSchema.parse(data);
+    },
+    [apiBaseUrl],
   );
-  return calendarCoachSendMessageResponseSchema.parse(data);
+
+  const sendCalendarCoachMessage = useCallback(
+    async (conversationId: string, payload: unknown) => {
+      const validated = calendarCoachSendMessageRequestSchema.parse(payload);
+      const data = await post<typeof validated, unknown>(
+        apiBaseUrl,
+        `/api/calendar/coach/conversations/${conversationId}/messages`,
+        validated,
+      );
+      return calendarCoachSendMessageResponseSchema.parse(data);
+    },
+    [apiBaseUrl],
+  );
+
+  return {
+    getCurrentCalendarCoachConversation,
+    startNewCalendarCoachConversation,
+    getCalendarCoachConversation,
+    sendCalendarCoachMessage,
+  };
 }

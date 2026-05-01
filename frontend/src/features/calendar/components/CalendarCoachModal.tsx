@@ -7,12 +7,11 @@ import { ChatMessageList } from '../../coach/components/ChatMessageList';
 import { useCalendarCoachChat } from '../hooks/useCalendarCoachChat';
 
 type CalendarCoachModalProps = {
-  apiBaseUrl: string;
   isOpen: boolean;
   onClose: () => void;
 };
 
-export function CalendarCoachModal({ apiBaseUrl, isOpen, onClose }: CalendarCoachModalProps) {
+export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -26,7 +25,7 @@ export function CalendarCoachModal({ apiBaseUrl, isOpen, onClose }: CalendarCoac
     error,
     sendMessage,
     startNewConversation,
-  } = useCalendarCoachChat({ apiBaseUrl, isOpen });
+  } = useCalendarCoachChat({ isOpen });
 
   useEffect(() => {
     if (!isOpen) {

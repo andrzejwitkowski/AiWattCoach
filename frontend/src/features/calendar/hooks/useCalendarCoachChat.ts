@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
 import { AuthenticationError, HttpError } from '../../../lib/httpClient';
-import {
-  getCalendarCoachConversation,
-  getCurrentCalendarCoachConversation,
-  sendCalendarCoachMessage,
-  startNewCalendarCoachConversation,
-} from '../api/calendar';
+import { useCalendarCoachApi } from '../api/calendar';
 import {
   calendarCoachClientWsMessageSchema,
   calendarCoachServerWsMessageSchema,
@@ -15,7 +11,6 @@ import {
 } from '../types';
 
 type UseCalendarCoachChatOptions = {
-  apiBaseUrl: string;
   isOpen: boolean;
 };
 
@@ -71,9 +66,10 @@ function temporaryMessage(content: string): CalendarCoachMessage {
 }
 
 export function useCalendarCoachChat({
-  apiBaseUrl,
   isOpen,
 }: UseCalendarCoachChatOptions): UseCalendarCoachChatResult {
+  const apiBaseUrl = useApiBaseUrl();
+  const coachApi = useCalendarCoachApi();
   const [conversation, setConversation] = useState<CalendarCoachConversation | null>(null);
   const [messages, setMessages] = useState<CalendarCoachMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -265,7 +261,7 @@ export function useCalendarCoachChat({
         pendingSocketRef.current = null;
       }
     }
-  }, [apiBaseUrl, applyConversationResponse]);
+  }, [apiBaseUrl, applyConversationResponse, coachApi]);
 
   const loadConversation = useCallback(async () => {
     if (!isOpenRef.current) {
@@ -276,7 +272,7 @@ export function useCalendarCoachChat({
     setError(null);
 
     try {
-      const response = await getCurrentCalendarCoachConversation(apiBaseUrl);
+      const response = await coachApi.getCurrentCalendarCoachConversation();
       if (!isOpenRef.current) {
         return;
       }
@@ -309,7 +305,7 @@ export function useCalendarCoachChat({
         setIsLoading(false);
       }
     }
-  }, [apiBaseUrl, applyConversationResponse, connectSocket, handleAuthenticationError]);
+  }, [apiBaseUrl, applyConversationResponse, connectSocket, handleAuthenticationError, coachApi]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -333,7 +329,7 @@ export function useCalendarCoachChat({
       return pendingConversationRef.current;
     }
 
-    const createConversationPromise = startNewCalendarCoachConversation(apiBaseUrl)
+    const createConversationPromise = coachApi.startNewCalendarCoachConversation()
       .then((created) => {
         applyConversationResponse(created.conversation, created.messages);
         return created.conversation;
@@ -346,7 +342,7 @@ export function useCalendarCoachChat({
 
     pendingConversationRef.current = createConversationPromise;
     return createConversationPromise;
-  }, [apiBaseUrl, applyConversationResponse, conversation]);
+  }, [applyConversationResponse, conversation, coachApi]);
 
   const startNewConversation = useCallback(async () => {
     if (pendingNewConversationRef.current) {
@@ -357,7 +353,7 @@ export function useCalendarCoachChat({
     setError(null);
     pendingConversationRef.current = null;
 
-    const newConversationPromise = startNewCalendarCoachConversation(apiBaseUrl)
+    const newConversationPromise = coachApi.startNewCalendarCoachConversation()
       .then(async (created) => {
         closeSocket();
         applyConversationResponse(created.conversation, created.messages);
@@ -392,7 +388,7 @@ export function useCalendarCoachChat({
       setError(startError instanceof Error ? startError.message : 'Unable to start a new calendar coach conversation.');
       return false;
     }
-  }, [apiBaseUrl, applyConversationResponse, closeSocket, connectSocket, handleAuthenticationError]);
+  }, [apiBaseUrl, applyConversationResponse, closeSocket, connectSocket, handleAuthenticationError, coachApi]);
 
   const sendMessage = useCallback(async (content: string) => {
     const trimmed = content.trim();
@@ -422,7 +418,7 @@ export function useCalendarCoachChat({
         return true;
       }
 
-      const response = await sendCalendarCoachMessage(apiBaseUrl, conversationId, { content: trimmed });
+      const response = await coachApi.sendCalendarCoachMessage(conversationId, { content: trimmed });
       applyConversationResponse(response.conversation, response.messages);
       setError(null);
       return true;
@@ -433,7 +429,7 @@ export function useCalendarCoachChat({
 
       if (sendError instanceof HttpError && sendError.status === 404 && attemptedConversationId) {
         try {
-          const reloaded = await getCalendarCoachConversation(apiBaseUrl, attemptedConversationId);
+          const reloaded = await coachApi.getCalendarCoachConversation(attemptedConversationId);
           applyConversationResponse(reloaded.conversation, reloaded.messages);
         } catch {
           setConversation(null);
@@ -445,7 +441,7 @@ export function useCalendarCoachChat({
       setIsCoachTyping(false);
       return false;
     }
-  }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError]);
+  }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError, coachApi]);
 
   return useMemo(() => ({
     conversation,
