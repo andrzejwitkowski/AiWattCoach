@@ -1667,6 +1667,75 @@ async fn refresh_range_for_user_replaces_stale_heuristic_link_with_current_same_
     assert_eq!(stored_link.matched_at_epoch_seconds, 1_778_414_400);
 }
 
+#[tokio::test]
+async fn refresh_range_for_user_relinks_without_creating_heuristic_link_when_completed_date_is_malformed(
+) {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestCalendarPlannedWorkoutSource::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+    let planned_completed_links = TestPlannedCompletedWorkoutLinkRepository::default();
+
+    let mut planned_workout = sample_planned_workout();
+    planned_workout.planned_workout_id = "planned-new".to_string();
+    planned_workout.name = None;
+    planned.upsert(
+        planned_workout,
+        CalendarPlannedWorkoutOrigin::Projected,
+        vec![],
+    );
+
+    let mut workout = sample_completed_workout();
+    workout.start_date_local = "2026-05-10 invalid".to_string();
+    workout.planned_workout_id = None;
+    workout.name = Some("Threshold builder".to_string());
+    completed.upsert(workout).await.unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        completed.clone(),
+        races,
+        special_days,
+        sync_states,
+    )
+    .with_planned_completed_links(planned_completed_links.clone());
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::PlannedWorkout);
+    assert_eq!(
+        refreshed[0].planned_workout_id.as_deref(),
+        Some("planned-new")
+    );
+    assert_eq!(
+        refreshed[0].completed_workout_id.as_deref(),
+        Some("completed-1")
+    );
+
+    let stored_workout = completed
+        .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("completed workout remains stored");
+    assert_eq!(
+        stored_workout.planned_workout_id.as_deref(),
+        Some("planned-new")
+    );
+
+    let stored_link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap();
+    assert!(stored_link.is_none());
+}
+
 #[derive(Clone, Default)]
 struct TestCalendarPlannedWorkoutSource {
     stored: std::sync::Arc<std::sync::Mutex<Vec<CalendarPlannedWorkoutCandidate>>>,
@@ -2340,6 +2409,34 @@ impl ExternalSyncStateRepository for TestExternalSyncStateRepository {
                 .find(|state| {
                     state.user_id == user_id
                         && state.provider == provider
+                        && state.external_id.as_deref() == Some(external_id.as_str())
+                })
+                .cloned())
+        })
+    }
+
+    fn find_planned_workout_by_provider_and_external_id(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        external_id: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let single_lookup_count = self.single_lookup_count.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            single_lookup_count.fetch_add(1, Ordering::Relaxed);
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == provider
+                        && state.canonical_entity.entity_kind == CanonicalEntityKind::PlannedWorkout
                         && state.external_id.as_deref() == Some(external_id.as_str())
                 })
                 .cloned())

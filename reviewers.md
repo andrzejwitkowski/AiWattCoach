@@ -27,6 +27,12 @@ Read this file before planning and before implementation.
 - Fix: changed calendar refresh to stamp heuristic relinks from the completed workout day, added a dedicated `list_visible_planned_workout_ids_by_user_id(...)` port with a Mongo implementation that reads only cleanup ids/dates plus sync keys instead of full workout payloads, and introduced `find_planned_workout_by_provider_and_external_id(...)` with a Mongo filter and unique index scoped by `canonical_entity_kind = planned_workout`. Added focused domain and Mongo regressions, including the case where a hidden imported duplicate id must be cleared before merging to the projected plan.
 - Prevention: when a review points at a heavy cleanup path, verify that the replacement actually narrows the loaded document shape instead of just moving the same full scan behind a new method name. When adding provider-level explicit linking on a shared sync-state store, scope the lookup to the intended canonical entity kind in both the repository API and the backing index, then add a regression with a conflicting non-target entity kind.
 
+### 2026-05-01 | Copilot | PR #172 follow-up on defaults and malformed heuristic timestamps
+
+- Problem: after the first review-fix batch, `find_planned_workout_by_provider_and_external_id(...)` still had a trait default that silently fell back to the generic provider/external-id lookup, so any future repository that forgot to override it would lose the planned-workout scoping guarantee. Separately, `heuristic_link_timestamp(...)` still fell back to `0` for malformed `start_date_local`, reintroducing the 1970 sentinel through a different path. The repo also still exposed a `sandbox:docker` script pointing at a local ignored compose file, which makes fresh checkouts misleading.
+- Fix: made the planned-workout-scoped lookup a required trait method, changed heuristic timestamp resolution to return `Option<i64>` and skip heuristic link-row creation when the completed date is malformed, added a regression for that malformed-date relink case, and removed the dead `sandbox:docker` package script.
+- Prevention: when a review-driven API exists specifically to enforce a stronger invariant, do not leave a weaker default implementation behind in the shared trait. And when removing a repo-local file in favor of local ignored setup, grep package scripts/docs for stale references so fresh checkouts do not inherit a broken command.
+
 ## Entries
 
 ### 2026-05-01 | user | Intervals paired_event_id import follow-up

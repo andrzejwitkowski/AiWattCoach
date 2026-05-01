@@ -92,9 +92,7 @@ pub trait ExternalSyncStateRepository: Clone + Send + Sync + 'static {
         user_id: &str,
         provider: ExternalProvider,
         external_id: &str,
-    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
-        self.find_by_provider_and_external_id(user_id, provider, external_id)
-    }
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>>;
 }
 
 pub trait ProviderPollStateRepository: Clone + Send + Sync + 'static {

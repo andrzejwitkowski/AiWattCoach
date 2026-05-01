@@ -372,16 +372,20 @@ where
                             .upsert(updated.clone())
                             .await
                             .map_err(map_completed_error)?;
-                        planned_completed_links
-                            .upsert(PlannedCompletedWorkoutLink::new(
-                                user_id.clone(),
-                                relinked_planned_workout_id,
-                                updated.completed_workout_id.clone(),
-                                PlannedCompletedWorkoutLinkMatchSource::Heuristic,
-                                heuristic_link_timestamp(&updated.start_date_local),
-                            ))
-                            .await
-                            .map_err(map_planned_completed_link_error)?;
+                        if let Some(matched_at_epoch_seconds) =
+                            heuristic_link_timestamp(&updated.start_date_local)
+                        {
+                            planned_completed_links
+                                .upsert(PlannedCompletedWorkoutLink::new(
+                                    user_id.clone(),
+                                    relinked_planned_workout_id,
+                                    updated.completed_workout_id.clone(),
+                                    PlannedCompletedWorkoutLinkMatchSource::Heuristic,
+                                    matched_at_epoch_seconds,
+                                ))
+                                .await
+                                .map_err(map_planned_completed_link_error)?;
+                        }
                     }
                     continue;
                 }
@@ -499,7 +503,7 @@ where
     }
 }
 
-fn heuristic_link_timestamp(start_date_local: &str) -> i64 {
+fn heuristic_link_timestamp(start_date_local: &str) -> Option<i64> {
     let date = start_date_local
         .split_once('T')
         .map(|(date, _)| date)
@@ -509,7 +513,6 @@ fn heuristic_link_timestamp(start_date_local: &str) -> i64 {
         .ok()
         .and_then(|date| date.and_hms_opt(12, 0, 0))
         .map(|datetime| datetime.and_utc().timestamp())
-        .unwrap_or_default()
 }
 
 fn map_planned_error(
