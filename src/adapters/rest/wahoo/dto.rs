@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::domain::wahoo::{WahooFileReference, WahooWorkout, WahooWorkoutSummary};
 
@@ -39,7 +39,11 @@ pub(super) struct WahooWebhookWorkout {
     pub(super) name: Option<String>,
     #[serde(rename = "plan_id")]
     pub(super) plan_id: Option<i64>,
-    #[serde(rename = "plan_ids", default)]
+    #[serde(
+        rename = "plan_ids",
+        default,
+        deserialize_with = "deserialize_vec_or_default"
+    )]
     pub(super) plan_ids: Vec<i64>,
     #[serde(rename = "route_id")]
     pub(super) route_id: Option<i64>,
@@ -87,9 +91,17 @@ pub(super) struct WahooWebhookWorkoutSummary {
     pub(super) total_work_joules: Option<f64>,
     #[serde(rename = "time_zone")]
     pub(super) time_zone: Option<String>,
-    #[serde(rename = "manual", default)]
+    #[serde(
+        rename = "manual",
+        default,
+        deserialize_with = "deserialize_bool_or_default"
+    )]
     pub(super) manual: bool,
-    #[serde(rename = "edited", default)]
+    #[serde(
+        rename = "edited",
+        default,
+        deserialize_with = "deserialize_bool_or_default"
+    )]
     pub(super) edited: bool,
     #[serde(rename = "fitness_app_id")]
     pub(super) fitness_app_id: Option<i64>,
@@ -137,6 +149,21 @@ impl WahooWebhookWorkout {
             updated_at: self.updated_at,
         }
     }
+}
+
+fn deserialize_bool_or_default<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(deserializer)?.unwrap_or(false))
+}
+
+fn deserialize_vec_or_default<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 impl WahooWebhookWorkoutSummary {

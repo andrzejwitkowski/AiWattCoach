@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-01 | CodeRabbit | PR #174 webhook nullish optional-field follow-up
+
+- Problem: after the broader PR #174 review-fix batch, the Wahoo webhook REST DTO still assumed several optional fields were either present or non-null. Real webhook payloads can send `plan_ids`, `manual`, or `edited` as explicit `null`, which made serde reject otherwise valid `workout_summary` events with `400` even though those fields should behave the same as missing values.
+- Fix: updated `src/adapters/rest/wahoo/dto.rs` to deserialize `plan_ids: null` as an empty vector and `manual: null` / `edited: null` as `false`, then expanded `tests/auth_rest/wahoo_webhook.rs` to prove the endpoint still accepts a `workout_summary` payload when those optional fields and `file.url` are nullish.
+- Prevention: for external webhook DTOs, treat nullable optional scalars and lists the same as omitted fields unless the upstream contract says `null` is semantically distinct. Add a transport regression the first time a provider payload shape is widened so serde tolerance and HTTP status behavior stay locked together.
+
 ### 2026-05-01 | CodeRabbit/Qodo | PR #174 Wahoo webhook review follow-up
 
 - Problem: review feedback on PR #174 pointed out several concrete gaps that were still real in the branch: `WAHOO_WEBHOOK_TOKEN` could be set without the rest of the Wahoo OAuth trio and get silently discarded during settings parsing; the webhook REST DTOs still relied on implicit JSON field names, returned a raw tuple from `into_domain_parts()`, and rejected `file: { "url": null }` payloads even though the rest of the Wahoo adapter treats missing URLs as "no FIT file"; the manual admin sync endpoint had no explicit non-admin regression; and the Wahoo import payload hash still ignored most summary fields, so corrected upstream metrics could keep the same `normalized_payload_hash` and be suppressed as no-op updates.

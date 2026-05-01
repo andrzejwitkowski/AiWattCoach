@@ -328,7 +328,7 @@ async fn wahoo_webhook_ignores_non_summary_events_even_without_workout_shape() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn wahoo_webhook_accepts_workout_summary_event_with_null_file_url() {
+async fn wahoo_webhook_accepts_workout_summary_event_with_nullish_optional_fields() {
     let service = TestWahooWebhookService::accepting();
     let app =
         auth_test_app_with_wahoo_webhook(TestIdentityService::default(), service.clone()).await;
@@ -347,12 +347,14 @@ async fn wahoo_webhook_accepts_workout_summary_event_with_null_file_url() {
                         "workout_summary": {
                             "id": 42,
                             "file": { "url": null },
-                            "manual": false,
-                            "edited": false
+                            "manual": null,
+                            "edited": null,
+                            "plan_ids": null
                         },
                         "workout": {
                             "id": 42,
-                            "starts": "2023-11-14T08:00:00Z"
+                            "starts": "2023-11-14T08:00:00Z",
+                            "plan_ids": null
                         }
                     }"#,
                 ))
