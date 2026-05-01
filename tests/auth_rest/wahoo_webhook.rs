@@ -222,6 +222,47 @@ async fn wahoo_webhook_returns_503_when_webhook_token_not_configured() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn wahoo_webhook_ignores_unknown_user_for_workout_summary() {
+    let service = TestWahooWebhookService::ignored();
+    let app =
+        auth_test_app_with_wahoo_webhook(TestIdentityService::default(), service.clone()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/wahoo/webhook")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{
+                        "event_type": "workout_summary",
+                        "webhook_token": "secret-token",
+                        "user": { "id": 999999 },
+                        "workout_summary": {
+                            "id": 42,
+                            "manual": false,
+                            "edited": false
+                        },
+                        "workout": {
+                            "id": 42,
+                            "starts": "2023-11-14T08:00:00Z"
+                        }
+                    }"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), RESPONSE_LIMIT_BYTES)
+        .await
+        .unwrap();
+    assert_eq!(body.as_ref(), br#"{"accepted":false}"#);
+    assert_eq!(service.import_calls().len(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn wahoo_webhook_ignores_non_workout_summary_events() {
     let service = TestWahooWebhookService::accepting();
     let app =
@@ -284,6 +325,48 @@ async fn wahoo_webhook_ignores_non_summary_events_even_without_workout_shape() {
         .await
         .unwrap();
     assert_eq!(body.as_ref(), br#"{"accepted":false}"#);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wahoo_webhook_accepts_workout_summary_event_with_null_file_url() {
+    let service = TestWahooWebhookService::accepting();
+    let app =
+        auth_test_app_with_wahoo_webhook(TestIdentityService::default(), service.clone()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/wahoo/webhook")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{
+                        "event_type": "workout_summary",
+                        "webhook_token": "secret-token",
+                        "user": { "id": 60462 },
+                        "workout_summary": {
+                            "id": 42,
+                            "file": { "url": null },
+                            "manual": false,
+                            "edited": false
+                        },
+                        "workout": {
+                            "id": 42,
+                            "starts": "2023-11-14T08:00:00Z"
+                        }
+                    }"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), RESPONSE_LIMIT_BYTES)
+        .await
+        .unwrap();
+    assert_eq!(body.as_ref(), br#"{"accepted":true}"#);
+    assert_eq!(service.import_calls().len(), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]

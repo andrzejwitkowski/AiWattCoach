@@ -51,7 +51,10 @@ impl std::fmt::Debug for WahooConfig {
             .field("access_token", &RedactedOptionalText(&self.access_token))
             .field("refresh_token", &RedactedOptionalText(&self.refresh_token))
             .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
-            .field("user_id", &self.user_id)
+            .field(
+                "user_id",
+                &RedactedOptionalText(&self.user_id.map(|value| value.to_string())),
+            )
             .field("connected", &self.connected)
             .field("updated_at_epoch_seconds", &self.updated_at_epoch_seconds)
             .finish()

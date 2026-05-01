@@ -473,6 +473,38 @@ async fn admin_can_trigger_manual_wahoo_completed_workout_sync() {
 }
 
 #[tokio::test]
+async fn non_admin_cannot_trigger_manual_wahoo_completed_workout_sync() {
+    let service = TestWahooWebhookService::default();
+    let app = settings_test_app_with_admin_services(
+        TestIdentityServiceWithSession {
+            roles: vec![Role::User],
+            ..Default::default()
+        },
+        TestSettingsService::default(),
+        None,
+        Some(std::sync::Arc::new(service.clone())),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/wahoo/user-999/sync-completed-workouts")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::HOST, "localhost")
+                .header(header::ORIGIN, "http://localhost")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert!(service.manual_sync_calls().is_empty());
+}
+
+#[tokio::test]
 async fn admin_manual_wahoo_sync_rejects_cross_origin_request() {
     let service = TestWahooWebhookService::default();
     let app = settings_test_app_with_admin_services(

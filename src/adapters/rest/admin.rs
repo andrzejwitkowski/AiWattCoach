@@ -60,8 +60,11 @@ pub struct CompletedWorkoutMetricsBackfillResponse {
 
 #[derive(Serialize)]
 pub struct ManualWahooSyncResponse {
+    #[serde(rename = "scanned")]
     scanned: usize,
+    #[serde(rename = "imported")]
     imported: usize,
+    #[serde(rename = "skipped")]
     skipped: usize,
 }
 

@@ -5,7 +5,7 @@ use super::{
     SettingsError, UserSettings, WahooConfig,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct WahooUserIdBackfillCandidate {
     pub user_id: String,
     pub wahoo: WahooConfig,

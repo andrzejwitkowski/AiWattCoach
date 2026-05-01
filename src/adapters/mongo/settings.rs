@@ -364,7 +364,8 @@ impl MongoUserSettingsRepository {
         wahoo_user_id: i64,
         updated_at_epoch_seconds: i64,
     ) -> Result<(), SettingsError> {
-        self.collection
+        let result = self
+            .collection
             .update_one(
                 doc! {
                     "user_id": user_id,
@@ -386,6 +387,11 @@ impl MongoUserSettingsRepository {
             )
             .await
             .map_err(|error| SettingsError::Repository(error.to_string()))?;
+        if result.matched_count == 0 {
+            return Err(SettingsError::Repository(format!(
+                "no settings document updated for user_id={user_id} wahoo_user_id={wahoo_user_id}",
+            )));
+        }
         Ok(())
     }
 }

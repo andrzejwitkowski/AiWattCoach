@@ -184,14 +184,73 @@ fn hash_workout(workout: &WahooWorkout) -> String {
     let mut hasher = Sha256::new();
     hasher.update(workout.id.to_string());
     hasher.update(workout.starts.as_bytes());
+    hash_optional_i32(&mut hasher, workout.minutes);
+    hash_optional_string(&mut hasher, workout.name.as_deref());
+    hash_optional_i64(&mut hasher, workout.plan_id);
+    for plan_id in &workout.plan_ids {
+        hasher.update(plan_id.to_string());
+    }
+    hash_optional_i64(&mut hasher, workout.route_id);
+    hash_optional_string(&mut hasher, workout.workout_token.as_deref());
+    hash_optional_i64(&mut hasher, workout.workout_type_id);
+    hash_optional_string(&mut hasher, workout.created_at.as_deref());
+    hash_optional_string(&mut hasher, workout.updated_at.as_deref());
     if let Some(summary) = &workout.workout_summary {
         hasher.update(summary.id.to_string());
-        if let Some(updated_at) = &summary.updated_at {
-            hasher.update(updated_at.as_bytes());
-        }
+        hash_optional_string(&mut hasher, summary.name.as_deref());
+        hash_optional_f64(&mut hasher, summary.ascent_meters);
+        hash_optional_f64(&mut hasher, summary.cadence_avg_rpm);
+        hash_optional_f64(&mut hasher, summary.calories);
+        hash_optional_f64(&mut hasher, summary.distance_meters);
+        hash_optional_f64(&mut hasher, summary.duration_active_seconds);
+        hash_optional_f64(&mut hasher, summary.duration_paused_seconds);
+        hash_optional_f64(&mut hasher, summary.duration_total_seconds);
+        hash_optional_f64(&mut hasher, summary.heart_rate_avg_bpm);
+        hash_optional_f64(&mut hasher, summary.normalized_power_watts);
+        hash_optional_f64(&mut hasher, summary.training_stress_score);
+        hash_optional_f64(&mut hasher, summary.average_power_watts);
+        hash_optional_f64(&mut hasher, summary.speed_avg_mps);
+        hash_optional_f64(&mut hasher, summary.total_work_joules);
+        hash_optional_string(&mut hasher, summary.time_zone.as_deref());
+        hasher.update(if summary.manual { b"1" } else { b"0" });
+        hasher.update(if summary.edited { b"1" } else { b"0" });
+        hash_optional_i64(&mut hasher, summary.fitness_app_id);
         if let Some(file) = &summary.file {
             hasher.update(file.url.as_bytes());
         }
+        hash_optional_string(&mut hasher, summary.created_at.as_deref());
+        hash_optional_string(&mut hasher, summary.updated_at.as_deref());
     }
     format!("{:x}", hasher.finalize())
+}
+
+fn hash_optional_string(hasher: &mut Sha256, value: Option<&str>) {
+    hasher.update(value.unwrap_or_default().as_bytes());
+}
+
+fn hash_optional_i64(hasher: &mut Sha256, value: Option<i64>) {
+    hasher.update(
+        value
+            .map(|value| value.to_string())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+}
+
+fn hash_optional_i32(hasher: &mut Sha256, value: Option<i32>) {
+    hasher.update(
+        value
+            .map(|value| value.to_string())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+}
+
+fn hash_optional_f64(hasher: &mut Sha256, value: Option<f64>) {
+    hasher.update(
+        value
+            .map(|value| format!("{value:.6}"))
+            .unwrap_or_default()
+            .as_bytes(),
+    );
 }

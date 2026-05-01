@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-01 | CodeRabbit/Qodo | PR #174 Wahoo webhook review follow-up
+
+- Problem: review feedback on PR #174 pointed out several concrete gaps that were still real in the branch: `WAHOO_WEBHOOK_TOKEN` could be set without the rest of the Wahoo OAuth trio and get silently discarded during settings parsing; the webhook REST DTOs still relied on implicit JSON field names, returned a raw tuple from `into_domain_parts()`, and rejected `file: { "url": null }` payloads even though the rest of the Wahoo adapter treats missing URLs as "no FIT file"; the manual admin sync endpoint had no explicit non-admin regression; and the Wahoo import payload hash still ignored most summary fields, so corrected upstream metrics could keep the same `normalized_payload_hash` and be suppressed as no-op updates.
+- Fix: rejected webhook-token-only configuration in `src/config/settings/parse.rs` with a focused settings regression; added explicit `#[serde(rename = ...)]` annotations to the Wahoo REST DTOs, replaced the webhook tuple return with `WahooWebhookDomainParts`, and made webhook file URL parsing tolerant of `null`/missing/blank values by mapping them to `None`; added the missing non-admin admin-endpoint regression plus an unknown-user ignore regression and a `null file.url` webhook regression; hardened `backfill_wahoo_user_id(...)` to error when Mongo updates match no rows; removed `Debug` from `WahooUserIdBackfillCandidate`, redacted `WahooConfig.user_id` in `Debug`, and expanded `hash_workout(...)` to include the imported workout/summary payload fields that drive completed-workout updates.
+- Prevention: when review feedback identifies transport-boundary DTO contract drift, fix both the serde declarations and the boundary regressions in the same change so JSON shape, tolerance, and status mapping stay locked together. For provider payload hashes, hash the canonical imported payload rather than only identity fields, or corrected upstream metrics can be missed as duplicates. For secret-bearing or user-identifying config structs, derive `Debug` minimally and redact stable identifiers as well as tokens.
+
 ### 2026-05-01 | user | split oversized Wahoo webhook module
 
 - Problem: `src/domain/wahoo/webhook.rs` had grown into a large mixed production-plus-test file, which violated the repo guidance to keep modules small and reviewable and made future changes harder to reason about.
@@ -80,8 +86,6 @@ Read this file before planning and before implementation.
 - Problem: after the first review-fix batch, `find_planned_workout_by_provider_and_external_id(...)` still had a trait default that silently fell back to the generic provider/external-id lookup, so any future repository that forgot to override it would lose the planned-workout scoping guarantee. Separately, `heuristic_link_timestamp(...)` still fell back to `0` for malformed `start_date_local`, reintroducing the 1970 sentinel through a different path. The repo also still exposed a `sandbox:docker` script pointing at a local ignored compose file, which makes fresh checkouts misleading.
 - Fix: made the planned-workout-scoped lookup a required trait method, changed heuristic timestamp resolution to return `Option<i64>` and skip heuristic link-row creation when the completed date is malformed, added a regression for that malformed-date relink case, and removed the dead `sandbox:docker` package script.
 - Prevention: when a review-driven API exists specifically to enforce a stronger invariant, do not leave a weaker default implementation behind in the shared trait. And when removing a repo-local file in favor of local ignored setup, grep package scripts/docs for stale references so fresh checkouts do not inherit a broken command.
-
-## Entries
 
 ### 2026-05-01 | user | Intervals paired_event_id import follow-up
 

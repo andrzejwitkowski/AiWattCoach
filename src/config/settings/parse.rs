@@ -82,6 +82,16 @@ pub(super) fn parse_wahoo_oauth_settings(
         .unwrap_or_else(|| DEFAULT_WAHOO_SCOPE.to_string());
     let webhook_token = optional_string_setting(values, "WAHOO_WEBHOOK_TOKEN");
 
+    if webhook_token.is_some()
+        && client_id.is_none()
+        && client_secret.is_none()
+        && redirect_url.is_none()
+    {
+        return Err(SettingsError::new(
+            "WAHOO_WEBHOOK_TOKEN requires WAHOO_OAUTH_CLIENT_ID, WAHOO_OAUTH_CLIENT_SECRET, and WAHOO_OAUTH_REDIRECT_URL",
+        ));
+    }
+
     match (client_id, client_secret, redirect_url) {
         (None, None, None) => Ok(None),
         (Some(client_id), Some(client_secret), Some(redirect_url)) => Ok(Some(WahooOAuthSettings {

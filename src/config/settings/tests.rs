@@ -141,6 +141,19 @@ fn wahoo_oauth_settings_allow_optional_endpoint_overrides() {
 }
 
 #[test]
+fn wahoo_oauth_settings_require_webhook_token_to_have_oauth_settings() {
+    let mut values = base_values();
+    values.insert(
+        "WAHOO_WEBHOOK_TOKEN".to_string(),
+        "secret-token".to_string(),
+    );
+
+    let error = Settings::from_map(&values).expect_err("settings should fail");
+
+    assert!(error.to_string().contains("WAHOO_WEBHOOK_TOKEN requires"));
+}
+
+#[test]
 fn wahoo_oauth_settings_require_all_values_together() {
     let mut values = base_values();
     values.insert(

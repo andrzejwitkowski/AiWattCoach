@@ -341,6 +341,13 @@ impl TestWahooWebhookService {
         }
     }
 
+    pub(crate) fn ignored() -> Self {
+        Self {
+            result: Ok(WahooWebhookOutcome::Ignored),
+            import_calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
     pub(crate) fn unauthorized() -> Self {
         Self {
             result: Err(WahooWebhookError::Unauthorized),

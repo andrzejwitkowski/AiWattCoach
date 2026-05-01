@@ -8,7 +8,7 @@ use crate::{
     domain::wahoo::{WahooWebhookError, WahooWebhookOutcome},
 };
 
-use super::dto::WahooWebhookRequest;
+use super::dto::{WahooWebhookDomainParts, WahooWebhookRequest};
 
 #[derive(Serialize)]
 struct WahooWebhookResponse {
@@ -40,7 +40,11 @@ pub async fn receive_webhook(
     };
 
     let webhook_token = payload.webhook_token.clone();
-    let (_, wahoo_user_id, workout) = payload.into_domain_parts();
+    let (_, parts) = payload.into_domain_parts();
+    let WahooWebhookDomainParts {
+        wahoo_user_id,
+        workout,
+    } = parts;
 
     match service
         .import_webhook_workout(&webhook_token, wahoo_user_id, workout)
