@@ -8,4 +8,7 @@ pub use model::{
     TrainingContextBuildResult, WeeklyAvailabilityContext,
 };
 pub use packing::{approximate_token_count, render_training_context};
-pub use service::{DefaultTrainingContextBuilder, TrainingContextBuilder};
+pub use service::{
+    DefaultTrainingContextBuilder, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
+    CALENDAR_OVERVIEW_FOCUS_ID,
+};

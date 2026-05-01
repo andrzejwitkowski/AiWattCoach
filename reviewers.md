@@ -21,6 +21,25 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+## Entries
+
+### 2026-04-30 | user | calendar coach summary-style context regression
+
+- Problem: the new calendar coach reused too much of the athlete-summary flow: it built packed context through the synthetic `athlete-summary` target, regenerated athlete summaries before replies, and surfaced a websocket system message about summary generation. That biased the prompt toward a generic overview and contradicted the intended calendar-chat behavior with no summary side effects.
+- Fix: changed `src/domain/coach_conversation/service/mod.rs` to request a dedicated calendar-overview training context instead of `build_athlete_summary_context(...)`, stopped calling athlete-summary regeneration in the calendar coach path, kept the append/reply flags hard-false for summary regeneration, removed the calendar websocket `system_message("First the summary is being generated - wait a moment")`, and added focused regressions for the new training-context entry point plus the calendar-coach service path.
+- Prevention: when reusing an adjacent LLM workflow, verify which parts are truly shared behavior versus product-specific side effects. For calendar- or chat-only coach surfaces, inspect the actual prompt builder entry point and websocket status messages before shipping so summary-generation hints and synthetic `athlete-summary` focus do not leak into a non-summary conversation.
+
+### 2026-04-30 | Copilot | PR #163 calendar AI coach review follow-up
+
+- Problem: the calendar coach preview PR still had review gaps around modal accessibility and polish: opening the dialog did not move focus into it or restore focus on close, the dialog did not trap keyboard focus, a few Polish UI strings still used English/product-review wording, and the page test suite only reset the i18n language in `afterEach`, which left avoidable order sensitivity.
+- Fix: added focus capture/restore plus a `Tab` trap in `frontend/src/features/calendar/components/CalendarCoachModal.tsx`, strengthened `frontend/src/pages/CalendarPage.test.tsx` with `beforeEach` language reset and focus-behavior assertions, and finished the remaining Polish copy in `frontend/src/locales/pl/translation.json`.
+- Prevention: for modal-only preview UIs, verify keyboard behavior explicitly before sending the PR: focus should enter the dialog, remain trapped within enabled controls, and return to the trigger on close. When tests depend on a global i18n singleton, reset language before each test as well as during cleanup so order-dependent failures cannot hide.
+
+### 2026-04-30 | user | Dockerfile Cargo registry cache in container build
+
+- Problem: after a frontend-only change, the dev container build failed in the Rust stage while downloading `strsim v0.11.1` with `no targets specified in the manifest`. The crate itself was valid; the failure came from a corrupted cached unpacked source tree under the shared BuildKit mount at `/usr/local/cargo/registry/src`.
+- Fix: changed the Dockerfile cache mounts to persist only `/usr/local/cargo/registry/cache` and `/usr/local/cargo/registry/index`, leaving `registry/src` ephemeral inside each build stage so Cargo always re-extracts crate sources from the cached tarballs instead of reusing a potentially half-written unpacked directory.
+- Prevention: when Docker/Podman Rust builds fail on a well-known crates.io package with an impossible manifest error, verify the same dependency builds locally before touching `Cargo.lock`. If local Cargo works, treat the failure as a corrupted container cache and avoid caching `cargo/registry/src` across builds.
 ### 2026-05-01 | Copilot/CodeRabbit | PR #166 alias resolution and storage-id follow-up
 
 - Problem: PR #166 review still pointed at several real gaps after earlier batch-read fixes: alias resolution in `resolve_workout_summary_target` preferred the resolved `preferred_workout_id` over the caller's exact `workout_id`, mutation/reload paths in `read.rs`, `save.rs`, and `chat.rs` used `target.summary_workout_id` instead of `target.storage_workout_id` for existing-summary operations, Mongo batch lookup still used O(n²) scanned alias matching and `BTreeMap`-ordered fallback for missing ids, and the Wahoo sync-state migration doc had ambiguous duplicate headings.
@@ -68,6 +87,7 @@ Read this file before planning and before implementation.
 - Problem: the first completed-workout summary alias patch still had four confirmed review gaps: missing-`source_activity_id` fallback collapsed canonical ids to stripped activity ids, saved-workout side effects used the preferred alias instead of the persisted storage key and could drift operation ids on retry, `list_summaries(...)` could return the same summary twice when both aliases were requested, and batch `find_by_user_id_and_workout_ids(...)` no longer matched equivalent completed-workout aliases needed by `training_context`.
 - Fix: kept missing-`source_activity_id` targets on `completed_workout_id`, tracked the matched repository storage key inside `ResolvedWorkoutSummaryTarget`, drove saved-workout recap/plan side effects from that storage key, deduped `list_summaries(...)` by summary id after alias resolution, and taught batch summary lookup in both Mongo and in-memory test repositories to match equivalent completed-workout aliases.
 - Prevention: when adding alias resolution above a repository boundary, verify three separate surfaces before review: fallback identity selection when canonical metadata is missing, side effects that derive operation keys from ids, and batch lookup/list APIs used by downstream read models. Single-item get/create coverage is not enough.
+>>>>>>> origin/main
 
 ### 2026-04-29 | user | workout detail modal black screen after summary refactor
 
@@ -200,7 +220,6 @@ Read this file before planning and before implementation.
 - Problem: the calendar and training-context read path still treated Wahoo as authoritative for a whole day even when the Wahoo completed workout was only a sparse summary and Intervals already had richer power details. Separately, successful Wahoo FIT enrichment updated the completed workout but did not automatically refresh `calendar_view`, so the day could stay stale until a manual rebuild.
 - Fix: extracted shared completed-workout day selection that treats "detailed" as a non-empty `watts` stream, wired `AuthoritativeCompletedWorkoutRepository` to use that day-level selector, kept prompt-side dedupe limited to collapsing true duplicate logical activities, and connected `WahooFitEnrichmentService` to `CalendarEntryViewRefreshPort` so a successful enrichment refreshes that workout day automatically. Added focused regressions for authoritative day selection, training-context fallback, calendar-view refresh behavior, and scheduler wiring for the new generic refresh dependency.
 - Prevention: when two read paths must agree on source authority, centralize the authority rule in the repository or shared selector instead of re-encoding provider preference in each consumer. For enrichment flows that materially change read models, verify whether the write path must trigger the corresponding projection refresh immediately after persistence.
->>>>>>> origin/main
 
 ### 2026-04-26 | user | Wahoo bootstrap poller loses all progress on rate limit
 

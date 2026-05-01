@@ -61,6 +61,11 @@ pub trait TrainingContextBuilder: Send + Sync {
         workout_id: &str,
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
 
+    fn build_calendar_overview_context(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>>;
+
     fn build_athlete_summary_context(
         &self,
         user_id: &str,
@@ -70,6 +75,8 @@ pub trait TrainingContextBuilder: Send + Sync {
 const STREAM_BUCKET_SIZE: usize = 5;
 const MAX_CHUNKS_PER_WORKOUT: usize = 48;
 const STABLE_FUTURE_EVENT_DAYS: i64 = 120;
+pub const CALENDAR_OVERVIEW_FOCUS_ID: &str = "calendar-overview";
+pub const ATHLETE_SUMMARY_FOCUS_ID: &str = "athlete-summary";
 
 trait CompletedWorkoutReadPort: Send + Sync {
     fn list_by_user_id(
@@ -328,13 +335,26 @@ where
         Box::pin(async move { builder.build_impl(&user_id, &workout_id).await })
     }
 
+    fn build_calendar_overview_context(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        let builder = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            builder
+                .build_impl(&user_id, CALENDAR_OVERVIEW_FOCUS_ID)
+                .await
+        })
+    }
+
     fn build_athlete_summary_context(
         &self,
         user_id: &str,
     ) -> crate::domain::llm::BoxFuture<Result<TrainingContextBuildResult, LlmError>> {
         let builder = self.clone();
         let user_id = user_id.to_string();
-        Box::pin(async move { builder.build_impl(&user_id, "athlete-summary").await })
+        Box::pin(async move { builder.build_impl(&user_id, ATHLETE_SUMMARY_FOCUS_ID).await })
     }
 }
 
@@ -728,7 +748,10 @@ where
     }
 
     async fn resolve_focus_date(&self, user_id: &str, workout_id: &str) -> Option<NaiveDate> {
-        if workout_id == "athlete-summary" {
+        if matches!(
+            workout_id,
+            ATHLETE_SUMMARY_FOCUS_ID | CALENDAR_OVERVIEW_FOCUS_ID
+        ) {
             return None;
         }
 

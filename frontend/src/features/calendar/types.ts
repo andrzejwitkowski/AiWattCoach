@@ -3,6 +3,73 @@ import { z } from 'zod';
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
 import { raceDisciplineSchema, racePrioritySchema, raceSyncStatusSchema } from '../races/types';
 
+export const calendarCoachMessageRoleSchema = z.enum(['user', 'coach', 'system']);
+
+export const calendarCoachConversationSchema = z.object({
+  conversationId: z.string(),
+  surface: z.literal('calendar'),
+  status: z.enum(['active', 'archived']),
+  focus: z.enum(['overview']),
+  createdAtEpochSeconds: z.number().int(),
+  updatedAtEpochSeconds: z.number().int(),
+});
+
+export const calendarCoachMessageSchema = z.object({
+  id: z.string(),
+  role: calendarCoachMessageRoleSchema,
+  content: z.string(),
+  createdAtEpochSeconds: z.number().int(),
+});
+
+export const calendarCoachConversationResponseSchema = z.object({
+  conversation: calendarCoachConversationSchema,
+  messages: z.array(calendarCoachMessageSchema),
+});
+
+export const calendarCoachSendMessageRequestSchema = z.object({
+  content: z.string().trim().min(1).max(2000),
+});
+
+export const calendarCoachSendMessageResponseSchema = z.object({
+  conversation: calendarCoachConversationSchema,
+  messages: z.array(calendarCoachMessageSchema),
+  userMessage: calendarCoachMessageSchema,
+  coachMessage: calendarCoachMessageSchema,
+});
+
+export const calendarCoachClientWsMessageSchema = z.object({
+  type: z.literal('send_message'),
+  content: z.string().trim().min(1).max(2000),
+});
+
+export const calendarCoachTypingWsMessageSchema = z.object({
+  type: z.literal('coach_typing'),
+});
+
+export const calendarCoachMessageWsMessageSchema = z.object({
+  type: z.literal('coach_message'),
+  message: calendarCoachMessageSchema,
+  conversation: calendarCoachConversationSchema,
+  messages: z.array(calendarCoachMessageSchema),
+});
+
+export const calendarCoachSystemMessageWsMessageSchema = z.object({
+  type: z.literal('system_message'),
+  content: z.string().trim().min(1),
+});
+
+export const calendarCoachErrorWsMessageSchema = z.object({
+  type: z.literal('error'),
+  error: z.string(),
+});
+
+export const calendarCoachServerWsMessageSchema = z.discriminatedUnion('type', [
+  calendarCoachTypingWsMessageSchema,
+  calendarCoachMessageWsMessageSchema,
+  calendarCoachSystemMessageWsMessageSchema,
+  calendarCoachErrorWsMessageSchema,
+]);
+
 export const calendarRaceLabelPayloadSchema = z.object({
   raceId: z.string(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -64,6 +131,12 @@ export const calendarLabelsResponseSchema = z.object({
 
 export type CalendarLabel = z.infer<typeof calendarLabelSchema>;
 export type CalendarRaceLabel = Extract<CalendarLabel, { kind: 'race' }>;
+export type CalendarCoachConversation = z.infer<typeof calendarCoachConversationSchema>;
+export type CalendarCoachMessage = z.infer<typeof calendarCoachMessageSchema>;
+export type CalendarCoachConversationResponse = z.infer<typeof calendarCoachConversationResponseSchema>;
+export type CalendarCoachSendMessageResponse = z.infer<typeof calendarCoachSendMessageResponseSchema>;
+export type CalendarCoachClientWsMessage = z.infer<typeof calendarCoachClientWsMessageSchema>;
+export type CalendarCoachServerWsMessage = z.infer<typeof calendarCoachServerWsMessageSchema>;
 
 export type CalendarWeekStatus = 'idle' | 'loading' | 'loaded' | 'error';
 

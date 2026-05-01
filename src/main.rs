@@ -31,6 +31,9 @@ use aiwattcoach::{
             calendar_entry_view_calendar::MongoCalendarEntryViewCalendarSource,
             calendar_entry_views::MongoCalendarEntryViewRepository,
             client::{create_client, ensure_database_exists, verify_connection},
+            coach_conversation_messages::MongoCoachConversationMessageRepository,
+            coach_conversation_reply_operations::MongoCoachConversationReplyOperationRepository,
+            coach_conversations::MongoCoachConversationRepository,
             coach_reply_operations::MongoCoachReplyOperationRepository,
             completed_workouts::MongoCompletedWorkoutRepository,
             external_observations::MongoExternalObservationRepository,
@@ -78,8 +81,13 @@ use aiwattcoach::{
         SchedulerBackedAthleteSummaryService,
     },
     domain::calendar::CalendarService,
+    domain::calendar_coach::SharedCalendarCoachService,
     domain::calendar_labels::CalendarLabelsService,
     domain::calendar_view::{CalendarEntryViewRefreshService, ManualCalendarRefreshService},
+    domain::coach_conversation::{
+        coach_conversation_reply_task_handler, SchedulerBackedCoachConversationService,
+        SharedCoachConversationService,
+    },
     domain::completed_workouts::{
         AuthoritativeCompletedWorkoutRepository, CompletedWorkoutReadService,
     },
@@ -232,6 +240,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let coach_reply_operation_repository =
         MongoCoachReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
     coach_reply_operation_repository.ensure_indexes().await?;
+    let coach_conversation_repository =
+        MongoCoachConversationRepository::new(mongo_client.clone(), &mongo_database);
+    coach_conversation_repository.ensure_indexes().await?;
+    let coach_conversation_message_repository =
+        MongoCoachConversationMessageRepository::new(mongo_client.clone(), &mongo_database);
+    coach_conversation_message_repository
+        .ensure_indexes()
+        .await?;
+    let coach_conversation_reply_operation_repository =
+        MongoCoachConversationReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
+    coach_conversation_reply_operation_repository
+        .ensure_indexes()
+        .await?;
     let training_plan_snapshot_repository =
         MongoTrainingPlanSnapshotRepository::new(mongo_client.clone(), &mongo_database);
     training_plan_snapshot_repository.ensure_indexes().await?;
@@ -528,7 +549,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     training_context_builder.clone(),
                     SystemClock,
                 )
-                .with_context_cache_repository(Arc::new(llm_context_cache_repository)),
+                .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
             ),
         )
         .with_athlete_summary_service(athlete_summary_direct_service.clone())
@@ -539,6 +560,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_latest_completed_activity_service(Arc::new(
             LatestCompletedActivityAdapter::new(authoritative_completed_workout_repository.clone()),
         )),
+    );
+    let coach_conversation_direct_service = Arc::new(
+        SharedCoachConversationService::new(
+            coach_conversation_repository,
+            coach_conversation_message_repository,
+            coach_conversation_reply_operation_repository,
+            llm_adapter.clone(),
+            llm_config_provider.clone(),
+            training_context_builder.clone(),
+            SystemClock,
+            UuidIdGenerator,
+        )
+        .with_settings_service(settings_service.clone())
+        .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
     );
     let training_plan_direct_service = Arc::new(
         TrainingPlanGenerationService::new(
@@ -617,8 +652,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         shared_task_scheduler.clone(),
         UuidIdGenerator,
     ));
+    let calendar_coach_service = Arc::new(SharedCalendarCoachService::new(Arc::new(
+        SchedulerBackedCoachConversationService::new(
+            coach_conversation_direct_service.clone(),
+            shared_task_scheduler.clone(),
+            UuidIdGenerator,
+        ),
+    )));
     let mut task_handlers = vec![
         workout_summary_coach_reply_task_handler(workout_summary_direct_service.clone()),
+        coach_conversation_reply_task_handler(coach_conversation_direct_service),
         athlete_summary_generate_task_handler(athlete_summary_direct_service.clone()),
         training_plan_generate_task_handler(training_plan_direct_service),
     ];
@@ -662,6 +705,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_settings_service(settings_service)
         .with_training_load_dashboard_service(training_load_dashboard_service)
         .with_calendar_service(calendar_service)
+        .with_calendar_coach_service(calendar_coach_service)
         .with_calendar_labels_service(calendar_labels_service)
         .with_manual_calendar_refresh_service(manual_calendar_refresh_service)
         .with_completed_workout_service(completed_workout_service)

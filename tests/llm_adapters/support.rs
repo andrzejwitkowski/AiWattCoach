@@ -14,7 +14,8 @@ use aiwattcoach::{
         identity::Clock,
         training_context::{
             IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
-            TrainingContextBuildResult, TrainingContextBuilder,
+            TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
+            CALENDAR_OVERVIEW_FOCUS_ID,
         },
         workout_summary::WorkoutSummary,
     },
@@ -171,11 +172,18 @@ impl TrainingContextBuilder for StubTrainingContextBuilder {
         })
     }
 
+    fn build_calendar_overview_context(
+        &self,
+        user_id: &str,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build(user_id, CALENDAR_OVERVIEW_FOCUS_ID)
+    }
+
     fn build_athlete_summary_context(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
-        self.build("user-1", "athlete-summary")
+        self.build(user_id, ATHLETE_SUMMARY_FOCUS_ID)
     }
 }
 

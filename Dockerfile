@@ -52,7 +52,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get install -y --no-install-recommends ca-certificates clang lld pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry,id=aiwattcoach-cargo-registry-${TARGETARCH},sharing=locked \
+RUN --mount=type=cache,target=/usr/local/cargo/registry/cache,id=aiwattcoach-cargo-registry-cache-${TARGETARCH},sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/registry/index,id=aiwattcoach-cargo-registry-index-${TARGETARCH},sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,id=aiwattcoach-cargo-git-${TARGETARCH},sharing=locked \
     --mount=type=cache,target=/app/target,id=aiwattcoach-cargo-tools-${TARGETARCH},sharing=locked \
     cargo install cargo-chef --locked
@@ -70,7 +71,8 @@ ARG TARGETARCH
 
 COPY --from=planner /app/recipe.json recipe.json
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry,id=aiwattcoach-cargo-registry-${TARGETARCH},sharing=locked \
+RUN --mount=type=cache,target=/usr/local/cargo/registry/cache,id=aiwattcoach-cargo-registry-cache-${TARGETARCH},sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/registry/index,id=aiwattcoach-cargo-registry-index-${TARGETARCH},sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,id=aiwattcoach-cargo-git-${TARGETARCH},sharing=locked \
     --mount=type=cache,target=/app/target,id=aiwattcoach-cargo-target-${TARGETARCH},sharing=locked \
     cargo chef cook --release --locked --recipe-path recipe.json
@@ -82,7 +84,8 @@ ARG TARGETARCH
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry,id=aiwattcoach-cargo-registry-${TARGETARCH},sharing=locked \
+RUN --mount=type=cache,target=/usr/local/cargo/registry/cache,id=aiwattcoach-cargo-registry-cache-${TARGETARCH},sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/registry/index,id=aiwattcoach-cargo-registry-index-${TARGETARCH},sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,id=aiwattcoach-cargo-git-${TARGETARCH},sharing=locked \
     --mount=type=cache,target=/app/target,id=aiwattcoach-cargo-target-${TARGETARCH},sharing=locked \
     cargo build --release --locked --bin aiwattcoach \

@@ -229,6 +229,7 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 - Keep API functions small and focused: validate input, call HTTP helper, parse output.
 - Reuse shared HTTP utilities from `frontend/src/lib/httpClient.ts`.
 - Prefer feature-local tests next to or near the feature API/components.
+- API functions that accept `apiBaseUrl` as a parameter must be wrapped in React hooks. Components should never thread `apiBaseUrl` through props — use `useApiBaseUrl()` from `frontend/src/lib/apiBaseUrl.tsx` or the feature-specific hook that wraps all backend HTTP calls.
 
 ## Testing Conventions
 
