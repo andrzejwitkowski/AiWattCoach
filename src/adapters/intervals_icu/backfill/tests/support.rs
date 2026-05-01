@@ -355,6 +355,7 @@ pub(super) fn sample_sparse_workout() -> CompletedWorkout {
 pub(super) fn sample_detailed_activity() -> Activity {
     Activity {
         id: "i1".to_string(),
+        paired_event_id: None,
         athlete_id: Some("athlete".to_string()),
         start_date_local: "2026-04-16T15:28:24".to_string(),
         start_date: None,

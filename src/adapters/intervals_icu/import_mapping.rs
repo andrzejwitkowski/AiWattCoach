@@ -156,6 +156,7 @@ fn build_activity_import_command(
         provider: ExternalProvider::Intervals,
         external_id: activity.id.clone(),
         normalized_payload_hash: hash_activity(activity),
+        intervals_paired_event_id: activity.paired_event_id,
         marker_sources: vec![
             activity.external_id.clone(),
             activity.description.clone(),
@@ -733,6 +734,7 @@ mod tests {
         };
 
         assert_eq!(command.external_id, "activity-1");
+        assert_eq!(command.intervals_paired_event_id, Some(144));
         assert_eq!(
             command.workout.completed_workout_id,
             "intervals-activity:activity-1"
@@ -804,6 +806,7 @@ mod tests {
     fn sample_activity() -> crate::domain::intervals::Activity {
         crate::domain::intervals::Activity {
             id: "activity-1".to_string(),
+            paired_event_id: Some(144),
             athlete_id: None,
             start_date_local: "2026-05-11T08:00:00".to_string(),
             start_date: None,

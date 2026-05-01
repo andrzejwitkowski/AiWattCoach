@@ -280,6 +280,57 @@ impl ExternalSyncStateRepository for InMemoryExternalSyncStateRepository {
                 .cloned())
         })
     }
+
+    fn find_planned_workout_by_provider_and_external_id(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        external_id: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == provider
+                        && state.canonical_entity.entity_kind == CanonicalEntityKind::PlannedWorkout
+                        && state.external_id.as_deref() == Some(external_id.as_str())
+                })
+                .cloned())
+        })
+    }
+
+    fn find_by_provider_and_external_id(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        external_id: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            Ok(states
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|state| {
+                    state.user_id == user_id
+                        && state.provider == provider
+                        && state.external_id.as_deref() == Some(external_id.as_str())
+                })
+                .cloned())
+        })
+    }
 }
 
 impl ProviderPollStateRepository for InMemoryProviderPollStateRepository {

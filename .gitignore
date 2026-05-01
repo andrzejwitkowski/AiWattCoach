@@ -12,3 +12,5 @@
 /frontend/.vite/
 /graphify-out/cache/
 /.pup/
+/docker-compose-sandbox.yml
+/sandbox-auth-cookie.txt

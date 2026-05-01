@@ -30,6 +30,7 @@ use aiwattcoach::{
             athlete_summary_generation_operations::MongoAthleteSummaryGenerationOperationRepository,
             calendar_entry_view_calendar::MongoCalendarEntryViewCalendarSource,
             calendar_entry_views::MongoCalendarEntryViewRepository,
+            calendar_planned_workouts::MongoCalendarPlannedWorkoutSource,
             client::{create_client, ensure_database_exists, verify_connection},
             coach_conversation_messages::MongoCoachConversationMessageRepository,
             coach_conversation_reply_operations::MongoCoachConversationReplyOperationRepository,
@@ -401,6 +402,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let calendar_entry_view_repository =
         MongoCalendarEntryViewRepository::new(mongo_client.clone(), &mongo_database);
     calendar_entry_view_repository.ensure_indexes().await?;
+    let calendar_planned_workout_source =
+        MongoCalendarPlannedWorkoutSource::new(mongo_client.clone(), &mongo_database);
     let activity_repository = MongoActivityRepository::new(mongo_client.clone(), &mongo_database);
     activity_repository.ensure_indexes().await?;
     if legacy_time_stream_cleanup_enabled {
@@ -417,17 +420,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     upload_operation_repository.ensure_indexes().await?;
     let calendar_entry_view_refresh_service = CalendarEntryViewRefreshService::new(
         calendar_entry_view_repository.clone(),
-        authoritative_planned_workout_repository.clone(),
+        calendar_planned_workout_source.clone(),
         authoritative_completed_workout_repository.clone(),
         authoritative_race_repository.clone(),
         authoritative_special_day_repository.clone(),
         external_sync_state_repository.clone(),
     )
-    .with_cleanup_planned_workouts(planned_workout_repository.clone())
+    .with_cleanup_planned_workouts(calendar_planned_workout_source.clone())
     .with_planned_completed_links(planned_completed_link_repository.clone());
     let manual_calendar_refresh_service = Arc::new(ManualCalendarRefreshService::new(
         calendar_entry_view_repository.clone(),
-        authoritative_planned_workout_repository.clone(),
+        calendar_planned_workout_source.clone(),
         authoritative_completed_workout_repository.clone(),
         authoritative_race_repository.clone(),
         authoritative_special_day_repository.clone(),

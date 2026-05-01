@@ -1,9 +1,10 @@
 use chrono::{TimeZone, Utc};
 
 use crate::domain::{
+    calendar_view::{select_visible_planned_workout_candidates, CalendarPlannedWorkoutSource},
     completed_workouts::{CompletedWorkoutError, CompletedWorkoutRepository},
     identity::Clock,
-    planned_workouts::{PlannedWorkoutError, PlannedWorkoutRepository},
+    planned_workouts::PlannedWorkoutError,
     races::{RaceError, RaceRepository},
     special_days::{SpecialDayError, SpecialDayRepository},
 };
@@ -37,7 +38,7 @@ pub struct ManualCalendarRefreshService<
     Refresh,
 > where
     Views: CalendarEntryViewRepository + Clone,
-    Planned: PlannedWorkoutRepository + Clone,
+    Planned: CalendarPlannedWorkoutSource + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -57,7 +58,7 @@ impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
     ManualCalendarRefreshService<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
 where
     Views: CalendarEntryViewRepository + Clone,
-    Planned: PlannedWorkoutRepository + Clone,
+    Planned: CalendarPlannedWorkoutSource + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -89,7 +90,7 @@ impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh> ManualCalenda
     for ManualCalendarRefreshService<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
 where
     Views: CalendarEntryViewRepository + Clone,
-    Planned: PlannedWorkoutRepository + Clone,
+    Planned: CalendarPlannedWorkoutSource + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -110,7 +111,7 @@ impl<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
     ManualCalendarRefreshService<Views, Planned, Completed, Races, SpecialDays, Time, Refresh>
 where
     Views: CalendarEntryViewRepository + Clone,
-    Planned: PlannedWorkoutRepository + Clone,
+    Planned: CalendarPlannedWorkoutSource + Clone,
     Completed: CompletedWorkoutRepository + Clone,
     Races: RaceRepository + Clone,
     SpecialDays: SpecialDayRepository + Clone,
@@ -170,11 +171,12 @@ where
     ) -> Result<Vec<String>, CalendarEntryViewError> {
         let planned_dates = self
             .planned_workouts
-            .list_by_user_id(user_id)
+            .list_candidates_by_user_id_and_date_range(user_id, "0000-01-01", "9999-12-31")
             .await
-            .map_err(map_planned_error)?
+            .map_err(map_planned_error)?;
+        let planned_dates = select_visible_planned_workout_candidates(planned_dates)
             .into_iter()
-            .map(|workout| workout.date)
+            .map(|candidate| candidate.workout.date)
             .collect::<Vec<_>>();
 
         let completed_dates = self

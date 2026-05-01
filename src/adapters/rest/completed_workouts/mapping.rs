@@ -68,6 +68,7 @@ fn map_completed_workout_to_activity(workout: CompletedWorkout) -> Activity {
 
     Activity {
         id: canonical_activity_id(&workout),
+        paired_event_id: None,
         athlete_id: None,
         start_date_local: workout.start_date_local,
         start_date: None,

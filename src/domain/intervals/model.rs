@@ -472,6 +472,7 @@ pub struct ActivityDetails {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Activity {
     pub id: String,
+    pub paired_event_id: Option<i64>,
     pub athlete_id: Option<String>,
     pub start_date_local: String,
     pub start_date: Option<String>,

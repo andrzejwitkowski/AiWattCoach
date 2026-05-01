@@ -1,6 +1,7 @@
 mod integrity;
 mod manual_refresh;
 mod model;
+mod planned_candidates;
 mod ports;
 mod projection;
 mod rebuild;
@@ -18,6 +19,10 @@ pub use manual_refresh::{
 pub use model::{
     CalendarEntryKind, CalendarEntryRace, CalendarEntrySummary, CalendarEntrySync,
     CalendarEntryView, CalendarEntryViewError,
+};
+pub use planned_candidates::{
+    select_visible_planned_workout_candidates, CalendarPlannedSyncKey,
+    CalendarPlannedWorkoutCandidate, CalendarPlannedWorkoutOrigin, CalendarPlannedWorkoutSource,
 };
 pub use ports::{BoxFuture, CalendarEntryViewRepository};
 pub use projection::{

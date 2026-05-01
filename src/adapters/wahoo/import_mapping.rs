@@ -62,6 +62,7 @@ pub fn map_workout_to_import_command(
             provider: ExternalProvider::Wahoo,
             external_id: workout.id.to_string(),
             normalized_payload_hash: hash_workout(workout),
+            intervals_paired_event_id: None,
             marker_sources: [
                 workout.workout_token.clone(),
                 workout.name.clone(),

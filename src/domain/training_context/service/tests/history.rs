@@ -12,6 +12,7 @@ fn build_daily_tss_map_includes_zero_load_rest_days() {
     let end = NaiveDate::from_ymd_opt(2026, 4, 4).unwrap();
     let activities = vec![Activity {
         id: "ride-1".to_string(),
+        paired_event_id: None,
         athlete_id: None,
         start_date_local: "2026-04-03T08:00:00".to_string(),
         start_date: None,

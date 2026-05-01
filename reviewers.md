@@ -21,7 +21,37 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-01 | Copilot/CodeRabbit | PR #172 calendar cleanup and explicit Intervals follow-up
+
+- Problem: the first paired-event and calendar duplicate fix left three real review gaps. Calendar refresh recreated heuristic links with `matched_at_epoch_seconds = 0`, cleanup still loaded full planned-workout candidates across all history just to compute live ids, and the new Intervals explicit relink path still relied on an unscoped provider+external_id lookup that could collide with non-planned sync rows.
+- Fix: changed calendar refresh to stamp heuristic relinks from the completed workout day, added a dedicated `list_visible_planned_workout_ids_by_user_id(...)` port with a Mongo implementation that reads only cleanup ids/dates plus sync keys instead of full workout payloads, and introduced `find_planned_workout_by_provider_and_external_id(...)` with a Mongo filter and unique index scoped by `canonical_entity_kind = planned_workout`. Added focused domain and Mongo regressions, including the case where a hidden imported duplicate id must be cleared before merging to the projected plan.
+- Prevention: when a review points at a heavy cleanup path, verify that the replacement actually narrows the loaded document shape instead of just moving the same full scan behind a new method name. When adding provider-level explicit linking on a shared sync-state store, scope the lookup to the intended canonical entity kind in both the repository API and the backing index, then add a regression with a conflicting non-target entity kind.
+
+### 2026-05-01 | Copilot | PR #172 follow-up on defaults and malformed heuristic timestamps
+
+- Problem: after the first review-fix batch, `find_planned_workout_by_provider_and_external_id(...)` still had a trait default that silently fell back to the generic provider/external-id lookup, so any future repository that forgot to override it would lose the planned-workout scoping guarantee. Separately, `heuristic_link_timestamp(...)` still fell back to `0` for malformed `start_date_local`, reintroducing the 1970 sentinel through a different path. The repo also still exposed a `sandbox:docker` script pointing at a local ignored compose file, which makes fresh checkouts misleading.
+- Fix: made the planned-workout-scoped lookup a required trait method, changed heuristic timestamp resolution to return `Option<i64>` and skip heuristic link-row creation when the completed date is malformed, added a regression for that malformed-date relink case, and removed the dead `sandbox:docker` package script.
+- Prevention: when a review-driven API exists specifically to enforce a stronger invariant, do not leave a weaker default implementation behind in the shared trait. And when removing a repo-local file in favor of local ignored setup, grep package scripts/docs for stale references so fresh checkouts do not inherit a broken command.
+
 ## Entries
+
+### 2026-05-01 | user | Intervals paired_event_id import follow-up
+
+- Problem: after adding explicit Intervals planned-to-completed linking by `paired_event_id`, I changed shared backend shapes without sweeping every dependent test seam. The branch stayed red on missing `ExternalSyncStateRepository::find_by_provider_and_external_id(...)` implementations, missing `Activity.paired_event_id` fixture fields, and a new import helper that tripped clippy's argument-count limit.
+- Fix: added the missing sync-state lookup method to every affected in-memory/test repository, added the lenient `paired_event_id` DTO deserializer, filled `intervals_paired_event_id: None` into older completed-import fixtures, updated remaining `Activity` fixture/merge constructors to preserve `paired_event_id`, and packed completed-workout planned-link lookup inputs into a small struct so `cargo clippy -D warnings` stays green.
+- Prevention: whenever a shared trait or domain model gains a new method/field, immediately grep all impls, merge helpers, and test fixtures before chasing behavior bugs. Re-run clippy early after the shape change so helper-argument growth and test-double fallout are caught before broader verification.
+
+### 2026-05-01 | user | sandbox docker workflow
+
+- Problem: I added the sandbox runtime as a giant inline `bun -e` script in `package.json`, which buried Docker build/run configuration inside shell-escaped code instead of using the repo's existing compose-based Docker workflow.
+- Fix: replaced the inline script with a dedicated `docker-compose-sandbox.yml` and changed `sandbox:docker` to run `docker compose -f docker-compose-sandbox.yml up --build`.
+- Prevention: when a local runtime needs the same shape as the repo's existing Docker setup with only environment differences, add a dedicated compose file instead of embedding `docker build` and `docker run` orchestration inside `package.json`.
+
+### 2026-05-01 | user | sandbox auth usability
+
+- Problem: the first sandbox compose still used the generic dev-auth identity, which hit the normal whitelist/pending-approval flow for a first-time mock user and made the local sandbox effectively unusable despite `DEV_AUTH_ENABLED=true`.
+- Fix: pointed sandbox dev auth at the real existing sandbox user identity already present in `aiwatt.app_users`, so the same-origin dev OAuth flow now signs into the actual sandbox account and lands in the app without needing a live Google callback.
+- Prevention: when wiring a sandbox against a shared real database, verify not only that mock OAuth redirects locally but also that the configured dev-auth identity maps to a real allowed user in that database. A generic fake account can still fail product-level approval gates.
 
 ### 2026-04-30 | user | calendar coach summary-style context regression
 
@@ -87,7 +117,6 @@ Read this file before planning and before implementation.
 - Problem: the first completed-workout summary alias patch still had four confirmed review gaps: missing-`source_activity_id` fallback collapsed canonical ids to stripped activity ids, saved-workout side effects used the preferred alias instead of the persisted storage key and could drift operation ids on retry, `list_summaries(...)` could return the same summary twice when both aliases were requested, and batch `find_by_user_id_and_workout_ids(...)` no longer matched equivalent completed-workout aliases needed by `training_context`.
 - Fix: kept missing-`source_activity_id` targets on `completed_workout_id`, tracked the matched repository storage key inside `ResolvedWorkoutSummaryTarget`, drove saved-workout recap/plan side effects from that storage key, deduped `list_summaries(...)` by summary id after alias resolution, and taught batch summary lookup in both Mongo and in-memory test repositories to match equivalent completed-workout aliases.
 - Prevention: when adding alias resolution above a repository boundary, verify three separate surfaces before review: fallback identity selection when canonical metadata is missing, side effects that derive operation keys from ids, and batch lookup/list APIs used by downstream read models. Single-item get/create coverage is not enough.
->>>>>>> origin/main
 
 ### 2026-04-29 | user | workout detail modal black screen after summary refactor
 

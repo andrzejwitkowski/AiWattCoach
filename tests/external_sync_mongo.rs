@@ -96,6 +96,60 @@ async fn external_sync_state_repository_round_trips_by_provider_and_canonical_en
 }
 
 #[tokio::test]
+async fn external_sync_state_repository_scopes_planned_workout_lookup_by_entity_kind() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository =
+        MongoExternalSyncStateRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    let race_state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+    )
+    .mark_synced(
+        "shared-1".to_string(),
+        "hash-race-1".to_string(),
+        1_700_000_000,
+    );
+    let planned_state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::PlannedWorkout, "planned-1".to_string()),
+    )
+    .mark_synced(
+        "shared-1".to_string(),
+        "hash-planned-1".to_string(),
+        1_700_000_001,
+    );
+    repository.upsert(race_state).await.unwrap();
+    repository.upsert(planned_state.clone()).await.unwrap();
+
+    let found = repository
+        .find_planned_workout_by_provider_and_external_id(
+            "user-1",
+            ExternalProvider::Intervals,
+            "shared-1",
+        )
+        .await
+        .unwrap();
+    assert_eq!(found, Some(planned_state));
+
+    let error = repository
+        .find_by_provider_and_external_id("user-1", ExternalProvider::Intervals, "shared-1")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        aiwattcoach::domain::external_sync::ExternalSyncRepositoryError::CorruptData(_)
+    ));
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
 async fn provider_poll_state_repository_lists_due_items_and_round_trips_by_stream() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
@@ -197,6 +251,12 @@ async fn external_sync_repositories_create_expected_indexes() {
             == Some("external_sync_states_user_provider_entity_unique")
             && index.keys
                 == doc! { "user_id": 1, "provider": 1, "canonical_entity_kind": 1, "canonical_entity_id": 1 }
+    }));
+    assert!(sync_state_indexes.iter().any(|index| {
+        index.options.as_ref().and_then(|options| options.name.as_deref())
+            == Some("external_sync_states_user_provider_kind_external_id_unique")
+            && index.keys
+                == doc! { "user_id": 1, "provider": 1, "canonical_entity_kind": 1, "external_id": 1 }
     }));
 
     let poll_state_indexes = fixture

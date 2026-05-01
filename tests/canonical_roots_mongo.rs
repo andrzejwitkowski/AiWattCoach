@@ -6,6 +6,7 @@ use std::{
 use aiwattcoach::{
     adapters::mongo::{
         calendar_entry_views::MongoCalendarEntryViewRepository,
+        calendar_planned_workouts::MongoCalendarPlannedWorkoutSource,
         completed_workouts::MongoCompletedWorkoutRepository,
         planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
         planned_workout_tokens::MongoPlannedWorkoutTokenRepository,
@@ -136,7 +137,7 @@ async fn calendar_entry_view_refresh_includes_projected_workout_on_snapshot_star
         MongoTrainingPlanProjectionRepository::new(fixture.client.clone(), &fixture.database);
     projection_repository.ensure_indexes().await.unwrap();
     let planned_repository =
-        MongoPlannedWorkoutRepository::new(fixture.client.clone(), &fixture.database);
+        MongoCalendarPlannedWorkoutSource::new(fixture.client.clone(), &fixture.database);
     let calendar_repository =
         MongoCalendarEntryViewRepository::new(fixture.client.clone(), &fixture.database);
     calendar_repository.ensure_indexes().await.unwrap();
