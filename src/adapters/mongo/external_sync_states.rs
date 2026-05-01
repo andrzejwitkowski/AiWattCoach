@@ -117,6 +117,7 @@ impl MongoExternalSyncStateRepository {
                             .name("external_sync_states_user_provider_kind_external_id_unique".to_string())
                             .unique(true)
                             .partial_filter_expression(doc! {
+                                "canonical_entity_kind": "planned_workout",
                                 "external_id": { "$type": "string" }
                             })
                             .build(),
