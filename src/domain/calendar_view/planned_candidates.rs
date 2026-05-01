@@ -30,6 +30,24 @@ pub trait CalendarPlannedWorkoutSource: Clone + Send + Sync + 'static {
         oldest: &str,
         newest: &str,
     ) -> BoxFuture<Result<Vec<CalendarPlannedWorkoutCandidate>, PlannedWorkoutError>>;
+
+    fn list_visible_planned_workout_ids_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Vec<String>, PlannedWorkoutError>> {
+        let source = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(select_visible_planned_workout_candidates(
+                source
+                    .list_candidates_by_user_id_and_date_range(&user_id, "0000-01-01", "9999-12-31")
+                    .await?,
+            )
+            .into_iter()
+            .map(|candidate| candidate.workout.planned_workout_id)
+            .collect())
+        })
+    }
 }
 
 pub fn select_visible_planned_workout_candidates(

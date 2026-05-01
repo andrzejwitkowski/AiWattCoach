@@ -649,7 +649,7 @@ where
             if let Some(paired_event_id) = lookup.intervals_paired_event_id {
                 let sync = self
                     .sync_states
-                    .find_by_provider_and_external_id(
+                    .find_planned_workout_by_provider_and_external_id(
                         user_id,
                         ExternalProvider::Intervals,
                         &paired_event_id.to_string(),

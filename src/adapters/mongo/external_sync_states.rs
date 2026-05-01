@@ -110,6 +110,18 @@ impl MongoExternalSyncStateRepository {
                             .build(),
                     )
                     .build(),
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "provider": 1, "canonical_entity_kind": 1, "external_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("external_sync_states_user_provider_kind_external_id_unique".to_string())
+                            .unique(true)
+                            .partial_filter_expression(doc! {
+                                "external_id": { "$type": "string" }
+                            })
+                            .build(),
+                    )
+                    .build(),
             ])
             .await
             .map_err(storage_error)?;
@@ -342,6 +354,31 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
                     "external_id": &external_id,
                 },
                 "provider external id",
+            )
+            .await
+        })
+    }
+
+    fn find_planned_workout_by_provider_and_external_id(
+        &self,
+        user_id: &str,
+        provider: ExternalProvider,
+        external_id: &str,
+    ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let provider = provider_as_str(&provider).to_string();
+        let external_id = external_id.to_string();
+        Box::pin(async move {
+            find_unique_sync_state(
+                &collection,
+                doc! {
+                    "user_id": &user_id,
+                    "provider": &provider,
+                    "canonical_entity_kind": "planned_workout",
+                    "external_id": &external_id,
+                },
+                "planned workout provider external id",
             )
             .await
         })

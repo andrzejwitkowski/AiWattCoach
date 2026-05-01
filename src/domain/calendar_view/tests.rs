@@ -1042,6 +1042,96 @@ async fn refresh_range_for_user_prefers_projected_planned_over_imported_duplicat
 }
 
 #[tokio::test]
+async fn refresh_range_for_user_clears_hidden_imported_duplicate_planned_id_before_merging() {
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestCalendarPlannedWorkoutSource::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+    let planned_completed_links = TestPlannedCompletedWorkoutLinkRepository::default();
+
+    let duplicate_sync_key = CalendarPlannedSyncKey {
+        provider: "intervals".to_string(),
+        external_id: "144".to_string(),
+    };
+    planned.upsert(
+        sample_bridged_planned_workout("plan-op-1", "2026-05-10"),
+        CalendarPlannedWorkoutOrigin::Projected,
+        vec![duplicate_sync_key.clone()],
+    );
+    planned.upsert(
+        PlannedWorkout::new(
+            "imported-planned-1".to_string(),
+            "user-1".to_string(),
+            "2026-05-10".to_string(),
+            sample_planned_workout().workout,
+        ),
+        CalendarPlannedWorkoutOrigin::Imported,
+        vec![duplicate_sync_key],
+    );
+
+    let mut workout = sample_completed_workout();
+    workout.start_date_local = "2026-05-10T08:00:00".to_string();
+    workout.planned_workout_id = Some("imported-planned-1".to_string());
+    workout.name = Some("Threshold builder".to_string());
+    completed.upsert(workout).await.unwrap();
+    planned_completed_links
+        .upsert(PlannedCompletedWorkoutLink::new(
+            "user-1".to_string(),
+            "imported-planned-1".to_string(),
+            "completed-1".to_string(),
+            PlannedCompletedWorkoutLinkMatchSource::Heuristic,
+            1_700_000_000,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        completed.clone(),
+        races,
+        special_days,
+        sync_states,
+    )
+    .with_planned_completed_links(planned_completed_links.clone());
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_id, "planned:plan-op-1:2026-05-10");
+    assert_eq!(
+        refreshed[0].completed_workout_id.as_deref(),
+        Some("completed-1")
+    );
+
+    let stored_workout = completed
+        .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("completed workout remains stored");
+    assert_eq!(
+        stored_workout.planned_workout_id.as_deref(),
+        Some("plan-op-1:2026-05-10")
+    );
+
+    let stored_link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("hidden imported duplicate link is replaced");
+    assert_eq!(stored_link.planned_workout_id, "plan-op-1:2026-05-10");
+    assert_eq!(
+        stored_link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Heuristic
+    );
+}
+
+#[tokio::test]
 async fn refresh_range_for_user_clears_orphaned_heuristic_links_and_replaces_stale_planned_entries()
 {
     let views = InMemoryCalendarEntryViewRepository::default();
@@ -1489,6 +1579,7 @@ async fn refresh_range_for_user_relinks_completed_workout_to_current_same_day_pl
         stored_link.match_source,
         PlannedCompletedWorkoutLinkMatchSource::Heuristic
     );
+    assert_eq!(stored_link.matched_at_epoch_seconds, 1_778_414_400);
 }
 
 #[tokio::test]
@@ -1573,6 +1664,7 @@ async fn refresh_range_for_user_replaces_stale_heuristic_link_with_current_same_
         stored_link.match_source,
         PlannedCompletedWorkoutLinkMatchSource::Heuristic
     );
+    assert_eq!(stored_link.matched_at_epoch_seconds, 1_778_414_400);
 }
 
 #[derive(Clone, Default)]

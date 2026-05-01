@@ -45,6 +45,12 @@ struct TrainingPlanSnapshotLookupDocument {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct CleanupProjectedPlannedWorkoutDocument {
+    operation_key: String,
+    date: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct ImportedPlannedWorkoutDocument {
     user_id: String,
     planned_workout_id: String,
@@ -57,6 +63,12 @@ struct ImportedPlannedWorkoutDocument {
     description: Option<String>,
     event_type: Option<String>,
     workout: StoredPlannedWorkoutContentDocument,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct CleanupImportedPlannedWorkoutDocument {
+    planned_workout_id: String,
+    date: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -93,6 +105,14 @@ struct ExternalSyncStateDocument {
     provider: String,
     canonical_entity_id: String,
     external_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CleanupPlannedWorkoutCandidate {
+    planned_workout_id: String,
+    date: String,
+    origin: CalendarPlannedWorkoutOrigin,
+    sync_keys: Vec<CalendarPlannedSyncKey>,
 }
 
 impl MongoCalendarPlannedWorkoutSource {
@@ -154,6 +174,155 @@ impl CalendarPlannedWorkoutSource for MongoCalendarPlannedWorkoutSource {
             Ok(candidates)
         })
     }
+
+    fn list_visible_planned_workout_ids_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<Vec<String>, PlannedWorkoutError>> {
+        let source = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(select_visible_cleanup_planned_workout_ids(
+                load_cleanup_candidates(&source, &user_id).await?,
+            ))
+        })
+    }
+}
+
+async fn load_cleanup_candidates(
+    source: &MongoCalendarPlannedWorkoutSource,
+    user_id: &str,
+) -> Result<Vec<CleanupPlannedWorkoutCandidate>, PlannedWorkoutError> {
+    let mut candidates = load_cleanup_projected_candidates(source, user_id).await?;
+    candidates.extend(load_cleanup_imported_candidates(source, user_id).await?);
+
+    let canonical_entity_ids = candidates
+        .iter()
+        .map(|candidate| candidate.planned_workout_id.clone())
+        .collect::<Vec<_>>();
+    let sync_keys_by_entity =
+        load_sync_keys_by_entity(source, user_id, &canonical_entity_ids).await?;
+
+    for candidate in &mut candidates {
+        candidate.sync_keys = sync_keys_by_entity
+            .get(&candidate.planned_workout_id)
+            .cloned()
+            .unwrap_or_default();
+    }
+
+    candidates.sort_by(|left, right| {
+        left.date
+            .cmp(&right.date)
+            .then_with(|| left.planned_workout_id.cmp(&right.planned_workout_id))
+    });
+    Ok(candidates)
+}
+
+async fn load_cleanup_projected_candidates(
+    source: &MongoCalendarPlannedWorkoutSource,
+    user_id: &str,
+) -> Result<Vec<CleanupPlannedWorkoutCandidate>, PlannedWorkoutError> {
+    let documents = source
+        .projected_collection
+        .clone_with_type::<CleanupProjectedPlannedWorkoutDocument>()
+        .find(doc! {
+            "user_id": user_id,
+            "superseded_at_epoch_seconds": Bson::Null,
+            "$or": [
+                { "workout": { "$ne": Bson::Null } },
+                { "rest_day": true },
+            ],
+        })
+        .projection(doc! {
+            "_id": 0,
+            "user_id": 1,
+            "operation_key": 1,
+            "date": 1,
+        })
+        .sort(doc! { "date": 1, "operation_key": 1 })
+        .await
+        .map_err(storage_error)?
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(storage_error)?;
+
+    let operation_keys = documents
+        .iter()
+        .map(|document| document.operation_key.as_str())
+        .collect::<Vec<_>>();
+    let snapshot_start_dates = load_snapshot_start_dates(source, user_id, &operation_keys).await?;
+
+    Ok(documents
+        .into_iter()
+        .filter(|document| {
+            snapshot_start_dates
+                .get(&document.operation_key)
+                .map(|start_date| document.date >= *start_date)
+                .unwrap_or(false)
+        })
+        .map(|document| CleanupPlannedWorkoutCandidate {
+            planned_workout_id: format!("{}:{}", document.operation_key, document.date),
+            date: document.date,
+            origin: CalendarPlannedWorkoutOrigin::Projected,
+            sync_keys: Vec::new(),
+        })
+        .collect())
+}
+
+async fn load_cleanup_imported_candidates(
+    source: &MongoCalendarPlannedWorkoutSource,
+    user_id: &str,
+) -> Result<Vec<CleanupPlannedWorkoutCandidate>, PlannedWorkoutError> {
+    Ok(source
+        .imported_collection
+        .clone_with_type::<CleanupImportedPlannedWorkoutDocument>()
+        .find(doc! {
+            "user_id": user_id,
+        })
+        .projection(doc! {
+            "_id": 0,
+            "planned_workout_id": 1,
+            "date": 1,
+        })
+        .sort(doc! { "date": 1, "planned_workout_id": 1 })
+        .await
+        .map_err(storage_error)?
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(storage_error)?
+        .into_iter()
+        .map(|document| CleanupPlannedWorkoutCandidate {
+            planned_workout_id: document.planned_workout_id,
+            date: document.date,
+            origin: CalendarPlannedWorkoutOrigin::Imported,
+            sync_keys: Vec::new(),
+        })
+        .collect())
+}
+
+fn select_visible_cleanup_planned_workout_ids(
+    candidates: Vec<CleanupPlannedWorkoutCandidate>,
+) -> Vec<String> {
+    let projected_sync_keys = candidates
+        .iter()
+        .filter(|candidate| candidate.origin == CalendarPlannedWorkoutOrigin::Projected)
+        .flat_map(|candidate| candidate.sync_keys.iter().cloned())
+        .collect::<std::collections::HashSet<_>>();
+
+    candidates
+        .into_iter()
+        .filter(|candidate| {
+            if candidate.origin == CalendarPlannedWorkoutOrigin::Projected {
+                return true;
+            }
+
+            !candidate
+                .sync_keys
+                .iter()
+                .any(|sync_key| projected_sync_keys.contains(sync_key))
+        })
+        .map(|candidate| candidate.planned_workout_id)
+        .collect()
 }
 
 async fn load_projected_candidates(

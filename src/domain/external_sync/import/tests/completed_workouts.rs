@@ -644,6 +644,99 @@ async fn import_completed_workout_links_intervals_activity_by_paired_event_id_as
 }
 
 #[tokio::test]
+async fn import_completed_workout_links_intervals_activity_by_paired_event_id_ignoring_other_entity_kinds(
+) {
+    let planned_workouts = InMemoryPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(sample_planned_workout_on_date(
+            "planned-intervals-explicit",
+            "2026-05-11",
+        ))
+        .await
+        .unwrap();
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let planned_completed_links = InMemoryPlannedCompletedWorkoutLinkRepository::default();
+    let sync_states = InMemorySyncStateRepository::default();
+    sync_states
+        .upsert(
+            crate::domain::external_sync::ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(CanonicalEntityKind::Race, "race-1".to_string()),
+            )
+            .mark_synced(
+                "107538052".to_string(),
+                "hash-race-explicit".to_string(),
+                1_700_000_000,
+            ),
+        )
+        .await
+        .unwrap();
+    sync_states
+        .upsert(
+            crate::domain::external_sync::ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                CanonicalEntityRef::new(
+                    CanonicalEntityKind::PlannedWorkout,
+                    "planned-intervals-explicit".to_string(),
+                ),
+            )
+            .mark_synced(
+                "107538052".to_string(),
+                "hash-planned-explicit".to_string(),
+                1_700_000_001,
+            ),
+        )
+        .await
+        .unwrap();
+    let service = external_import_service_without_refresh(
+        planned_workouts,
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        planned_completed_links.clone(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
+        InMemoryObservationRepository::default(),
+        sync_states,
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Intervals,
+                external_id: "intervals-activity-77".to_string(),
+                normalized_payload_hash: "hash-intervals-explicit".to_string(),
+                intervals_paired_event_id: Some(107538052),
+                marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: None,
+                workout: sample_completed_workout_named("Completely Different Name"),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored = completed_workouts.list_by_user_id("user-1").await.unwrap();
+    assert_eq!(
+        stored[0].planned_workout_id.as_deref(),
+        Some("planned-intervals-explicit")
+    );
+
+    let link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-imported-1")
+        .await
+        .unwrap()
+        .expect("planned-completed link");
+    assert_eq!(link.planned_workout_id, "planned-intervals-explicit");
+    assert_eq!(
+        link.match_source,
+        PlannedCompletedWorkoutLinkMatchSource::Explicit
+    );
+}
+
+#[tokio::test]
 async fn import_completed_workout_links_wahoo_activity_by_plan_id_as_explicit() {
     let planned_workouts = InMemoryPlannedWorkoutRepository::default();
     planned_workouts

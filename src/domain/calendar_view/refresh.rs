@@ -1,3 +1,5 @@
+use chrono::NaiveDate;
+
 use crate::domain::{
     calendar_view::{select_visible_planned_workout_candidates, CalendarPlannedWorkoutSource},
     completed_workouts::{CompletedWorkout, CompletedWorkoutRepository},
@@ -314,11 +316,10 @@ where
         let newest = newest.to_string();
         Box::pin(async move {
             let all_planned_ids = cleanup_planned_workouts
-                .list_candidates_by_user_id_and_date_range(&user_id, "0000-01-01", "9999-12-31")
+                .list_visible_planned_workout_ids_by_user_id(&user_id)
                 .await
                 .map_err(map_planned_error)?
                 .into_iter()
-                .map(|candidate| candidate.workout.planned_workout_id)
                 .collect::<std::collections::HashSet<_>>();
             let planned = select_visible_planned_workout_candidates(
                 planned_workouts
@@ -377,7 +378,7 @@ where
                                 relinked_planned_workout_id,
                                 updated.completed_workout_id.clone(),
                                 PlannedCompletedWorkoutLinkMatchSource::Heuristic,
-                                0,
+                                heuristic_link_timestamp(&updated.start_date_local),
                             ))
                             .await
                             .map_err(map_planned_completed_link_error)?;
@@ -496,6 +497,19 @@ where
                 .await
         })
     }
+}
+
+fn heuristic_link_timestamp(start_date_local: &str) -> i64 {
+    let date = start_date_local
+        .split_once('T')
+        .map(|(date, _)| date)
+        .unwrap_or(start_date_local);
+
+    NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .ok()
+        .and_then(|date| date.and_hms_opt(12, 0, 0))
+        .map(|datetime| datetime.and_utc().timestamp())
+        .unwrap_or_default()
 }
 
 fn map_planned_error(
