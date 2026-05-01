@@ -408,8 +408,15 @@ fn client_error_message(error: &CoachConversationError) -> String {
 }
 
 fn should_close_worker(error: &CoachConversationError) -> bool {
-    matches!(
-        map_calendar_coach_error(error).status().as_u16(),
-        404 | 409 | 503
-    )
+    match error {
+        CoachConversationError::NotFound
+        | CoachConversationError::Archived
+        | CoachConversationError::ReplyAlreadyPending => true,
+        CoachConversationError::Llm(llm_error) => {
+            !matches!(llm_error, crate::domain::llm::LlmError::ContextTooLarge(_))
+                && llm_error.is_retryable()
+        }
+        CoachConversationError::Repository(_) => true,
+        CoachConversationError::Validation(_) => false,
+    }
 }

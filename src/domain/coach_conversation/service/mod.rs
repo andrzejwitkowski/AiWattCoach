@@ -464,8 +464,7 @@ where
             + messages
                 .iter()
                 .map(|message| approximate_token_usage(&message.content))
-                .sum::<usize>()
-            + approximate_token_usage(&user_message.content);
+                .sum::<usize>();
         let token_budget = approximate_token_budget_for_model(&config.model);
         if estimated_request_tokens > token_budget {
             return Err(CoachConversationError::Llm(LlmError::ContextTooLarge(
@@ -506,7 +505,7 @@ where
             system_prompt,
             stable_context,
             volatile_context,
-            conversation: build_calendar_conversation(messages, &user_message.content),
+            conversation: build_calendar_conversation(messages, &user_message.id),
             cache_scope_key: cache_scope_key.clone(),
             cache_key: Some(context_hash.clone()),
             reusable_cache_id,
@@ -919,9 +918,14 @@ fn build_calendar_volatile_context(
 
 fn build_calendar_conversation(
     messages: &[CoachConversationMessage],
-    user_message: &str,
+    up_to_message_id: &str,
 ) -> Vec<LlmChatMessage> {
-    let mut conversation = messages
+    let messages = match messages.iter().position(|msg| msg.id == up_to_message_id) {
+        Some(pos) => &messages[..=pos],
+        None => messages,
+    };
+
+    messages
         .iter()
         .filter_map(|message| match message.role {
             CoachConversationMessageRole::User => Some(LlmChatMessage {
@@ -934,18 +938,5 @@ fn build_calendar_conversation(
             }),
             CoachConversationMessageRole::System => None,
         })
-        .collect::<Vec<_>>();
-
-    if let Some(last) = conversation.last_mut() {
-        if last.role == LlmMessageRole::User {
-            last.content = user_message.to_string();
-            return conversation;
-        }
-    }
-
-    conversation.push(LlmChatMessage {
-        role: LlmMessageRole::User,
-        content: user_message.to_string(),
-    });
-    conversation
+        .collect::<Vec<_>>()
 }
