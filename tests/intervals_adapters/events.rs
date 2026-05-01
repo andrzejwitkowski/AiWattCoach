@@ -315,41 +315,6 @@ async fn intervals_client_posts_create_event_payload_as_json_object() {
 }
 
 #[tokio::test]
-async fn intervals_client_posts_canonical_planned_workout_doc_as_json_object() {
-    let server = TestIntervalsServer::start().await;
-    server.set_created_event(ResponseEvent::sample(204, "Created"));
-    let client = IntervalsIcuClient::new(reqwest::Client::new()).with_base_url(server.base_url());
-
-    let _created = client
-        .create_event(
-            &test_credentials(),
-            CreateEvent {
-                category: EventCategory::Workout,
-                start_date_local: "2026-04-11T00:00:00".to_string(),
-                event_type: Some("Ride".to_string()),
-                name: Some("Active Recovery".to_string()),
-                description: None,
-                indoor: false,
-                color: None,
-                workout_doc: Some("Active Recovery\n- 45m 50%".to_string()),
-                file_upload: None,
-            },
-        )
-        .await
-        .unwrap();
-
-    let requests = server.requests();
-    let body = String::from_utf8(requests[0].body.clone().unwrap()).unwrap();
-    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-
-    assert_eq!(
-        json.get("workout_doc").and_then(|value| value.as_str()),
-        Some("Active Recovery\n- 45m 50%")
-    );
-    assert!(json.get("description").is_none());
-}
-
-#[tokio::test]
 async fn intervals_client_create_event_logs_without_body_previews_on_normal_success_path() {
     let server = TestIntervalsServer::start().await;
     server.set_created_event(ResponseEvent::sample(203, "Created"));

@@ -168,7 +168,7 @@ where
                     .update_event(
                         user_id,
                         existing_remote_event.id,
-                        build_update_event(&projected_day),
+                        build_update_event(&projected_day, &existing_remote_event),
                     )
                     .await
                     .map_err(map_intervals_error)?
@@ -572,25 +572,46 @@ fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
         start_date_local: projected_event_start_date_local(&day.date),
         event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
-        description: None,
+        description: projected_event_sync_body(day),
         indoor: false,
         color: None,
-        workout_doc: projected_event_sync_body(day),
+        workout_doc: None,
         file_upload: None,
     }
 }
 
-fn build_update_event(day: &TrainingPlanProjectedDay) -> UpdateEvent {
+fn build_update_event(day: &TrainingPlanProjectedDay, existing_event: &Event) -> UpdateEvent {
     UpdateEvent {
         category: Some(EventCategory::Workout),
         start_date_local: Some(projected_event_start_date_local(&day.date)),
-        event_type: Some("Ride".to_string()),
+        event_type: existing_event
+            .event_type
+            .clone()
+            .or_else(|| Some("Ride".to_string())),
         name: projected_workout_name(day),
-        description: None,
-        indoor: Some(false),
-        color: None,
-        workout_doc: projected_event_sync_body(day),
+        description: merge_event_description(
+            existing_event.description.as_deref(),
+            projected_event_sync_body(day).as_deref(),
+        ),
+        indoor: Some(existing_event.indoor),
+        color: existing_event.color.clone(),
+        workout_doc: None,
         file_upload: None,
+    }
+}
+
+fn merge_event_description(existing: Option<&str>, projected: Option<&str>) -> Option<String> {
+    match (
+        existing.map(str::trim).filter(|value| !value.is_empty()),
+        projected,
+    ) {
+        (None, None) => None,
+        (Some(existing), None) => Some(existing.to_string()),
+        (None, Some(projected)) => Some(projected.to_string()),
+        (Some(existing), Some(projected)) if existing.contains(projected) => {
+            Some(existing.to_string())
+        }
+        (Some(existing), Some(projected)) => Some(format!("{existing}\n\n{projected}")),
     }
 }
 

@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-01 | user | planned-workout Intervals sync history-backed revert
+
+- Problem: I chased the remaining live Intervals `400 Bad Request` by switching planned-workout sync from `description` to canonical `workout_doc`, but the live failure persisted and the user pointed out that the repo history already contained a previously working Intervals push shape. Re-reading the older working calendar service at commit `4b7b545` showed planned-workout Intervals sync historically sent body-only workout text in `description`, left `workout_doc` empty, and preserved existing event metadata on updates.
+- Fix: reverted the planned-workout Intervals sync path to that history-backed shape: `projected_event_sync_body(...)` now feeds `description`, `workout_doc` stays `None`, and update payloads merge projected text into the existing remote description while preserving existing `event_type`, `indoor`, and `color`. Updated the planned-workout sync regression and removed the incorrect adapter regression that had locked in the speculative `workout_doc` shape.
+- Prevention: when a live provider failure persists after multiple payload tweaks, stop iterating on local theories and diff the current code against the last known working implementation in git history before making another semantic change. Prefer the repository's proven provider contract over a cleaner-looking abstraction when the upstream system disagrees.
+
 ### 2026-04-30 | user | planned-workout Intervals sync workout_doc grammar follow-up
 
 - Problem: after fixing `workout_doc` placement and `start_date_local`, planned-workout Intervals sync still built the outbound `workout_doc` from a stripped body-only serializer in `src/domain/calendar/service/projected.rs`. Live request previews showed only `- 60m 50%` for `Active Recovery`, while adjacent canonical planned-workout paths in `calendar_view` and `training_context` serialize the full workout text including the title line. That left the remaining live `400 Bad Request` most likely caused by a grammar mismatch between the sync payload and the repo's canonical planned-workout text shape.
