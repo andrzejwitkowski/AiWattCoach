@@ -561,6 +561,34 @@ async fn build_athlete_summary_context_uses_explicit_summary_focus() {
 }
 
 #[tokio::test]
+async fn build_calendar_overview_context_uses_calendar_overview_focus() {
+    let builder = DefaultTrainingContextBuilder::new(
+        Arc::new(TestSettingsService),
+        Arc::new(TestWorkoutSummaryRepository),
+        FixedClock,
+    )
+    .with_completed_workout_repository(TestCompletedWorkoutRepository::default())
+    .with_planned_workout_repository(TestPlannedWorkoutRepository::default())
+    .with_special_day_repository(TestSpecialDayRepository::default());
+
+    let result = builder
+        .build_calendar_overview_context("user-1")
+        .await
+        .unwrap();
+
+    assert_eq!(result.context.focus_kind, "summary");
+    assert_eq!(result.context.focus_workout_id, None);
+    assert!(result
+        .rendered
+        .volatile_context
+        .contains("\"k\":\"summary\""));
+    assert!(result
+        .rendered
+        .volatile_context
+        .contains("\"fx\":{\"k\":\"summary\"}"));
+}
+
+#[tokio::test]
 async fn builder_requests_longer_history_warmup_for_load_seed() {
     let builder = DefaultTrainingContextBuilder::new(
         Arc::new(TestSettingsService),

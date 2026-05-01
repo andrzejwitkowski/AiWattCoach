@@ -1,8 +1,15 @@
+import { useCallback } from 'react';
 import { z } from 'zod';
 
+import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
 import { get, post } from '../../../lib/httpClient';
 import { listEventsQuerySchema } from '../../intervals/types';
-import { calendarLabelsResponseSchema } from '../types';
+import {
+  calendarCoachConversationResponseSchema,
+  calendarCoachSendMessageRequestSchema,
+  calendarCoachSendMessageResponseSchema,
+  calendarLabelsResponseSchema,
+} from '../types';
 
 const manualCalendarRefreshResponseSchema = z.object({
   oldest: z.string(),
@@ -25,4 +32,46 @@ export async function listCalendarLabels(apiBaseUrl: string, query: unknown) {
 export async function refreshCalendarView(apiBaseUrl: string) {
   const data = await post<undefined, unknown>(apiBaseUrl, '/api/calendar/refresh');
   return manualCalendarRefreshResponseSchema.parse(data);
+}
+
+export function useCalendarCoachApi() {
+  const apiBaseUrl = useApiBaseUrl();
+
+  const getCurrentCalendarCoachConversation = useCallback(async () => {
+    const data = await get(apiBaseUrl, '/api/calendar/coach/current');
+    return calendarCoachConversationResponseSchema.parse(data);
+  }, [apiBaseUrl]);
+
+  const startNewCalendarCoachConversation = useCallback(async () => {
+    const data = await post<undefined, unknown>(apiBaseUrl, '/api/calendar/coach/conversations');
+    return calendarCoachConversationResponseSchema.parse(data);
+  }, [apiBaseUrl]);
+
+  const getCalendarCoachConversation = useCallback(
+    async (conversationId: string) => {
+      const data = await get(apiBaseUrl, `/api/calendar/coach/conversations/${conversationId}`);
+      return calendarCoachConversationResponseSchema.parse(data);
+    },
+    [apiBaseUrl],
+  );
+
+  const sendCalendarCoachMessage = useCallback(
+    async (conversationId: string, payload: unknown) => {
+      const validated = calendarCoachSendMessageRequestSchema.parse(payload);
+      const data = await post<typeof validated, unknown>(
+        apiBaseUrl,
+        `/api/calendar/coach/conversations/${conversationId}/messages`,
+        validated,
+      );
+      return calendarCoachSendMessageResponseSchema.parse(data);
+    },
+    [apiBaseUrl],
+  );
+
+  return {
+    getCurrentCalendarCoachConversation,
+    startNewCalendarCoachConversation,
+    getCalendarCoachConversation,
+    sendCalendarCoachMessage,
+  };
 }

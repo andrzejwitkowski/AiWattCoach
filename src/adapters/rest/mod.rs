@@ -2,6 +2,7 @@ mod admin;
 mod athlete_summary;
 mod auth;
 mod calendar;
+mod calendar_coach;
 mod completed_workouts;
 mod cookies;
 mod dashboard;
@@ -124,6 +125,22 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                     post(calendar::refresh_calendar_view),
                 )
                 .route(
+                    "/api/calendar/coach/current",
+                    get(calendar_coach::get_current_conversation),
+                )
+                .route(
+                    "/api/calendar/coach/conversations",
+                    post(calendar_coach::start_new_conversation),
+                )
+                .route(
+                    "/api/calendar/coach/conversations/{conversation_id}",
+                    get(calendar_coach::get_conversation),
+                )
+                .route(
+                    "/api/calendar/coach/conversations/{conversation_id}/messages",
+                    post(calendar_coach::send_message),
+                )
+                .route(
                     "/api/completed-workouts",
                     get(completed_workouts::list_completed_workouts),
                 )
@@ -209,6 +226,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route(
             "/api/workout-summaries/{workout_id}/ws",
             get(workout_summary::workout_summary_ws),
+        )
+        .route(
+            "/api/calendar/coach/conversations/{conversation_id}/ws",
+            get(calendar_coach::calendar_coach_ws),
         )
         .route(
             "/api/intervals/activities",

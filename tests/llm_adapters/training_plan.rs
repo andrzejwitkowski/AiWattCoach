@@ -6,7 +6,8 @@ use aiwattcoach::{
     domain::llm::{BoxFuture as LlmBoxFuture, LlmError},
     domain::training_context::{
         IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
-        TrainingContextBuildResult, TrainingContextBuilder,
+        TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
+        CALENDAR_OVERVIEW_FOCUS_ID,
     },
     domain::training_plan::{
         TrainingPlanConversationMessage, TrainingPlanConversationRole, TrainingPlanGenerator,
@@ -59,11 +60,18 @@ impl TrainingContextBuilder for LargeContextTrainingContextBuilder {
         })
     }
 
+    fn build_calendar_overview_context(
+        &self,
+        _user_id: &str,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build("user-1", CALENDAR_OVERVIEW_FOCUS_ID)
+    }
+
     fn build_athlete_summary_context(
         &self,
         _user_id: &str,
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
-        self.build("user-1", "athlete-summary")
+        self.build("user-1", ATHLETE_SUMMARY_FOCUS_ID)
     }
 }
 
@@ -104,11 +112,18 @@ impl TrainingContextBuilder for UnconfiguredAvailabilityTrainingContextBuilder {
         })
     }
 
+    fn build_calendar_overview_context(
+        &self,
+        _user_id: &str,
+    ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
+        self.build("user-1", CALENDAR_OVERVIEW_FOCUS_ID)
+    }
+
     fn build_athlete_summary_context(
         &self,
         _user_id: &str,
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
-        self.build("user-1", "athlete-summary")
+        self.build("user-1", ATHLETE_SUMMARY_FOCUS_ID)
     }
 }
 
