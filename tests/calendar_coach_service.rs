@@ -34,11 +34,30 @@ impl Clock for FixedClock {
 }
 
 #[derive(Clone)]
-struct TestIds;
+struct TestIds {
+    counter: Arc<Mutex<u64>>,
+}
+
+impl TestIds {
+    fn new() -> Self {
+        Self {
+            counter: Arc::new(Mutex::new(0)),
+        }
+    }
+}
+
+impl Default for TestIds {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl IdGenerator for TestIds {
     fn new_id(&self, prefix: &str) -> String {
-        format!("{prefix}-id")
+        let mut counter = self.counter.lock().unwrap();
+        let id = format!("{prefix}-{counter}");
+        *counter += 1;
+        id
     }
 }
 
@@ -534,7 +553,7 @@ async fn calendar_coach_generate_reply_uses_calendar_overview_context_and_no_sum
         Arc::new(StaticLlmConfigProvider),
         Arc::new(training_context_builder.clone()),
         FixedClock,
-        TestIds,
+        TestIds::new(),
     )
     .with_settings_service(Arc::new(ConfiguredSettingsService))
     .with_context_cache_repository(Arc::new(NoopContextCacheRepository));
@@ -607,7 +626,7 @@ async fn calendar_coach_send_message_result_keeps_summary_regeneration_hint_fals
         Arc::new(StaticLlmConfigProvider),
         Arc::new(RecordingTrainingContextBuilder::default()),
         FixedClock,
-        TestIds,
+        TestIds::new(),
     )
     .with_settings_service(Arc::new(ConfiguredSettingsService));
 
