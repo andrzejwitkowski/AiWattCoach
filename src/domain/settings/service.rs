@@ -593,6 +593,7 @@ fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConf
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::settings::WahooUserIdBackfillCandidate;
     use crate::domain::{
         external_sync::{
             BoxFuture as SyncBoxFuture, ExternalProvider, ExternalSyncRepositoryError,
@@ -636,6 +637,47 @@ mod tests {
         ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
             let settings = self.settings.clone();
             Box::pin(async move { Ok(settings.lock().unwrap().clone()) })
+        }
+
+        fn find_by_wahoo_user_id(
+            &self,
+            wahoo_user_id: i64,
+        ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+            let settings = self.settings.clone();
+            Box::pin(async move {
+                Ok(settings
+                    .lock()
+                    .unwrap()
+                    .clone()
+                    .filter(|settings| settings.wahoo.user_id == Some(wahoo_user_id)))
+            })
+        }
+
+        fn list_wahoo_user_id_backfill_candidates(
+            &self,
+        ) -> BoxFuture<Result<Vec<WahooUserIdBackfillCandidate>, SettingsError>> {
+            let settings = self.settings.clone();
+            Box::pin(async move {
+                Ok(settings
+                    .lock()
+                    .unwrap()
+                    .clone()
+                    .filter(|settings| {
+                        settings.wahoo.connected
+                            && settings.wahoo.user_id.is_none()
+                            && settings
+                                .wahoo
+                                .refresh_token
+                                .as_deref()
+                                .is_some_and(|value| !value.trim().is_empty())
+                    })
+                    .into_iter()
+                    .map(|settings| WahooUserIdBackfillCandidate {
+                        user_id: settings.user_id,
+                        wahoo: settings.wahoo,
+                    })
+                    .collect())
+            })
         }
 
         fn upsert(&self, settings: UserSettings) -> BoxFuture<Result<UserSettings, SettingsError>> {

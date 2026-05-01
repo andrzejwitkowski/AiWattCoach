@@ -6,13 +6,14 @@ mod llm;
 mod settings;
 
 pub(crate) use app::{
-    get_json, session_cookie, settings_test_app, settings_test_app_with_athlete_summary,
-    settings_test_app_with_completed_workout_service, settings_test_app_with_intervals,
-    settings_test_app_with_services,
+    get_json, session_cookie, settings_test_app, settings_test_app_with_admin_services,
+    settings_test_app_with_athlete_summary, settings_test_app_with_completed_workout_service,
+    settings_test_app_with_intervals, settings_test_app_with_services,
 };
 pub(crate) use athlete_summary::TestAthleteSummaryService;
 pub(crate) use completed_workouts::{
-    DetailBackfillCall, MetricsBackfillCall, MetricsBackfillRange, TestCompletedWorkoutAdminService,
+    DetailBackfillCall, ManualWahooSyncCall, MetricsBackfillCall, MetricsBackfillRange,
+    TestCompletedWorkoutAdminService, TestWahooWebhookService,
 };
 pub(crate) use identity::{AdminIdentityErrorService, TestIdentityServiceWithSession};
 pub(crate) use intervals::MockIntervalsConnectionTester;

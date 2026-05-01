@@ -10,6 +10,7 @@ use aiwattcoach::{
         intervals::IntervalsConnectionTester,
         llm::{LlmChatPort, UserLlmConfigProvider},
         settings::UserSettingsUseCases,
+        wahoo::WahooWebhookUseCases,
     },
     Settings,
 };
@@ -81,10 +82,25 @@ pub(crate) async fn settings_test_app_with_completed_workout_service(
     settings_service: impl UserSettingsUseCases + 'static,
     completed_workout_service: impl CompletedWorkoutAdminUseCases + 'static,
 ) -> axum::Router {
+    settings_test_app_with_admin_services(
+        identity_service,
+        settings_service,
+        Some(std::sync::Arc::new(completed_workout_service)),
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn settings_test_app_with_admin_services(
+    identity_service: impl IdentityUseCases + 'static,
+    settings_service: impl UserSettingsUseCases + 'static,
+    completed_workout_service: Option<std::sync::Arc<dyn CompletedWorkoutAdminUseCases>>,
+    wahoo_webhook_service: Option<std::sync::Arc<dyn WahooWebhookUseCases>>,
+) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = shared_frontend_fixture();
 
-    let app_state = AppState::new(
+    let mut app_state = AppState::new(
         settings.app_name,
         settings.mongo.database,
         test_mongo_client(&settings.mongo.uri).await,
@@ -96,8 +112,15 @@ pub(crate) async fn settings_test_app_with_completed_workout_service(
         false,
         24,
     )
-    .with_settings_service(std::sync::Arc::new(settings_service))
-    .with_completed_workout_admin_service(std::sync::Arc::new(completed_workout_service));
+    .with_settings_service(std::sync::Arc::new(settings_service));
+
+    if let Some(service) = completed_workout_service {
+        app_state = app_state.with_completed_workout_admin_service(service);
+    }
+
+    if let Some(service) = wahoo_webhook_service {
+        app_state = app_state.with_wahoo_webhook_service(service);
+    }
 
     build_app_with_frontend_dist(app_state, fixture.dist_dir())
 }

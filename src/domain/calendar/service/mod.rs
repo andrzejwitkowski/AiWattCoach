@@ -120,6 +120,15 @@ impl crate::domain::wahoo::WahooUseCases for NoopWahooUseCases {
         Box::pin(async { Err(crate::domain::wahoo::WahooError::NotConnected) })
     }
 
+    fn get_authenticated_user(
+        &self,
+        _user_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<
+        Result<crate::domain::wahoo::WahooUser, crate::domain::wahoo::WahooError>,
+    > {
+        Box::pin(async { Err(crate::domain::wahoo::WahooError::NotConnected) })
+    }
+
     fn find_plan_by_external_id(
         &self,
         _user_id: &str,

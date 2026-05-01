@@ -6,3 +6,4 @@ mod session_endpoints;
 mod shared;
 mod tracing_capture;
 mod wahoo_flow;
+mod wahoo_webhook;

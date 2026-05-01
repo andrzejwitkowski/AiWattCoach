@@ -1,4 +1,4 @@
-use std::{error::Error, future::Future, sync::Arc};
+use std::{collections::BTreeSet, error::Error, future::Future, sync::Arc};
 
 use crate::{
     adapters::mongo::{
@@ -10,10 +10,12 @@ use crate::{
             ExternalProvider, ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
         },
         identity::Clock,
+        wahoo::WahooUseCases,
         workout_summary::WorkoutSummaryError,
     },
 };
 use tokio::sync::Notify;
+use tracing::warn;
 
 #[derive(Clone)]
 pub struct TrainingPlanWorkoutSummaryAdapter<Service> {
@@ -211,52 +213,74 @@ pub async fn reconcile_intervals_poll_states(
     Ok(())
 }
 
-pub async fn reconcile_wahoo_poll_states(
-    settings_repository: &MongoUserSettingsRepository,
+pub async fn park_wahoo_poll_states(
     poll_states: &MongoProviderPollStateRepository,
-    clock: &impl Clock,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let now_epoch_seconds = clock.now_epoch_seconds();
     let existing_wahoo_user_ids = poll_states
         .list_user_ids_for_provider(ExternalProvider::Wahoo)
-        .await?;
-
-    for user in settings_repository
-        .list_wahoo_poll_bootstrap_users(&existing_wahoo_user_ids)
         .await?
-    {
-        let existing = poll_states
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+
+    for user_id in existing_wahoo_user_ids {
+        let Some(state) = poll_states
             .find_by_provider_and_stream(
-                &user.user_id,
+                &user_id,
                 ExternalProvider::Wahoo,
                 ProviderPollStream::CompletedWorkouts,
             )
-            .await?;
-
-        if !user.desired_active {
-            if let Some(state) = existing {
-                poll_states
-                    .upsert(ProviderPollState {
-                        next_due_at_epoch_seconds: i64::MAX,
-                        cursor: None,
-                        backoff_until_epoch_seconds: None,
-                        last_error: None,
-                        ..state
-                    })
-                    .await?;
-            }
+            .await?
+        else {
             continue;
-        }
+        };
 
-        if should_reset_poll_state(existing.as_ref(), user.wahoo_updated_at_epoch_seconds) {
-            poll_states
-                .upsert(ProviderPollState::new(
-                    user.user_id.clone(),
-                    ExternalProvider::Wahoo,
-                    ProviderPollStream::CompletedWorkouts,
-                    now_epoch_seconds,
-                ))
-                .await?;
+        poll_states
+            .upsert(ProviderPollState {
+                next_due_at_epoch_seconds: i64::MAX,
+                cursor: None,
+                backoff_until_epoch_seconds: None,
+                last_error: None,
+                ..state
+            })
+            .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn reconcile_wahoo_user_ids(
+    settings_repository: &MongoUserSettingsRepository,
+    wahoo_service: &dyn WahooUseCases,
+    clock: &impl Clock,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let now_epoch_seconds = clock.now_epoch_seconds();
+    let users = settings_repository
+        .list_wahoo_user_id_backfill_candidates()
+        .await?;
+
+    for user in users {
+        let wahoo_user = match wahoo_service.get_authenticated_user(&user.user_id).await {
+            Ok(wahoo_user) => wahoo_user,
+            Err(error) => {
+                warn!(
+                    user_id = %user.user_id,
+                    error = %error,
+                    "Failed to backfill Wahoo user id during startup reconcile"
+                );
+                continue;
+            }
+        };
+
+        if let Err(error) = settings_repository
+            .backfill_wahoo_user_id(&user.user_id, wahoo_user.id, now_epoch_seconds)
+            .await
+        {
+            warn!(
+                user_id = %user.user_id,
+                wahoo_user_id = wahoo_user.id,
+                error = %error,
+                "Failed to persist Wahoo user id during startup reconcile"
+            );
         }
     }
 

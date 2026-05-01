@@ -40,6 +40,7 @@ pub struct WahooConfig {
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
     pub expires_at_epoch_seconds: Option<i64>,
+    pub user_id: Option<i64>,
     pub connected: bool,
     pub updated_at_epoch_seconds: Option<i64>,
 }
@@ -50,6 +51,10 @@ impl std::fmt::Debug for WahooConfig {
             .field("access_token", &RedactedOptionalText(&self.access_token))
             .field("refresh_token", &RedactedOptionalText(&self.refresh_token))
             .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
+            .field(
+                "user_id",
+                &RedactedOptionalText(&self.user_id.map(|value| value.to_string())),
+            )
             .field("connected", &self.connected)
             .field("updated_at_epoch_seconds", &self.updated_at_epoch_seconds)
             .finish()
@@ -351,6 +356,7 @@ mod tests {
             access_token: Some("access-token".to_string()),
             refresh_token: Some("refresh-token".to_string()),
             expires_at_epoch_seconds: Some(1_700_000_000),
+            user_id: Some(60_462),
             connected: true,
             updated_at_epoch_seconds: Some(1_700_000_001),
         };

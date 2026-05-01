@@ -1,7 +1,7 @@
 use crate::domain::wahoo::{
     BoxFuture, WahooApiPort, WahooCreatePlan, WahooCreateWorkout, WahooError, WahooFileReference,
-    WahooOAuthPort, WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooWorkout,
-    WahooWorkoutList, WahooWorkoutSummary,
+    WahooOAuthPort, WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooUser,
+    WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
 };
 
 const DEV_AUTH_CODE: &str = "dev-wahoo-auth";
@@ -148,6 +148,13 @@ impl WahooApiPort for DevWahooOAuthClient {
                 Ok(None)
             }
         })
+    }
+
+    fn get_authenticated_user(
+        &self,
+        _access_token: &str,
+    ) -> BoxFuture<Result<WahooUser, WahooError>> {
+        Box::pin(async { Ok(WahooUser { id: 60_462 }) })
     }
 
     fn create_workout(

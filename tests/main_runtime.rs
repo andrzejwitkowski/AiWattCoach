@@ -15,10 +15,17 @@ use aiwattcoach::{
             ExternalProvider, ProviderPollState, ProviderPollStateRepository, ProviderPollStream,
         },
         identity::Clock,
+        settings::UserSettingsRepository,
+        wahoo::{
+            BoxFuture as WahooBoxFuture, WahooAuthExchange, WahooAuthStart, WahooCreatePlan,
+            WahooCreateWorkout, WahooError, WahooPlan, WahooToken, WahooUpdatePlan,
+            WahooUpdateWorkout, WahooUseCases, WahooUser, WahooWorkout, WahooWorkoutList,
+            WahooWorkoutSummary,
+        },
     },
     main_runtime::{
-        finish_server_shutdown, reconcile_intervals_poll_states, should_reset_poll_state,
-        wait_for_ctrl_c,
+        finish_server_shutdown, park_wahoo_poll_states, reconcile_intervals_poll_states,
+        reconcile_wahoo_user_ids, should_reset_poll_state, wait_for_ctrl_c,
     },
 };
 use mongodb::{bson::doc, options::ClientOptions, Client};
@@ -66,6 +73,134 @@ struct FixedClock(i64);
 impl Clock for FixedClock {
     fn now_epoch_seconds(&self) -> i64 {
         self.0
+    }
+}
+
+#[derive(Clone)]
+struct RecordingWahooService {
+    authenticated_users: Arc<Mutex<Vec<String>>>,
+}
+
+impl Default for RecordingWahooService {
+    fn default() -> Self {
+        Self {
+            authenticated_users: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl RecordingWahooService {
+    fn authenticated_users(&self) -> Vec<String> {
+        self.authenticated_users.lock().unwrap().clone()
+    }
+}
+
+impl WahooUseCases for RecordingWahooService {
+    fn begin_connect(
+        &self,
+        _user_id: &str,
+        _return_to: Option<String>,
+    ) -> WahooBoxFuture<Result<WahooAuthStart, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn finish_connect(
+        &self,
+        _user_id: &str,
+        _state: &str,
+        _code: &str,
+    ) -> WahooBoxFuture<Result<WahooAuthExchange, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn ensure_token(&self, _user_id: &str) -> WahooBoxFuture<Result<WahooToken, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn get_authenticated_user(
+        &self,
+        user_id: &str,
+    ) -> WahooBoxFuture<Result<WahooUser, WahooError>> {
+        let authenticated_users = self.authenticated_users.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            authenticated_users.lock().unwrap().push(user_id);
+            Ok(WahooUser { id: 60_462 })
+        })
+    }
+
+    fn list_workouts(
+        &self,
+        _user_id: &str,
+        _page: usize,
+        _per_page: usize,
+    ) -> WahooBoxFuture<Result<WahooWorkoutList, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn get_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> WahooBoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn get_workout_summary(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+    ) -> WahooBoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn find_plan_by_external_id(
+        &self,
+        _user_id: &str,
+        _external_id: &str,
+    ) -> WahooBoxFuture<Result<Option<WahooPlan>, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn create_plan(
+        &self,
+        _user_id: &str,
+        _request: WahooCreatePlan,
+    ) -> WahooBoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn update_plan(
+        &self,
+        _user_id: &str,
+        _plan_id: i64,
+        _request: WahooUpdatePlan,
+    ) -> WahooBoxFuture<Result<WahooPlan, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn create_workout(
+        &self,
+        _user_id: &str,
+        _request: WahooCreateWorkout,
+    ) -> WahooBoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn update_workout(
+        &self,
+        _user_id: &str,
+        _workout_id: i64,
+        _request: WahooUpdateWorkout,
+    ) -> WahooBoxFuture<Result<WahooWorkout, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
+    }
+
+    fn download_workout_file(
+        &self,
+        _file_url: &str,
+    ) -> WahooBoxFuture<Result<Vec<u8>, WahooError>> {
+        Box::pin(async { unreachable!("not used in main_runtime tests") })
     }
 }
 
@@ -383,6 +518,141 @@ async fn reconcile_intervals_poll_states_seeds_missing_states_for_existing_conne
     assert_eq!(disconnected_completed.cursor, None);
     assert_eq!(disconnected_completed.last_error, None);
     assert_eq!(disconnected_completed.backoff_until_epoch_seconds, None);
+
+    let _ = client.database(&database_name).drop().await;
+}
+
+#[tokio::test]
+async fn park_wahoo_poll_states_disables_legacy_wahoo_completed_polling() {
+    let Some(client) = test_mongo_client_or_skip().await else {
+        return;
+    };
+    let database_name = unique_test_database_name("main-park-wahoo-poll-states");
+    let poll_states = MongoProviderPollStateRepository::new(client.clone(), &database_name);
+    poll_states.ensure_indexes().await.unwrap();
+
+    poll_states
+        .upsert(ProviderPollState {
+            user_id: "connected-user".to_string(),
+            provider: ExternalProvider::Wahoo,
+            stream: ProviderPollStream::CompletedWorkouts,
+            cursor: Some("2026-04-03T10:00:00+00:00".to_string()),
+            next_due_at_epoch_seconds: 42,
+            last_attempted_at_epoch_seconds: Some(40),
+            last_successful_at_epoch_seconds: Some(41),
+            last_error: Some("legacy wahoo state".to_string()),
+            backoff_until_epoch_seconds: Some(99),
+        })
+        .await
+        .unwrap();
+
+    park_wahoo_poll_states(&poll_states).await.unwrap();
+
+    let parked = poll_states
+        .find_by_provider_and_stream(
+            "connected-user",
+            ExternalProvider::Wahoo,
+            ProviderPollStream::CompletedWorkouts,
+        )
+        .await
+        .unwrap()
+        .expect("legacy wahoo completed state should be parked");
+    assert_eq!(parked.next_due_at_epoch_seconds, i64::MAX);
+    assert_eq!(parked.cursor, None);
+    assert_eq!(parked.last_error, None);
+    assert_eq!(parked.backoff_until_epoch_seconds, None);
+
+    let _ = client.database(&database_name).drop().await;
+}
+
+#[tokio::test]
+async fn reconcile_wahoo_user_ids_backfills_missing_ids_for_connected_users() {
+    let Some(client) = test_mongo_client_or_skip().await else {
+        return;
+    };
+    let database_name = unique_test_database_name("main-reconcile-wahoo-user-ids");
+    let settings_repository = MongoUserSettingsRepository::new(client.clone(), &database_name);
+    settings_repository.ensure_indexes().await.unwrap();
+
+    let settings_collection = client
+        .database(&database_name)
+        .collection::<mongodb::bson::Document>("user_settings");
+    settings_collection
+        .insert_many([
+            doc! {
+                "user_id": "legacy-user",
+                "ai_agents": {},
+                "wahoo": {
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                    "connected": true,
+                },
+                "intervals": {
+                    "updated_at_epoch_seconds": 123,
+                },
+                "options": {},
+                "availability": { "configured": false, "days": [] },
+                "cycling": {},
+                "created_at_epoch_seconds": 1,
+                "updated_at_epoch_seconds": 1,
+            },
+            doc! {
+                "user_id": "already-mapped-user",
+                "ai_agents": {},
+                "wahoo": {
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                    "user_id": 777,
+                    "connected": true,
+                },
+                "intervals": {
+                    "updated_at_epoch_seconds": 456,
+                },
+                "options": {},
+                "availability": { "configured": false, "days": [] },
+                "cycling": {},
+                "created_at_epoch_seconds": 1,
+                "updated_at_epoch_seconds": 2,
+            },
+        ])
+        .await
+        .unwrap();
+
+    let wahoo_service = RecordingWahooService::default();
+    reconcile_wahoo_user_ids(
+        &settings_repository,
+        &wahoo_service,
+        &FixedClock(1_700_000_000),
+    )
+    .await
+    .unwrap();
+
+    let legacy_user = settings_repository
+        .find_by_user_id("legacy-user")
+        .await
+        .unwrap()
+        .expect("legacy user should exist");
+    assert_eq!(legacy_user.wahoo.user_id, Some(60_462));
+    assert_eq!(legacy_user.updated_at_epoch_seconds, 1);
+    assert_eq!(legacy_user.intervals.api_key, None);
+    assert_eq!(legacy_user.intervals.athlete_id, None);
+    assert_eq!(
+        legacy_user.wahoo.updated_at_epoch_seconds,
+        Some(1_700_000_000)
+    );
+
+    let already_mapped_user = settings_repository
+        .find_by_user_id("already-mapped-user")
+        .await
+        .unwrap()
+        .expect("already mapped user should exist");
+    assert_eq!(already_mapped_user.wahoo.user_id, Some(777));
+    assert_eq!(already_mapped_user.updated_at_epoch_seconds, 2);
+    assert_eq!(already_mapped_user.wahoo.updated_at_epoch_seconds, None);
+    assert_eq!(
+        wahoo_service.authenticated_users(),
+        vec!["legacy-user".to_string()]
+    );
 
     let _ = client.database(&database_name).drop().await;
 }

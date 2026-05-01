@@ -109,7 +109,7 @@ use aiwattcoach::{
         training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
         TrainingPlanGenerationService,
     },
-    domain::wahoo::WahooService,
+    domain::wahoo::{WahooService, WahooWebhookService},
     domain::wahoo_fit_enrichment::{
         wahoo_fit_enrichment_task_handler, SchedulerBackedWahooFitEnrichmentService,
         WahooFitEnrichmentService,
@@ -119,8 +119,8 @@ use aiwattcoach::{
         WorkoutSummaryService,
     },
     main_runtime::{
-        finish_server_shutdown, reconcile_intervals_poll_states, reconcile_wahoo_poll_states,
-        shutdown_signal, TrainingPlanWorkoutSummaryAdapter,
+        finish_server_shutdown, park_wahoo_poll_states, reconcile_intervals_poll_states,
+        reconcile_wahoo_user_ids, shutdown_signal, TrainingPlanWorkoutSummaryAdapter,
     },
     telemetry::setup_telemetry,
     AppState,
@@ -290,12 +290,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         &SystemClock,
     )
     .await?;
-    reconcile_wahoo_poll_states(
-        &settings_repository,
-        &provider_poll_state_repository,
-        &SystemClock,
-    )
-    .await?;
+    park_wahoo_poll_states(&provider_poll_state_repository).await?;
     let race_repository = MongoRaceRepository::new(mongo_client.clone(), &mongo_database);
     race_repository.ensure_indexes().await?;
     let planned_workout_repository =
@@ -387,6 +382,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
         None => None,
     };
+    if let Some(wahoo_service) = wahoo_service.as_ref() {
+        reconcile_wahoo_user_ids(&settings_repository, wahoo_service.as_ref(), &SystemClock)
+            .await?;
+    }
     let llm_config_provider = Arc::new(SettingsLlmConfigProvider::new(settings_service.clone()));
     let special_day_repository =
         MongoSpecialDayRepository::new(mongo_client.clone(), &mongo_database);
@@ -488,15 +487,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             UuidIdGenerator,
         ))
     });
-    let provider_polling_service = if let Some(wahoo_service) = wahoo_service.clone() {
-        let provider_polling_service = provider_polling_service.with_wahoo_service(wahoo_service);
-        if let Some(queue) = wahoo_fit_enrichment_queue_service.clone() {
-            provider_polling_service.with_wahoo_fit_enrichment_queue(queue)
-        } else {
-            provider_polling_service
-        }
-    } else {
-        provider_polling_service
+    let wahoo_webhook_service = match (
+        wahoo_service.clone(),
+        wahoo_fit_enrichment_queue_service.clone(),
+    ) {
+        (Some(wahoo_service), Some(queue)) => Some(Arc::new(WahooWebhookService::new(
+            settings_repository.clone(),
+            external_import_service.clone(),
+            wahoo_service,
+            (*training_load_recompute_service).clone(),
+            (*queue).clone(),
+            SystemClock,
+            auth.wahoo
+                .as_ref()
+                .and_then(|settings| settings.webhook_token.clone()),
+        ))),
+        _ => None,
     };
     let activity_identity_extractor = ActivityFileIdentityExtractor;
     let intervals_service = Arc::new(
@@ -720,7 +726,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_race_service(race_service)
         .with_intervals_connection_tester(Arc::new(intervals_connection_tester));
     let app_state = if let Some(wahoo_service) = wahoo_service {
-        app_state.with_wahoo_service(wahoo_service)
+        let app_state = app_state.with_wahoo_service(wahoo_service);
+        if let Some(wahoo_webhook_service) = wahoo_webhook_service {
+            app_state.with_wahoo_webhook_service(wahoo_webhook_service)
+        } else {
+            app_state
+        }
     } else {
         app_state
     };

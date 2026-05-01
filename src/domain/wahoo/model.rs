@@ -35,6 +35,11 @@ pub struct WahooFileReference {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WahooUser {
+    pub id: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WahooPlan {
     pub id: i64,
     pub external_id: String,

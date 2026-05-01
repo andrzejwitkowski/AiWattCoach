@@ -1685,6 +1685,52 @@ impl UserSettingsRepository for InMemoryUserSettingsRepository {
         })
     }
 
+    fn find_by_wahoo_user_id(
+        &self,
+        wahoo_user_id: i64,
+    ) -> crate::domain::settings::BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|settings| settings.wahoo.user_id == Some(wahoo_user_id))
+                .cloned())
+        })
+    }
+
+    fn list_wahoo_user_id_backfill_candidates(
+        &self,
+    ) -> crate::domain::settings::BoxFuture<
+        Result<Vec<crate::domain::settings::WahooUserIdBackfillCandidate>, SettingsError>,
+    > {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|settings| {
+                    settings.wahoo.connected
+                        && settings.wahoo.user_id.is_none()
+                        && settings
+                            .wahoo
+                            .refresh_token
+                            .as_deref()
+                            .is_some_and(|value| !value.trim().is_empty())
+                })
+                .cloned()
+                .map(
+                    |settings| crate::domain::settings::WahooUserIdBackfillCandidate {
+                        user_id: settings.user_id,
+                        wahoo: settings.wahoo,
+                    },
+                )
+                .collect())
+        })
+    }
+
     fn upsert(
         &self,
         settings: UserSettings,
@@ -1823,6 +1869,13 @@ impl WahooUseCases for RecordingWahooService {
         &self,
         _user_id: &str,
     ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooToken, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn get_authenticated_user(
+        &self,
+        _user_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooUser, WahooError>> {
         Box::pin(async { Err(WahooError::NotConnected) })
     }
 

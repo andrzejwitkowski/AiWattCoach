@@ -13,6 +13,11 @@ pub struct WahooFileReferenceResponse {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct WahooUserResponse {
+    pub id: i64,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct WahooPlanResponse {
     pub id: i64,
     pub external_id: Option<String>,

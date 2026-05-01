@@ -10,6 +10,7 @@ use tracing::error;
 use crate::config::AppState;
 use crate::domain::completed_workouts::CompletedWorkoutError;
 use crate::domain::identity::IdentityError;
+use crate::domain::wahoo::WahooWebhookError;
 
 use super::cookies::read_cookie;
 use super::same_origin::request_has_same_origin;
@@ -55,6 +56,16 @@ pub struct CompletedWorkoutMetricsBackfillResponse {
     failed: usize,
     #[serde(rename = "recomputedFrom")]
     recomputed_from: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ManualWahooSyncResponse {
+    #[serde(rename = "scanned")]
+    scanned: usize,
+    #[serde(rename = "imported")]
+    imported: usize,
+    #[serde(rename = "skipped")]
+    skipped: usize,
 }
 
 pub async fn system_info(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
@@ -229,8 +240,75 @@ pub async fn backfill_completed_workout_metrics(
     }
 }
 
+pub async fn sync_wahoo_completed_workouts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<CompletedWorkoutBackfillPath>,
+) -> impl IntoResponse {
+    let Some(identity_service) = state.identity_service.clone() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+
+    let Some(session_id) = read_cookie(&headers, &state.session_cookie_name) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+
+    let Some(service) = state.wahoo_webhook_service.as_ref() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+
+    if !request_has_same_origin(&headers, state.trust_proxy_headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    match identity_service.require_admin(&session_id).await {
+        Ok(_) => match service
+            .sync_completed_workouts_for_user(&path.user_id)
+            .await
+        {
+            Ok(result) => Json(ManualWahooSyncResponse {
+                scanned: result.scanned,
+                imported: result.imported,
+                skipped: result.skipped,
+            })
+            .into_response(),
+            Err(error) => {
+                let status = map_wahoo_sync_error_status(&error);
+                error!(
+                    user_id = %path.user_id,
+                    error = %error,
+                    status = status.as_u16(),
+                    "manual Wahoo completed workout sync failed"
+                );
+                status.into_response()
+            }
+        },
+        Err(IdentityError::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(crate::domain::identity::IdentityError::Forbidden) => {
+            StatusCode::FORBIDDEN.into_response()
+        }
+        Err(IdentityError::Repository(_) | IdentityError::External(_)) => {
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 fn map_backfill_error_status(error: &CompletedWorkoutError) -> StatusCode {
     match error {
         CompletedWorkoutError::Repository(_) => StatusCode::SERVICE_UNAVAILABLE,
+    }
+}
+
+fn map_wahoo_sync_error_status(error: &WahooWebhookError) -> StatusCode {
+    match error {
+        WahooWebhookError::Unauthorized => StatusCode::UNAUTHORIZED,
+        WahooWebhookError::InvalidPayload(_) => StatusCode::BAD_REQUEST,
+        WahooWebhookError::NotConfigured => StatusCode::SERVICE_UNAVAILABLE,
+        WahooWebhookError::Settings(_)
+        | WahooWebhookError::Import(_)
+        | WahooWebhookError::Queue(_)
+        | WahooWebhookError::TrainingLoad(_)
+        | WahooWebhookError::Wahoo(_) => StatusCode::SERVICE_UNAVAILABLE,
     }
 }

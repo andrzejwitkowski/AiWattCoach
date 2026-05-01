@@ -14,6 +14,7 @@ mod races;
 mod same_origin;
 mod settings;
 mod user_auth;
+mod wahoo;
 mod workout_summary;
 
 use std::path::PathBuf;
@@ -57,7 +58,6 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
 
     let write_log_config = EndpointLogConfig::request_only().with_max_body_bytes(10240);
     let settings_read_log_config = EndpointLogConfig::response_only().with_max_body_bytes(10240);
-
     Router::new()
         .route("/health", get(health::health_check))
         .route("/ready", get(health::readiness_check))
@@ -67,6 +67,11 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .route("/api/wahoo/callback", get(auth::finish_wahoo_connect))
         .route("/api/auth/me", get(auth::current_user))
         .route("/api/auth/logout", post(auth::logout))
+        .merge(
+            Router::new()
+                .route("/api/wahoo/webhook", post(wahoo::receive_webhook))
+                .route_layer(with_log_config(EndpointLogConfig::default())),
+        )
         .merge(Router::new().route(
             "/api/logs",
             post(logs::ingest_logs).layer(DefaultBodyLimit::max(logs::MAX_REQUEST_BODY_BYTES)),
@@ -85,6 +90,10 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
                 .route(
                     "/api/admin/completed-workouts/{user_id}/backfill-metrics",
                     post(admin::backfill_completed_workout_metrics),
+                )
+                .route(
+                    "/api/admin/wahoo/{user_id}/sync-completed-workouts",
+                    post(admin::sync_wahoo_completed_workouts),
                 )
                 .route(
                     "/api/admin/settings/{user_id}",

@@ -12,7 +12,7 @@ use crate::domain::{
     },
     settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
-        SettingsError, UserSettings, UserSettingsRepository,
+        SettingsError, UserSettings, UserSettingsRepository, WahooUserIdBackfillCandidate,
     },
     training_load::{
         build_daily_training_load_snapshots, FtpHistoryRepository, InMemoryFtpHistoryRepository,
@@ -95,6 +95,38 @@ impl UserSettingsRepository for StaticSettingsRepository {
     ) -> crate::domain::settings::BoxFuture<Result<Option<UserSettings>, SettingsError>> {
         let settings = self.settings.clone();
         Box::pin(async move { Ok(Some(settings)) })
+    }
+
+    fn find_by_wahoo_user_id(
+        &self,
+        wahoo_user_id: i64,
+    ) -> crate::domain::settings::BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let settings = self.settings.clone();
+        Box::pin(
+            async move { Ok((settings.wahoo.user_id == Some(wahoo_user_id)).then_some(settings)) },
+        )
+    }
+
+    fn list_wahoo_user_id_backfill_candidates(
+        &self,
+    ) -> crate::domain::settings::BoxFuture<Result<Vec<WahooUserIdBackfillCandidate>, SettingsError>>
+    {
+        let settings = self.settings.clone();
+        Box::pin(async move {
+            Ok((settings.wahoo.connected
+                && settings.wahoo.user_id.is_none()
+                && settings
+                    .wahoo
+                    .refresh_token
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty()))
+            .then_some(WahooUserIdBackfillCandidate {
+                user_id: settings.user_id,
+                wahoo: settings.wahoo,
+            })
+            .into_iter()
+            .collect())
+        })
     }
 
     fn upsert(

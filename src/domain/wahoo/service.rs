@@ -8,8 +8,8 @@ use std::sync::Arc;
 use super::{
     BoxFuture, WahooApiPort, WahooAuthExchange, WahooAuthStart, WahooConnectState,
     WahooConnectStateRepository, WahooCreatePlan, WahooCreateWorkout, WahooError, WahooOAuthPort,
-    WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooWorkout, WahooWorkoutList,
-    WahooWorkoutSummary,
+    WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooUser, WahooWorkout,
+    WahooWorkoutList, WahooWorkoutSummary,
 };
 
 const CONNECT_STATE_TTL_SECONDS: i64 = 600;
@@ -29,6 +29,8 @@ pub trait WahooUseCases: Send + Sync {
     ) -> BoxFuture<Result<WahooAuthExchange, WahooError>>;
 
     fn ensure_token(&self, user_id: &str) -> BoxFuture<Result<WahooToken, WahooError>>;
+
+    fn get_authenticated_user(&self, user_id: &str) -> BoxFuture<Result<WahooUser, WahooError>>;
 
     fn list_workouts(
         &self,
@@ -107,6 +109,10 @@ where
 
     fn ensure_token(&self, user_id: &str) -> BoxFuture<Result<WahooToken, WahooError>> {
         self.as_ref().ensure_token(user_id)
+    }
+
+    fn get_authenticated_user(&self, user_id: &str) -> BoxFuture<Result<WahooUser, WahooError>> {
+        self.as_ref().get_authenticated_user(user_id)
     }
 
     fn list_workouts(
@@ -243,9 +249,25 @@ where
         &self,
         user_id: &str,
         token: WahooToken,
+        wahoo_user_id: Option<i64>,
         mark_connection_updated: bool,
     ) -> Result<WahooToken, WahooError> {
         let mut settings = self.get_or_create_settings(user_id).await?;
+        let resolved_wahoo_user_id = wahoo_user_id.or(settings.wahoo.user_id);
+        if let Some(wahoo_user_id) = resolved_wahoo_user_id {
+            if let Some(existing_settings) = self
+                .settings_repository
+                .find_by_wahoo_user_id(wahoo_user_id)
+                .await
+                .map_err(map_settings_error)?
+            {
+                if existing_settings.user_id != user_id {
+                    return Err(WahooError::Repository(format!(
+                        "Wahoo user id {wahoo_user_id} is already connected to another user"
+                    )));
+                }
+            }
+        }
         let connection_updated_at_epoch_seconds = if mark_connection_updated {
             Some(self.clock.now_epoch_seconds())
         } else {
@@ -255,6 +277,7 @@ where
             access_token: Some(token.access_token.clone()),
             refresh_token: Some(token.refresh_token.clone()),
             expires_at_epoch_seconds: Some(token.expires_at_epoch_seconds),
+            user_id: resolved_wahoo_user_id,
             connected: true,
             updated_at_epoch_seconds: connection_updated_at_epoch_seconds,
         };
@@ -304,7 +327,13 @@ where
             .filter(|saved| !saved.is_expired(now))
             .ok_or(WahooError::InvalidConnectState)?;
         let token = self.client.exchange_code(code).await?;
-        let token = self.persist_token(&state.user_id, token, true).await?;
+        let wahoo_user = self
+            .client
+            .get_authenticated_user(&token.access_token)
+            .await?;
+        let token = self
+            .persist_token(&state.user_id, token, Some(wahoo_user.id), true)
+            .await?;
 
         Ok(WahooAuthExchange {
             redirect_to: sanitize_return_to(state.return_to)
@@ -334,7 +363,15 @@ where
 
         let refresh_token = wahoo.refresh_token.ok_or(WahooError::NotConnected)?;
         let token = self.client.refresh_token(&refresh_token).await?;
-        self.persist_token(user_id, token, false).await
+        self.persist_token(user_id, token, wahoo.user_id, false)
+            .await
+    }
+
+    async fn get_authenticated_user(&self, user_id: &str) -> Result<WahooUser, WahooError> {
+        let token = self.ensure_token(user_id).await?;
+        self.client
+            .get_authenticated_user(&token.access_token)
+            .await
     }
 
     async fn list_workouts(
@@ -476,6 +513,12 @@ where
         let service = self.clone();
         let user_id = user_id.to_string();
         Box::pin(async move { service.ensure_token(&user_id).await })
+    }
+
+    fn get_authenticated_user(&self, user_id: &str) -> BoxFuture<Result<WahooUser, WahooError>> {
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move { service.get_authenticated_user(&user_id).await })
     }
 
     fn list_workouts(
