@@ -9,5 +9,5 @@ pub use model::{
     CyclingSettings, IntervalsConfig, SettingsError, UserSettings, WahooConfig, Weekday,
 };
 pub use noop_repository::NoopUserSettingsRepository;
-pub use ports::{BoxFuture, UserSettingsRepository};
+pub use ports::{BoxFuture, UserSettingsRepository, WahooUserIdBackfillCandidate};
 pub use service::{UserSettingsService, UserSettingsUseCases};

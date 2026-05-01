@@ -10,8 +10,8 @@ macro_rules! delegate {
 use super::{client::WahooOAuthClient, dev_client::DevWahooOAuthClient};
 use crate::domain::wahoo::{
     BoxFuture, WahooApiPort, WahooCreatePlan, WahooCreateWorkout, WahooError, WahooOAuthPort,
-    WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooWorkout, WahooWorkoutList,
-    WahooWorkoutSummary,
+    WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooUser, WahooWorkout,
+    WahooWorkoutList, WahooWorkoutSummary,
 };
 
 #[derive(Clone)]
@@ -83,6 +83,13 @@ impl WahooApiPort for WahooOAuthAdapter {
         workout_id: i64,
     ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
         delegate!(self, get_workout_summary(access_token, workout_id))
+    }
+
+    fn get_authenticated_user(
+        &self,
+        access_token: &str,
+    ) -> BoxFuture<Result<WahooUser, WahooError>> {
+        delegate!(self, get_authenticated_user(access_token))
     }
 
     fn create_workout(

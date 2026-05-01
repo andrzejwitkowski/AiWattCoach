@@ -1,6 +1,6 @@
 use super::*;
 
-use aiwattcoach::domain::settings::Weekday;
+use aiwattcoach::domain::settings::{WahooUserIdBackfillCandidate, Weekday};
 
 #[derive(Clone, Default)]
 pub(crate) struct InMemoryUserSettingsRepository {
@@ -24,6 +24,48 @@ impl UserSettingsRepository for InMemoryUserSettingsRepository {
         let settings = self.settings.clone();
         let user_id = user_id.to_string();
         Box::pin(async move { Ok(settings.lock().unwrap().get(&user_id).cloned()) })
+    }
+
+    fn find_by_wahoo_user_id(
+        &self,
+        wahoo_user_id: i64,
+    ) -> SettingsBoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let settings = self.settings.clone();
+        Box::pin(async move {
+            Ok(settings
+                .lock()
+                .unwrap()
+                .values()
+                .find(|settings| settings.wahoo.user_id == Some(wahoo_user_id))
+                .cloned())
+        })
+    }
+
+    fn list_wahoo_user_id_backfill_candidates(
+        &self,
+    ) -> SettingsBoxFuture<Result<Vec<WahooUserIdBackfillCandidate>, SettingsError>> {
+        let settings = self.settings.clone();
+        Box::pin(async move {
+            Ok(settings
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|settings| {
+                    settings.wahoo.connected
+                        && settings.wahoo.user_id.is_none()
+                        && settings
+                            .wahoo
+                            .refresh_token
+                            .as_deref()
+                            .is_some_and(|value| !value.trim().is_empty())
+                })
+                .cloned()
+                .map(|settings| WahooUserIdBackfillCandidate {
+                    user_id: settings.user_id,
+                    wahoo: settings.wahoo,
+                })
+                .collect())
+        })
     }
 
     fn upsert(

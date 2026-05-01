@@ -2,7 +2,8 @@ use std::{future::Future, pin::Pin};
 
 use super::{
     WahooConnectState, WahooCreatePlan, WahooCreateWorkout, WahooError, WahooPlan, WahooToken,
-    WahooUpdatePlan, WahooUpdateWorkout, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+    WahooUpdatePlan, WahooUpdateWorkout, WahooUser, WahooWorkout, WahooWorkoutList,
+    WahooWorkoutSummary,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
@@ -63,6 +64,11 @@ pub trait WahooApiPort: Clone + Send + Sync + 'static {
         access_token: &str,
         workout_id: i64,
     ) -> BoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>>;
+
+    fn get_authenticated_user(
+        &self,
+        access_token: &str,
+    ) -> BoxFuture<Result<WahooUser, WahooError>>;
 
     fn create_workout(
         &self,

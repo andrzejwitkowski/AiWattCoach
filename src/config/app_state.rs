@@ -21,6 +21,7 @@ use crate::domain::races::RaceUseCases;
 use crate::domain::settings::UserSettingsUseCases;
 use crate::domain::training_load::TrainingLoadDashboardReadUseCases;
 use crate::domain::wahoo::WahooUseCases;
+use crate::domain::wahoo::WahooWebhookUseCases;
 use crate::domain::workout_summary::WorkoutSummaryUseCases;
 
 #[derive(Clone)]
@@ -38,6 +39,7 @@ pub struct AppState {
     pub completed_workout_admin_service: Option<Arc<dyn CompletedWorkoutAdminUseCases>>,
     pub intervals_service: Option<Arc<dyn IntervalsUseCases>>,
     pub wahoo_service: Option<Arc<dyn WahooUseCases>>,
+    pub wahoo_webhook_service: Option<Arc<dyn WahooWebhookUseCases>>,
     pub race_service: Option<Arc<dyn RaceUseCases>>,
     pub settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     pub training_load_dashboard_service: Option<Arc<dyn TrainingLoadDashboardReadUseCases>>,
@@ -117,6 +119,7 @@ impl AppState {
             completed_workout_admin_service: None,
             intervals_service: None,
             wahoo_service: None,
+            wahoo_webhook_service: None,
             race_service: None,
             settings_service: None,
             training_load_dashboard_service: None,
@@ -262,6 +265,14 @@ impl AppState {
 
     pub fn with_wahoo_service(mut self, wahoo_service: Arc<dyn WahooUseCases>) -> Self {
         self.wahoo_service = Some(wahoo_service);
+        self
+    }
+
+    pub fn with_wahoo_webhook_service(
+        mut self,
+        wahoo_webhook_service: Arc<dyn WahooWebhookUseCases>,
+    ) -> Self {
+        self.wahoo_webhook_service = Some(wahoo_webhook_service);
         self
     }
 

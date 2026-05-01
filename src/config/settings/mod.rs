@@ -88,7 +88,7 @@ impl Settings {
 }
 
 fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
-    const KEYS: [&str; 29] = [
+    const KEYS: [&str; 30] = [
         "APP_NAME",
         "SERVER_HOST",
         "SERVER_PORT",
@@ -103,6 +103,7 @@ fn load_env_values() -> Result<BTreeMap<String, String>, SettingsError> {
         "WAHOO_OAUTH_AUTHORIZE_URL",
         "WAHOO_OAUTH_TOKEN_URL",
         "WAHOO_OAUTH_SCOPE",
+        "WAHOO_WEBHOOK_TOKEN",
         "DEV_AUTH_ENABLED",
         "DEV_AUTH_GOOGLE_SUBJECT",
         "DEV_AUTH_EMAIL",

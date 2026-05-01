@@ -11,13 +11,13 @@ use crate::{
     adapters::wahoo::dto::{
         WahooCreateWorkoutRequest, WahooCreateWorkoutRequestBody, WahooFileReferenceResponse,
         WahooPlanResponse, WahooTokenResponse, WahooUpdateWorkoutRequest,
-        WahooUpdateWorkoutRequestBody, WahooWorkoutListResponse, WahooWorkoutResponse,
-        WahooWorkoutSummaryResponse,
+        WahooUpdateWorkoutRequestBody, WahooUserResponse, WahooWorkoutListResponse,
+        WahooWorkoutResponse, WahooWorkoutSummaryResponse,
     },
     domain::wahoo::{
         BoxFuture, WahooApiPort, WahooCreatePlan, WahooCreateWorkout, WahooError,
         WahooFileReference, WahooOAuthPort, WahooPlan, WahooToken, WahooUpdatePlan,
-        WahooUpdateWorkout, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+        WahooUpdateWorkout, WahooUser, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
     },
 };
 
@@ -281,6 +281,10 @@ fn map_workout(workout: WahooWorkoutResponse) -> WahooWorkout {
     }
 }
 
+fn map_user(user: WahooUserResponse) -> WahooUser {
+    WahooUser { id: user.id }
+}
+
 fn summarize_error_body(body: &[u8]) -> String {
     let fallback = || {
         let digest = sha2::Sha256::digest(body);
@@ -542,6 +546,20 @@ impl WahooApiPort for WahooOAuthClient {
                 Err(WahooError::NotFound) => Ok(None),
                 Err(error) => Err(error),
             }
+        })
+    }
+
+    fn get_authenticated_user(
+        &self,
+        access_token: &str,
+    ) -> BoxFuture<Result<WahooUser, WahooError>> {
+        let client = self.clone();
+        let access_token = access_token.to_string();
+        Box::pin(async move {
+            let payload: WahooUserResponse = client
+                .execute_api_get(client.bearer_request(client.api_url("/v1/user"), &access_token))
+                .await?;
+            Ok(map_user(payload))
         })
     }
 

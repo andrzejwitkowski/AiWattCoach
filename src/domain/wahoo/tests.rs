@@ -6,14 +6,14 @@ use std::{
 use super::{
     WahooApiPort, WahooConnectState, WahooConnectStateRepository, WahooCreatePlan,
     WahooCreateWorkout, WahooError, WahooOAuthPort, WahooPlan, WahooService, WahooToken,
-    WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooWorkout, WahooWorkoutList,
+    WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooUser, WahooWorkout, WahooWorkoutList,
     WahooWorkoutSummary,
 };
 use crate::domain::{
     identity::{Clock, IdGenerator},
     settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
-        SettingsError, UserSettings, UserSettingsRepository,
+        SettingsError, UserSettings, UserSettingsRepository, WahooUserIdBackfillCandidate,
     },
 };
 
@@ -48,6 +48,49 @@ impl UserSettingsRepository for InMemorySettingsRepository {
         let items = self.items.clone();
         let user_id = user_id.to_string();
         Box::pin(async move { Ok(items.lock().unwrap().get(&user_id).cloned()) })
+    }
+
+    fn find_by_wahoo_user_id(
+        &self,
+        wahoo_user_id: i64,
+    ) -> crate::domain::settings::BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let items = self.items.clone();
+        Box::pin(async move {
+            Ok(items
+                .lock()
+                .unwrap()
+                .values()
+                .find(|settings| settings.wahoo.user_id == Some(wahoo_user_id))
+                .cloned())
+        })
+    }
+
+    fn list_wahoo_user_id_backfill_candidates(
+        &self,
+    ) -> crate::domain::settings::BoxFuture<Result<Vec<WahooUserIdBackfillCandidate>, SettingsError>>
+    {
+        let items = self.items.clone();
+        Box::pin(async move {
+            Ok(items
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|settings| {
+                    settings.wahoo.connected
+                        && settings.wahoo.user_id.is_none()
+                        && settings
+                            .wahoo
+                            .refresh_token
+                            .as_deref()
+                            .is_some_and(|value| !value.trim().is_empty())
+                })
+                .cloned()
+                .map(|settings| WahooUserIdBackfillCandidate {
+                    user_id: settings.user_id,
+                    wahoo: settings.wahoo,
+                })
+                .collect())
+        })
     }
 
     fn upsert(
@@ -246,6 +289,13 @@ impl WahooApiPort for TestOAuth {
         Box::pin(async { Ok(None) })
     }
 
+    fn get_authenticated_user(
+        &self,
+        _access_token: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<WahooUser, WahooError>> {
+        Box::pin(async { Ok(WahooUser { id: 60_462 }) })
+    }
+
     fn create_workout(
         &self,
         _access_token: &str,
@@ -349,4 +399,42 @@ async fn find_plan_by_external_id_rejects_duplicate_external_ids() {
         error,
         WahooError::External("Wahoo returned 2 plans for external_id 'plan-1'".to_string())
     );
+}
+
+#[tokio::test]
+async fn finish_connect_persists_wahoo_user_id() {
+    let settings = InMemorySettingsRepository::default();
+    let connect_states = InMemoryConnectStates::default();
+    let oauth = TestOAuth::default();
+    let service = WahooService::new(
+        settings.clone(),
+        connect_states.clone(),
+        oauth,
+        TestClock,
+        TestIds,
+    );
+
+    connect_states
+        .create(WahooConnectState::new(
+            "state-1".to_string(),
+            "user-1".to_string(),
+            Some("/settings".to_string()),
+            200,
+            100,
+        ))
+        .await
+        .unwrap();
+
+    service
+        .finish_connect("user-1", "state-1", "oauth-code")
+        .await
+        .unwrap();
+
+    let stored = settings
+        .find_by_user_id("user-1")
+        .await
+        .unwrap()
+        .expect("settings should be stored");
+
+    assert_eq!(stored.wahoo.user_id, Some(60_462));
 }

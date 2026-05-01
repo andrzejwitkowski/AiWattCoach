@@ -4,6 +4,10 @@ use aiwattcoach::domain::completed_workouts::{
     BackfillCompletedWorkoutDetailsResult, BackfillCompletedWorkoutMetricsResult,
     CompletedWorkoutAdminUseCases, CompletedWorkoutError,
 };
+use aiwattcoach::domain::wahoo::{
+    ManualWahooSyncResult, WahooWebhookError, WahooWebhookOutcome, WahooWebhookUseCases,
+    WahooWorkout,
+};
 
 use super::app::BoxFuture;
 
@@ -33,6 +37,17 @@ pub(crate) struct TestCompletedWorkoutAdminService {
     error: Arc<Mutex<Option<String>>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ManualWahooSyncCall {
+    pub(crate) user_id: String,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TestWahooWebhookService {
+    manual_sync_calls: Arc<Mutex<Vec<ManualWahooSyncCall>>>,
+    error: Arc<Mutex<Option<WahooWebhookError>>>,
+}
+
 impl TestCompletedWorkoutAdminService {
     pub(crate) fn failing(message: &str) -> Self {
         Self {
@@ -48,6 +63,19 @@ impl TestCompletedWorkoutAdminService {
 
     pub(crate) fn metric_calls(&self) -> Vec<MetricsBackfillCall> {
         self.metric_calls.lock().unwrap().clone()
+    }
+}
+
+impl TestWahooWebhookService {
+    pub(crate) fn failing(error: WahooWebhookError) -> Self {
+        Self {
+            manual_sync_calls: Arc::new(Mutex::new(Vec::new())),
+            error: Arc::new(Mutex::new(Some(error))),
+        }
+    }
+
+    pub(crate) fn manual_sync_calls(&self) -> Vec<ManualWahooSyncCall> {
+        self.manual_sync_calls.lock().unwrap().clone()
     }
 }
 
@@ -109,6 +137,37 @@ impl CompletedWorkoutAdminUseCases for TestCompletedWorkoutAdminService {
                 skipped: 0,
                 failed: 0,
                 recomputed_from: oldest,
+            })
+        })
+    }
+}
+
+impl WahooWebhookUseCases for TestWahooWebhookService {
+    fn import_webhook_workout(
+        &self,
+        _webhook_token: &str,
+        _wahoo_user_id: i64,
+        _workout: WahooWorkout,
+    ) -> BoxFuture<Result<WahooWebhookOutcome, WahooWebhookError>> {
+        Box::pin(async { Ok(WahooWebhookOutcome::Ignored) })
+    }
+
+    fn sync_completed_workouts_for_user(
+        &self,
+        user_id: &str,
+    ) -> BoxFuture<Result<ManualWahooSyncResult, WahooWebhookError>> {
+        let calls = self.manual_sync_calls.clone();
+        let user_id = user_id.to_string();
+        let error = self.error.lock().unwrap().clone();
+        Box::pin(async move {
+            calls.lock().unwrap().push(ManualWahooSyncCall { user_id });
+            if let Some(error) = error {
+                return Err(error);
+            }
+            Ok(ManualWahooSyncResult {
+                scanned: 3,
+                imported: 2,
+                skipped: 1,
             })
         })
     }

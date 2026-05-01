@@ -14,7 +14,7 @@ use crate::domain::llm::LlmProvider;
 use crate::domain::settings::{
     validation, AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, BoxFuture,
     CyclingSettings, IntervalsConfig, SettingsError, UserSettings, UserSettingsRepository,
-    WahooConfig, Weekday,
+    WahooConfig, WahooUserIdBackfillCandidate, Weekday,
 };
 
 #[derive(Clone)]
@@ -71,6 +71,8 @@ struct WahooDocument {
     #[serde(default)]
     expires_at: Option<DateTime>,
     #[serde(default)]
+    user_id: Option<i64>,
+    #[serde(default)]
     connected: bool,
     updated_at_epoch_seconds: Option<i64>,
     #[serde(default)]
@@ -84,6 +86,7 @@ impl std::fmt::Debug for WahooDocument {
             .field("refresh_token", &RedactedOptionalText(&self.refresh_token))
             .field("expires_at_epoch_seconds", &self.expires_at_epoch_seconds)
             .field("expires_at", &self.expires_at)
+            .field("user_id", &self.user_id)
             .field("connected", &self.connected)
             .field("updated_at_epoch_seconds", &self.updated_at_epoch_seconds)
             .field("updated_at", &self.updated_at)
@@ -91,17 +94,9 @@ impl std::fmt::Debug for WahooDocument {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct WahooPollBootstrapUser {
-    pub user_id: String,
-    pub desired_active: bool,
-    pub wahoo_updated_at_epoch_seconds: Option<i64>,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 struct WahooPollBootstrapUserDocument {
     user_id: String,
-    updated_at_epoch_seconds: Option<i64>,
     wahoo: Option<WahooPollBootstrapWahooDocument>,
 }
 
@@ -109,8 +104,8 @@ struct WahooPollBootstrapUserDocument {
 struct WahooPollBootstrapWahooDocument {
     access_token: Option<String>,
     refresh_token: Option<String>,
+    user_id: Option<i64>,
     connected: Option<bool>,
-    updated_at_epoch_seconds: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -238,15 +233,29 @@ impl MongoUserSettingsRepository {
 
     pub async fn ensure_indexes(&self) -> Result<(), SettingsError> {
         self.collection
-            .create_indexes([IndexModel::builder()
-                .keys(doc! { "user_id": 1 })
-                .options(
-                    IndexOptions::builder()
-                        .name("user_settings_user_id_unique".to_string())
-                        .unique(true)
-                        .build(),
-                )
-                .build()])
+            .create_indexes([
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("user_settings_user_id_unique".to_string())
+                            .unique(true)
+                            .build(),
+                    )
+                    .build(),
+                IndexModel::builder()
+                    .keys(doc! { "wahoo.user_id": 1 })
+                    .options(
+                        IndexOptions::builder()
+                            .name("user_settings_wahoo_user_id_unique".to_string())
+                            .unique(true)
+                            .partial_filter_expression(doc! {
+                                "wahoo.user_id": { "$type": ["long", "int"] }
+                            })
+                            .build(),
+                    )
+                    .build(),
+            ])
             .await
             .map_err(|e| SettingsError::Repository(e.to_string()))?;
         Ok(())
@@ -304,25 +313,24 @@ impl MongoUserSettingsRepository {
             .collect())
     }
 
-    pub async fn list_wahoo_poll_bootstrap_users(
+    pub async fn list_wahoo_user_id_backfill_candidates(
         &self,
-        user_ids: &[String],
-    ) -> Result<Vec<WahooPollBootstrapUser>, SettingsError> {
-        let poll_user_ids = user_ids
-            .iter()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>();
+    ) -> Result<Vec<WahooUserIdBackfillCandidate>, SettingsError> {
         let collection = self
             .collection
             .clone_with_type::<WahooPollBootstrapUserDocument>();
-        let filter = build_wahoo_poll_bootstrap_filter(user_ids);
         let documents = collection
-            .find(filter)
+            .find(doc! {
+                "$and": [
+                    { "wahoo.refresh_token": { "$type": "string", "$regex": "\\S" } },
+                    { "wahoo.connected": { "$ne": false } },
+                    { "wahoo.user_id": null },
+                ]
+            })
             .projection(doc! {
                 "_id": 0,
                 "user_id": 1,
                 "wahoo": 1,
-                "updated_at_epoch_seconds": 1,
             })
             .sort(doc! { "user_id": 1 })
             .await
@@ -333,27 +341,52 @@ impl MongoUserSettingsRepository {
 
         Ok(documents
             .into_iter()
-            .filter(|document| {
-                if poll_user_ids.contains(&document.user_id) {
-                    return true;
-                }
-
-                should_include_non_requested_wahoo_bootstrap_user(document)
-            })
-            .map(|document| {
-                let desired_active = document
-                    .wahoo
-                    .as_ref()
-                    .is_some_and(is_bootstrap_active_wahoo);
-                let wahoo_updated_at_epoch_seconds = bootstrap_wahoo_updated_at(&document);
-
-                WahooPollBootstrapUser {
+            .filter_map(|document| {
+                let wahoo = document.wahoo?;
+                Some(WahooUserIdBackfillCandidate {
                     user_id: document.user_id,
-                    desired_active,
-                    wahoo_updated_at_epoch_seconds,
-                }
+                    wahoo: WahooConfig {
+                        access_token: wahoo.access_token,
+                        refresh_token: wahoo.refresh_token,
+                        expires_at_epoch_seconds: None,
+                        user_id: wahoo.user_id,
+                        connected: wahoo.connected.unwrap_or(true),
+                        updated_at_epoch_seconds: None,
+                    },
+                })
             })
             .collect())
+    }
+
+    pub async fn backfill_wahoo_user_id(
+        &self,
+        user_id: &str,
+        wahoo_user_id: i64,
+        updated_at_epoch_seconds: i64,
+    ) -> Result<(), SettingsError> {
+        self.collection
+            .update_one(
+                doc! {
+                    "user_id": user_id,
+                    "$or": [
+                        { "wahoo.user_id": null },
+                        { "wahoo.user_id": wahoo_user_id },
+                    ]
+                },
+                doc! {
+                    "$set": {
+                        "wahoo.user_id": wahoo_user_id,
+                        "wahoo.updated_at_epoch_seconds": updated_at_epoch_seconds,
+                        "wahoo.updated_at": optional_epoch_seconds_to_bson_datetime(
+                            Some(updated_at_epoch_seconds),
+                            "wahoo.updated_at"
+                        ).map_err(SettingsError::Repository)?,
+                    }
+                },
+            )
+            .await
+            .map_err(|error| SettingsError::Repository(error.to_string()))?;
+        Ok(())
     }
 }
 
@@ -376,35 +409,11 @@ fn should_include_non_requested_bootstrap_user(
         .is_some_and(is_bootstrap_active_intervals)
 }
 
-fn is_bootstrap_active_wahoo(wahoo: &WahooPollBootstrapWahooDocument) -> bool {
-    has_non_empty(wahoo.refresh_token.as_deref())
-        && wahoo.connected != Some(false)
-        && (has_non_empty(wahoo.access_token.as_deref())
-            || has_non_empty(wahoo.refresh_token.as_deref()))
-}
-
-fn should_include_non_requested_wahoo_bootstrap_user(
-    document: &WahooPollBootstrapUserDocument,
-) -> bool {
-    document
-        .wahoo
-        .as_ref()
-        .is_some_and(is_bootstrap_active_wahoo)
-}
-
 fn bootstrap_intervals_updated_at(document: &IntervalsPollBootstrapUserDocument) -> Option<i64> {
     document
         .intervals
         .as_ref()
         .and_then(|intervals| intervals.updated_at_epoch_seconds)
-        .or(document.updated_at_epoch_seconds)
-}
-
-fn bootstrap_wahoo_updated_at(document: &WahooPollBootstrapUserDocument) -> Option<i64> {
-    document
-        .wahoo
-        .as_ref()
-        .and_then(|wahoo| wahoo.updated_at_epoch_seconds)
         .or(document.updated_at_epoch_seconds)
 }
 
@@ -414,21 +423,6 @@ fn build_intervals_poll_bootstrap_filter(user_ids: &[String]) -> mongodb::bson::
             { "intervals.api_key": { "$type": "string", "$regex": "\\S" } },
             { "intervals.athlete_id": { "$type": "string", "$regex": "\\S" } },
             { "intervals.connected": { "$ne": false } },
-        ]
-    }];
-
-    if !user_ids.is_empty() {
-        filter_clauses.push(doc! { "user_id": { "$in": user_ids } });
-    }
-
-    doc! { "$or": filter_clauses }
-}
-
-fn build_wahoo_poll_bootstrap_filter(user_ids: &[String]) -> mongodb::bson::Document {
-    let mut filter_clauses = vec![doc! {
-        "$and": [
-            { "wahoo.refresh_token": { "$type": "string", "$regex": "\\S" } },
-            { "wahoo.connected": { "$ne": false } },
         ]
     }];
 
@@ -453,6 +447,41 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                 .map_err(|e| SettingsError::Repository(e.to_string()))?;
             doc.map(map_document_to_domain).transpose()
         })
+    }
+
+    fn find_by_wahoo_user_id(
+        &self,
+        wahoo_user_id: i64,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        let collection = self.collection.clone();
+        Box::pin(async move {
+            let mut documents = collection
+                .find(doc! { "wahoo.user_id": wahoo_user_id })
+                .await
+                .map_err(|e| SettingsError::Repository(e.to_string()))?;
+            let first = documents
+                .try_next()
+                .await
+                .map_err(|e| SettingsError::Repository(e.to_string()))?;
+            let second = documents
+                .try_next()
+                .await
+                .map_err(|e| SettingsError::Repository(e.to_string()))?;
+            if second.is_some() {
+                return Err(SettingsError::Repository(format!(
+                    "multiple users are mapped to Wahoo user id {wahoo_user_id}"
+                )));
+            }
+
+            first.map(map_document_to_domain).transpose()
+        })
+    }
+
+    fn list_wahoo_user_id_backfill_candidates(
+        &self,
+    ) -> BoxFuture<Result<Vec<WahooUserIdBackfillCandidate>, SettingsError>> {
+        let repository = self.clone();
+        Box::pin(async move { repository.list_wahoo_user_id_backfill_candidates().await })
     }
 
     fn upsert(&self, settings: UserSettings) -> BoxFuture<Result<UserSettings, SettingsError>> {
@@ -662,6 +691,7 @@ fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, Setting
                 doc.wahoo.expires_at,
                 doc.wahoo.expires_at_epoch_seconds,
             ),
+            user_id: doc.wahoo.user_id,
             connected: doc.wahoo.connected,
             updated_at_epoch_seconds: resolve_optional_epoch_seconds(
                 doc.wahoo.updated_at,
@@ -716,6 +746,7 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
                 "wahoo.expires_at",
             )
             .expect("wahoo.expires_at should fit BSON DateTime"),
+            user_id: settings.wahoo.user_id,
             connected: settings.wahoo.connected,
             updated_at_epoch_seconds: settings.wahoo.updated_at_epoch_seconds,
             updated_at: optional_epoch_seconds_to_bson_datetime(
@@ -895,7 +926,7 @@ mod tests {
         map_document_availability_to_domain, map_domain_availability_to_document, AiAgentsDocument,
         IntervalsPollBootstrapIntervalsDocument, IntervalsPollBootstrapUser,
         IntervalsPollBootstrapUserDocument, MongoUserSettingsRepository, OptionsDocument,
-        SettingsDocument,
+        SettingsDocument, WahooDocument,
     };
     use crate::domain::settings::{
         AvailabilityDay, AvailabilitySettings, UserSettingsRepository, Weekday,
@@ -929,6 +960,7 @@ mod tests {
                 refresh_token: Some("wahoo-refresh-token".to_string()),
                 expires_at_epoch_seconds: Some(123),
                 expires_at: Some(DateTime::from_millis(123_000)),
+                user_id: Some(60_462),
                 updated_at_epoch_seconds: Some(456),
                 updated_at: Some(DateTime::from_millis(456_000)),
                 connected: true,
@@ -1623,5 +1655,149 @@ mod tests {
             .unwrap()
             .as_nanos();
         format!("{prefix}-{unique}")
+    }
+
+    #[tokio::test]
+    async fn ensure_indexes_creates_unique_wahoo_user_id_index() {
+        let Some(client) = test_mongo_client_or_skip().await else {
+            return;
+        };
+        let database_name = unique_test_database_name("mongo-settings-wahoo-user-id-index");
+        let repository = MongoUserSettingsRepository::new(client.clone(), &database_name);
+
+        repository.ensure_indexes().await.unwrap();
+
+        let index_names = client
+            .database(&database_name)
+            .collection::<mongodb::bson::Document>("user_settings")
+            .list_index_names()
+            .await
+            .unwrap();
+        assert!(index_names.contains(&"user_settings_wahoo_user_id_unique".to_string()));
+
+        client.database(&database_name).drop().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn find_by_wahoo_user_id_rejects_duplicate_mappings() {
+        let Some(client) = test_mongo_client_or_skip().await else {
+            return;
+        };
+        let database_name = unique_test_database_name("mongo-settings-wahoo-user-id-duplicates");
+        let repository = MongoUserSettingsRepository::new(client.clone(), &database_name);
+        let collection = client
+            .database(&database_name)
+            .collection::<SettingsDocument>("user_settings");
+
+        collection
+            .insert_many([
+                SettingsDocument {
+                    wahoo: WahooDocument {
+                        user_id: Some(60_462),
+                        refresh_token: Some("refresh-1".to_string()),
+                        connected: true,
+                        ..WahooDocument::default()
+                    },
+                    ..build_settings_document("user-1", 10)
+                },
+                SettingsDocument {
+                    wahoo: WahooDocument {
+                        user_id: Some(60_462),
+                        refresh_token: Some("refresh-2".to_string()),
+                        connected: true,
+                        ..WahooDocument::default()
+                    },
+                    ..build_settings_document("user-2", 20)
+                },
+            ])
+            .await
+            .unwrap();
+
+        let error = repository
+            .find_by_wahoo_user_id(60_462)
+            .await
+            .expect_err("duplicate wahoo user id should be rejected");
+        assert!(error
+            .to_string()
+            .contains("multiple users are mapped to Wahoo user id 60462"));
+
+        client.database(&database_name).drop().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn backfill_wahoo_user_id_updates_only_wahoo_fields() {
+        let Some(client) = test_mongo_client_or_skip().await else {
+            return;
+        };
+        let database_name = unique_test_database_name("mongo-settings-wahoo-user-id-backfill");
+        let repository = MongoUserSettingsRepository::new(client.clone(), &database_name);
+        let collection = client
+            .database(&database_name)
+            .collection::<Document>("user_settings");
+
+        collection
+            .insert_one(doc! {
+                "user_id": "user-1",
+                "ai_agents": {},
+                "intervals": {
+                    "api_key": "api-key",
+                    "athlete_id": "athlete-1",
+                    "connected": true,
+                    "updated_at_epoch_seconds": 123,
+                },
+                "wahoo": {
+                    "refresh_token": "refresh-token",
+                    "connected": true,
+                },
+                "options": {},
+                "availability": { "configured": false, "days": [] },
+                "cycling": {},
+                "created_at_epoch_seconds": 1,
+                "updated_at_epoch_seconds": 2,
+            })
+            .await
+            .unwrap();
+
+        repository
+            .backfill_wahoo_user_id("user-1", 60_462, 1_700_000_000)
+            .await
+            .unwrap();
+
+        let updated = collection
+            .find_one(doc! { "user_id": "user-1" })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            updated.get("updated_at_epoch_seconds").unwrap().as_i32(),
+            Some(2)
+        );
+        assert_eq!(
+            updated
+                .get_document("intervals")
+                .unwrap()
+                .get("updated_at_epoch_seconds")
+                .unwrap()
+                .as_i32(),
+            Some(123)
+        );
+        assert_eq!(
+            updated
+                .get_document("wahoo")
+                .unwrap()
+                .get_i64("user_id")
+                .unwrap(),
+            60_462
+        );
+        assert_eq!(
+            updated
+                .get_document("wahoo")
+                .unwrap()
+                .get_i64("updated_at_epoch_seconds")
+                .unwrap(),
+            1_700_000_000
+        );
+
+        client.database(&database_name).drop().await.unwrap();
     }
 }

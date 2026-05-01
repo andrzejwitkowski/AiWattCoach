@@ -377,6 +377,13 @@ impl WahooUseCases for RecordingWahooService {
         Box::pin(async { Err(WahooError::NotConnected) })
     }
 
+    fn get_authenticated_user(
+        &self,
+        _user_id: &str,
+    ) -> crate::domain::wahoo::BoxFuture<Result<crate::domain::wahoo::WahooUser, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
     fn list_workouts(
         &self,
         user_id: &str,

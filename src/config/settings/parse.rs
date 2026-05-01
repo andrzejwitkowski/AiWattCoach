@@ -80,6 +80,7 @@ pub(super) fn parse_wahoo_oauth_settings(
         .unwrap_or_else(|| DEFAULT_WAHOO_TOKEN_URL.to_string());
     let scope = optional_string_setting(values, "WAHOO_OAUTH_SCOPE")
         .unwrap_or_else(|| DEFAULT_WAHOO_SCOPE.to_string());
+    let webhook_token = optional_string_setting(values, "WAHOO_WEBHOOK_TOKEN");
 
     match (client_id, client_secret, redirect_url) {
         (None, None, None) => Ok(None),
@@ -90,6 +91,7 @@ pub(super) fn parse_wahoo_oauth_settings(
             authorize_url,
             token_url,
             scope,
+            webhook_token,
         })),
         _ => Err(SettingsError::new(
             "WAHOO_OAUTH_CLIENT_ID, WAHOO_OAUTH_CLIENT_SECRET, and WAHOO_OAUTH_REDIRECT_URL must be set together",

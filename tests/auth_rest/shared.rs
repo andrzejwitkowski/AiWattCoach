@@ -19,8 +19,9 @@ use aiwattcoach::{
     },
     domain::wahoo::{
         WahooAuthExchange, WahooAuthStart, WahooCreatePlan, WahooCreateWorkout, WahooError,
-        WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooWorkout,
-        WahooWorkoutList, WahooWorkoutSummary,
+        WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, WahooUser,
+        WahooWebhookAccepted, WahooWebhookError, WahooWebhookOutcome, WahooWebhookUseCases,
+        WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
     },
     Settings,
 };
@@ -30,6 +31,15 @@ pub(crate) type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>
 
 type BeginConnectInput = (String, Option<String>);
 type FinishConnectInput = (String, String, String);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WahooWebhookImportCall {
+    pub(crate) webhook_token: String,
+    pub(crate) wahoo_user_id: i64,
+    pub(crate) workout_id: i64,
+    pub(crate) starts: String,
+    pub(crate) has_workout_summary: bool,
+}
 
 pub(crate) const RESPONSE_LIMIT_BYTES: usize = 4 * 1024;
 
@@ -190,6 +200,35 @@ pub(crate) async fn auth_test_app_with_wahoo(
     )
 }
 
+pub(crate) async fn auth_test_app_with_wahoo_webhook(
+    identity_service: TestIdentityService,
+    wahoo_webhook_service: impl WahooWebhookUseCases + 'static,
+) -> axum::Router {
+    let settings = Settings::test_defaults();
+    let dist_dir = shared_frontend_fixture().dist_dir();
+
+    build_app_with_frontend_dist(
+        AppState::new(
+            settings.app_name,
+            settings.mongo.database,
+            test_mongo_client(&settings.mongo.uri).await,
+        )
+        .with_whitelist_rate_limiter(WhitelistRateLimiter::new(
+            usize::MAX,
+            std::time::Duration::from_secs(60),
+        ))
+        .with_identity_service(
+            std::sync::Arc::new(identity_service),
+            "aiwattcoach_session",
+            "lax",
+            false,
+            24,
+        )
+        .with_wahoo_webhook_service(std::sync::Arc::new(wahoo_webhook_service)),
+        dist_dir,
+    )
+}
+
 pub(crate) async fn auth_test_app_with_limited_whitelist_rate(
     identity_service: TestIdentityService,
     max_attempts: usize,
@@ -285,6 +324,42 @@ pub(crate) struct TestWahooService {
     pub(crate) last_ensure_user_id: Arc<Mutex<Option<String>>>,
 }
 
+#[derive(Clone)]
+pub(crate) struct TestWahooWebhookService {
+    result: Result<WahooWebhookOutcome, WahooWebhookError>,
+    import_calls: Arc<Mutex<Vec<WahooWebhookImportCall>>>,
+}
+
+impl TestWahooWebhookService {
+    pub(crate) fn accepting() -> Self {
+        Self {
+            result: Ok(WahooWebhookOutcome::Accepted(WahooWebhookAccepted {
+                user_id: "user-1".to_string(),
+                completed_workout_id: "wahoo-workout:42".to_string(),
+            })),
+            import_calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub(crate) fn unauthorized() -> Self {
+        Self {
+            result: Err(WahooWebhookError::Unauthorized),
+            import_calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub(crate) fn not_configured() -> Self {
+        Self {
+            result: Err(WahooWebhookError::NotConfigured),
+            import_calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub(crate) fn import_calls(&self) -> Vec<WahooWebhookImportCall> {
+        self.import_calls.lock().unwrap().clone()
+    }
+}
+
 impl Default for TestWahooService {
     fn default() -> Self {
         Self {
@@ -340,6 +415,10 @@ impl WahooUseCases for TestWahooService {
         *self.last_ensure_user_id.lock().unwrap() = Some(user_id.to_string());
         let result = self.ensure_result.clone();
         Box::pin(async move { result })
+    }
+
+    fn get_authenticated_user(&self, _user_id: &str) -> BoxFuture<Result<WahooUser, WahooError>> {
+        Box::pin(async move { Ok(WahooUser { id: 60_462 }) })
     }
 
     fn list_workouts(
@@ -420,6 +499,42 @@ impl WahooUseCases for TestWahooService {
 
     fn download_workout_file(&self, _file_url: &str) -> BoxFuture<Result<Vec<u8>, WahooError>> {
         Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
+impl WahooWebhookUseCases for TestWahooWebhookService {
+    fn import_webhook_workout(
+        &self,
+        webhook_token: &str,
+        wahoo_user_id: i64,
+        workout: WahooWorkout,
+    ) -> BoxFuture<Result<WahooWebhookOutcome, WahooWebhookError>> {
+        self.import_calls
+            .lock()
+            .unwrap()
+            .push(WahooWebhookImportCall {
+                webhook_token: webhook_token.to_string(),
+                wahoo_user_id,
+                workout_id: workout.id,
+                starts: workout.starts.clone(),
+                has_workout_summary: workout.workout_summary.is_some(),
+            });
+        let result = self.result.clone();
+        Box::pin(async move { result })
+    }
+
+    fn sync_completed_workouts_for_user(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<aiwattcoach::domain::wahoo::ManualWahooSyncResult, WahooWebhookError>>
+    {
+        Box::pin(async {
+            Ok(aiwattcoach::domain::wahoo::ManualWahooSyncResult {
+                scanned: 0,
+                imported: 0,
+                skipped: 0,
+            })
+        })
     }
 }
 

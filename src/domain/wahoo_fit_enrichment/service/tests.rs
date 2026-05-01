@@ -17,7 +17,8 @@ use crate::domain::{
     wahoo::{
         BoxFuture as WahooBoxFuture, WahooAuthExchange, WahooAuthStart, WahooCreatePlan,
         WahooCreateWorkout, WahooError, WahooFileReference, WahooPlan, WahooToken, WahooUpdatePlan,
-        WahooUpdateWorkout, WahooUseCases, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
+        WahooUpdateWorkout, WahooUseCases, WahooUser, WahooWorkout, WahooWorkoutList,
+        WahooWorkoutSummary,
     },
     wahoo_fit_files::{
         BoxFuture as WahooFitFileBoxFuture, WahooFitFile, WahooFitFileRepository, WahooFitFileStage,
@@ -333,6 +334,13 @@ impl WahooUseCases for FakeWahooService {
     }
 
     fn ensure_token(&self, _user_id: &str) -> WahooBoxFuture<Result<WahooToken, WahooError>> {
+        Box::pin(async { Err(WahooError::NotConnected) })
+    }
+
+    fn get_authenticated_user(
+        &self,
+        _user_id: &str,
+    ) -> WahooBoxFuture<Result<WahooUser, WahooError>> {
         Box::pin(async { Err(WahooError::NotConnected) })
     }
 

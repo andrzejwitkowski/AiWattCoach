@@ -1,6 +1,7 @@
 use super::{
-    ports::BoxFuture, AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings,
-    IntervalsConfig, SettingsError, UserSettings, UserSettingsRepository,
+    ports::{BoxFuture, WahooUserIdBackfillCandidate},
+    AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
+    SettingsError, UserSettings, UserSettingsRepository,
 };
 
 #[derive(Clone, Default)]
@@ -12,6 +13,19 @@ impl UserSettingsRepository for NoopUserSettingsRepository {
         _user_id: &str,
     ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
         Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_wahoo_user_id(
+        &self,
+        _wahoo_user_id: i64,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn list_wahoo_user_id_backfill_candidates(
+        &self,
+    ) -> BoxFuture<Result<Vec<WahooUserIdBackfillCandidate>, SettingsError>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 
     fn upsert(&self, settings: UserSettings) -> BoxFuture<Result<UserSettings, SettingsError>> {

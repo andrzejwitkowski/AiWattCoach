@@ -2,8 +2,14 @@ use std::{future::Future, pin::Pin};
 
 use super::{
     AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
-    SettingsError, UserSettings,
+    SettingsError, UserSettings, WahooConfig,
 };
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WahooUserIdBackfillCandidate {
+    pub user_id: String,
+    pub wahoo: WahooConfig,
+}
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -12,6 +18,15 @@ pub trait UserSettingsRepository: Clone + Send + Sync + 'static {
         &self,
         user_id: &str,
     ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>>;
+
+    fn find_by_wahoo_user_id(
+        &self,
+        wahoo_user_id: i64,
+    ) -> BoxFuture<Result<Option<UserSettings>, SettingsError>>;
+
+    fn list_wahoo_user_id_backfill_candidates(
+        &self,
+    ) -> BoxFuture<Result<Vec<WahooUserIdBackfillCandidate>, SettingsError>>;
 
     fn upsert(&self, settings: UserSettings) -> BoxFuture<Result<UserSettings, SettingsError>>;
 

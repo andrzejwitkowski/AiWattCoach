@@ -96,6 +96,7 @@ fn wahoo_oauth_settings_parse_when_all_values_are_present() {
         wahoo.scope,
         "email user_read user_write power_zones_read power_zones_write workouts_read workouts_write plans_read plans_write routes_read routes_write offline_data"
     );
+    assert_eq!(wahoo.webhook_token, None);
 }
 
 #[test]
@@ -125,6 +126,10 @@ fn wahoo_oauth_settings_allow_optional_endpoint_overrides() {
         "WAHOO_OAUTH_SCOPE".to_string(),
         "email offline_data custom_scope".to_string(),
     );
+    values.insert(
+        "WAHOO_WEBHOOK_TOKEN".to_string(),
+        "secret-token".to_string(),
+    );
 
     let settings = Settings::from_map(&values).expect("settings should parse");
     let wahoo = settings.auth.wahoo.expect("wahoo settings should exist");
@@ -132,6 +137,7 @@ fn wahoo_oauth_settings_allow_optional_endpoint_overrides() {
     assert_eq!(wahoo.authorize_url, "https://example.test/oauth/authorize");
     assert_eq!(wahoo.token_url, "https://example.test/oauth/token");
     assert_eq!(wahoo.scope, "email offline_data custom_scope");
+    assert_eq!(wahoo.webhook_token.as_deref(), Some("secret-token"));
 }
 
 #[test]

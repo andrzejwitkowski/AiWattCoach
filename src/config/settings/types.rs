@@ -63,6 +63,7 @@ pub struct WahooOAuthSettings {
     pub authorize_url: String,
     pub token_url: String,
     pub scope: String,
+    pub webhook_token: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -103,6 +104,10 @@ impl fmt::Debug for WahooOAuthSettings {
             .field("authorize_url", &self.authorize_url)
             .field("token_url", &self.token_url)
             .field("scope", &self.scope)
+            .field(
+                "webhook_token",
+                &self.webhook_token.as_ref().map(|_| "<redacted>"),
+            )
             .finish()
     }
 }
