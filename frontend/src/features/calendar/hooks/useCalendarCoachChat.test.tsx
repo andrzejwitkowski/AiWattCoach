@@ -5,10 +5,10 @@ import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import { buildCalendarCoachWebSocketUrl, useCalendarCoachChat } from './useCalendarCoachChat';
 
 const coachApi = {
-  getCurrentCalendarCoachConversation: vi.fn<() => Promise<ReturnType<typeof coachApi.getCurrentCalendarCoachConversation>>>(),
-  startNewCalendarCoachConversation: vi.fn<() => Promise<ReturnType<typeof coachApi.startNewCalendarCoachConversation>>>(),
-  getCalendarCoachConversation: vi.fn<(id: string) => Promise<ReturnType<typeof coachApi.getCalendarCoachConversation>>>(),
-  sendCalendarCoachMessage: vi.fn<(id: string, payload: unknown) => Promise<ReturnType<typeof coachApi.sendCalendarCoachMessage>>>(),
+  getCurrentCalendarCoachConversation: vi.fn(),
+  startNewCalendarCoachConversation: vi.fn(),
+  getCalendarCoachConversation: vi.fn(),
+  sendCalendarCoachMessage: vi.fn(),
 };
 
 vi.mock('../api/calendar', () => ({
