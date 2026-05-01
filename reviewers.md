@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-01 | user | split oversized Wahoo webhook module
+
+- Problem: `src/domain/wahoo/webhook.rs` had grown into a large mixed production-plus-test file, which violated the repo guidance to keep modules small and reviewable and made future changes harder to reason about.
+- Fix: converted `src/domain/wahoo/webhook.rs` into a directory module `src/domain/wahoo/webhook/` with `mod.rs` for production code and `tests.rs` for the existing unit tests, keeping behavior and public exports unchanged while shrinking the runtime module substantially.
+- Prevention: when a domain module starts mixing core workflow code with large embedded test scaffolding, split tests into sibling module files before adding more behavior. Prefer directory modules once a file is approaching the repo's size limits.
+
 ### 2026-05-01 | Copilot internal review | Wahoo webhook rollout fourth follow-up
 
 - Problem: the manual Wahoo admin sync still exposed a `failed` field in both `ManualWahooSyncResult` and the REST response even though the implementation is fail-fast. On every successful path the field was always `0`, so the contract implied partial-failure accounting that the code did not actually provide.
