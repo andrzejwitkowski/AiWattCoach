@@ -1,6 +1,9 @@
+mod context_prelude;
 mod error;
 mod model;
 mod ports;
+
+pub(crate) use context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
 
 pub use error::LlmError;
 pub use model::{

@@ -885,7 +885,7 @@ fn approximate_token_usage(value: &str) -> usize {
 fn calendar_coach_system_prompt() -> String {
     format!(
         "{CALENDAR_COACH_SYSTEM_PROMPT_BASE} {}",
-        crate::adapters::llm::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND,
+        crate::domain::llm::PACKED_TRAINING_CONTEXT_LEGEND,
     )
 }
 

@@ -82,7 +82,7 @@ const messageFixture = {
 };
 
 afterEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   FakeWebSocket.instances = [];
   FakeWebSocket.failNextConnection = false;
   global.WebSocket = originalWebSocket;

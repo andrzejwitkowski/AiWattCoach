@@ -27,7 +27,7 @@ export const calendarCoachConversationResponseSchema = z.object({
 });
 
 export const calendarCoachSendMessageRequestSchema = z.object({
-  content: z.string().trim().min(1),
+  content: z.string().trim().min(1).max(2000),
 });
 
 export const calendarCoachSendMessageResponseSchema = z.object({
@@ -39,7 +39,7 @@ export const calendarCoachSendMessageResponseSchema = z.object({
 
 export const calendarCoachClientWsMessageSchema = z.object({
   type: z.literal('send_message'),
-  content: z.string().trim().min(1),
+  content: z.string().trim().min(1).max(2000),
 });
 
 export const calendarCoachTypingWsMessageSchema = z.object({

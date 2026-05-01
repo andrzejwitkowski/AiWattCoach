@@ -261,7 +261,7 @@ export function useCalendarCoachChat({
         pendingSocketRef.current = null;
       }
     }
-  }, [apiBaseUrl, applyConversationResponse, coachApi]);
+  }, [apiBaseUrl, applyConversationResponse]);
 
   const loadConversation = useCallback(async () => {
     if (!isOpenRef.current) {

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { z } from 'zod';
 
 import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
@@ -68,10 +68,15 @@ export function useCalendarCoachApi() {
     [apiBaseUrl],
   );
 
-  return {
+  return useMemo(() => ({
     getCurrentCalendarCoachConversation,
     startNewCalendarCoachConversation,
     getCalendarCoachConversation,
     sendCalendarCoachMessage,
-  };
+  }), [
+    getCurrentCalendarCoachConversation,
+    startNewCalendarCoachConversation,
+    getCalendarCoachConversation,
+    sendCalendarCoachMessage,
+  ]);
 }

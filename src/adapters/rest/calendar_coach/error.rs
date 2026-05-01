@@ -49,6 +49,14 @@ pub(super) fn map_calendar_coach_error(error: &CoachConversationError) -> Respon
             } else {
                 StatusCode::BAD_REQUEST
             };
+            let public_message =
+                if matches!(llm_error, crate::domain::llm::LlmError::ContextTooLarge(_)) {
+                    "Conversation context is too large"
+                } else if llm_error.is_retryable() {
+                    "Calendar coach is temporarily unavailable"
+                } else {
+                    "Unable to process calendar coach request"
+                };
             let level = if status.is_server_error() {
                 Level::ERROR
             } else {
@@ -58,7 +66,7 @@ pub(super) fn map_calendar_coach_error(error: &CoachConversationError) -> Respon
             (
                 status,
                 Json(ErrorResponse {
-                    message: error.to_string(),
+                    message: public_message.to_string(),
                 }),
             )
                 .into_response()

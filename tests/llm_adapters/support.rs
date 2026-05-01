@@ -174,16 +174,16 @@ impl TrainingContextBuilder for StubTrainingContextBuilder {
 
     fn build_calendar_overview_context(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
-        self.build("user-1", CALENDAR_OVERVIEW_FOCUS_ID)
+        self.build(user_id, CALENDAR_OVERVIEW_FOCUS_ID)
     }
 
     fn build_athlete_summary_context(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> LlmBoxFuture<Result<TrainingContextBuildResult, LlmError>> {
-        self.build("user-1", ATHLETE_SUMMARY_FOCUS_ID)
+        self.build(user_id, ATHLETE_SUMMARY_FOCUS_ID)
     }
 }
 
