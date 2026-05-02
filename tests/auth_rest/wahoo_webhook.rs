@@ -372,6 +372,83 @@ async fn wahoo_webhook_accepts_workout_summary_event_with_nullish_optional_field
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn wahoo_webhook_accepts_real_summary_only_payload_shape() {
+    let service = TestWahooWebhookService::accepting();
+    let app =
+        auth_test_app_with_wahoo_webhook(TestIdentityService::default(), service.clone()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/wahoo/webhook")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{
+                        "event_type": "workout_summary",
+                        "webhook_token": "secret-token",
+                        "user": { "id": 616126 },
+                        "workout_summary": {
+                            "id": 402756448,
+                            "started_at": "2026-05-02T08:14:29.000Z",
+                            "ascent_accum": "36.0",
+                            "cadence_avg": "76.0",
+                            "calories_accum": "464.0",
+                            "distance_accum": "20959.15",
+                            "duration_active_accum": "2405.0",
+                            "duration_paused_accum": "36.0",
+                            "duration_total_accum": "2441.0",
+                            "heart_rate_avg": null,
+                            "power_bike_np_last": "221.0",
+                            "power_bike_tss_last": "28.1",
+                            "power_avg": "193.0",
+                            "speed_avg": "8.72",
+                            "work_accum": "464094.0",
+                            "fitness_app_id": 14,
+                            "time_zone": "Europe/Warsaw",
+                            "created_at": "2026-05-02T10:11:08.000Z",
+                            "updated_at": "2026-05-02T10:11:13.000Z",
+                            "file": {
+                                "url": "https://cdn.wahooligan.com/wahoo-cloud/production/uploads/workout_file/file/test.fit"
+                            },
+                            "workout": {
+                                "id": 451769692,
+                                "starts": "2026-05-02T21:00:00.000Z",
+                                "minutes": 40,
+                                "name": "Race Openers",
+                                "created_at": "2026-05-01T11:50:19.000Z",
+                                "updated_at": "2026-05-01T11:50:19.000Z",
+                                "plan_id": 13449478,
+                                "workout_token": "icu_107574759",
+                                "workout_type_id": 0,
+                                "fitness_app_id": 1199
+                            }
+                        }
+                    }"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), RESPONSE_LIMIT_BYTES)
+        .await
+        .unwrap();
+    assert_eq!(body.as_ref(), br#"{"accepted":true}"#);
+    assert_eq!(
+        service.import_calls(),
+        vec![WahooWebhookImportCall {
+            webhook_token: "secret-token".to_string(),
+            wahoo_user_id: 616_126,
+            workout_id: 402_756_448,
+            starts: "2026-05-02T08:14:29.000Z".to_string(),
+            has_workout_summary: true,
+        }]
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn wahoo_webhook_returns_400_for_workout_summary_event_without_summary_payload() {
     let app = auth_test_app_with_wahoo_webhook(
         TestIdentityService::default(),

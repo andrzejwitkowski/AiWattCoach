@@ -40,7 +40,13 @@ pub async fn receive_webhook(
     };
 
     let webhook_token = payload.webhook_token.clone();
-    let (_, parts) = payload.into_domain_parts();
+    let (_, parts) = match payload.into_domain_parts() {
+        Ok(parts) => parts,
+        Err(error) => {
+            warn!(error, "Invalid Wahoo webhook payload");
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
     let WahooWebhookDomainParts {
         wahoo_user_id,
         workout,
