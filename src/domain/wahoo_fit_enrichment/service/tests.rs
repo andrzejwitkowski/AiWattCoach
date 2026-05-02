@@ -274,6 +274,8 @@ struct FakeWahooService {
     summary: Option<WahooWorkoutSummary>,
     file_bytes: Vec<u8>,
     download_calls: Arc<Mutex<usize>>,
+    expected_workout_id: Option<i64>,
+    requested_workout_ids: Arc<Mutex<Vec<i64>>>,
 }
 
 impl FakeWahooService {
@@ -307,11 +309,24 @@ impl FakeWahooService {
             }),
             file_bytes,
             download_calls: Arc::new(Mutex::new(0)),
+            expected_workout_id: None,
+            requested_workout_ids: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn with_file_for_workout(file_url: &str, file_bytes: Vec<u8>, workout_id: i64) -> Self {
+        Self {
+            expected_workout_id: Some(workout_id),
+            ..Self::with_file(file_url, file_bytes)
         }
     }
 
     fn download_calls(&self) -> usize {
         *self.download_calls.lock().unwrap()
+    }
+
+    fn requested_workout_ids(&self) -> Vec<i64> {
+        self.requested_workout_ids.lock().unwrap().clone()
     }
 }
 
@@ -364,10 +379,18 @@ impl WahooUseCases for FakeWahooService {
     fn get_workout_summary(
         &self,
         _user_id: &str,
-        _workout_id: i64,
+        workout_id: i64,
     ) -> WahooBoxFuture<Result<Option<WahooWorkoutSummary>, WahooError>> {
         let summary = self.summary.clone();
-        Box::pin(async move { Ok(summary) })
+        let expected_workout_id = self.expected_workout_id;
+        let requested_workout_ids = self.requested_workout_ids.clone();
+        Box::pin(async move {
+            requested_workout_ids.lock().unwrap().push(workout_id);
+            if expected_workout_id.is_some_and(|expected| expected != workout_id) {
+                return Ok(None);
+            }
+            Ok(summary)
+        })
     }
 
     fn find_plan_by_external_id(
@@ -608,6 +631,34 @@ async fn enrich_completed_workout_updates_workout_and_fit_file() {
     );
     assert_eq!(fit_file.raw_fit_bytes, Some(vec![1, 2, 3, 4]));
     assert_eq!(recompute.calls().len(), 1);
+}
+
+#[tokio::test]
+async fn enrich_completed_workout_prefers_numeric_external_id_over_stale_task_workout_id() {
+    let mut workout = sample_workout();
+    workout.external_id = Some("451769692".to_string());
+    let workouts = InMemoryCompletedWorkoutRepository::with_workout(workout);
+    let fit_files = InMemoryWahooFitFileRepository::default();
+    let wahoo = Arc::new(FakeWahooService::with_file_for_workout(
+        "https://example.test/workout.fit",
+        vec![1, 2, 3, 4],
+        451_769_692,
+    ));
+    let service = WahooFitEnrichmentService::new(
+        wahoo.clone(),
+        workouts,
+        fit_files.clone(),
+        FakeParser::with_responses(vec![Ok(parsed_workout())]),
+        FixedClock,
+    );
+
+    service
+        .enrich_completed_workout("user-1", "wahoo-workout:42", 402_756_448)
+        .await
+        .expect("fit enrichment should use numeric external id when task payload id is stale");
+
+    assert_eq!(wahoo.requested_workout_ids(), vec![451_769_692]);
+    assert_eq!(fit_files.only_fit_file().wahoo_workout_id, 451_769_692);
 }
 
 #[tokio::test]

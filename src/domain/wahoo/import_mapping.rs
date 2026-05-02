@@ -93,7 +93,7 @@ fn map_workout_to_completed_workout(
         summary.name.clone().or_else(|| workout.name.clone()),
         None,
         map_activity_type(workout.workout_type_id),
-        workout.workout_token.clone(),
+        Some(workout.id.to_string()),
         is_trainer_workout(workout.workout_type_id),
         round_optional_i32(summary.duration_total_seconds)
             .or_else(|| round_optional_i32(summary.duration_active_seconds))

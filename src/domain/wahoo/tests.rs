@@ -321,6 +321,106 @@ impl WahooApiPort for TestOAuth {
     }
 }
 
+mod import_mapping_tests {
+    use super::*;
+    use crate::domain::wahoo::{map_workout_to_import_command, WahooFileReference};
+
+    fn sample_workout() -> WahooWorkout {
+        WahooWorkout {
+            id: 56_519,
+            starts: "2023-11-14T08:00:00.000Z".to_string(),
+            minutes: Some(60),
+            name: Some("Wahoo Ride".to_string()),
+            plan_id: None,
+            plan_ids: Vec::new(),
+            route_id: None,
+            workout_token: Some("token-1".to_string()),
+            workout_type_id: Some(0),
+            workout_summary: Some(WahooWorkoutSummary {
+                id: 8_297,
+                name: Some("Wahoo Ride".to_string()),
+                ascent_meters: Some(450.0),
+                cadence_avg_rpm: Some(50.0),
+                calories: Some(1500.0),
+                distance_meters: Some(24_909.71),
+                duration_active_seconds: Some(179.0),
+                duration_paused_seconds: Some(95.0),
+                duration_total_seconds: Some(275.0),
+                heart_rate_avg_bpm: Some(100.0),
+                normalized_power_watts: Some(150.0),
+                training_stress_score: Some(304.9),
+                average_power_watts: Some(94.59),
+                speed_avg_mps: Some(10.75),
+                total_work_joules: Some(1_041_480.0),
+                time_zone: Some("America/Denver".to_string()),
+                manual: false,
+                edited: false,
+                fitness_app_id: Some(1002),
+                file: Some(WahooFileReference {
+                    url: "https://example.test/file.fit".to_string(),
+                }),
+                created_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+                updated_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+            }),
+            created_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+            updated_at: Some("2023-11-14T08:00:00.000Z".to_string()),
+        }
+    }
+
+    #[test]
+    fn map_workout_to_import_command_uses_wahoo_canonical_identity() {
+        let mut workout = sample_workout();
+        workout.plan_id = Some(7001);
+        let command = map_workout_to_import_command("user-1", &workout)
+            .expect("workout with summary should map");
+
+        let crate::domain::external_sync::ExternalImportCommand::UpsertCompletedWorkout(import) =
+            command
+        else {
+            panic!("expected completed workout import");
+        };
+
+        assert_eq!(import.workout.completed_workout_id, "wahoo-workout:56519");
+        assert_eq!(import.workout.source_activity_id.as_deref(), Some("56519"));
+        assert_eq!(import.workout.external_id.as_deref(), Some("56519"));
+        assert_eq!(import.wahoo_workout_token.as_deref(), Some("token-1"));
+        assert_eq!(import.wahoo_plan_id, Some(7001));
+        assert_eq!(
+            import.workout.details_unavailable_reason.as_deref(),
+            Some("Detailed Wahoo workout data is still being processed. Please check back soon.")
+        );
+    }
+
+    #[test]
+    fn map_workout_to_import_command_uses_workout_id_not_summary_id_for_external_identity() {
+        let mut workout = sample_workout();
+        workout.id = 451_769_692;
+        workout.workout_token = Some("icu_107574759".to_string());
+        workout.workout_summary.as_mut().unwrap().id = 402_756_448;
+
+        let command = map_workout_to_import_command("user-1", &workout)
+            .expect("workout with summary should map");
+
+        let crate::domain::external_sync::ExternalImportCommand::UpsertCompletedWorkout(import) =
+            command
+        else {
+            panic!("expected completed workout import");
+        };
+
+        assert_eq!(import.external_id, "451769692");
+        assert_eq!(
+            import.workout.completed_workout_id,
+            "wahoo-workout:451769692"
+        );
+        assert_eq!(
+            import.workout.source_activity_id.as_deref(),
+            Some("451769692")
+        );
+        assert_eq!(import.workout.external_id.as_deref(), Some("451769692"));
+        assert_eq!(import.wahoo_workout_token.as_deref(), Some("icu_107574759"));
+    }
+}
+
 #[tokio::test]
 async fn finish_connect_rejects_state_owned_by_another_user() {
     let settings = InMemorySettingsRepository::default();

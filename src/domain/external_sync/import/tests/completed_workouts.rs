@@ -212,6 +212,54 @@ async fn import_completed_workout_reuses_existing_canonical_workout_for_matching
 }
 
 #[tokio::test]
+async fn import_completed_workout_persists_wahoo_workout_id_as_external_id() {
+    let completed_workouts = InMemoryCompletedWorkoutRepository::default();
+    let sync_states = InMemorySyncStateRepository::default();
+    let service = external_import_service_without_refresh(
+        InMemoryPlannedWorkoutRepository::default(),
+        completed_workouts.clone(),
+        InMemoryRaceRepository::default(),
+        InMemorySpecialDayRepository::default(),
+        InMemoryPlannedWorkoutTokenRepository::default(),
+        InMemoryPlannedCompletedWorkoutLinkRepository::default(),
+        InMemoryPlannedWorkoutWahooSyncRepository::default(),
+        InMemoryObservationRepository::default(),
+        sync_states.clone(),
+    );
+
+    service
+        .import(ExternalImportCommand::UpsertCompletedWorkout(Box::new(
+            ExternalCompletedWorkoutImport {
+                provider: ExternalProvider::Wahoo,
+                external_id: "451769692".to_string(),
+                normalized_payload_hash: "hash-wahoo-workout-id".to_string(),
+                intervals_paired_event_id: None,
+                marker_sources: Vec::new(),
+                wahoo_plan_id: None,
+                wahoo_workout_token: Some("icu_107574759".to_string()),
+                workout: sample_completed_workout_for_provider(
+                    ExternalProvider::Wahoo,
+                    "wahoo-workout:451769692",
+                    None,
+                ),
+            },
+        )))
+        .await
+        .unwrap();
+
+    let stored_workout = completed_workouts
+        .find_by_user_id_and_completed_workout_id("user-1", "wahoo-workout:451769692")
+        .await
+        .unwrap()
+        .expect("stored completed workout");
+    assert_eq!(stored_workout.external_id.as_deref(), Some("451769692"));
+
+    let stored_state = sync_states.stored();
+    assert_eq!(stored_state.len(), 1);
+    assert_eq!(stored_state[0].external_id.as_deref(), Some("451769692"));
+}
+
+#[tokio::test]
 async fn import_completed_workout_refreshes_old_and_new_dates_when_existing_canonical_date_moves() {
     let completed_workouts = InMemoryCompletedWorkoutRepository::default();
     let refresh = RecordingRefresh::default();

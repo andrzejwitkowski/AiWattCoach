@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-02 | user | Wahoo completed-workout id semantics vs summary id
+
+- Problem: Wahoo completed-workout import mixed three different identifiers from the same payload. The canonical completed workout and FIT enrichment path could end up persisting `workout_summary.id` or `workout_token` where the system actually needed the Wahoo workout resource id (`workout.id`). That left `completed_workouts.external_id` and task payloads pointing at the wrong id, so later `GET /v1/workouts/{id}/workout_summary` calls returned 404 or "does not expose a FIT file URL" even though the live workout resource did have a FIT file.
+- Fix: changed Wahoo import mapping to persist the workout resource id as `CompletedWorkout.external_id`, normalized Wahoo completed-workout imports so `source_activity_id` and `external_id` are reset from the imported Wahoo workout id before dedup/upsert, and taught FIT enrichment to prefer a numeric `CompletedWorkout.external_id` over a stale task payload workout id. Added focused regressions for the real split case where `workout.id != workout_summary.id` and `workout_token` carries an Intervals key.
+- Prevention: whenever an upstream payload contains both entity ids and nested summary ids, verify which id each downstream API endpoint expects before persisting or scheduling follow-up work. For Wahoo completed workouts specifically, treat `workout.id` as the provider resource id for sync/enrichment, `workout_summary.id` as a nested summary id only, and `workout_token` as a cross-system marker rather than the canonical external id.
+
 ### 2026-05-02 | user | Wahoo webhook real summary-only payload
 
 - Problem: the Wahoo webhook REST DTO still assumed the older payload shape with a top-level `workout` object and numeric metric fields already normalized to local names. Real `workout_summary` webhook deliveries from Wahoo can instead nest the planned workout under `workout_summary.workout`, send completed-workout metrics under string-valued keys like `distance_accum` and `power_avg`, and carry the real completed start time in `workout_summary.started_at`. That made valid webhook deliveries fail with `400`, and even a naive parser widening would have risked importing the planned workout id/start instead of the completed workout id/start.
