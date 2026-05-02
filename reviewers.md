@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-02 | user | Wahoo webhook real summary-only payload
+
+- Problem: the Wahoo webhook REST DTO still assumed the older payload shape with a top-level `workout` object and numeric metric fields already normalized to local names. Real `workout_summary` webhook deliveries from Wahoo can instead nest the planned workout under `workout_summary.workout`, send completed-workout metrics under string-valued keys like `distance_accum` and `power_avg`, and carry the real completed start time in `workout_summary.started_at`. That made valid webhook deliveries fail with `400`, and even a naive parser widening would have risked importing the planned workout id/start instead of the completed workout id/start.
+- Fix: widened `src/adapters/rest/wahoo/dto.rs` to accept both webhook payload shapes, parse the string-or-number summary metric fields, and map summary-only webhook payloads into a completed-workout `WahooWorkout` using `workout_summary.id` plus `workout_summary.started_at` while still reusing the nested workout metadata for plan linkage fields. Added a REST regression in `tests/auth_rest/wahoo_webhook.rs` using a real summary-only payload shape and asserting the forwarded workout id/start values.
+- Prevention: when provider webhooks evolve independently from poll/list endpoints, do not reuse one rigid DTO shape across both paths without checking real captured payloads. For Wahoo `workout_summary` events specifically, verify which fields describe the completed workout versus the nested planned workout before choosing canonical id and start-time mapping.
+
 ### 2026-05-01 | CodeRabbit | PR #174 webhook nullish optional-field follow-up
 
 - Problem: after the broader PR #174 review-fix batch, the Wahoo webhook REST DTO still assumed several optional fields were either present or non-null. Real webhook payloads can send `plan_ids`, `manual`, or `edited` as explicit `null`, which made serde reject otherwise valid `workout_summary` events with `400` even though those fields should behave the same as missing values.
