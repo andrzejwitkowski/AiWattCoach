@@ -365,6 +365,7 @@ where
         &self,
         command: ExternalCompletedWorkoutImport,
     ) -> Result<ExternalImportOutcome, ExternalImportError> {
+        let command = normalize_completed_workout_import(command);
         let dedup_key = completed_workout_dedup_key(&command.workout);
         let resolved_link = self
             .resolve_planned_workout_id_for_completed_workout(
@@ -907,6 +908,17 @@ where
     ) -> BoxFuture<Result<ExternalImportOutcome, ExternalImportError>> {
         ExternalImportService::import(self, command)
     }
+}
+
+fn normalize_completed_workout_import(
+    mut command: ExternalCompletedWorkoutImport,
+) -> ExternalCompletedWorkoutImport {
+    if command.provider == ExternalProvider::Wahoo {
+        command.workout.external_id = Some(command.external_id.clone());
+        command.workout.source_activity_id = Some(command.external_id.clone());
+    }
+
+    command
 }
 
 fn map_planned_workout_error(error: PlannedWorkoutError) -> ExternalImportError {

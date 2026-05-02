@@ -142,6 +142,7 @@ where
             let workout = service
                 .load_completed_workout(&user_id, &completed_workout_id)
                 .await?;
+            let wahoo_workout_id = resolved_wahoo_workout_id(&workout, wahoo_workout_id);
             let fit_file = service
                 .load_or_create_fit_file(&user_id, &completed_workout_id, wahoo_workout_id)
                 .await?;
@@ -351,6 +352,14 @@ fn has_any_details(details: &CompletedWorkoutDetails) -> bool {
         || !details.heart_rate_zone_times.is_empty()
         || !details.pace_zone_times.is_empty()
         || !details.gap_zone_times.is_empty()
+}
+
+fn resolved_wahoo_workout_id(workout: &CompletedWorkout, fallback_wahoo_workout_id: i64) -> i64 {
+    workout
+        .external_id
+        .as_deref()
+        .and_then(|external_id| external_id.parse::<i64>().ok())
+        .unwrap_or(fallback_wahoo_workout_id)
 }
 
 fn merge_workout_enrichment(
