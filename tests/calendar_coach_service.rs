@@ -725,14 +725,17 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
             surface: aiwattcoach::domain::coach_conversation::CoachConversationSurface::Calendar,
             status: CoachConversationStatus::Active,
             focus: aiwattcoach::domain::coach_conversation::CoachConversationFocus::Overview,
-            hidden_transcript: vec![LlmChatMessage::assistant_with_tool_calls(
-                "Coach reply",
-                vec![LlmToolCall {
-                    id: "tool-1".to_string(),
-                    name: "lookupCalendar".to_string(),
-                    arguments_json: r#"{\"week\":\"2026-W18\"}"#.to_string(),
-                }],
-            )],
+            hidden_transcript: vec![
+                LlmChatMessage::assistant_with_tool_calls(
+                    "Coach reply",
+                    vec![LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookupCalendar".to_string(),
+                        arguments_json: r#"{\"week\":\"2026-W18\"}"#.to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-1", "Calendar lookup result"),
+            ],
             created_at_epoch_seconds: 1,
             updated_at_epoch_seconds: 2,
         }))),
@@ -801,14 +804,18 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
 
     let requests = llm_chat_port.requests();
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].conversation.len(), 3);
+    assert_eq!(requests[0].conversation.len(), 4);
     assert_eq!(
         requests[0].conversation[1].role,
         aiwattcoach::domain::llm::LlmMessageRole::Assistant
     );
     assert_eq!(requests[0].conversation[1].tool_calls.len(), 1);
     assert_eq!(requests[0].conversation[1].tool_calls[0].id, "tool-1");
-    assert_eq!(requests[0].conversation[2].content, "What about tomorrow?");
+    assert_eq!(
+        requests[0].conversation[2].tool_call_id.as_deref(),
+        Some("tool-1")
+    );
+    assert_eq!(requests[0].conversation[3].content, "What about tomorrow?");
 }
 
 #[tokio::test]
@@ -838,6 +845,7 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
                         arguments_json: "{}".to_string(),
                     }],
                 ),
+                LlmChatMessage::tool("tool-1", "first result"),
                 LlmChatMessage::assistant_with_tool_calls(
                     "Second answer\n",
                     vec![LlmToolCall {
@@ -846,6 +854,7 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
                         arguments_json: "{}".to_string(),
                     }],
                 ),
+                LlmChatMessage::tool("tool-2", "second result"),
             ],
             created_at_epoch_seconds: 1,
             updated_at_epoch_seconds: 2,
@@ -916,7 +925,15 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
 
     let requests = llm_chat_port.requests();
     assert_eq!(requests[0].conversation[1].tool_calls[0].id, "tool-1");
-    assert_eq!(requests[0].conversation[3].tool_calls[0].id, "tool-2");
+    assert_eq!(
+        requests[0].conversation[2].tool_call_id.as_deref(),
+        Some("tool-1")
+    );
+    assert_eq!(requests[0].conversation[4].tool_calls[0].id, "tool-2");
+    assert_eq!(
+        requests[0].conversation[5].tool_call_id.as_deref(),
+        Some("tool-2")
+    );
 }
 
 #[tokio::test]

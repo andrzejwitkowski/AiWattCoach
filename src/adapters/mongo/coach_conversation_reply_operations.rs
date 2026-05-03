@@ -478,7 +478,10 @@ mod tests {
         })
         .expect("legacy response_message should map");
 
-        assert_eq!(operation.status, CoachConversationReplyOperationStatus::Pending);
+        assert_eq!(
+            operation.status,
+            CoachConversationReplyOperationStatus::Pending
+        );
         assert_eq!(
             operation.hidden_transcript,
             vec![LlmChatMessage::assistant("Legacy conversation checkpoint")]

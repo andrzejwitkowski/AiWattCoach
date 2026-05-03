@@ -297,13 +297,7 @@ where
             )
             .await?;
         let operation = self
-            .persist_provider_response_checkpoint(
-                user_id,
-                workout_id,
-                operation,
-                &llm_response,
-                &summary,
-            )
+            .persist_provider_response_checkpoint(user_id, workout_id, operation, &llm_response)
             .await?;
         let operation = self
             .materialize_public_tool_messages(user_id, workout_id, operation, &llm_response)
@@ -361,7 +355,6 @@ where
         workout_id: &str,
         operation: CoachReplyOperation,
         llm_response: &crate::domain::llm::LlmChatResponse,
-        summary: &WorkoutSummary,
     ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
         let operation = operation.record_provider_response(PendingCoachReplyCheckpoint {
             provider: llm_response.provider.clone(),
@@ -377,14 +370,26 @@ where
         let operation = self
             .persist_post_provider_operation(operation, "persist_success_checkpoint")
             .await?;
-        let mut merged = summary.hidden_transcript.clone();
-        for entry in &operation.hidden_transcript {
-            if !merged.contains(entry) {
-                merged.push(entry.clone());
-            }
-        }
-        self.replace_hidden_transcript(user_id, workout_id, merged)
+        if let Err(error) = self
+            .merge_hidden_transcript_with_retry(
+                user_id,
+                workout_id,
+                &operation,
+                "persist_hidden_transcript",
+            )
+            .await
+        {
+            let llm_error = crate::domain::llm::LlmError::Internal(format!(
+                "failed to persist hidden transcript after provider response: {error}"
+            ));
+            let failed = operation.mark_failed(&llm_error, self.clock.now_epoch_seconds());
+            self.persist_post_provider_operation(
+                failed,
+                "persist_failed_hidden_transcript_checkpoint",
+            )
             .await?;
+            return Err(WorkoutSummaryError::Llm(llm_error));
+        }
 
         Ok(operation)
     }

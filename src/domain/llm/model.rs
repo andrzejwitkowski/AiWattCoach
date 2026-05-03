@@ -281,6 +281,8 @@ impl std::fmt::Debug for LlmChatRequest {
             .field("stable_context", &redact_value(&self.stable_context))
             .field("volatile_context", &redact_value(&self.volatile_context))
             .field("conversation_len", &self.conversation.len())
+            .field("tools_len", &self.tools.len())
+            .field("tool_choice", &self.tool_choice)
             .field("cache_scope_key", &self.cache_scope_key)
             .field("cache_key", &self.cache_key)
             .field("reusable_cache_id", &self.reusable_cache_id)

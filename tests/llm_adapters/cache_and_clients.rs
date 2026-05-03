@@ -1,6 +1,6 @@
 use aiwattcoach::{
     adapters::llm::gemini::cache::context_hash,
-    domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice},
+    domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition},
 };
 
 use crate::support::{
@@ -388,6 +388,37 @@ async fn openrouter_request_serializes_explicit_none_tool_choice() {
 
     let requests = server.requests();
     assert_eq!(requests[0].body["tool_choice"], "none");
+}
+
+#[tokio::test]
+async fn openrouter_request_rejects_invalid_tool_schema_json() {
+    let server = MockServer::start().await;
+    let client = openrouter_client(&server.base_url);
+
+    let error = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "openai/gpt-4o-mini".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            aiwattcoach::domain::llm::LlmChatRequest {
+                tools: vec![LlmToolDefinition {
+                    name: "lookupCalendar".to_string(),
+                    description: "Lookup calendar details".to_string(),
+                    input_schema_json: "{not-json}".to_string(),
+                }],
+                ..sample_request()
+            },
+        )
+        .await
+        .expect_err("invalid tool schema should fail");
+
+    assert!(matches!(
+        error,
+        aiwattcoach::domain::llm::LlmError::InvalidResponse(message)
+            if message.contains("invalid tool input schema for lookupCalendar")
+    ));
 }
 
 #[tokio::test]

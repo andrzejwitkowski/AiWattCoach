@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::domain::{
     identity::{Clock, IdGenerator},
@@ -31,16 +31,77 @@ pub use scheduler::{
 const POST_PROVIDER_WRITE_ATTEMPTS: usize = 2;
 pub(super) const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
 
-fn llm_message_content_matches_public_text(message: &LlmChatMessage, public_text: &str) -> bool {
-    message.content.trim() == public_text.trim()
-}
-
 fn final_assistant_text(response: &LlmChatResponse) -> Option<String> {
     response
         .assistant_text()
         .map(str::trim)
         .filter(|content| !content.is_empty())
         .map(str::to_string)
+}
+
+fn merge_hidden_transcript_entries(
+    mut existing: Vec<LlmChatMessage>,
+    pending: &[LlmChatMessage],
+) -> Vec<LlmChatMessage> {
+    for entry in pending {
+        if !existing.contains(entry) {
+            existing.push(entry.clone());
+        }
+    }
+
+    existing
+}
+
+fn hidden_tool_messages_for_assistant(
+    hidden_transcript: &[LlmChatMessage],
+    assistant: &LlmChatMessage,
+) -> Vec<LlmChatMessage> {
+    assistant
+        .tool_calls
+        .iter()
+        .filter_map(|tool_call| {
+            hidden_transcript
+                .iter()
+                .find(|message| {
+                    message.role == LlmMessageRole::Tool
+                        && message.tool_call_id.as_deref() == Some(tool_call.id.as_str())
+                })
+                .cloned()
+        })
+        .collect()
+}
+
+fn rebuild_conversation_with_hidden_transcript(
+    conversation: Vec<LlmChatMessage>,
+    hidden_transcript: &[LlmChatMessage],
+) -> Vec<LlmChatMessage> {
+    let hidden_assistants = hidden_transcript
+        .iter()
+        .filter(|message| message.role == LlmMessageRole::Assistant)
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut hidden_assistant_index = 0;
+    let mut rebuilt = Vec::with_capacity(conversation.len() + hidden_transcript.len());
+
+    for message in conversation {
+        if message.role != LlmMessageRole::Assistant {
+            rebuilt.push(message);
+            continue;
+        }
+
+        let assistant = hidden_assistants
+            .get(hidden_assistant_index)
+            .cloned()
+            .unwrap_or(message);
+        hidden_assistant_index += 1;
+        rebuilt.push(assistant.clone());
+        rebuilt.extend(hidden_tool_messages_for_assistant(
+            hidden_transcript,
+            &assistant,
+        ));
+    }
+
+    rebuilt
 }
 
 const CALENDAR_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reason about their training from the calendar view. Use the packed training context as factual background. This is a general coaching conversation: the athlete may ask about a workout on a given date, why a planned workout appears in the schedule, how to fuel sessions, how to approach a race strategically, or how the broader week fits together. Be direct, concise, and evidence-based. Do not invent details beyond the provided context. Do not claim that workouts were regenerated, changed, or committed unless the application explicitly says so. If the athlete asks to regenerate training plans, tell them this is not available from the calendar chat \u{2014} they need to go to the completed workouts section and save a workout summary to trigger plan generation.";
@@ -337,6 +398,70 @@ where
             .await
     }
 
+    async fn merge_hidden_transcript_with_retry(
+        &self,
+        conversation: &CoachConversation,
+        operation: &CoachConversationReplyOperation,
+        write_label: &'static str,
+    ) -> Result<(), CoachConversationError> {
+        let mut last_error = None;
+
+        for attempt in 1..=POST_PROVIDER_WRITE_ATTEMPTS {
+            let latest = self
+                .conversations
+                .find_by_user_id_and_conversation_id(
+                    &conversation.user_id,
+                    &conversation.conversation_id,
+                )
+                .await?
+                .ok_or(CoachConversationError::NotFound)?;
+            let merged = merge_hidden_transcript_entries(
+                latest.hidden_transcript.clone(),
+                &operation.hidden_transcript,
+            );
+
+            match self.replace_hidden_transcript(&latest, merged).await {
+                Ok(()) => {
+                    if attempt > 1 {
+                        tracing::info!(
+                            conversation_id = %conversation.conversation_id,
+                            user_message_id = %operation.user_message_id,
+                            attempt,
+                            max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
+                            write_label,
+                            "recovered hidden transcript write after retry"
+                        );
+                    }
+                    return Ok(());
+                }
+                Err(error @ CoachConversationError::Repository(_)) => {
+                    if attempt == POST_PROVIDER_WRITE_ATTEMPTS {
+                        return Err(error);
+                    }
+
+                    tracing::warn!(
+                        conversation_id = %conversation.conversation_id,
+                        user_message_id = %operation.user_message_id,
+                        attempt,
+                        max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
+                        write_label,
+                        error = %error,
+                        "retrying hidden transcript write after repository error"
+                    );
+                    last_error = Some(error);
+                    tokio::time::sleep(Duration::from_millis(25 * attempt as u64)).await;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| {
+            CoachConversationError::Repository(
+                "hidden transcript write failed without error".to_string(),
+            )
+        }))
+    }
+
     async fn materialize_public_tool_messages(
         &self,
         conversation: &CoachConversation,
@@ -548,12 +673,27 @@ where
             &training_context.rendered.volatile_context,
         );
         let system_prompt = calendar_coach_system_prompt();
+        let llm_conversation = build_calendar_conversation(
+            messages,
+            &conversation.hidden_transcript,
+            &user_message.id,
+        );
         let estimated_request_tokens = approximate_token_usage(&stable_context)
             + approximate_token_usage(&volatile_context)
             + approximate_token_usage(&system_prompt)
-            + messages
+            + llm_conversation
                 .iter()
-                .map(|message| approximate_token_usage(&message.content))
+                .map(|message| {
+                    approximate_token_usage(&message.content)
+                        + message
+                            .tool_calls
+                            .iter()
+                            .map(|tool| {
+                                approximate_token_usage(&tool.name)
+                                    + approximate_token_usage(&tool.arguments_json)
+                            })
+                            .sum::<usize>()
+                })
                 .sum::<usize>();
         let token_budget = approximate_token_budget_for_model(&config.model);
         if estimated_request_tokens > token_budget {
@@ -595,11 +735,7 @@ where
             system_prompt,
             stable_context,
             volatile_context,
-            conversation: build_calendar_conversation(
-                messages,
-                &conversation.hidden_transcript,
-                &user_message.id,
-            ),
+            conversation: llm_conversation,
             cache_scope_key: cache_scope_key.clone(),
             cache_key: Some(context_hash.clone()),
             reusable_cache_id,
@@ -675,13 +811,25 @@ where
         }
 
         if !operation.hidden_transcript.is_empty() {
-            let mut merged = conversation.hidden_transcript.clone();
-            for entry in &operation.hidden_transcript {
-                if !merged.contains(entry) {
-                    merged.push(entry.clone());
-                }
+            if let Err(error) = self
+                .merge_hidden_transcript_with_retry(
+                    conversation,
+                    operation,
+                    "recover_hidden_transcript",
+                )
+                .await
+            {
+                let llm_error = LlmError::Internal(format!(
+                    "failed to persist hidden transcript during recovery: {error}"
+                ));
+                let failed = operation.mark_failed(&llm_error, self.clock.now_epoch_seconds());
+                self.persist_post_provider_operation(
+                    failed,
+                    "persist_failed_hidden_transcript_recovery",
+                )
+                .await?;
+                return Err(CoachConversationError::Llm(llm_error));
             }
-            self.replace_hidden_transcript(conversation, merged).await?;
 
             for transcript_message in &operation.hidden_transcript {
                 if transcript_message.role != LlmMessageRole::Assistant {
@@ -997,15 +1145,26 @@ where
                     "persist_provider_response_checkpoint",
                 )
                 .await?;
-            let mut merged = conversation.hidden_transcript.clone();
-            for entry in &operation.hidden_transcript {
-                if !merged.contains(entry) {
-                    merged.push(entry.clone());
-                }
+            if let Err(error) = service
+                .merge_hidden_transcript_with_retry(
+                    &conversation,
+                    &operation,
+                    "persist_hidden_transcript",
+                )
+                .await
+            {
+                let llm_error = LlmError::Internal(format!(
+                    "failed to persist hidden transcript after provider response: {error}"
+                ));
+                let failed = operation.mark_failed(&llm_error, service.clock.now_epoch_seconds());
+                service
+                    .persist_post_provider_operation(
+                        failed,
+                        "persist_failed_hidden_transcript_checkpoint",
+                    )
+                    .await?;
+                return Err(CoachConversationError::Llm(llm_error));
             }
-            service
-                .replace_hidden_transcript(&conversation, merged)
-                .await?;
             let operation = service
                 .materialize_public_tool_messages(&conversation, operation, &llm_response)
                 .await?;
@@ -1121,7 +1280,7 @@ fn build_calendar_conversation(
         None => messages,
     };
 
-    let mut conversation = messages
+    let conversation = messages
         .iter()
         .filter_map(|message| match message.role {
             CoachConversationMessageRole::User => Some(LlmChatMessage {
@@ -1140,26 +1299,5 @@ fn build_calendar_conversation(
         })
         .collect::<Vec<_>>();
 
-    let mut assistant_positions = conversation
-        .iter()
-        .enumerate()
-        .filter_map(|(index, message)| (message.role == LlmMessageRole::Assistant).then_some(index))
-        .collect::<Vec<_>>();
-
-    for hidden_assistant in hidden_transcript
-        .iter()
-        .filter(|message| message.role == LlmMessageRole::Assistant)
-    {
-        if let Some(position) = assistant_positions.iter().position(|index| {
-            llm_message_content_matches_public_text(
-                &conversation[*index],
-                &hidden_assistant.content,
-            )
-        }) {
-            let index = assistant_positions.remove(position);
-            conversation[index] = hidden_assistant.clone();
-        }
-    }
-
-    conversation
+    rebuild_conversation_with_hidden_transcript(conversation, hidden_transcript)
 }

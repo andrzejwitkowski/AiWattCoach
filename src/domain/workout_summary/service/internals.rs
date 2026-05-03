@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use tracing::{info, warn};
 
 use super::*;
@@ -168,6 +170,67 @@ where
                 self.clock.now_epoch_seconds(),
             )
             .await
+    }
+
+    pub(super) async fn merge_hidden_transcript_with_retry(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        operation: &CoachReplyOperation,
+        write_label: &'static str,
+    ) -> Result<(), WorkoutSummaryError> {
+        let mut last_error = None;
+
+        for attempt in 1..=POST_PROVIDER_WRITE_ATTEMPTS {
+            let summary = self.get_existing_summary(user_id, workout_id).await?;
+            let merged = merge_hidden_transcript_entries(
+                summary.hidden_transcript,
+                &operation.hidden_transcript,
+            );
+
+            match self
+                .replace_hidden_transcript(user_id, workout_id, merged)
+                .await
+            {
+                Ok(()) => {
+                    if attempt > 1 {
+                        info!(
+                            workout_id = %workout_id,
+                            user_message_id = %operation.user_message_id,
+                            attempt,
+                            max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
+                            write_label,
+                            "recovered hidden transcript write after retry"
+                        );
+                    }
+                    return Ok(());
+                }
+                Err(error @ WorkoutSummaryError::Repository(_)) => {
+                    if attempt == POST_PROVIDER_WRITE_ATTEMPTS {
+                        return Err(error);
+                    }
+
+                    warn!(
+                        workout_id = %workout_id,
+                        user_message_id = %operation.user_message_id,
+                        attempt,
+                        max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
+                        write_label,
+                        error = %error,
+                        "retrying hidden transcript write after repository error"
+                    );
+                    last_error = Some(error);
+                    tokio::time::sleep(Duration::from_millis(25 * attempt as u64)).await;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| {
+            WorkoutSummaryError::Repository(
+                "hidden transcript write failed without error".to_string(),
+            )
+        }))
     }
 
     pub(super) async fn materialize_public_tool_messages(
@@ -414,15 +477,26 @@ where
         }
 
         if !operation.hidden_transcript.is_empty() {
-            let summary = self.get_existing_summary(user_id, workout_id).await?;
-            let mut merged = summary.hidden_transcript;
-            for entry in &operation.hidden_transcript {
-                if !merged.contains(entry) {
-                    merged.push(entry.clone());
-                }
-            }
-            self.replace_hidden_transcript(user_id, workout_id, merged)
+            if let Err(error) = self
+                .merge_hidden_transcript_with_retry(
+                    user_id,
+                    workout_id,
+                    operation,
+                    "recover_hidden_transcript",
+                )
+                .await
+            {
+                let llm_error = crate::domain::llm::LlmError::Internal(format!(
+                    "failed to persist hidden transcript during recovery: {error}"
+                ));
+                let failed = operation.mark_failed(&llm_error, self.clock.now_epoch_seconds());
+                self.persist_post_provider_operation(
+                    failed,
+                    "persist_failed_hidden_transcript_recovery",
+                )
                 .await?;
+                return Err(WorkoutSummaryError::Llm(llm_error));
+            }
 
             for transcript_message in &operation.hidden_transcript {
                 if transcript_message.role != crate::domain::llm::LlmMessageRole::Assistant {
@@ -596,6 +670,19 @@ where
 
         Ok((Some(ensured.summary.summary_text), ensured.was_regenerated))
     }
+}
+
+fn merge_hidden_transcript_entries(
+    mut existing: Vec<crate::domain::llm::LlmChatMessage>,
+    pending: &[crate::domain::llm::LlmChatMessage],
+) -> Vec<crate::domain::llm::LlmChatMessage> {
+    for entry in pending {
+        if !existing.contains(entry) {
+            existing.push(entry.clone());
+        }
+    }
+
+    existing
 }
 
 fn push_unique_workout_id(workout_ids: &mut Vec<String>, workout_id: String) {

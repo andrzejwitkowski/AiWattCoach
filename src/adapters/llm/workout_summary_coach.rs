@@ -283,7 +283,7 @@ fn build_conversation(
     hidden_transcript: &[LlmChatMessage],
     user_message: &str,
 ) -> Vec<LlmChatMessage> {
-    let mut conversation = messages
+    let conversation = messages
         .iter()
         .filter_map(|message| match message.role {
             crate::domain::workout_summary::MessageRole::User => Some(LlmChatMessage {
@@ -302,34 +302,70 @@ fn build_conversation(
         })
         .collect::<Vec<_>>();
 
-    let mut assistant_positions = conversation
-        .iter()
-        .enumerate()
-        .filter_map(|(index, message)| (message.role == LlmMessageRole::Assistant).then_some(index))
-        .collect::<Vec<_>>();
+    let mut rebuilt = rebuild_conversation_with_hidden_transcript(conversation, hidden_transcript);
 
-    for hidden_assistant in hidden_transcript
-        .iter()
-        .filter(|message| message.role == LlmMessageRole::Assistant)
-    {
-        if let Some(position) = assistant_positions.iter().position(|index| {
-            conversation[*index].content.trim() == hidden_assistant.content.trim()
-        }) {
-            let index = assistant_positions.remove(position);
-            conversation[index] = hidden_assistant.clone();
-        }
-    }
-
-    if let Some(last) = conversation.last_mut() {
+    if let Some(last) = rebuilt.last_mut() {
         if last.role == LlmMessageRole::User {
             last.content = user_message.to_string();
-            return conversation;
+            return rebuilt;
         }
     }
 
-    conversation.push(LlmChatMessage::user(user_message));
+    rebuilt.push(LlmChatMessage::user(user_message));
 
-    conversation
+    rebuilt
+}
+
+fn rebuild_conversation_with_hidden_transcript(
+    conversation: Vec<LlmChatMessage>,
+    hidden_transcript: &[LlmChatMessage],
+) -> Vec<LlmChatMessage> {
+    let hidden_assistants = hidden_transcript
+        .iter()
+        .filter(|message| message.role == LlmMessageRole::Assistant)
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut hidden_assistant_index = 0;
+    let mut rebuilt = Vec::with_capacity(conversation.len() + hidden_transcript.len());
+
+    for message in conversation {
+        if message.role != LlmMessageRole::Assistant {
+            rebuilt.push(message);
+            continue;
+        }
+
+        let assistant = hidden_assistants
+            .get(hidden_assistant_index)
+            .cloned()
+            .unwrap_or(message);
+        hidden_assistant_index += 1;
+        rebuilt.push(assistant.clone());
+        rebuilt.extend(hidden_tool_messages_for_assistant(
+            hidden_transcript,
+            &assistant,
+        ));
+    }
+
+    rebuilt
+}
+
+fn hidden_tool_messages_for_assistant(
+    hidden_transcript: &[LlmChatMessage],
+    assistant: &LlmChatMessage,
+) -> Vec<LlmChatMessage> {
+    assistant
+        .tool_calls
+        .iter()
+        .filter_map(|tool_call| {
+            hidden_transcript
+                .iter()
+                .find(|message| {
+                    message.role == LlmMessageRole::Tool
+                        && message.tool_call_id.as_deref() == Some(tool_call.id.as_str())
+                })
+                .cloned()
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -370,27 +406,32 @@ mod tests {
                     created_at_epoch_seconds: 3,
                 },
             ],
-            &[LlmChatMessage::assistant_with_tool_calls(
-                "Coach reply",
-                vec![LlmToolCall {
-                    id: "tool-1".to_string(),
-                    name: "lookupWorkout".to_string(),
-                    arguments_json: r#"{\"workoutId\":\"workout-1\"}"#.to_string(),
-                }],
-            )],
+            &[
+                LlmChatMessage::assistant_with_tool_calls(
+                    "Coach reply",
+                    vec![LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookupWorkout".to_string(),
+                        arguments_json: r#"{\"workoutId\":\"workout-1\"}"#.to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-1", "Workout lookup result"),
+            ],
             "What about tomorrow?",
         );
 
-        assert_eq!(conversation.len(), 3);
+        assert_eq!(conversation.len(), 4);
         assert_eq!(conversation[1].role, LlmMessageRole::Assistant);
         assert_eq!(conversation[1].tool_calls.len(), 1);
         assert_eq!(conversation[1].tool_calls[0].id, "tool-1");
-        assert_eq!(conversation[2].role, LlmMessageRole::User);
-        assert_eq!(conversation[2].content, "What about tomorrow?");
+        assert_eq!(conversation[2].role, LlmMessageRole::Tool);
+        assert_eq!(conversation[2].tool_call_id.as_deref(), Some("tool-1"));
+        assert_eq!(conversation[3].role, LlmMessageRole::User);
+        assert_eq!(conversation[3].content, "What about tomorrow?");
     }
 
     #[test]
-    fn build_conversation_replays_matching_assistant_turns_with_trimmed_content() {
+    fn build_conversation_replays_hidden_assistant_turns_by_position() {
         let conversation = build_conversation(
             &[
                 ConversationMessage {
@@ -431,6 +472,7 @@ mod tests {
                         arguments_json: "{}".to_string(),
                     }],
                 ),
+                LlmChatMessage::tool("tool-1", "first result"),
                 LlmChatMessage::assistant_with_tool_calls(
                     "Second answer\n",
                     vec![LlmToolCall {
@@ -439,12 +481,15 @@ mod tests {
                         arguments_json: "{}".to_string(),
                     }],
                 ),
+                LlmChatMessage::tool("tool-2", "second result"),
             ],
             "Third question",
         );
 
         assert_eq!(conversation[1].tool_calls[0].id, "tool-1");
-        assert_eq!(conversation[3].tool_calls[0].id, "tool-2");
-        assert_eq!(conversation[4].content, "Third question");
+        assert_eq!(conversation[2].tool_call_id.as_deref(), Some("tool-1"));
+        assert_eq!(conversation[4].tool_calls[0].id, "tool-2");
+        assert_eq!(conversation[5].tool_call_id.as_deref(), Some("tool-2"));
+        assert_eq!(conversation[6].content, "Third question");
     }
 }

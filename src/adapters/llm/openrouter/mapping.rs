@@ -14,7 +14,10 @@ use super::dto::{
     OpenRouterToolChoice as OpenRouterToolChoiceDto, OpenRouterToolFunctionCall, OpenRouterUsage,
 };
 
-pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenRouterChatRequest {
+pub fn map_request(
+    config: &LlmProviderConfig,
+    request: LlmChatRequest,
+) -> Result<OpenRouterChatRequest, LlmError> {
     let mut request = request;
     let mut messages = non_empty_context_parts([
         ("system", request.system_prompt.as_str()),
@@ -39,13 +42,17 @@ pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenR
     .collect::<Vec<_>>();
     messages.extend(request.conversation.drain(..).map(map_message));
 
-    OpenRouterChatRequest {
+    Ok(OpenRouterChatRequest {
         model: config.model.clone(),
         messages,
-        tools: request.tools.drain(..).map(map_tool_definition).collect(),
+        tools: request
+            .tools
+            .drain(..)
+            .map(map_tool_definition)
+            .collect::<Result<Vec<_>, _>>()?,
         tool_choice: map_tool_choice(request.tool_choice),
         route: None,
-    }
+    })
 }
 
 pub fn map_response(
@@ -103,24 +110,22 @@ pub fn map_response(
     })
 }
 
-fn map_tool_definition(tool: LlmToolDefinition) -> OpenRouterTool {
-    let parameters = serde_json::from_str(&tool.input_schema_json).unwrap_or_else(|error| {
-        tracing::warn!(tool_name = %tool.name, error = %error, "failed to parse tool input schema json; using permissive fallback");
-        serde_json::json!({
-            "type": "object",
-            "properties": {},
-            "additionalProperties": true,
-        })
-    });
+fn map_tool_definition(tool: LlmToolDefinition) -> Result<OpenRouterTool, LlmError> {
+    let parameters = serde_json::from_str(&tool.input_schema_json).map_err(|error| {
+        LlmError::InvalidResponse(format!(
+            "invalid tool input schema for {}: {error}",
+            tool.name
+        ))
+    })?;
 
-    OpenRouterTool {
+    Ok(OpenRouterTool {
         tool_type: "function".to_string(),
         function: OpenRouterFunctionDefinition {
             name: tool.name,
             description: tool.description,
             parameters,
         },
-    }
+    })
 }
 
 fn map_tool_choice(choice: LlmToolChoice) -> Option<OpenRouterToolChoiceDto> {

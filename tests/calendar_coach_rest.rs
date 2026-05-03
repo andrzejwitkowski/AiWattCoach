@@ -123,7 +123,7 @@ mod shared {
         coach_reply_delay: Option<Duration>,
         availability_configured: bool,
         summary_may_regenerate_before_reply: bool,
-        next_tool_call: Option<PublicToolCall>,
+        next_tool_call: Arc<Mutex<Option<PublicToolCall>>>,
     }
 
     #[derive(Clone)]
@@ -171,8 +171,8 @@ mod shared {
             self
         }
 
-        pub(crate) fn with_tool_call(mut self, tool_call: PublicToolCall) -> Self {
-            self.next_tool_call = Some(tool_call);
+        pub(crate) fn with_tool_call(self, tool_call: PublicToolCall) -> Self {
+            *self.next_tool_call.lock().unwrap() = Some(tool_call);
             self
         }
 
@@ -212,7 +212,7 @@ mod shared {
                 coach_reply_delay: None,
                 availability_configured: true,
                 summary_may_regenerate_before_reply: false,
-                next_tool_call: None,
+                next_tool_call: Arc::new(Mutex::new(None)),
             }
         }
     }
@@ -454,7 +454,7 @@ mod shared {
                         )
                     })?;
 
-                if let Some(tool_call) = next_tool_call {
+                if let Some(tool_call) = next_tool_call.lock().unwrap().take() {
                     stored.messages.push(CoachConversationMessage {
                         id: tool_call.id.clone(),
                         conversation_id: stored.conversation.conversation_id.clone(),
