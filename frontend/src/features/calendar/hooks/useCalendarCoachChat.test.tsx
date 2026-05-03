@@ -113,9 +113,9 @@ describe('useCalendarCoachChat', () => {
   it('ignores stale load responses after switching conversations', async () => {
     global.WebSocket = undefined as unknown as typeof WebSocket;
 
-    let resolveLoad: ((value: { conversation: typeof conversationFixture; messages: typeof messageFixture[] }) => void) | null = null;
+    const resolveLoadRef = { current: null as ((value: unknown) => void) | null };
     coachApi.getCurrentCalendarCoachConversation.mockImplementation(() => new Promise((resolve) => {
-      resolveLoad = resolve;
+      resolveLoadRef.current = resolve;
     }));
     coachApi.startNewCalendarCoachConversation.mockResolvedValue({
       conversation: { ...conversationFixture, conversationId: 'conversation-2' },
@@ -128,7 +128,7 @@ describe('useCalendarCoachChat', () => {
       await result.current.startNewConversation();
     });
 
-    resolveLoad?.({
+    resolveLoadRef.current?.({
       conversation: conversationFixture,
       messages: [messageFixture],
     });
@@ -368,10 +368,10 @@ describe('useCalendarCoachChat', () => {
     global.WebSocket = undefined as unknown as typeof WebSocket;
     coachApi.getCurrentCalendarCoachConversation.mockRejectedValue(new HttpError(404, 'not found'));
 
-    let resolveFirstCreate: ((value: { conversation: typeof conversationFixture; messages: [] }) => void) | null = null;
+    const resolveFirstCreateRef = { current: null as ((value: unknown) => void) | null };
     coachApi.startNewCalendarCoachConversation
       .mockImplementationOnce(() => new Promise((resolve) => {
-        resolveFirstCreate = resolve;
+        resolveFirstCreateRef.current = resolve;
       }))
       .mockResolvedValueOnce({
         conversation: { ...conversationFixture, conversationId: 'conversation-2' },
@@ -394,7 +394,7 @@ describe('useCalendarCoachChat', () => {
       await result.current.startNewConversation();
     });
 
-    resolveFirstCreate?.({
+    resolveFirstCreateRef.current?.({
       conversation: conversationFixture,
       messages: [],
     });
@@ -638,9 +638,9 @@ describe('useCalendarCoachChat', () => {
         messages: [],
       });
 
-    let resolveSend: ((value: { conversation: typeof conversationFixture; messages: typeof messageFixture[] }) => void) | null = null;
+    const resolveSendRef = { current: null as ((value: unknown) => void) | null };
     coachApi.sendCalendarCoachMessage.mockImplementation(() => new Promise((resolve) => {
-      resolveSend = resolve;
+      resolveSendRef.current = resolve;
     }));
 
     const { result } = renderHook(() => useCalendarCoachChat({ isOpen: true }));
@@ -659,7 +659,7 @@ describe('useCalendarCoachChat', () => {
       await result.current.startNewConversation();
     });
 
-    resolveSend?.({
+    resolveSendRef.current?.({
       conversation: { ...conversationFixture, conversationId: 'conversation-1' },
       messages: [messageFixture],
     });
