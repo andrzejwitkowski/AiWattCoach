@@ -48,6 +48,7 @@
 
 ## Small Review Fixes
 
+- If an external workout format already accepts the repo's canonical repeat-header syntax like `Main Set 4x`, do not add a provider-specific serializer that splits the title and repeat count across lines. Syntax-preserving reuse is safer than speculative reshaping.
 - When adding a unique index to a shared sync-state collection, scope the partial filter to the exact canonical entity kind that requires the invariant. A broader `external_id`-only partial filter can turn harmless historical duplicates in other kinds into a startup rollout failure.
 - When a shared trait or widely used domain struct changes shape, grep all implementations, merge helpers, and test fixtures immediately. Do not wait for compile errors to surface one file at a time.
 - After adding one more input to an already busy helper, run clippy early and prefer a small input struct over crossing the repo's function-argument limit.
