@@ -16,8 +16,9 @@ use super::{
         map_settings_error, map_training_plan_error, map_wahoo_error,
     },
     projected::{
-        build_projected_calendar_event, projected_day_payload_hash, projected_event_payload_hash,
-        projected_event_sync_body, projected_workout_id, projected_workout_name,
+        build_projected_calendar_event, comparable_workout_text_for_payload_hash,
+        projected_day_payload_hash, projected_event_payload_hash, projected_event_sync_body,
+        projected_intervals_workout_doc, projected_workout_id, projected_workout_name,
     },
     CalendarService,
 };
@@ -561,7 +562,11 @@ where
             && projected_event_payload_hash(
                 &projected_day.date,
                 event.name.as_deref(),
-                event.structured_workout_text(),
+                comparable_workout_text_for_payload_hash(
+                    event.name.as_deref(),
+                    event.structured_workout_text(),
+                )
+                .as_deref(),
             ) == payload_hash
     }))
 }
@@ -572,10 +577,10 @@ fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
         start_date_local: projected_event_start_date_local(&day.date),
         event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
-        description: projected_event_sync_body(day),
+        description: None,
         indoor: false,
         color: None,
-        workout_doc: None,
+        workout_doc: projected_intervals_workout_doc(day),
         file_upload: None,
     }
 }
@@ -589,30 +594,39 @@ fn build_update_event(day: &TrainingPlanProjectedDay, existing_event: &Event) ->
             .clone()
             .or_else(|| Some("Ride".to_string())),
         name: projected_workout_name(day),
-        description: merge_event_description(
+        description: preserve_event_description(
             existing_event.description.as_deref(),
             projected_event_sync_body(day).as_deref(),
         ),
         indoor: Some(existing_event.indoor),
         color: existing_event.color.clone(),
-        workout_doc: None,
+        workout_doc: projected_intervals_workout_doc(day),
         file_upload: None,
     }
 }
 
-fn merge_event_description(existing: Option<&str>, projected: Option<&str>) -> Option<String> {
-    match (
-        existing.map(str::trim).filter(|value| !value.is_empty()),
-        projected,
-    ) {
-        (None, None) => None,
-        (Some(existing), None) => Some(existing.to_string()),
-        (None, Some(projected)) => Some(projected.to_string()),
-        (Some(existing), Some(projected)) if existing.contains(projected) => {
-            Some(existing.to_string())
-        }
-        (Some(existing), Some(projected)) => Some(format!("{existing}\n\n{projected}")),
+fn preserve_event_description(
+    existing: Option<&str>,
+    legacy_generated: Option<&str>,
+) -> Option<String> {
+    let existing = existing.map(str::trim).filter(|value| !value.is_empty())?;
+    let Some(legacy_generated) = legacy_generated
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Some(existing.to_string());
+    };
+
+    if existing == legacy_generated {
+        return None;
     }
+
+    let legacy_suffix = format!("\n\n{legacy_generated}");
+    if let Some(notes) = existing.strip_suffix(&legacy_suffix).map(str::trim) {
+        return (!notes.is_empty()).then(|| notes.to_string());
+    }
+
+    Some(existing.to_string())
 }
 
 fn intervals_event_id(state: &ExternalSyncState) -> Option<i64> {

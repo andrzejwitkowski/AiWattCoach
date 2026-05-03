@@ -2,7 +2,10 @@ mod parser;
 
 use std::{error::Error, fmt};
 
-pub use parser::{parse_planned_workout, parse_planned_workout_days, serialize_planned_workout};
+pub use parser::{
+    parse_planned_workout, parse_planned_workout_days, serialize_planned_workout,
+    serialize_planned_workout_for_intervals,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlannedWorkout {

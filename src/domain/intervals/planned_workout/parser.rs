@@ -85,6 +85,10 @@ pub fn serialize_planned_workout(workout: &PlannedWorkout) -> String {
         .join("\n")
 }
 
+pub fn serialize_planned_workout_for_intervals(workout: &PlannedWorkout) -> String {
+    serialize_planned_workout(workout)
+}
+
 fn parse_day(date: &str, lines: &[String]) -> Result<PlannedWorkoutDay, PlannedWorkoutParseError> {
     if lines.is_empty() {
         return Err(PlannedWorkoutParseError::new(format!(
