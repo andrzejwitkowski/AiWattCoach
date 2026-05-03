@@ -119,7 +119,7 @@ pub(super) fn projected_day_payload_hash(day: &TrainingPlanProjectedDay) -> Stri
     projected_event_payload_hash(
         &day.date,
         projected_workout_name(day).as_deref(),
-        projected_intervals_workout_doc(day).as_deref(),
+        projected_workout_sync_body(day).as_deref(),
     )
 }
 
@@ -154,6 +154,48 @@ pub(super) fn projected_intervals_workout_doc(day: &TrainingPlanProjectedDay) ->
     day.workout
         .as_ref()
         .map(crate::domain::intervals::serialize_planned_workout_for_intervals)
+}
+
+pub(super) fn projected_event_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
+    projected_workout_sync_body(day)
+}
+
+pub(super) fn projected_workout_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
+    let workout = day.workout.as_ref()?;
+    let serialized = crate::domain::intervals::serialize_planned_workout(workout);
+    Ok::<_, ()>(comparable_workout_text_for_payload_hash(
+        projected_workout_name(day).as_deref(),
+        Some(serialized.as_str()),
+    ))
+    .ok()
+    .flatten()
+}
+
+pub(super) fn comparable_workout_text_for_payload_hash(
+    name: Option<&str>,
+    workout_text: Option<&str>,
+) -> Option<String> {
+    let workout_text = workout_text
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let Some(name) = name.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Some(workout_text.to_string());
+    };
+
+    let mut lines = workout_text.lines();
+    let Some(first_line) = lines.next() else {
+        return Some(workout_text.to_string());
+    };
+    if first_line.trim() != name {
+        return Some(workout_text.to_string());
+    }
+
+    let body = lines.collect::<Vec<_>>().join("\n");
+    if body.trim().is_empty() {
+        Some(name.to_string())
+    } else {
+        Some(body)
+    }
 }
 
 fn sync_states_for_status<'a>(
