@@ -276,6 +276,215 @@ async fn sync_planned_workout_to_intervals_updates_existing_event_workout_doc() 
 }
 
 #[tokio::test]
+async fn sync_planned_workout_to_intervals_clears_legacy_generated_description() {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Build Session".to_string()),
+        category: EventCategory::Workout,
+        description: Some("- 60m 70%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    });
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                planned_workout_entity("training-plan:user-1:w1:1", "2023-11-14"),
+            )
+            .mark_synced("77".to_string(), "old-hash".to_string(), 1_700_000_001),
+        )
+        .await
+        .unwrap();
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        sync_states,
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    let updated = intervals.updated_events.lock().unwrap().clone();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].1.description, None);
+    assert_eq!(
+        updated[0].1.workout_doc.as_deref(),
+        Some("Build Session\n- 60m 70%")
+    );
+}
+
+#[tokio::test]
+async fn sync_planned_workout_to_intervals_drops_legacy_generated_suffix_but_keeps_manual_notes() {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Build Session".to_string()),
+        category: EventCategory::Workout,
+        description: Some("manual note\n\n- 60m 70%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    });
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                planned_workout_entity("training-plan:user-1:w1:1", "2023-11-14"),
+            )
+            .mark_synced("77".to_string(), "old-hash".to_string(), 1_700_000_001),
+        )
+        .await
+        .unwrap();
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        sync_states,
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    let updated = intervals.updated_events.lock().unwrap().clone();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].1.description.as_deref(), Some("manual note"));
+}
+
+#[tokio::test]
+async fn sync_planned_workout_to_intervals_reuses_existing_event_found_by_legacy_description_hash()
+{
+    let existing_event = Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Build Session".to_string()),
+        category: EventCategory::Workout,
+        description: Some("- 60m 70%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    };
+    let intervals = FakeIntervalsService::with_listed_events(vec![existing_event.clone()]);
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        InMemoryExternalSyncStateRepository::default(),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(intervals.created_events.lock().unwrap().is_empty());
+    let updated = intervals.updated_events.lock().unwrap().clone();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].0, existing_event.id);
+}
+
+#[tokio::test]
+async fn sync_planned_workout_to_intervals_reuses_existing_event_found_by_workout_doc_hash() {
+    let existing_event = Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Build Session".to_string()),
+        category: EventCategory::Workout,
+        description: None,
+        indoor: false,
+        color: None,
+        workout_doc: Some("Build Session\n- 60m 70%".to_string()),
+    };
+    let intervals = FakeIntervalsService::with_listed_events(vec![existing_event.clone()]);
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        InMemoryExternalSyncStateRepository::default(),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(intervals.created_events.lock().unwrap().is_empty());
+    let updated = intervals.updated_events.lock().unwrap().clone();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].0, existing_event.id);
+}
+
+#[tokio::test]
 async fn sync_planned_workout_returns_credentials_not_configured_when_wahoo_is_not_connected() {
     let sync_states = InMemoryExternalSyncStateRepository::default();
     let service = CalendarService::new(
@@ -359,6 +568,7 @@ impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
 #[derive(Clone)]
 struct FakeIntervalsService {
     created_event: Event,
+    listed_events: Vec<Event>,
     list_events_error: Option<IntervalsError>,
     created_events: Arc<Mutex<Vec<CreateEvent>>>,
     updated_events: Arc<Mutex<Vec<(i64, UpdateEvent)>>>,
@@ -368,6 +578,28 @@ impl FakeIntervalsService {
     fn with_created_event(created_event: Event) -> Self {
         Self {
             created_event,
+            listed_events: Vec::new(),
+            list_events_error: None,
+            created_events: Arc::new(Mutex::new(Vec::new())),
+            updated_events: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn with_listed_events(listed_events: Vec<Event>) -> Self {
+        let created_event = listed_events.first().cloned().unwrap_or(Event {
+            id: 0,
+            start_date_local: "2026-03-26T00:00:00".to_string(),
+            event_type: None,
+            name: None,
+            category: EventCategory::Workout,
+            description: None,
+            indoor: false,
+            color: None,
+            workout_doc: None,
+        });
+        Self {
+            created_event,
+            listed_events,
             list_events_error: None,
             created_events: Arc::new(Mutex::new(Vec::new())),
             updated_events: Arc::new(Mutex::new(Vec::new())),
@@ -387,6 +619,7 @@ impl FakeIntervalsService {
                 color: None,
                 workout_doc: None,
             },
+            listed_events: Vec::new(),
             list_events_error: Some(list_events_error),
             created_events: Arc::new(Mutex::new(Vec::new())),
             updated_events: Arc::new(Mutex::new(Vec::new())),
@@ -401,10 +634,11 @@ impl IntervalsUseCases for FakeIntervalsService {
         _range: &DateRange,
     ) -> IntervalsBoxFuture<Result<Vec<Event>, IntervalsError>> {
         let list_events_error = self.list_events_error.clone();
+        let listed_events = self.listed_events.clone();
         Box::pin(async move {
             match list_events_error {
                 Some(error) => Err(error),
-                None => Ok(Vec::new()),
+                None => Ok(listed_events),
             }
         })
     }

@@ -25,7 +25,7 @@ Read this file before planning and before implementation.
 
 - Problem: the latest Intervals planned-workout fix introduced a provider-specific serializer that split repeat headers like `Main Set 4x` into two lines (`Main Set\n4x`) before sending `workout_doc`. Intervals workout-builder syntax expects the repeat header on one line, so sync requests for workouts like `Stochastic Durability - Over/Unders` started failing again with `400 Bad Request`.
 - Fix: changed `serialize_planned_workout_for_intervals(...)` to reuse the canonical planned-workout serializer instead of reshaping repeat headers, and updated the planned-workout/calendar regressions to assert the one-line `Main Set 4x` payload.
-- Prevention: when adapting canonical workout text for an external provider, do not invent syntax-changing rewrites without upstream evidence. For Intervals workout docs specifically, preserve repeat headers as a single line ending in `x`, matching both the forum syntax and the repo's canonical serializer.
+- Prevention: when adapting canonical workout text for an external provider, do not invent syntax-changing rewrites without upstream evidence. For Intervals workout docs specifically, preserve repeat headers as a single line ending in `x`, matching both the forum syntax and the repo's canonical serializer unless new live evidence proves otherwise.
 
 ### 2026-05-03 | Copilot + CodeRabbit + Qodo | PR #180 post-review hardening
 
@@ -36,8 +36,8 @@ Read this file before planning and before implementation.
 ### 2026-05-03 | user | Intervals titled-repeat workout_doc interpretation
 
 - Problem: planned-workout Intervals sync sent titled repeats in the app's canonical one-line form (`Main Set 4x`). Intervals accepted the payload but interpreted that line as a plain label, so only one copy of the following steps contributed to the workout duration and the uploaded workout showed `40m` instead of the intended repeated `70m` shape.
-- Fix: added an Intervals-specific planned-workout serializer that emits titled repeats as a title line followed by a standalone repeat token (`Main Set` then `4x`), sends that text through `workout_doc`, preserves existing event descriptions as notes on update, and locks the existing-event path to `PUT` via a sync-state-backed regression.
-- Prevention: for provider DSLs, do not treat HTTP acceptance as semantic correctness. Verify how the provider renders/expands grouped constructs and keep provider-specific grammar exceptions isolated from the app's canonical parser/serializer.
+- Fix: temporarily added an Intervals-specific planned-workout serializer that emitted titled repeats as a title line followed by a standalone repeat token (`Main Set` then `4x`), sent that text through `workout_doc`, preserved existing event descriptions as notes on update, and locked the existing-event path to `PUT` via a sync-state-backed regression. This was later reverted by the newer entry above after live verification showed the split-header payload was the real Intervals failure mode.
+- Prevention: for provider DSLs, do not treat HTTP acceptance as semantic correctness, but also do not lock in speculative grammar workarounds without stable live evidence. Verify the provider's real rendered interpretation end to end before diverging from the app's canonical parser/serializer.
 
 ### 2026-05-02 | user | Wahoo completed-workout id semantics vs summary id
 
