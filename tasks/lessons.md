@@ -37,6 +37,7 @@
 - When a service method starts mixing validation, request building, persistence, orchestration, and result interpretation, split it immediately into small helpers. Long public methods in scheduler/service code are hard to review and hide control-flow bugs.
 - When converting a single-task loop into a concurrent worker pool, keep worker-level state in one shared runtime structure. Per-task copies of active-task state lead to lost heartbeats and flaky concurrency behavior.
 - When a use-case orchestration method starts owning validation, claim/recovery, provider I/O, checkpoint writes, persistence completion, and result hydration all at once, split it into named phase helpers before adding more behavior.
+- When a domain service `mod.rs` starts mixing transcript helpers, provider request building, persistence internals, and use-case orchestration, keep the public type in `mod.rs` and split the phases into sibling modules before the file grows into a review bottleneck.
 - Treat function size as a hard clean-code rule: aim to stay at or below about 100 lines of code, and if a function grows past roughly 130 lines, refactor it into smaller logical helpers before continuing. Do not keep adding behavior to oversized functions.
 - When runtime orchestration for a domain workflow needs `tokio` tasks, timers, channels, or shutdown handles, keep the task handler contract in `src/domain` but move the runtime loop and background-task wiring into `src/config` or another adapter/wiring layer. Do not leave runtime-specific loops in domain modules just because the workflow is domain-owned.
 - When a scheduled task wraps another durable operation with its own stale or reclaim timeout, align the scheduler retry delay with that durable reclaim window. Otherwise the wrapper can burn through retries and mark a task dead before the underlying operation is actually recoverable.
@@ -49,6 +50,7 @@
 
 ## Small Review Fixes
 
+- If a live provider bug reappears in the same shape as an earlier resolved incident, first diff the current code against the last verified provider contract in git history. Do not assume the current branch still carries the earlier hotfix just because the repo has tests for it.
 - If an external workout format already accepts the repo's canonical repeat-header syntax like `Main Set 4x`, do not add a provider-specific serializer that splits the title and repeat count across lines. Syntax-preserving reuse is safer than speculative reshaping.
 - When adding a unique index to a shared sync-state collection, scope the partial filter to the exact canonical entity kind that requires the invariant. A broader `external_id`-only partial filter can turn harmless historical duplicates in other kinds into a startup rollout failure.
 - When a shared trait or widely used domain struct changes shape, grep all implementations, merge helpers, and test fixtures immediately. Do not wait for compile errors to surface one file at a time.

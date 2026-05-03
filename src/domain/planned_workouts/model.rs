@@ -5,6 +5,7 @@ pub struct PlannedWorkoutContent {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlannedWorkoutLine {
+    BlankLine,
     Text(PlannedWorkoutText),
     Repeat(PlannedWorkoutRepeat),
     Step(PlannedWorkoutStep),

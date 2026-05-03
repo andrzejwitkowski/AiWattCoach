@@ -79,6 +79,7 @@ struct StoredPlannedWorkoutContentDocument {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum StoredPlannedWorkoutLineDocument {
+    BlankLine,
     Text {
         text: String,
     },
@@ -535,6 +536,7 @@ fn map_workout_lines(
 
 fn map_workout_line(line: crate::domain::intervals::PlannedWorkoutLine) -> PlannedWorkoutLine {
     match line {
+        crate::domain::intervals::PlannedWorkoutLine::BlankLine => PlannedWorkoutLine::BlankLine,
         crate::domain::intervals::PlannedWorkoutLine::Text(text) => {
             PlannedWorkoutLine::Text(PlannedWorkoutText { text: text.text })
         }
@@ -572,6 +574,7 @@ fn map_stored_line_to_domain(
     line: StoredPlannedWorkoutLineDocument,
 ) -> Result<PlannedWorkoutLine, PlannedWorkoutError> {
     match line {
+        StoredPlannedWorkoutLineDocument::BlankLine => Ok(PlannedWorkoutLine::BlankLine),
         StoredPlannedWorkoutLineDocument::Text { text } => {
             Ok(PlannedWorkoutLine::Text(PlannedWorkoutText { text }))
         }

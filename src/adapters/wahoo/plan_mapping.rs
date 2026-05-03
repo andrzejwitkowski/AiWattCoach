@@ -80,6 +80,9 @@ fn build_plan_intervals(
     let mut index = 0usize;
     while index < lines.len() {
         match &lines[index] {
+            crate::domain::intervals::PlannedWorkoutLine::BlankLine => {
+                index += 1;
+            }
             crate::domain::intervals::PlannedWorkoutLine::Text(_) => {
                 index += 1;
             }
@@ -94,6 +97,9 @@ fn build_plan_intervals(
                     match &lines[child_index] {
                         crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
                             child_steps.push(step_to_plan_interval(None, step));
+                            child_index += 1;
+                        }
+                        crate::domain::intervals::PlannedWorkoutLine::BlankLine => {
                             child_index += 1;
                         }
                         crate::domain::intervals::PlannedWorkoutLine::Text(_) => break,
