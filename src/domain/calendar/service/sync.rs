@@ -17,7 +17,7 @@ use super::{
     },
     projected::{
         build_projected_calendar_event, projected_day_payload_hash, projected_event_payload_hash,
-        projected_event_sync_body, projected_workout_id, projected_workout_name,
+        projected_intervals_workout_doc, projected_workout_id, projected_workout_name,
     },
     CalendarService,
 };
@@ -572,10 +572,10 @@ fn build_create_event(day: &TrainingPlanProjectedDay) -> CreateEvent {
         start_date_local: projected_event_start_date_local(&day.date),
         event_type: Some("Ride".to_string()),
         name: projected_workout_name(day),
-        description: projected_event_sync_body(day),
+        description: None,
         indoor: false,
         color: None,
-        workout_doc: None,
+        workout_doc: projected_intervals_workout_doc(day),
         file_upload: None,
     }
 }
@@ -589,30 +589,19 @@ fn build_update_event(day: &TrainingPlanProjectedDay, existing_event: &Event) ->
             .clone()
             .or_else(|| Some("Ride".to_string())),
         name: projected_workout_name(day),
-        description: merge_event_description(
-            existing_event.description.as_deref(),
-            projected_event_sync_body(day).as_deref(),
-        ),
+        description: preserve_event_description(existing_event.description.as_deref()),
         indoor: Some(existing_event.indoor),
         color: existing_event.color.clone(),
-        workout_doc: None,
+        workout_doc: projected_intervals_workout_doc(day),
         file_upload: None,
     }
 }
 
-fn merge_event_description(existing: Option<&str>, projected: Option<&str>) -> Option<String> {
-    match (
-        existing.map(str::trim).filter(|value| !value.is_empty()),
-        projected,
-    ) {
-        (None, None) => None,
-        (Some(existing), None) => Some(existing.to_string()),
-        (None, Some(projected)) => Some(projected.to_string()),
-        (Some(existing), Some(projected)) if existing.contains(projected) => {
-            Some(existing.to_string())
-        }
-        (Some(existing), Some(projected)) => Some(format!("{existing}\n\n{projected}")),
-    }
+fn preserve_event_description(existing: Option<&str>) -> Option<String> {
+    existing
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 fn intervals_event_id(state: &ExternalSyncState) -> Option<i64> {

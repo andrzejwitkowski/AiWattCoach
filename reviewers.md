@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-03 | user | Intervals titled-repeat workout_doc interpretation
+
+- Problem: planned-workout Intervals sync sent titled repeats in the app's canonical one-line form (`Main Set 4x`). Intervals accepted the payload but interpreted that line as a plain label, so only one copy of the following steps contributed to the workout duration and the uploaded workout showed `40m` instead of the intended repeated `70m` shape.
+- Fix: added an Intervals-specific planned-workout serializer that emits titled repeats as a title line followed by a standalone repeat token (`Main Set` then `4x`), sends that text through `workout_doc`, preserves existing event descriptions as notes on update, and locks the existing-event path to `PUT` via a sync-state-backed regression.
+- Prevention: for provider DSLs, do not treat HTTP acceptance as semantic correctness. Verify how the provider renders/expands grouped constructs and keep provider-specific grammar exceptions isolated from the app's canonical parser/serializer.
+
 ### 2026-05-02 | user | Wahoo completed-workout id semantics vs summary id
 
 - Problem: Wahoo completed-workout import mixed three different identifiers from the same payload. The canonical completed workout and FIT enrichment path could end up persisting `workout_summary.id` or `workout_token` where the system actually needed the Wahoo workout resource id (`workout.id`). That left `completed_workouts.external_id` and task payloads pointing at the wrong id, so later `GET /v1/workouts/{id}/workout_summary` calls returned 404 or "does not expose a FIT file URL" even though the live workout resource did have a FIT file.
