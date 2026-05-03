@@ -150,19 +150,13 @@ pub fn synthetic_event_id(operation_key: &str, date: &str) -> i64 {
     ((value % MAX_JS_SAFE_INTEGER) + 1) as i64
 }
 
-pub(super) fn projected_intervals_workout_doc(day: &TrainingPlanProjectedDay) -> Option<String> {
-    day.workout
-        .as_ref()
-        .map(crate::domain::intervals::serialize_planned_workout_for_intervals)
-}
-
 pub(super) fn projected_event_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
     projected_workout_sync_body(day)
 }
 
 pub(super) fn projected_workout_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
     let workout = day.workout.as_ref()?;
-    let serialized = crate::domain::intervals::serialize_planned_workout(workout);
+    let serialized = crate::domain::intervals::serialize_planned_workout_for_intervals(workout);
     Ok::<_, ()>(comparable_workout_text_for_payload_hash(
         projected_workout_name(day).as_deref(),
         Some(serialized.as_str()),

@@ -180,6 +180,9 @@ fn map_canonical_line_to_intervals_line(
     line: crate::domain::planned_workouts::PlannedWorkoutLine,
 ) -> crate::domain::intervals::PlannedWorkoutLine {
     match line {
+        crate::domain::planned_workouts::PlannedWorkoutLine::BlankLine => {
+            crate::domain::intervals::PlannedWorkoutLine::BlankLine
+        }
         crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => {
             crate::domain::intervals::PlannedWorkoutLine::Text(
                 crate::domain::intervals::PlannedWorkoutText { text: text.text },
@@ -351,10 +354,11 @@ fn serialize_planned_workout_line(
     line: &crate::domain::planned_workouts::PlannedWorkoutLine,
 ) -> String {
     match line {
+        crate::domain::planned_workouts::PlannedWorkoutLine::BlankLine => String::new(),
         crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => text.text.clone(),
         crate::domain::planned_workouts::PlannedWorkoutLine::Repeat(repeat) => {
             match &repeat.title {
-                Some(title) if !title.trim().is_empty() => format!("{title} {}x", repeat.count),
+                Some(title) if !title.trim().is_empty() => format!("{title}\n\n{}x", repeat.count),
                 _ => format!("{}x", repeat.count),
             }
         }

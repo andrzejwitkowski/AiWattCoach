@@ -351,6 +351,9 @@ fn map_planned_workout_line(
     line: intervals::PlannedWorkoutLine,
 ) -> crate::domain::planned_workouts::PlannedWorkoutLine {
     match line {
+        intervals::PlannedWorkoutLine::BlankLine => {
+            crate::domain::planned_workouts::PlannedWorkoutLine::BlankLine
+        }
         intervals::PlannedWorkoutLine::Text(text) => {
             crate::domain::planned_workouts::PlannedWorkoutLine::Text(
                 crate::domain::planned_workouts::PlannedWorkoutText { text: text.text },

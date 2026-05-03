@@ -502,6 +502,9 @@ pub(super) fn projected_interval_blocks(
             PlannedWorkoutLine::Text(_) => {
                 flush_repeated_steps(&mut blocks, &mut repeated_steps, repeat_count.take());
             }
+            PlannedWorkoutLine::BlankLine => {
+                flush_repeated_steps(&mut blocks, &mut repeated_steps, repeat_count.take());
+            }
         }
     }
 

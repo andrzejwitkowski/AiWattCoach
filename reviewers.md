@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-03 | user | Intervals sync still failing on event update after workout_doc drift
+
+- Problem: `main` had drifted back to the speculative `workout_doc`-based planned-workout sync shape. Live logs again showed `PUT /api/v1/athlete/{id}/events/{event_id}` failing with `400 Bad Request` while sending `workout_doc` for an existing planned workout, which matched the previously rejected payload shape rather than a new upstream issue.
+- Fix: restored the history-backed planned-workout Intervals sync payload on `main`: create/update now send the body-only workout text in `description`, keep `workout_doc` unset, preserve manual notes by merging them with the generated body on update, and keep the compatibility lookup tests that still match legacy `description` and newer `workout_doc` rows.
+- Prevention: when a live provider regression reappears in the same shape as an earlier fixed issue, diff the current code against the last verified provider contract in git history before trying a new grammar tweak. For Intervals planned-workout sync specifically, treat `description` as the stable write path unless new live evidence proves `workout_doc` updates really work end to end.
+
 ### 2026-05-03 | user | Intervals planned-workout repeat header serialization
 
 - Problem: the latest Intervals planned-workout fix introduced a provider-specific serializer that split repeat headers like `Main Set 4x` into two lines (`Main Set\n4x`) before sending `workout_doc`. Intervals workout-builder syntax expects the repeat header on one line, so sync requests for workouts like `Stochastic Durability - Over/Unders` started failing again with `400 Bad Request`.

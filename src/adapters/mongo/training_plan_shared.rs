@@ -16,6 +16,8 @@ pub(crate) struct PlannedWorkoutDocument {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 enum PlannedWorkoutLineDocument {
+    #[serde(rename = "blank_line")]
+    BlankLine,
     #[serde(rename = "text")]
     Text { text: String },
     #[serde(rename = "repeat")]
@@ -59,6 +61,7 @@ fn map_line_to_document(
     line: &PlannedWorkoutLine,
 ) -> Result<PlannedWorkoutLineDocument, TrainingPlanError> {
     match line {
+        PlannedWorkoutLine::BlankLine => Ok(PlannedWorkoutLineDocument::BlankLine),
         PlannedWorkoutLine::Text(PlannedWorkoutText { text }) => {
             Ok(PlannedWorkoutLineDocument::Text { text: text.clone() })
         }
@@ -105,6 +108,7 @@ fn map_document_to_line(
     document: PlannedWorkoutLineDocument,
 ) -> Result<PlannedWorkoutLine, TrainingPlanError> {
     match document {
+        PlannedWorkoutLineDocument::BlankLine => Ok(PlannedWorkoutLine::BlankLine),
         PlannedWorkoutLineDocument::Text { text } => {
             Ok(PlannedWorkoutLine::Text(PlannedWorkoutText { text }))
         }

@@ -12,6 +12,7 @@ pub fn parse_planned_workout(input: &str) -> Result<PlannedWorkout, PlannedWorko
     for raw_line in input.lines() {
         let line = raw_line.trim();
         if line.is_empty() {
+            lines.push(PlannedWorkoutLine::BlankLine);
             continue;
         }
 
@@ -42,7 +43,7 @@ pub fn parse_planned_workout_days(
 
     for raw_line in input.lines() {
         let line = raw_line.trim();
-        if line.is_empty() {
+        if line.is_empty() && current_date.is_none() {
             continue;
         }
 
@@ -83,10 +84,6 @@ pub fn serialize_planned_workout(workout: &PlannedWorkout) -> String {
         .map(serialize_line)
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-pub fn serialize_planned_workout_for_intervals(workout: &PlannedWorkout) -> String {
-    serialize_planned_workout(workout)
 }
 
 fn parse_day(date: &str, lines: &[String]) -> Result<PlannedWorkoutDay, PlannedWorkoutParseError> {
@@ -267,6 +264,7 @@ fn parse_watts_target(token: &str) -> Option<PlannedWorkoutTarget> {
 
 fn serialize_line(line: &PlannedWorkoutLine) -> String {
     match line {
+        PlannedWorkoutLine::BlankLine => String::new(),
         PlannedWorkoutLine::Text(text) => text.text.clone(),
         PlannedWorkoutLine::Repeat(repeat) => match &repeat.title {
             Some(title) => format!("{title} {}x", repeat.count),
@@ -281,6 +279,58 @@ fn serialize_line(line: &PlannedWorkoutLine) -> String {
             }
         }
     }
+}
+
+pub fn serialize_planned_workout_for_intervals(workout: &PlannedWorkout) -> String {
+    let mut serialized = Vec::new();
+    let mut previous_non_blank: Option<&PlannedWorkoutLine> = None;
+    let mut last_was_blank = false;
+
+    for line in &workout.lines {
+        match line {
+            PlannedWorkoutLine::BlankLine => {
+                if !serialized.is_empty() && !last_was_blank {
+                    serialized.push(String::new());
+                    last_was_blank = true;
+                }
+            }
+            PlannedWorkoutLine::Text(text) => {
+                if previous_non_blank.is_some_and(|prev| {
+                    matches!(
+                        prev,
+                        PlannedWorkoutLine::Step(_) | PlannedWorkoutLine::Repeat(_)
+                    )
+                }) && !last_was_blank
+                {
+                    serialized.push(String::new());
+                }
+                serialized.push(text.text.clone());
+                previous_non_blank = Some(line);
+                last_was_blank = false;
+            }
+            PlannedWorkoutLine::Repeat(repeat) => {
+                if previous_non_blank.is_some() && !last_was_blank {
+                    serialized.push(String::new());
+                }
+                if let Some(title) = &repeat.title {
+                    if !title.trim().is_empty() {
+                        serialized.push(title.clone());
+                        serialized.push(String::new());
+                    }
+                }
+                serialized.push(format!("{}x", repeat.count));
+                previous_non_blank = Some(line);
+                last_was_blank = false;
+            }
+            PlannedWorkoutLine::Step(step) => {
+                serialized.push(serialize_line(&PlannedWorkoutLine::Step(step.clone())));
+                previous_non_blank = Some(line);
+                last_was_blank = false;
+            }
+        }
+    }
+
+    serialized.join("\n")
 }
 
 fn serialize_duration(duration_seconds: i32) -> String {
@@ -319,4 +369,169 @@ fn normalize_spaces(value: &str) -> String {
 
 fn is_exact_date(value: &str) -> bool {
     NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_planned_workout_preserves_blank_lines() {
+        let workout = parse_planned_workout("Warmup\n- 15m 55%\n\nMain Set\n\n4x\n- 2m 105%")
+            .expect("planned workout should parse");
+
+        assert_eq!(
+            workout.lines,
+            vec![
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Warmup".to_string(),
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 900,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 55.0,
+                        max: 55.0,
+                    },
+                }),
+                PlannedWorkoutLine::BlankLine,
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Main Set".to_string(),
+                }),
+                PlannedWorkoutLine::BlankLine,
+                PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
+                    title: None,
+                    count: 4,
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 120,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 105.0,
+                        max: 105.0,
+                    },
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn serialize_planned_workout_preserves_blank_lines() {
+        let workout = PlannedWorkout {
+            lines: vec![
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Warmup".to_string(),
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 900,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 55.0,
+                        max: 55.0,
+                    },
+                }),
+                PlannedWorkoutLine::BlankLine,
+                PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
+                    title: None,
+                    count: 4,
+                }),
+            ],
+        };
+
+        assert_eq!(
+            serialize_planned_workout(&workout),
+            "Warmup\n- 15m 55%\n\n4x"
+        );
+    }
+
+    #[test]
+    fn intervals_serializer_splits_titled_repeats_and_keeps_group_spacing() {
+        let workout = PlannedWorkout {
+            lines: vec![
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Warmup".to_string(),
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 900,
+                    kind: PlannedWorkoutStepKind::Ramp,
+                    target: PlannedWorkoutTarget::WattsRange { min: 175, max: 250 },
+                }),
+                PlannedWorkoutLine::BlankLine,
+                PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
+                    title: Some("Main Set".to_string()),
+                    count: 4,
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 120,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 105.0,
+                        max: 105.0,
+                    },
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 240,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 92.0,
+                        max: 92.0,
+                    },
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 240,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 50.0,
+                        max: 50.0,
+                    },
+                }),
+                PlannedWorkoutLine::BlankLine,
+                PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
+                    title: None,
+                    count: 3,
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 120,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 125.0,
+                        max: 125.0,
+                    },
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 240,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 92.0,
+                        max: 92.0,
+                    },
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 60,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 50.0,
+                        max: 50.0,
+                    },
+                }),
+                PlannedWorkoutLine::BlankLine,
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Cooldown".to_string(),
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 900,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 55.0,
+                        max: 55.0,
+                    },
+                }),
+            ],
+        };
+
+        assert_eq!(
+            serialize_planned_workout_for_intervals(&workout),
+            "Warmup\n- 15m ramp 175-250W\n\nMain Set\n\n4x\n- 2m 105%\n- 4m 92%\n- 4m 50%\n\n3x\n- 2m 125%\n- 4m 92%\n- 1m 50%\n\nCooldown\n- 15m 55%"
+        );
+    }
 }

@@ -122,7 +122,7 @@ fn serializes_parsed_workout_to_canonical_normalized_string() {
 }
 
 #[test]
-fn serializes_intervals_workout_with_repeat_header_on_one_line() {
+fn serializes_intervals_workout_with_repeat_header_split_into_grouped_lines() {
     let parsed = parse_planned_workout(
         "Warmup\n- 15m ramp 120-160W\nMain Set 4x\n- 5m 95%\n- 2m 55%\nCooldown\n- 10m 50%",
     )
@@ -130,7 +130,7 @@ fn serializes_intervals_workout_with_repeat_header_on_one_line() {
 
     assert_eq!(
         serialize_planned_workout_for_intervals(&parsed),
-        "Warmup\n- 15m ramp 120-160W\nMain Set 4x\n- 5m 95%\n- 2m 55%\nCooldown\n- 10m 50%"
+        "Warmup\n- 15m ramp 120-160W\n\nMain Set\n\n4x\n- 5m 95%\n- 2m 55%\n\nCooldown\n- 10m 50%"
     );
 }
 
@@ -143,7 +143,7 @@ fn serializes_titled_repeat_for_intervals_workout_doc() {
 
     assert_eq!(
         serialize_planned_workout_for_intervals(&parsed),
-        "Stochastic Durability - Over/Unders\nWarmup\n- 15m ramp 175-250W\nMain Set 4x\n- 2m 105%\n- 4m 92%\n- 4m 50%\nCooldown\n- 15m 55%"
+        "Stochastic Durability - Over/Unders\nWarmup\n- 15m ramp 175-250W\n\nMain Set\n\n4x\n- 2m 105%\n- 4m 92%\n- 4m 50%\n\nCooldown\n- 15m 55%"
     );
 }
 

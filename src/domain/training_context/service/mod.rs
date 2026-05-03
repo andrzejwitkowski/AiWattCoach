@@ -1170,6 +1170,9 @@ fn map_canonical_line_to_intervals_line(
     line: crate::domain::planned_workouts::PlannedWorkoutLine,
 ) -> crate::domain::intervals::PlannedWorkoutLine {
     match line {
+        crate::domain::planned_workouts::PlannedWorkoutLine::BlankLine => {
+            crate::domain::intervals::PlannedWorkoutLine::BlankLine
+        }
         crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => {
             crate::domain::intervals::PlannedWorkoutLine::Text(
                 crate::domain::intervals::PlannedWorkoutText { text: text.text },
