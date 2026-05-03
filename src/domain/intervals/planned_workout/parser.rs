@@ -86,12 +86,7 @@ pub fn serialize_planned_workout(workout: &PlannedWorkout) -> String {
 }
 
 pub fn serialize_planned_workout_for_intervals(workout: &PlannedWorkout) -> String {
-    workout
-        .lines
-        .iter()
-        .flat_map(serialize_line_for_intervals)
-        .collect::<Vec<_>>()
-        .join("\n")
+    serialize_planned_workout(workout)
 }
 
 fn parse_day(date: &str, lines: &[String]) -> Result<PlannedWorkoutDay, PlannedWorkoutParseError> {
@@ -285,18 +280,6 @@ fn serialize_line(line: &PlannedWorkoutLine) -> String {
                 PlannedWorkoutStepKind::Ramp => format!("- {duration} ramp {target}"),
             }
         }
-    }
-}
-
-fn serialize_line_for_intervals(line: &PlannedWorkoutLine) -> Vec<String> {
-    match line {
-        PlannedWorkoutLine::Repeat(repeat) => match &repeat.title {
-            Some(title) if !title.trim().is_empty() => {
-                vec![title.trim().to_string(), format!("{}x", repeat.count)]
-            }
-            _ => vec![format!("{}x", repeat.count)],
-        },
-        _ => vec![serialize_line(line)],
     }
 }
 

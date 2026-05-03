@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-03 | user | Intervals planned-workout repeat header serialization
+
+- Problem: the latest Intervals planned-workout fix introduced a provider-specific serializer that split repeat headers like `Main Set 4x` into two lines (`Main Set\n4x`) before sending `workout_doc`. Intervals workout-builder syntax expects the repeat header on one line, so sync requests for workouts like `Stochastic Durability - Over/Unders` started failing again with `400 Bad Request`.
+- Fix: changed `serialize_planned_workout_for_intervals(...)` to reuse the canonical planned-workout serializer instead of reshaping repeat headers, and updated the planned-workout/calendar regressions to assert the one-line `Main Set 4x` payload.
+- Prevention: when adapting canonical workout text for an external provider, do not invent syntax-changing rewrites without upstream evidence. For Intervals workout docs specifically, preserve repeat headers as a single line ending in `x`, matching both the forum syntax and the repo's canonical serializer.
+
 ### 2026-05-03 | Copilot + CodeRabbit + Qodo | PR #180 post-review hardening
 
 - Problem: follow-up PR review found a mix of real transport and recovery gaps around the tool-calling foundation. Calendar load `404` handling could leave stale conversation state visible when the failing request belonged to the currently displayed conversation. Frontend `tool_message` schemas accepted non-tool-shaped payloads. Athlete summary and training-plan generation still treated missing/blank assistant text as successful output and could persist empty summaries/plans. The OpenAI adapter still dropped tool-call responses and finish reasons entirely, which would block provider continuity once OpenAI is used for tool-calling flows. New Mongo hidden-transcript update code for workout summaries did not include `user_id` in the update filter. Legacy reply-operation documents with only `response_message` could no longer replay into the new hidden-transcript recovery path. Public tool-message materialization also relied only on in-operation ids, so a crash between message append and operation checkpoint could duplicate a tool bubble on retry.
