@@ -271,7 +271,7 @@ async fn sync_planned_workout_to_intervals_updates_existing_event_workout_doc() 
     assert_eq!(updated[0].1.description.as_deref(), Some("manual note"));
     assert_eq!(
         updated[0].1.workout_doc.as_deref(),
-        Some("Stochastic Durability - Over/Unders\nWarmup\n- 15m ramp 175-250W\nMain Set 4x\n- 2m 105%\n- 4m 92%\n- 4m 50%\nCooldown\n- 15m 55%")
+        Some("Stochastic Durability - Over/Unders\nWarmup\n- 15m ramp 175-250W\nMain Set\n4x\n- 2m 105%\n- 4m 92%\n- 4m 50%\nCooldown\n- 15m 55%")
     );
 }
 
