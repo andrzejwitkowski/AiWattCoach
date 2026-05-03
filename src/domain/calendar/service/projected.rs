@@ -119,7 +119,7 @@ pub(super) fn projected_day_payload_hash(day: &TrainingPlanProjectedDay) -> Stri
     projected_event_payload_hash(
         &day.date,
         projected_workout_name(day).as_deref(),
-        projected_intervals_workout_doc(day).as_deref(),
+        projected_workout_sync_body(day).as_deref(),
     )
 }
 
@@ -150,10 +150,34 @@ pub fn synthetic_event_id(operation_key: &str, date: &str) -> i64 {
     ((value % MAX_JS_SAFE_INTEGER) + 1) as i64
 }
 
-pub(super) fn projected_intervals_workout_doc(day: &TrainingPlanProjectedDay) -> Option<String> {
-    day.workout
-        .as_ref()
-        .map(crate::domain::intervals::serialize_planned_workout_for_intervals)
+pub(super) fn projected_workout_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
+    let workout = day.workout.as_ref()?;
+    let workout_name = projected_workout_name(day);
+
+    let lines = workout
+        .lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let is_title_line = index == 0
+                && line
+                    .text()
+                    .zip(workout_name.as_deref())
+                    .is_some_and(|(text, name)| text == name);
+
+            (!is_title_line).then(|| serialize_projected_workout_line(line))
+        })
+        .collect::<Vec<_>>();
+
+    if lines.is_empty() {
+        workout_name
+    } else {
+        Some(lines.join("\n"))
+    }
+}
+
+pub(super) fn projected_event_sync_body(day: &TrainingPlanProjectedDay) -> Option<String> {
+    projected_workout_sync_body(day)
 }
 
 fn sync_states_for_status<'a>(
@@ -177,4 +201,62 @@ fn linked_intervals_event_id(
         .find(|state| state.provider == ExternalProvider::Intervals)
         .and_then(|state| state.external_id.as_deref())
         .and_then(|value| value.parse::<i64>().ok())
+}
+
+fn serialize_projected_workout_line(line: &crate::domain::intervals::PlannedWorkoutLine) -> String {
+    match line {
+        crate::domain::intervals::PlannedWorkoutLine::Text(text) => text.text.clone(),
+        crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => match &repeat.title {
+            Some(title) if !title.trim().is_empty() => format!("{title} {}x", repeat.count),
+            _ => format!("{}x", repeat.count),
+        },
+        crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
+            let duration = format_projected_step_duration(step.duration_seconds);
+            let target = format_projected_step_target(&step.target);
+            match step.kind {
+                crate::domain::intervals::PlannedWorkoutStepKind::Steady => {
+                    format!("- {duration} {target}")
+                }
+                crate::domain::intervals::PlannedWorkoutStepKind::Ramp => {
+                    format!("- {duration} ramp {target}")
+                }
+            }
+        }
+    }
+}
+
+fn format_projected_step_duration(duration_seconds: i32) -> String {
+    if duration_seconds % 60 == 0 {
+        format!("{}m", duration_seconds / 60)
+    } else {
+        format!("{duration_seconds}s")
+    }
+}
+
+fn format_projected_step_target(target: &crate::domain::intervals::PlannedWorkoutTarget) -> String {
+    match target {
+        crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max } => {
+            if (min - max).abs() < f64::EPSILON {
+                format!("{}%", trim_decimal(*min))
+            } else {
+                format!("{}-{}%", trim_decimal(*min), trim_decimal(*max))
+            }
+        }
+        crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max } => {
+            if min == max {
+                format!("{min}W")
+            } else {
+                format!("{min}-{max}W")
+            }
+        }
+    }
+}
+
+fn trim_decimal(value: f64) -> String {
+    let rounded = (value * 10.0).round() / 10.0;
+    if (rounded.fract()).abs() < f64::EPSILON {
+        format!("{rounded:.0}")
+    } else {
+        format!("{rounded:.1}")
+    }
 }
