@@ -116,7 +116,7 @@ where
                 .map_err(map_llm_error)?;
 
             let generated_at_epoch_seconds = clock.now_epoch_seconds();
-            let recap_text = response.assistant_text().unwrap_or_default().to_string();
+            let recap_text = require_assistant_text(&response)?;
             let provider = response.provider.as_str().to_string();
             Ok(WorkoutRecap::generated(
                 recap_text,
@@ -188,7 +188,7 @@ where
                 .await
                 .map_err(map_llm_error)?;
 
-            Ok(response.assistant_text().unwrap_or_default().to_string())
+            require_assistant_text(&response)
         })
     }
 
@@ -263,13 +263,24 @@ where
                 .await
                 .map_err(map_llm_error)?;
 
-            Ok(response.assistant_text().unwrap_or_default().to_string())
+            require_assistant_text(&response)
         })
     }
 }
 
 fn map_llm_error(error: LlmError) -> TrainingPlanError {
     TrainingPlanError::Unavailable(error.to_string())
+}
+
+fn require_assistant_text(
+    response: &crate::domain::llm::LlmChatResponse,
+) -> Result<String, TrainingPlanError> {
+    response
+        .assistant_text()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| TrainingPlanError::Unavailable("LLM returned no assistant text".to_string()))
 }
 
 fn training_plan_recap_system_prompt() -> String {

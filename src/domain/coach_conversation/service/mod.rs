@@ -354,6 +354,20 @@ where
                 continue;
             }
 
+            let already_materialized = self
+                .messages
+                .find_by_user_id_and_conversation_id_and_message_id(
+                    &conversation.user_id,
+                    &conversation.conversation_id,
+                    &tool_call.id,
+                )
+                .await?
+                .is_some();
+            if already_materialized {
+                operation.public_tool_call_ids.push(tool_call.id.clone());
+                continue;
+            }
+
             self.append_tool_message(
                 conversation,
                 crate::domain::workout_summary::PublicToolCall {
@@ -995,9 +1009,13 @@ where
             let operation = service
                 .materialize_public_tool_messages(&conversation, operation, &llm_response)
                 .await?;
-            let operation = service
-                .persist_post_provider_operation(operation, "persist_public_tool_messages")
-                .await?;
+            let operation = if llm_response.tool_calls().is_empty() {
+                operation
+            } else {
+                service
+                    .persist_post_provider_operation(operation, "persist_public_tool_messages")
+                    .await?
+            };
 
             let Some(coach_content) = final_assistant_text(&llm_response) else {
                 let error = LlmError::InvalidResponse(

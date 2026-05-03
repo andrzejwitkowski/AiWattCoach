@@ -17,6 +17,11 @@ export const conversationMessageSchema = z.object({
   createdAtEpochSeconds: z.number().int(),
 });
 
+const toolConversationMessageSchema = conversationMessageSchema.extend({
+  role: z.literal('tool'),
+  toolCall: toolCallSchema,
+});
+
 export const workoutSummarySchema = z.object({
   id: z.string(),
   workoutId: z.string(),
@@ -67,7 +72,7 @@ export const coachMessageWsMessageSchema = z.object({
 
 export const toolMessageWsMessageSchema = z.object({
   type: z.literal('tool_message'),
-  message: conversationMessageSchema,
+  message: toolConversationMessageSchema,
 });
 
 export const systemMessageWsMessageSchema = z.object({

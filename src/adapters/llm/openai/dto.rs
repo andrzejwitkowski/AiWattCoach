@@ -11,7 +11,26 @@ pub struct OpenAiChatRequest {
 #[derive(Serialize)]
 pub struct OpenAiMessage {
     pub role: String,
-    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub tool_calls: Vec<OpenAiToolCall>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OpenAiToolFunctionCall {
+    pub name: String,
+    pub arguments: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OpenAiToolCall {
+    pub id: String,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub tool_type: Option<String>,
+    pub function: OpenAiToolFunctionCall,
 }
 
 #[derive(Deserialize)]
@@ -25,11 +44,14 @@ pub struct OpenAiChatResponse {
 #[derive(Deserialize)]
 pub struct OpenAiChoice {
     pub message: OpenAiMessageResponse,
+    pub finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct OpenAiMessageResponse {
-    pub content: String,
+    pub content: Option<String>,
+    #[serde(default)]
+    pub tool_calls: Vec<OpenAiToolCall>,
 }
 
 #[derive(Deserialize)]

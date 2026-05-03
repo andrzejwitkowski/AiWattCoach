@@ -164,6 +164,33 @@ describe('useCalendarCoachChat', () => {
     expect(result.current.messages[0]?.content).toBe('How does this week look?');
   });
 
+  it('clears the current conversation when load returns 404 for the same conversation', async () => {
+    global.WebSocket = undefined as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockResolvedValueOnce({
+      conversation: conversationFixture,
+      messages: [messageFixture],
+    }).mockRejectedValueOnce(new HttpError(404, 'not found'));
+
+    const { result, rerender } = renderHook(({ isOpen }) => useCalendarCoachChat({ isOpen }), {
+      initialProps: { isOpen: true },
+    });
+
+    await waitFor(() => {
+      expect(result.current.conversation?.conversationId).toBe('conversation-1');
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    rerender({ isOpen: false });
+    rerender({ isOpen: true });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.conversation).toBeNull();
+    expect(result.current.messages).toHaveLength(0);
+  });
+
   it('appends websocket typing and coach reply updates', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     coachApi.getCurrentCalendarCoachConversation.mockResolvedValue({

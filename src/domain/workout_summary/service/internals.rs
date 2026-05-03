@@ -188,6 +188,19 @@ where
                 continue;
             }
 
+            let already_materialized = match self
+                .get_message_by_id(user_id, workout_id, &tool_call.id)
+                .await
+            {
+                Ok(_) => true,
+                Err(WorkoutSummaryError::NotFound) => false,
+                Err(error) => return Err(error),
+            };
+            if already_materialized {
+                operation.public_tool_call_ids.push(tool_call.id.clone());
+                continue;
+            }
+
             self.append_tool_message(
                 user_id,
                 workout_id,

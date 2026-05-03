@@ -93,15 +93,28 @@ where
             let volatile_context =
                 build_volatile_context(&training_context.rendered.volatile_context);
             let system_prompt = workout_coach_system_prompt();
+            let conversation = build_conversation(
+                summary.messages.as_slice(),
+                &summary.hidden_transcript,
+                &user_message,
+            );
             let estimated_request_tokens = approximate_token_usage(&stable_context)
                 + approximate_token_usage(&volatile_context)
                 + approximate_token_usage(&system_prompt)
-                + summary
-                    .messages
+                + conversation
                     .iter()
-                    .map(|message| approximate_token_usage(&message.content))
-                    .sum::<usize>()
-                + approximate_token_usage(&user_message);
+                    .map(|message| {
+                        approximate_token_usage(&message.content)
+                            + message
+                                .tool_calls
+                                .iter()
+                                .map(|tool| {
+                                    approximate_token_usage(&tool.name)
+                                        + approximate_token_usage(&tool.arguments_json)
+                                })
+                                .sum::<usize>()
+                    })
+                    .sum::<usize>();
             let token_budget = approximate_token_budget_for_model(&config.model);
             if estimated_request_tokens > token_budget {
                 return Err(LlmError::ContextTooLarge(format!(
@@ -167,11 +180,7 @@ where
                 system_prompt,
                 stable_context,
                 volatile_context,
-                conversation: build_conversation(
-                    summary.messages.as_slice(),
-                    &summary.hidden_transcript,
-                    &user_message,
-                ),
+                conversation,
                 cache_scope_key: cache_scope_key.clone(),
                 cache_key: Some(context_hash.clone()),
                 reusable_cache_id,

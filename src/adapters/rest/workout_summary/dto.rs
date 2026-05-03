@@ -68,7 +68,9 @@ pub(super) struct WorkoutSummaryDto {
 
 #[derive(Serialize)]
 pub(super) struct ToolCallDto {
+    #[serde(rename = "id")]
     pub id: String,
+    #[serde(rename = "name")]
     pub name: String,
     #[serde(rename = "argumentsJson")]
     pub arguments_json: String,

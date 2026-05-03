@@ -1,12 +1,12 @@
+use crate::adapters::llm::context_prelude::non_empty_context_parts;
 use crate::domain::llm::{
-    LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmMessageRole, LlmProvider,
-    LlmProviderConfig, LlmTokenUsage,
+    LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmFinishReason,
+    LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall,
 };
 
-use crate::adapters::llm::context_prelude::non_empty_context_parts;
-
 use super::dto::{
-    OpenAiChatRequest, OpenAiChatResponse, OpenAiMessage, OpenAiPromptTokenDetails, OpenAiUsage,
+    OpenAiChatRequest, OpenAiChatResponse, OpenAiMessage, OpenAiPromptTokenDetails, OpenAiToolCall,
+    OpenAiToolFunctionCall, OpenAiUsage,
 };
 
 pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenAiChatRequest {
@@ -19,7 +19,9 @@ pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenA
     .into_iter()
     .map(|(role, content)| OpenAiMessage {
         role: role.to_string(),
-        content: content.to_string(),
+        content: Some(content.to_string()),
+        tool_calls: Vec::new(),
+        tool_call_id: None,
     })
     .collect::<Vec<_>>();
     messages.extend(request.conversation.drain(..).map(map_message));
@@ -35,17 +37,22 @@ pub fn map_response(
     config: &LlmProviderConfig,
     response: OpenAiChatResponse,
 ) -> Result<LlmChatResponse, crate::domain::llm::LlmError> {
-    let message = response
-        .choices
+    let choice = response.choices.into_iter().next().ok_or_else(|| {
+        crate::domain::llm::LlmError::InvalidResponse("OpenAI returned no choices".to_string())
+    })?;
+    let content = choice.message.content.unwrap_or_default();
+    let tool_calls = choice
+        .message
+        .tool_calls
         .into_iter()
-        .next()
-        .map(|choice| choice.message.content)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            crate::domain::llm::LlmError::InvalidResponse(
-                "OpenAI returned no message content".to_string(),
-            )
-        })?;
+        .map(map_tool_call)
+        .collect::<Vec<_>>();
+
+    if content.trim().is_empty() && tool_calls.is_empty() {
+        return Err(crate::domain::llm::LlmError::InvalidResponse(
+            "OpenAI returned neither message content nor tool calls".to_string(),
+        ));
+    }
 
     let usage = response.usage.unwrap_or(OpenAiUsage {
         prompt_tokens: None,
@@ -63,8 +70,8 @@ pub fn map_response(
     Ok(LlmChatResponse {
         provider: LlmProvider::OpenAi,
         model: response.model.unwrap_or_else(|| config.model.clone()),
-        message: LlmChatMessage::assistant(message),
-        finish_reason: None,
+        message: LlmChatMessage::assistant_with_tool_calls(content, tool_calls),
+        finish_reason: choice.finish_reason.map(map_finish_reason),
         provider_request_id: response.id,
         usage: LlmTokenUsage {
             input_tokens: usage.prompt_tokens,
@@ -91,6 +98,41 @@ fn map_message(message: LlmChatMessage) -> OpenAiMessage {
             LlmMessageRole::Assistant => "assistant".to_string(),
             LlmMessageRole::Tool => "tool".to_string(),
         },
-        content: message.content,
+        content: (!message.content.is_empty()).then_some(message.content),
+        tool_calls: message
+            .tool_calls
+            .into_iter()
+            .map(map_domain_tool_call)
+            .collect(),
+        tool_call_id: message.tool_call_id,
+    }
+}
+
+fn map_domain_tool_call(call: LlmToolCall) -> OpenAiToolCall {
+    OpenAiToolCall {
+        id: call.id,
+        tool_type: Some("function".to_string()),
+        function: OpenAiToolFunctionCall {
+            name: call.name,
+            arguments: call.arguments_json,
+        },
+    }
+}
+
+fn map_tool_call(call: OpenAiToolCall) -> LlmToolCall {
+    LlmToolCall {
+        id: call.id,
+        name: call.function.name,
+        arguments_json: call.function.arguments,
+    }
+}
+
+fn map_finish_reason(value: String) -> LlmFinishReason {
+    match value.as_str() {
+        "stop" => LlmFinishReason::Stop,
+        "length" => LlmFinishReason::Length,
+        "tool_calls" => LlmFinishReason::ToolCalls,
+        "content_filter" => LlmFinishReason::ContentFilter,
+        other => LlmFinishReason::Unknown(other.to_string()),
     }
 }

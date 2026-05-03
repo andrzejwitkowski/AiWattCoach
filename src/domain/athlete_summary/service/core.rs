@@ -236,7 +236,23 @@ where
         let created_at_epoch_seconds = existing_summary
             .map(|summary| summary.created_at_epoch_seconds)
             .unwrap_or(now);
-        let summary_text = response.assistant_text().unwrap_or_default().to_string();
+        let Some(summary_text) = response
+            .assistant_text()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+        else {
+            let error = crate::domain::llm::LlmError::InvalidResponse(
+                "assistant summary missing final text".to_string(),
+            );
+            let failed = self.failed_operation(
+                &operation,
+                error.to_string(),
+                self.clock.now_epoch_seconds(),
+            );
+            self.operations.upsert(failed).await?;
+            return Err(AthleteSummaryError::Llm(error));
+        };
         let provider = response.provider.to_string();
         let model = response.model.clone();
         let summary = self.build_summary(SummaryRecord {

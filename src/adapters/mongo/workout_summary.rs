@@ -342,7 +342,12 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
 
             let result = collection
                 .update_one(
-                    document_identity_filter(&document),
+                    doc! {
+                        "$and": [
+                            document_identity_filter(&document),
+                            { "user_id": &user_id },
+                        ]
+                    },
                     doc! {
                         "$set": {
                             "hidden_transcript": mongodb::bson::to_bson(&hidden_transcript)

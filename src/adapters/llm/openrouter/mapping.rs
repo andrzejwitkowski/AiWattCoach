@@ -104,7 +104,8 @@ pub fn map_response(
 }
 
 fn map_tool_definition(tool: LlmToolDefinition) -> OpenRouterTool {
-    let parameters = serde_json::from_str(&tool.input_schema_json).unwrap_or_else(|_| {
+    let parameters = serde_json::from_str(&tool.input_schema_json).unwrap_or_else(|error| {
+        tracing::warn!(tool_name = %tool.name, error = %error, "failed to parse tool input schema json; using permissive fallback");
         serde_json::json!({
             "type": "object",
             "properties": {},

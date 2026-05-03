@@ -288,7 +288,38 @@ async fn openai_handler(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let model = body
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let model = model.to_string();
     capture_request(&state, "/v1/chat/completions", headers, body);
+    if model == "gpt-4o-mini-tool-calls" {
+        return Json(json!({
+            "id": "openai-req-tool-1",
+            "model": model,
+            "choices": [{
+                "finish_reason": "tool_calls",
+                "message": {
+                    "content": null,
+                    "tool_calls": [{
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {
+                            "name": "lookupWorkout",
+                            "arguments": "{\"workoutId\":\"workout-1\"}"
+                        }
+                    }]
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 120,
+                "prompt_tokens_details": { "cached_tokens": 42 }
+            }
+        }));
+    }
     Json(json!({
         "id": "openai-req-1",
         "model": "gpt-4o-mini",

@@ -3,7 +3,10 @@ use std::sync::Arc;
 use aiwattcoach::{
     adapters::llm::training_plan_generator::TrainingPlanLlmGenerator,
     domain::ai_workflow::ValidationIssue,
-    domain::llm::{BoxFuture as LlmBoxFuture, LlmError},
+    domain::llm::{
+        BoxFuture as LlmBoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse,
+        LlmError, LlmProvider, LlmProviderConfig, LlmTokenUsage,
+    },
     domain::training_context::{
         IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
         TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
@@ -455,4 +458,49 @@ async fn training_plan_generator_does_not_reject_large_context_before_calling_ch
 
     assert!(response.is_ok(), "unexpected error: {response:?}");
     assert_eq!(chat_port.requests().len(), 1);
+}
+
+#[derive(Clone, Default)]
+struct BlankAssistantChatPort;
+
+impl LlmChatPort for BlankAssistantChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        _request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        Box::pin(async move {
+            Ok(LlmChatResponse {
+                provider: LlmProvider::Gemini,
+                model: "gemini-3.1-pro".to_string(),
+                message: LlmChatMessage::assistant("  "),
+                finish_reason: None,
+                provider_request_id: Some("req-blank".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
+#[tokio::test]
+async fn training_plan_generator_fails_when_llm_returns_blank_assistant_text() {
+    let generator = TrainingPlanLlmGenerator::new(
+        Arc::new(BlankAssistantChatPort),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let error = generator
+        .generate_workout_recap("user-1", "workout-1", 1_699_999_000)
+        .await
+        .expect_err("blank assistant text should fail");
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+            "LLM returned no assistant text".to_string(),
+        )
+    );
 }

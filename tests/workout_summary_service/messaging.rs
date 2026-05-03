@@ -198,7 +198,6 @@ async fn generate_coach_reply_persists_pending_operation_before_coach_message() 
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
-            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
         ]
     );
@@ -358,7 +357,6 @@ async fn generate_coach_reply_targets_the_persisted_message_id_when_contents_rep
         reply_operations.calls(),
         vec![
             format!("claim_pending:workout-1:{}", second.user_message.id),
-            format!("upsert:workout-1:{}:Pending", second.user_message.id),
             format!("upsert:workout-1:{}:Pending", second.user_message.id),
             format!("upsert:workout-1:{}:Completed", second.user_message.id),
         ]
@@ -774,7 +772,6 @@ async fn generate_coach_reply_retries_after_failed_operation() {
             format!("seed:workout-1:{}:Failed", persisted.user_message.id),
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
-            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
         ]
     );
@@ -850,7 +847,6 @@ async fn generate_coach_reply_reuses_completed_operation_without_duplicate_coach
         reply_operations.calls(),
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
-            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
@@ -1206,7 +1202,6 @@ async fn generate_coach_reply_retries_completion_write_after_coach_message_appen
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
-            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
         ]
@@ -1239,7 +1234,6 @@ async fn generate_coach_reply_retries_success_checkpoint_write_before_returning(
         reply_operations.calls(),
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
-            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),

@@ -39,6 +39,33 @@ async fn openai_client_maps_response_and_cached_tokens() {
 }
 
 #[tokio::test]
+async fn openai_client_maps_tool_call_response_and_finish_reason() {
+    let server = MockServer::start().await;
+    let client = openai_client(&server.base_url);
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenAi,
+                model: "gpt-4o-mini-tool-calls".to_string(),
+                api_key: "openai-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.assistant_text(), Some(""));
+    assert_eq!(response.tool_calls().len(), 1);
+    assert_eq!(response.tool_calls()[0].id, "call-1");
+    assert_eq!(response.tool_calls()[0].name, "lookupWorkout");
+    assert_eq!(
+        response.finish_reason,
+        Some(aiwattcoach::domain::llm::LlmFinishReason::ToolCalls)
+    );
+}
+
+#[tokio::test]
 async fn gemini_client_creates_cache_and_reuses_cached_content() {
     let server = MockServer::start().await;
     let client = gemini_client(&server.base_url);

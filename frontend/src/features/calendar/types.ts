@@ -28,6 +28,11 @@ export const calendarCoachMessageSchema = z.object({
   createdAtEpochSeconds: z.number().int(),
 });
 
+const calendarCoachToolOnlyMessageSchema = calendarCoachMessageSchema.extend({
+  role: z.literal('tool'),
+  toolCall: calendarCoachToolCallSchema,
+});
+
 export const calendarCoachConversationResponseSchema = z.object({
   conversation: calendarCoachConversationSchema,
   messages: z.array(calendarCoachMessageSchema),
@@ -62,7 +67,7 @@ export const calendarCoachMessageWsMessageSchema = z.object({
 
 export const calendarCoachToolMessageWsMessageSchema = z.object({
   type: z.literal('tool_message'),
-  message: calendarCoachMessageSchema,
+  message: calendarCoachToolOnlyMessageSchema,
 });
 
 export const calendarCoachSystemMessageWsMessageSchema = z.object({

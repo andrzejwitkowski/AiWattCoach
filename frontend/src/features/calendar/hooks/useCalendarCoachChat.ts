@@ -285,6 +285,7 @@ export function useCalendarCoachChat({
       return;
     }
 
+    const conversationIdAtRequestStart = currentConversationIdRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -315,7 +316,8 @@ export function useCalendarCoachChat({
       }
 
       if (loadError instanceof HttpError && loadError.status === 404) {
-        if (!currentConversationIdRef.current) {
+        if (conversationIdAtRequestStart === currentConversationIdRef.current) {
+          currentConversationIdRef.current = null;
           setConversation(null);
           setMessages([]);
         }

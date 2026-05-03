@@ -308,9 +308,12 @@ where
         let operation = self
             .materialize_public_tool_messages(user_id, workout_id, operation, &llm_response)
             .await?;
-        let operation = self
-            .persist_post_provider_operation(operation, "persist_public_tool_messages")
-            .await?;
+        let operation = if llm_response.tool_calls().is_empty() {
+            operation
+        } else {
+            self.persist_post_provider_operation(operation, "persist_public_tool_messages")
+                .await?
+        };
 
         Ok((operation, llm_response, athlete_summary_was_regenerated))
     }

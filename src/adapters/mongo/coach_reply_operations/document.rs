@@ -19,6 +19,8 @@ pub(super) struct CoachReplyOperationDocument {
     #[serde(default)]
     pub(super) hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
     #[serde(default)]
+    pub(super) response_message: Option<String>,
+    #[serde(default)]
     pub(super) finish_reason: Option<crate::domain::llm::LlmFinishReason>,
     #[serde(default)]
     pub(super) public_tool_call_ids: Vec<String>,
