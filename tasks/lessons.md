@@ -7,6 +7,7 @@
 - The purpose of this loop is to reduce repeated PR and review mistakes over time.
 - I must read `reviewers.md` before writing a plan and before starting implementation work.
 - When repo instructions point at an Obsidian vault on Windows, store the exact subtree that contains the handbook notes, not only the vault root. A too-broad path wastes time and leads to false "file not found" lookups.
+- Before any commit or push, explicitly verify the current branch name against the user's requested target branch. Do not rely on conversational memory when the user references "this branch" or another already-existing branch by name.
 
 ## PR Conflict Verification
 
