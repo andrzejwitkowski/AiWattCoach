@@ -10,6 +10,7 @@ use super::dto::{
 };
 
 pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenAiChatRequest {
+    let mut request = request;
     let mut messages = non_empty_context_parts([
         ("system", request.system_prompt.as_str()),
         ("system", request.stable_context.as_str()),
@@ -21,7 +22,7 @@ pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenA
         content: content.to_string(),
     })
     .collect::<Vec<_>>();
-    messages.extend(request.conversation.into_iter().map(map_message));
+    messages.extend(request.conversation.drain(..).map(map_message));
 
     OpenAiChatRequest {
         model: config.model.clone(),
@@ -62,7 +63,8 @@ pub fn map_response(
     Ok(LlmChatResponse {
         provider: LlmProvider::OpenAi,
         model: response.model.unwrap_or_else(|| config.model.clone()),
-        message,
+        message: LlmChatMessage::assistant(message),
+        finish_reason: None,
         provider_request_id: response.id,
         usage: LlmTokenUsage {
             input_tokens: usage.prompt_tokens,
@@ -84,8 +86,10 @@ pub fn map_response(
 fn map_message(message: LlmChatMessage) -> OpenAiMessage {
     OpenAiMessage {
         role: match message.role {
+            LlmMessageRole::System => "system".to_string(),
             LlmMessageRole::User => "user".to_string(),
             LlmMessageRole::Assistant => "assistant".to_string(),
+            LlmMessageRole::Tool => "tool".to_string(),
         },
         content: message.content,
     }

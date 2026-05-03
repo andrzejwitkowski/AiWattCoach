@@ -24,6 +24,7 @@ pub(crate) fn sample_summary_for_user(user_id: &str, workout_id: &str) -> Workou
         workout_id: workout_id.to_string(),
         rpe: Some(6),
         messages: Vec::new(),
+        hidden_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,

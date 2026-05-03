@@ -104,22 +104,23 @@ where
                         system_prompt: training_plan_recap_system_prompt(),
                         stable_context,
                         volatile_context,
-                        conversation: vec![LlmChatMessage {
-                            role: LlmMessageRole::User,
-                            content: user_prompt.to_string(),
-                        }],
+                        conversation: vec![LlmChatMessage::user(user_prompt)],
                         cache_scope_key: None,
                         cache_key: None,
                         reusable_cache_id: None,
+                        tools: Vec::new(),
+                        tool_choice: crate::domain::llm::LlmToolChoice::None,
                     },
                 )
                 .await
                 .map_err(map_llm_error)?;
 
             let generated_at_epoch_seconds = clock.now_epoch_seconds();
+            let recap_text = response.assistant_text().unwrap_or_default().to_string();
+            let provider = response.provider.as_str().to_string();
             Ok(WorkoutRecap::generated(
-                response.message,
-                response.provider.as_str(),
+                recap_text,
+                provider,
                 response.model,
                 generated_at_epoch_seconds,
             ))
@@ -164,10 +165,7 @@ where
             );
             let user_prompt = "Generate the next 14 dated days starting the day after the completed workout. Return only dated sections in parser-friendly workout-builder text. Include rest days explicitly when needed, and use `Rest Day: <reason>` when you prescribe full rest.";
             let mut conversation = planning_conversation_messages(planning_context.as_ref());
-            conversation.push(LlmChatMessage {
-                role: LlmMessageRole::User,
-                content: user_prompt.to_string(),
-            });
+            conversation.push(LlmChatMessage::user(user_prompt));
 
             let response = llm_chat_port
                 .chat(
@@ -183,12 +181,14 @@ where
                         cache_scope_key: None,
                         cache_key: None,
                         reusable_cache_id: None,
+                        tools: Vec::new(),
+                        tool_choice: crate::domain::llm::LlmToolChoice::None,
                     },
                 )
                 .await
                 .map_err(map_llm_error)?;
 
-            Ok(response.message)
+            Ok(response.assistant_text().unwrap_or_default().to_string())
         })
     }
 
@@ -240,10 +240,7 @@ where
                 "Correct only these invalid dated sections. Keep valid days untouched.\n\nInvalid sections:\n{invalid_day_sections}\n\nValidation issues:\n{issues_text}"
             );
             let mut conversation = planning_conversation_messages(planning_context.as_ref());
-            conversation.push(LlmChatMessage {
-                role: LlmMessageRole::User,
-                content: user_prompt,
-            });
+            conversation.push(LlmChatMessage::user(user_prompt));
 
             let response = llm_chat_port
                 .chat(
@@ -259,12 +256,14 @@ where
                         cache_scope_key: None,
                         cache_key: None,
                         reusable_cache_id: None,
+                        tools: Vec::new(),
+                        tool_choice: crate::domain::llm::LlmToolChoice::None,
                     },
                 )
                 .await
                 .map_err(map_llm_error)?;
 
-            Ok(response.message)
+            Ok(response.assistant_text().unwrap_or_default().to_string())
         })
     }
 }
@@ -342,6 +341,8 @@ fn planning_conversation_messages(
                 TrainingPlanConversationRole::User => LlmMessageRole::User,
             },
             content: message.content.clone(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
         })
         .collect()
 }

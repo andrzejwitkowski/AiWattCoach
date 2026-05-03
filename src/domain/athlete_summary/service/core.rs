@@ -236,22 +236,19 @@ where
         let created_at_epoch_seconds = existing_summary
             .map(|summary| summary.created_at_epoch_seconds)
             .unwrap_or(now);
+        let summary_text = response.assistant_text().unwrap_or_default().to_string();
+        let provider = response.provider.to_string();
+        let model = response.model.clone();
         let summary = self.build_summary(SummaryRecord {
             user_id: operation.user_id.clone(),
-            summary_text: response.message.clone(),
+            summary_text: summary_text.clone(),
             created_at_epoch_seconds,
             generated_at_epoch_seconds: now,
             updated_at_epoch_seconds: now,
-            provider: Some(response.provider.to_string()),
-            model: Some(response.model.clone()),
+            provider: Some(provider.clone()),
+            model: Some(model.clone()),
         });
-        let completed = self.completed_operation(
-            &operation,
-            response.message,
-            response.provider.to_string(),
-            response.model,
-            now,
-        );
+        let completed = self.completed_operation(&operation, summary_text, provider, model, now);
 
         match self.repository.upsert(summary).await {
             Ok(summary) => {

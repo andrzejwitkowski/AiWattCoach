@@ -6,13 +6,14 @@ use aiwattcoach::domain::{
         CoachConversationMessageRepository, CoachConversationMessageRole,
         CoachConversationReplyClaimResult, CoachConversationReplyOperation,
         CoachConversationReplyOperationRepository, CoachConversationRepository,
-        CoachConversationStatus, CoachConversationUseCases, SharedCoachConversationService,
+        CoachConversationStatus, CoachConversationUseCases,
+        PendingCoachConversationReplyCheckpoint, SharedCoachConversationService,
     },
     identity::{Clock, IdGenerator},
     llm::{
-        BoxFuture as LlmBoxFuture, LlmCacheUsage, LlmChatPort, LlmChatRequest, LlmChatResponse,
-        LlmContextCache, LlmContextCacheRepository, LlmError, LlmProvider, LlmProviderConfig,
-        LlmTokenUsage, UserLlmConfigProvider,
+        BoxFuture as LlmBoxFuture, LlmCacheUsage, LlmChatMessage, LlmChatPort, LlmChatRequest,
+        LlmChatResponse, LlmContextCache, LlmContextCacheRepository, LlmError, LlmProvider,
+        LlmProviderConfig, LlmTokenUsage, LlmToolCall, UserLlmConfigProvider,
     },
     settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilityDay, AvailabilitySettings, CyclingSettings,
@@ -30,6 +31,40 @@ struct FixedClock;
 impl Clock for FixedClock {
     fn now_epoch_seconds(&self) -> i64 {
         1_700_000_000
+    }
+}
+
+#[derive(Clone)]
+struct StaticLlmChatPort {
+    requests: Arc<Mutex<Vec<LlmChatRequest>>>,
+    response: LlmChatResponse,
+}
+
+impl StaticLlmChatPort {
+    fn new(response: LlmChatResponse) -> Self {
+        Self {
+            requests: Arc::new(Mutex::new(Vec::new())),
+            response,
+        }
+    }
+
+    fn requests(&self) -> Vec<LlmChatRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+impl LlmChatPort for StaticLlmChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        let state = self.requests.clone();
+        let response = self.response.clone();
+        Box::pin(async move {
+            state.lock().unwrap().push(request);
+            Ok(response)
+        })
     }
 }
 
@@ -159,6 +194,31 @@ impl CoachConversationRepository for InMemoryConversationRepository {
             if existing.user_id != user_id || existing.conversation_id != conversation_id {
                 return Err(CoachConversationError::NotFound);
             }
+            existing.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
+
+    fn replace_hidden_transcript(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        hidden_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        updated_at_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::coach_conversation::BoxFuture<Result<(), CoachConversationError>>
+    {
+        let state = self.conversation.clone();
+        let user_id = user_id.to_string();
+        let conversation_id = conversation_id.to_string();
+        Box::pin(async move {
+            let mut guard = state.lock().unwrap();
+            let Some(existing) = guard.as_mut() else {
+                return Err(CoachConversationError::NotFound);
+            };
+            if existing.user_id != user_id || existing.conversation_id != conversation_id {
+                return Err(CoachConversationError::NotFound);
+            }
+            existing.hidden_transcript = hidden_transcript;
             existing.updated_at_epoch_seconds = updated_at_epoch_seconds;
             Ok(())
         })
@@ -308,7 +368,8 @@ impl LlmChatPort for RecordingLlmChatPort {
             Ok(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-5".to_string(),
-                message: "Coach reply".to_string(),
+                message: aiwattcoach::domain::llm::LlmChatMessage::assistant("Coach reply"),
+                finish_reason: None,
                 provider_request_id: Some("req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
@@ -644,4 +705,381 @@ async fn calendar_coach_send_message_result_keeps_summary_regeneration_hint_fals
         .expect("user message should persist");
 
     assert!(!persisted.athlete_summary_may_regenerate_before_reply);
+}
+
+#[tokio::test]
+async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
+    let llm_chat_port = StaticLlmChatPort::new(LlmChatResponse {
+        provider: LlmProvider::OpenAi,
+        model: "gpt-5".to_string(),
+        message: LlmChatMessage::assistant("Coach follow-up"),
+        finish_reason: None,
+        provider_request_id: Some("req-2".to_string()),
+        usage: LlmTokenUsage::default(),
+        cache: LlmCacheUsage::default(),
+    });
+    let conversations = InMemoryConversationRepository {
+        conversation: Arc::new(Mutex::new(Some(CoachConversation {
+            conversation_id: "conversation-1".to_string(),
+            user_id: "user-1".to_string(),
+            surface: aiwattcoach::domain::coach_conversation::CoachConversationSurface::Calendar,
+            status: CoachConversationStatus::Active,
+            focus: aiwattcoach::domain::coach_conversation::CoachConversationFocus::Overview,
+            hidden_transcript: vec![LlmChatMessage::assistant_with_tool_calls(
+                "Coach reply",
+                vec![LlmToolCall {
+                    id: "tool-1".to_string(),
+                    name: "lookupCalendar".to_string(),
+                    arguments_json: r#"{\"week\":\"2026-W18\"}"#.to_string(),
+                }],
+            )],
+            created_at_epoch_seconds: 1,
+            updated_at_epoch_seconds: 2,
+        }))),
+    };
+    let messages = InMemoryMessageRepository {
+        messages: Arc::new(Mutex::new(vec![
+            CoachConversationMessage {
+                id: "user-1".to_string(),
+                conversation_id: "conversation-1".to_string(),
+                user_id: "user-1".to_string(),
+                role: CoachConversationMessageRole::User,
+                content: "Need recovery advice".to_string(),
+                tool_call: None,
+                created_at_epoch_seconds: 1,
+            },
+            CoachConversationMessage {
+                id: "tool-1".to_string(),
+                conversation_id: "conversation-1".to_string(),
+                user_id: "user-1".to_string(),
+                role: CoachConversationMessageRole::Tool,
+                content: "Tool call: lookupCalendar".to_string(),
+                tool_call: Some(aiwattcoach::domain::workout_summary::PublicToolCall {
+                    id: "tool-1".to_string(),
+                    name: "lookupCalendar".to_string(),
+                    arguments_json: r#"{\"week\":\"2026-W18\"}"#.to_string(),
+                }),
+                created_at_epoch_seconds: 2,
+            },
+            CoachConversationMessage {
+                id: "coach-1".to_string(),
+                conversation_id: "conversation-1".to_string(),
+                user_id: "user-1".to_string(),
+                role: CoachConversationMessageRole::Coach,
+                content: "Coach reply".to_string(),
+                tool_call: None,
+                created_at_epoch_seconds: 3,
+            },
+        ])),
+    };
+
+    let service = SharedCoachConversationService::new(
+        conversations,
+        messages,
+        InMemoryReplyOperationRepository::default(),
+        Arc::new(llm_chat_port.clone()),
+        Arc::new(StaticLlmConfigProvider),
+        Arc::new(RecordingTrainingContextBuilder::default()),
+        FixedClock,
+        TestIds::new(),
+    )
+    .with_settings_service(Arc::new(ConfiguredSettingsService));
+
+    let persisted = service
+        .append_calendar_user_message(
+            "user-1",
+            "conversation-1",
+            "What about tomorrow?".to_string(),
+        )
+        .await
+        .expect("user message should persist");
+
+    service
+        .generate_calendar_reply("user-1", "conversation-1", persisted.user_message.id)
+        .await
+        .expect("reply should be generated");
+
+    let requests = llm_chat_port.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].conversation.len(), 3);
+    assert_eq!(
+        requests[0].conversation[1].role,
+        aiwattcoach::domain::llm::LlmMessageRole::Assistant
+    );
+    assert_eq!(requests[0].conversation[1].tool_calls.len(), 1);
+    assert_eq!(requests[0].conversation[1].tool_calls[0].id, "tool-1");
+    assert_eq!(requests[0].conversation[2].content, "What about tomorrow?");
+}
+
+#[tokio::test]
+async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_trimmed_content() {
+    let llm_chat_port = StaticLlmChatPort::new(LlmChatResponse {
+        provider: LlmProvider::OpenAi,
+        model: "gpt-5".to_string(),
+        message: LlmChatMessage::assistant("Final answer"),
+        finish_reason: None,
+        provider_request_id: Some("req-3".to_string()),
+        usage: LlmTokenUsage::default(),
+        cache: LlmCacheUsage::default(),
+    });
+    let conversations = InMemoryConversationRepository {
+        conversation: Arc::new(Mutex::new(Some(CoachConversation {
+            conversation_id: "conversation-1".to_string(),
+            user_id: "user-1".to_string(),
+            surface: aiwattcoach::domain::coach_conversation::CoachConversationSurface::Calendar,
+            status: CoachConversationStatus::Active,
+            focus: aiwattcoach::domain::coach_conversation::CoachConversationFocus::Overview,
+            hidden_transcript: vec![
+                LlmChatMessage::assistant_with_tool_calls(
+                    "First answer\n",
+                    vec![LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookupOne".to_string(),
+                        arguments_json: "{}".to_string(),
+                    }],
+                ),
+                LlmChatMessage::assistant_with_tool_calls(
+                    "Second answer\n",
+                    vec![LlmToolCall {
+                        id: "tool-2".to_string(),
+                        name: "lookupTwo".to_string(),
+                        arguments_json: "{}".to_string(),
+                    }],
+                ),
+            ],
+            created_at_epoch_seconds: 1,
+            updated_at_epoch_seconds: 2,
+        }))),
+    };
+    let messages = InMemoryMessageRepository {
+        messages: Arc::new(Mutex::new(vec![
+            CoachConversationMessage {
+                id: "user-1".to_string(),
+                conversation_id: "conversation-1".to_string(),
+                user_id: "user-1".to_string(),
+                role: CoachConversationMessageRole::User,
+                content: "First question".to_string(),
+                tool_call: None,
+                created_at_epoch_seconds: 1,
+            },
+            CoachConversationMessage {
+                id: "coach-1".to_string(),
+                conversation_id: "conversation-1".to_string(),
+                user_id: "user-1".to_string(),
+                role: CoachConversationMessageRole::Coach,
+                content: "First answer".to_string(),
+                tool_call: None,
+                created_at_epoch_seconds: 2,
+            },
+            CoachConversationMessage {
+                id: "user-2".to_string(),
+                conversation_id: "conversation-1".to_string(),
+                user_id: "user-1".to_string(),
+                role: CoachConversationMessageRole::User,
+                content: "Second question".to_string(),
+                tool_call: None,
+                created_at_epoch_seconds: 3,
+            },
+            CoachConversationMessage {
+                id: "coach-2".to_string(),
+                conversation_id: "conversation-1".to_string(),
+                user_id: "user-1".to_string(),
+                role: CoachConversationMessageRole::Coach,
+                content: "Second answer".to_string(),
+                tool_call: None,
+                created_at_epoch_seconds: 4,
+            },
+        ])),
+    };
+
+    let service = SharedCoachConversationService::new(
+        conversations,
+        messages,
+        InMemoryReplyOperationRepository::default(),
+        Arc::new(llm_chat_port.clone()),
+        Arc::new(StaticLlmConfigProvider),
+        Arc::new(RecordingTrainingContextBuilder::default()),
+        FixedClock,
+        TestIds::new(),
+    )
+    .with_settings_service(Arc::new(ConfiguredSettingsService));
+
+    let persisted = service
+        .append_calendar_user_message("user-1", "conversation-1", "Third question".to_string())
+        .await
+        .expect("user message should persist");
+
+    service
+        .generate_calendar_reply("user-1", "conversation-1", persisted.user_message.id)
+        .await
+        .expect("reply should be generated");
+
+    let requests = llm_chat_port.requests();
+    assert_eq!(requests[0].conversation[1].tool_calls[0].id, "tool-1");
+    assert_eq!(requests[0].conversation[3].tool_calls[0].id, "tool-2");
+}
+
+#[tokio::test]
+async fn calendar_coach_marks_tool_only_recovery_as_failed() {
+    let conversations = InMemoryConversationRepository::default();
+    let messages = InMemoryMessageRepository::default();
+    let reply_operations = InMemoryReplyOperationRepository::default();
+    let service = SharedCoachConversationService::new(
+        conversations.clone(),
+        messages.clone(),
+        reply_operations.clone(),
+        Arc::new(RecordingLlmChatPort::default()),
+        Arc::new(StaticLlmConfigProvider),
+        Arc::new(RecordingTrainingContextBuilder::default()),
+        FixedClock,
+        TestIds::new(),
+    )
+    .with_settings_service(Arc::new(ConfiguredSettingsService));
+
+    let (conversation, _) = service
+        .get_or_create_active_calendar_conversation("user-1")
+        .await
+        .expect("conversation should be created");
+    let persisted = service
+        .append_calendar_user_message(
+            "user-1",
+            &conversation.conversation_id,
+            "Need recovery advice".to_string(),
+        )
+        .await
+        .expect("user message should persist");
+    let user_message_id = persisted.user_message.id.clone();
+
+    reply_operations
+        .upsert(
+            CoachConversationReplyOperation::pending(
+                "user-1".to_string(),
+                conversation.conversation_id.clone(),
+                user_message_id.clone(),
+                Some("calendar-coach:user-1:overview".to_string()),
+                "message-tool-only".to_string(),
+                1_699_999_000,
+            )
+            .record_provider_response(PendingCoachConversationReplyCheckpoint {
+                provider: LlmProvider::OpenRouter,
+                model: "openai/gpt-4o-mini".to_string(),
+                provider_request_id: Some("req-tool-only".to_string()),
+                provider_cache_id: None,
+                token_usage: LlmTokenUsage::default(),
+                cache_usage: LlmCacheUsage::default(),
+                hidden_transcript: vec![LlmChatMessage::assistant_with_tool_calls(
+                    "",
+                    vec![LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookupCalendar".to_string(),
+                        arguments_json: "{}".to_string(),
+                    }],
+                )],
+                finish_reason: None,
+                updated_at_epoch_seconds: 1_699_999_001,
+            }),
+        )
+        .await
+        .unwrap();
+
+    let error = service
+        .generate_calendar_reply(
+            "user-1",
+            &conversation.conversation_id,
+            user_message_id.clone(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        CoachConversationError::Llm(LlmError::InvalidResponse(
+            "assistant reply missing final text message".to_string(),
+        ))
+    );
+    let stored = reply_operations
+        .find_by_user_message_id("user-1", &conversation.conversation_id, &user_message_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        stored.status,
+        aiwattcoach::domain::coach_conversation::CoachConversationReplyOperationStatus::Failed
+    );
+}
+
+#[tokio::test]
+async fn calendar_coach_marks_fresh_tool_only_response_as_failed() {
+    let llm_chat_port = StaticLlmChatPort::new(LlmChatResponse {
+        provider: LlmProvider::OpenRouter,
+        model: "openai/gpt-4o-mini".to_string(),
+        message: LlmChatMessage::assistant_with_tool_calls(
+            "",
+            vec![LlmToolCall {
+                id: "tool-1".to_string(),
+                name: "lookupCalendar".to_string(),
+                arguments_json: "{}".to_string(),
+            }],
+        ),
+        finish_reason: None,
+        provider_request_id: Some("req-tool-only-fresh".to_string()),
+        usage: LlmTokenUsage::default(),
+        cache: LlmCacheUsage::default(),
+    });
+    let conversations = InMemoryConversationRepository::default();
+    let messages = InMemoryMessageRepository::default();
+    let reply_operations = InMemoryReplyOperationRepository::default();
+    let service = SharedCoachConversationService::new(
+        conversations.clone(),
+        messages.clone(),
+        reply_operations.clone(),
+        Arc::new(llm_chat_port),
+        Arc::new(StaticLlmConfigProvider),
+        Arc::new(RecordingTrainingContextBuilder::default()),
+        FixedClock,
+        TestIds::new(),
+    )
+    .with_settings_service(Arc::new(ConfiguredSettingsService));
+
+    let (conversation, _) = service
+        .get_or_create_active_calendar_conversation("user-1")
+        .await
+        .expect("conversation should be created");
+    let persisted = service
+        .append_calendar_user_message(
+            "user-1",
+            &conversation.conversation_id,
+            "Need recovery advice".to_string(),
+        )
+        .await
+        .expect("user message should persist");
+
+    let error = service
+        .generate_calendar_reply(
+            "user-1",
+            &conversation.conversation_id,
+            persisted.user_message.id.clone(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        CoachConversationError::Llm(LlmError::InvalidResponse(
+            "assistant reply missing final text message".to_string(),
+        ))
+    );
+    let stored = reply_operations
+        .find_by_user_message_id(
+            "user-1",
+            &conversation.conversation_id,
+            &persisted.user_message.id,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        stored.status,
+        aiwattcoach::domain::coach_conversation::CoachConversationReplyOperationStatus::Failed
+    );
 }

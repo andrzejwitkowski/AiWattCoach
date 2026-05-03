@@ -76,10 +76,14 @@ impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
                 conversation: vec![LlmChatMessage {
                     role: LlmMessageRole::User,
                     content: user_prompt.to_string(),
+                    tool_calls: Vec::new(),
+                    tool_call_id: None,
                 }],
                 cache_scope_key: Some("athlete-summary".to_string()),
                 cache_key: Some(hash_text(&stable_context)),
                 reusable_cache_id: None,
+                tools: Vec::new(),
+                tool_choice: crate::domain::llm::LlmToolChoice::None,
             };
 
             llm_chat_port.chat(config, request).await

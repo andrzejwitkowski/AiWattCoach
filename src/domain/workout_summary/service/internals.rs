@@ -2,6 +2,26 @@ use tracing::{info, warn};
 
 use super::*;
 
+pub(super) struct AppendMessageInput {
+    role: MessageRole,
+    content: String,
+    message_id: Option<String>,
+    tool_call: Option<crate::domain::workout_summary::PublicToolCall>,
+    require_open_summary: bool,
+}
+
+impl AppendMessageInput {
+    pub(super) fn coach(content: String, message_id: String) -> Self {
+        Self {
+            role: MessageRole::Coach,
+            content,
+            message_id: Some(message_id),
+            tool_call: None,
+            require_open_summary: false,
+        }
+    }
+}
+
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
 where
     Repo: WorkoutSummaryRepository + Clone,
@@ -100,8 +120,88 @@ where
         role: MessageRole,
         content: String,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
-        self.append_message_with_role_and_id(user_id, workout_id, role, content, None, true)
+        self.append_message_with_role_and_id(
+            user_id,
+            workout_id,
+            AppendMessageInput {
+                role,
+                content,
+                message_id: None,
+                tool_call: None,
+                require_open_summary: true,
+            },
+        )
+        .await
+    }
+
+    pub(super) async fn append_tool_message(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        tool_call: crate::domain::workout_summary::PublicToolCall,
+    ) -> Result<ConversationMessage, WorkoutSummaryError> {
+        self.append_message_with_role_and_id(
+            user_id,
+            workout_id,
+            AppendMessageInput {
+                role: MessageRole::Tool,
+                content: format!("Tool call: {}", tool_call.name),
+                message_id: Some(tool_call.id.clone()),
+                tool_call: Some(tool_call),
+                require_open_summary: false,
+            },
+        )
+        .await
+    }
+
+    pub(super) async fn replace_hidden_transcript(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+    ) -> Result<(), WorkoutSummaryError> {
+        self.repository
+            .replace_hidden_transcript(
+                user_id,
+                workout_id,
+                hidden_transcript,
+                self.clock.now_epoch_seconds(),
+            )
             .await
+    }
+
+    pub(super) async fn materialize_public_tool_messages(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        operation: CoachReplyOperation,
+        response: &crate::domain::llm::LlmChatResponse,
+    ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
+        let mut operation = operation;
+
+        for tool_call in response.tool_calls() {
+            if operation
+                .public_tool_call_ids
+                .iter()
+                .any(|id| id == &tool_call.id)
+            {
+                continue;
+            }
+
+            self.append_tool_message(
+                user_id,
+                workout_id,
+                crate::domain::workout_summary::PublicToolCall {
+                    id: tool_call.id.clone(),
+                    name: tool_call.name.clone(),
+                    arguments_json: tool_call.arguments_json.clone(),
+                },
+            )
+            .await?;
+            operation.public_tool_call_ids.push(tool_call.id.clone());
+        }
+
+        Ok(operation)
     }
 
     pub(super) async fn ensure_availability_configured_for_coach(
@@ -146,30 +246,30 @@ where
         &self,
         user_id: &str,
         workout_id: &str,
-        role: MessageRole,
-        content: String,
-        message_id: Option<String>,
-        require_open_summary: bool,
+        input: AppendMessageInput,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
         let summary = self.get_existing_summary(user_id, workout_id).await?;
-        if require_open_summary && summary.saved_at_epoch_seconds.is_some() {
+        if input.require_open_summary && summary.saved_at_epoch_seconds.is_some() {
             return Err(WorkoutSummaryError::Locked);
         }
-        if require_open_summary && summary.rpe.is_none() {
+        if input.require_open_summary && summary.rpe.is_none() {
             return Err(WorkoutSummaryError::Validation(
                 "rpe must be set before chatting with coach".to_string(),
             ));
         }
-        let content = validate_message_content(&content)?;
-        if require_open_summary && matches!(role, MessageRole::User) {
+        let content = validate_message_content(&input.content)?;
+        if input.require_open_summary && matches!(input.role, MessageRole::User) {
             self.ensure_availability_configured_for_coach(user_id)
                 .await?;
         }
         let now = self.clock.now_epoch_seconds();
         let message = ConversationMessage {
-            id: message_id.unwrap_or_else(|| self.ids.new_id("message")),
-            role,
+            id: input
+                .message_id
+                .unwrap_or_else(|| self.ids.new_id("message")),
+            role: input.role,
             content,
+            tool_call: input.tool_call,
             created_at_epoch_seconds: now,
         };
 
@@ -300,40 +400,108 @@ where
             }
         }
 
-        if let Some(response_message) = operation.response_message.clone() {
-            let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
-                WorkoutSummaryError::Repository(
-                    "pending coach reply operation missing reserved coach message id".to_string(),
-                )
-            })?;
-            let coach_message = self
-                .append_message_with_role_and_id(
-                    user_id,
-                    workout_id,
-                    MessageRole::Coach,
-                    response_message,
-                    Some(coach_message_id),
-                    false,
-                )
-                .await?;
-            let completed = operation.mark_completed_from_existing_message(
-                coach_message.id.clone(),
-                self.clock.now_epoch_seconds(),
-            );
-            self.persist_post_provider_operation(completed, "replay_persisted_coach_reply")
-                .await?;
+        if !operation.hidden_transcript.is_empty() {
             let summary = self.get_existing_summary(user_id, workout_id).await?;
-            info!(
-                workout_id = %workout_id,
-                user_message_id = %user_message_id,
-                coach_message_id = %coach_message.id,
-                "replayed persisted coach reply after partial crash"
+            let mut merged = summary.hidden_transcript;
+            for entry in &operation.hidden_transcript {
+                if !merged.contains(entry) {
+                    merged.push(entry.clone());
+                }
+            }
+            self.replace_hidden_transcript(user_id, workout_id, merged)
+                .await?;
+
+            for transcript_message in &operation.hidden_transcript {
+                if transcript_message.role != crate::domain::llm::LlmMessageRole::Assistant {
+                    continue;
+                }
+
+                for tool_call in &transcript_message.tool_calls {
+                    let existing_tool_message = match self
+                        .get_message_by_id(user_id, workout_id, &tool_call.id)
+                        .await
+                    {
+                        Ok(message) => Some(message),
+                        Err(WorkoutSummaryError::NotFound) => None,
+                        Err(error) => return Err(error),
+                    };
+
+                    if operation
+                        .public_tool_call_ids
+                        .iter()
+                        .any(|id| id == &tool_call.id)
+                        || existing_tool_message.is_some()
+                    {
+                        continue;
+                    }
+
+                    self.append_tool_message(
+                        user_id,
+                        workout_id,
+                        crate::domain::workout_summary::PublicToolCall {
+                            id: tool_call.id.clone(),
+                            name: tool_call.name.clone(),
+                            arguments_json: tool_call.arguments_json.clone(),
+                        },
+                    )
+                    .await?;
+                }
+            }
+
+            if let Some(content) = operation
+                .hidden_transcript
+                .iter()
+                .rev()
+                .find(|message| message.role == crate::domain::llm::LlmMessageRole::Assistant)
+                .map(|message| message.content.clone())
+                .filter(|content| !content.trim().is_empty())
+            {
+                let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+                    WorkoutSummaryError::Repository(
+                        "pending coach reply operation missing reserved coach message id"
+                            .to_string(),
+                    )
+                })?;
+                let coach_message = self
+                    .append_message_with_role_and_id(
+                        user_id,
+                        workout_id,
+                        AppendMessageInput {
+                            role: MessageRole::Coach,
+                            content,
+                            message_id: Some(coach_message_id),
+                            tool_call: None,
+                            require_open_summary: false,
+                        },
+                    )
+                    .await?;
+                let completed = operation.mark_completed_from_existing_message(
+                    coach_message.id.clone(),
+                    self.clock.now_epoch_seconds(),
+                );
+                self.persist_post_provider_operation(completed, "replay_persisted_coach_reply")
+                    .await?;
+                let summary = self.get_existing_summary(user_id, workout_id).await?;
+                info!(
+                    workout_id = %workout_id,
+                    user_message_id = %user_message_id,
+                    coach_message_id = %coach_message.id,
+                    "replayed persisted coach reply after partial crash"
+                );
+                return Ok(Some(CoachReply {
+                    summary,
+                    coach_message,
+                    athlete_summary_was_regenerated: false,
+                }));
+            }
+
+            let error = crate::domain::llm::LlmError::InvalidResponse(
+                "assistant reply missing final text message".to_string(),
             );
-            return Ok(Some(CoachReply {
-                summary,
-                coach_message,
-                athlete_summary_was_regenerated: false,
-            }));
+            let failed = operation.mark_failed(&error, self.clock.now_epoch_seconds());
+            self.persist_post_provider_operation(failed, "replay_invalid_coach_reply")
+                .await?;
+            return Err(WorkoutSummaryError::Llm(error));
         }
 
         Ok(None)

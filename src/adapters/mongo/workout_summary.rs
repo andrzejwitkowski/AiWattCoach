@@ -14,9 +14,10 @@ use crate::{
     adapters::mongo::error::is_duplicate_key_error,
     domain::{
         completed_workouts::{canonical_completed_workout_id, completed_workout_activity_id},
+        llm::LlmChatMessage,
         workout_summary::{
-            BoxFuture, ConversationMessage, MessageRole, WorkoutRecap, WorkoutSummary,
-            WorkoutSummaryError, WorkoutSummaryRepository,
+            BoxFuture, ConversationMessage, MessageRole, PublicToolCall, WorkoutRecap,
+            WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
         },
     },
 };
@@ -36,6 +37,8 @@ struct WorkoutSummaryDocument {
     workout_id: String,
     rpe: Option<i32>,
     messages: Vec<ConversationMessageDocument>,
+    #[serde(default)]
+    hidden_transcript: Vec<LlmChatMessage>,
     saved_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     saved_at: Option<DateTime>,
@@ -62,6 +65,8 @@ struct ConversationMessageDocument {
     id: String,
     role: String,
     content: String,
+    #[serde(default)]
+    tool_call: Option<PublicToolCall>,
     created_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     created_at: Option<DateTime>,
@@ -301,6 +306,47 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                             "saved_at_epoch_seconds": saved_at_epoch_seconds,
                             "saved_at": optional_epoch_seconds_to_bson_datetime(saved_at_epoch_seconds, "saved_at")
                                 .map_err(WorkoutSummaryError::Repository)?,
+                            "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at_epoch_seconds), "updated_at")
+                                .map_err(WorkoutSummaryError::Repository)?,
+                        }
+                    },
+                )
+                .await
+                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
+
+            if result.matched_count == 0 {
+                return Err(WorkoutSummaryError::NotFound);
+            }
+
+            Ok(())
+        })
+    }
+
+    fn replace_hidden_transcript(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        hidden_transcript: Vec<LlmChatMessage>,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        Box::pin(async move {
+            let Some(document) =
+                find_preferred_document(&collection, &user_id, &workout_id).await?
+            else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+
+            let result = collection
+                .update_one(
+                    document_identity_filter(&document),
+                    doc! {
+                        "$set": {
+                            "hidden_transcript": mongodb::bson::to_bson(&hidden_transcript)
+                                .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?,
                             "updated_at_epoch_seconds": updated_at_epoch_seconds,
                             "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at_epoch_seconds), "updated_at")
                                 .map_err(WorkoutSummaryError::Repository)?,
@@ -622,6 +668,7 @@ fn map_document_to_domain(
             .into_iter()
             .map(map_message_to_domain)
             .collect::<Result<Vec<_>, _>>()?,
+        hidden_transcript: document.hidden_transcript,
         saved_at_epoch_seconds: resolve_optional_epoch_seconds(
             document.saved_at,
             document.saved_at_epoch_seconds,
@@ -661,6 +708,7 @@ fn map_domain_to_document(summary: &WorkoutSummary) -> WorkoutSummaryDocument {
             .cloned()
             .map(map_message_to_document)
             .collect(),
+        hidden_transcript: summary.hidden_transcript.clone(),
         saved_at_epoch_seconds: summary.saved_at_epoch_seconds,
         saved_at: optional_epoch_seconds_to_bson_datetime(
             summary.saved_at_epoch_seconds,
@@ -697,8 +745,10 @@ fn map_message_to_document(message: ConversationMessage) -> ConversationMessageD
         role: match message.role {
             MessageRole::User => "user".to_string(),
             MessageRole::Coach => "coach".to_string(),
+            MessageRole::Tool => "tool".to_string(),
         },
         content: message.content,
+        tool_call: message.tool_call,
         created_at_epoch_seconds: Some(message.created_at_epoch_seconds),
         created_at: optional_epoch_seconds_to_bson_datetime(
             Some(message.created_at_epoch_seconds),
@@ -714,6 +764,7 @@ fn map_message_to_domain(
     let role = match message.role.as_str() {
         "user" => MessageRole::User,
         "coach" => MessageRole::Coach,
+        "tool" => MessageRole::Tool,
         other => {
             return Err(WorkoutSummaryError::Repository(format!(
                 "unknown message role: {other}"
@@ -725,6 +776,7 @@ fn map_message_to_domain(
         id: message.id,
         role,
         content: message.content,
+        tool_call: message.tool_call,
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             message.created_at,
             message.created_at_epoch_seconds,

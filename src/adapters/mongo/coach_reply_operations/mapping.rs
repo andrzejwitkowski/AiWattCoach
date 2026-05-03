@@ -75,7 +75,9 @@ pub(super) fn map_operation_to_document(
         provider_cache_id: operation.provider_cache_id.clone(),
         token_usage: operation.token_usage.clone(),
         cache_usage: operation.cache_usage.clone(),
-        response_message: operation.response_message.clone(),
+        hidden_transcript: operation.hidden_transcript.clone(),
+        finish_reason: operation.finish_reason.clone(),
+        public_tool_call_ids: operation.public_tool_call_ids.clone(),
         error_message: operation.error_message.clone(),
         started_at_epoch_seconds: operation.started_at_epoch_seconds,
         started_at: optional_epoch_seconds_to_bson_datetime(
@@ -143,7 +145,9 @@ pub(super) fn map_document_to_operation(
         provider_cache_id: document.provider_cache_id,
         token_usage: document.token_usage,
         cache_usage: document.cache_usage,
-        response_message: document.response_message,
+        hidden_transcript: document.hidden_transcript,
+        finish_reason: document.finish_reason,
+        public_tool_call_ids: document.public_tool_call_ids,
         error_message: document.error_message,
         started_at_epoch_seconds: resolve_required_epoch_seconds(
             document.started_at,

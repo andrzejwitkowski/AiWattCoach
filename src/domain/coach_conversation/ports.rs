@@ -5,6 +5,7 @@ use super::{
     CoachConversationReplyClaimResult, CoachConversationReplyOperation, CoachConversationStatus,
     CoachConversationSurface,
 };
+use crate::domain::llm::LlmChatMessage;
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -38,6 +39,14 @@ pub trait CoachConversationRepository: Send + Sync + 'static {
         &self,
         user_id: &str,
         conversation_id: &str,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), CoachConversationError>>;
+
+    fn replace_hidden_transcript(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        hidden_transcript: Vec<LlmChatMessage>,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), CoachConversationError>>;
 }

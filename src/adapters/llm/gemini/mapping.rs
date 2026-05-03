@@ -118,7 +118,8 @@ pub fn map_response(
     Ok(LlmChatResponse {
         provider: LlmProvider::Gemini,
         model: config.model.clone(),
-        message,
+        message: LlmChatMessage::assistant(message),
+        finish_reason: None,
         provider_request_id: None,
         usage: LlmTokenUsage {
             input_tokens: usage
@@ -146,8 +147,10 @@ pub fn map_response(
 fn map_message(message: LlmChatMessage) -> GeminiContent {
     GeminiContent {
         role: match message.role {
+            LlmMessageRole::System => "user".to_string(),
             LlmMessageRole::User => "user".to_string(),
             LlmMessageRole::Assistant => "model".to_string(),
+            LlmMessageRole::Tool => "user".to_string(),
         },
         parts: vec![GeminiTextPart {
             text: message.content,

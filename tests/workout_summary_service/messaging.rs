@@ -54,7 +54,8 @@ impl WorkoutCoach for CountingCoach {
             Ok(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "counting-coach".to_string(),
-                message,
+                message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
+                finish_reason: None,
                 provider_request_id: Some("counting-req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
@@ -80,7 +81,8 @@ impl WorkoutCoach for CapturingAthleteSummaryCoach {
             Ok(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "capturing-coach".to_string(),
-                message,
+                message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
+                finish_reason: None,
                 provider_request_id: Some("capturing-req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
@@ -146,6 +148,7 @@ async fn send_message_persists_user_message_before_coach_reply() {
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
+            "replace_hidden_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -195,6 +198,7 @@ async fn generate_coach_reply_persists_pending_operation_before_coach_message() 
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
         ]
     );
@@ -202,6 +206,7 @@ async fn generate_coach_reply_persists_pending_operation_before_coach_message() 
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
+            "replace_hidden_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -354,6 +359,7 @@ async fn generate_coach_reply_targets_the_persisted_message_id_when_contents_rep
         vec![
             format!("claim_pending:workout-1:{}", second.user_message.id),
             format!("upsert:workout-1:{}:Pending", second.user_message.id),
+            format!("upsert:workout-1:{}:Pending", second.user_message.id),
             format!("upsert:workout-1:{}:Completed", second.user_message.id),
         ]
     );
@@ -362,6 +368,7 @@ async fn generate_coach_reply_targets_the_persisted_message_id_when_contents_rep
         vec![
             "append_message:workout-1:user".to_string(),
             "append_message:workout-1:user".to_string(),
+            "replace_hidden_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -427,7 +434,10 @@ impl WorkoutCoach for OneTimeFailureCoach {
                 Ok(LlmChatResponse {
                     provider: LlmProvider::OpenAi,
                     model: "recovered-coach".to_string(),
-                    message: format!("Recovered reply to: {user_message}"),
+                    message: aiwattcoach::domain::llm::LlmChatMessage::assistant(format!(
+                        "Recovered reply to: {user_message}"
+                    )),
+                    finish_reason: None,
                     provider_request_id: Some("recovered-req".to_string()),
                     usage: LlmTokenUsage::default(),
                     cache: LlmCacheUsage::default(),
@@ -593,6 +603,136 @@ async fn generate_coach_reply_returns_dedicated_error_when_reply_is_already_pend
 }
 
 #[tokio::test]
+async fn generate_coach_reply_marks_tool_only_recovery_as_failed() {
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let coach = Arc::new(CountingCoach::default());
+    let service = test_service_with_coach(repository, reply_operations.clone(), coach);
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    reply_operations.seed(
+        CoachReplyOperation::pending(
+            "user-1".to_string(),
+            "workout-1".to_string(),
+            persisted.user_message.id.clone(),
+            Some("workout-summary:user-1:workout-1".to_string()),
+            "message-tool-only".to_string(),
+            1_699_999_000,
+        )
+        .record_provider_response(PendingCoachReplyCheckpoint {
+            provider: LlmProvider::OpenRouter,
+            model: "openai/gpt-4o-mini".to_string(),
+            provider_request_id: Some("req-tool-only".to_string()),
+            provider_cache_id: None,
+            token_usage: LlmTokenUsage::default(),
+            cache_usage: LlmCacheUsage::default(),
+            hidden_transcript: vec![
+                aiwattcoach::domain::llm::LlmChatMessage::assistant_with_tool_calls(
+                    "",
+                    vec![aiwattcoach::domain::llm::LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookupWorkout".to_string(),
+                        arguments_json: "{}".to_string(),
+                    }],
+                ),
+            ],
+            finish_reason: None,
+            updated_at_epoch_seconds: 1_699_999_001,
+        }),
+    );
+
+    let error = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        WorkoutSummaryError::Llm(LlmError::InvalidResponse(
+            "assistant reply missing final text message".to_string(),
+        ))
+    );
+    let stored = reply_operations
+        .get("user-1", "workout-1", &persisted.user_message.id)
+        .unwrap();
+    assert_eq!(
+        stored.status,
+        aiwattcoach::domain::workout_summary::CoachReplyOperationStatus::Failed
+    );
+}
+
+#[tokio::test]
+async fn generate_coach_reply_marks_fresh_tool_only_response_as_failed() {
+    #[derive(Clone, Default)]
+    struct ToolOnlyCoach;
+
+    impl WorkoutCoach for ToolOnlyCoach {
+        fn reply(
+            &self,
+            _user_id: &str,
+            _summary: &WorkoutSummary,
+            _user_message: &str,
+            _athlete_summary_text: Option<&str>,
+        ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+            Box::pin(async move {
+                Ok(LlmChatResponse {
+                    provider: LlmProvider::OpenRouter,
+                    model: "openai/gpt-4o-mini".to_string(),
+                    message: aiwattcoach::domain::llm::LlmChatMessage::assistant_with_tool_calls(
+                        "",
+                        vec![aiwattcoach::domain::llm::LlmToolCall {
+                            id: "tool-1".to_string(),
+                            name: "lookupWorkout".to_string(),
+                            arguments_json: "{}".to_string(),
+                        }],
+                    ),
+                    finish_reason: None,
+                    provider_request_id: Some("req-tool-only-fresh".to_string()),
+                    usage: LlmTokenUsage::default(),
+                    cache: LlmCacheUsage::default(),
+                })
+            })
+        }
+    }
+
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let service = test_service_with_coach(
+        repository,
+        reply_operations.clone(),
+        Arc::new(ToolOnlyCoach),
+    );
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Need feedback".to_string())
+        .await
+        .unwrap();
+
+    let error = service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id.clone())
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        WorkoutSummaryError::Llm(LlmError::InvalidResponse(
+            "assistant reply missing final text message".to_string(),
+        ))
+    );
+    let stored = reply_operations
+        .get("user-1", "workout-1", &persisted.user_message.id)
+        .unwrap();
+    assert_eq!(
+        stored.status,
+        aiwattcoach::domain::workout_summary::CoachReplyOperationStatus::Failed
+    );
+}
+
+#[tokio::test]
 async fn generate_coach_reply_retries_after_failed_operation() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(existing_summary());
     let reply_operations = InMemoryCoachReplyOperationRepository::default();
@@ -634,6 +774,7 @@ async fn generate_coach_reply_retries_after_failed_operation() {
             format!("seed:workout-1:{}:Failed", persisted.user_message.id),
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
         ]
     );
@@ -641,6 +782,7 @@ async fn generate_coach_reply_retries_after_failed_operation() {
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
+            "replace_hidden_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -709,6 +851,7 @@ async fn generate_coach_reply_reuses_completed_operation_without_duplicate_coach
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
         ]
@@ -717,6 +860,7 @@ async fn generate_coach_reply_reuses_completed_operation_without_duplicate_coach
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
+            "replace_hidden_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -762,12 +906,14 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
         id: "message-user-1".to_string(),
         role: MessageRole::User,
         content: "Need feedback".to_string(),
+        tool_call: None,
         created_at_epoch_seconds: 1_699_999_000,
     };
     let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
         id: "message-coach-1".to_string(),
         role: MessageRole::Coach,
         content: "Recovered coach reply".to_string(),
+        tool_call: None,
         created_at_epoch_seconds: 1_699_999_001,
     };
     summary.messages = vec![user_message.clone(), coach_message.clone()];
@@ -805,7 +951,10 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
             cache_expires_at_epoch_seconds: Some(1_700_010_000),
             cache_discount: Some("0.0012".to_string()),
         },
-        response_message: "Recovered coach reply".to_string(),
+        hidden_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+            "Recovered coach reply",
+        )],
+        finish_reason: None,
         updated_at_epoch_seconds: 1_699_999_000,
     });
     reply_operations.seed(stale_operation);
@@ -876,7 +1025,10 @@ async fn generate_coach_reply_replays_persisted_response_message_after_partial_c
         provider_cache_id: None,
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
-        response_message: "Persisted before crash".to_string(),
+        hidden_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+            "Persisted before crash",
+        )],
+        finish_reason: None,
         updated_at_epoch_seconds: 1_699_999_001,
     });
     reply_operations.seed(partial);
@@ -893,6 +1045,7 @@ async fn generate_coach_reply_replays_persisted_response_message_after_partial_c
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
+            "replace_hidden_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -905,12 +1058,14 @@ async fn generate_coach_reply_retries_completion_write_when_recovering_existing_
         id: "message-user-recovery".to_string(),
         role: MessageRole::User,
         content: "Need feedback".to_string(),
+        tool_call: None,
         created_at_epoch_seconds: 1_699_999_000,
     };
     let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
         id: "message-coach-recovery".to_string(),
         role: MessageRole::Coach,
         content: "Recovered coach reply".to_string(),
+        tool_call: None,
         created_at_epoch_seconds: 1_699_999_001,
     };
     summary.messages = vec![user_message.clone(), coach_message.clone()];
@@ -979,7 +1134,10 @@ async fn generate_coach_reply_retries_completion_write_when_replaying_persisted_
         provider_cache_id: None,
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
-        response_message: "Persisted before crash".to_string(),
+        hidden_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+            "Persisted before crash",
+        )],
+        finish_reason: None,
         updated_at_epoch_seconds: 1_699_999_001,
     });
     reply_operations.seed(partial);
@@ -997,6 +1155,7 @@ async fn generate_coach_reply_retries_completion_write_when_replaying_persisted_
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
+            "replace_hidden_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -1038,6 +1197,7 @@ async fn generate_coach_reply_retries_completion_write_after_coach_message_appen
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
+            "replace_hidden_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -1045,6 +1205,7 @@ async fn generate_coach_reply_retries_completion_write_after_coach_message_appen
         reply_operations.calls(),
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
@@ -1078,6 +1239,7 @@ async fn generate_coach_reply_retries_success_checkpoint_write_before_returning(
         reply_operations.calls(),
         vec![
             format!("claim_pending:workout-1:{}", persisted.user_message.id),
+            format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Pending", persisted.user_message.id),
             format!("upsert:workout-1:{}:Completed", persisted.user_message.id),
@@ -1135,6 +1297,7 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
         id: "message-user-saved".to_string(),
         role: MessageRole::User,
         content: "Need feedback".to_string(),
+        tool_call: None,
         created_at_epoch_seconds: 1_699_999_000,
     };
     repository
@@ -1157,7 +1320,10 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
         provider_cache_id: None,
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
-        response_message: "Recovered even though summary was saved".to_string(),
+        hidden_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+            "Recovered even though summary was saved",
+        )],
+        finish_reason: None,
         updated_at_epoch_seconds: 1_699_999_001,
     });
     reply_operations.seed(partial);
@@ -1173,4 +1339,64 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
         reply.coach_message.content,
         "Recovered even though summary was saved"
     );
+}
+
+#[tokio::test]
+async fn generate_coach_reply_accumulates_hidden_transcript_across_turns() {
+    let mut summary = existing_summary();
+    summary.hidden_transcript = vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+        "Turn 0",
+    )];
+    summary.messages = vec![
+        aiwattcoach::domain::workout_summary::ConversationMessage {
+            id: "message-user-0".to_string(),
+            role: MessageRole::User,
+            content: "Initial question".to_string(),
+            tool_call: None,
+            created_at_epoch_seconds: 1,
+        },
+        aiwattcoach::domain::workout_summary::ConversationMessage {
+            id: "message-coach-0".to_string(),
+            role: MessageRole::Coach,
+            content: "Turn 0".to_string(),
+            tool_call: None,
+            created_at_epoch_seconds: 2,
+        },
+    ];
+
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations, default_dev_coach());
+
+    let first = service
+        .append_user_message("user-1", "workout-1", "Turn 1 question".to_string())
+        .await
+        .unwrap();
+    service
+        .generate_coach_reply("user-1", "workout-1", first.user_message.id.clone())
+        .await
+        .unwrap();
+
+    let round1 = repository
+        .find_by_user_id_and_workout_id("user-1", "workout-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(round1.hidden_transcript.len() >= 2);
+    let second = service
+        .append_user_message("user-1", "workout-1", "Turn 2 question".to_string())
+        .await
+        .unwrap();
+    service
+        .generate_coach_reply("user-1", "workout-1", second.user_message.id.clone())
+        .await
+        .unwrap();
+
+    let round2 = repository
+        .find_by_user_id_and_workout_id("user-1", "workout-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(round2.hidden_transcript.len() >= 3);
 }

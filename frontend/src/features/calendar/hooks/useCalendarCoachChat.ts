@@ -65,6 +65,13 @@ function temporaryMessage(content: string): CalendarCoachMessage {
   };
 }
 
+function appendUniqueMessage(messages: CalendarCoachMessage[], message: CalendarCoachMessage): CalendarCoachMessage[] {
+  if (messages.some((existing) => existing.id === message.id)) {
+    return messages;
+  }
+  return [...messages, message];
+}
+
 export function useCalendarCoachChat({
   isOpen,
 }: UseCalendarCoachChatOptions): UseCalendarCoachChatResult {
@@ -120,8 +127,13 @@ export function useCalendarCoachChat({
   }, []);
 
   const applyConversationResponse = useCallback((nextConversation: CalendarCoachConversation, nextMessages: CalendarCoachMessage[]) => {
+    currentConversationIdRef.current = nextConversation.conversationId;
     setConversation(nextConversation);
     setMessages(nextMessages);
+  }, []);
+
+  const isCurrentConversation = useCallback((conversationIdToCheck: string) => {
+    return currentConversationIdRef.current === conversationIdToCheck;
   }, []);
 
   const connectSocket = useCallback(async (conversationId: string) => {
@@ -203,6 +215,11 @@ export function useCalendarCoachChat({
             return;
           }
 
+          if (parsed.type === 'tool_message') {
+            setMessages((current) => appendUniqueMessage(current, parsed.message));
+            return;
+          }
+
           if (parsed.type === 'system_message') {
             systemMessageCounterRef.current += 1;
             setMessages((current) => [
@@ -277,6 +294,10 @@ export function useCalendarCoachChat({
         return;
       }
 
+      if (currentConversationIdRef.current && !isCurrentConversation(response.conversation.conversationId)) {
+        return;
+      }
+
       applyConversationResponse(response.conversation, response.messages);
 
       try {
@@ -294,8 +315,10 @@ export function useCalendarCoachChat({
       }
 
       if (loadError instanceof HttpError && loadError.status === 404) {
-        setConversation(null);
-        setMessages([]);
+        if (!currentConversationIdRef.current) {
+          setConversation(null);
+          setMessages([]);
+        }
         return;
       }
 
@@ -331,7 +354,9 @@ export function useCalendarCoachChat({
 
     const createConversationPromise = coachApi.startNewCalendarCoachConversation()
       .then((created) => {
-        applyConversationResponse(created.conversation, created.messages);
+        if (!currentConversationIdRef.current || isCurrentConversation(created.conversation.conversationId)) {
+          applyConversationResponse(created.conversation, created.messages);
+        }
         return created.conversation;
       })
       .finally(() => {
@@ -412,6 +437,9 @@ export function useCalendarCoachChat({
       }
 
       if (socket && socket.readyState === WebSocket.OPEN) {
+        if (!isCurrentConversation(conversationId)) {
+          return false;
+        }
         const payload = calendarCoachClientWsMessageSchema.parse({ type: 'send_message', content: trimmed });
         socket.send(JSON.stringify(payload));
         setMessages((current) => [...current, temporaryMessage(trimmed)]);
@@ -419,10 +447,17 @@ export function useCalendarCoachChat({
       }
 
       const response = await coachApi.sendCalendarCoachMessage(conversationId, { content: trimmed });
+      if (!isCurrentConversation(conversationId)) {
+        return false;
+      }
       applyConversationResponse(response.conversation, response.messages);
       setError(null);
       return true;
     } catch (sendError) {
+      if (attemptedConversationId && !isCurrentConversation(attemptedConversationId)) {
+        return false;
+      }
+
       if (handleAuthenticationError(sendError)) {
         return false;
       }
@@ -430,10 +465,14 @@ export function useCalendarCoachChat({
       if (sendError instanceof HttpError && sendError.status === 404 && attemptedConversationId) {
         try {
           const reloaded = await coachApi.getCalendarCoachConversation(attemptedConversationId);
-          applyConversationResponse(reloaded.conversation, reloaded.messages);
+          if (isCurrentConversation(attemptedConversationId)) {
+            applyConversationResponse(reloaded.conversation, reloaded.messages);
+          }
         } catch {
-          setConversation(null);
-          setMessages([]);
+          if (isCurrentConversation(attemptedConversationId)) {
+            setConversation(null);
+            setMessages([]);
+          }
         }
       }
 
@@ -441,7 +480,7 @@ export function useCalendarCoachChat({
       setIsCoachTyping(false);
       return false;
     }
-  }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError, coachApi]);
+  }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError, isCurrentConversation, coachApi]);
 
   return useMemo(() => ({
     conversation,

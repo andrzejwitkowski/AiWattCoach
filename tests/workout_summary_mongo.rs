@@ -339,6 +339,7 @@ fn sample_summary(
         workout_id: workout_id.to_string(),
         rpe,
         messages: Vec::new(),
+        hidden_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,

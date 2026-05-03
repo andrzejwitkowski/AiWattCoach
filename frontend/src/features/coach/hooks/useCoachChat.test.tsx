@@ -275,6 +275,108 @@ describe('useCoachChat', () => {
     });
   });
 
+  it('appends streamed tool messages before the final coach reply', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Need feedback');
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'tool_message',
+            message: {
+              id: 'tool-1',
+              role: 'tool',
+              content: 'Tool call: lookupCalendar',
+              toolCall: {
+                id: 'tool-1',
+                name: 'lookupCalendar',
+                argumentsJson: '{"date":"2026-05-02"}',
+              },
+              createdAtEpochSeconds: 3,
+            },
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      const tool = result.current.messages.at(-1);
+      expect(tool?.role).toBe('tool');
+      expect(tool?.toolCall).toEqual({
+        id: 'tool-1',
+        name: 'lookupCalendar',
+        argumentsJson: '{"date":"2026-05-02"}',
+      });
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'coach_message',
+            message: {
+              id: 'message-2',
+              role: 'coach',
+              content: 'Coach reply',
+              createdAtEpochSeconds: 4,
+            },
+            summary: {
+              ...summaryFixture,
+              messages: [
+                {
+                  id: 'temp-user',
+                  role: 'user',
+                  content: 'Need feedback',
+                  createdAtEpochSeconds: 2,
+                },
+                {
+                  id: 'tool-1',
+                  role: 'tool',
+                  content: 'Tool call: lookupCalendar',
+                  toolCall: {
+                    id: 'tool-1',
+                    name: 'lookupCalendar',
+                    argumentsJson: '{"date":"2026-05-02"}',
+                  },
+                  createdAtEpochSeconds: 3,
+                },
+                {
+                  id: 'message-2',
+                  role: 'coach',
+                  content: 'Coach reply',
+                  createdAtEpochSeconds: 4,
+                },
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages.map((message) => message.role)).toEqual(['user', 'tool', 'coach']);
+      const toolMessage = result.current.messages[1];
+      expect(toolMessage.toolCall).toEqual({
+        id: 'tool-1',
+        name: 'lookupCalendar',
+        argumentsJson: '{"date":"2026-05-02"}',
+      });
+    });
+  });
+
   it('recognizes the backend availability error sentinel', () => {
     expect(isAvailabilityRequiredChatError(availabilityRequiredChatError)).toBe(true);
     expect(isAvailabilityRequiredChatError('Availability must be configured before chatting with coach.')).toBe(true);

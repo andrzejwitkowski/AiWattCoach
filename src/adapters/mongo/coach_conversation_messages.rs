@@ -27,6 +27,8 @@ struct CoachConversationMessageDocument {
     id: String,
     role: String,
     content: String,
+    #[serde(default)]
+    tool_call: Option<crate::domain::workout_summary::PublicToolCall>,
     created_at_epoch_seconds: i64,
     #[serde(default)]
     created_at: Option<DateTime>,
@@ -171,6 +173,7 @@ fn map_domain_to_document(message: &CoachConversationMessage) -> CoachConversati
         id: message.id.clone(),
         role: role_as_str(&message.role).to_string(),
         content: message.content.clone(),
+        tool_call: message.tool_call.clone(),
         created_at_epoch_seconds: message.created_at_epoch_seconds,
         created_at: optional_epoch_seconds_to_bson_datetime(
             Some(message.created_at_epoch_seconds),
@@ -189,6 +192,7 @@ fn map_document_to_domain(
         user_id: document.user_id,
         role: map_role(document.role)?,
         content: document.content,
+        tool_call: document.tool_call,
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             document.created_at,
             Some(document.created_at_epoch_seconds),
@@ -203,6 +207,7 @@ fn role_as_str(role: &CoachConversationMessageRole) -> &'static str {
         CoachConversationMessageRole::User => "user",
         CoachConversationMessageRole::Coach => "coach",
         CoachConversationMessageRole::System => "system",
+        CoachConversationMessageRole::Tool => "tool",
     }
 }
 
@@ -211,6 +216,7 @@ fn map_role(value: String) -> Result<CoachConversationMessageRole, CoachConversa
         "user" => Ok(CoachConversationMessageRole::User),
         "coach" => Ok(CoachConversationMessageRole::Coach),
         "system" => Ok(CoachConversationMessageRole::System),
+        "tool" => Ok(CoachConversationMessageRole::Tool),
         other => Err(CoachConversationError::Repository(format!(
             "unknown coach conversation message role: {other}"
         ))),

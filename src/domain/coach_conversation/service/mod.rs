@@ -5,7 +5,7 @@ use crate::domain::{
     llm::{
         approximate_token_budget_for_model, hash_text, LlmChatMessage, LlmChatPort, LlmChatRequest,
         LlmChatResponse, LlmContextCache, LlmContextCacheRepository, LlmError, LlmMessageRole,
-        LlmProvider, UserLlmConfigProvider,
+        LlmProvider, LlmToolChoice, UserLlmConfigProvider,
     },
     settings::UserSettingsUseCases,
     training_context::TrainingContextBuilder,
@@ -30,6 +30,18 @@ pub use scheduler::{
 
 const POST_PROVIDER_WRITE_ATTEMPTS: usize = 2;
 pub(super) const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
+
+fn llm_message_content_matches_public_text(message: &LlmChatMessage, public_text: &str) -> bool {
+    message.content.trim() == public_text.trim()
+}
+
+fn final_assistant_text(response: &LlmChatResponse) -> Option<String> {
+    response
+        .assistant_text()
+        .map(str::trim)
+        .filter(|content| !content.is_empty())
+        .map(str::to_string)
+}
 
 const CALENDAR_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reason about their training from the calendar view. Use the packed training context as factual background. This is a general coaching conversation: the athlete may ask about a workout on a given date, why a planned workout appears in the schedule, how to fuel sessions, how to approach a race strategically, or how the broader week fits together. Be direct, concise, and evidence-based. Do not invent details beyond the provided context. Do not claim that workouts were regenerated, changed, or committed unless the application explicitly says so. If the athlete asks to regenerate training plans, tell them this is not available from the calendar chat \u{2014} they need to go to the completed workouts section and save a workout summary to trigger plan generation.";
 
@@ -259,6 +271,7 @@ where
         role: CoachConversationMessageRole,
         content: String,
         message_id: Option<String>,
+        tool_call: Option<crate::domain::workout_summary::PublicToolCall>,
     ) -> Result<CoachConversationMessage, CoachConversationError> {
         if conversation.status == CoachConversationStatus::Archived {
             return Err(CoachConversationError::Archived);
@@ -278,6 +291,7 @@ where
                 user_id: conversation.user_id.clone(),
                 role,
                 content,
+                tool_call,
                 created_at_epoch_seconds: self.clock.now_epoch_seconds(),
             })
             .await?;
@@ -291,6 +305,68 @@ where
             .await?;
 
         Ok(message)
+    }
+
+    async fn append_tool_message(
+        &self,
+        conversation: &CoachConversation,
+        tool_call: crate::domain::workout_summary::PublicToolCall,
+    ) -> Result<CoachConversationMessage, CoachConversationError> {
+        self.append_message(
+            conversation,
+            CoachConversationMessageRole::Tool,
+            format!("Tool call: {}", tool_call.name),
+            Some(tool_call.id.clone()),
+            Some(tool_call),
+        )
+        .await
+    }
+
+    async fn replace_hidden_transcript(
+        &self,
+        conversation: &CoachConversation,
+        hidden_transcript: Vec<LlmChatMessage>,
+    ) -> Result<(), CoachConversationError> {
+        self.conversations
+            .replace_hidden_transcript(
+                &conversation.user_id,
+                &conversation.conversation_id,
+                hidden_transcript,
+                self.clock.now_epoch_seconds(),
+            )
+            .await
+    }
+
+    async fn materialize_public_tool_messages(
+        &self,
+        conversation: &CoachConversation,
+        operation: CoachConversationReplyOperation,
+        response: &LlmChatResponse,
+    ) -> Result<CoachConversationReplyOperation, CoachConversationError> {
+        let mut operation = operation;
+
+        for tool_call in response.tool_calls() {
+            if operation
+                .public_tool_call_ids
+                .iter()
+                .any(|id| id == &tool_call.id)
+            {
+                continue;
+            }
+
+            self.append_tool_message(
+                conversation,
+                crate::domain::workout_summary::PublicToolCall {
+                    id: tool_call.id.clone(),
+                    name: tool_call.name.clone(),
+                    arguments_json: tool_call.arguments_json.clone(),
+                },
+            )
+            .await?;
+            operation.public_tool_call_ids.push(tool_call.id.clone());
+        }
+
+        Ok(operation)
     }
 
     async fn load_persisted_user_message(
@@ -505,10 +581,16 @@ where
             system_prompt,
             stable_context,
             volatile_context,
-            conversation: build_calendar_conversation(messages, &user_message.id),
+            conversation: build_calendar_conversation(
+                messages,
+                &conversation.hidden_transcript,
+                &user_message.id,
+            ),
             cache_scope_key: cache_scope_key.clone(),
             cache_key: Some(context_hash.clone()),
             reusable_cache_id,
+            tools: Vec::new(),
+            tool_choice: LlmToolChoice::None,
         };
         let response = self
             .llm_chat_port
@@ -578,35 +660,99 @@ where
             }
         }
 
-        if let Some(response_message) = operation.response_message.clone() {
-            let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
-                CoachConversationError::Repository(
-                    "pending coach reply operation missing reserved coach message id".to_string(),
+        if !operation.hidden_transcript.is_empty() {
+            let mut merged = conversation.hidden_transcript.clone();
+            for entry in &operation.hidden_transcript {
+                if !merged.contains(entry) {
+                    merged.push(entry.clone());
+                }
+            }
+            self.replace_hidden_transcript(conversation, merged).await?;
+
+            for transcript_message in &operation.hidden_transcript {
+                if transcript_message.role != LlmMessageRole::Assistant {
+                    continue;
+                }
+
+                for tool_call in &transcript_message.tool_calls {
+                    if operation
+                        .public_tool_call_ids
+                        .iter()
+                        .any(|id| id == &tool_call.id)
+                        || self
+                            .messages
+                            .find_by_user_id_and_conversation_id_and_message_id(
+                                &conversation.user_id,
+                                &conversation.conversation_id,
+                                &tool_call.id,
+                            )
+                            .await?
+                            .is_some()
+                    {
+                        continue;
+                    }
+
+                    self.append_tool_message(
+                        conversation,
+                        crate::domain::workout_summary::PublicToolCall {
+                            id: tool_call.id.clone(),
+                            name: tool_call.name.clone(),
+                            arguments_json: tool_call.arguments_json.clone(),
+                        },
+                    )
+                    .await?;
+                }
+            }
+
+            if let Some(content) = operation
+                .hidden_transcript
+                .iter()
+                .rev()
+                .find(|message| message.role == LlmMessageRole::Assistant)
+                .map(|message| message.content.clone())
+                .filter(|content| !content.trim().is_empty())
+            {
+                let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+                    CoachConversationError::Repository(
+                        "pending coach reply operation missing reserved coach message id"
+                            .to_string(),
+                    )
+                })?;
+                let coach_message = self
+                    .append_message(
+                        conversation,
+                        CoachConversationMessageRole::Coach,
+                        content,
+                        Some(coach_message_id),
+                        None,
+                    )
+                    .await?;
+                let completed = operation.mark_completed_from_existing_message(
+                    coach_message.id.clone(),
+                    self.clock.now_epoch_seconds(),
+                );
+                self.persist_post_provider_operation(
+                    completed,
+                    "replay_persisted_conversation_reply",
                 )
-            })?;
-            let coach_message = self
-                .append_message(
-                    conversation,
-                    CoachConversationMessageRole::Coach,
-                    response_message,
-                    Some(coach_message_id),
-                )
                 .await?;
-            let completed = operation.mark_completed_from_existing_message(
-                coach_message.id.clone(),
-                self.clock.now_epoch_seconds(),
-            );
-            self.persist_post_provider_operation(completed, "replay_persisted_conversation_reply")
+                let messages = self
+                    .list_messages(&conversation.user_id, &conversation.conversation_id)
+                    .await?;
+                return Ok(Some(CoachConversationReply {
+                    conversation: conversation.clone(),
+                    messages,
+                    coach_message,
+                    athlete_summary_was_regenerated: false,
+                }));
+            }
+
+            let error =
+                LlmError::InvalidResponse("assistant reply missing final text message".to_string());
+            let failed = operation.mark_failed(&error, self.clock.now_epoch_seconds());
+            self.persist_post_provider_operation(failed, "replay_invalid_conversation_reply")
                 .await?;
-            let messages = self
-                .list_messages(&conversation.user_id, &conversation.conversation_id)
-                .await?;
-            return Ok(Some(CoachConversationReply {
-                conversation: conversation.clone(),
-                messages,
-                coach_message,
-                athlete_summary_was_regenerated: false,
-            }));
+            return Err(CoachConversationError::Llm(error));
         }
 
         Ok(None)
@@ -728,6 +874,7 @@ where
                     CoachConversationMessageRole::User,
                     content,
                     None,
+                    None,
                 )
                 .await?;
             let messages = service.list_messages(&user_id, &conversation_id).await?;
@@ -829,13 +976,42 @@ where
                         provider_cache_id: llm_response.cache.provider_cache_id.clone(),
                         token_usage: llm_response.usage.clone(),
                         cache_usage: llm_response.cache.clone(),
-                        response_message: llm_response.message.clone(),
+                        hidden_transcript: vec![llm_response.message.clone()],
+                        finish_reason: llm_response.finish_reason.clone(),
                         updated_at_epoch_seconds: service.clock.now_epoch_seconds(),
                     }),
                     "persist_provider_response_checkpoint",
                 )
                 .await?;
+            let mut merged = conversation.hidden_transcript.clone();
+            for entry in &operation.hidden_transcript {
+                if !merged.contains(entry) {
+                    merged.push(entry.clone());
+                }
+            }
+            service
+                .replace_hidden_transcript(&conversation, merged)
+                .await?;
+            let operation = service
+                .materialize_public_tool_messages(&conversation, operation, &llm_response)
+                .await?;
+            let operation = service
+                .persist_post_provider_operation(operation, "persist_public_tool_messages")
+                .await?;
 
+            let Some(coach_content) = final_assistant_text(&llm_response) else {
+                let error = LlmError::InvalidResponse(
+                    "assistant reply missing final text message".to_string(),
+                );
+                let failed = operation.mark_failed(&error, service.clock.now_epoch_seconds());
+                service
+                    .persist_post_provider_operation(
+                        failed,
+                        "persist_invalid_conversation_response_checkpoint",
+                    )
+                    .await?;
+                return Err(CoachConversationError::Llm(error));
+            };
             let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
                 CoachConversationError::Repository(
                     "pending coach reply operation missing reserved coach message id".to_string(),
@@ -845,8 +1021,9 @@ where
                 .append_message(
                     &conversation,
                     CoachConversationMessageRole::Coach,
-                    llm_response.message.clone(),
+                    coach_content,
                     Some(coach_message_id),
+                    None,
                 )
                 .await?;
             let completed_reply = CompletedCoachConversationReply {
@@ -918,6 +1095,7 @@ fn build_calendar_volatile_context(
 
 fn build_calendar_conversation(
     messages: &[CoachConversationMessage],
+    hidden_transcript: &[LlmChatMessage],
     up_to_message_id: &str,
 ) -> Vec<LlmChatMessage> {
     let messages = match messages.iter().position(|msg| msg.id == up_to_message_id) {
@@ -925,18 +1103,45 @@ fn build_calendar_conversation(
         None => messages,
     };
 
-    messages
+    let mut conversation = messages
         .iter()
         .filter_map(|message| match message.role {
             CoachConversationMessageRole::User => Some(LlmChatMessage {
                 role: LlmMessageRole::User,
                 content: message.content.clone(),
+                tool_calls: Vec::new(),
+                tool_call_id: None,
             }),
             CoachConversationMessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
                 content: message.content.clone(),
+                tool_calls: Vec::new(),
+                tool_call_id: None,
             }),
-            CoachConversationMessageRole::System => None,
+            CoachConversationMessageRole::Tool | CoachConversationMessageRole::System => None,
         })
-        .collect::<Vec<_>>()
+        .collect::<Vec<_>>();
+
+    let mut assistant_positions = conversation
+        .iter()
+        .enumerate()
+        .filter_map(|(index, message)| (message.role == LlmMessageRole::Assistant).then_some(index))
+        .collect::<Vec<_>>();
+
+    for hidden_assistant in hidden_transcript
+        .iter()
+        .filter(|message| message.role == LlmMessageRole::Assistant)
+    {
+        if let Some(position) = assistant_positions.iter().position(|index| {
+            llm_message_content_matches_public_text(
+                &conversation[*index],
+                &hidden_assistant.content,
+            )
+        }) {
+            let index = assistant_positions.remove(position);
+            conversation[index] = hidden_assistant.clone();
+        }
+    }
+
+    conversation
 }

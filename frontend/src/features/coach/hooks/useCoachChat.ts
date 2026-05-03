@@ -101,6 +101,13 @@ function localSystemMessages(contents: string[], startId: number): ConversationM
   }));
 }
 
+function appendUniqueMessage(messages: ConversationMessage[], message: ConversationMessage): ConversationMessage[] {
+  if (messages.some((existing) => existing.id === message.id)) {
+    return messages;
+  }
+  return [...messages, message];
+}
+
 export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): UseCoachChatResult {
   const [summary, setSummary] = useState<WorkoutSummary | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -264,6 +271,20 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
             setDraftRpe(parsed.summary.rpe);
             setIsCoachTyping(false);
             clearReplyProgress();
+            return;
+          }
+
+          if (parsed.type === 'tool_message') {
+            setMessages((current) => appendUniqueMessage(current, parsed.message));
+            setSummary((current) => {
+              if (!current) {
+                return current;
+              }
+              return {
+                ...current,
+                messages: appendUniqueMessage(current.messages, parsed.message),
+              };
+            });
             return;
           }
 

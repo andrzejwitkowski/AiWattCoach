@@ -900,6 +900,7 @@ async fn builder_falls_back_to_event_id_summary_when_activity_id_summary_is_miss
                         workout_id: id,
                         rpe: Some(8),
                         messages: Vec::new(),
+                        hidden_transcript: Vec::new(),
                         saved_at_epoch_seconds: None,
                         workout_recap_text: Some("Matched legacy event summary".to_string()),
                         workout_recap_provider: Some("openrouter".to_string()),
@@ -967,6 +968,18 @@ async fn builder_falls_back_to_event_id_summary_when_activity_id_summary_is_miss
             _user_id: &str,
             _workout_id: &str,
             _saved_at_epoch_seconds: Option<i64>,
+            _updated_at_epoch_seconds: i64,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<(), crate::domain::workout_summary::WorkoutSummaryError>,
+        > {
+            unreachable!()
+        }
+
+        fn replace_hidden_transcript(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
             _updated_at_epoch_seconds: i64,
         ) -> crate::domain::workout_summary::BoxFuture<
             Result<(), crate::domain::workout_summary::WorkoutSummaryError>,
@@ -1051,6 +1064,7 @@ async fn builder_uses_alias_backed_summary_for_recent_activity_context() {
                             workout_id: "wahoo-workout:ride-1".to_string(),
                             rpe: Some(9),
                             messages: Vec::new(),
+                            hidden_transcript: Vec::new(),
                             saved_at_epoch_seconds: None,
                             workout_recap_text: Some("Recovered alias-backed recap".to_string()),
                             workout_recap_provider: Some("openrouter".to_string()),
@@ -1121,6 +1135,18 @@ async fn builder_uses_alias_backed_summary_for_recent_activity_context() {
             _user_id: &str,
             _workout_id: &str,
             _saved_at_epoch_seconds: Option<i64>,
+            _updated_at_epoch_seconds: i64,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<(), crate::domain::workout_summary::WorkoutSummaryError>,
+        > {
+            unreachable!()
+        }
+
+        fn replace_hidden_transcript(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
             _updated_at_epoch_seconds: i64,
         ) -> crate::domain::workout_summary::BoxFuture<
             Result<(), crate::domain::workout_summary::WorkoutSummaryError>,

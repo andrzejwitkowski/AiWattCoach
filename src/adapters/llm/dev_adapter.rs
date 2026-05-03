@@ -24,9 +24,10 @@ impl LlmChatPort for DevLlmCoachAdapter {
             Ok(LlmChatResponse {
                 provider: config.provider,
                 model: config.model,
-                message: format!(
+                message: crate::domain::llm::LlmChatMessage::assistant(format!(
                     "DEV coach mock: thanks for sharing. What changed most in the session after '{last_user_message}'?"
-                ),
+                )),
+                finish_reason: None,
                 provider_request_id: Some("dev-llm-request".to_string()),
                 usage: LlmTokenUsage {
                     input_tokens: Some(128),

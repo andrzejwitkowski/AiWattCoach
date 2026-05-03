@@ -8,7 +8,7 @@ use aiwattcoach::{
     domain::llm::{
         BoxFuture as LlmBoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse,
         LlmContextCache, LlmContextCacheRepository, LlmError, LlmMessageRole, LlmProvider,
-        LlmProviderConfig, LlmTokenUsage, UserLlmConfigProvider,
+        LlmProviderConfig, LlmTokenUsage, LlmToolChoice, UserLlmConfigProvider,
     },
     domain::{
         identity::Clock,
@@ -73,7 +73,8 @@ impl LlmChatPort for CapturingChatPort {
             Ok(LlmChatResponse {
                 provider: LlmProvider::Gemini,
                 model: "gemini-3.1-pro".to_string(),
-                message: "Gemini coach reply".to_string(),
+                message: LlmChatMessage::assistant("Gemini coach reply"),
+                finish_reason: None,
                 provider_request_id: Some("req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: Default::default(),
@@ -237,10 +238,14 @@ pub(crate) fn sample_request() -> LlmChatRequest {
         conversation: vec![LlmChatMessage {
             role: LlmMessageRole::User,
             content: "How did I do?".to_string(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
         }],
         cache_scope_key: Some("scope-1".to_string()),
         cache_key: Some("cache-key-1".to_string()),
         reusable_cache_id: None,
+        tools: Vec::new(),
+        tool_choice: LlmToolChoice::None,
     }
 }
 
@@ -251,6 +256,7 @@ pub(crate) fn sample_summary() -> WorkoutSummary {
         workout_id: "workout-1".to_string(),
         rpe: Some(6),
         messages: Vec::new(),
+        hidden_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,
@@ -331,6 +337,26 @@ async fn openrouter_handler(
                 "message": {
                     "content": [
                         { "type": "text", "text": "OpenRouter says hi from parts" }
+                    ]
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 25,
+                "total_tokens": 145
+            }
+        }))
+        .into_response();
+    }
+    if model == "google/gemini-3-flash-preview-multipart" {
+        return Json(json!({
+            "id": "openrouter-req-2",
+            "model": model,
+            "choices": [{
+                "message": {
+                    "content": [
+                        { "type": "text", "text": "OpenRouter says" },
+                        { "type": "text", "text": "hi from parts" }
                     ]
                 }
             }],

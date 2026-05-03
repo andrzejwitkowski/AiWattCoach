@@ -5,7 +5,7 @@ use crate::domain::coach_conversation::{
 
 use super::dto::{
     CalendarCoachConversationResponseDto, CoachConversationDto, CoachConversationMessageDto,
-    SendMessageResponseDto,
+    SendMessageResponseDto, ToolCallDto,
 };
 use crate::domain::coach_conversation::SendConversationMessageResult;
 
@@ -55,8 +55,14 @@ pub(super) fn map_message_to_dto(message: CoachConversationMessage) -> CoachConv
             CoachConversationMessageRole::User => "user".to_string(),
             CoachConversationMessageRole::Coach => "coach".to_string(),
             CoachConversationMessageRole::System => "system".to_string(),
+            CoachConversationMessageRole::Tool => "tool".to_string(),
         },
         content: message.content,
+        tool_call: message.tool_call.map(|tool_call| ToolCallDto {
+            id: tool_call.id,
+            name: tool_call.name,
+            arguments_json: tool_call.arguments_json,
+        }),
         created_at_epoch_seconds: message.created_at_epoch_seconds,
     }
 }

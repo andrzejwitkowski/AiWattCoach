@@ -172,6 +172,32 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
         })
     }
 
+    fn replace_hidden_transcript(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        hidden_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let summaries = self.summaries.clone();
+        let calls = self.calls.clone();
+        Box::pin(async move {
+            calls
+                .lock()
+                .unwrap()
+                .push(format!("replace_hidden_transcript:{workout_id}"));
+            let mut summaries = summaries.lock().unwrap();
+            let Some(summary) = summaries.get_mut(&(user_id, workout_id)) else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+            summary.hidden_transcript = hidden_transcript;
+            summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
+
     fn persist_workout_recap(
         &self,
         user_id: &str,
@@ -220,6 +246,7 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
                 match message.role {
                     MessageRole::User => "user",
                     MessageRole::Coach => "coach",
+                    MessageRole::Tool => "tool",
                 }
             ));
             let mut summaries = summaries.lock().unwrap();

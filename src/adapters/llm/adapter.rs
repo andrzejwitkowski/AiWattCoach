@@ -116,7 +116,8 @@ mod tests {
                 Ok(LlmChatResponse {
                     provider: LlmProvider::OpenAi,
                     model: "o1-mini".to_string(),
-                    message: "late".to_string(),
+                    message: crate::domain::llm::LlmChatMessage::assistant("late"),
+                    finish_reason: None,
                     provider_request_id: None,
                     usage: Default::default(),
                     cache: Default::default(),

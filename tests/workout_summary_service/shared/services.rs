@@ -354,6 +354,7 @@ pub(crate) fn existing_summary() -> WorkoutSummary {
         workout_id: "workout-1".to_string(),
         rpe: Some(6),
         messages: Vec::new(),
+        hidden_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,
@@ -370,6 +371,7 @@ pub(crate) fn existing_summary_with_finished_conversation() -> WorkoutSummary {
         id: "message-coach-1".to_string(),
         role: MessageRole::Coach,
         content: "Nice work. Save this and we can build the next block.".to_string(),
+        tool_call: None,
         created_at_epoch_seconds: 1_700_000_050,
     });
     summary
@@ -781,7 +783,8 @@ impl WorkoutCoach for DevWorkoutCoach {
             Ok(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "dev-llm-coach".to_string(),
-                message,
+                message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
+                finish_reason: None,
                 provider_request_id: Some("dev-request-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),

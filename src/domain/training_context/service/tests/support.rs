@@ -509,8 +509,10 @@ fn summary_for_workout_id(workout_id: &str) -> WorkoutSummary {
             id: "message-1".to_string(),
             role: MessageRole::User,
             content: "felt controlled".to_string(),
+            tool_call: None,
             created_at_epoch_seconds: 1,
         }],
+        hidden_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: Some("Strong sweet spot execution with steady control".to_string()),
         workout_recap_provider: Some("openrouter".to_string()),
@@ -580,6 +582,16 @@ impl WorkoutSummaryRepository for TestWorkoutSummaryRepository {
         _user_id: &str,
         _workout_id: &str,
         _saved_at_epoch_seconds: Option<i64>,
+        _updated_at_epoch_seconds: i64,
+    ) -> crate::domain::workout_summary::BoxFuture<Result<(), WorkoutSummaryError>> {
+        unreachable!()
+    }
+
+    fn replace_hidden_transcript(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
         _updated_at_epoch_seconds: i64,
     ) -> crate::domain::workout_summary::BoxFuture<Result<(), WorkoutSummaryError>> {
         unreachable!()

@@ -1,12 +1,19 @@
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
 import { z } from 'zod';
 
-export const conversationMessageRoleSchema = z.enum(['user', 'coach', 'system']);
+export const conversationMessageRoleSchema = z.enum(['user', 'coach', 'system', 'tool']);
+
+export const toolCallSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  argumentsJson: z.string(),
+});
 
 export const conversationMessageSchema = z.object({
   id: z.string(),
   role: conversationMessageRoleSchema,
   content: z.string(),
+  toolCall: toolCallSchema.nullish(),
   createdAtEpochSeconds: z.number().int(),
 });
 
@@ -58,6 +65,11 @@ export const coachMessageWsMessageSchema = z.object({
   summary: workoutSummarySchema,
 });
 
+export const toolMessageWsMessageSchema = z.object({
+  type: z.literal('tool_message'),
+  message: conversationMessageSchema,
+});
+
 export const systemMessageWsMessageSchema = z.object({
   type: z.literal('system_message'),
   content: z.string().trim().min(1),
@@ -71,6 +83,7 @@ export const errorWsMessageSchema = z.object({
 export const serverWsMessageSchema = z.discriminatedUnion('type', [
   coachTypingWsMessageSchema,
   coachMessageWsMessageSchema,
+  toolMessageWsMessageSchema,
   systemMessageWsMessageSchema,
   errorWsMessageSchema,
 ]);

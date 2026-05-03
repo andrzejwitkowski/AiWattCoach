@@ -5,7 +5,7 @@ use crate::domain::workout_summary::{
 
 use super::dto::{
     ConversationMessageDto, SaveWorkflowDto, SaveWorkflowStatusDto, SendMessageResponseDto,
-    WorkoutSummaryDto,
+    ToolCallDto, WorkoutSummaryDto,
 };
 
 pub(super) fn map_summary_to_dto(summary: WorkoutSummary) -> WorkoutSummaryDto {
@@ -71,8 +71,14 @@ pub(super) fn map_message_to_dto(message: ConversationMessage) -> ConversationMe
         role: match message.role {
             MessageRole::User => "user".to_string(),
             MessageRole::Coach => "coach".to_string(),
+            MessageRole::Tool => "tool".to_string(),
         },
         content: message.content,
+        tool_call: message.tool_call.map(|tool_call| ToolCallDto {
+            id: tool_call.id,
+            name: tool_call.name,
+            arguments_json: tool_call.arguments_json,
+        }),
         created_at_epoch_seconds: message.created_at_epoch_seconds,
     }
 }
