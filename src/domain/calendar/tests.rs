@@ -206,8 +206,73 @@ async fn sync_planned_workout_to_intervals_sends_structured_workout_as_workout_d
     let created = intervals.created_events.lock().unwrap().clone();
     assert_eq!(created.len(), 1);
     assert_eq!(created[0].start_date_local, "2023-11-14T00:00:00");
-    assert_eq!(created[0].description.as_deref(), Some("- 60m 70%"));
-    assert_eq!(created[0].workout_doc, None);
+    assert_eq!(created[0].description, None);
+    assert_eq!(
+        created[0].workout_doc.as_deref(),
+        Some("Build Session\n- 60m 70%")
+    );
+}
+
+#[tokio::test]
+async fn sync_planned_workout_to_intervals_updates_existing_event_workout_doc() {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 77,
+        start_date_local: "2026-05-05T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Stochastic Durability - Over/Unders".to_string()),
+        category: EventCategory::Workout,
+        description: Some("manual note".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: Some("old workout".to_string()),
+    });
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                planned_workout_entity("training-plan:user-1:w1:1", "2026-05-05"),
+            )
+            .mark_synced("77".to_string(), "old-hash".to_string(), 1_700_000_001),
+        )
+        .await
+        .unwrap();
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day_with_doc(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2026-05-05",
+            "Stochastic Durability - Over/Unders\nWarmup\n- 15m ramp 175-250W\nMain Set 4x\n- 2m 105%\n- 4m 92%\n- 4m 50%\nCooldown\n- 15m 55%",
+        )]),
+        sync_states,
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2026-05-05".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(intervals.created_events.lock().unwrap().is_empty());
+    let updated = intervals.updated_events.lock().unwrap().clone();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].0, 77);
+    assert_eq!(updated[0].1.description.as_deref(), Some("manual note"));
+    assert_eq!(
+        updated[0].1.workout_doc.as_deref(),
+        Some("Stochastic Durability - Over/Unders\nWarmup\n- 15m ramp 175-250W\nMain Set\n4x\n- 2m 105%\n- 4m 92%\n- 4m 50%\nCooldown\n- 15m 55%")
+    );
 }
 
 #[tokio::test]
@@ -2120,6 +2185,20 @@ fn projected_day(
     date: &str,
     workout_name: &str,
 ) -> TrainingPlanProjectedDay {
+    projected_day_with_doc(
+        user_id,
+        operation_key,
+        date,
+        &format!("{workout_name}\n- 60m 70%"),
+    )
+}
+
+fn projected_day_with_doc(
+    user_id: &str,
+    operation_key: &str,
+    date: &str,
+    workout_doc: &str,
+) -> TrainingPlanProjectedDay {
     TrainingPlanProjectedDay {
         user_id: user_id.to_string(),
         workout_id: "workout-1".to_string(),
@@ -2127,10 +2206,7 @@ fn projected_day(
         date: date.to_string(),
         rest_day: false,
         rest_day_reason: None,
-        workout: Some(
-            parse_planned_workout(&format!("{workout_name}\n- 60m 70%"))
-                .expect("planned workout should parse"),
-        ),
+        workout: Some(parse_planned_workout(workout_doc).expect("planned workout should parse")),
         superseded_at_epoch_seconds: None,
         created_at_epoch_seconds: 1_700_000_000,
         updated_at_epoch_seconds: 1_700_000_000,
