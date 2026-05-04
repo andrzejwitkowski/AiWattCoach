@@ -562,18 +562,32 @@ mod tests {
             history: Default::default(),
             recent_days: Vec::new(),
             upcoming_days: Vec::new(),
-            projected_days: vec![ProjectedDayContext {
-                date: "2026-05-06".to_string(),
-                workouts: vec![ProjectedWorkoutContext {
-                    source_workout_id: "planned-1".to_string(),
-                    start_date_local: "2026-05-06T06:00:00".to_string(),
-                    name: Some("Projected Endurance".to_string()),
-                    interval_blocks: Vec::new(),
-                    raw_workout_doc: Some("- 90m 65%".to_string()),
-                    rest_day: false,
-                    rest_day_reason: None,
-                }],
-            }],
+            projected_days: vec![
+                ProjectedDayContext {
+                    date: "2026-05-06".to_string(),
+                    workouts: vec![ProjectedWorkoutContext {
+                        source_workout_id: "planned-1".to_string(),
+                        start_date_local: "2026-05-06T06:00:00".to_string(),
+                        name: Some("Projected Endurance".to_string()),
+                        interval_blocks: Vec::new(),
+                        raw_workout_doc: Some("- 90m 65%".to_string()),
+                        rest_day: false,
+                        rest_day_reason: None,
+                    }],
+                },
+                ProjectedDayContext {
+                    date: "2026-05-07".to_string(),
+                    workouts: vec![ProjectedWorkoutContext {
+                        source_workout_id: "planned-2".to_string(),
+                        start_date_local: "2026-05-07T06:00:00".to_string(),
+                        name: Some("Projected Tempo".to_string()),
+                        interval_blocks: Vec::new(),
+                        raw_workout_doc: Some("- 60m 75%".to_string()),
+                        rest_day: false,
+                        rest_day_reason: None,
+                    }],
+                },
+            ],
         };
         training_context.history.ctl = Some(72.0);
         training_context.history.atl = Some(81.0);

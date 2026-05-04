@@ -163,3 +163,9 @@
 - Sharing a client is not the same as sharing mutable data: keep per-test database names and mutable test records isolated even when the underlying client is reused.
 - When a suite starts many HTTP mock servers or websocket apps, centralize that startup in a helper with cleanup semantics instead of open-coded `tokio::spawn` blocks in each test.
 - When a suite gets `SIGKILL` only after many earlier test binaries pass, suspect retained test infrastructure first and inspect the binaries that run immediately before the failure point.
+
+## Misleading Struct Literal Placeholders
+
+- Never set a struct field to a placeholder value in a builder or request constructor when that value is unconditionally overwritten later by an orchestrator, loop, or mapper. Examples include `tools: Vec::new()` and `tool_choice: LlmToolChoice::None` in an `LlmChatRequest` that is immediately passed to `run_tool_loop`, which replaces both fields based on scope. The placeholder makes every reader think the request is sent without tools, which hides the real behavior and wastes debugging time.
+- If a downstream stage owns a field, omit it from the upstream builder. Use `..Default::default()` or a dedicated builder helper so the struct literal only contains values the current layer is actually responsible for.
+- When reviewing code that builds a request and then passes it to an orchestrator, check whether every field in the literal survives to the wire unchanged. If a field is reassigned before the wire call, remove it from the literal and let the orchestrator set it.

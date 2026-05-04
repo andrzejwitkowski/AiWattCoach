@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | user | misleading LlmChatRequest tool placeholder fields
+
+- Problem: multiple request builders (`coach_conversation/service/request.rs`, `workout_summary_coach.rs`, `training_plan_generator.rs`) constructed `LlmChatRequest` with `tools: Vec::new()` and `tool_choice: LlmToolChoice::None`, but every one of those requests was then passed to `run_tool_loop` or `run_tool_loop_with_checkpoint`, which unconditionally overwrote both fields based on `ToolScope`. The placeholder values made it look like requests were sent without tools, which wasted review time and hid the real behavior.
+- Fix: added `Default` to `LlmToolChoice` (defaulting to `None`), ensured `LlmChatRequest` derives `Default`, replaced the misleading placeholder fields in all request builders that feed the shared tool loop with `..Default::default()`, and documented the rule in `tasks/lessons.md` and `AGENTS.md`.
+- Prevention: when building a request that is handed to an orchestrator, omit fields the orchestrator owns. If a field is reassigned before the wire call, do not set it in the builder literal. Always verify that struct literals contain only values the current layer is actually responsible for.
+
 ### 2026-05-04 | user | training-plan in-flight tool-loop checkpoint persistence
 
 - Problem: the first training-plan durable tool-loop change persisted phase `LlmToolLoopState` only together with the final raw plan or correction text. That made the reclaim branch effectively unreachable for real in-flight tool rounds: a crash after a tool call but before final assistant text left no persisted loop checkpoint to resume from, and `fail_operation(...)` could also overwrite any newly written phase state with an older stale operation snapshot.

@@ -187,6 +187,7 @@ Adapted from `forrestchang/andrej-karpathy-skills` for OpenCode work in this rep
 - Prefer explicit mapping helpers like `map_document_to_domain`, `map_domain_to_document`, `map_event_response`.
 - Prefer `snake_case` for fields/functions/modules; use `PascalCase` for types and traits.
 - Use descriptive enum variants like `CredentialsNotConfigured`, `Unauthenticated`, `NotFound`.
+- Do not set struct fields to placeholder values in a builder or constructor when those values are unconditionally overwritten later by an orchestrator, loop, or mapper. If a downstream stage owns a field, omit it from the upstream builder and use `..Default::default()` or a dedicated builder helper. This applies especially to `tools` and `tool_choice` in `LlmChatRequest` when the request is passed to `run_tool_loop`.
 
 ## Import Conventions
 

@@ -241,8 +241,7 @@ where
                 cache_scope_key: None,
                 cache_key: None,
                 reusable_cache_id: None,
-                tools: Vec::new(),
-                tool_choice: crate::domain::llm::LlmToolChoice::None,
+                ..Default::default()
             };
             let tool_context = ToolExecutionContext {
                 training_context: context.context.clone(),
@@ -336,8 +335,7 @@ where
                 cache_scope_key: None,
                 cache_key: None,
                 reusable_cache_id: None,
-                tools: Vec::new(),
-                tool_choice: crate::domain::llm::LlmToolChoice::None,
+                ..Default::default()
             };
             let tool_context = ToolExecutionContext {
                 training_context: context.context.clone(),

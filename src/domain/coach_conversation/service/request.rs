@@ -1,6 +1,6 @@
 use crate::domain::llm::{
     approximate_token_budget_for_model, hash_text, LlmChatMessage, LlmChatRequest, LlmChatResponse,
-    LlmContextCache, LlmError, LlmProvider, LlmProviderConfig, LlmToolChoice,
+    LlmContextCache, LlmError, LlmProvider, LlmProviderConfig,
 };
 use crate::domain::llm_tools::{run_tool_loop, LlmToolLoopOutput, ToolExecutionContext, ToolScope};
 
@@ -53,8 +53,7 @@ where
             cache_scope_key: prepared.cache_scope_key.clone(),
             cache_key: Some(prepared.context_hash.clone()),
             reusable_cache_id: prepared.reusable_cache_id.clone(),
-            tools: Vec::new(),
-            tool_choice: LlmToolChoice::None,
+            ..Default::default()
         };
         let response = self.llm_chat_port.clone();
         let response = run_tool_loop(

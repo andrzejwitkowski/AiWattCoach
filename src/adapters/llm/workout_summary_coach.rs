@@ -186,8 +186,7 @@ where
                 cache_scope_key: cache_scope_key.clone(),
                 cache_key: Some(context_hash.clone()),
                 reusable_cache_id,
-                tools: Vec::new(),
-                tool_choice: crate::domain::llm::LlmToolChoice::None,
+                ..Default::default()
             };
             let tool_context = ToolExecutionContext {
                 training_context: training_context.context.clone(),
