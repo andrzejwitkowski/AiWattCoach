@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | user | split oversized coach conversation internals module
+
+- Problem: `src/domain/coach_conversation/service/internals.rs` had grown into another mixed-responsibility file even after the broader service split. Conversation lookup, message append/materialization, provider-transcript persistence, and crash-recovery flow all lived in one internal module, which made the calendar coach path harder to review and violated the repo guidance to keep Rust files and functions small by concern.
+- Fix: converted `src/domain/coach_conversation/service/internals.rs` into a directory module with focused siblings: `conversations.rs` for conversation lookup/create/archive helpers, `messaging.rs` for message append and public tool-message materialization, `persistence.rs` for provider-transcript and post-provider operation writes, and `recovery.rs` for pending-operation recovery and replay. Restored the needed explicit imports for the new module boundaries and verified the split with `cargo check`, `bun run verify:arch`, `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and focused `calendar_coach_service` tests.
+- Prevention: when an internal service helper file starts mixing durable state lookup, public message writes, provider checkpoint persistence, and replay/recovery logic, split it by phase before adding more behavior. After turning one Rust file into sibling modules, immediately re-add explicit imports/types that the old single-file layout got implicitly from shared scope, then run a focused behavior test in addition to compile-only checks.
+
 ### 2026-05-04 | user | provider transcript rename completion and shared helper extraction
 
 - Problem: the branch was left in a half-renamed state after moving `hidden_transcript` toward `provider_transcript`. Core domain models had already switched field names, but several service paths, ports, Mongo adapters, and test repositories still used the old names or local duplicate transcript helpers, so the tree no longer compiled and the transcript logic stayed duplicated across workout-summary, calendar coach, and LLM helpers.
