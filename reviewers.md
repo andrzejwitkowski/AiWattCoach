@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | user | training-context test split and coach reply operation coverage follow-up
+
+- Problem: follow-up review comments were still correct in four places. `src/adapters/mongo/coach_conversation_reply_operations.rs` only covered the legacy `response_message` fallback and did not prove that a persisted hidden transcript with assistant tool calls plus tool messages round-trips correctly. `src/domain/workout_summary/service/internals.rs` kept `ensure_availability_configured_for_coach(...)` as a long mixed helper instead of splitting lookup/error-mapping concerns. The `training_context` test support stayed in oversized catch-all files, which made the refactor incomplete and harder to review.
+- Fix: added a focused Mongo unit regression for full hidden-transcript tool-call mapping, split the workout-summary availability guard into smaller helpers with shared settings-error mapping, converted the oversized `training_context` builder test file into a directory module with focused siblings, and finished the support split so settings, workout fixtures/repositories, summaries, and calendar repositories live in separate support modules behind a thin `support.rs` re-export surface.
+- Prevention: when a review calls out oversized Rust test/support files, finish the split all the way to concern-based modules instead of stopping at a compile-only extraction. For persisted transcript formats, add a regression that exercises the full modern shape, not only the legacy fallback path. For orchestration helpers that mix lookup, defaulting, and transport/domain error mapping, split those phases before adding more behavior.
+
 ### 2026-05-04 | CodeRabbit | hidden transcript compare-and-set versioning and merge semantics
 
 - Problem: the hidden-transcript compare-and-set fix still used `now_epoch_seconds()` directly as the new version token, so writes in the same second could leave `updated_at_epoch_seconds` unchanged and weaken optimistic locking. The retry merge helper also treated transcript entries like a set via `Vec::contains`, which could drop valid repeated identical turns instead of appending only the new suffix.

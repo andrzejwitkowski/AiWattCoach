@@ -295,38 +295,42 @@ where
         &self,
         user_id: &str,
     ) -> Result<(), WorkoutSummaryError> {
+        if !self.availability_is_configured(user_id).await? {
+            Err(WorkoutSummaryError::Validation(
+                "availability must be configured before chatting with coach".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn availability_is_configured(&self, user_id: &str) -> Result<bool, WorkoutSummaryError> {
         let Some(settings_service) = &self.settings_service else {
-            return Ok(());
+            return Ok(true);
         };
 
-        let settings = settings_service
+        Ok(self
+            .find_coach_settings(settings_service, user_id)
+            .await?
+            .availability
+            .is_configured())
+    }
+
+    async fn find_coach_settings(
+        &self,
+        settings_service: &Arc<dyn crate::domain::settings::UserSettingsUseCases>,
+        user_id: &str,
+    ) -> Result<crate::domain::settings::UserSettings, WorkoutSummaryError> {
+        Ok(settings_service
             .find_settings(user_id)
             .await
-            .map_err(|error| match error {
-                crate::domain::settings::SettingsError::Repository(message) => {
-                    WorkoutSummaryError::Repository(message)
-                }
-                crate::domain::settings::SettingsError::Unauthenticated => {
-                    WorkoutSummaryError::Validation("authentication is required".to_string())
-                }
-                crate::domain::settings::SettingsError::Validation(message) => {
-                    WorkoutSummaryError::Validation(message)
-                }
-            })?
+            .map_err(map_settings_error)?
             .unwrap_or_else(|| {
                 crate::domain::settings::UserSettings::new_defaults(
                     user_id.to_string(),
                     self.clock.now_epoch_seconds(),
                 )
-            });
-
-        if settings.availability.is_configured() {
-            Ok(())
-        } else {
-            Err(WorkoutSummaryError::Validation(
-                "availability must be configured before chatting with coach".to_string(),
-            ))
-        }
+            }))
     }
 
     pub(super) async fn append_message_with_role_and_id(
@@ -705,6 +709,20 @@ fn next_hidden_transcript_updated_at_epoch_seconds(
     now_epoch_seconds: i64,
 ) -> i64 {
     now_epoch_seconds.max(expected_updated_at_epoch_seconds.saturating_add(1))
+}
+
+fn map_settings_error(error: crate::domain::settings::SettingsError) -> WorkoutSummaryError {
+    match error {
+        crate::domain::settings::SettingsError::Repository(message) => {
+            WorkoutSummaryError::Repository(message)
+        }
+        crate::domain::settings::SettingsError::Unauthenticated => {
+            WorkoutSummaryError::Validation("authentication is required".to_string())
+        }
+        crate::domain::settings::SettingsError::Validation(message) => {
+            WorkoutSummaryError::Validation(message)
+        }
+    }
 }
 
 fn push_unique_workout_id(workout_ids: &mut Vec<String>, workout_id: String) {

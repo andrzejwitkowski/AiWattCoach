@@ -443,7 +443,7 @@ fn storage_error(error: mongodb::error::Error) -> CoachConversationError {
 mod tests {
     use super::{map_document_to_operation, CoachConversationReplyOperationDocument};
     use crate::domain::coach_conversation::CoachConversationReplyOperationStatus;
-    use crate::domain::llm::LlmChatMessage;
+    use crate::domain::llm::{LlmChatMessage, LlmToolCall};
 
     #[test]
     fn map_document_to_operation_reuses_legacy_response_message_when_hidden_transcript_missing() {
@@ -485,6 +485,73 @@ mod tests {
         assert_eq!(
             operation.hidden_transcript,
             vec![LlmChatMessage::assistant("Legacy conversation checkpoint")]
+        );
+    }
+
+    #[test]
+    fn map_document_to_operation_preserves_full_tool_call_hidden_transcript() {
+        let operation = map_document_to_operation(CoachConversationReplyOperationDocument {
+            user_id: "user-1".to_string(),
+            conversation_id: "conversation-1".to_string(),
+            user_message_id: "message-1".to_string(),
+            status: "pending".to_string(),
+            failure_kind: None,
+            provider: None,
+            model: None,
+            provider_request_id: None,
+            coach_message_id: None,
+            cache_scope_key: None,
+            provider_cache_id: None,
+            token_usage: None,
+            cache_usage: None,
+            hidden_transcript: vec![
+                LlmChatMessage::assistant_with_tool_calls(
+                    "",
+                    vec![LlmToolCall {
+                        id: "tool-call-1".to_string(),
+                        name: "lookupCalendar".to_string(),
+                        arguments_json: "{\"date\":\"2026-05-04\"}".to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-call-1", "calendar result"),
+            ],
+            response_message: Some("Legacy conversation checkpoint".to_string()),
+            finish_reason: None,
+            public_tool_call_ids: vec!["tool-call-1".to_string()],
+            error_message: None,
+            started_at_epoch_seconds: 1,
+            started_at: None,
+            last_attempt_at_epoch_seconds: 2,
+            last_attempt_at: None,
+            attempt_count: 1,
+            created_at_epoch_seconds: 3,
+            created_at: None,
+            updated_at_epoch_seconds: 4,
+            updated_at: None,
+        })
+        .expect("full tool-call transcript should map");
+
+        assert_eq!(
+            operation.status,
+            CoachConversationReplyOperationStatus::Pending
+        );
+        assert_eq!(
+            operation.hidden_transcript,
+            vec![
+                LlmChatMessage::assistant_with_tool_calls(
+                    "",
+                    vec![LlmToolCall {
+                        id: "tool-call-1".to_string(),
+                        name: "lookupCalendar".to_string(),
+                        arguments_json: "{\"date\":\"2026-05-04\"}".to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-call-1", "calendar result"),
+            ]
+        );
+        assert_eq!(
+            operation.public_tool_call_ids,
+            vec!["tool-call-1".to_string()]
         );
     }
 }
