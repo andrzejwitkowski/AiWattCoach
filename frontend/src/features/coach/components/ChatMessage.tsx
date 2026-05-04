@@ -14,6 +14,7 @@ function formatTimestamp(epochSeconds: number): string {
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
+  const isTool = message.role === 'tool';
   const containerClassName = ['flex', isUser ? 'justify-end' : 'justify-start'].join(' ');
   const bubbleClassName = [
     'max-w-[85%] rounded-2xl border px-4 py-4',
@@ -21,13 +22,25 @@ export function ChatMessage({ message }: ChatMessageProps) {
       ? 'rounded-tr-none border-cyan-300/20 bg-cyan-300/10 text-cyan-50'
       : isSystem
         ? 'border-amber-200/20 bg-amber-100/10 text-amber-50'
+        : isTool
+          ? 'border-indigo-300/20 bg-indigo-300/10 text-indigo-50'
         : 'rounded-tl-none border-white/10 bg-white/5 text-white',
   ].join(' ');
 
   return (
     <div className={containerClassName}>
       <div className={bubbleClassName} data-message-role={message.role}>
-        <p className="whitespace-pre-wrap text-base leading-7">{message.content}</p>
+        {isTool && message.toolCall ? (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-200/80">Tool</p>
+            <p className="text-sm font-semibold text-indigo-50">{message.toolCall.name}</p>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-indigo-200/10 bg-slate-950/40 p-3 text-xs leading-6 text-indigo-100/80">
+              {message.toolCall.argumentsJson}
+            </pre>
+          </div>
+        ) : (
+          <p className="whitespace-pre-wrap text-base leading-7">{message.content}</p>
+        )}
         <p className="mt-3 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
           {formatTimestamp(message.createdAtEpochSeconds)}
         </p>

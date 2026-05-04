@@ -19,7 +19,8 @@ impl MockLlmChatService {
             result: Ok(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "gpt-4o-mini".to_string(),
-                message: "OK".to_string(),
+                message: aiwattcoach::domain::llm::LlmChatMessage::assistant("OK"),
+                finish_reason: None,
                 provider_request_id: Some("req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),

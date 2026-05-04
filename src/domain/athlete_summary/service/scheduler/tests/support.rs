@@ -683,7 +683,8 @@ pub(super) fn llm_response(message: &str) -> LlmChatResponse {
     LlmChatResponse {
         provider: LlmProvider::OpenRouter,
         model: MODEL.to_string(),
-        message: message.to_string(),
+        message: crate::domain::llm::LlmChatMessage::assistant(message),
+        finish_reason: None,
         provider_request_id: None,
         usage: LlmTokenUsage::default(),
         cache: LlmCacheUsage::default(),

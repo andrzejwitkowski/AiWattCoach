@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
+use aiwattcoach::domain::workout_summary::PublicToolCall;
 use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSummaryService};
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
@@ -130,6 +131,68 @@ async fn websocket_sends_typing_then_coach_message() {
     assert!(first_text.contains(r#""type":"coach_typing""#));
     assert!(second_text.contains(r#""type":"coach_message""#));
     assert!(second_text.contains(r#""role":"coach""#));
+}
+
+#[tokio::test]
+async fn websocket_streams_tool_message_before_coach_message() {
+    let service = TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")])
+        .with_tool_call(PublicToolCall {
+            id: "tool-1".to_string(),
+            name: "lookupCalendar".to_string(),
+            arguments_json: r#"{"date":"2026-05-02"}"#.to_string(),
+        });
+    let app =
+        workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
+
+    let server = SpawnedApp::start(app).await;
+
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    socket
+        .send(Message::Text(
+            r#"{"type":"send_message","content":"Legs felt heavy today"}"#
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap();
+
+    let first = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let second = timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let third = timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+
+    assert!(first.contains(r#""type":"coach_typing""#));
+    assert!(second.contains(r#""type":"tool_message""#));
+    assert!(second.contains(r#""role":"tool""#));
+    assert!(second.contains(r#""name":"lookupCalendar""#));
+    assert!(third.contains(r#""type":"coach_message""#));
 }
 
 #[tokio::test]

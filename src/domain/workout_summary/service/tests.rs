@@ -154,6 +154,17 @@ impl WorkoutSummaryRepository for StubSummaryRepository {
         Box::pin(async { Ok(()) })
     }
 
+    fn replace_provider_transcript(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _provider_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+        _expected_updated_at_epoch_seconds: i64,
+        _updated_at_epoch_seconds: i64,
+    ) -> super::BoxFuture<Result<(), WorkoutSummaryError>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn persist_workout_recap(
         &self,
         _user_id: &str,

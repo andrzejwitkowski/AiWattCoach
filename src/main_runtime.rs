@@ -84,6 +84,7 @@ fn map_workout_summary_to_planning_context(
     let messages = summary
         .messages
         .into_iter()
+        .filter(|message| message.role != crate::domain::workout_summary::MessageRole::Tool)
         .map(
             |message| crate::domain::training_plan::TrainingPlanConversationMessage {
                 role: match message.role {
@@ -93,6 +94,7 @@ fn map_workout_summary_to_planning_context(
                     crate::domain::workout_summary::MessageRole::User => {
                         crate::domain::training_plan::TrainingPlanConversationRole::User
                     }
+                    crate::domain::workout_summary::MessageRole::Tool => unreachable!(),
                 },
                 content: message.content,
             },
@@ -391,10 +393,12 @@ pub async fn wait_for_sigterm(
 mod tests {
     use super::TrainingPlanWorkoutSummaryAdapter;
     use crate::domain::{
+        llm::LlmChatMessage,
         training_plan::TrainingPlanWorkoutSummaryPort,
         workout_summary::{
-            BoxFuture, CoachReply, PersistedUserMessage, SaveSummaryResult, SendMessageResult,
-            WorkoutRecap, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
+            BoxFuture, CoachReply, ConversationMessage, MessageRole, PersistedUserMessage,
+            SaveSummaryResult, SendMessageResult, WorkoutRecap, WorkoutSummary,
+            WorkoutSummaryError, WorkoutSummaryUseCases,
         },
     };
 
@@ -505,5 +509,153 @@ mod tests {
                 "workout summary not found".to_string()
             )
         );
+    }
+
+    #[derive(Clone)]
+    struct StaticWorkoutSummaryService {
+        summary: WorkoutSummary,
+    }
+
+    impl WorkoutSummaryUseCases for StaticWorkoutSummaryService {
+        fn get_summary(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            let summary = self.summary.clone();
+            Box::pin(async move { Ok(summary) })
+        }
+
+        fn create_summary(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn list_summaries(
+            &self,
+            _user_id: &str,
+            _workout_ids: Vec<String>,
+        ) -> BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn update_rpe(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _rpe: u8,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn mark_saved(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> BoxFuture<Result<SaveSummaryResult, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn reopen_summary(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn persist_workout_recap(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _recap: WorkoutRecap,
+        ) -> BoxFuture<Result<WorkoutSummary, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn send_message(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _content: String,
+        ) -> BoxFuture<Result<SendMessageResult, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn append_user_message(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _content: String,
+        ) -> BoxFuture<Result<PersistedUserMessage, WorkoutSummaryError>> {
+            unreachable!()
+        }
+
+        fn generate_coach_reply(
+            &self,
+            _user_id: &str,
+            _workout_id: &str,
+            _user_message_id: String,
+        ) -> BoxFuture<Result<CoachReply, WorkoutSummaryError>> {
+            unreachable!()
+        }
+    }
+
+    #[tokio::test]
+    async fn planning_context_ignores_public_tool_messages() {
+        let adapter = TrainingPlanWorkoutSummaryAdapter::new(std::sync::Arc::new(
+            StaticWorkoutSummaryService {
+                summary: WorkoutSummary {
+                    id: "summary-1".to_string(),
+                    user_id: "user-1".to_string(),
+                    workout_id: "workout-1".to_string(),
+                    rpe: Some(6),
+                    messages: vec![
+                        ConversationMessage {
+                            id: "user-1".to_string(),
+                            role: MessageRole::User,
+                            content: "How did I do?".to_string(),
+                            tool_call: None,
+                            created_at_epoch_seconds: 1,
+                        },
+                        ConversationMessage {
+                            id: "tool-1".to_string(),
+                            role: MessageRole::Tool,
+                            content: "Tool call: lookupWorkout".to_string(),
+                            tool_call: None,
+                            created_at_epoch_seconds: 2,
+                        },
+                        ConversationMessage {
+                            id: "coach-1".to_string(),
+                            role: MessageRole::Coach,
+                            content: "You faded late.".to_string(),
+                            tool_call: None,
+                            created_at_epoch_seconds: 3,
+                        },
+                    ],
+                    provider_transcript: vec![LlmChatMessage::assistant("You faded late.")],
+                    saved_at_epoch_seconds: None,
+                    workout_recap_text: None,
+                    workout_recap_provider: None,
+                    workout_recap_model: None,
+                    workout_recap_generated_at_epoch_seconds: None,
+                    created_at_epoch_seconds: 1,
+                    updated_at_epoch_seconds: 3,
+                },
+            },
+        ));
+
+        let context = adapter
+            .get_planning_context("user-1", "workout-1")
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(context.messages.len(), 2);
+        assert_eq!(context.messages[0].content, "How did I do?");
+        assert_eq!(context.messages[1].content, "You faded late.");
     }
 }

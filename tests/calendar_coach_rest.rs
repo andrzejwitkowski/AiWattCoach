@@ -21,6 +21,7 @@ mod shared {
                 AppUser, GoogleLoginOutcome, GoogleLoginStart, IdentityError, IdentityUseCases,
                 Role, WhitelistEntry,
             },
+            workout_summary::PublicToolCall,
         },
         Settings,
     };
@@ -122,6 +123,7 @@ mod shared {
         coach_reply_delay: Option<Duration>,
         availability_configured: bool,
         summary_may_regenerate_before_reply: bool,
+        next_tool_call: Arc<Mutex<Option<PublicToolCall>>>,
     }
 
     #[derive(Clone)]
@@ -169,6 +171,11 @@ mod shared {
             self
         }
 
+        pub(crate) fn with_tool_call(self, tool_call: PublicToolCall) -> Self {
+            *self.next_tool_call.lock().unwrap() = Some(tool_call);
+            self
+        }
+
         pub(crate) fn processed_user_messages(&self) -> Vec<String> {
             self.state.lock().unwrap().processed_user_messages.clone()
         }
@@ -205,6 +212,7 @@ mod shared {
                 coach_reply_delay: None,
                 availability_configured: true,
                 summary_may_regenerate_before_reply: false,
+                next_tool_call: Arc::new(Mutex::new(None)),
             }
         }
     }
@@ -319,6 +327,7 @@ mod shared {
                     user_id: stored.conversation.user_id.clone(),
                     role: CoachConversationMessageRole::User,
                     content,
+                    tool_call: None,
                     created_at_epoch_seconds: 1_700_000_000,
                 };
                 let coach_message = CoachConversationMessage {
@@ -327,6 +336,7 @@ mod shared {
                     user_id: stored.conversation.user_id.clone(),
                     role: CoachConversationMessageRole::Coach,
                     content: format!("Coach reply to: {}", user_message.content),
+                    tool_call: None,
                     created_at_epoch_seconds: 1_700_000_001,
                 };
                 stored.messages.push(user_message.clone());
@@ -381,6 +391,7 @@ mod shared {
                     user_id: stored.conversation.user_id.clone(),
                     role: CoachConversationMessageRole::User,
                     content,
+                    tool_call: None,
                     created_at_epoch_seconds: 1_700_000_000,
                 };
                 stored.messages.push(user_message.clone());
@@ -406,6 +417,7 @@ mod shared {
             let conversation_id = conversation_id.to_string();
             let coach_reply_delay = self.coach_reply_delay;
             let availability_configured = self.availability_configured;
+            let next_tool_call = self.next_tool_call.clone();
             Box::pin(async move {
                 if let Some(delay) = coach_reply_delay {
                     tokio::time::sleep(delay).await;
@@ -442,12 +454,25 @@ mod shared {
                         )
                     })?;
 
+                if let Some(tool_call) = next_tool_call.lock().unwrap().take() {
+                    stored.messages.push(CoachConversationMessage {
+                        id: tool_call.id.clone(),
+                        conversation_id: stored.conversation.conversation_id.clone(),
+                        user_id: stored.conversation.user_id.clone(),
+                        role: CoachConversationMessageRole::Tool,
+                        content: format!("Tool call: {}", tool_call.name),
+                        tool_call: Some(tool_call),
+                        created_at_epoch_seconds: 1_700_000_001,
+                    });
+                }
+
                 let coach_message = CoachConversationMessage {
                     id: format!("message-coach-{}", stored.messages.len() + 1),
                     conversation_id: stored.conversation.conversation_id.clone(),
                     user_id: stored.conversation.user_id.clone(),
                     role: CoachConversationMessageRole::Coach,
                     content: format!("Coach reply to: {}", user_message.content),
+                    tool_call: None,
                     created_at_epoch_seconds: 1_700_000_001,
                 };
                 stored.messages.push(coach_message.clone());
@@ -494,6 +519,7 @@ mod shared {
             surface: CoachConversationSurface::Calendar,
             status: CoachConversationStatus::Active,
             focus: CoachConversationFocus::Overview,
+            provider_transcript: Vec::new(),
             created_at_epoch_seconds: 1_700_000_000,
             updated_at_epoch_seconds: 1_700_000_000,
         }
@@ -545,6 +571,7 @@ mod shared {
 
 use std::{net::SocketAddr, time::Duration};
 
+use aiwattcoach::domain::workout_summary::PublicToolCall;
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::task::JoinHandle;
@@ -806,6 +833,70 @@ async fn websocket_sends_typing_then_coach_message() {
             .all(|frame| !frame.contains(r#""type":"system_message""#)),
         "expected no summary system_message frame, got {frames:?}"
     );
+}
+
+#[tokio::test]
+async fn websocket_streams_tool_message_before_calendar_coach_message() {
+    let service = TestCalendarCoachService::default().with_tool_call(PublicToolCall {
+        id: "tool-1".to_string(),
+        name: "lookupCalendar".to_string(),
+        arguments_json: r#"{"week":"2026-W18"}"#.to_string(),
+    });
+    let app =
+        calendar_coach_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;
+
+    let server = SpawnedApp::start(app).await;
+
+    let mut request = format!(
+        "ws://{}/api/calendar/coach/conversations/conversation-1/ws",
+        server.address
+    )
+    .into_client_request()
+    .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    socket
+        .send(Message::Text(
+            r#"{"type":"send_message","content":"Legs felt heavy today"}"#
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap();
+
+    let first = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let second = timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let third = timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+
+    assert!(first.contains(r#""type":"coach_typing""#));
+    assert!(second.contains(r#""type":"tool_message""#));
+    assert!(second.contains(r#""role":"tool""#));
+    assert!(second.contains(r#""name":"lookupCalendar""#));
+    assert!(third.contains(r#""type":"coach_message""#));
 }
 
 #[tokio::test]

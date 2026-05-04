@@ -3,7 +3,13 @@ import { z } from 'zod';
 import type { IntervalActivity, IntervalEvent } from '../intervals/types';
 import { raceDisciplineSchema, racePrioritySchema, raceSyncStatusSchema } from '../races/types';
 
-export const calendarCoachMessageRoleSchema = z.enum(['user', 'coach', 'system']);
+export const calendarCoachMessageRoleSchema = z.enum(['user', 'coach', 'system', 'tool']);
+
+export const calendarCoachToolCallSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  argumentsJson: z.string(),
+});
 
 export const calendarCoachConversationSchema = z.object({
   conversationId: z.string(),
@@ -18,7 +24,13 @@ export const calendarCoachMessageSchema = z.object({
   id: z.string(),
   role: calendarCoachMessageRoleSchema,
   content: z.string(),
+  toolCall: calendarCoachToolCallSchema.nullish(),
   createdAtEpochSeconds: z.number().int(),
+});
+
+const calendarCoachToolOnlyMessageSchema = calendarCoachMessageSchema.extend({
+  role: z.literal('tool'),
+  toolCall: calendarCoachToolCallSchema,
 });
 
 export const calendarCoachConversationResponseSchema = z.object({
@@ -53,6 +65,11 @@ export const calendarCoachMessageWsMessageSchema = z.object({
   messages: z.array(calendarCoachMessageSchema),
 });
 
+export const calendarCoachToolMessageWsMessageSchema = z.object({
+  type: z.literal('tool_message'),
+  message: calendarCoachToolOnlyMessageSchema,
+});
+
 export const calendarCoachSystemMessageWsMessageSchema = z.object({
   type: z.literal('system_message'),
   content: z.string().trim().min(1),
@@ -66,6 +83,7 @@ export const calendarCoachErrorWsMessageSchema = z.object({
 export const calendarCoachServerWsMessageSchema = z.discriminatedUnion('type', [
   calendarCoachTypingWsMessageSchema,
   calendarCoachMessageWsMessageSchema,
+  calendarCoachToolMessageWsMessageSchema,
   calendarCoachSystemMessageWsMessageSchema,
   calendarCoachErrorWsMessageSchema,
 ]);

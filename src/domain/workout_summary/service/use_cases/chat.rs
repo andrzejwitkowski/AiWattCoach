@@ -1,5 +1,7 @@
 use tracing::{info, warn};
 
+use crate::domain::llm::final_assistant_text;
+
 use super::*;
 
 enum CoachReplyOperationResolution {
@@ -297,8 +299,17 @@ where
             )
             .await?;
         let operation = self
-            .persist_provider_response_checkpoint(operation, &llm_response)
+            .persist_provider_response_checkpoint(user_id, workout_id, operation, &llm_response)
             .await?;
+        let operation = self
+            .materialize_public_tool_messages(user_id, workout_id, operation, &llm_response)
+            .await?;
+        let operation = if llm_response.tool_calls().is_empty() {
+            operation
+        } else {
+            self.persist_post_provider_operation(operation, "persist_public_tool_messages")
+                .await?
+        };
 
         Ok((operation, llm_response, athlete_summary_was_regenerated))
     }
@@ -342,6 +353,8 @@ where
 
     async fn persist_provider_response_checkpoint(
         &self,
+        user_id: &str,
+        workout_id: &str,
         operation: CoachReplyOperation,
         llm_response: &crate::domain::llm::LlmChatResponse,
     ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
@@ -352,12 +365,53 @@ where
             provider_cache_id: llm_response.cache.provider_cache_id.clone(),
             token_usage: llm_response.usage.clone(),
             cache_usage: llm_response.cache.clone(),
-            response_message: llm_response.message.clone(),
+            provider_transcript: vec![llm_response.message.clone()],
+            finish_reason: llm_response.finish_reason.clone(),
             updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
         });
-
-        self.persist_post_provider_operation(operation, "persist_success_checkpoint")
+        let operation = self
+            .persist_post_provider_operation(operation, "persist_success_checkpoint")
+            .await?;
+        if let Err(error) = self
+            .merge_provider_transcript_with_retry(
+                user_id,
+                workout_id,
+                &operation,
+                "persist_provider_transcript",
+            )
             .await
+        {
+            let llm_error = crate::domain::llm::LlmError::Internal(format!(
+                "failed to persist provider transcript after provider response: {error}"
+            ));
+            let failed = operation.mark_failed(&llm_error, self.clock.now_epoch_seconds());
+            self.persist_post_provider_operation(
+                failed,
+                "persist_failed_provider_transcript_checkpoint",
+            )
+            .await?;
+            return Err(WorkoutSummaryError::Llm(llm_error));
+        }
+
+        Ok(operation)
+    }
+
+    async fn require_final_assistant_text(
+        &self,
+        operation: &CoachReplyOperation,
+        llm_response: &crate::domain::llm::LlmChatResponse,
+    ) -> Result<String, WorkoutSummaryError> {
+        let Some(coach_content) = final_assistant_text(llm_response) else {
+            let error = crate::domain::llm::LlmError::InvalidResponse(
+                "assistant reply missing final text message".to_string(),
+            );
+            let failed = operation.mark_failed(&error, self.clock.now_epoch_seconds());
+            self.persist_post_provider_operation(failed, "persist_invalid_response_checkpoint")
+                .await?;
+            return Err(WorkoutSummaryError::Llm(error));
+        };
+
+        Ok(coach_content)
     }
 
     async fn append_coach_reply_message(
@@ -367,6 +421,9 @@ where
         operation: &CoachReplyOperation,
         llm_response: &crate::domain::llm::LlmChatResponse,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
+        let coach_content = self
+            .require_final_assistant_text(operation, llm_response)
+            .await?;
         let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
             WorkoutSummaryError::Repository(
                 "pending coach reply operation missing reserved coach message id".to_string(),
@@ -376,10 +433,10 @@ where
         self.append_message_with_role_and_id(
             user_id,
             workout_id,
-            MessageRole::Coach,
-            llm_response.message.clone(),
-            Some(coach_message_id),
-            false,
+            crate::domain::workout_summary::service::internals::AppendMessageInput::coach(
+                coach_content,
+                coach_message_id,
+            ),
         )
         .await
     }

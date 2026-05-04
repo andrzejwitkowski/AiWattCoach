@@ -43,7 +43,8 @@ impl WorkoutCoach for MockWorkoutCoach {
             Ok(LlmChatResponse {
                 provider: crate::domain::llm::LlmProvider::OpenAi,
                 model: "mock-workout-coach".to_string(),
-                message: response,
+                message: crate::domain::llm::LlmChatMessage::assistant(response),
+                finish_reason: None,
                 provider_request_id: Some(format!("mock-{user_id}")),
                 usage: crate::domain::llm::LlmTokenUsage::default(),
                 cache: crate::domain::llm::LlmCacheUsage::default(),

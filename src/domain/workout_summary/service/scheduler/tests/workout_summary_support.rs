@@ -10,7 +10,7 @@ use crate::domain::{
         AthleteSummary, AthleteSummaryError, AthleteSummaryState, AthleteSummaryUseCases,
         EnsuredAthleteSummary,
     },
-    llm::{LlmCacheUsage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
+    llm::{LlmCacheUsage, LlmChatMessage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
     workout_summary::{
         CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository, WorkoutCoach,
         WorkoutSummaryRepository, WorkoutSummaryService,
@@ -151,6 +151,32 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
                 .get_mut(&key)
                 .ok_or(WorkoutSummaryError::NotFound)?;
             summary.saved_at_epoch_seconds = saved_at_epoch_seconds;
+            summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
+
+    fn replace_provider_transcript(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        provider_transcript: Vec<LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
+        updated_at_epoch_seconds: i64,
+    ) -> crate::domain::workout_summary::BoxFuture<Result<(), WorkoutSummaryError>> {
+        let summaries = self.summaries.clone();
+        let key = (user_id.to_string(), workout_id.to_string());
+        Box::pin(async move {
+            let mut summaries = summaries.lock().expect("summary mutex poisoned");
+            let summary = summaries
+                .get_mut(&key)
+                .ok_or(WorkoutSummaryError::NotFound)?;
+            if summary.updated_at_epoch_seconds != expected_updated_at_epoch_seconds {
+                return Err(WorkoutSummaryError::Repository(
+                    "provider transcript update lost compare-and-set race".to_string(),
+                ));
+            }
+            summary.provider_transcript = provider_transcript;
             summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
             Ok(())
         })
@@ -369,7 +395,8 @@ impl WorkoutCoach for TestCoach {
             Ok(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "test-coach".to_string(),
-                message: format!("Coach reply to: {user_message}"),
+                message: LlmChatMessage::assistant(format!("Coach reply to: {user_message}")),
+                finish_reason: None,
                 provider_request_id: Some("req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
@@ -410,7 +437,8 @@ impl WorkoutCoach for BlockingCoach {
             Ok(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "test-coach".to_string(),
-                message: format!("Coach reply to: {user_message}"),
+                message: LlmChatMessage::assistant(format!("Coach reply to: {user_message}")),
+                finish_reason: None,
                 provider_request_id: Some("req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
@@ -489,6 +517,7 @@ pub(super) fn existing_summary() -> WorkoutSummary {
         workout_id: "workout-1".to_string(),
         rpe: Some(6),
         messages: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,

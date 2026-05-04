@@ -1,6 +1,6 @@
 use aiwattcoach::{
     adapters::llm::gemini::cache::context_hash,
-    domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig},
+    domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition},
 };
 
 use crate::support::{
@@ -25,7 +25,7 @@ async fn openai_client_maps_response_and_cached_tokens() {
         .await
         .unwrap();
 
-    assert_eq!(response.message, "OpenAI says hi");
+    assert_eq!(response.assistant_text(), Some("OpenAI says hi"));
     assert_eq!(response.cache.cached_read_tokens, Some(42));
     assert!(response.cache.cache_hit);
 
@@ -36,6 +36,33 @@ async fn openai_client_maps_response_and_cached_tokens() {
         Some("Bearer openai-key")
     );
     assert_eq!(requests[0].body["prompt_cache_key"], "cache-key-1");
+}
+
+#[tokio::test]
+async fn openai_client_maps_tool_call_response_and_finish_reason() {
+    let server = MockServer::start().await;
+    let client = openai_client(&server.base_url);
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenAi,
+                model: "gpt-4o-mini-tool-calls".to_string(),
+                api_key: "openai-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.assistant_text(), Some(""));
+    assert_eq!(response.tool_calls().len(), 1);
+    assert_eq!(response.tool_calls()[0].id, "call-1");
+    assert_eq!(response.tool_calls()[0].name, "lookupWorkout");
+    assert_eq!(
+        response.finish_reason,
+        Some(aiwattcoach::domain::llm::LlmFinishReason::ToolCalls)
+    );
 }
 
 #[tokio::test]
@@ -55,7 +82,7 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
         .await
         .unwrap();
 
-    assert_eq!(first.message, "Gemini says hi");
+    assert_eq!(first.assistant_text(), Some("Gemini says hi"));
     assert_eq!(
         first.cache.provider_cache_id.as_deref(),
         Some("cachedContents/cache-1")
@@ -122,7 +149,7 @@ async fn gemini_client_accepts_google_prefixed_model_name() {
         .await
         .unwrap();
 
-    assert_eq!(response.message, "Gemini says hi");
+    assert_eq!(response.assistant_text(), Some("Gemini says hi"));
 }
 
 #[tokio::test]
@@ -142,7 +169,7 @@ async fn openrouter_client_maps_cache_discount_and_write_tokens() {
         .await
         .unwrap();
 
-    assert_eq!(response.message, "OpenRouter says hi");
+    assert_eq!(response.assistant_text(), Some("OpenRouter says hi"));
     assert_eq!(response.cache.cached_read_tokens, Some(80));
     assert_eq!(response.cache.cache_write_tokens, Some(32));
     assert_eq!(response.cache.cache_discount.as_deref(), Some("0.0012"));
@@ -162,7 +189,7 @@ async fn openrouter_request_caches_stable_prefix_only() {
         .chat(
             LlmProviderConfig {
                 provider: LlmProvider::OpenRouter,
-                model: "google/gemini-3-flash-preview".to_string(),
+                model: "openai/gpt-4o-mini".to_string(),
                 api_key: "or-key".to_string(),
             },
             sample_request(),
@@ -193,6 +220,48 @@ async fn openrouter_request_caches_stable_prefix_only() {
     assert_eq!(messages[3]["role"], "user");
     assert_eq!(messages[3]["content"], "How did I do?");
     assert!(messages[3].get("cache_control").is_none());
+    assert_eq!(requests[0].body["tool_choice"], "none");
+}
+
+#[tokio::test]
+async fn openrouter_request_skips_prompt_cache_for_google_models() {
+    let server = MockServer::start().await;
+    let client = openrouter_client(&server.base_url);
+
+    client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "google/gemini-3-flash-preview".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            aiwattcoach::domain::llm::LlmChatRequest {
+                tools: vec![LlmToolDefinition {
+                    name: "lookupCalendar".to_string(),
+                    description: "Lookup calendar details".to_string(),
+                    input_schema_json:
+                        r#"{"type":"object","properties":{},"additionalProperties":false}"#
+                            .to_string(),
+                }],
+                tool_choice: LlmToolChoice::Auto,
+                ..sample_request()
+            },
+        )
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    let messages = requests[0].body["messages"].as_array().unwrap();
+
+    assert!(messages[0]["content"].is_array());
+    assert!(messages[0]["content"][0].get("cache_control").is_none());
+    assert!(messages[1]["content"][0].get("cache_control").is_none());
+    assert!(messages[2]["content"][0].get("cache_control").is_none());
+    assert_eq!(requests[0].body["tool_choice"], "auto");
+    assert_eq!(
+        requests[0].body["tools"][0]["function"]["name"],
+        "lookupCalendar"
+    );
 }
 
 #[tokio::test]
@@ -216,7 +285,7 @@ async fn gemini_client_skips_cache_creation_without_durable_cache_keys() {
         .await
         .unwrap();
 
-    assert_eq!(response.message, "Gemini says hi");
+    assert_eq!(response.assistant_text(), Some("Gemini says hi"));
     assert_eq!(response.cache.provider_cache_id, None);
 
     let requests = server.requests();
@@ -309,7 +378,88 @@ async fn openrouter_client_parses_array_content_parts() {
         .await
         .unwrap();
 
-    assert_eq!(response.message, "OpenRouter says hi from parts");
+    assert_eq!(
+        response.assistant_text(),
+        Some("OpenRouter says hi from parts")
+    );
+}
+
+#[tokio::test]
+async fn openrouter_client_inserts_spaces_between_array_content_parts() {
+    let server = MockServer::start().await;
+    let client = openrouter_client(&server.base_url);
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "google/gemini-3-flash-preview-multipart".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.assistant_text(),
+        Some("OpenRouter says hi from parts")
+    );
+}
+
+#[tokio::test]
+async fn openrouter_request_serializes_explicit_none_tool_choice() {
+    let server = MockServer::start().await;
+    let client = openrouter_client(&server.base_url);
+
+    client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "openai/gpt-4o-mini".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            aiwattcoach::domain::llm::LlmChatRequest {
+                tool_choice: LlmToolChoice::None,
+                ..sample_request()
+            },
+        )
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    assert_eq!(requests[0].body["tool_choice"], "none");
+}
+
+#[tokio::test]
+async fn openrouter_request_rejects_invalid_tool_schema_json() {
+    let server = MockServer::start().await;
+    let client = openrouter_client(&server.base_url);
+
+    let error = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "openai/gpt-4o-mini".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            aiwattcoach::domain::llm::LlmChatRequest {
+                tools: vec![LlmToolDefinition {
+                    name: "lookupCalendar".to_string(),
+                    description: "Lookup calendar details".to_string(),
+                    input_schema_json: "{not-json}".to_string(),
+                }],
+                ..sample_request()
+            },
+        )
+        .await
+        .expect_err("invalid tool schema should fail");
+
+    assert!(matches!(
+        error,
+        aiwattcoach::domain::llm::LlmError::InvalidResponse(message)
+            if message.contains("invalid tool input schema for lookupCalendar")
+    ));
 }
 
 #[tokio::test]
@@ -329,7 +479,7 @@ async fn openrouter_client_parses_numeric_usage_fields() {
         .await
         .unwrap();
 
-    assert_eq!(response.message, "OK");
+    assert_eq!(response.assistant_text(), Some("OK"));
     assert_eq!(response.cache.cache_discount.as_deref(), Some("0.000014"));
 }
 

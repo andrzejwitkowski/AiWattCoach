@@ -14,6 +14,9 @@ use crate::domain::coach_conversation::{
     CoachConversationReplyOperation, CoachConversationReplyOperationFailureKind,
     CoachConversationReplyOperationRepository, CoachConversationReplyOperationStatus,
 };
+use crate::domain::llm::{
+    provider_transcript_from_legacy_response, LlmChatMessage, LlmFinishReason,
+};
 
 #[derive(Clone)]
 pub struct MongoCoachConversationReplyOperationRepository {
@@ -35,7 +38,14 @@ struct CoachConversationReplyOperationDocument {
     provider_cache_id: Option<String>,
     token_usage: Option<crate::domain::llm::LlmTokenUsage>,
     cache_usage: Option<crate::domain::llm::LlmCacheUsage>,
+    #[serde(default)]
+    provider_transcript: Vec<LlmChatMessage>,
+    #[serde(default)]
     response_message: Option<String>,
+    #[serde(default)]
+    finish_reason: Option<LlmFinishReason>,
+    #[serde(default)]
+    public_tool_call_ids: Vec<String>,
     error_message: Option<String>,
     started_at_epoch_seconds: i64,
     #[serde(default)]
@@ -256,7 +266,10 @@ fn map_operation_to_document(
         provider_cache_id: operation.provider_cache_id.clone(),
         token_usage: operation.token_usage.clone(),
         cache_usage: operation.cache_usage.clone(),
-        response_message: operation.response_message.clone(),
+        provider_transcript: operation.provider_transcript.clone(),
+        response_message: None,
+        finish_reason: operation.finish_reason.clone(),
+        public_tool_call_ids: operation.public_tool_call_ids.clone(),
         error_message: operation.error_message.clone(),
         started_at_epoch_seconds: operation.started_at_epoch_seconds,
         started_at: optional_epoch_seconds_to_bson_datetime(
@@ -312,7 +325,12 @@ fn map_document_to_operation(
         provider_cache_id: document.provider_cache_id,
         token_usage: document.token_usage,
         cache_usage: document.cache_usage,
-        response_message: document.response_message,
+        provider_transcript: provider_transcript_from_legacy_response(
+            document.provider_transcript,
+            document.response_message,
+        ),
+        finish_reason: document.finish_reason,
+        public_tool_call_ids: document.public_tool_call_ids,
         error_message: document.error_message,
         started_at_epoch_seconds: resolve_required_epoch_seconds(
             document.started_at,
@@ -416,4 +434,121 @@ fn map_failure_kind(
 
 fn storage_error(error: mongodb::error::Error) -> CoachConversationError {
     CoachConversationError::Repository(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{map_document_to_operation, CoachConversationReplyOperationDocument};
+    use crate::domain::coach_conversation::CoachConversationReplyOperationStatus;
+    use crate::domain::llm::{LlmChatMessage, LlmToolCall};
+
+    #[test]
+    fn map_document_to_operation_reuses_legacy_response_message_when_provider_transcript_missing() {
+        let operation = map_document_to_operation(CoachConversationReplyOperationDocument {
+            user_id: "user-1".to_string(),
+            conversation_id: "conversation-1".to_string(),
+            user_message_id: "message-1".to_string(),
+            status: "pending".to_string(),
+            failure_kind: None,
+            provider: None,
+            model: None,
+            provider_request_id: None,
+            coach_message_id: None,
+            cache_scope_key: None,
+            provider_cache_id: None,
+            token_usage: None,
+            cache_usage: None,
+            provider_transcript: Vec::new(),
+            response_message: Some("Legacy conversation checkpoint".to_string()),
+            finish_reason: None,
+            public_tool_call_ids: Vec::new(),
+            error_message: None,
+            started_at_epoch_seconds: 1,
+            started_at: None,
+            last_attempt_at_epoch_seconds: 2,
+            last_attempt_at: None,
+            attempt_count: 1,
+            created_at_epoch_seconds: 3,
+            created_at: None,
+            updated_at_epoch_seconds: 4,
+            updated_at: None,
+        })
+        .expect("legacy response_message should map");
+
+        assert_eq!(
+            operation.status,
+            CoachConversationReplyOperationStatus::Pending
+        );
+        assert_eq!(
+            operation.provider_transcript,
+            vec![LlmChatMessage::assistant("Legacy conversation checkpoint")]
+        );
+    }
+
+    #[test]
+    fn map_document_to_operation_preserves_full_tool_call_provider_transcript() {
+        let operation = map_document_to_operation(CoachConversationReplyOperationDocument {
+            user_id: "user-1".to_string(),
+            conversation_id: "conversation-1".to_string(),
+            user_message_id: "message-1".to_string(),
+            status: "pending".to_string(),
+            failure_kind: None,
+            provider: None,
+            model: None,
+            provider_request_id: None,
+            coach_message_id: None,
+            cache_scope_key: None,
+            provider_cache_id: None,
+            token_usage: None,
+            cache_usage: None,
+            provider_transcript: vec![
+                LlmChatMessage::assistant_with_tool_calls(
+                    "",
+                    vec![LlmToolCall {
+                        id: "tool-call-1".to_string(),
+                        name: "lookupCalendar".to_string(),
+                        arguments_json: "{\"date\":\"2026-05-04\"}".to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-call-1", "calendar result"),
+            ],
+            response_message: Some("Legacy conversation checkpoint".to_string()),
+            finish_reason: None,
+            public_tool_call_ids: vec!["tool-call-1".to_string()],
+            error_message: None,
+            started_at_epoch_seconds: 1,
+            started_at: None,
+            last_attempt_at_epoch_seconds: 2,
+            last_attempt_at: None,
+            attempt_count: 1,
+            created_at_epoch_seconds: 3,
+            created_at: None,
+            updated_at_epoch_seconds: 4,
+            updated_at: None,
+        })
+        .expect("full tool-call transcript should map");
+
+        assert_eq!(
+            operation.status,
+            CoachConversationReplyOperationStatus::Pending
+        );
+        assert_eq!(
+            operation.provider_transcript,
+            vec![
+                LlmChatMessage::assistant_with_tool_calls(
+                    "",
+                    vec![LlmToolCall {
+                        id: "tool-call-1".to_string(),
+                        name: "lookupCalendar".to_string(),
+                        arguments_json: "{\"date\":\"2026-05-04\"}".to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-call-1", "calendar result"),
+            ]
+        );
+        assert_eq!(
+            operation.public_tool_call_ids,
+            vec!["tool-call-1".to_string()]
+        );
+    }
 }

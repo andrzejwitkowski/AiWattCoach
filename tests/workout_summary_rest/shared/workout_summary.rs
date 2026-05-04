@@ -6,9 +6,9 @@ use std::{
 use aiwattcoach::domain::{
     llm::BoxFuture,
     workout_summary::{
-        validate_message_content, CoachReply, MessageRole, PersistedUserMessage, SaveSummaryResult,
-        SaveWorkflowResult, SaveWorkflowStatus, SendMessageResult, WorkoutRecap, WorkoutSummary,
-        WorkoutSummaryError, WorkoutSummaryUseCases,
+        validate_message_content, CoachReply, MessageRole, PersistedUserMessage, PublicToolCall,
+        SaveSummaryResult, SaveWorkflowResult, SaveWorkflowStatus, SendMessageResult, WorkoutRecap,
+        WorkoutSummary, WorkoutSummaryError, WorkoutSummaryUseCases,
     },
 };
 
@@ -21,6 +21,7 @@ pub(crate) struct TestWorkoutSummaryService {
     coach_reply_delay: Option<Duration>,
     availability_configured: bool,
     completed_workout_ids: Arc<Mutex<Option<Vec<String>>>>,
+    next_tool_call: Option<PublicToolCall>,
 }
 
 impl TestWorkoutSummaryService {
@@ -31,6 +32,7 @@ impl TestWorkoutSummaryService {
             coach_reply_delay: None,
             availability_configured: true,
             completed_workout_ids: Arc::new(Mutex::new(None)),
+            next_tool_call: None,
         }
     }
 
@@ -51,6 +53,11 @@ impl TestWorkoutSummaryService {
                 .map(|value| (*value).to_string())
                 .collect(),
         )));
+        self
+    }
+
+    pub(crate) fn with_tool_call(mut self, tool_call: PublicToolCall) -> Self {
+        self.next_tool_call = Some(tool_call);
         self
     }
 
@@ -354,12 +361,14 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 id: format!("message-user-{next_user_suffix}"),
                 role: MessageRole::User,
                 content,
+                tool_call: None,
                 created_at_epoch_seconds: 1_700_000_000,
             };
             let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
                 id: format!("message-coach-{}", next_user_suffix + 1),
                 role: MessageRole::Coach,
                 content: "Thanks, that helps. What stood out most about how the workout felt compared with the plan?".to_string(),
+                tool_call: None,
                 created_at_epoch_seconds: 1_700_000_000,
             };
 
@@ -424,6 +433,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 id: format!("message-user-{next_user_suffix}"),
                 role: MessageRole::User,
                 content,
+                tool_call: None,
                 created_at_epoch_seconds: 1_700_000_000,
             };
 
@@ -451,6 +461,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
         let summaries = self.summaries.clone();
         let coach_reply_delay = self.coach_reply_delay;
         let availability_configured = self.availability_configured;
+        let next_tool_call = self.next_tool_call.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         Box::pin(async move {
@@ -491,11 +502,24 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                     )
                 })?;
 
+            if let Some(tool_call) = next_tool_call {
+                summary
+                    .messages
+                    .push(aiwattcoach::domain::workout_summary::ConversationMessage {
+                        id: tool_call.id.clone(),
+                        role: MessageRole::Tool,
+                        content: format!("Tool call: {}", tool_call.name),
+                        tool_call: Some(tool_call),
+                        created_at_epoch_seconds: 1_700_000_000,
+                    });
+            }
+
             let next_coach_suffix = summary.messages.len() + 1;
             let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
                 id: format!("message-coach-{next_coach_suffix}"),
                 role: MessageRole::Coach,
                 content: format!("Coach reply to: {user_message_content}"),
+                tool_call: None,
                 created_at_epoch_seconds: 1_700_000_000,
             };
 

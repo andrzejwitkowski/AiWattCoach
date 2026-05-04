@@ -12,6 +12,7 @@ use mongodb::{
 
 use aiwattcoach::{
     adapters::mongo::workout_summary::MongoWorkoutSummaryRepository,
+    domain::llm::LlmChatMessage,
     domain::workout_summary::{WorkoutSummary, WorkoutSummaryRepository},
     Settings,
 };
@@ -274,6 +275,67 @@ async fn workout_summary_repository_batch_lookup_matches_wahoo_request_to_interv
     fixture.cleanup().await;
 }
 
+#[tokio::test]
+async fn workout_summary_repository_replace_provider_transcript_rejects_stale_compare_and_set_write(
+) {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoWorkoutSummaryRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .create(sample_summary(
+            "summary-1",
+            "user-1",
+            "workout-1",
+            Some(6),
+            10,
+        ))
+        .await
+        .unwrap();
+
+    repository
+        .replace_provider_transcript(
+            "user-1",
+            "workout-1",
+            vec![LlmChatMessage::assistant("fresh transcript")],
+            10,
+            20,
+        )
+        .await
+        .unwrap();
+
+    let error = repository
+        .replace_provider_transcript(
+            "user-1",
+            "workout-1",
+            vec![LlmChatMessage::assistant("stale transcript")],
+            10,
+            30,
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "provider transcript update lost compare-and-set race"
+    );
+
+    let stored = repository
+        .find_by_user_id_and_workout_id("user-1", "workout-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.updated_at_epoch_seconds, 20);
+    assert_eq!(
+        stored.provider_transcript,
+        vec![LlmChatMessage::assistant("fresh transcript")]
+    );
+
+    fixture.cleanup().await;
+}
+
 struct MongoFixture {
     client: Client,
     database: String,
@@ -339,6 +401,7 @@ fn sample_summary(
         workout_id: workout_id.to_string(),
         rpe,
         messages: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,

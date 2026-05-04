@@ -4,6 +4,7 @@ use super::{
     CoachReplyClaimResult, CoachReplyOperation, ConversationMessage, WorkoutRecap, WorkoutSummary,
     WorkoutSummaryError,
 };
+use crate::domain::llm::LlmChatMessage;
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -46,6 +47,15 @@ pub trait WorkoutSummaryRepository: Send + Sync + 'static {
         user_id: &str,
         workout_id: &str,
         saved_at_epoch_seconds: Option<i64>,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), WorkoutSummaryError>>;
+
+    fn replace_provider_transcript(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        provider_transcript: Vec<LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>>;
 

@@ -5,7 +5,8 @@ use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
 use crate::domain::{
     identity::Clock,
     llm::{
-        approximate_token_budget_for_model, hash_text, BoxFuture, LlmChatMessage, LlmChatPort,
+        approximate_token_budget_for_model, hash_text,
+        rebuild_conversation_with_provider_transcript, BoxFuture, LlmChatMessage, LlmChatPort,
         LlmChatRequest, LlmChatResponse, LlmContextCache, LlmContextCacheRepository, LlmError,
         LlmMessageRole, LlmProvider, UserLlmConfigProvider,
     },
@@ -93,15 +94,28 @@ where
             let volatile_context =
                 build_volatile_context(&training_context.rendered.volatile_context);
             let system_prompt = workout_coach_system_prompt();
+            let conversation = build_conversation(
+                summary.messages.as_slice(),
+                &summary.provider_transcript,
+                &user_message,
+            );
             let estimated_request_tokens = approximate_token_usage(&stable_context)
                 + approximate_token_usage(&volatile_context)
                 + approximate_token_usage(&system_prompt)
-                + summary
-                    .messages
+                + conversation
                     .iter()
-                    .map(|message| approximate_token_usage(&message.content))
-                    .sum::<usize>()
-                + approximate_token_usage(&user_message);
+                    .map(|message| {
+                        approximate_token_usage(&message.content)
+                            + message
+                                .tool_calls
+                                .iter()
+                                .map(|tool| {
+                                    approximate_token_usage(&tool.name)
+                                        + approximate_token_usage(&tool.arguments_json)
+                                })
+                                .sum::<usize>()
+                    })
+                    .sum::<usize>();
             let token_budget = approximate_token_budget_for_model(&config.model);
             if estimated_request_tokens > token_budget {
                 return Err(LlmError::ContextTooLarge(format!(
@@ -167,10 +181,12 @@ where
                 system_prompt,
                 stable_context,
                 volatile_context,
-                conversation: build_conversation(&summary, &user_message),
+                conversation,
                 cache_scope_key: cache_scope_key.clone(),
                 cache_key: Some(context_hash.clone()),
                 reusable_cache_id,
+                tools: Vec::new(),
+                tool_choice: crate::domain::llm::LlmToolChoice::None,
             };
 
             tracing::info!(
@@ -263,31 +279,167 @@ fn workout_coach_system_prompt() -> String {
     format!("{WORKOUT_COACH_SYSTEM_PROMPT_BASE} {PACKED_TRAINING_CONTEXT_LEGEND}")
 }
 
-fn build_conversation(summary: &WorkoutSummary, user_message: &str) -> Vec<LlmChatMessage> {
-    let mut conversation = summary
-        .messages
+fn build_conversation(
+    messages: &[crate::domain::workout_summary::ConversationMessage],
+    provider_transcript: &[LlmChatMessage],
+    user_message: &str,
+) -> Vec<LlmChatMessage> {
+    let conversation = messages
         .iter()
-        .cloned()
-        .map(|message| LlmChatMessage {
-            role: match message.role {
-                crate::domain::workout_summary::MessageRole::User => LlmMessageRole::User,
-                crate::domain::workout_summary::MessageRole::Coach => LlmMessageRole::Assistant,
-            },
-            content: message.content,
+        .filter_map(|message| match message.role {
+            crate::domain::workout_summary::MessageRole::User => Some(LlmChatMessage {
+                role: LlmMessageRole::User,
+                content: message.content.clone(),
+                tool_calls: Vec::new(),
+                tool_call_id: None,
+            }),
+            crate::domain::workout_summary::MessageRole::Coach => Some(LlmChatMessage {
+                role: LlmMessageRole::Assistant,
+                content: message.content.clone(),
+                tool_calls: Vec::new(),
+                tool_call_id: None,
+            }),
+            crate::domain::workout_summary::MessageRole::Tool => None,
         })
         .collect::<Vec<_>>();
 
-    if let Some(last) = conversation.last_mut() {
+    let mut rebuilt =
+        rebuild_conversation_with_provider_transcript(conversation, provider_transcript);
+
+    if let Some(last) = rebuilt.last_mut() {
         if last.role == LlmMessageRole::User {
             last.content = user_message.to_string();
-            return conversation;
+            return rebuilt;
         }
     }
 
-    conversation.push(LlmChatMessage {
-        role: LlmMessageRole::User,
-        content: user_message.to_string(),
-    });
+    rebuilt.push(LlmChatMessage::user(user_message));
 
-    conversation
+    rebuilt
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_conversation;
+    use crate::domain::{
+        llm::{LlmChatMessage, LlmMessageRole, LlmToolCall},
+        workout_summary::{ConversationMessage, MessageRole, PublicToolCall},
+    };
+
+    #[test]
+    fn build_conversation_replays_last_hidden_assistant_tool_calls() {
+        let conversation = build_conversation(
+            &[
+                ConversationMessage {
+                    id: "user-1".to_string(),
+                    role: MessageRole::User,
+                    content: "Need feedback".to_string(),
+                    tool_call: None,
+                    created_at_epoch_seconds: 1,
+                },
+                ConversationMessage {
+                    id: "tool-1".to_string(),
+                    role: MessageRole::Tool,
+                    content: "Tool call: lookupWorkout".to_string(),
+                    tool_call: Some(PublicToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookupWorkout".to_string(),
+                        arguments_json: r#"{\"workoutId\":\"workout-1\"}"#.to_string(),
+                    }),
+                    created_at_epoch_seconds: 2,
+                },
+                ConversationMessage {
+                    id: "coach-1".to_string(),
+                    role: MessageRole::Coach,
+                    content: "Coach reply".to_string(),
+                    tool_call: None,
+                    created_at_epoch_seconds: 3,
+                },
+            ],
+            &[
+                LlmChatMessage::assistant_with_tool_calls(
+                    "Coach reply",
+                    vec![LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookupWorkout".to_string(),
+                        arguments_json: r#"{\"workoutId\":\"workout-1\"}"#.to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-1", "Workout lookup result"),
+            ],
+            "What about tomorrow?",
+        );
+
+        assert_eq!(conversation.len(), 4);
+        assert_eq!(conversation[1].role, LlmMessageRole::Assistant);
+        assert_eq!(conversation[1].tool_calls.len(), 1);
+        assert_eq!(conversation[1].tool_calls[0].id, "tool-1");
+        assert_eq!(conversation[2].role, LlmMessageRole::Tool);
+        assert_eq!(conversation[2].tool_call_id.as_deref(), Some("tool-1"));
+        assert_eq!(conversation[3].role, LlmMessageRole::User);
+        assert_eq!(conversation[3].content, "What about tomorrow?");
+    }
+
+    #[test]
+    fn build_conversation_replays_hidden_assistant_turns_by_position() {
+        let conversation = build_conversation(
+            &[
+                ConversationMessage {
+                    id: "user-1".to_string(),
+                    role: MessageRole::User,
+                    content: "First question".to_string(),
+                    tool_call: None,
+                    created_at_epoch_seconds: 1,
+                },
+                ConversationMessage {
+                    id: "coach-1".to_string(),
+                    role: MessageRole::Coach,
+                    content: "First answer".to_string(),
+                    tool_call: None,
+                    created_at_epoch_seconds: 2,
+                },
+                ConversationMessage {
+                    id: "user-2".to_string(),
+                    role: MessageRole::User,
+                    content: "Second question".to_string(),
+                    tool_call: None,
+                    created_at_epoch_seconds: 3,
+                },
+                ConversationMessage {
+                    id: "coach-2".to_string(),
+                    role: MessageRole::Coach,
+                    content: "Second answer".to_string(),
+                    tool_call: None,
+                    created_at_epoch_seconds: 4,
+                },
+            ],
+            &[
+                LlmChatMessage::assistant_with_tool_calls(
+                    "First answer\n",
+                    vec![LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "lookupOne".to_string(),
+                        arguments_json: "{}".to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-1", "first result"),
+                LlmChatMessage::assistant_with_tool_calls(
+                    "Second answer\n",
+                    vec![LlmToolCall {
+                        id: "tool-2".to_string(),
+                        name: "lookupTwo".to_string(),
+                        arguments_json: "{}".to_string(),
+                    }],
+                ),
+                LlmChatMessage::tool("tool-2", "second result"),
+            ],
+            "Third question",
+        );
+
+        assert_eq!(conversation[1].tool_calls[0].id, "tool-1");
+        assert_eq!(conversation[2].tool_call_id.as_deref(), Some("tool-1"));
+        assert_eq!(conversation[4].tool_calls[0].id, "tool-2");
+        assert_eq!(conversation[5].tool_call_id.as_deref(), Some("tool-2"));
+        assert_eq!(conversation[6].content, "Third question");
+    }
 }

@@ -1,10 +1,12 @@
 use mongodb::bson::{doc, from_document, Bson, DateTime};
 
 use super::{
-    current_workout_id_filter, document_identity_filter, document_is_locked,
-    editable_document_identity_filter, legacy_event_id_filter, map_document_to_domain,
-    map_domain_to_document, with_message_append_filter, ConversationMessageDocument,
-    WorkoutSummaryDocument,
+    document::{ConversationMessageDocument, WorkoutSummaryDocument},
+    lookup::{
+        current_workout_id_filter, document_identity_filter, document_is_locked,
+        editable_document_identity_filter, legacy_event_id_filter, with_message_append_filter,
+    },
+    mapping::{map_document_to_domain, map_domain_to_document},
 };
 use crate::domain::workout_summary::{WorkoutSummary, WorkoutSummaryError};
 
@@ -17,6 +19,7 @@ fn map_document_to_domain_rejects_out_of_range_rpe() {
         workout_id: "workout-1".to_string(),
         rpe: Some(300),
         messages: Vec::<ConversationMessageDocument>::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         saved_at: None,
         workout_recap_text: None,
@@ -88,9 +91,11 @@ fn workout_summary_document_reads_datetime_fields_without_legacy_epoch() {
             id: "message-1".to_string(),
             role: "user".to_string(),
             content: "hello".to_string(),
+            tool_call: None,
             created_at_epoch_seconds: None,
             created_at: Some(DateTime::from_millis(1_700_000_000_000)),
         }],
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         saved_at: Some(DateTime::from_millis(1_700_000_010_000)),
         workout_recap_text: None,
@@ -124,6 +129,7 @@ fn map_domain_to_document_includes_recap_fields() {
         workout_id: "workout-1".to_string(),
         rpe: Some(6),
         messages: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: Some("Strong close after a controlled opener.".to_string()),
         workout_recap_provider: Some("openai".to_string()),
@@ -179,6 +185,7 @@ fn document_identity_filter_prefers_object_id() {
         workout_id: "workout-1".to_string(),
         rpe: None,
         messages: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         saved_at: None,
         workout_recap_text: None,
@@ -204,6 +211,7 @@ fn document_identity_filter_falls_back_to_summary_and_user() {
         workout_id: "workout-1".to_string(),
         rpe: None,
         messages: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         saved_at: None,
         workout_recap_text: None,
@@ -235,6 +243,7 @@ fn document_is_locked_when_saved_at_datetime_exists_without_legacy_epoch() {
         workout_id: "workout-1".to_string(),
         rpe: None,
         messages: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         saved_at: Some(DateTime::from_millis(1_700_000_000_000)),
         workout_recap_text: None,
@@ -260,6 +269,7 @@ fn editable_document_identity_filter_requires_datetime_mirror_to_be_null() {
         workout_id: "workout-1".to_string(),
         rpe: None,
         messages: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         saved_at: None,
         workout_recap_text: None,

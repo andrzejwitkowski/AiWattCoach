@@ -16,7 +16,14 @@ pub(super) struct CoachReplyOperationDocument {
     pub(super) provider_cache_id: Option<String>,
     pub(super) token_usage: Option<crate::domain::llm::LlmTokenUsage>,
     pub(super) cache_usage: Option<crate::domain::llm::LlmCacheUsage>,
+    #[serde(default)]
+    pub(super) provider_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+    #[serde(default)]
     pub(super) response_message: Option<String>,
+    #[serde(default)]
+    pub(super) finish_reason: Option<crate::domain::llm::LlmFinishReason>,
+    #[serde(default)]
+    pub(super) public_tool_call_ids: Vec<String>,
     pub(super) error_message: Option<String>,
     pub(super) started_at_epoch_seconds: i64,
     #[serde(default)]

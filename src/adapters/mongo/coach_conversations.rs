@@ -10,6 +10,7 @@ use crate::domain::coach_conversation::{
     BoxFuture, CoachConversation, CoachConversationError, CoachConversationFocus,
     CoachConversationRepository, CoachConversationStatus, CoachConversationSurface,
 };
+use crate::domain::llm::LlmChatMessage;
 
 #[derive(Clone)]
 pub struct MongoCoachConversationRepository {
@@ -23,6 +24,8 @@ struct CoachConversationDocument {
     surface: String,
     status: String,
     focus: String,
+    #[serde(default)]
+    provider_transcript: Vec<LlmChatMessage>,
     created_at_epoch_seconds: i64,
     #[serde(default)]
     created_at: Option<DateTime>,
@@ -205,6 +208,51 @@ impl CoachConversationRepository for MongoCoachConversationRepository {
             Ok(())
         })
     }
+
+    fn replace_provider_transcript(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        provider_transcript: Vec<LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), CoachConversationError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let conversation_id = conversation_id.to_string();
+        Box::pin(async move {
+            let result = collection
+                .update_one(
+                    doc! {
+                        "user_id": &user_id,
+                        "conversation_id": &conversation_id,
+                        "updated_at_epoch_seconds": expected_updated_at_epoch_seconds,
+                    },
+                    doc! {
+                        "$set": {
+                            "provider_transcript": mongodb::bson::to_bson(&provider_transcript)
+                                .map_err(|error| CoachConversationError::Repository(error.to_string()))?,
+                            "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                            "updated_at": optional_epoch_seconds_to_bson_datetime(
+                                Some(updated_at_epoch_seconds),
+                                "updated_at",
+                            )
+                            .map_err(CoachConversationError::Repository)?,
+                        }
+                    },
+                )
+                .await
+                .map_err(storage_error)?;
+
+            if result.matched_count == 0 {
+                return Err(CoachConversationError::Repository(
+                    "provider transcript update lost compare-and-set race".to_string(),
+                ));
+            }
+
+            Ok(())
+        })
+    }
 }
 
 fn map_domain_to_document(conversation: &CoachConversation) -> CoachConversationDocument {
@@ -214,6 +262,7 @@ fn map_domain_to_document(conversation: &CoachConversation) -> CoachConversation
         surface: surface_as_str(&conversation.surface).to_string(),
         status: status_as_str(&conversation.status).to_string(),
         focus: focus_as_str(&conversation.focus).to_string(),
+        provider_transcript: conversation.provider_transcript.clone(),
         created_at_epoch_seconds: conversation.created_at_epoch_seconds,
         created_at: optional_epoch_seconds_to_bson_datetime(
             Some(conversation.created_at_epoch_seconds),
@@ -238,6 +287,7 @@ fn map_document_to_domain(
         surface: map_surface(document.surface)?,
         status: map_status(document.status)?,
         focus: map_focus(document.focus)?,
+        provider_transcript: document.provider_transcript,
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             document.created_at,
             Some(document.created_at_epoch_seconds),

@@ -7,6 +7,7 @@
 - The purpose of this loop is to reduce repeated PR and review mistakes over time.
 - I must read `reviewers.md` before writing a plan and before starting implementation work.
 - When repo instructions point at an Obsidian vault on Windows, store the exact subtree that contains the handbook notes, not only the vault root. A too-broad path wastes time and leads to false "file not found" lookups.
+- Before any commit or push, explicitly verify the current branch name against the user's requested target branch. Do not rely on conversational memory when the user references "this branch" or another already-existing branch by name.
 
 ## PR Conflict Verification
 
@@ -36,6 +37,7 @@
 - When a service method starts mixing validation, request building, persistence, orchestration, and result interpretation, split it immediately into small helpers. Long public methods in scheduler/service code are hard to review and hide control-flow bugs.
 - When converting a single-task loop into a concurrent worker pool, keep worker-level state in one shared runtime structure. Per-task copies of active-task state lead to lost heartbeats and flaky concurrency behavior.
 - When a use-case orchestration method starts owning validation, claim/recovery, provider I/O, checkpoint writes, persistence completion, and result hydration all at once, split it into named phase helpers before adding more behavior.
+- When a domain service `mod.rs` starts mixing transcript helpers, provider request building, persistence internals, and use-case orchestration, keep the public type in `mod.rs` and split the phases into sibling modules before the file grows into a review bottleneck.
 - Treat function size as a hard clean-code rule: aim to stay at or below about 100 lines of code, and if a function grows past roughly 130 lines, refactor it into smaller logical helpers before continuing. Do not keep adding behavior to oversized functions.
 - When runtime orchestration for a domain workflow needs `tokio` tasks, timers, channels, or shutdown handles, keep the task handler contract in `src/domain` but move the runtime loop and background-task wiring into `src/config` or another adapter/wiring layer. Do not leave runtime-specific loops in domain modules just because the workflow is domain-owned.
 - When a scheduled task wraps another durable operation with its own stale or reclaim timeout, align the scheduler retry delay with that durable reclaim window. Otherwise the wrapper can burn through retries and mark a task dead before the underlying operation is actually recoverable.

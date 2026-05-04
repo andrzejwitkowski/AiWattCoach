@@ -110,6 +110,35 @@ describe('useCalendarCoachChat', () => {
     expect(FakeWebSocket.instances[0]?.url).toContain('/api/calendar/coach/conversations/conversation-1/ws');
   });
 
+  it('ignores stale load responses after switching conversations', async () => {
+    global.WebSocket = undefined as unknown as typeof WebSocket;
+
+    const resolveLoadRef = { current: null as ((value: unknown) => void) | null };
+    coachApi.getCurrentCalendarCoachConversation.mockImplementation(() => new Promise((resolve) => {
+      resolveLoadRef.current = resolve;
+    }));
+    coachApi.startNewCalendarCoachConversation.mockResolvedValue({
+      conversation: { ...conversationFixture, conversationId: 'conversation-2' },
+      messages: [],
+    });
+
+    const { result } = renderHook(() => useCalendarCoachChat({ isOpen: true }));
+
+    await act(async () => {
+      await result.current.startNewConversation();
+    });
+
+    resolveLoadRef.current?.({
+      conversation: conversationFixture,
+      messages: [messageFixture],
+    });
+
+    await waitFor(() => {
+      expect(result.current.conversation?.conversationId).toBe('conversation-2');
+    });
+    expect(result.current.messages).toHaveLength(0);
+  });
+
   it('starts a new conversation on first send when none exists', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     coachApi.getCurrentCalendarCoachConversation.mockRejectedValue(new HttpError(404, 'not found'));
@@ -133,6 +162,33 @@ describe('useCalendarCoachChat', () => {
       JSON.stringify({ type: 'send_message', content: 'How does this week look?' }),
     );
     expect(result.current.messages[0]?.content).toBe('How does this week look?');
+  });
+
+  it('clears the current conversation when load returns 404 for the same conversation', async () => {
+    global.WebSocket = undefined as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockResolvedValueOnce({
+      conversation: conversationFixture,
+      messages: [messageFixture],
+    }).mockRejectedValueOnce(new HttpError(404, 'not found'));
+
+    const { result, rerender } = renderHook(({ isOpen }) => useCalendarCoachChat({ isOpen }), {
+      initialProps: { isOpen: true },
+    });
+
+    await waitFor(() => {
+      expect(result.current.conversation?.conversationId).toBe('conversation-1');
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    rerender({ isOpen: false });
+    rerender({ isOpen: true });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.conversation).toBeNull();
+    expect(result.current.messages).toHaveLength(0);
   });
 
   it('appends websocket typing and coach reply updates', async () => {
@@ -193,6 +249,99 @@ describe('useCalendarCoachChat', () => {
     });
   });
 
+  it('appends streamed tool messages before the final calendar coach reply', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockResolvedValue({
+      conversation: conversationFixture,
+      messages: [],
+    });
+
+    const { result } = renderHook(() => useCalendarCoachChat({ isOpen: true }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Need recovery advice');
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'tool_message',
+            message: {
+              id: 'tool-1',
+              role: 'tool',
+              content: 'Tool call: lookupCalendar',
+              toolCall: {
+                id: 'tool-1',
+                name: 'lookupCalendar',
+                argumentsJson: '{"week":"2026-W18"}',
+              },
+              createdAtEpochSeconds: 3,
+            },
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      const tool = result.current.messages.at(-1);
+      expect(tool?.role).toBe('tool');
+      expect(tool?.toolCall).toEqual({
+        id: 'tool-1',
+        name: 'lookupCalendar',
+        argumentsJson: '{"week":"2026-W18"}',
+      });
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'coach_message',
+            message: messageFixture,
+            conversation: conversationFixture,
+            messages: [
+              {
+                id: 'message-user-1',
+                role: 'user',
+                content: 'Need recovery advice',
+                createdAtEpochSeconds: 2,
+              },
+              {
+                id: 'tool-1',
+                role: 'tool',
+                content: 'Tool call: lookupCalendar',
+                toolCall: {
+                  id: 'tool-1',
+                  name: 'lookupCalendar',
+                  argumentsJson: '{"week":"2026-W18"}',
+                },
+                createdAtEpochSeconds: 3,
+              },
+              messageFixture,
+            ],
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages.map((message) => message.role)).toEqual(['user', 'tool', 'coach']);
+      const toolMessage = result.current.messages[1];
+      expect(toolMessage.toolCall).toEqual({
+        id: 'tool-1',
+        name: 'lookupCalendar',
+        argumentsJson: '{"week":"2026-W18"}',
+      });
+    });
+  });
+
   it('deduplicates rapid new conversation requests', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     coachApi.getCurrentCalendarCoachConversation.mockRejectedValue(new HttpError(404, 'not found'));
@@ -236,6 +385,49 @@ describe('useCalendarCoachChat', () => {
 
     await act(async () => {
       await result.current.startNewConversation();
+    });
+
+    expect(result.current.conversation?.conversationId).toBe('conversation-2');
+    expect(result.current.messages).toHaveLength(0);
+  });
+
+  it('ignores stale implicit conversation creation after a newer conversation is opened', async () => {
+    global.WebSocket = undefined as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockRejectedValue(new HttpError(404, 'not found'));
+
+    const resolveFirstCreateRef = { current: null as ((value: unknown) => void) | null };
+    coachApi.startNewCalendarCoachConversation
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirstCreateRef.current = resolve;
+      }))
+      .mockResolvedValueOnce({
+        conversation: { ...conversationFixture, conversationId: 'conversation-2' },
+        messages: [],
+      });
+
+    const { result } = renderHook(() => useCalendarCoachChat({ isOpen: true }));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const sendPromise = result.current.sendMessage('Implicit create');
+
+    await waitFor(() => {
+      expect(coachApi.startNewCalendarCoachConversation).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await result.current.startNewConversation();
+    });
+
+    resolveFirstCreateRef.current?.({
+      conversation: conversationFixture,
+      messages: [],
+    });
+
+    await act(async () => {
+      await sendPromise;
     });
 
     expect(result.current.conversation?.conversationId).toBe('conversation-2');
@@ -315,7 +507,9 @@ describe('useCalendarCoachChat', () => {
     });
 
     expect(coachApi.sendCalendarCoachMessage).toHaveBeenCalledWith('conversation-1', { content: 'Can we replan this week?' });
-    expect(result.current.messages.at(-1)?.content).toBe('Coach reply');
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[0]?.content).toBe('Can we replan this week?');
+    expect(result.current.messages[1]?.content).toBe('Coach reply');
   });
 
   it('preserves app path prefixes in websocket urls', () => {
@@ -417,5 +611,90 @@ describe('useCalendarCoachChat', () => {
     expect(coachApi.getCalendarCoachConversation).toHaveBeenCalledWith('conversation-2');
     expect(result.current.conversation?.conversationId).toBe('conversation-2');
     expect(result.current.messages).toHaveLength(1);
+  });
+
+  it('ignores stale websocket events immediately after switching conversations', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockResolvedValue({
+      conversation: conversationFixture,
+      messages: [messageFixture],
+    });
+    coachApi.startNewCalendarCoachConversation.mockResolvedValue({
+      conversation: { ...conversationFixture, conversationId: 'conversation-2' },
+      messages: [],
+    });
+
+    const { result } = renderHook(() => useCalendarCoachChat({ isOpen: true }));
+
+    await waitFor(() => {
+      expect(result.current.conversation?.conversationId).toBe('conversation-1');
+    });
+
+    await act(async () => {
+      await result.current.startNewConversation();
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'coach_message',
+            message: messageFixture,
+            conversation: conversationFixture,
+            messages: [messageFixture],
+          }),
+        }),
+      );
+    });
+
+    expect(result.current.conversation?.conversationId).toBe('conversation-2');
+    expect(result.current.messages).toHaveLength(0);
+  });
+
+  it('ignores stale rest send responses after switching conversations', async () => {
+    global.WebSocket = undefined as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockRejectedValue(new HttpError(404, 'not found'));
+    coachApi.startNewCalendarCoachConversation
+      .mockResolvedValueOnce({
+        conversation: { ...conversationFixture, conversationId: 'conversation-1' },
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        conversation: { ...conversationFixture, conversationId: 'conversation-2' },
+        messages: [],
+      });
+
+    const resolveSendRef = { current: null as ((value: unknown) => void) | null };
+    coachApi.sendCalendarCoachMessage.mockImplementation(() => new Promise((resolve) => {
+      resolveSendRef.current = resolve;
+    }));
+
+    const { result } = renderHook(() => useCalendarCoachChat({ isOpen: true }));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const sendPromise = result.current.sendMessage('First conversation message');
+
+    await waitFor(() => {
+      expect(coachApi.sendCalendarCoachMessage).toHaveBeenCalledWith('conversation-1', { content: 'First conversation message' });
+    });
+
+    await act(async () => {
+      await result.current.startNewConversation();
+    });
+
+    resolveSendRef.current?.({
+      conversation: { ...conversationFixture, conversationId: 'conversation-1' },
+      messages: [messageFixture],
+    });
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(result.current.conversation?.conversationId).toBe('conversation-2');
+    expect(result.current.messages).toHaveLength(0);
   });
 });

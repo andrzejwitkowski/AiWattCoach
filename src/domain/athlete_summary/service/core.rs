@@ -236,22 +236,35 @@ where
         let created_at_epoch_seconds = existing_summary
             .map(|summary| summary.created_at_epoch_seconds)
             .unwrap_or(now);
+        let Some(summary_text) = response
+            .assistant_text()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+        else {
+            let error = crate::domain::llm::LlmError::InvalidResponse(
+                "assistant summary missing final text".to_string(),
+            );
+            let failed = self.failed_operation(
+                &operation,
+                error.to_string(),
+                self.clock.now_epoch_seconds(),
+            );
+            self.operations.upsert(failed).await?;
+            return Err(AthleteSummaryError::Llm(error));
+        };
+        let provider = response.provider.to_string();
+        let model = response.model.clone();
         let summary = self.build_summary(SummaryRecord {
             user_id: operation.user_id.clone(),
-            summary_text: response.message.clone(),
+            summary_text: summary_text.clone(),
             created_at_epoch_seconds,
             generated_at_epoch_seconds: now,
             updated_at_epoch_seconds: now,
-            provider: Some(response.provider.to_string()),
-            model: Some(response.model.clone()),
+            provider: Some(provider.clone()),
+            model: Some(model.clone()),
         });
-        let completed = self.completed_operation(
-            &operation,
-            response.message,
-            response.provider.to_string(),
-            response.model,
-            now,
-        );
+        let completed = self.completed_operation(&operation, summary_text, provider, model, now);
 
         match self.repository.upsert(summary).await {
             Ok(summary) => {

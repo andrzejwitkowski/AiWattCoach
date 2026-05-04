@@ -507,6 +507,7 @@ pub(crate) fn sample_workout_summary(user_id: &str, workout_id: &str) -> Workout
         workout_id: workout_id.to_string(),
         rpe: Some(6),
         messages: Vec::<ConversationMessage>::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: Some(1_700_000_100),
         workout_recap_text: None,
         workout_recap_provider: None,

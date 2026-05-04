@@ -16,8 +16,8 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::{
     dto::{
-        coach_message, coach_typing_message, error_message, system_message, ClientWsMessage,
-        WorkoutSummaryPath,
+        coach_message, coach_typing_message, error_message, system_message, tool_message,
+        ClientWsMessage, WorkoutSummaryPath,
     },
     error::map_workout_summary_error,
     mapping::{map_message_to_dto, map_summary_to_dto},
@@ -376,6 +376,19 @@ async fn process_send_message(
                         return true;
                     }
 
+                    for message in current_turn_tool_messages(
+                        &reply.summary,
+                        &persisted.user_message.id,
+                        &reply.coach_message.id,
+                    ) {
+                        if send_ws_json(&sender, tool_message(map_message_to_dto(message)))
+                            .await
+                            .is_err()
+                        {
+                            return true;
+                        }
+                    }
+
                     send_ws_json(
                         &sender,
                         coach_message(
@@ -409,6 +422,36 @@ async fn process_send_message(
             should_close_worker(&error)
         }
     }
+}
+
+fn current_turn_tool_messages(
+    summary: &crate::domain::workout_summary::WorkoutSummary,
+    user_message_id: &str,
+    coach_message_id: &str,
+) -> Vec<crate::domain::workout_summary::ConversationMessage> {
+    let Some(user_index) = summary
+        .messages
+        .iter()
+        .position(|message| message.id == user_message_id)
+    else {
+        return Vec::new();
+    };
+    let Some(coach_index) = summary
+        .messages
+        .iter()
+        .position(|message| message.id == coach_message_id)
+    else {
+        return Vec::new();
+    };
+    if coach_index <= user_index {
+        return Vec::new();
+    }
+
+    summary.messages[user_index + 1..coach_index]
+        .iter()
+        .filter(|message| message.role == crate::domain::workout_summary::MessageRole::Tool)
+        .cloned()
+        .collect()
 }
 
 fn client_error_message(error: &WorkoutSummaryError) -> String {

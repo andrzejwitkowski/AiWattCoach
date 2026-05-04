@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 pub struct OpenRouterChatRequest {
     pub model: String,
     pub messages: Vec<OpenRouterMessage>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<OpenRouterTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<OpenRouterToolChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route: Option<String>,
 }
@@ -11,7 +15,59 @@ pub struct OpenRouterChatRequest {
 #[derive(Serialize)]
 pub struct OpenRouterMessage {
     pub role: String,
-    pub content: OpenRouterRequestContent,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<OpenRouterRequestContent>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tool_calls: Vec<OpenRouterToolCall>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct OpenRouterTool {
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub function: OpenRouterFunctionDefinition,
+}
+
+#[derive(Serialize)]
+pub struct OpenRouterFunctionDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum OpenRouterToolChoice {
+    String(String),
+    Named(OpenRouterNamedToolChoice),
+}
+
+#[derive(Serialize)]
+pub struct OpenRouterNamedToolChoice {
+    #[serde(rename = "type")]
+    pub choice_type: String,
+    pub function: OpenRouterNamedFunctionChoice,
+}
+
+#[derive(Serialize)]
+pub struct OpenRouterNamedFunctionChoice {
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OpenRouterToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub function: OpenRouterToolFunctionCall,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OpenRouterToolFunctionCall {
+    pub name: String,
+    pub arguments: String,
 }
 
 #[derive(Serialize)]
@@ -30,7 +86,7 @@ pub struct OpenRouterRequestContentPart {
     pub cache_control: Option<OpenRouterCacheControl>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct OpenRouterCacheControl {
     #[serde(rename = "type")]
     pub cache_type: String,
@@ -47,11 +103,16 @@ pub struct OpenRouterChatResponse {
 #[derive(Deserialize)]
 pub struct OpenRouterChoice {
     pub message: OpenRouterMessageResponse,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct OpenRouterMessageResponse {
-    pub content: OpenRouterMessageContent,
+    #[serde(default)]
+    pub content: Option<OpenRouterMessageContent>,
+    #[serde(default)]
+    pub tool_calls: Vec<OpenRouterToolCall>,
 }
 
 #[derive(Deserialize)]

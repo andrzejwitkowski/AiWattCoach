@@ -11,7 +11,7 @@ use aiwattcoach::domain::{
         AthleteSummaryService, AthleteSummaryUseCases,
     },
     identity::Clock,
-    llm::{LlmCacheUsage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
+    llm::{LlmCacheUsage, LlmChatMessage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
 };
 
 const USER_ID: &str = "user-1";
@@ -357,6 +357,53 @@ async fn ensure_fresh_summary_generates_when_missing() {
     assert_eq!(summary.summary_text, "fresh summary");
     assert_eq!(generator.call_count(), 1);
     assert_eq!(repository.upsert_call_count(), 1);
+}
+
+#[tokio::test]
+async fn ensure_fresh_summary_fails_when_generator_returns_blank_assistant_text() {
+    let call_log = new_call_log();
+    let repository = InMemoryAthleteSummaryRepository::new(call_log.clone());
+    let operations = InMemoryAthleteSummaryOperationRepository::new(call_log.clone());
+    let generator = StubGenerator {
+        calls: Arc::new(Mutex::new(0)),
+        responses: Arc::new(Mutex::new(VecDeque::from([Ok(LlmChatResponse {
+            provider: LlmProvider::OpenRouter,
+            model: MODEL.to_string(),
+            message: LlmChatMessage::assistant("   "),
+            finish_reason: None,
+            provider_request_id: None,
+            usage: LlmTokenUsage::default(),
+            cache: LlmCacheUsage::default(),
+        })]))),
+        call_log,
+    };
+    let service = AthleteSummaryService::new(
+        repository.clone(),
+        operations.clone(),
+        generator,
+        FixedClock {
+            now_epoch_seconds: NOW_EPOCH_SECONDS,
+        },
+    );
+
+    let error = service
+        .ensure_fresh_summary(USER_ID)
+        .await
+        .expect_err("blank summary should fail");
+
+    assert_eq!(
+        error,
+        AthleteSummaryError::Llm(LlmError::InvalidResponse(
+            "assistant summary missing final text".to_string(),
+        ))
+    );
+    assert_eq!(repository.upsert_call_count(), 0);
+    assert_eq!(
+        operations
+            .stored_operation()
+            .map(|operation| operation.status),
+        Some(AthleteSummaryGenerationOperationStatus::Failed)
+    );
 }
 
 #[tokio::test]
@@ -814,7 +861,8 @@ fn llm_response(message: &str) -> LlmChatResponse {
     LlmChatResponse {
         provider: LlmProvider::OpenRouter,
         model: MODEL.to_string(),
-        message: message.to_string(),
+        message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
+        finish_reason: None,
         provider_request_id: None,
         usage: LlmTokenUsage::default(),
         cache: LlmCacheUsage::default(),

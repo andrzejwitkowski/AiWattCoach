@@ -135,6 +135,32 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
         })
     }
 
+    fn replace_provider_transcript(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        provider_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
+        updated_at_epoch_seconds: i64,
+    ) -> WorkoutBoxFuture<Result<(), WorkoutSummaryError>> {
+        let summaries = self.summaries.clone();
+        let key = (user_id.to_string(), workout_id.to_string());
+        Box::pin(async move {
+            let mut summaries = summaries.lock().unwrap();
+            let Some(summary) = summaries.get_mut(&key) else {
+                return Err(WorkoutSummaryError::NotFound);
+            };
+            if summary.updated_at_epoch_seconds != expected_updated_at_epoch_seconds {
+                return Err(WorkoutSummaryError::Repository(
+                    "provider transcript update lost compare-and-set race".to_string(),
+                ));
+            }
+            summary.provider_transcript = provider_transcript;
+            summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            Ok(())
+        })
+    }
+
     fn persist_workout_recap(
         &self,
         user_id: &str,
@@ -271,6 +297,7 @@ pub(crate) fn sample_summary(workout_id: &str) -> WorkoutSummary {
         workout_id: workout_id.to_string(),
         rpe: Some(6),
         messages: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,

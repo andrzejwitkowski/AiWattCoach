@@ -1,3 +1,4 @@
+use crate::domain::llm::provider_transcript_from_legacy_response;
 use crate::domain::workout_summary::{
     CoachReplyOperation, CoachReplyOperationFailureKind, CoachReplyOperationStatus,
     WorkoutSummaryError,
@@ -75,7 +76,10 @@ pub(super) fn map_operation_to_document(
         provider_cache_id: operation.provider_cache_id.clone(),
         token_usage: operation.token_usage.clone(),
         cache_usage: operation.cache_usage.clone(),
-        response_message: operation.response_message.clone(),
+        provider_transcript: operation.provider_transcript.clone(),
+        response_message: None,
+        finish_reason: operation.finish_reason.clone(),
+        public_tool_call_ids: operation.public_tool_call_ids.clone(),
         error_message: operation.error_message.clone(),
         started_at_epoch_seconds: operation.started_at_epoch_seconds,
         started_at: optional_epoch_seconds_to_bson_datetime(
@@ -143,7 +147,12 @@ pub(super) fn map_document_to_operation(
         provider_cache_id: document.provider_cache_id,
         token_usage: document.token_usage,
         cache_usage: document.cache_usage,
-        response_message: document.response_message,
+        provider_transcript: provider_transcript_from_legacy_response(
+            document.provider_transcript,
+            document.response_message,
+        ),
+        finish_reason: document.finish_reason,
+        public_tool_call_ids: document.public_tool_call_ids,
         error_message: document.error_message,
         started_at_epoch_seconds: resolve_required_epoch_seconds(
             document.started_at,
@@ -173,4 +182,52 @@ pub(super) fn map_document_to_operation(
         )
         .map_err(WorkoutSummaryError::Repository)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::map_document_to_operation;
+    use crate::adapters::mongo::coach_reply_operations::document::CoachReplyOperationDocument;
+    use crate::domain::llm::LlmChatMessage;
+    use crate::domain::workout_summary::CoachReplyOperationStatus;
+
+    #[test]
+    fn map_document_to_operation_reuses_legacy_response_message_when_provider_transcript_missing() {
+        let operation = map_document_to_operation(CoachReplyOperationDocument {
+            user_id: "user-1".to_string(),
+            workout_id: "workout-1".to_string(),
+            user_message_id: "message-1".to_string(),
+            status: "pending".to_string(),
+            failure_kind: None,
+            provider: None,
+            model: None,
+            provider_request_id: None,
+            coach_message_id: None,
+            cache_scope_key: None,
+            provider_cache_id: None,
+            token_usage: None,
+            cache_usage: None,
+            provider_transcript: Vec::new(),
+            response_message: Some("Legacy checkpoint".to_string()),
+            finish_reason: None,
+            public_tool_call_ids: Vec::new(),
+            error_message: None,
+            started_at_epoch_seconds: 1,
+            started_at: None,
+            last_attempt_at_epoch_seconds: 2,
+            last_attempt_at: None,
+            attempt_count: 1,
+            created_at_epoch_seconds: 3,
+            created_at: None,
+            updated_at_epoch_seconds: 4,
+            updated_at: None,
+        })
+        .expect("legacy response_message should map");
+
+        assert_eq!(operation.status, CoachReplyOperationStatus::Pending);
+        assert_eq!(
+            operation.provider_transcript,
+            vec![LlmChatMessage::assistant("Legacy checkpoint")]
+        );
+    }
 }

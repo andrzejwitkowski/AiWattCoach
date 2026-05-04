@@ -19,10 +19,22 @@ pub(super) struct CoachConversationDto {
 }
 
 #[derive(Serialize)]
+pub(super) struct ToolCallDto {
+    #[serde(rename = "id")]
+    pub id: String,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "argumentsJson")]
+    pub arguments_json: String,
+}
+
+#[derive(Serialize)]
 pub(super) struct CoachConversationMessageDto {
     pub id: String,
     pub role: String,
     pub content: String,
+    #[serde(rename = "toolCall", skip_serializing_if = "Option::is_none")]
+    pub tool_call: Option<ToolCallDto>,
     #[serde(rename = "createdAtEpochSeconds")]
     pub created_at_epoch_seconds: i64,
 }
@@ -93,6 +105,17 @@ pub(super) fn coach_message(
         content: None,
         conversation: Some(conversation),
         messages: Some(messages),
+        error: None,
+    }
+}
+
+pub(super) fn tool_message(message: CoachConversationMessageDto) -> ServerWsMessage {
+    ServerWsMessage {
+        message_type: "tool_message".to_string(),
+        message: Some(message),
+        content: None,
+        conversation: None,
+        messages: None,
         error: None,
     }
 }
