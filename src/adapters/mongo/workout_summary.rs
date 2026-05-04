@@ -328,6 +328,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         user_id: &str,
         workout_id: &str,
         hidden_transcript: Vec<LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
         let collection = self.collection.clone();
@@ -346,6 +347,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                         "$and": [
                             document_identity_filter(&document),
                             { "user_id": &user_id },
+                            { "updated_at_epoch_seconds": expected_updated_at_epoch_seconds },
                         ]
                     },
                     doc! {
@@ -362,7 +364,9 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
                 .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?;
 
             if result.matched_count == 0 {
-                return Err(WorkoutSummaryError::NotFound);
+                return Err(WorkoutSummaryError::Repository(
+                    "hidden transcript update lost compare-and-set race".to_string(),
+                ));
             }
 
             Ok(())

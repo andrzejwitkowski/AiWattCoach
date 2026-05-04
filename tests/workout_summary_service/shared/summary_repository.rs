@@ -9,6 +9,7 @@ pub(crate) struct InMemoryWorkoutSummaryRepository {
     summaries: Arc<Mutex<BTreeMap<(String, String), WorkoutSummary>>>,
     calls: Arc<Mutex<Vec<String>>>,
     read_calls: Arc<Mutex<Vec<String>>>,
+    hidden_transcript_conflicts_remaining: Arc<Mutex<usize>>,
 }
 
 impl InMemoryWorkoutSummaryRepository {
@@ -23,6 +24,7 @@ impl InMemoryWorkoutSummaryRepository {
             summaries: Arc::new(Mutex::new(summaries)),
             calls: Arc::new(Mutex::new(Vec::new())),
             read_calls: Arc::new(Mutex::new(Vec::new())),
+            hidden_transcript_conflicts_remaining: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -39,6 +41,10 @@ impl InMemoryWorkoutSummaryRepository {
             (summary.user_id.clone(), summary.workout_id.clone()),
             summary,
         );
+    }
+
+    pub(crate) fn conflict_next_hidden_transcript_write(&self) {
+        *self.hidden_transcript_conflicts_remaining.lock().unwrap() = 1;
     }
 }
 
@@ -177,12 +183,15 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
         user_id: &str,
         workout_id: &str,
         hidden_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         let summaries = self.summaries.clone();
         let calls = self.calls.clone();
+        let hidden_transcript_conflicts_remaining =
+            self.hidden_transcript_conflicts_remaining.clone();
         Box::pin(async move {
             calls
                 .lock()
@@ -192,6 +201,21 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             let Some(summary) = summaries.get_mut(&(user_id, workout_id)) else {
                 return Err(WorkoutSummaryError::NotFound);
             };
+            let mut conflicts_remaining = hidden_transcript_conflicts_remaining.lock().unwrap();
+            if *conflicts_remaining > 0 {
+                *conflicts_remaining -= 1;
+                summary.hidden_transcript.push(
+                    aiwattcoach::domain::llm::LlmChatMessage::assistant(
+                        "Concurrent summary update",
+                    ),
+                );
+                summary.updated_at_epoch_seconds += 1;
+            }
+            if summary.updated_at_epoch_seconds != expected_updated_at_epoch_seconds {
+                return Err(WorkoutSummaryError::Repository(
+                    "hidden transcript update lost compare-and-set race".to_string(),
+                ));
+            }
             summary.hidden_transcript = hidden_transcript;
             summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
             Ok(())

@@ -47,6 +47,7 @@ pub trait CoachConversationRepository: Send + Sync + 'static {
         user_id: &str,
         conversation_id: &str,
         hidden_transcript: Vec<LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), CoachConversationError>>;
 }

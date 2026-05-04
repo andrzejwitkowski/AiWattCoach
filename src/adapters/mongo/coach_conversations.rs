@@ -214,6 +214,7 @@ impl CoachConversationRepository for MongoCoachConversationRepository {
         user_id: &str,
         conversation_id: &str,
         hidden_transcript: Vec<LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), CoachConversationError>> {
         let collection = self.collection.clone();
@@ -225,6 +226,7 @@ impl CoachConversationRepository for MongoCoachConversationRepository {
                     doc! {
                         "user_id": &user_id,
                         "conversation_id": &conversation_id,
+                        "updated_at_epoch_seconds": expected_updated_at_epoch_seconds,
                     },
                     doc! {
                         "$set": {
@@ -243,7 +245,9 @@ impl CoachConversationRepository for MongoCoachConversationRepository {
                 .map_err(storage_error)?;
 
             if result.matched_count == 0 {
-                return Err(CoachConversationError::NotFound);
+                return Err(CoachConversationError::Repository(
+                    "hidden transcript update lost compare-and-set race".to_string(),
+                ));
             }
 
             Ok(())

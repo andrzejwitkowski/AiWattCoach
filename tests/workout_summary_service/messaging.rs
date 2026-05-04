@@ -1394,3 +1394,43 @@ async fn generate_coach_reply_accumulates_hidden_transcript_across_turns() {
         .unwrap();
     assert!(round2.hidden_transcript.len() >= 3);
 }
+
+#[tokio::test]
+async fn generate_coach_reply_retries_hidden_transcript_write_after_compare_and_set_conflict() {
+    let mut summary = existing_summary();
+    summary.hidden_transcript = vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+        "Turn 0",
+    )];
+
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    repository.conflict_next_hidden_transcript_write();
+    let reply_operations = InMemoryCoachReplyOperationRepository::default();
+    let service =
+        test_service_with_coach(repository.clone(), reply_operations, default_dev_coach());
+
+    let persisted = service
+        .append_user_message("user-1", "workout-1", "Turn 1 question".to_string())
+        .await
+        .unwrap();
+    service
+        .generate_coach_reply("user-1", "workout-1", persisted.user_message.id)
+        .await
+        .unwrap();
+
+    let stored = repository
+        .find_by_user_id_and_workout_id("user-1", "workout-1")
+        .await
+        .unwrap()
+        .unwrap();
+    let hidden_contents = stored
+        .hidden_transcript
+        .iter()
+        .map(|message| message.content.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(hidden_contents.contains(&"Turn 0"));
+    assert!(hidden_contents.contains(&"Concurrent summary update"));
+    assert!(hidden_contents
+        .iter()
+        .any(|content| content.contains("Turn 1 question")));
+}

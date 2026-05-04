@@ -99,6 +99,13 @@ impl IdGenerator for TestIds {
 #[derive(Clone, Default)]
 struct InMemoryConversationRepository {
     conversation: Arc<Mutex<Option<CoachConversation>>>,
+    hidden_transcript_conflicts_remaining: Arc<Mutex<usize>>,
+}
+
+impl InMemoryConversationRepository {
+    fn conflict_next_hidden_transcript_write(&self) {
+        *self.hidden_transcript_conflicts_remaining.lock().unwrap() = 1;
+    }
 }
 
 impl CoachConversationRepository for InMemoryConversationRepository {
@@ -204,10 +211,13 @@ impl CoachConversationRepository for InMemoryConversationRepository {
         user_id: &str,
         conversation_id: &str,
         hidden_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> aiwattcoach::domain::coach_conversation::BoxFuture<Result<(), CoachConversationError>>
     {
         let state = self.conversation.clone();
+        let hidden_transcript_conflicts_remaining =
+            self.hidden_transcript_conflicts_remaining.clone();
         let user_id = user_id.to_string();
         let conversation_id = conversation_id.to_string();
         Box::pin(async move {
@@ -217,6 +227,19 @@ impl CoachConversationRepository for InMemoryConversationRepository {
             };
             if existing.user_id != user_id || existing.conversation_id != conversation_id {
                 return Err(CoachConversationError::NotFound);
+            }
+            let mut conflicts_remaining = hidden_transcript_conflicts_remaining.lock().unwrap();
+            if *conflicts_remaining > 0 {
+                *conflicts_remaining -= 1;
+                existing
+                    .hidden_transcript
+                    .push(LlmChatMessage::assistant("Concurrent calendar update"));
+                existing.updated_at_epoch_seconds += 1;
+            }
+            if existing.updated_at_epoch_seconds != expected_updated_at_epoch_seconds {
+                return Err(CoachConversationError::Repository(
+                    "hidden transcript update lost compare-and-set race".to_string(),
+                ));
             }
             existing.hidden_transcript = hidden_transcript;
             existing.updated_at_epoch_seconds = updated_at_epoch_seconds;
@@ -739,6 +762,7 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
             created_at_epoch_seconds: 1,
             updated_at_epoch_seconds: 2,
         }))),
+        hidden_transcript_conflicts_remaining: Arc::new(Mutex::new(0)),
     };
     let messages = InMemoryMessageRepository {
         messages: Arc::new(Mutex::new(vec![
@@ -859,6 +883,7 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
             created_at_epoch_seconds: 1,
             updated_at_epoch_seconds: 2,
         }))),
+        hidden_transcript_conflicts_remaining: Arc::new(Mutex::new(0)),
     };
     let messages = InMemoryMessageRepository {
         messages: Arc::new(Mutex::new(vec![
@@ -1099,4 +1124,67 @@ async fn calendar_coach_marks_fresh_tool_only_response_as_failed() {
         stored.status,
         aiwattcoach::domain::coach_conversation::CoachConversationReplyOperationStatus::Failed
     );
+}
+
+#[tokio::test]
+async fn calendar_coach_retries_hidden_transcript_write_after_compare_and_set_conflict() {
+    let llm_chat_port = RecordingLlmChatPort::default();
+    let conversations = InMemoryConversationRepository::default();
+    let messages = InMemoryMessageRepository::default();
+    let reply_operations = InMemoryReplyOperationRepository::default();
+    let service = SharedCoachConversationService::new(
+        conversations.clone(),
+        messages,
+        reply_operations,
+        Arc::new(llm_chat_port),
+        Arc::new(StaticLlmConfigProvider),
+        Arc::new(RecordingTrainingContextBuilder::default()),
+        FixedClock,
+        TestIds::new(),
+    )
+    .with_settings_service(Arc::new(ConfiguredSettingsService));
+
+    let (conversation, _) = service
+        .get_or_create_active_calendar_conversation("user-1")
+        .await
+        .expect("conversation should be created");
+
+    {
+        let mut guard = conversations.conversation.lock().unwrap();
+        guard.as_mut().unwrap().hidden_transcript = vec![LlmChatMessage::assistant("Turn 0")];
+    }
+    conversations.conflict_next_hidden_transcript_write();
+
+    let persisted = service
+        .append_calendar_user_message(
+            "user-1",
+            &conversation.conversation_id,
+            "What should I do tomorrow?".to_string(),
+        )
+        .await
+        .expect("user message should persist");
+
+    service
+        .generate_calendar_reply(
+            "user-1",
+            &conversation.conversation_id,
+            persisted.user_message.id,
+        )
+        .await
+        .expect("reply should be generated");
+
+    let stored = conversations
+        .find_by_user_id_and_conversation_id("user-1", &conversation.conversation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let hidden_contents = stored
+        .hidden_transcript
+        .iter()
+        .map(|message| message.content.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(hidden_contents.contains(&"Turn 0"));
+    assert!(hidden_contents.contains(&"Concurrent calendar update"));
+    assert!(hidden_contents.contains(&"Coach reply"));
 }

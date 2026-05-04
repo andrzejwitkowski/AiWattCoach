@@ -140,6 +140,7 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
         user_id: &str,
         workout_id: &str,
         hidden_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> WorkoutBoxFuture<Result<(), WorkoutSummaryError>> {
         let summaries = self.summaries.clone();
@@ -149,6 +150,11 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             let Some(summary) = summaries.get_mut(&key) else {
                 return Err(WorkoutSummaryError::NotFound);
             };
+            if summary.updated_at_epoch_seconds != expected_updated_at_epoch_seconds {
+                return Err(WorkoutSummaryError::Repository(
+                    "hidden transcript update lost compare-and-set race".to_string(),
+                ));
+            }
             summary.hidden_transcript = hidden_transcript;
             summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
             Ok(())

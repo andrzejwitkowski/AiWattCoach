@@ -12,6 +12,7 @@ use mongodb::{
 
 use aiwattcoach::{
     adapters::mongo::workout_summary::MongoWorkoutSummaryRepository,
+    domain::llm::LlmChatMessage,
     domain::workout_summary::{WorkoutSummary, WorkoutSummaryRepository},
     Settings,
 };
@@ -270,6 +271,67 @@ async fn workout_summary_repository_batch_lookup_matches_wahoo_request_to_interv
     assert_eq!(summaries.len(), 1);
     assert_eq!(summaries[0].id, "summary-alias");
     assert_eq!(summaries[0].workout_id, "wahoo-workout:450868242");
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn workout_summary_repository_replace_hidden_transcript_rejects_stale_compare_and_set_write()
+{
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoWorkoutSummaryRepository::new(fixture.client.clone(), &fixture.database);
+    repository.ensure_indexes().await.unwrap();
+
+    repository
+        .create(sample_summary(
+            "summary-1",
+            "user-1",
+            "workout-1",
+            Some(6),
+            10,
+        ))
+        .await
+        .unwrap();
+
+    repository
+        .replace_hidden_transcript(
+            "user-1",
+            "workout-1",
+            vec![LlmChatMessage::assistant("fresh transcript")],
+            10,
+            20,
+        )
+        .await
+        .unwrap();
+
+    let error = repository
+        .replace_hidden_transcript(
+            "user-1",
+            "workout-1",
+            vec![LlmChatMessage::assistant("stale transcript")],
+            10,
+            30,
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "hidden transcript update lost compare-and-set race"
+    );
+
+    let stored = repository
+        .find_by_user_id_and_workout_id("user-1", "workout-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.updated_at_epoch_seconds, 20);
+    assert_eq!(
+        stored.hidden_transcript,
+        vec![LlmChatMessage::assistant("fresh transcript")]
+    );
 
     fixture.cleanup().await;
 }

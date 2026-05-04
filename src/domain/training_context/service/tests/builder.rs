@@ -980,6 +980,7 @@ async fn builder_falls_back_to_event_id_summary_when_activity_id_summary_is_miss
             _user_id: &str,
             _workout_id: &str,
             _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+            _expected_updated_at_epoch_seconds: i64,
             _updated_at_epoch_seconds: i64,
         ) -> crate::domain::workout_summary::BoxFuture<
             Result<(), crate::domain::workout_summary::WorkoutSummaryError>,
@@ -1147,6 +1148,7 @@ async fn builder_uses_alias_backed_summary_for_recent_activity_context() {
             _user_id: &str,
             _workout_id: &str,
             _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+            _expected_updated_at_epoch_seconds: i64,
             _updated_at_epoch_seconds: i64,
         ) -> crate::domain::workout_summary::BoxFuture<
             Result<(), crate::domain::workout_summary::WorkoutSummaryError>,

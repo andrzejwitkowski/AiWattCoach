@@ -592,6 +592,7 @@ impl WorkoutSummaryRepository for TestWorkoutSummaryRepository {
         _user_id: &str,
         _workout_id: &str,
         _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+        _expected_updated_at_epoch_seconds: i64,
         _updated_at_epoch_seconds: i64,
     ) -> crate::domain::workout_summary::BoxFuture<Result<(), WorkoutSummaryError>> {
         unreachable!()

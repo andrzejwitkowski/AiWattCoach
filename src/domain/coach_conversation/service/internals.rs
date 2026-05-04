@@ -190,6 +190,7 @@ where
                 &conversation.user_id,
                 &conversation.conversation_id,
                 hidden_transcript,
+                conversation.updated_at_epoch_seconds,
                 self.clock.now_epoch_seconds(),
             )
             .await

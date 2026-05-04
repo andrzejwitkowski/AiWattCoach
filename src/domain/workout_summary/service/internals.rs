@@ -160,6 +160,7 @@ where
         &self,
         user_id: &str,
         workout_id: &str,
+        expected_updated_at_epoch_seconds: i64,
         hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
     ) -> Result<(), WorkoutSummaryError> {
         self.repository
@@ -167,6 +168,7 @@ where
                 user_id,
                 workout_id,
                 hidden_transcript,
+                expected_updated_at_epoch_seconds,
                 self.clock.now_epoch_seconds(),
             )
             .await
@@ -189,7 +191,12 @@ where
             );
 
             match self
-                .replace_hidden_transcript(user_id, workout_id, merged)
+                .replace_hidden_transcript(
+                    user_id,
+                    workout_id,
+                    summary.updated_at_epoch_seconds,
+                    merged,
+                )
                 .await
             {
                 Ok(()) => {
