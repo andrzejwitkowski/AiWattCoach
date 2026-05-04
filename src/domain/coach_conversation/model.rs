@@ -1,5 +1,6 @@
 use crate::domain::llm::{
-    LlmCacheUsage, LlmChatMessage, LlmError, LlmFinishReason, LlmProvider, LlmTokenUsage,
+    merge_provider_transcript_entries, LlmCacheUsage, LlmChatMessage, LlmError, LlmFinishReason,
+    LlmProvider, LlmTokenUsage,
 };
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +51,7 @@ pub struct CoachConversation {
     pub surface: CoachConversationSurface,
     pub status: CoachConversationStatus,
     pub focus: CoachConversationFocus,
-    pub hidden_transcript: Vec<LlmChatMessage>,
+    pub provider_transcript: Vec<LlmChatMessage>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
 }
@@ -69,7 +70,7 @@ impl CoachConversation {
             surface,
             status: CoachConversationStatus::Active,
             focus,
-            hidden_transcript: Vec::new(),
+            provider_transcript: Vec::new(),
             created_at_epoch_seconds: now_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
         }
@@ -82,7 +83,7 @@ impl CoachConversation {
             surface: self.surface.clone(),
             status: CoachConversationStatus::Archived,
             focus: self.focus.clone(),
-            hidden_transcript: self.hidden_transcript.clone(),
+            provider_transcript: self.provider_transcript.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds,
         }
@@ -191,7 +192,7 @@ pub struct CoachConversationReplyOperation {
     pub provider_cache_id: Option<String>,
     pub token_usage: Option<LlmTokenUsage>,
     pub cache_usage: Option<LlmCacheUsage>,
-    pub hidden_transcript: Vec<LlmChatMessage>,
+    pub provider_transcript: Vec<LlmChatMessage>,
     pub finish_reason: Option<LlmFinishReason>,
     pub public_tool_call_ids: Vec<String>,
     pub error_message: Option<String>,
@@ -228,7 +229,7 @@ pub struct PendingCoachConversationReplyCheckpoint {
     pub provider_cache_id: Option<String>,
     pub token_usage: LlmTokenUsage,
     pub cache_usage: LlmCacheUsage,
-    pub hidden_transcript: Vec<LlmChatMessage>,
+    pub provider_transcript: Vec<LlmChatMessage>,
     pub finish_reason: Option<LlmFinishReason>,
     pub updated_at_epoch_seconds: i64,
 }
@@ -256,7 +257,7 @@ impl CoachConversationReplyOperation {
             provider_cache_id: None,
             token_usage: None,
             cache_usage: None,
-            hidden_transcript: Vec::new(),
+            provider_transcript: Vec::new(),
             finish_reason: None,
             public_tool_call_ids: Vec::new(),
             error_message: None,
@@ -291,7 +292,7 @@ impl CoachConversationReplyOperation {
             provider_cache_id: self.provider_cache_id.clone(),
             token_usage: self.token_usage.clone(),
             cache_usage: self.cache_usage.clone(),
-            hidden_transcript: self.hidden_transcript.clone(),
+            provider_transcript: self.provider_transcript.clone(),
             finish_reason: self.finish_reason.clone(),
             public_tool_call_ids: self.public_tool_call_ids.clone(),
             error_message: None,
@@ -307,8 +308,10 @@ impl CoachConversationReplyOperation {
         &self,
         checkpoint: PendingCoachConversationReplyCheckpoint,
     ) -> Self {
-        let mut hidden_transcript = self.hidden_transcript.clone();
-        hidden_transcript.extend(checkpoint.hidden_transcript);
+        let provider_transcript = merge_provider_transcript_entries(
+            self.provider_transcript.clone(),
+            &checkpoint.provider_transcript,
+        );
 
         Self {
             user_id: self.user_id.clone(),
@@ -324,7 +327,7 @@ impl CoachConversationReplyOperation {
             provider_cache_id: checkpoint.provider_cache_id,
             token_usage: Some(checkpoint.token_usage),
             cache_usage: Some(checkpoint.cache_usage),
-            hidden_transcript,
+            provider_transcript,
             finish_reason: checkpoint.finish_reason,
             public_tool_call_ids: self.public_tool_call_ids.clone(),
             error_message: None,
@@ -351,7 +354,7 @@ impl CoachConversationReplyOperation {
             provider_cache_id: reply.provider_cache_id,
             token_usage: Some(reply.token_usage),
             cache_usage: Some(reply.cache_usage),
-            hidden_transcript: self.hidden_transcript.clone(),
+            provider_transcript: self.provider_transcript.clone(),
             finish_reason: self.finish_reason.clone(),
             public_tool_call_ids: self.public_tool_call_ids.clone(),
             error_message: None,
@@ -382,7 +385,7 @@ impl CoachConversationReplyOperation {
             provider_cache_id: self.provider_cache_id.clone(),
             token_usage: self.token_usage.clone(),
             cache_usage: self.cache_usage.clone(),
-            hidden_transcript: self.hidden_transcript.clone(),
+            provider_transcript: self.provider_transcript.clone(),
             finish_reason: self.finish_reason.clone(),
             public_tool_call_ids: self.public_tool_call_ids.clone(),
             error_message: None,
@@ -411,7 +414,7 @@ impl CoachConversationReplyOperation {
             provider_cache_id: self.provider_cache_id.clone(),
             token_usage: self.token_usage.clone(),
             cache_usage: self.cache_usage.clone(),
-            hidden_transcript: self.hidden_transcript.clone(),
+            provider_transcript: self.provider_transcript.clone(),
             finish_reason: self.finish_reason.clone(),
             public_tool_call_ids: self.public_tool_call_ids.clone(),
             error_message: Some(error.to_string()),

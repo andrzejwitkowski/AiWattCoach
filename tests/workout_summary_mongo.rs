@@ -276,8 +276,8 @@ async fn workout_summary_repository_batch_lookup_matches_wahoo_request_to_interv
 }
 
 #[tokio::test]
-async fn workout_summary_repository_replace_hidden_transcript_rejects_stale_compare_and_set_write()
-{
+async fn workout_summary_repository_replace_provider_transcript_rejects_stale_compare_and_set_write(
+) {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;
     };
@@ -296,7 +296,7 @@ async fn workout_summary_repository_replace_hidden_transcript_rejects_stale_comp
         .unwrap();
 
     repository
-        .replace_hidden_transcript(
+        .replace_provider_transcript(
             "user-1",
             "workout-1",
             vec![LlmChatMessage::assistant("fresh transcript")],
@@ -307,7 +307,7 @@ async fn workout_summary_repository_replace_hidden_transcript_rejects_stale_comp
         .unwrap();
 
     let error = repository
-        .replace_hidden_transcript(
+        .replace_provider_transcript(
             "user-1",
             "workout-1",
             vec![LlmChatMessage::assistant("stale transcript")],
@@ -329,7 +329,7 @@ async fn workout_summary_repository_replace_hidden_transcript_rejects_stale_comp
         .unwrap();
     assert_eq!(stored.updated_at_epoch_seconds, 20);
     assert_eq!(
-        stored.hidden_transcript,
+        stored.provider_transcript,
         vec![LlmChatMessage::assistant("fresh transcript")]
     );
 
@@ -401,7 +401,7 @@ fn sample_summary(
         workout_id: workout_id.to_string(),
         rpe,
         messages: Vec::new(),
-        hidden_transcript: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,

@@ -256,7 +256,7 @@ pub(crate) fn sample_summary() -> WorkoutSummary {
         workout_id: "workout-1".to_string(),
         rpe: Some(6),
         messages: Vec::new(),
-        hidden_transcript: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,

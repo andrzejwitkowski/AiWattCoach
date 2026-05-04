@@ -178,11 +178,11 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
         })
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         user_id: &str,
         workout_id: &str,
-        hidden_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        provider_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
         expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
@@ -196,7 +196,7 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             calls
                 .lock()
                 .unwrap()
-                .push(format!("replace_hidden_transcript:{workout_id}"));
+                .push(format!("replace_provider_transcript:{workout_id}"));
             let mut summaries = summaries.lock().unwrap();
             let Some(summary) = summaries.get_mut(&(user_id, workout_id)) else {
                 return Err(WorkoutSummaryError::NotFound);
@@ -204,7 +204,7 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             let mut conflicts_remaining = hidden_transcript_conflicts_remaining.lock().unwrap();
             if *conflicts_remaining > 0 {
                 *conflicts_remaining -= 1;
-                summary.hidden_transcript.push(
+                summary.provider_transcript.push(
                     aiwattcoach::domain::llm::LlmChatMessage::assistant(
                         "Concurrent summary update",
                     ),
@@ -213,10 +213,10 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             }
             if summary.updated_at_epoch_seconds != expected_updated_at_epoch_seconds {
                 return Err(WorkoutSummaryError::Repository(
-                    "hidden transcript update lost compare-and-set race".to_string(),
+                    "provider transcript update lost compare-and-set race".to_string(),
                 ));
             }
-            summary.hidden_transcript = hidden_transcript;
+            summary.provider_transcript = provider_transcript;
             summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
             Ok(())
         })

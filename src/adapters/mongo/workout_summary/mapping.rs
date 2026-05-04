@@ -23,7 +23,7 @@ pub(super) fn map_document_to_domain(
             .into_iter()
             .map(map_message_to_domain)
             .collect::<Result<Vec<_>, _>>()?,
-        hidden_transcript: document.hidden_transcript,
+        provider_transcript: document.provider_transcript,
         saved_at_epoch_seconds: resolve_optional_epoch_seconds(
             document.saved_at,
             document.saved_at_epoch_seconds,
@@ -63,7 +63,7 @@ pub(super) fn map_domain_to_document(summary: &WorkoutSummary) -> WorkoutSummary
             .cloned()
             .map(map_message_to_document)
             .collect(),
-        hidden_transcript: summary.hidden_transcript.clone(),
+        provider_transcript: summary.provider_transcript.clone(),
         saved_at_epoch_seconds: summary.saved_at_epoch_seconds,
         saved_at: optional_epoch_seconds_to_bson_datetime(
             summary.saved_at_epoch_seconds,

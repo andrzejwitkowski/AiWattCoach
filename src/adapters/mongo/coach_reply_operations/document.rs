@@ -17,7 +17,7 @@ pub(super) struct CoachReplyOperationDocument {
     pub(super) token_usage: Option<crate::domain::llm::LlmTokenUsage>,
     pub(super) cache_usage: Option<crate::domain::llm::LlmCacheUsage>,
     #[serde(default)]
-    pub(super) hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+    pub(super) provider_transcript: Vec<crate::domain::llm::LlmChatMessage>,
     #[serde(default)]
     pub(super) response_message: Option<String>,
     #[serde(default)]

@@ -1,5 +1,7 @@
 use tracing::{info, warn};
 
+use crate::domain::llm::final_assistant_text;
+
 use super::*;
 
 enum CoachReplyOperationResolution {
@@ -363,7 +365,7 @@ where
             provider_cache_id: llm_response.cache.provider_cache_id.clone(),
             token_usage: llm_response.usage.clone(),
             cache_usage: llm_response.cache.clone(),
-            hidden_transcript: vec![llm_response.message.clone()],
+            provider_transcript: vec![llm_response.message.clone()],
             finish_reason: llm_response.finish_reason.clone(),
             updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
         });
@@ -371,21 +373,21 @@ where
             .persist_post_provider_operation(operation, "persist_success_checkpoint")
             .await?;
         if let Err(error) = self
-            .merge_hidden_transcript_with_retry(
+            .merge_provider_transcript_with_retry(
                 user_id,
                 workout_id,
                 &operation,
-                "persist_hidden_transcript",
+                "persist_provider_transcript",
             )
             .await
         {
             let llm_error = crate::domain::llm::LlmError::Internal(format!(
-                "failed to persist hidden transcript after provider response: {error}"
+                "failed to persist provider transcript after provider response: {error}"
             ));
             let failed = operation.mark_failed(&llm_error, self.clock.now_epoch_seconds());
             self.persist_post_provider_operation(
                 failed,
-                "persist_failed_hidden_transcript_checkpoint",
+                "persist_failed_provider_transcript_checkpoint",
             )
             .await?;
             return Err(WorkoutSummaryError::Llm(llm_error));
@@ -399,11 +401,7 @@ where
         operation: &CoachReplyOperation,
         llm_response: &crate::domain::llm::LlmChatResponse,
     ) -> Result<String, WorkoutSummaryError> {
-        let Some(coach_content) = llm_response
-            .assistant_text()
-            .map(str::trim)
-            .filter(|content| !content.is_empty())
-        else {
+        let Some(coach_content) = final_assistant_text(llm_response) else {
             let error = crate::domain::llm::LlmError::InvalidResponse(
                 "assistant reply missing final text message".to_string(),
             );
@@ -413,7 +411,7 @@ where
             return Err(WorkoutSummaryError::Llm(error));
         };
 
-        Ok(coach_content.to_string())
+        Ok(coach_content)
     }
 
     async fn append_coach_reply_message(

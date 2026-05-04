@@ -1,3 +1,4 @@
+use crate::domain::llm::provider_transcript_from_legacy_response;
 use crate::domain::workout_summary::{
     CoachReplyOperation, CoachReplyOperationFailureKind, CoachReplyOperationStatus,
     WorkoutSummaryError,
@@ -75,7 +76,7 @@ pub(super) fn map_operation_to_document(
         provider_cache_id: operation.provider_cache_id.clone(),
         token_usage: operation.token_usage.clone(),
         cache_usage: operation.cache_usage.clone(),
-        hidden_transcript: operation.hidden_transcript.clone(),
+        provider_transcript: operation.provider_transcript.clone(),
         response_message: None,
         finish_reason: operation.finish_reason.clone(),
         public_tool_call_ids: operation.public_tool_call_ids.clone(),
@@ -146,15 +147,10 @@ pub(super) fn map_document_to_operation(
         provider_cache_id: document.provider_cache_id,
         token_usage: document.token_usage,
         cache_usage: document.cache_usage,
-        hidden_transcript: if document.hidden_transcript.is_empty() {
-            document
-                .response_message
-                .map(crate::domain::llm::LlmChatMessage::assistant)
-                .into_iter()
-                .collect()
-        } else {
-            document.hidden_transcript
-        },
+        provider_transcript: provider_transcript_from_legacy_response(
+            document.provider_transcript,
+            document.response_message,
+        ),
         finish_reason: document.finish_reason,
         public_tool_call_ids: document.public_tool_call_ids,
         error_message: document.error_message,
@@ -196,7 +192,7 @@ mod tests {
     use crate::domain::workout_summary::CoachReplyOperationStatus;
 
     #[test]
-    fn map_document_to_operation_reuses_legacy_response_message_when_hidden_transcript_missing() {
+    fn map_document_to_operation_reuses_legacy_response_message_when_provider_transcript_missing() {
         let operation = map_document_to_operation(CoachReplyOperationDocument {
             user_id: "user-1".to_string(),
             workout_id: "workout-1".to_string(),
@@ -211,7 +207,7 @@ mod tests {
             provider_cache_id: None,
             token_usage: None,
             cache_usage: None,
-            hidden_transcript: Vec::new(),
+            provider_transcript: Vec::new(),
             response_message: Some("Legacy checkpoint".to_string()),
             finish_reason: None,
             public_tool_call_ids: Vec::new(),
@@ -230,7 +226,7 @@ mod tests {
 
         assert_eq!(operation.status, CoachReplyOperationStatus::Pending);
         assert_eq!(
-            operation.hidden_transcript,
+            operation.provider_transcript,
             vec![LlmChatMessage::assistant("Legacy checkpoint")]
         );
     }

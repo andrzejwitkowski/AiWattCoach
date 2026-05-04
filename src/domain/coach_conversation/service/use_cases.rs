@@ -131,7 +131,7 @@ where
                 provider_cache_id: llm_response.cache.provider_cache_id.clone(),
                 token_usage: llm_response.usage.clone(),
                 cache_usage: llm_response.cache.clone(),
-                hidden_transcript: vec![llm_response.message.clone()],
+                provider_transcript: vec![llm_response.message.clone()],
                 finish_reason: llm_response.finish_reason.clone(),
                 updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
             });
@@ -140,20 +140,20 @@ where
             .await?;
 
         if let Err(error) = self
-            .merge_hidden_transcript_with_retry(
+            .merge_provider_transcript_with_retry(
                 conversation,
                 &operation,
-                "persist_hidden_transcript",
+                "persist_provider_transcript",
             )
             .await
         {
             let llm_error = LlmError::Internal(format!(
-                "failed to persist hidden transcript after provider response: {error}"
+                "failed to persist provider transcript after provider response: {error}"
             ));
             let failed = operation.mark_failed(&llm_error, self.clock.now_epoch_seconds());
             self.persist_post_provider_operation(
                 failed,
-                "persist_failed_hidden_transcript_checkpoint",
+                "persist_failed_provider_transcript_checkpoint",
             )
             .await?;
             return Err(CoachConversationError::Llm(llm_error));

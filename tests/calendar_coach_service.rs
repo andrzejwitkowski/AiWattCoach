@@ -206,11 +206,11 @@ impl CoachConversationRepository for InMemoryConversationRepository {
         })
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         user_id: &str,
         conversation_id: &str,
-        hidden_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        provider_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
         expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> aiwattcoach::domain::coach_conversation::BoxFuture<Result<(), CoachConversationError>>
@@ -232,16 +232,16 @@ impl CoachConversationRepository for InMemoryConversationRepository {
             if *conflicts_remaining > 0 {
                 *conflicts_remaining -= 1;
                 existing
-                    .hidden_transcript
+                    .provider_transcript
                     .push(LlmChatMessage::assistant("Concurrent calendar update"));
                 existing.updated_at_epoch_seconds += 1;
             }
             if existing.updated_at_epoch_seconds != expected_updated_at_epoch_seconds {
                 return Err(CoachConversationError::Repository(
-                    "hidden transcript update lost compare-and-set race".to_string(),
+                    "provider transcript update lost compare-and-set race".to_string(),
                 ));
             }
-            existing.hidden_transcript = hidden_transcript;
+            existing.provider_transcript = provider_transcript;
             existing.updated_at_epoch_seconds = updated_at_epoch_seconds;
             Ok(())
         })
@@ -748,7 +748,7 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
             surface: aiwattcoach::domain::coach_conversation::CoachConversationSurface::Calendar,
             status: CoachConversationStatus::Active,
             focus: aiwattcoach::domain::coach_conversation::CoachConversationFocus::Overview,
-            hidden_transcript: vec![
+            provider_transcript: vec![
                 LlmChatMessage::assistant_with_tool_calls(
                     "Coach reply",
                     vec![LlmToolCall {
@@ -860,7 +860,7 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
             surface: aiwattcoach::domain::coach_conversation::CoachConversationSurface::Calendar,
             status: CoachConversationStatus::Active,
             focus: aiwattcoach::domain::coach_conversation::CoachConversationFocus::Overview,
-            hidden_transcript: vec![
+            provider_transcript: vec![
                 LlmChatMessage::assistant_with_tool_calls(
                     "First answer\n",
                     vec![LlmToolCall {
@@ -1009,7 +1009,7 @@ async fn calendar_coach_marks_tool_only_recovery_as_failed() {
                 provider_cache_id: None,
                 token_usage: LlmTokenUsage::default(),
                 cache_usage: LlmCacheUsage::default(),
-                hidden_transcript: vec![LlmChatMessage::assistant_with_tool_calls(
+                provider_transcript: vec![LlmChatMessage::assistant_with_tool_calls(
                     "",
                     vec![LlmToolCall {
                         id: "tool-1".to_string(),
@@ -1127,7 +1127,7 @@ async fn calendar_coach_marks_fresh_tool_only_response_as_failed() {
 }
 
 #[tokio::test]
-async fn calendar_coach_retries_hidden_transcript_write_after_compare_and_set_conflict() {
+async fn calendar_coach_retries_provider_transcript_write_after_compare_and_set_conflict() {
     let llm_chat_port = RecordingLlmChatPort::default();
     let conversations = InMemoryConversationRepository::default();
     let messages = InMemoryMessageRepository::default();
@@ -1151,7 +1151,7 @@ async fn calendar_coach_retries_hidden_transcript_write_after_compare_and_set_co
 
     {
         let mut guard = conversations.conversation.lock().unwrap();
-        guard.as_mut().unwrap().hidden_transcript = vec![LlmChatMessage::assistant("Turn 0")];
+        guard.as_mut().unwrap().provider_transcript = vec![LlmChatMessage::assistant("Turn 0")];
     }
     conversations.conflict_next_hidden_transcript_write();
 
@@ -1178,13 +1178,13 @@ async fn calendar_coach_retries_hidden_transcript_write_after_compare_and_set_co
         .await
         .unwrap()
         .unwrap();
-    let hidden_contents = stored
-        .hidden_transcript
+    let provider_contents = stored
+        .provider_transcript
         .iter()
         .map(|message| message.content.as_str())
         .collect::<Vec<_>>();
 
-    assert!(hidden_contents.contains(&"Turn 0"));
-    assert!(hidden_contents.contains(&"Concurrent calendar update"));
-    assert!(hidden_contents.contains(&"Coach reply"));
+    assert!(provider_contents.contains(&"Turn 0"));
+    assert!(provider_contents.contains(&"Concurrent calendar update"));
+    assert!(provider_contents.contains(&"Coach reply"));
 }

@@ -213,11 +213,11 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
         })
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         user_id: &str,
         workout_id: &str,
-        hidden_transcript: Vec<LlmChatMessage>,
+        provider_transcript: Vec<LlmChatMessage>,
         expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>> {
@@ -229,8 +229,8 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
 
             let mut set = updated_at_fields(updated_at_epoch_seconds)?;
             set.insert(
-                "hidden_transcript",
-                to_bson(&hidden_transcript)
+                "provider_transcript",
+                to_bson(&provider_transcript)
                     .map_err(|error| WorkoutSummaryError::Repository(error.to_string()))?,
             );
 
@@ -250,7 +250,7 @@ impl WorkoutSummaryRepository for MongoWorkoutSummaryRepository {
 
             if result.matched_count == 0 {
                 return Err(WorkoutSummaryError::Repository(
-                    "hidden transcript update lost compare-and-set race".to_string(),
+                    "provider transcript update lost compare-and-set race".to_string(),
                 ));
             }
 

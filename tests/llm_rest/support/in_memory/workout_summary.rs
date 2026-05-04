@@ -135,11 +135,11 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
         })
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         user_id: &str,
         workout_id: &str,
-        hidden_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
+        provider_transcript: Vec<aiwattcoach::domain::llm::LlmChatMessage>,
         expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> WorkoutBoxFuture<Result<(), WorkoutSummaryError>> {
@@ -152,10 +152,10 @@ impl WorkoutSummaryRepository for InMemoryWorkoutSummaryRepository {
             };
             if summary.updated_at_epoch_seconds != expected_updated_at_epoch_seconds {
                 return Err(WorkoutSummaryError::Repository(
-                    "hidden transcript update lost compare-and-set race".to_string(),
+                    "provider transcript update lost compare-and-set race".to_string(),
                 ));
             }
-            summary.hidden_transcript = hidden_transcript;
+            summary.provider_transcript = provider_transcript;
             summary.updated_at_epoch_seconds = updated_at_epoch_seconds;
             Ok(())
         })
@@ -297,7 +297,7 @@ pub(crate) fn sample_summary(workout_id: &str) -> WorkoutSummary {
         workout_id: workout_id.to_string(),
         rpe: Some(6),
         messages: Vec::new(),
-        hidden_transcript: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: None,
         workout_recap_provider: None,

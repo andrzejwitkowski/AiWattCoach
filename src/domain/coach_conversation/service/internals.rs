@@ -1,7 +1,11 @@
 use std::time::Duration;
 
 use crate::domain::{
-    llm::{LlmChatMessage, LlmChatResponse, LlmError, LlmMessageRole},
+    llm::{
+        last_nonempty_assistant_content, merge_provider_transcript_entries,
+        next_provider_transcript_updated_at_epoch_seconds, LlmChatMessage, LlmChatResponse,
+        LlmError, LlmMessageRole,
+    },
     settings::{SettingsError, UserSettings},
     workout_summary::PublicToolCall,
 };
@@ -13,7 +17,6 @@ use super::{
         CoachConversationReply, CoachConversationReplyOperation, CoachConversationStatus,
         CoachConversationSurface,
     },
-    transcript::merge_hidden_transcript_entries,
     SharedCoachConversationService, POST_PROVIDER_WRITE_ATTEMPTS,
 };
 
@@ -180,27 +183,27 @@ where
         .await
     }
 
-    async fn replace_hidden_transcript(
+    async fn replace_provider_transcript(
         &self,
         conversation: &CoachConversation,
-        hidden_transcript: Vec<LlmChatMessage>,
+        provider_transcript: Vec<LlmChatMessage>,
     ) -> Result<(), CoachConversationError> {
-        let updated_at_epoch_seconds = next_hidden_transcript_updated_at_epoch_seconds(
+        let updated_at_epoch_seconds = next_provider_transcript_updated_at_epoch_seconds(
             conversation.updated_at_epoch_seconds,
             self.clock.now_epoch_seconds(),
         );
         self.conversations
-            .replace_hidden_transcript(
+            .replace_provider_transcript(
                 &conversation.user_id,
                 &conversation.conversation_id,
-                hidden_transcript,
+                provider_transcript,
                 conversation.updated_at_epoch_seconds,
                 updated_at_epoch_seconds,
             )
             .await
     }
 
-    pub(super) async fn merge_hidden_transcript_with_retry(
+    pub(super) async fn merge_provider_transcript_with_retry(
         &self,
         conversation: &CoachConversation,
         operation: &CoachConversationReplyOperation,
@@ -217,12 +220,12 @@ where
                 )
                 .await?
                 .ok_or(CoachConversationError::NotFound)?;
-            let merged = merge_hidden_transcript_entries(
-                latest.hidden_transcript.clone(),
-                &operation.hidden_transcript,
+            let merged = merge_provider_transcript_entries(
+                latest.provider_transcript.clone(),
+                &operation.provider_transcript,
             );
 
-            match self.replace_hidden_transcript(&latest, merged).await {
+            match self.replace_provider_transcript(&latest, merged).await {
                 Ok(()) => {
                     if attempt > 1 {
                         tracing::info!(
@@ -231,7 +234,7 @@ where
                             attempt,
                             max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
                             write_label,
-                            "recovered hidden transcript write after retry"
+                            "recovered provider transcript write after retry"
                         );
                     }
                     return Ok(());
@@ -248,7 +251,7 @@ where
                         max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
                         write_label,
                         error = %error,
-                        "retrying hidden transcript write after repository error"
+                        "retrying provider transcript write after repository error"
                     );
                     last_error = Some(error);
                     tokio::time::sleep(Duration::from_millis(25 * attempt as u64)).await;
@@ -259,7 +262,7 @@ where
 
         Err(last_error.unwrap_or_else(|| {
             CoachConversationError::Repository(
-                "hidden transcript write failed without error".to_string(),
+                "provider transcript write failed without error".to_string(),
             )
         }))
     }
@@ -473,11 +476,11 @@ where
             return Ok(Some(reply));
         }
 
-        if operation.hidden_transcript.is_empty() {
+        if operation.provider_transcript.is_empty() {
             return Ok(None);
         }
 
-        self.replay_persisted_reply_from_hidden_transcript(conversation, operation)
+        self.replay_persisted_reply_from_provider_transcript(conversation, operation)
             .await
     }
 
@@ -523,26 +526,26 @@ where
         }))
     }
 
-    async fn replay_persisted_reply_from_hidden_transcript(
+    async fn replay_persisted_reply_from_provider_transcript(
         &self,
         conversation: &CoachConversation,
         operation: &CoachConversationReplyOperation,
     ) -> Result<Option<CoachConversationReply>, CoachConversationError> {
         if let Err(error) = self
-            .merge_hidden_transcript_with_retry(
+            .merge_provider_transcript_with_retry(
                 conversation,
                 operation,
-                "recover_hidden_transcript",
+                "recover_provider_transcript",
             )
             .await
         {
             let llm_error = LlmError::Internal(format!(
-                "failed to persist hidden transcript during recovery: {error}"
+                "failed to persist provider transcript during recovery: {error}"
             ));
             let failed = operation.mark_failed(&llm_error, self.clock.now_epoch_seconds());
             self.persist_post_provider_operation(
                 failed,
-                "persist_failed_hidden_transcript_recovery",
+                "persist_failed_provider_transcript_recovery",
             )
             .await?;
             return Err(CoachConversationError::Llm(llm_error));
@@ -597,7 +600,7 @@ where
         conversation: &CoachConversation,
         operation: &CoachConversationReplyOperation,
     ) -> Result<(), CoachConversationError> {
-        for transcript_message in &operation.hidden_transcript {
+        for transcript_message in &operation.provider_transcript {
             if transcript_message.role != LlmMessageRole::Assistant {
                 continue;
             }
@@ -641,28 +644,5 @@ fn map_settings_error(error: SettingsError) -> CoachConversationError {
 }
 
 fn recovered_assistant_reply_text(operation: &CoachConversationReplyOperation) -> Option<String> {
-    operation
-        .hidden_transcript
-        .iter()
-        .rev()
-        .find(|message| message.role == LlmMessageRole::Assistant)
-        .map(|message| message.content.clone())
-        .filter(|content| !content.trim().is_empty())
-}
-
-fn next_hidden_transcript_updated_at_epoch_seconds(
-    expected_updated_at_epoch_seconds: i64,
-    now_epoch_seconds: i64,
-) -> i64 {
-    now_epoch_seconds.max(expected_updated_at_epoch_seconds.saturating_add(1))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::next_hidden_transcript_updated_at_epoch_seconds;
-
-    #[test]
-    fn next_hidden_transcript_updated_at_epoch_seconds_advances_when_clock_stalls() {
-        assert_eq!(next_hidden_transcript_updated_at_epoch_seconds(42, 42), 43);
-    }
+    last_nonempty_assistant_content(&operation.provider_transcript)
 }

@@ -519,7 +519,7 @@ mod shared {
             surface: CoachConversationSurface::Calendar,
             status: CoachConversationStatus::Active,
             focus: CoachConversationFocus::Overview,
-            hidden_transcript: Vec::new(),
+            provider_transcript: Vec::new(),
             created_at_epoch_seconds: 1_700_000_000,
             updated_at_epoch_seconds: 1_700_000_000,
         }

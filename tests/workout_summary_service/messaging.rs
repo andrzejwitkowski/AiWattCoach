@@ -148,7 +148,7 @@ async fn send_message_persists_user_message_before_coach_reply() {
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
-            "replace_hidden_transcript:workout-1".to_string(),
+            "replace_provider_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -205,7 +205,7 @@ async fn generate_coach_reply_persists_pending_operation_before_coach_message() 
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
-            "replace_hidden_transcript:workout-1".to_string(),
+            "replace_provider_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -366,7 +366,7 @@ async fn generate_coach_reply_targets_the_persisted_message_id_when_contents_rep
         vec![
             "append_message:workout-1:user".to_string(),
             "append_message:workout-1:user".to_string(),
-            "replace_hidden_transcript:workout-1".to_string(),
+            "replace_provider_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -628,7 +628,7 @@ async fn generate_coach_reply_marks_tool_only_recovery_as_failed() {
             provider_cache_id: None,
             token_usage: LlmTokenUsage::default(),
             cache_usage: LlmCacheUsage::default(),
-            hidden_transcript: vec![
+            provider_transcript: vec![
                 aiwattcoach::domain::llm::LlmChatMessage::assistant_with_tool_calls(
                     "",
                     vec![aiwattcoach::domain::llm::LlmToolCall {
@@ -779,7 +779,7 @@ async fn generate_coach_reply_retries_after_failed_operation() {
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
-            "replace_hidden_transcript:workout-1".to_string(),
+            "replace_provider_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -856,7 +856,7 @@ async fn generate_coach_reply_reuses_completed_operation_without_duplicate_coach
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
-            "replace_hidden_transcript:workout-1".to_string(),
+            "replace_provider_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -947,7 +947,7 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
             cache_expires_at_epoch_seconds: Some(1_700_010_000),
             cache_discount: Some("0.0012".to_string()),
         },
-        hidden_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+        provider_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
             "Recovered coach reply",
         )],
         finish_reason: None,
@@ -1021,7 +1021,7 @@ async fn generate_coach_reply_replays_persisted_response_message_after_partial_c
         provider_cache_id: None,
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
-        hidden_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+        provider_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
             "Persisted before crash",
         )],
         finish_reason: None,
@@ -1041,7 +1041,7 @@ async fn generate_coach_reply_replays_persisted_response_message_after_partial_c
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
-            "replace_hidden_transcript:workout-1".to_string(),
+            "replace_provider_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -1130,7 +1130,7 @@ async fn generate_coach_reply_retries_completion_write_when_replaying_persisted_
         provider_cache_id: None,
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
-        hidden_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+        provider_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
             "Persisted before crash",
         )],
         finish_reason: None,
@@ -1151,7 +1151,7 @@ async fn generate_coach_reply_retries_completion_write_when_replaying_persisted_
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
-            "replace_hidden_transcript:workout-1".to_string(),
+            "replace_provider_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -1193,7 +1193,7 @@ async fn generate_coach_reply_retries_completion_write_after_coach_message_appen
         repository.calls(),
         vec![
             "append_message:workout-1:user".to_string(),
-            "replace_hidden_transcript:workout-1".to_string(),
+            "replace_provider_transcript:workout-1".to_string(),
             "append_message:workout-1:coach".to_string(),
         ]
     );
@@ -1314,7 +1314,7 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
         provider_cache_id: None,
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
-        hidden_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+        provider_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
             "Recovered even though summary was saved",
         )],
         finish_reason: None,
@@ -1336,9 +1336,9 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
 }
 
 #[tokio::test]
-async fn generate_coach_reply_accumulates_hidden_transcript_across_turns() {
+async fn generate_coach_reply_accumulates_provider_transcript_across_turns() {
     let mut summary = existing_summary();
-    summary.hidden_transcript = vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+    summary.provider_transcript = vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
         "Turn 0",
     )];
     summary.messages = vec![
@@ -1377,7 +1377,7 @@ async fn generate_coach_reply_accumulates_hidden_transcript_across_turns() {
         .await
         .unwrap()
         .unwrap();
-    assert!(round1.hidden_transcript.len() >= 2);
+    assert!(round1.provider_transcript.len() >= 2);
     let second = service
         .append_user_message("user-1", "workout-1", "Turn 2 question".to_string())
         .await
@@ -1392,13 +1392,13 @@ async fn generate_coach_reply_accumulates_hidden_transcript_across_turns() {
         .await
         .unwrap()
         .unwrap();
-    assert!(round2.hidden_transcript.len() >= 3);
+    assert!(round2.provider_transcript.len() >= 3);
 }
 
 #[tokio::test]
-async fn generate_coach_reply_retries_hidden_transcript_write_after_compare_and_set_conflict() {
+async fn generate_coach_reply_retries_provider_transcript_write_after_compare_and_set_conflict() {
     let mut summary = existing_summary();
-    summary.hidden_transcript = vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
+    summary.provider_transcript = vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
         "Turn 0",
     )];
 
@@ -1422,15 +1422,15 @@ async fn generate_coach_reply_retries_hidden_transcript_write_after_compare_and_
         .await
         .unwrap()
         .unwrap();
-    let hidden_contents = stored
-        .hidden_transcript
+    let provider_contents = stored
+        .provider_transcript
         .iter()
         .map(|message| message.content.as_str())
         .collect::<Vec<_>>();
 
-    assert!(hidden_contents.contains(&"Turn 0"));
-    assert!(hidden_contents.contains(&"Concurrent summary update"));
-    assert!(hidden_contents
+    assert!(provider_contents.contains(&"Turn 0"));
+    assert!(provider_contents.contains(&"Concurrent summary update"));
+    assert!(provider_contents
         .iter()
         .any(|content| content.contains("Turn 1 question")));
 }

@@ -25,7 +25,7 @@ struct CoachConversationDocument {
     status: String,
     focus: String,
     #[serde(default)]
-    hidden_transcript: Vec<LlmChatMessage>,
+    provider_transcript: Vec<LlmChatMessage>,
     created_at_epoch_seconds: i64,
     #[serde(default)]
     created_at: Option<DateTime>,
@@ -209,11 +209,11 @@ impl CoachConversationRepository for MongoCoachConversationRepository {
         })
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         user_id: &str,
         conversation_id: &str,
-        hidden_transcript: Vec<LlmChatMessage>,
+        provider_transcript: Vec<LlmChatMessage>,
         expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), CoachConversationError>> {
@@ -230,7 +230,7 @@ impl CoachConversationRepository for MongoCoachConversationRepository {
                     },
                     doc! {
                         "$set": {
-                            "hidden_transcript": mongodb::bson::to_bson(&hidden_transcript)
+                            "provider_transcript": mongodb::bson::to_bson(&provider_transcript)
                                 .map_err(|error| CoachConversationError::Repository(error.to_string()))?,
                             "updated_at_epoch_seconds": updated_at_epoch_seconds,
                             "updated_at": optional_epoch_seconds_to_bson_datetime(
@@ -246,7 +246,7 @@ impl CoachConversationRepository for MongoCoachConversationRepository {
 
             if result.matched_count == 0 {
                 return Err(CoachConversationError::Repository(
-                    "hidden transcript update lost compare-and-set race".to_string(),
+                    "provider transcript update lost compare-and-set race".to_string(),
                 ));
             }
 
@@ -262,7 +262,7 @@ fn map_domain_to_document(conversation: &CoachConversation) -> CoachConversation
         surface: surface_as_str(&conversation.surface).to_string(),
         status: status_as_str(&conversation.status).to_string(),
         focus: focus_as_str(&conversation.focus).to_string(),
-        hidden_transcript: conversation.hidden_transcript.clone(),
+        provider_transcript: conversation.provider_transcript.clone(),
         created_at_epoch_seconds: conversation.created_at_epoch_seconds,
         created_at: optional_epoch_seconds_to_bson_datetime(
             Some(conversation.created_at_epoch_seconds),
@@ -287,7 +287,7 @@ fn map_document_to_domain(
         surface: map_surface(document.surface)?,
         status: map_status(document.status)?,
         focus: map_focus(document.focus)?,
-        hidden_transcript: document.hidden_transcript,
+        provider_transcript: document.provider_transcript,
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             document.created_at,
             Some(document.created_at_epoch_seconds),

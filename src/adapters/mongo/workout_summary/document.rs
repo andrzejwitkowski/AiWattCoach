@@ -14,7 +14,7 @@ pub(super) struct WorkoutSummaryDocument {
     pub(super) rpe: Option<i32>,
     pub(super) messages: Vec<ConversationMessageDocument>,
     #[serde(default)]
-    pub(super) hidden_transcript: Vec<LlmChatMessage>,
+    pub(super) provider_transcript: Vec<LlmChatMessage>,
     pub(super) saved_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     pub(super) saved_at: Option<DateTime>,

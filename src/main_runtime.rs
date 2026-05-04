@@ -636,7 +636,7 @@ mod tests {
                             created_at_epoch_seconds: 3,
                         },
                     ],
-                    hidden_transcript: vec![LlmChatMessage::assistant("You faded late.")],
+                    provider_transcript: vec![LlmChatMessage::assistant("You faded late.")],
                     saved_at_epoch_seconds: None,
                     workout_recap_text: None,
                     workout_recap_provider: None,

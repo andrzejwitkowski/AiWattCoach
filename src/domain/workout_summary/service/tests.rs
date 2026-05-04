@@ -154,11 +154,11 @@ impl WorkoutSummaryRepository for StubSummaryRepository {
         Box::pin(async { Ok(()) })
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         _user_id: &str,
         _workout_id: &str,
-        _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+        _provider_transcript: Vec<crate::domain::llm::LlmChatMessage>,
         _expected_updated_at_epoch_seconds: i64,
         _updated_at_epoch_seconds: i64,
     ) -> super::BoxFuture<Result<(), WorkoutSummaryError>> {

@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | user | provider transcript rename completion and shared helper extraction
+
+- Problem: the branch was left in a half-renamed state after moving `hidden_transcript` toward `provider_transcript`. Core domain models had already switched field names, but several service paths, ports, Mongo adapters, and test repositories still used the old names or local duplicate transcript helpers, so the tree no longer compiled and the transcript logic stayed duplicated across workout-summary, calendar coach, and LLM helpers.
+- Fix: completed the internal rename from `hidden_transcript` to `provider_transcript` across the Rust domain, adapters, and tests; moved shared transcript behaviors into `src/domain/llm/transcript.rs`; updated both workout-summary and calendar coach flows to reuse the shared merge, recovery, rebuild, legacy-fallback, final-assistant-text, and monotonic-version helpers; and aligned repository method names plus focused test expectations with the new provider-transcript surface.
+- Prevention: when a terminology refactor crosses domain models, ports, adapters, and tests, finish the rename end to end in one pass before leaving the branch. If multiple workflows share transcript merge/rebuild/recovery logic, extract the helper once and point both call paths at it instead of carrying parallel copies with different names.
+
 ### 2026-05-04 | user | split spaghetti Mongo workout summary adapter
 
 - Problem: `src/adapters/mongo/workout_summary.rs` had turned into a mixed-responsibility adapter that combined Mongo document DTOs, domain mapping, alias/legacy lookup logic, repository mutations, and module-scoped tests in one large file. Even though behavior was still correct, that shape was review-hostile spaghetti and made further changes risky.

@@ -5,7 +5,8 @@ use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
 use crate::domain::{
     identity::Clock,
     llm::{
-        approximate_token_budget_for_model, hash_text, BoxFuture, LlmChatMessage, LlmChatPort,
+        approximate_token_budget_for_model, hash_text,
+        rebuild_conversation_with_provider_transcript, BoxFuture, LlmChatMessage, LlmChatPort,
         LlmChatRequest, LlmChatResponse, LlmContextCache, LlmContextCacheRepository, LlmError,
         LlmMessageRole, LlmProvider, UserLlmConfigProvider,
     },
@@ -95,7 +96,7 @@ where
             let system_prompt = workout_coach_system_prompt();
             let conversation = build_conversation(
                 summary.messages.as_slice(),
-                &summary.hidden_transcript,
+                &summary.provider_transcript,
                 &user_message,
             );
             let estimated_request_tokens = approximate_token_usage(&stable_context)
@@ -280,7 +281,7 @@ fn workout_coach_system_prompt() -> String {
 
 fn build_conversation(
     messages: &[crate::domain::workout_summary::ConversationMessage],
-    hidden_transcript: &[LlmChatMessage],
+    provider_transcript: &[LlmChatMessage],
     user_message: &str,
 ) -> Vec<LlmChatMessage> {
     let conversation = messages
@@ -302,7 +303,8 @@ fn build_conversation(
         })
         .collect::<Vec<_>>();
 
-    let mut rebuilt = rebuild_conversation_with_hidden_transcript(conversation, hidden_transcript);
+    let mut rebuilt =
+        rebuild_conversation_with_provider_transcript(conversation, provider_transcript);
 
     if let Some(last) = rebuilt.last_mut() {
         if last.role == LlmMessageRole::User {
@@ -314,58 +316,6 @@ fn build_conversation(
     rebuilt.push(LlmChatMessage::user(user_message));
 
     rebuilt
-}
-
-fn rebuild_conversation_with_hidden_transcript(
-    conversation: Vec<LlmChatMessage>,
-    hidden_transcript: &[LlmChatMessage],
-) -> Vec<LlmChatMessage> {
-    let hidden_assistants = hidden_transcript
-        .iter()
-        .filter(|message| message.role == LlmMessageRole::Assistant)
-        .cloned()
-        .collect::<Vec<_>>();
-    let mut hidden_assistant_index = 0;
-    let mut rebuilt = Vec::with_capacity(conversation.len() + hidden_transcript.len());
-
-    for message in conversation {
-        if message.role != LlmMessageRole::Assistant {
-            rebuilt.push(message);
-            continue;
-        }
-
-        let assistant = hidden_assistants
-            .get(hidden_assistant_index)
-            .cloned()
-            .unwrap_or(message);
-        hidden_assistant_index += 1;
-        rebuilt.push(assistant.clone());
-        rebuilt.extend(hidden_tool_messages_for_assistant(
-            hidden_transcript,
-            &assistant,
-        ));
-    }
-
-    rebuilt
-}
-
-fn hidden_tool_messages_for_assistant(
-    hidden_transcript: &[LlmChatMessage],
-    assistant: &LlmChatMessage,
-) -> Vec<LlmChatMessage> {
-    assistant
-        .tool_calls
-        .iter()
-        .filter_map(|tool_call| {
-            hidden_transcript
-                .iter()
-                .find(|message| {
-                    message.role == LlmMessageRole::Tool
-                        && message.tool_call_id.as_deref() == Some(tool_call.id.as_str())
-                })
-                .cloned()
-        })
-        .collect()
 }
 
 #[cfg(test)]

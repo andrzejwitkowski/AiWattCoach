@@ -14,7 +14,9 @@ use crate::domain::coach_conversation::{
     CoachConversationReplyOperation, CoachConversationReplyOperationFailureKind,
     CoachConversationReplyOperationRepository, CoachConversationReplyOperationStatus,
 };
-use crate::domain::llm::{LlmChatMessage, LlmFinishReason};
+use crate::domain::llm::{
+    provider_transcript_from_legacy_response, LlmChatMessage, LlmFinishReason,
+};
 
 #[derive(Clone)]
 pub struct MongoCoachConversationReplyOperationRepository {
@@ -37,7 +39,7 @@ struct CoachConversationReplyOperationDocument {
     token_usage: Option<crate::domain::llm::LlmTokenUsage>,
     cache_usage: Option<crate::domain::llm::LlmCacheUsage>,
     #[serde(default)]
-    hidden_transcript: Vec<LlmChatMessage>,
+    provider_transcript: Vec<LlmChatMessage>,
     #[serde(default)]
     response_message: Option<String>,
     #[serde(default)]
@@ -264,7 +266,7 @@ fn map_operation_to_document(
         provider_cache_id: operation.provider_cache_id.clone(),
         token_usage: operation.token_usage.clone(),
         cache_usage: operation.cache_usage.clone(),
-        hidden_transcript: operation.hidden_transcript.clone(),
+        provider_transcript: operation.provider_transcript.clone(),
         response_message: None,
         finish_reason: operation.finish_reason.clone(),
         public_tool_call_ids: operation.public_tool_call_ids.clone(),
@@ -323,15 +325,10 @@ fn map_document_to_operation(
         provider_cache_id: document.provider_cache_id,
         token_usage: document.token_usage,
         cache_usage: document.cache_usage,
-        hidden_transcript: if document.hidden_transcript.is_empty() {
-            document
-                .response_message
-                .map(LlmChatMessage::assistant)
-                .into_iter()
-                .collect()
-        } else {
-            document.hidden_transcript
-        },
+        provider_transcript: provider_transcript_from_legacy_response(
+            document.provider_transcript,
+            document.response_message,
+        ),
         finish_reason: document.finish_reason,
         public_tool_call_ids: document.public_tool_call_ids,
         error_message: document.error_message,
@@ -446,7 +443,7 @@ mod tests {
     use crate::domain::llm::{LlmChatMessage, LlmToolCall};
 
     #[test]
-    fn map_document_to_operation_reuses_legacy_response_message_when_hidden_transcript_missing() {
+    fn map_document_to_operation_reuses_legacy_response_message_when_provider_transcript_missing() {
         let operation = map_document_to_operation(CoachConversationReplyOperationDocument {
             user_id: "user-1".to_string(),
             conversation_id: "conversation-1".to_string(),
@@ -461,7 +458,7 @@ mod tests {
             provider_cache_id: None,
             token_usage: None,
             cache_usage: None,
-            hidden_transcript: Vec::new(),
+            provider_transcript: Vec::new(),
             response_message: Some("Legacy conversation checkpoint".to_string()),
             finish_reason: None,
             public_tool_call_ids: Vec::new(),
@@ -483,13 +480,13 @@ mod tests {
             CoachConversationReplyOperationStatus::Pending
         );
         assert_eq!(
-            operation.hidden_transcript,
+            operation.provider_transcript,
             vec![LlmChatMessage::assistant("Legacy conversation checkpoint")]
         );
     }
 
     #[test]
-    fn map_document_to_operation_preserves_full_tool_call_hidden_transcript() {
+    fn map_document_to_operation_preserves_full_tool_call_provider_transcript() {
         let operation = map_document_to_operation(CoachConversationReplyOperationDocument {
             user_id: "user-1".to_string(),
             conversation_id: "conversation-1".to_string(),
@@ -504,7 +501,7 @@ mod tests {
             provider_cache_id: None,
             token_usage: None,
             cache_usage: None,
-            hidden_transcript: vec![
+            provider_transcript: vec![
                 LlmChatMessage::assistant_with_tool_calls(
                     "",
                     vec![LlmToolCall {
@@ -536,7 +533,7 @@ mod tests {
             CoachConversationReplyOperationStatus::Pending
         );
         assert_eq!(
-            operation.hidden_transcript,
+            operation.provider_transcript,
             vec![
                 LlmChatMessage::assistant_with_tool_calls(
                     "",

@@ -90,7 +90,7 @@ where
         );
         let llm_conversation = build_calendar_conversation(
             messages,
-            &conversation.hidden_transcript,
+            &conversation.provider_transcript,
             &user_message.id,
         );
 

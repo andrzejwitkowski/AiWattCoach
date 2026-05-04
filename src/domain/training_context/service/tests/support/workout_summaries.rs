@@ -25,7 +25,7 @@ fn summary_for_workout_id(workout_id: &str) -> WorkoutSummary {
             tool_call: None,
             created_at_epoch_seconds: 1,
         }],
-        hidden_transcript: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: Some("Strong sweet spot execution with steady control".to_string()),
         workout_recap_provider: Some("openrouter".to_string()),
@@ -43,7 +43,7 @@ fn event_id_only_summary(workout_id: &str) -> WorkoutSummary {
         workout_id: workout_id.to_string(),
         rpe: Some(8),
         messages: Vec::new(),
-        hidden_transcript: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: Some("Matched legacy event summary".to_string()),
         workout_recap_provider: Some("openrouter".to_string()),
@@ -61,7 +61,7 @@ fn alias_backed_summary(requested_workout_id: &str) -> WorkoutSummary {
         workout_id: requested_workout_id.to_string(),
         rpe: Some(9),
         messages: Vec::new(),
-        hidden_transcript: Vec::new(),
+        provider_transcript: Vec::new(),
         saved_at_epoch_seconds: None,
         workout_recap_text: Some("Recovered alias-backed recap".to_string()),
         workout_recap_provider: Some("openrouter".to_string()),
@@ -132,11 +132,11 @@ impl WorkoutSummaryRepository for TestWorkoutSummaryRepository {
         unreachable!()
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         _user_id: &str,
         _workout_id: &str,
-        _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+        _provider_transcript: Vec<crate::domain::llm::LlmChatMessage>,
         _expected_updated_at_epoch_seconds: i64,
         _updated_at_epoch_seconds: i64,
     ) -> WorkoutSummaryBoxFuture<Result<(), WorkoutSummaryError>> {
@@ -223,11 +223,11 @@ impl WorkoutSummaryRepository for EventIdOnlySummaryRepository {
         unreachable!()
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         _user_id: &str,
         _workout_id: &str,
-        _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+        _provider_transcript: Vec<crate::domain::llm::LlmChatMessage>,
         _expected_updated_at_epoch_seconds: i64,
         _updated_at_epoch_seconds: i64,
     ) -> WorkoutSummaryBoxFuture<Result<(), WorkoutSummaryError>> {
@@ -314,11 +314,11 @@ impl WorkoutSummaryRepository for AliasSummaryRepository {
         unreachable!()
     }
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         _user_id: &str,
         _workout_id: &str,
-        _hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
+        _provider_transcript: Vec<crate::domain::llm::LlmChatMessage>,
         _expected_updated_at_epoch_seconds: i64,
         _updated_at_epoch_seconds: i64,
     ) -> WorkoutSummaryBoxFuture<Result<(), WorkoutSummaryError>> {

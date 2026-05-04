@@ -50,11 +50,11 @@ pub trait WorkoutSummaryRepository: Send + Sync + 'static {
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>>;
 
-    fn replace_hidden_transcript(
+    fn replace_provider_transcript(
         &self,
         user_id: &str,
         workout_id: &str,
-        hidden_transcript: Vec<LlmChatMessage>,
+        provider_transcript: Vec<LlmChatMessage>,
         expected_updated_at_epoch_seconds: i64,
         updated_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<(), WorkoutSummaryError>>;
