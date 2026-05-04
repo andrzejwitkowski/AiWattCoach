@@ -200,17 +200,16 @@ pub fn tool_definitions_for_scope(
         | ToolScope::CalendarCoachChat
         | ToolScope::TrainingPlanGeneration => vec![LlmToolDefinition {
             name: SIMULATE_FORWARD_LOAD_TOOL_NAME.to_string(),
-            description: "Simulate 14 days of forward training load from today using dated workout text and return per-day CTL ATL TSB and planned load estimates.".to_string(),
+            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
                     "dated_workout_text": {
                         "type": "string",
-                        "description": "Raw dated workout text in the existing YYYY-MM-DD plus workout-builder format."
+                        "description": "Optional. Dated workout text for days you want to override or add, in YYYY-MM-DD plus workout-builder format. If omitted, the simulation uses only existing scheduled workouts, projections, and events from context."
                     }
-                },
-                "required": ["dated_workout_text"]
+                }
             })
             .to_string(),
         }],

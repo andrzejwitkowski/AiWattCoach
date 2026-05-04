@@ -4,7 +4,9 @@ use serde_json::json;
 
 use crate::domain::{
     intervals::{parse_planned_workout_days, parse_workout_doc, serialize_planned_workout},
-    training_context::{FuturePlannedEventContext, ProjectedDayContext, TrainingContext},
+    training_context::{
+        FuturePlannedEventContext, ProjectedDayContext, TrainingContext, UpcomingDayContext,
+    },
 };
 
 use super::SIMULATE_FORWARD_LOAD_TOOL_NAME;
@@ -13,7 +15,10 @@ type PlannedLoadEstimate = (f64, Option<i32>, String, bool, Option<String>);
 
 #[derive(Deserialize)]
 pub(super) struct SimulateForwardLoadArgs {
-    dated_workout_text: String,
+    /// Dated workout text for days the LLM wants to override or add.
+    /// If omitted, the simulation uses only context sources
+    /// (upcoming days, projected days, future events).
+    dated_workout_text: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -58,15 +63,12 @@ pub(super) fn simulate_forward_load(
         }
     };
 
-    let parsed_days = match parse_planned_workout_days(&args.dated_workout_text) {
-        Ok(parsed) => parsed,
-        Err(error) => {
-            return json!({
-                "error": format!("failed to parse dated workout text: {error}")
-            })
-            .to_string();
-        }
-    };
+    let input_days = args
+        .dated_workout_text
+        .as_deref()
+        .and_then(|text| parse_planned_workout_days(text).ok())
+        .map(|parsed| parsed.days)
+        .unwrap_or_default();
 
     let Some(today) = parse_date(&context.today) else {
         return json!({
@@ -83,13 +85,24 @@ pub(super) fn simulate_forward_load(
         let date = today + Duration::days(offset);
         let date_key = format_date(date);
 
-        // Collect contributions from all sources and aggregate them.
-        let input = input_day_estimate(&parsed_days.days, &date_key, ftp_watts);
+        // Input from LLM takes highest priority — it is the plan being proposed.
+        let input = input_day_estimate(&input_days, &date_key, ftp_watts);
+
+        // For days the LLM did not explicitly provide, fall back to already
+        // scheduled workouts and projections.
+        let upcoming = upcoming_day_estimate(
+            &context.training_context.upcoming_days,
+            &date_key,
+            ftp_watts,
+        );
         let projected = projected_day_estimate(
             &context.training_context.projected_days,
             &date_key,
             ftp_watts,
         );
+
+        // Future events (races) are always additive — they exist independently
+        // of the training plan.
         let future = future_event_estimate(&context.training_context.future_events, &date_key);
 
         let mut total_tss = 0.0;
@@ -98,7 +111,18 @@ pub(super) fn simulate_forward_load(
         let mut is_rest_day = true;
         let mut rest_reason: Option<String> = None;
 
-        for estimate in [input, projected, future].into_iter().flatten() {
+        // If LLM provided an explicit day, it overrides upcoming/projected.
+        // Otherwise aggregate fallback sources.
+        let estimates: Vec<PlannedLoadEstimate> = if input.is_some() {
+            [input, future].into_iter().flatten().collect()
+        } else {
+            [upcoming, projected, future]
+                .into_iter()
+                .flatten()
+                .collect()
+        };
+
+        for estimate in estimates {
             let (tss, duration, source, rest, reason) = estimate;
             total_tss += tss;
             if let Some(d) = duration {
@@ -175,7 +199,8 @@ pub(super) fn preview_tool_arguments(tool_name: &str, arguments_json: &str) -> O
     match tool_name {
         SIMULATE_FORWARD_LOAD_TOOL_NAME => {
             let args: SimulateForwardLoadArgs = serde_json::from_str(arguments_json).ok()?;
-            let parsed = parse_planned_workout_days(&args.dated_workout_text).ok()?;
+            let text = args.dated_workout_text.as_deref()?;
+            let parsed = parse_planned_workout_days(text).ok()?;
             let first = parsed.days.first()?.date.clone();
             let last = parsed.days.last()?.date.clone();
             let count = parsed.days.len();
@@ -213,6 +238,53 @@ fn input_day_estimate(
             .unwrap_or(0.0),
         Some(parsed.summary.total_duration_seconds),
         "input".to_string(),
+        false,
+        None,
+    ))
+}
+
+/// Aggregate all already-scheduled workouts for an upcoming day.
+fn upcoming_day_estimate(
+    upcoming_days: &[UpcomingDayContext],
+    date: &str,
+    ftp_watts: Option<i32>,
+) -> Option<PlannedLoadEstimate> {
+    let upcoming = upcoming_days.iter().find(|day| day.date == date)?;
+
+    let mut total_tss = 0.0;
+    let mut total_duration: i32 = 0;
+    let mut has_any = false;
+
+    for workout in &upcoming.planned_workouts {
+        has_any = true;
+        if let Some(tss) = workout.estimated_training_stress_score {
+            total_tss += tss;
+        } else if let Some(raw) = workout.raw_workout_doc.as_deref() {
+            let parsed = parse_workout_doc(Some(raw), ftp_watts);
+            total_tss += parsed
+                .summary
+                .estimated_training_stress_score
+                .unwrap_or(0.0);
+        }
+        // Derive duration from raw_workout_doc if available.
+        if let Some(raw) = workout.raw_workout_doc.as_deref() {
+            let parsed = parse_workout_doc(Some(raw), ftp_watts);
+            total_duration += parsed.summary.total_duration_seconds;
+        }
+    }
+
+    if !has_any {
+        return None;
+    }
+
+    Some((
+        total_tss,
+        if total_duration > 0 {
+            Some(total_duration)
+        } else {
+            None
+        },
+        "upcoming".to_string(),
         false,
         None,
     ))
@@ -376,7 +448,8 @@ mod tests {
     use super::{preview_tool_arguments, simulate_forward_load};
     use crate::domain::llm_tools::ToolExecutionContext;
     use crate::domain::training_context::{
-        AthleteProfileContext, ProjectedDayContext, ProjectedWorkoutContext, TrainingContext,
+        AthleteProfileContext, PlannedWorkoutContext, ProjectedDayContext, ProjectedWorkoutContext,
+        TrainingContext, UpcomingDayContext,
     };
 
     fn sample_context() -> ToolExecutionContext {
@@ -393,7 +466,23 @@ mod tests {
             future_events: Vec::new(),
             history: Default::default(),
             recent_days: Vec::new(),
-            upcoming_days: Vec::new(),
+            upcoming_days: vec![UpcomingDayContext {
+                date: "2026-05-05".to_string(),
+                free_day: false,
+                planned_workouts: vec![PlannedWorkoutContext {
+                    event_id: 1,
+                    start_date_local: "2026-05-05T06:00:00".to_string(),
+                    name: Some("Morning Endurance".to_string()),
+                    category: "workout".to_string(),
+                    interval_blocks: Vec::new(),
+                    raw_workout_doc: Some("- 60m 65%".to_string()),
+                    estimated_training_stress_score: Some(65.0),
+                    estimated_intensity_factor: None,
+                    estimated_normalized_power_watts: None,
+                    completed: false,
+                }],
+                special_days: Vec::new(),
+            }],
             projected_days: vec![
                 ProjectedDayContext {
                     date: "2026-05-06".to_string(),
@@ -491,7 +580,6 @@ mod tests {
         );
 
         // 2026-05-06 has two projected workouts (90m 65% + 30m easy spin).
-        // The response should contain this date with "projected" source.
         assert!(response.contains("\"2026-05-06\""));
         assert!(response.contains("\"source\":\"projected\""));
     }
@@ -529,8 +617,31 @@ mod tests {
         let response =
             simulate_forward_load(r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#, &ctx);
 
-        // 2026-05-08 should have source including "future_event"
         assert!(response.contains("\"2026-05-08\""));
         assert!(response.contains("\"source\":\"future_event\""));
+    }
+
+    #[test]
+    fn simulate_forward_load_without_input_uses_context_sources() {
+        let response = simulate_forward_load(r#"{}"#, &sample_context());
+
+        // 2026-05-05 should have "upcoming" source (from calendar)
+        assert!(response.contains("\"2026-05-05\""));
+        assert!(response.contains("\"source\":\"upcoming\""));
+
+        // 2026-05-06 should have "projected" source
+        assert!(response.contains("\"2026-05-06\""));
+        assert!(response.contains("\"source\":\"projected\""));
+    }
+
+    #[test]
+    fn simulate_forward_load_input_overrides_upcoming() {
+        let ctx = sample_context();
+        let response =
+            simulate_forward_load(r#"{"dated_workout_text":"2026-05-05\n- 120m 60%"}"#, &ctx);
+
+        // 2026-05-05 should use input, not upcoming
+        assert!(response.contains("\"2026-05-05\""));
+        assert!(response.contains("\"source\":\"input\""));
     }
 }
