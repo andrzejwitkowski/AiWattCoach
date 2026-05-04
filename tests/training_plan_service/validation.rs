@@ -126,7 +126,9 @@ async fn correction_retry_exhaustion_marks_failed_operation_and_keeps_raw_respon
         operation.raw_plan_response.as_deref(),
         Some(initial_raw.as_str())
     );
+    assert!(operation.initial_plan_tool_loop_state.is_some());
     assert!(operation.raw_correction_response.is_some());
+    assert!(operation.correction_tool_loop_state.is_some());
     assert_eq!(built.generator.correction_call_count(), 2);
 }
 

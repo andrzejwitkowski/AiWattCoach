@@ -303,6 +303,7 @@ describe('useCoachChat', () => {
                 id: 'tool-1',
                 name: 'lookupCalendar',
                 argumentsJson: '{"date":"2026-05-02"}',
+                argumentsPreview: '1 dated day from 2026-05-02 to 2026-05-02',
               },
               createdAtEpochSeconds: 3,
             },
@@ -318,6 +319,7 @@ describe('useCoachChat', () => {
         id: 'tool-1',
         name: 'lookupCalendar',
         argumentsJson: '{"date":"2026-05-02"}',
+        argumentsPreview: '1 dated day from 2026-05-02 to 2026-05-02',
       });
     });
 
@@ -350,6 +352,7 @@ describe('useCoachChat', () => {
                     id: 'tool-1',
                     name: 'lookupCalendar',
                     argumentsJson: '{"date":"2026-05-02"}',
+                    argumentsPreview: '1 dated day from 2026-05-02 to 2026-05-02',
                   },
                   createdAtEpochSeconds: 3,
                 },
@@ -373,6 +376,7 @@ describe('useCoachChat', () => {
         id: 'tool-1',
         name: 'lookupCalendar',
         argumentsJson: '{"date":"2026-05-02"}',
+        argumentsPreview: '1 dated day from 2026-05-02 to 2026-05-02',
       });
     });
   });

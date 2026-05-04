@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | user | training-plan in-flight tool-loop checkpoint persistence
+
+- Problem: the first training-plan durable tool-loop change persisted phase `LlmToolLoopState` only together with the final raw plan or correction text. That made the reclaim branch effectively unreachable for real in-flight tool rounds: a crash after a tool call but before final assistant text left no persisted loop checkpoint to resume from, and `fail_operation(...)` could also overwrite any newly written phase state with an older stale operation snapshot.
+- Fix: added a shared per-round checkpoint hook to `run_tool_loop(...)`, wired training-plan initial-generation and correction through that hook so phase tool-loop state is durably upserted after each tool round before final text exists, changed training-plan `fail_operation(...)` to reload the latest stored operation before marking it failed, and replaced the synthetic reclaim expectation with a focused recovery regression that proves a first attempt can persist in-flight initial loop state and a reclaimed second attempt reuses that stored state.
+- Prevention: when adding resumable tool-calling to a durable workflow, do not stop at persisting the final assistant text and final transcript state. Add a checkpoint at the actual crash boundary between tool rounds, then verify recovery with a test that creates that state through reachable production flow instead of hand-constructing an impossible operation snapshot.
+
+### 2026-05-04 | user | training-plan durable tool-loop checkpoints
+
+- Problem: the shared `simulate_forward_load` tool loop had been integrated into workout-summary and calendar coach flows, but training-plan generation still persisted only final raw plan/correction text. That left a crash-recovery gap: stale pending operations could reuse recap text and raw outputs, but they could not resume an in-flight provider transcript or tool-call history for initial-generation and correction phases.
+- Fix: extended `TrainingPlanGenerationOperation` with phase-scoped durable `LlmToolLoopState` fields for initial generation and correction, changed the training-plan generator contract to return `TrainingPlanPhaseOutput { raw_response, tool_loop_state }`, wired the OpenAI/OpenRouter training-plan adapter through shared `run_tool_loop(...)`, persisted the phase loop state in both in-memory and Mongo repositories, and added focused adapter/service/Mongo regressions proving tool-enabled plan generation and reclaim-safe state reuse.
+- Prevention: when adding shared tool-calling or hidden provider-transcript behavior to another durable workflow, do not stop at the final assistant text checkpoint. Persist the phase-specific loop state needed to resume retries and crash recovery before considering the integration complete, and add a reclaim regression that proves the stored state is reused instead of silently restarting from zero.
+
 ### 2026-05-04 | user | CI drift after provider-transcript rename and local-only formatting
 
 - Problem: the Rust CI for PR #180 was failing for two small drift reasons unrelated to runtime logic. One Mongo regression test still asserted the old `hidden transcript update lost compare-and-set race` error string after the branch-wide rename to `provider transcript`, and a newly added OpenRouter adapter regression had not been run through `rustfmt`, so `cargo fmt --check` failed in CI even though local targeted tests passed.

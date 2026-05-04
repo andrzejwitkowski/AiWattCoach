@@ -9,6 +9,7 @@ pub enum LlmError {
     ProviderRejected(String),
     RateLimited(String),
     InvalidResponse(String),
+    Checkpoint(String),
     Internal(String),
 }
 
@@ -24,6 +25,7 @@ impl LlmError {
             Self::ProviderRejected(_) => false,
             Self::RateLimited(_) => true,
             Self::InvalidResponse(_) => true,
+            Self::Checkpoint(_) => true,
             Self::Internal(_) => true,
         }
     }
@@ -43,6 +45,7 @@ impl std::fmt::Display for LlmError {
             Self::ProviderRejected(message) => write!(f, "{message}"),
             Self::RateLimited(message) => write!(f, "{message}"),
             Self::InvalidResponse(message) => write!(f, "{message}"),
+            Self::Checkpoint(message) => write!(f, "{message}"),
             Self::Internal(message) => write!(f, "{message}"),
         }
     }

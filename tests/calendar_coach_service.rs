@@ -785,6 +785,7 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
                     id: "tool-1".to_string(),
                     name: "lookupCalendar".to_string(),
                     arguments_json: r#"{\"week\":\"2026-W18\"}"#.to_string(),
+                    arguments_preview: None,
                 }),
                 created_at_epoch_seconds: 2,
             },
@@ -1108,7 +1109,7 @@ async fn calendar_coach_marks_fresh_tool_only_response_as_failed() {
     assert_eq!(
         error,
         CoachConversationError::Llm(LlmError::InvalidResponse(
-            "assistant reply missing final text message".to_string(),
+            "tool loop exceeded 6 rounds".to_string(),
         ))
     );
     let stored = reply_operations

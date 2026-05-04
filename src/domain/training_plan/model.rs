@@ -1,6 +1,7 @@
 use crate::domain::{
     ai_workflow::{AttemptRecord, ValidationIssue, WorkflowPhase, WorkflowStatus},
     intervals::PlannedWorkout,
+    llm_tools::LlmToolLoopState,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,6 +36,12 @@ pub struct TrainingPlanConversationMessage {
 pub struct TrainingPlanPlanningContext {
     pub rpe: Option<u8>,
     pub messages: Vec<TrainingPlanConversationMessage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrainingPlanPhaseOutput {
+    pub raw_response: String,
+    pub tool_loop_state: LlmToolLoopState,
 }
 
 impl std::fmt::Display for TrainingPlanError {
@@ -108,7 +115,9 @@ pub struct TrainingPlanGenerationOperation {
     pub workout_recap_generated_at_epoch_seconds: Option<i64>,
     pub projection_persisted_at_epoch_seconds: Option<i64>,
     pub raw_plan_response: Option<String>,
+    pub initial_plan_tool_loop_state: Option<LlmToolLoopState>,
     pub raw_correction_response: Option<String>,
+    pub correction_tool_loop_state: Option<LlmToolLoopState>,
     pub validation_issues: Vec<ValidationIssue>,
     pub attempts: Vec<AttemptRecord>,
     pub failure: Option<TrainingPlanFailureState>,
@@ -139,7 +148,9 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: None,
             projection_persisted_at_epoch_seconds: None,
             raw_plan_response: None,
+            initial_plan_tool_loop_state: None,
             raw_correction_response: None,
+            correction_tool_loop_state: None,
             validation_issues: Vec::new(),
             attempts: Vec::new(),
             failure: None,
@@ -164,7 +175,9 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
             projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
             raw_plan_response: self.raw_plan_response.clone(),
+            initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
             raw_correction_response: self.raw_correction_response.clone(),
+            correction_tool_loop_state: self.correction_tool_loop_state.clone(),
             validation_issues: self.validation_issues.clone(),
             attempts: self.attempts.clone(),
             failure: None,
@@ -189,7 +202,9 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
             projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
             raw_plan_response: self.raw_plan_response.clone(),
+            initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
             raw_correction_response: self.raw_correction_response.clone(),
+            correction_tool_loop_state: self.correction_tool_loop_state.clone(),
             validation_issues: self.validation_issues.clone(),
             attempts: self.attempts.clone(),
             failure: None,
@@ -242,10 +257,22 @@ impl TrainingPlanGenerationOperation {
     pub fn with_raw_plan_response(
         &self,
         raw_plan_response: String,
+        tool_loop_state: LlmToolLoopState,
         recorded_at_epoch_seconds: i64,
     ) -> Self {
         let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
         updated.raw_plan_response = Some(raw_plan_response);
+        updated.initial_plan_tool_loop_state = Some(tool_loop_state);
+        updated
+    }
+
+    pub fn with_initial_plan_tool_loop_state(
+        &self,
+        tool_loop_state: LlmToolLoopState,
+        recorded_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.initial_plan_tool_loop_state = Some(tool_loop_state);
         updated
     }
 
@@ -262,6 +289,7 @@ impl TrainingPlanGenerationOperation {
     pub fn with_correction_response(
         &self,
         raw_correction_response: String,
+        tool_loop_state: LlmToolLoopState,
         recorded_at_epoch_seconds: i64,
     ) -> Self {
         let mut attempts = self.attempts.clone();
@@ -278,7 +306,18 @@ impl TrainingPlanGenerationOperation {
 
         let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
         updated.raw_correction_response = Some(raw_correction_response);
+        updated.correction_tool_loop_state = Some(tool_loop_state);
         updated.attempts = attempts;
+        updated
+    }
+
+    pub fn with_correction_tool_loop_state(
+        &self,
+        tool_loop_state: LlmToolLoopState,
+        recorded_at_epoch_seconds: i64,
+    ) -> Self {
+        let mut updated = self.clone_pending_update(recorded_at_epoch_seconds);
+        updated.correction_tool_loop_state = Some(tool_loop_state);
         updated
     }
 
@@ -319,7 +358,9 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
             projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
             raw_plan_response: self.raw_plan_response.clone(),
+            initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
             raw_correction_response: self.raw_correction_response.clone(),
+            correction_tool_loop_state: self.correction_tool_loop_state.clone(),
             validation_issues: self.validation_issues.clone(),
             attempts: self.attempts.clone(),
             failure: None,
@@ -350,7 +391,9 @@ impl TrainingPlanGenerationOperation {
             workout_recap_generated_at_epoch_seconds: self.workout_recap_generated_at_epoch_seconds,
             projection_persisted_at_epoch_seconds: self.projection_persisted_at_epoch_seconds,
             raw_plan_response: self.raw_plan_response.clone(),
+            initial_plan_tool_loop_state: self.initial_plan_tool_loop_state.clone(),
             raw_correction_response: self.raw_correction_response.clone(),
+            correction_tool_loop_state: self.correction_tool_loop_state.clone(),
             validation_issues,
             attempts: self.attempts.clone(),
             failure: Some(TrainingPlanFailureState { phase, message }),

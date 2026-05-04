@@ -6,6 +6,7 @@ mod snapshot;
 use chrono::{TimeZone, Utc};
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use crate::domain::{
     ai_workflow::{ValidationIssue, WorkflowPhase, WorkflowStatus},
@@ -235,7 +236,21 @@ where
         validation_issues: Vec<ValidationIssue>,
     ) -> Result<TrainingPlanError, TrainingPlanError> {
         let message = error.to_string();
-        let failed = operation.mark_failed(
+        let latest_operation = match self
+            .operations
+            .find_by_operation_key(&operation.operation_key)
+            .await?
+        {
+            Some(stored) => stored,
+            None => {
+                tracing::warn!(
+                    operation_key = %operation.operation_key,
+                    "operation disappeared before marking failed; using in-memory snapshot"
+                );
+                operation.clone()
+            }
+        };
+        let failed = latest_operation.mark_failed(
             phase,
             message.clone(),
             validation_issues,
@@ -243,6 +258,82 @@ where
         );
         self.operations.upsert(failed).await?;
         Ok(error)
+    }
+
+    fn initial_plan_checkpoint(
+        &self,
+        operation: &TrainingPlanGenerationOperation,
+    ) -> Arc<
+        dyn Fn(
+                crate::domain::llm_tools::LlmToolLoopState,
+            ) -> BoxFuture<Result<(), TrainingPlanError>>
+            + Send
+            + Sync,
+    > {
+        let service = self.clone();
+        let operation_key = operation.operation_key.clone();
+        Arc::new(move |state| {
+            let service = service.clone();
+            let operation_key = operation_key.clone();
+            Box::pin(async move {
+                let operation = service
+                    .operations
+                    .find_by_operation_key(&operation_key)
+                    .await?
+                    .ok_or_else(|| {
+                        TrainingPlanError::Repository(format!(
+                            "operation {operation_key} disappeared during checkpoint"
+                        ))
+                    })?;
+                service
+                    .operations
+                    .upsert(operation.with_initial_plan_tool_loop_state(
+                        state,
+                        service.clock.now_epoch_seconds(),
+                    ))
+                    .await?;
+                Ok(())
+            })
+        })
+    }
+
+    fn correction_checkpoint(
+        &self,
+        operation: &TrainingPlanGenerationOperation,
+    ) -> Arc<
+        dyn Fn(
+                crate::domain::llm_tools::LlmToolLoopState,
+            ) -> BoxFuture<Result<(), TrainingPlanError>>
+            + Send
+            + Sync,
+    > {
+        let service = self.clone();
+        let operation_key = operation.operation_key.clone();
+        Arc::new(move |state| {
+            let service = service.clone();
+            let operation_key = operation_key.clone();
+            Box::pin(async move {
+                let operation = service
+                    .operations
+                    .find_by_operation_key(&operation_key)
+                    .await?
+                    .ok_or_else(|| {
+                        TrainingPlanError::Repository(format!(
+                            "operation {operation_key} disappeared during checkpoint"
+                        ))
+                    })?;
+                service
+                    .operations
+                    .upsert(
+                        operation.with_correction_tool_loop_state(
+                            state,
+                            service.clock.now_epoch_seconds(),
+                        ),
+                    )
+                    .await?;
+                Ok(())
+            })
+        })
     }
 
     fn workout_recap_from_operation(
@@ -524,16 +615,22 @@ where
                     }
                     let raw_plan_response = match service
                         .generator
-                        .generate_initial_plan_window(
+                        .generate_initial_plan_window_with_state(
                             &user_id,
                             &workout_id,
                             saved_at_epoch_seconds,
                             &recap,
                             planning_context.as_ref(),
+                            operation
+                                .raw_plan_response
+                                .is_none()
+                                .then(|| operation.initial_plan_tool_loop_state.clone())
+                                .flatten(),
+                            Some(service.initial_plan_checkpoint(&operation)),
                         )
                         .await
                     {
-                        Ok(raw_plan_response) => raw_plan_response,
+                        Ok(raw_plan_output) => raw_plan_output,
                         Err(error) => {
                             return Err(service
                                 .fail_operation(
@@ -545,10 +642,13 @@ where
                                 .await?)
                         }
                     };
+                    let raw_plan_tool_loop_state = raw_plan_response.tool_loop_state;
+                    let raw_plan_response = raw_plan_response.raw_response;
                     operation = service
                         .operations
                         .upsert(operation.with_raw_plan_response(
                             raw_plan_response.clone(),
+                            raw_plan_tool_loop_state,
                             service.clock.now_epoch_seconds(),
                         ))
                         .await?;
@@ -677,7 +777,7 @@ where
                     }
                     let correction_response = match service
                         .generator
-                        .correct_invalid_days(
+                        .correct_invalid_days_with_state(
                             &user_id,
                             &workout_id,
                             saved_at_epoch_seconds,
@@ -685,10 +785,16 @@ where
                             planning_context.as_ref(),
                             &invalid_day_sections.join("\n\n"),
                             issues.clone(),
+                            operation
+                                .raw_correction_response
+                                .is_none()
+                                .then(|| operation.correction_tool_loop_state.clone())
+                                .flatten(),
+                            Some(service.correction_checkpoint(&operation)),
                         )
                         .await
                     {
-                        Ok(correction_response) => correction_response,
+                        Ok(correction_output) => correction_output,
                         Err(error) => {
                             return Err(service
                                 .fail_operation(
@@ -700,10 +806,13 @@ where
                                 .await?)
                         }
                     };
+                    let correction_tool_loop_state = correction_response.tool_loop_state;
+                    let correction_response = correction_response.raw_response;
                     operation = service
                         .operations
                         .upsert(operation.with_correction_response(
                             correction_response.clone(),
+                            correction_tool_loop_state,
                             service.clock.now_epoch_seconds(),
                         ))
                         .await?;

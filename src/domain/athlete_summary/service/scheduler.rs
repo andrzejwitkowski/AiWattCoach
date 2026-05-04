@@ -95,6 +95,7 @@ fn serialize_athlete_summary_error(error: &AthleteSummaryError) -> SerializedAth
                 LlmError::ProviderRejected(_) => "provider_rejected",
                 LlmError::RateLimited(_) => "rate_limited",
                 LlmError::InvalidResponse(_) => "invalid_response",
+                LlmError::Checkpoint(_) => "checkpoint",
                 LlmError::Internal(_) => "internal",
             }
             .to_string(),
@@ -108,6 +109,7 @@ fn serialize_athlete_summary_error(error: &AthleteSummaryError) -> SerializedAth
                 | LlmError::ProviderRejected(message)
                 | LlmError::RateLimited(message)
                 | LlmError::InvalidResponse(message)
+                | LlmError::Checkpoint(message)
                 | LlmError::Internal(message) => Some(message.clone()),
             },
         },

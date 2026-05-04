@@ -7,9 +7,10 @@ use crate::domain::{
     llm::{
         approximate_token_budget_for_model, hash_text,
         rebuild_conversation_with_provider_transcript, BoxFuture, LlmChatMessage, LlmChatPort,
-        LlmChatRequest, LlmChatResponse, LlmContextCache, LlmContextCacheRepository, LlmError,
-        LlmMessageRole, LlmProvider, UserLlmConfigProvider,
+        LlmChatRequest, LlmContextCache, LlmContextCacheRepository, LlmError, LlmMessageRole,
+        LlmProvider, UserLlmConfigProvider,
     },
+    llm_tools::{run_tool_loop, LlmToolLoopOutput, ToolExecutionContext, ToolScope},
     training_context::TrainingContextBuilder,
     workout_summary::{WorkoutCoach, WorkoutSummary},
 };
@@ -64,7 +65,7 @@ where
         summary: &WorkoutSummary,
         user_message: &str,
         athlete_summary_text: Option<&str>,
-    ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+    ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         let llm_chat_port = self.llm_chat_port.clone();
         let config_provider = self.config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
@@ -188,6 +189,10 @@ where
                 tools: Vec::new(),
                 tool_choice: crate::domain::llm::LlmToolChoice::None,
             };
+            let tool_context = ToolExecutionContext {
+                training_context: training_context.context.clone(),
+                today: current_date_string(clock.now_epoch_seconds()),
+            };
 
             tracing::info!(
                 user_id = %user_id,
@@ -202,13 +207,21 @@ where
                 "prepared workout summary llm request"
             );
 
-            let response = llm_chat_port.chat(config.clone(), request).await?;
+            let response = run_tool_loop(
+                llm_chat_port.clone(),
+                config.clone(),
+                request,
+                ToolScope::WorkoutSummaryChat,
+                tool_context,
+                None,
+            )
+            .await?;
 
             if config.provider == LlmProvider::Gemini {
                 if let (Some(repository), Some(scope_key), Some(provider_cache_id)) = (
                     context_cache_repository,
                     cache_scope_key,
-                    response.cache.provider_cache_id.clone(),
+                    response.response.cache.provider_cache_id.clone(),
                 ) {
                     if let Err(error) = repository
                         .upsert(LlmContextCache {
@@ -218,7 +231,10 @@ where
                             scope_key,
                             context_hash,
                             provider_cache_id,
-                            expires_at_epoch_seconds: response.cache.cache_expires_at_epoch_seconds,
+                            expires_at_epoch_seconds: response
+                                .response
+                                .cache
+                                .cache_expires_at_epoch_seconds,
                             created_at_epoch_seconds: clock.now_epoch_seconds(),
                             updated_at_epoch_seconds: clock.now_epoch_seconds(),
                         })
@@ -273,6 +289,17 @@ fn build_volatile_context(packed_training_context: &str) -> String {
 
 fn approximate_token_usage(value: &str) -> usize {
     value.chars().count().div_ceil(3)
+}
+
+fn current_date_string(now_epoch_seconds: i64) -> String {
+    chrono::DateTime::from_timestamp(now_epoch_seconds, 0)
+        .map(|time| time.date_naive().format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| {
+            chrono::DateTime::UNIX_EPOCH
+                .date_naive()
+                .format("%Y-%m-%d")
+                .to_string()
+        })
 }
 
 fn workout_coach_system_prompt() -> String {
@@ -345,6 +372,7 @@ mod tests {
                         id: "tool-1".to_string(),
                         name: "lookupWorkout".to_string(),
                         arguments_json: r#"{\"workoutId\":\"workout-1\"}"#.to_string(),
+                        arguments_preview: None,
                     }),
                     created_at_epoch_seconds: 2,
                 },

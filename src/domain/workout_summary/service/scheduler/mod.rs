@@ -113,6 +113,7 @@ pub(crate) fn serialize_workout_summary_error(
                 LlmError::ProviderRejected(_) => "provider_rejected",
                 LlmError::RateLimited(_) => "rate_limited",
                 LlmError::InvalidResponse(_) => "invalid_response",
+                LlmError::Checkpoint(_) => "checkpoint",
                 LlmError::Internal(_) => "internal",
             }
             .to_string(),
@@ -126,6 +127,7 @@ pub(crate) fn serialize_workout_summary_error(
                 | LlmError::ProviderRejected(message)
                 | LlmError::RateLimited(message)
                 | LlmError::InvalidResponse(message)
+                | LlmError::Checkpoint(message)
                 | LlmError::Internal(message) => Some(message.clone()),
             },
         },

@@ -1,15 +1,20 @@
 use crate::adapters::llm::context_prelude::non_empty_context_parts;
 use crate::domain::llm::{
     LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmFinishReason,
-    LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall,
+    LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
+    LlmToolDefinition,
 };
 
 use super::dto::{
-    OpenAiChatRequest, OpenAiChatResponse, OpenAiMessage, OpenAiPromptTokenDetails, OpenAiToolCall,
-    OpenAiToolFunctionCall, OpenAiUsage,
+    OpenAiChatRequest, OpenAiChatResponse, OpenAiFunctionDefinition, OpenAiMessage,
+    OpenAiNamedFunctionChoice, OpenAiNamedToolChoice, OpenAiPromptTokenDetails, OpenAiTool,
+    OpenAiToolCall, OpenAiToolChoice as OpenAiToolChoiceDto, OpenAiToolFunctionCall, OpenAiUsage,
 };
 
-pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenAiChatRequest {
+pub fn map_request(
+    config: &LlmProviderConfig,
+    request: LlmChatRequest,
+) -> Result<OpenAiChatRequest, crate::domain::llm::LlmError> {
     let mut request = request;
     let mut messages = non_empty_context_parts([
         ("system", request.system_prompt.as_str()),
@@ -26,11 +31,17 @@ pub fn map_request(config: &LlmProviderConfig, request: LlmChatRequest) -> OpenA
     .collect::<Vec<_>>();
     messages.extend(request.conversation.drain(..).map(map_message));
 
-    OpenAiChatRequest {
+    Ok(OpenAiChatRequest {
         model: config.model.clone(),
         messages,
+        tools: request
+            .tools
+            .drain(..)
+            .map(map_tool_definition)
+            .collect::<Result<Vec<_>, _>>()?,
+        tool_choice: map_tool_choice(request.tool_choice),
         prompt_cache_key: request.cache_key,
-    }
+    })
 }
 
 pub fn map_response(
@@ -105,6 +116,38 @@ fn map_message(message: LlmChatMessage) -> OpenAiMessage {
             .map(map_domain_tool_call)
             .collect(),
         tool_call_id: message.tool_call_id,
+    }
+}
+
+fn map_tool_definition(
+    tool: LlmToolDefinition,
+) -> Result<OpenAiTool, crate::domain::llm::LlmError> {
+    let parameters = serde_json::from_str(&tool.input_schema_json).map_err(|error| {
+        crate::domain::llm::LlmError::InvalidResponse(format!(
+            "invalid tool input schema for {}: {error}",
+            tool.name
+        ))
+    })?;
+
+    Ok(OpenAiTool {
+        tool_type: "function".to_string(),
+        function: OpenAiFunctionDefinition {
+            name: tool.name,
+            description: tool.description,
+            parameters,
+        },
+    })
+}
+
+fn map_tool_choice(choice: LlmToolChoice) -> Option<OpenAiToolChoiceDto> {
+    match choice {
+        LlmToolChoice::None => Some(OpenAiToolChoiceDto::String("none".to_string())),
+        LlmToolChoice::Auto => Some(OpenAiToolChoiceDto::String("auto".to_string())),
+        LlmToolChoice::Required => Some(OpenAiToolChoiceDto::String("required".to_string())),
+        LlmToolChoice::Named(name) => Some(OpenAiToolChoiceDto::Named(OpenAiNamedToolChoice {
+            choice_type: "function".to_string(),
+            function: OpenAiNamedFunctionChoice { name },
+        })),
     }
 }
 

@@ -6,13 +6,15 @@ use std::{
 pub(crate) use aiwattcoach::domain::{
     ai_workflow::{AttemptRecord, ValidationIssue, WorkflowPhase, WorkflowStatus},
     identity::Clock,
+    llm_tools::LlmToolLoopState,
     training_plan::{
         TrainingPlanConversationMessage, TrainingPlanConversationRole, TrainingPlanError,
         TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
         TrainingPlanGenerationOperationRepository, TrainingPlanGenerationService,
-        TrainingPlanGenerator, TrainingPlanPlanningContext, TrainingPlanProjectedDay,
-        TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
-        TrainingPlanUseCases, TrainingPlanWorkoutSummaryPort,
+        TrainingPlanGenerator, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
+        TrainingPlanProjectedDay, TrainingPlanProjectionRepository, TrainingPlanSnapshot,
+        TrainingPlanSnapshotRepository, TrainingPlanToolLoopCheckpoint, TrainingPlanUseCases,
+        TrainingPlanWorkoutSummaryPort,
     },
     workout_summary::WorkoutRecap,
 };
@@ -33,6 +35,7 @@ pub(crate) use repos::*;
 pub(crate) type CallLog = Arc<Mutex<Vec<String>>>;
 pub(crate) type CorrectionInputs = Arc<Mutex<Vec<(String, Vec<ValidationIssue>)>>>;
 pub(crate) type PlanningContexts = Arc<Mutex<Vec<Option<TrainingPlanPlanningContext>>>>;
+pub(crate) type RestoredToolLoopStates = Arc<Mutex<Vec<Option<LlmToolLoopState>>>>;
 
 #[derive(Clone)]
 pub(crate) struct FixedClock {
@@ -112,6 +115,8 @@ pub(crate) struct StubTrainingPlanGenerator {
     correction_inputs: CorrectionInputs,
     initial_planning_contexts: PlanningContexts,
     correction_planning_contexts: PlanningContexts,
+    initial_restored_states: RestoredToolLoopStates,
+    correction_restored_states: RestoredToolLoopStates,
     call_log: CallLog,
 }
 
@@ -132,6 +137,8 @@ impl StubTrainingPlanGenerator {
             correction_inputs: Arc::new(Mutex::new(Vec::new())),
             initial_planning_contexts: Arc::new(Mutex::new(Vec::new())),
             correction_planning_contexts: Arc::new(Mutex::new(Vec::new())),
+            initial_restored_states: Arc::new(Mutex::new(Vec::new())),
+            correction_restored_states: Arc::new(Mutex::new(Vec::new())),
             call_log,
         }
     }
@@ -159,6 +166,14 @@ impl StubTrainingPlanGenerator {
     pub(crate) fn correction_planning_contexts(&self) -> Vec<Option<TrainingPlanPlanningContext>> {
         self.correction_planning_contexts.lock().unwrap().clone()
     }
+
+    pub(crate) fn initial_restored_states(&self) -> Vec<Option<LlmToolLoopState>> {
+        self.initial_restored_states.lock().unwrap().clone()
+    }
+
+    pub(crate) fn correction_restored_states(&self) -> Vec<Option<LlmToolLoopState>> {
+        self.correction_restored_states.lock().unwrap().clone()
+    }
 }
 
 impl TrainingPlanGenerator for StubTrainingPlanGenerator {
@@ -180,19 +195,27 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
         Box::pin(async move { response })
     }
 
-    fn generate_initial_plan_window(
+    fn generate_initial_plan_window_with_state(
         &self,
         _user_id: &str,
         _workout_id: &str,
         _saved_at_epoch_seconds: i64,
         _workout_recap: &WorkoutRecap,
         planning_context: Option<&TrainingPlanPlanningContext>,
-    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
+        restored_state: Option<LlmToolLoopState>,
+        _checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<TrainingPlanPhaseOutput, TrainingPlanError>,
+    > {
         *self.initial_plan_calls.lock().unwrap() += 1;
         self.initial_planning_contexts
             .lock()
             .unwrap()
             .push(planning_context.cloned());
+        self.initial_restored_states
+            .lock()
+            .unwrap()
+            .push(restored_state);
         push_call(&self.call_log, "generator.generate_initial_plan_window");
         let response = self
             .initial_plan_responses
@@ -200,10 +223,15 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
             .unwrap()
             .pop_front()
             .expect("expected initial plan response");
-        Box::pin(async move { response })
+        Box::pin(async move {
+            response.map(|raw_response| TrainingPlanPhaseOutput {
+                raw_response,
+                tool_loop_state: LlmToolLoopState::default(),
+            })
+        })
     }
 
-    fn correct_invalid_days(
+    fn correct_invalid_days_with_state(
         &self,
         _user_id: &str,
         _workout_id: &str,
@@ -212,12 +240,20 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
         planning_context: Option<&TrainingPlanPlanningContext>,
         raw_plan_response: &str,
         issues: Vec<ValidationIssue>,
-    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
+        restored_state: Option<LlmToolLoopState>,
+        _checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<TrainingPlanPhaseOutput, TrainingPlanError>,
+    > {
         *self.correction_calls.lock().unwrap() += 1;
         self.correction_planning_contexts
             .lock()
             .unwrap()
             .push(planning_context.cloned());
+        self.correction_restored_states
+            .lock()
+            .unwrap()
+            .push(restored_state);
         self.correction_inputs
             .lock()
             .unwrap()
@@ -229,7 +265,12 @@ impl TrainingPlanGenerator for StubTrainingPlanGenerator {
             .unwrap()
             .pop_front()
             .expect("expected correction response");
-        Box::pin(async move { response })
+        Box::pin(async move {
+            response.map(|raw_response| TrainingPlanPhaseOutput {
+                raw_response,
+                tool_loop_state: LlmToolLoopState::default(),
+            })
+        })
     }
 }
 

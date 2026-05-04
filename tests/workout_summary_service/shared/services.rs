@@ -774,21 +774,26 @@ impl WorkoutCoach for DevWorkoutCoach {
         user_message: &str,
         _athlete_summary_text: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
-        Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
+        Result<
+            aiwattcoach::domain::llm_tools::LlmToolLoopOutput,
+            aiwattcoach::domain::llm::LlmError,
+        >,
     > {
         let message = format!(
             "Thanks, that helps. What stood out most about \"{user_message}\" during the workout?"
         );
         Box::pin(async move {
-            Ok(LlmChatResponse {
-                provider: LlmProvider::OpenAi,
-                model: "dev-llm-coach".to_string(),
-                message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
-                finish_reason: None,
-                provider_request_id: Some("dev-request-1".to_string()),
-                usage: LlmTokenUsage::default(),
-                cache: LlmCacheUsage::default(),
-            })
+            Ok(
+                aiwattcoach::domain::llm_tools::LlmToolLoopOutput::from_response(LlmChatResponse {
+                    provider: LlmProvider::OpenAi,
+                    model: "dev-llm-coach".to_string(),
+                    message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
+                    finish_reason: None,
+                    provider_request_id: Some("dev-request-1".to_string()),
+                    usage: LlmTokenUsage::default(),
+                    cache: LlmCacheUsage::default(),
+                }),
+            )
         })
     }
 }

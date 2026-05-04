@@ -2,6 +2,7 @@ use crate::domain::llm::{
     approximate_token_budget_for_model, hash_text, LlmChatMessage, LlmChatRequest, LlmChatResponse,
     LlmContextCache, LlmError, LlmProvider, LlmProviderConfig, LlmToolChoice,
 };
+use crate::domain::llm_tools::{run_tool_loop, LlmToolLoopOutput, ToolExecutionContext, ToolScope};
 
 use super::{
     super::{CoachConversation, CoachConversationError, CoachConversationMessage},
@@ -11,9 +12,11 @@ use super::{
     },
     SharedCoachConversationService,
 };
+use crate::domain::training_context::TrainingContext;
 
 struct PreparedCalendarLlmRequest {
     config: LlmProviderConfig,
+    training_context: TrainingContext,
     system_prompt: String,
     stable_context: String,
     volatile_context: String,
@@ -37,7 +40,7 @@ where
         conversation: &CoachConversation,
         messages: &[CoachConversationMessage],
         user_message: &CoachConversationMessage,
-    ) -> Result<LlmChatResponse, CoachConversationError> {
+    ) -> Result<LlmToolLoopOutput, CoachConversationError> {
         let prepared = self
             .prepare_calendar_llm_request(conversation, messages, user_message)
             .await?;
@@ -53,13 +56,22 @@ where
             tools: Vec::new(),
             tool_choice: LlmToolChoice::None,
         };
-        let response = self
-            .llm_chat_port
-            .chat(prepared.config.clone(), request)
-            .await
-            .map_err(CoachConversationError::Llm)?;
+        let response = self.llm_chat_port.clone();
+        let response = run_tool_loop(
+            response,
+            prepared.config.clone(),
+            request,
+            ToolScope::CalendarCoachChat,
+            ToolExecutionContext {
+                training_context: prepared.training_context.clone(),
+                today: current_date_string(self.clock.now_epoch_seconds()),
+            },
+            None,
+        )
+        .await
+        .map_err(CoachConversationError::Llm)?;
 
-        self.persist_context_cache_if_needed(conversation, &prepared, &response)
+        self.persist_context_cache_if_needed(conversation, &prepared, &response.response)
             .await?;
 
         Ok(response)
@@ -114,6 +126,7 @@ where
 
         Ok(PreparedCalendarLlmRequest {
             config,
+            training_context: training_context.context,
             system_prompt,
             stable_context,
             volatile_context,
@@ -215,6 +228,17 @@ where
 
         Ok(())
     }
+}
+
+fn current_date_string(now_epoch_seconds: i64) -> String {
+    chrono::DateTime::from_timestamp(now_epoch_seconds, 0)
+        .map(|time| time.date_naive().format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| {
+            chrono::DateTime::UNIX_EPOCH
+                .date_naive()
+                .format("%Y-%m-%d")
+                .to_string()
+        })
 }
 
 fn estimate_message_token_usage(message: &LlmChatMessage) -> usize {

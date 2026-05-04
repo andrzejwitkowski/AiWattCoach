@@ -62,6 +62,7 @@ pub(super) fn map_message_to_dto(message: CoachConversationMessage) -> CoachConv
             id: tool_call.id,
             name: tool_call.name,
             arguments_json: tool_call.arguments_json,
+            arguments_preview: tool_call.arguments_preview,
         }),
         created_at_epoch_seconds: message.created_at_epoch_seconds,
     }

@@ -5,6 +5,7 @@ use aiwattcoach::domain::{
         AthleteSummaryError, AthleteSummaryState, AthleteSummaryUseCases, EnsuredAthleteSummary,
     },
     llm::{BoxFuture, LlmCacheUsage, LlmChatResponse, LlmError, LlmProvider, LlmTokenUsage},
+    llm_tools::LlmToolLoopOutput,
     workout_summary::{
         CoachReplyOperation, MessageRole, PendingCoachReplyCheckpoint, WorkoutCoach,
         WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryUseCases,
@@ -47,11 +48,11 @@ impl WorkoutCoach for CountingCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
-    ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+    ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         self.calls.lock().unwrap().push(user_message.to_string());
         let message = format!("Coach reply to: {user_message}");
         Box::pin(async move {
-            Ok(LlmChatResponse {
+            Ok(LlmToolLoopOutput::from_response(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "counting-coach".to_string(),
                 message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
@@ -59,7 +60,7 @@ impl WorkoutCoach for CountingCoach {
                 provider_request_id: Some("counting-req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
-            })
+            }))
         })
     }
 }
@@ -71,14 +72,14 @@ impl WorkoutCoach for CapturingAthleteSummaryCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         athlete_summary_text: Option<&str>,
-    ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+    ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         self.athlete_summary_texts
             .lock()
             .unwrap()
             .push(athlete_summary_text.map(str::to_string));
         let message = format!("Coach reply to: {user_message}");
         Box::pin(async move {
-            Ok(LlmChatResponse {
+            Ok(LlmToolLoopOutput::from_response(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "capturing-coach".to_string(),
                 message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
@@ -86,7 +87,7 @@ impl WorkoutCoach for CapturingAthleteSummaryCoach {
                 provider_request_id: Some("capturing-req-1".to_string()),
                 usage: LlmTokenUsage::default(),
                 cache: LlmCacheUsage::default(),
-            })
+            }))
         })
     }
 }
@@ -389,7 +390,10 @@ impl WorkoutCoach for AlwaysFailingCoach {
         _user_message: &str,
         _athlete_summary_text: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
-        Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
+        Result<
+            aiwattcoach::domain::llm_tools::LlmToolLoopOutput,
+            aiwattcoach::domain::llm::LlmError,
+        >,
     > {
         Box::pin(async move { Err(LlmError::RateLimited("provider throttled".to_string())) })
     }
@@ -418,7 +422,10 @@ impl WorkoutCoach for OneTimeFailureCoach {
         user_message: &str,
         _athlete_summary_text: Option<&str>,
     ) -> aiwattcoach::domain::llm::BoxFuture<
-        Result<aiwattcoach::domain::llm::LlmChatResponse, aiwattcoach::domain::llm::LlmError>,
+        Result<
+            aiwattcoach::domain::llm_tools::LlmToolLoopOutput,
+            aiwattcoach::domain::llm::LlmError,
+        >,
     > {
         let mut calls = self.calls.lock().unwrap();
         *calls += 1;
@@ -429,7 +436,7 @@ impl WorkoutCoach for OneTimeFailureCoach {
             if call_number == 1 {
                 Err(error)
             } else {
-                Ok(LlmChatResponse {
+                Ok(LlmToolLoopOutput::from_response(LlmChatResponse {
                     provider: LlmProvider::OpenAi,
                     model: "recovered-coach".to_string(),
                     message: aiwattcoach::domain::llm::LlmChatMessage::assistant(format!(
@@ -439,7 +446,7 @@ impl WorkoutCoach for OneTimeFailureCoach {
                     provider_request_id: Some("recovered-req".to_string()),
                     usage: LlmTokenUsage::default(),
                     cache: LlmCacheUsage::default(),
-                })
+                }))
             }
         })
     }
@@ -527,7 +534,7 @@ impl WorkoutCoach for OversizedContextCoach {
         _summary: &WorkoutSummary,
         _user_message: &str,
         _athlete_summary_text: Option<&str>,
-    ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+    ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         Box::pin(async move {
             Err(LlmError::ContextTooLarge(
                 "packed training context exceeds model limits".to_string(),
@@ -675,9 +682,9 @@ async fn generate_coach_reply_marks_fresh_tool_only_response_as_failed() {
             _summary: &WorkoutSummary,
             _user_message: &str,
             _athlete_summary_text: Option<&str>,
-        ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+        ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
             Box::pin(async move {
-                Ok(LlmChatResponse {
+                Ok(LlmToolLoopOutput::from_response(LlmChatResponse {
                     provider: LlmProvider::OpenRouter,
                     model: "openai/gpt-4o-mini".to_string(),
                     message: aiwattcoach::domain::llm::LlmChatMessage::assistant_with_tool_calls(
@@ -692,7 +699,7 @@ async fn generate_coach_reply_marks_fresh_tool_only_response_as_failed() {
                     provider_request_id: Some("req-tool-only-fresh".to_string()),
                     usage: LlmTokenUsage::default(),
                     cache: LlmCacheUsage::default(),
-                })
+                }))
             })
         }
     }

@@ -1,4 +1,4 @@
-use crate::domain::llm::{BoxFuture, LlmChatResponse, LlmError};
+use crate::domain::{llm::BoxFuture, llm::LlmError, llm_tools::LlmToolLoopOutput};
 
 use super::WorkoutSummary;
 
@@ -9,7 +9,7 @@ pub trait WorkoutCoach: Send + Sync {
         summary: &WorkoutSummary,
         user_message: &str,
         athlete_summary_text: Option<&str>,
-    ) -> BoxFuture<Result<LlmChatResponse, LlmError>>;
+    ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>>;
 }
 
 #[derive(Clone, Default)]
@@ -22,7 +22,7 @@ impl WorkoutCoach for MockWorkoutCoach {
         summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
-    ) -> BoxFuture<Result<LlmChatResponse, LlmError>> {
+    ) -> BoxFuture<Result<LlmToolLoopOutput, LlmError>> {
         let response = match summary.rpe {
             Some(rpe) if rpe >= 8 => format!(
                 "That sounds like a hard session. With an RPE of {rpe}, what part of the workout drove the most fatigue?"
@@ -40,15 +40,17 @@ impl WorkoutCoach for MockWorkoutCoach {
         };
         let user_id = user_id.to_string();
         Box::pin(async move {
-            Ok(LlmChatResponse {
-                provider: crate::domain::llm::LlmProvider::OpenAi,
-                model: "mock-workout-coach".to_string(),
-                message: crate::domain::llm::LlmChatMessage::assistant(response),
-                finish_reason: None,
-                provider_request_id: Some(format!("mock-{user_id}")),
-                usage: crate::domain::llm::LlmTokenUsage::default(),
-                cache: crate::domain::llm::LlmCacheUsage::default(),
-            })
+            Ok(LlmToolLoopOutput::from_response(
+                crate::domain::llm::LlmChatResponse {
+                    provider: crate::domain::llm::LlmProvider::OpenAi,
+                    model: "mock-workout-coach".to_string(),
+                    message: crate::domain::llm::LlmChatMessage::assistant(response),
+                    finish_reason: None,
+                    provider_request_id: Some(format!("mock-{user_id}")),
+                    usage: crate::domain::llm::LlmTokenUsage::default(),
+                    cache: crate::domain::llm::LlmCacheUsage::default(),
+                },
+            ))
         })
     }
 }
