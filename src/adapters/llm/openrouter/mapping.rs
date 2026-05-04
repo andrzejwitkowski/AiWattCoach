@@ -19,6 +19,7 @@ pub fn map_request(
     request: LlmChatRequest,
 ) -> Result<OpenRouterChatRequest, LlmError> {
     let mut request = request;
+    let cache_control = openrouter_prompt_cache_control(config);
     let mut messages = non_empty_context_parts([
         ("system", request.system_prompt.as_str()),
         ("system", request.stable_context.as_str()),
@@ -31,9 +32,7 @@ pub fn map_request(
             OpenRouterRequestContentPart {
                 part_type: "text".to_string(),
                 text: content.to_string(),
-                cache_control: Some(OpenRouterCacheControl {
-                    cache_type: "ephemeral".to_string(),
-                }),
+                cache_control: cache_control.clone(),
             },
         ])),
         tool_calls: Vec::new(),
@@ -53,6 +52,17 @@ pub fn map_request(
         tool_choice: map_tool_choice(request.tool_choice),
         route: None,
     })
+}
+
+fn openrouter_prompt_cache_control(config: &LlmProviderConfig) -> Option<OpenRouterCacheControl> {
+    (!routes_to_google_provider(&config.model)).then_some(OpenRouterCacheControl {
+        cache_type: "ephemeral".to_string(),
+    })
+}
+
+fn routes_to_google_provider(model: &str) -> bool {
+    let normalized = model.trim().to_ascii_lowercase();
+    normalized.starts_with("google/") || normalized.contains("gemini")
 }
 
 pub fn map_response(

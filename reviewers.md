@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | user | OpenRouter Google cached-content conflict during tool calling
+
+- Problem: OpenRouter prompt caching for context prefixes was always serialized with `cache_control: { type: "ephemeral" }`, including requests routed to Google Gemini models through OpenRouter. When those requests also included tool-calling fields, Google AI Studio rejected them with `CachedContent can not be used with GenerateContent request setting system_instruction, tools or tool_config`, so otherwise valid coach requests failed at runtime.
+- Fix: changed the OpenRouter request mapper to skip prompt-cache `cache_control` for models routed to Google/Gemini, kept prompt caching enabled for non-Google OpenRouter models, and added focused adapter regressions that lock both behaviors.
+- Prevention: when adding provider-agnostic request optimizations through an aggregator like OpenRouter, re-check provider-specific downstream constraints before enabling them for every routed model family. If a model path maps OpenRouter prompt caching onto a provider-native `CachedContent` feature, verify compatibility with tool calling and system instructions explicitly.
+
 ### 2026-05-04 | user | split oversized coach conversation internals module
 
 - Problem: `src/domain/coach_conversation/service/internals.rs` had grown into another mixed-responsibility file even after the broader service split. Conversation lookup, message append/materialization, provider-transcript persistence, and crash-recovery flow all lived in one internal module, which made the calendar coach path harder to review and violated the repo guidance to keep Rust files and functions small by concern.

@@ -189,7 +189,7 @@ async fn openrouter_request_caches_stable_prefix_only() {
         .chat(
             LlmProviderConfig {
                 provider: LlmProvider::OpenRouter,
-                model: "google/gemini-3-flash-preview".to_string(),
+                model: "openai/gpt-4o-mini".to_string(),
                 api_key: "or-key".to_string(),
             },
             sample_request(),
@@ -221,6 +221,44 @@ async fn openrouter_request_caches_stable_prefix_only() {
     assert_eq!(messages[3]["content"], "How did I do?");
     assert!(messages[3].get("cache_control").is_none());
     assert_eq!(requests[0].body["tool_choice"], "none");
+}
+
+#[tokio::test]
+async fn openrouter_request_skips_prompt_cache_for_google_models() {
+    let server = MockServer::start().await;
+    let client = openrouter_client(&server.base_url);
+
+    client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "google/gemini-3-flash-preview".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            aiwattcoach::domain::llm::LlmChatRequest {
+                tools: vec![LlmToolDefinition {
+                    name: "lookupCalendar".to_string(),
+                    description: "Lookup calendar details".to_string(),
+                    input_schema_json:
+                        r#"{"type":"object","properties":{},"additionalProperties":false}"#
+                            .to_string(),
+                }],
+                tool_choice: LlmToolChoice::Auto,
+                ..sample_request()
+            },
+        )
+        .await
+        .unwrap();
+
+    let requests = server.requests();
+    let messages = requests[0].body["messages"].as_array().unwrap();
+
+    assert!(messages[0]["content"].is_array());
+    assert!(messages[0]["content"][0].get("cache_control").is_none());
+    assert!(messages[1]["content"][0].get("cache_control").is_none());
+    assert!(messages[2]["content"][0].get("cache_control").is_none());
+    assert_eq!(requests[0].body["tool_choice"], "auto");
+    assert_eq!(requests[0].body["tools"][0]["function"]["name"], "lookupCalendar");
 }
 
 #[tokio::test]

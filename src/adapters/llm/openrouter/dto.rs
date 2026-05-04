@@ -86,7 +86,7 @@ pub struct OpenRouterRequestContentPart {
     pub cache_control: Option<OpenRouterCacheControl>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct OpenRouterCacheControl {
     #[serde(rename = "type")]
     pub cache_type: String,
