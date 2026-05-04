@@ -185,13 +185,17 @@ where
         conversation: &CoachConversation,
         hidden_transcript: Vec<LlmChatMessage>,
     ) -> Result<(), CoachConversationError> {
+        let updated_at_epoch_seconds = next_hidden_transcript_updated_at_epoch_seconds(
+            conversation.updated_at_epoch_seconds,
+            self.clock.now_epoch_seconds(),
+        );
         self.conversations
             .replace_hidden_transcript(
                 &conversation.user_id,
                 &conversation.conversation_id,
                 hidden_transcript,
                 conversation.updated_at_epoch_seconds,
-                self.clock.now_epoch_seconds(),
+                updated_at_epoch_seconds,
             )
             .await
     }
@@ -644,4 +648,21 @@ fn recovered_assistant_reply_text(operation: &CoachConversationReplyOperation) -
         .find(|message| message.role == LlmMessageRole::Assistant)
         .map(|message| message.content.clone())
         .filter(|content| !content.trim().is_empty())
+}
+
+fn next_hidden_transcript_updated_at_epoch_seconds(
+    expected_updated_at_epoch_seconds: i64,
+    now_epoch_seconds: i64,
+) -> i64 {
+    now_epoch_seconds.max(expected_updated_at_epoch_seconds.saturating_add(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_hidden_transcript_updated_at_epoch_seconds;
+
+    #[test]
+    fn next_hidden_transcript_updated_at_epoch_seconds_advances_when_clock_stalls() {
+        assert_eq!(next_hidden_transcript_updated_at_epoch_seconds(42, 42), 43);
+    }
 }

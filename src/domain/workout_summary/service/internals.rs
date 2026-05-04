@@ -163,13 +163,17 @@ where
         expected_updated_at_epoch_seconds: i64,
         hidden_transcript: Vec<crate::domain::llm::LlmChatMessage>,
     ) -> Result<(), WorkoutSummaryError> {
+        let updated_at_epoch_seconds = next_hidden_transcript_updated_at_epoch_seconds(
+            expected_updated_at_epoch_seconds,
+            self.clock.now_epoch_seconds(),
+        );
         self.repository
             .replace_hidden_transcript(
                 user_id,
                 workout_id,
                 hidden_transcript,
                 expected_updated_at_epoch_seconds,
-                self.clock.now_epoch_seconds(),
+                updated_at_epoch_seconds,
             )
             .await
     }
@@ -683,17 +687,59 @@ fn merge_hidden_transcript_entries(
     mut existing: Vec<crate::domain::llm::LlmChatMessage>,
     pending: &[crate::domain::llm::LlmChatMessage],
 ) -> Vec<crate::domain::llm::LlmChatMessage> {
-    for entry in pending {
-        if !existing.contains(entry) {
-            existing.push(entry.clone());
-        }
+    let max_overlap = existing.len().min(pending.len());
+    let overlap = (1..=max_overlap)
+        .rev()
+        .find(|overlap| existing[existing.len() - overlap..] == pending[..*overlap])
+        .unwrap_or(0);
+
+    for entry in &pending[overlap..] {
+        existing.push(entry.clone());
     }
 
     existing
 }
 
+fn next_hidden_transcript_updated_at_epoch_seconds(
+    expected_updated_at_epoch_seconds: i64,
+    now_epoch_seconds: i64,
+) -> i64 {
+    now_epoch_seconds.max(expected_updated_at_epoch_seconds.saturating_add(1))
+}
+
 fn push_unique_workout_id(workout_ids: &mut Vec<String>, workout_id: String) {
     if !workout_ids.contains(&workout_id) {
         workout_ids.push(workout_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::llm::LlmChatMessage;
+
+    use super::{merge_hidden_transcript_entries, next_hidden_transcript_updated_at_epoch_seconds};
+
+    #[test]
+    fn merge_hidden_transcript_entries_preserves_repeated_identical_messages() {
+        let repeated = LlmChatMessage::assistant("same tool result");
+
+        let merged = merge_hidden_transcript_entries(
+            vec![LlmChatMessage::assistant("earlier reply"), repeated.clone()],
+            &[repeated.clone(), repeated.clone()],
+        );
+
+        assert_eq!(
+            merged,
+            vec![
+                LlmChatMessage::assistant("earlier reply"),
+                repeated.clone(),
+                repeated,
+            ]
+        );
+    }
+
+    #[test]
+    fn next_hidden_transcript_updated_at_epoch_seconds_advances_when_clock_stalls() {
+        assert_eq!(next_hidden_transcript_updated_at_epoch_seconds(42, 42), 43);
     }
 }

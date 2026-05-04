@@ -16,10 +16,14 @@ pub(super) fn merge_hidden_transcript_entries(
     mut existing: Vec<LlmChatMessage>,
     pending: &[LlmChatMessage],
 ) -> Vec<LlmChatMessage> {
-    for entry in pending {
-        if !existing.contains(entry) {
-            existing.push(entry.clone());
-        }
+    let max_overlap = existing.len().min(pending.len());
+    let overlap = (1..=max_overlap)
+        .rev()
+        .find(|overlap| existing[existing.len() - overlap..] == pending[..*overlap])
+        .unwrap_or(0);
+
+    for entry in &pending[overlap..] {
+        existing.push(entry.clone());
     }
 
     existing
@@ -141,4 +145,30 @@ pub(super) fn build_calendar_conversation(
         .collect::<Vec<_>>();
 
     rebuild_conversation_with_hidden_transcript(conversation, hidden_transcript)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::llm::LlmChatMessage;
+
+    use super::merge_hidden_transcript_entries;
+
+    #[test]
+    fn merge_hidden_transcript_entries_preserves_repeated_identical_messages() {
+        let repeated = LlmChatMessage::assistant("same tool result");
+
+        let merged = merge_hidden_transcript_entries(
+            vec![LlmChatMessage::assistant("earlier reply"), repeated.clone()],
+            &[repeated.clone(), repeated.clone()],
+        );
+
+        assert_eq!(
+            merged,
+            vec![
+                LlmChatMessage::assistant("earlier reply"),
+                repeated.clone(),
+                repeated,
+            ]
+        );
+    }
 }

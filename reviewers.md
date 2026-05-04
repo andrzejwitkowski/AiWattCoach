@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | CodeRabbit | hidden transcript compare-and-set versioning and merge semantics
+
+- Problem: the hidden-transcript compare-and-set fix still used `now_epoch_seconds()` directly as the new version token, so writes in the same second could leave `updated_at_epoch_seconds` unchanged and weaken optimistic locking. The retry merge helper also treated transcript entries like a set via `Vec::contains`, which could drop valid repeated identical turns instead of appending only the new suffix.
+- Fix: changed both workout-summary and calendar-coach hidden-transcript writes to advance `updated_at_epoch_seconds` monotonically with `max(now, expected + 1)`, and rewrote the transcript merge helper to merge by longest suffix/prefix overlap so duplicate entries and ordering are preserved. Added focused unit regressions for the stalled-clock version bump and repeated-identical-message merge case.
+- Prevention: when using a mutable timestamp field as an optimistic-lock version, always guarantee the post-write version is strictly greater than the expected pre-write version even if the clock stalls within the same second. For append-only transcripts or logs, merge by sequence overlap rather than set membership so retries stay idempotent without deleting legitimate repeated entries.
+
 ### 2026-05-03 | user | split oversized coach conversation service module
 
 - Problem: `src/domain/coach_conversation/service/mod.rs` had grown into a large mixed module that combined transcript shaping, LLM request building, persistence helpers, recovery flow, and public use-case orchestration in one place. That made the calendar coach path harder to review and violated the repo guidance to keep service modules and functions smaller.
