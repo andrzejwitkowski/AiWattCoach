@@ -597,7 +597,7 @@ async fn training_plan_generator_runs_shared_tool_loop_for_openai_plan_generatio
         response.tool_loop_state.public_tool_calls[0]
             .arguments_preview
             .as_deref(),
-        Some("1 dated days from 2023-11-15 to 2023-11-15")
+        Some("1 dated day from 2023-11-15 to 2023-11-15")
     );
 
     let requests = chat_port.requests();
