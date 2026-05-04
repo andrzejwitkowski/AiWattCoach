@@ -319,7 +319,7 @@ async fn workout_summary_repository_replace_provider_transcript_rejects_stale_co
 
     assert_eq!(
         error.to_string(),
-        "hidden transcript update lost compare-and-set race"
+        "provider transcript update lost compare-and-set race"
     );
 
     let stored = repository

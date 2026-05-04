@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | user | CI drift after provider-transcript rename and local-only formatting
+
+- Problem: the Rust CI for PR #180 was failing for two small drift reasons unrelated to runtime logic. One Mongo regression test still asserted the old `hidden transcript update lost compare-and-set race` error string after the branch-wide rename to `provider transcript`, and a newly added OpenRouter adapter regression had not been run through `rustfmt`, so `cargo fmt --check` failed in CI even though local targeted tests passed.
+- Fix: updated `tests/workout_summary_mongo.rs` to assert the renamed `provider transcript` compare-and-set error text and ran `cargo fmt --all` so the new OpenRouter regression matches CI formatting.
+- Prevention: after terminology renames that cross domain, adapter, and test layers, grep for old human-readable error strings in tests as well as identifiers. Before pushing even a small follow-up test, run the exact CI gate (`cargo fmt --all --check` plus the relevant Rust test command) instead of relying only on targeted local execution.
+
 ### 2026-05-04 | user | OpenRouter Google cached-content conflict during tool calling
 
 - Problem: OpenRouter prompt caching for context prefixes was always serialized with `cache_control: { type: "ephemeral" }`, including requests routed to Google Gemini models through OpenRouter. When those requests also included tool-calling fields, Google AI Studio rejected them with `CachedContent can not be used with GenerateContent request setting system_instruction, tools or tool_config`, so otherwise valid coach requests failed at runtime.

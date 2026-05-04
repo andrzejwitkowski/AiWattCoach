@@ -258,7 +258,10 @@ async fn openrouter_request_skips_prompt_cache_for_google_models() {
     assert!(messages[1]["content"][0].get("cache_control").is_none());
     assert!(messages[2]["content"][0].get("cache_control").is_none());
     assert_eq!(requests[0].body["tool_choice"], "auto");
-    assert_eq!(requests[0].body["tools"][0]["function"]["name"], "lookupCalendar");
+    assert_eq!(
+        requests[0].body["tools"][0]["function"]["name"],
+        "lookupCalendar"
+    );
 }
 
 #[tokio::test]
