@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-04 | user | split spaghetti Mongo workout summary adapter
+
+- Problem: `src/adapters/mongo/workout_summary.rs` had turned into a mixed-responsibility adapter that combined Mongo document DTOs, domain mapping, alias/legacy lookup logic, repository mutations, and module-scoped tests in one large file. Even though behavior was still correct, that shape was review-hostile spaghetti and made further changes risky.
+- Fix: converted the adapter into a directory module with focused files: `document.rs` for persisted shapes, `mapping.rs` for domain/document translation, `lookup.rs` for identity and legacy lookup helpers, `repository.rs` for `WorkoutSummaryRepository` behavior, and `tests.rs` for adapter tests, while keeping the public `MongoWorkoutSummaryRepository` API and behavior unchanged.
+- Prevention: when a Mongo adapter starts mixing persisted DTOs, legacy-compat lookup rules, mutation filters, and tests in one file, stop and split it before adding more logic. Adapters should stay reviewable by concern, with `mod.rs` as the entry point and focused sibling modules for document, mapping, lookup, and repository behavior.
+
 ### 2026-05-04 | user | training-context test split and coach reply operation coverage follow-up
 
 - Problem: follow-up review comments were still correct in four places. `src/adapters/mongo/coach_conversation_reply_operations.rs` only covered the legacy `response_message` fallback and did not prove that a persisted hidden transcript with assistant tool calls plus tool messages round-trips correctly. `src/domain/workout_summary/service/internals.rs` kept `ensure_availability_configured_for_coach(...)` as a long mixed helper instead of splitting lookup/error-mapping concerns. The `training_context` test support stayed in oversized catch-all files, which made the refactor incomplete and harder to review.

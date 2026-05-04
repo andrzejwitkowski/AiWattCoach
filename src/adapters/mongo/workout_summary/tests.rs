@@ -1,10 +1,12 @@
 use mongodb::bson::{doc, from_document, Bson, DateTime};
 
 use super::{
-    current_workout_id_filter, document_identity_filter, document_is_locked,
-    editable_document_identity_filter, legacy_event_id_filter, map_document_to_domain,
-    map_domain_to_document, with_message_append_filter, ConversationMessageDocument,
-    WorkoutSummaryDocument,
+    document::{ConversationMessageDocument, WorkoutSummaryDocument},
+    lookup::{
+        current_workout_id_filter, document_identity_filter, document_is_locked,
+        editable_document_identity_filter, legacy_event_id_filter, with_message_append_filter,
+    },
+    mapping::{map_document_to_domain, map_domain_to_document},
 };
 use crate::domain::workout_summary::{WorkoutSummary, WorkoutSummaryError};
 
