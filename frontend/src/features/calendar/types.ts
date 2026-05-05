@@ -9,6 +9,7 @@ export const calendarCoachToolCallSchema = z.object({
   id: z.string(),
   name: z.string(),
   argumentsJson: z.string(),
+  argumentsPreview: z.string().nullish(),
 });
 
 export const calendarCoachConversationSchema = z.object({

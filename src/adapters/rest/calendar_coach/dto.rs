@@ -26,6 +26,8 @@ pub(super) struct ToolCallDto {
     pub name: String,
     #[serde(rename = "argumentsJson")]
     pub arguments_json: String,
+    #[serde(rename = "argumentsPreview", skip_serializing_if = "Option::is_none")]
+    pub arguments_preview: Option<String>,
 }
 
 #[derive(Serialize)]

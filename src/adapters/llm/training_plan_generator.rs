@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use chrono::TimeZone;
 use serde_json::json;
 
 use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
@@ -11,10 +12,14 @@ use crate::domain::{
         BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmError, LlmMessageRole,
         UserLlmConfigProvider,
     },
+    llm_tools::{
+        run_tool_loop_with_checkpoint, LlmToolLoopState, ToolExecutionContext, ToolLoopCheckpoint,
+        ToolScope,
+    },
     training_context::TrainingContextBuilder,
     training_plan::{
         TrainingPlanConversationRole, TrainingPlanError, TrainingPlanGenerator,
-        TrainingPlanPlanningContext,
+        TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint,
     },
     workout_summary::WorkoutRecap,
 };
@@ -127,17 +132,75 @@ where
         })
     }
 
-    fn generate_initial_plan_window(
+    fn generate_initial_plan_window_with_state(
         &self,
         user_id: &str,
         workout_id: &str,
         saved_at_epoch_seconds: i64,
         workout_recap: &WorkoutRecap,
         planning_context: Option<&TrainingPlanPlanningContext>,
-    ) -> BoxFuture<Result<String, TrainingPlanError>> {
+        restored_state: Option<LlmToolLoopState>,
+        checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
+        self.generate_initial_plan_window_with_state(
+            user_id,
+            workout_id,
+            saved_at_epoch_seconds,
+            workout_recap,
+            planning_context,
+            restored_state,
+            checkpoint,
+        )
+    }
+
+    fn correct_invalid_days_with_state(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+        workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
+        invalid_day_sections: &str,
+        issues: Vec<ValidationIssue>,
+        restored_state: Option<LlmToolLoopState>,
+        checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
+        self.correct_invalid_days_with_state(
+            user_id,
+            workout_id,
+            saved_at_epoch_seconds,
+            workout_recap,
+            planning_context,
+            invalid_day_sections,
+            issues,
+            restored_state,
+            checkpoint,
+        )
+    }
+}
+
+impl<Time> TrainingPlanLlmGenerator<Time>
+where
+    Time: Clock,
+{
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "training plan initial generation needs workout identity, recap context, planning context, restore state, and checkpoint callback together"
+    )]
+    pub fn generate_initial_plan_window_with_state(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+        workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
+        restored_state: Option<LlmToolLoopState>,
+        checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
         let llm_chat_port = self.llm_chat_port.clone();
         let llm_config_provider = self.llm_config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
+        let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         let workout_recap = workout_recap.clone();
@@ -167,32 +230,48 @@ where
             let mut conversation = planning_conversation_messages(planning_context.as_ref());
             conversation.push(LlmChatMessage::user(user_prompt));
 
-            let response = llm_chat_port
-                .chat(
-                    config,
-                    LlmChatRequest {
-                        user_id,
-                        system_prompt: training_plan_initial_window_system_prompt(
-                            context.context.profile.availability_configured,
-                        ),
-                        stable_context,
-                        volatile_context,
-                        conversation,
-                        cache_scope_key: None,
-                        cache_key: None,
-                        reusable_cache_id: None,
-                        tools: Vec::new(),
-                        tool_choice: crate::domain::llm::LlmToolChoice::None,
-                    },
-                )
-                .await
-                .map_err(map_llm_error)?;
+            let request = LlmChatRequest {
+                user_id,
+                system_prompt: training_plan_initial_window_system_prompt(
+                    context.context.profile.availability_configured,
+                ),
+                stable_context,
+                volatile_context,
+                conversation,
+                cache_scope_key: None,
+                cache_key: None,
+                reusable_cache_id: None,
+                ..Default::default()
+            };
+            let tool_context = ToolExecutionContext {
+                training_context: context.context.clone(),
+                today: current_date_string(clock.now_epoch_seconds()),
+            };
 
-            require_assistant_text(&response)
+            let response = run_tool_loop_with_checkpoint(
+                llm_chat_port,
+                config,
+                request,
+                ToolScope::TrainingPlanGeneration,
+                tool_context,
+                restored_state,
+                checkpoint.map(map_phase_checkpoint),
+            )
+            .await
+            .map_err(map_llm_error)?;
+
+            Ok(TrainingPlanPhaseOutput {
+                raw_response: require_assistant_text(&response.response)?,
+                tool_loop_state: response.state,
+            })
         })
     }
 
-    fn correct_invalid_days(
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "training plan correction needs workout identity, recap context, planning context, and validation payload together"
+    )]
+    pub fn correct_invalid_days_with_state(
         &self,
         user_id: &str,
         workout_id: &str,
@@ -201,10 +280,13 @@ where
         planning_context: Option<&TrainingPlanPlanningContext>,
         invalid_day_sections: &str,
         issues: Vec<ValidationIssue>,
-    ) -> BoxFuture<Result<String, TrainingPlanError>> {
+        restored_state: Option<LlmToolLoopState>,
+        checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
         let llm_chat_port = self.llm_chat_port.clone();
         let llm_config_provider = self.llm_config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
+        let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         let workout_recap = workout_recap.clone();
@@ -242,34 +324,57 @@ where
             let mut conversation = planning_conversation_messages(planning_context.as_ref());
             conversation.push(LlmChatMessage::user(user_prompt));
 
-            let response = llm_chat_port
-                .chat(
-                    config,
-                    LlmChatRequest {
-                        user_id,
-                        system_prompt: training_plan_correction_system_prompt(
-                            context.context.profile.availability_configured,
-                        ),
-                        stable_context,
-                        volatile_context,
-                        conversation,
-                        cache_scope_key: None,
-                        cache_key: None,
-                        reusable_cache_id: None,
-                        tools: Vec::new(),
-                        tool_choice: crate::domain::llm::LlmToolChoice::None,
-                    },
-                )
-                .await
-                .map_err(map_llm_error)?;
+            let request = LlmChatRequest {
+                user_id,
+                system_prompt: training_plan_correction_system_prompt(
+                    context.context.profile.availability_configured,
+                ),
+                stable_context,
+                volatile_context,
+                conversation,
+                cache_scope_key: None,
+                cache_key: None,
+                reusable_cache_id: None,
+                ..Default::default()
+            };
+            let tool_context = ToolExecutionContext {
+                training_context: context.context.clone(),
+                today: current_date_string(clock.now_epoch_seconds()),
+            };
 
-            require_assistant_text(&response)
+            let response = run_tool_loop_with_checkpoint(
+                llm_chat_port,
+                config,
+                request,
+                ToolScope::TrainingPlanGeneration,
+                tool_context,
+                restored_state,
+                checkpoint.map(map_phase_checkpoint),
+            )
+            .await
+            .map_err(map_llm_error)?;
+
+            Ok(TrainingPlanPhaseOutput {
+                raw_response: require_assistant_text(&response.response)?,
+                tool_loop_state: response.state,
+            })
         })
     }
 }
 
 fn map_llm_error(error: LlmError) -> TrainingPlanError {
     TrainingPlanError::Unavailable(error.to_string())
+}
+
+fn map_phase_checkpoint(checkpoint: TrainingPlanToolLoopCheckpoint) -> ToolLoopCheckpoint {
+    std::sync::Arc::new(move |state| {
+        let checkpoint = checkpoint.clone();
+        Box::pin(async move {
+            checkpoint(state)
+                .await
+                .map_err(|error| LlmError::Checkpoint(error.to_string()))
+        })
+    })
 }
 
 fn require_assistant_text(
@@ -311,6 +416,14 @@ fn training_plan_planning_guidelines(availability_configured: bool) -> String {
     format!(
         "{TRAINING_PLAN_PLANNING_GUIDELINES_BASE} {TRAINING_PLAN_CONVERSATION_GUIDANCE} {TRAINING_PLAN_FORWARD_LOAD_GUIDANCE} {availability_guidance}"
     )
+}
+
+fn current_date_string(now_epoch_seconds: i64) -> String {
+    chrono::Utc
+        .timestamp_opt(now_epoch_seconds, 0)
+        .single()
+        .map(|now| now.date_naive().format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| "1970-01-01".to_string())
 }
 
 fn training_plan_stable_context(

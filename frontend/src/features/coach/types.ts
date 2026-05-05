@@ -7,6 +7,7 @@ export const toolCallSchema = z.object({
   id: z.string(),
   name: z.string(),
   argumentsJson: z.string(),
+  argumentsPreview: z.string().nullish(),
 });
 
 export const conversationMessageSchema = z.object({

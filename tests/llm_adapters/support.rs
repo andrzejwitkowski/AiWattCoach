@@ -99,6 +99,21 @@ impl UserLlmConfigProvider for FixedGeminiConfigProvider {
 }
 
 #[derive(Clone)]
+pub(crate) struct FixedOpenAiConfigProvider;
+
+impl UserLlmConfigProvider for FixedOpenAiConfigProvider {
+    fn get_config(&self, _user_id: &str) -> LlmBoxFuture<Result<LlmProviderConfig, LlmError>> {
+        Box::pin(async {
+            Ok(LlmProviderConfig {
+                provider: LlmProvider::OpenAi,
+                model: "gpt-4o-mini".to_string(),
+                api_key: "openai-key".to_string(),
+            })
+        })
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct FailingReusableCacheRepository;
 
 impl LlmContextCacheRepository for FailingReusableCacheRepository {

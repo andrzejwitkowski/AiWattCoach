@@ -15,6 +15,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const isTool = message.role === 'tool';
+  const toolCallDisplay = message.toolCall?.argumentsPreview ?? message.toolCall?.argumentsJson;
   const containerClassName = ['flex', isUser ? 'justify-end' : 'justify-start'].join(' ');
   const bubbleClassName = [
     'max-w-[85%] rounded-2xl border px-4 py-4',
@@ -35,7 +36,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-200/80">Tool</p>
             <p className="text-sm font-semibold text-indigo-50">{message.toolCall.name}</p>
             <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-indigo-200/10 bg-slate-950/40 p-3 text-xs leading-6 text-indigo-100/80">
-              {message.toolCall.argumentsJson}
+              {toolCallDisplay}
             </pre>
           </div>
         ) : (

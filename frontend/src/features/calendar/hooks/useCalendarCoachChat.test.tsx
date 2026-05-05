@@ -280,6 +280,7 @@ describe('useCalendarCoachChat', () => {
                 id: 'tool-1',
                 name: 'lookupCalendar',
                 argumentsJson: '{"week":"2026-W18"}',
+                argumentsPreview: 'week 2026-W18',
               },
               createdAtEpochSeconds: 3,
             },
@@ -295,6 +296,7 @@ describe('useCalendarCoachChat', () => {
         id: 'tool-1',
         name: 'lookupCalendar',
         argumentsJson: '{"week":"2026-W18"}',
+        argumentsPreview: 'week 2026-W18',
       });
     });
 
@@ -321,6 +323,7 @@ describe('useCalendarCoachChat', () => {
                   id: 'tool-1',
                   name: 'lookupCalendar',
                   argumentsJson: '{"week":"2026-W18"}',
+                  argumentsPreview: 'week 2026-W18',
                 },
                 createdAtEpochSeconds: 3,
               },
@@ -338,6 +341,7 @@ describe('useCalendarCoachChat', () => {
         id: 'tool-1',
         name: 'lookupCalendar',
         argumentsJson: '{"week":"2026-W18"}',
+        argumentsPreview: 'week 2026-W18',
       });
     });
   });

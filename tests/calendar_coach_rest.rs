@@ -841,6 +841,7 @@ async fn websocket_streams_tool_message_before_calendar_coach_message() {
         id: "tool-1".to_string(),
         name: "lookupCalendar".to_string(),
         arguments_json: r#"{"week":"2026-W18"}"#.to_string(),
+        arguments_preview: None,
     });
     let app =
         calendar_coach_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;

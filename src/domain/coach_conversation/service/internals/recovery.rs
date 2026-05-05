@@ -1,7 +1,7 @@
 use crate::domain::{
     coach_conversation::{CoachConversationMessageRole, CoachConversationReplyOperation},
     llm::{last_nonempty_assistant_content, LlmError, LlmMessageRole},
-    workout_summary::PublicToolCall,
+    llm_tools::public_tool_call_from_llm,
 };
 
 use super::super::*;
@@ -168,15 +168,8 @@ where
                     continue;
                 }
 
-                self.append_tool_message(
-                    conversation,
-                    PublicToolCall {
-                        id: tool_call.id.clone(),
-                        name: tool_call.name.clone(),
-                        arguments_json: tool_call.arguments_json.clone(),
-                    },
-                )
-                .await?;
+                self.append_tool_message(conversation, public_tool_call_from_llm(tool_call))
+                    .await?;
             }
         }
 

@@ -3,7 +3,6 @@ use crate::domain::{
         validate_conversation_message_content, CoachConversationMessageRole,
         CoachConversationReplyOperation,
     },
-    llm::LlmChatResponse,
     settings::{SettingsError, UserSettings},
     workout_summary::PublicToolCall,
 };
@@ -81,11 +80,11 @@ where
         &self,
         conversation: &CoachConversation,
         operation: CoachConversationReplyOperation,
-        response: &LlmChatResponse,
+        public_tool_calls: &[PublicToolCall],
     ) -> Result<CoachConversationReplyOperation, CoachConversationError> {
         let mut operation = operation;
 
-        for tool_call in response.tool_calls() {
+        for tool_call in public_tool_calls {
             if operation
                 .public_tool_call_ids
                 .iter()
@@ -102,15 +101,8 @@ where
                 continue;
             }
 
-            self.append_tool_message(
-                conversation,
-                PublicToolCall {
-                    id: tool_call.id.clone(),
-                    name: tool_call.name.clone(),
-                    arguments_json: tool_call.arguments_json.clone(),
-                },
-            )
-            .await?;
+            self.append_tool_message(conversation, tool_call.clone())
+                .await?;
             operation.public_tool_call_ids.push(tool_call.id.clone());
         }
 

@@ -9,6 +9,7 @@ pub struct PublicToolCall {
     pub id: String,
     pub name: String,
     pub arguments_json: String,
+    pub arguments_preview: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,7 +38,7 @@ impl CoachReplyOperationFailureKind {
             LlmError::ProviderRejected(_) => Self::ProviderRejected,
             LlmError::RateLimited(_) => Self::RateLimited,
             LlmError::InvalidResponse(_) => Self::InvalidResponse,
-            LlmError::Internal(_) => Self::Internal,
+            LlmError::Checkpoint(_) | LlmError::Internal(_) => Self::Internal,
         }
     }
 

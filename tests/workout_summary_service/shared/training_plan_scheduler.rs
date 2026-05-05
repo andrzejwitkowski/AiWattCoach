@@ -10,9 +10,9 @@ use aiwattcoach::{
             training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
             TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
             TrainingPlanGenerationOperationRepository, TrainingPlanGenerationService,
-            TrainingPlanGenerator, TrainingPlanPlanningContext, TrainingPlanProjectedDay,
-            TrainingPlanProjectionRepository, TrainingPlanSnapshot, TrainingPlanSnapshotRepository,
-            TrainingPlanUseCases,
+            TrainingPlanGenerator, TrainingPlanPhaseOutput, TrainingPlanPlanningContext,
+            TrainingPlanProjectedDay, TrainingPlanProjectionRepository, TrainingPlanSnapshot,
+            TrainingPlanSnapshotRepository, TrainingPlanUseCases,
         },
         workout_summary::WorkoutRecap,
     },
@@ -288,28 +288,33 @@ impl TrainingPlanGenerator for SaveFlowTrainingPlanGenerator {
         })
     }
 
-    fn generate_initial_plan_window(
+    fn generate_initial_plan_window_with_state(
         &self,
         _user_id: &str,
         _workout_id: &str,
         _saved_at_epoch_seconds: i64,
         _workout_recap: &WorkoutRecap,
         _planning_context: Option<&TrainingPlanPlanningContext>,
+        _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
+        _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
-        Result<String, aiwattcoach::domain::training_plan::TrainingPlanError>,
+        Result<TrainingPlanPhaseOutput, aiwattcoach::domain::training_plan::TrainingPlanError>,
     > {
         Box::pin(async {
-            Ok((0..14)
-                .map(|offset| {
-                    let day = 15 + offset;
-                    format!("2023-11-{day:02}\nRest Day")
-                })
-                .collect::<Vec<_>>()
-                .join("\n\n"))
+            Ok(TrainingPlanPhaseOutput {
+                raw_response: (0..14)
+                    .map(|offset| {
+                        let day = 15 + offset;
+                        format!("2023-11-{day:02}\nRest Day")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n"),
+                tool_loop_state: aiwattcoach::domain::llm_tools::LlmToolLoopState::default(),
+            })
         })
     }
 
-    fn correct_invalid_days(
+    fn correct_invalid_days_with_state(
         &self,
         _user_id: &str,
         _workout_id: &str,
@@ -318,8 +323,10 @@ impl TrainingPlanGenerator for SaveFlowTrainingPlanGenerator {
         _planning_context: Option<&TrainingPlanPlanningContext>,
         _invalid_day_sections: &str,
         _issues: Vec<ValidationIssue>,
+        _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
+        _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
-        Result<String, aiwattcoach::domain::training_plan::TrainingPlanError>,
+        Result<TrainingPlanPhaseOutput, aiwattcoach::domain::training_plan::TrainingPlanError>,
     > {
         Box::pin(async { unreachable!("save-flow test does not use corrections") })
     }

@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use crate::domain::llm::{last_nonempty_assistant_content, merge_provider_transcript_entries};
+use crate::domain::{
+    llm::{last_nonempty_assistant_content, merge_provider_transcript_entries},
+    llm_tools::public_tool_call_from_llm,
+};
 
 use tracing::{info, warn};
 
@@ -348,16 +351,8 @@ where
                     continue;
                 }
 
-                self.append_tool_message(
-                    user_id,
-                    workout_id,
-                    crate::domain::workout_summary::PublicToolCall {
-                        id: tool_call.id.clone(),
-                        name: tool_call.name.clone(),
-                        arguments_json: tool_call.arguments_json.clone(),
-                    },
-                )
-                .await?;
+                self.append_tool_message(user_id, workout_id, public_tool_call_from_llm(tool_call))
+                    .await?;
             }
         }
 

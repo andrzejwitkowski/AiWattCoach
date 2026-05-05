@@ -135,7 +135,7 @@ impl CoachConversationReplyOperationFailureKind {
             LlmError::ProviderRejected(_) => Self::ProviderRejected,
             LlmError::RateLimited(_) => Self::RateLimited,
             LlmError::InvalidResponse(_) => Self::InvalidResponse,
-            LlmError::Internal(_) => Self::Internal,
+            LlmError::Checkpoint(_) | LlmError::Internal(_) => Self::Internal,
         }
     }
 

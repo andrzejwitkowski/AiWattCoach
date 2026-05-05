@@ -385,22 +385,25 @@ impl WorkoutCoach for TestCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
-    ) -> crate::domain::llm::BoxFuture<Result<LlmChatResponse, LlmError>> {
+    ) -> crate::domain::llm::BoxFuture<Result<crate::domain::llm_tools::LlmToolLoopOutput, LlmError>>
+    {
         let error = self.fail_with.lock().expect("coach mutex poisoned").take();
         let user_message = user_message.to_string();
         Box::pin(async move {
             if let Some(error) = error {
                 return Err(error);
             }
-            Ok(LlmChatResponse {
-                provider: LlmProvider::OpenAi,
-                model: "test-coach".to_string(),
-                message: LlmChatMessage::assistant(format!("Coach reply to: {user_message}")),
-                finish_reason: None,
-                provider_request_id: Some("req-1".to_string()),
-                usage: LlmTokenUsage::default(),
-                cache: LlmCacheUsage::default(),
-            })
+            Ok(crate::domain::llm_tools::LlmToolLoopOutput::from_response(
+                LlmChatResponse {
+                    provider: LlmProvider::OpenAi,
+                    model: "test-coach".to_string(),
+                    message: LlmChatMessage::assistant(format!("Coach reply to: {user_message}")),
+                    finish_reason: None,
+                    provider_request_id: Some("req-1".to_string()),
+                    usage: LlmTokenUsage::default(),
+                    cache: LlmCacheUsage::default(),
+                },
+            ))
         })
     }
 }
@@ -427,22 +430,25 @@ impl WorkoutCoach for BlockingCoach {
         _summary: &WorkoutSummary,
         user_message: &str,
         _athlete_summary_text: Option<&str>,
-    ) -> crate::domain::llm::BoxFuture<Result<LlmChatResponse, LlmError>> {
+    ) -> crate::domain::llm::BoxFuture<Result<crate::domain::llm_tools::LlmToolLoopOutput, LlmError>>
+    {
         let started = self.started.clone();
         let release = self.release.clone();
         let user_message = user_message.to_string();
         Box::pin(async move {
             started.notify_one();
             release.notified().await;
-            Ok(LlmChatResponse {
-                provider: LlmProvider::OpenAi,
-                model: "test-coach".to_string(),
-                message: LlmChatMessage::assistant(format!("Coach reply to: {user_message}")),
-                finish_reason: None,
-                provider_request_id: Some("req-1".to_string()),
-                usage: LlmTokenUsage::default(),
-                cache: LlmCacheUsage::default(),
-            })
+            Ok(crate::domain::llm_tools::LlmToolLoopOutput::from_response(
+                LlmChatResponse {
+                    provider: LlmProvider::OpenAi,
+                    model: "test-coach".to_string(),
+                    message: LlmChatMessage::assistant(format!("Coach reply to: {user_message}")),
+                    finish_reason: None,
+                    provider_request_id: Some("req-1".to_string()),
+                    usage: LlmTokenUsage::default(),
+                    cache: LlmCacheUsage::default(),
+                },
+            ))
         })
     }
 }

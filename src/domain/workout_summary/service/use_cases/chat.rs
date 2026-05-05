@@ -121,7 +121,7 @@ where
             "requesting workout summary coach reply"
         );
 
-        let (operation, llm_response, athlete_summary_was_regenerated) = self
+        let (operation, llm_output, athlete_summary_was_regenerated) = self
             .request_and_checkpoint_coach_reply(
                 user_id,
                 &target.storage_workout_id,
@@ -134,10 +134,10 @@ where
                 user_id,
                 &target.storage_workout_id,
                 &operation,
-                &llm_response,
+                &llm_output.response,
             )
             .await?;
-        self.finalize_coach_reply_operation(operation, &llm_response, &coach_message)
+        self.finalize_coach_reply_operation(operation, &llm_output.response, &coach_message)
             .await?;
 
         self.build_coach_reply_result(
@@ -279,7 +279,7 @@ where
     ) -> Result<
         (
             CoachReplyOperation,
-            crate::domain::llm::LlmChatResponse,
+            crate::domain::llm_tools::LlmToolLoopOutput,
             bool,
         ),
         WorkoutSummaryError,
@@ -288,7 +288,7 @@ where
         let (athlete_summary_text, athlete_summary_was_regenerated) =
             self.ensure_athlete_summary(user_id).await?;
 
-        let llm_response = self
+        let llm_output = self
             .request_coach_reply_from_llm(
                 user_id,
                 workout_id,
@@ -299,19 +299,24 @@ where
             )
             .await?;
         let operation = self
-            .persist_provider_response_checkpoint(user_id, workout_id, operation, &llm_response)
+            .persist_provider_response_checkpoint(user_id, workout_id, operation, &llm_output)
             .await?;
         let operation = self
-            .materialize_public_tool_messages(user_id, workout_id, operation, &llm_response)
+            .materialize_public_tool_messages(
+                user_id,
+                workout_id,
+                operation,
+                &llm_output.state.public_tool_calls,
+            )
             .await?;
-        let operation = if llm_response.tool_calls().is_empty() {
+        let operation = if llm_output.state.public_tool_calls.is_empty() {
             operation
         } else {
             self.persist_post_provider_operation(operation, "persist_public_tool_messages")
                 .await?
         };
 
-        Ok((operation, llm_response, athlete_summary_was_regenerated))
+        Ok((operation, llm_output, athlete_summary_was_regenerated))
     }
 
     async fn request_coach_reply_from_llm(
@@ -322,7 +327,7 @@ where
         summary: &WorkoutSummary,
         athlete_summary_text: Option<&str>,
         operation: &CoachReplyOperation,
-    ) -> Result<crate::domain::llm::LlmChatResponse, WorkoutSummaryError> {
+    ) -> Result<crate::domain::llm_tools::LlmToolLoopOutput, WorkoutSummaryError> {
         match self
             .coach
             .reply(
@@ -356,17 +361,17 @@ where
         user_id: &str,
         workout_id: &str,
         operation: CoachReplyOperation,
-        llm_response: &crate::domain::llm::LlmChatResponse,
+        llm_output: &crate::domain::llm_tools::LlmToolLoopOutput,
     ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
         let operation = operation.record_provider_response(PendingCoachReplyCheckpoint {
-            provider: llm_response.provider.clone(),
-            model: llm_response.model.clone(),
-            provider_request_id: llm_response.provider_request_id.clone(),
-            provider_cache_id: llm_response.cache.provider_cache_id.clone(),
-            token_usage: llm_response.usage.clone(),
-            cache_usage: llm_response.cache.clone(),
-            provider_transcript: vec![llm_response.message.clone()],
-            finish_reason: llm_response.finish_reason.clone(),
+            provider: llm_output.response.provider.clone(),
+            model: llm_output.response.model.clone(),
+            provider_request_id: llm_output.response.provider_request_id.clone(),
+            provider_cache_id: llm_output.response.cache.provider_cache_id.clone(),
+            token_usage: llm_output.response.usage.clone(),
+            cache_usage: llm_output.response.cache.clone(),
+            provider_transcript: llm_output.state.provider_transcript.clone(),
+            finish_reason: llm_output.state.finish_reason.clone(),
             updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
         });
         let operation = self

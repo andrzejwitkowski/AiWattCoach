@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{
     ai_workflow::{AttemptRecord, ValidationIssue, WorkflowPhase, WorkflowStatus},
+    llm_tools::LlmToolLoopState,
     training_plan::{
         BoxFuture, TrainingPlanError, TrainingPlanFailureState, TrainingPlanGenerationClaimResult,
         TrainingPlanGenerationOperation, TrainingPlanGenerationOperationRepository,
@@ -43,7 +44,11 @@ struct TrainingPlanGenerationOperationDocument {
     #[serde(default)]
     projection_persisted_at: Option<DateTime>,
     raw_plan_response: Option<String>,
+    #[serde(default)]
+    initial_plan_tool_loop_state: Option<LlmToolLoopState>,
     raw_correction_response: Option<String>,
+    #[serde(default)]
+    correction_tool_loop_state: Option<LlmToolLoopState>,
     validation_issues: Vec<ValidationIssueDocument>,
     attempts: Vec<AttemptRecordDocument>,
     failure: Option<TrainingPlanFailureStateDocument>,
@@ -255,7 +260,9 @@ fn map_operation_to_document(
         )
         .expect("projection_persisted_at should fit BSON DateTime"),
         raw_plan_response: operation.raw_plan_response.clone(),
+        initial_plan_tool_loop_state: operation.initial_plan_tool_loop_state.clone(),
         raw_correction_response: operation.raw_correction_response.clone(),
+        correction_tool_loop_state: operation.correction_tool_loop_state.clone(),
         validation_issues: operation
             .validation_issues
             .iter()
@@ -317,7 +324,9 @@ fn map_document_to_operation(
             document.projection_persisted_at_epoch_seconds,
         ),
         raw_plan_response: document.raw_plan_response,
+        initial_plan_tool_loop_state: document.initial_plan_tool_loop_state,
         raw_correction_response: document.raw_correction_response,
+        correction_tool_loop_state: document.correction_tool_loop_state,
         validation_issues: document
             .validation_issues
             .into_iter()

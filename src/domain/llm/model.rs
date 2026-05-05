@@ -74,8 +74,9 @@ pub struct LlmToolDefinition {
     pub input_schema_json: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LlmToolChoice {
+    #[default]
     None,
     Auto,
     Required,
@@ -147,7 +148,7 @@ impl LlmChatMessage {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct LlmChatRequest {
     pub user_id: String,
     pub system_prompt: String,
@@ -157,7 +158,15 @@ pub struct LlmChatRequest {
     pub cache_scope_key: Option<String>,
     pub cache_key: Option<String>,
     pub reusable_cache_id: Option<String>,
+    /// Populated by the orchestrator (e.g. `run_tool_loop`) based on scope.
+    /// Do NOT set this in domain request builders; it is injected at the
+    /// transport boundary so the builder is not misleading about whether
+    /// tools are actually available.
+    #[serde(default)]
     pub tools: Vec<LlmToolDefinition>,
+    /// Populated by the orchestrator (e.g. `run_tool_loop`) based on scope.
+    /// See note on `tools` above.
+    #[serde(default)]
     pub tool_choice: LlmToolChoice,
 }
 

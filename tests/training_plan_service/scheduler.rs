@@ -20,7 +20,7 @@ use aiwattcoach::{
         training_plan::{
             training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
             TrainingPlanError, TrainingPlanGenerationService, TrainingPlanGenerator,
-            TrainingPlanPlanningContext, TrainingPlanUseCases,
+            TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanUseCases,
         },
         workout_summary::WorkoutRecap,
     },
@@ -465,18 +465,27 @@ impl TrainingPlanGenerator for PanicOnceTrainingPlanGenerator {
         })
     }
 
-    fn generate_initial_plan_window(
+    fn generate_initial_plan_window_with_state(
         &self,
         _user_id: &str,
         _workout_id: &str,
         _saved_at_epoch_seconds: i64,
         _workout_recap: &WorkoutRecap,
         _planning_context: Option<&TrainingPlanPlanningContext>,
-    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
-        Box::pin(async move { Ok(valid_plan_window(FIRST_DAY)) })
+        _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
+        _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<TrainingPlanPhaseOutput, TrainingPlanError>,
+    > {
+        Box::pin(async move {
+            Ok(TrainingPlanPhaseOutput {
+                raw_response: valid_plan_window(FIRST_DAY),
+                tool_loop_state: aiwattcoach::domain::llm_tools::LlmToolLoopState::default(),
+            })
+        })
     }
 
-    fn correct_invalid_days(
+    fn correct_invalid_days_with_state(
         &self,
         _user_id: &str,
         _workout_id: &str,
@@ -485,7 +494,11 @@ impl TrainingPlanGenerator for PanicOnceTrainingPlanGenerator {
         _planning_context: Option<&TrainingPlanPlanningContext>,
         _invalid_day_sections: &str,
         _issues: Vec<ValidationIssue>,
-    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
+        _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
+        _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<TrainingPlanPhaseOutput, TrainingPlanError>,
+    > {
         Box::pin(
             async move { unreachable!("correction should not run in panic-once generator test") },
         )
@@ -512,18 +525,27 @@ impl TrainingPlanGenerator for BlockingTrainingPlanGenerator {
         })
     }
 
-    fn generate_initial_plan_window(
+    fn generate_initial_plan_window_with_state(
         &self,
         _user_id: &str,
         _workout_id: &str,
         _saved_at_epoch_seconds: i64,
         _workout_recap: &WorkoutRecap,
         _planning_context: Option<&TrainingPlanPlanningContext>,
-    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
-        Box::pin(async move { Ok(valid_plan_window(FIRST_DAY)) })
+        _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
+        _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<TrainingPlanPhaseOutput, TrainingPlanError>,
+    > {
+        Box::pin(async move {
+            Ok(TrainingPlanPhaseOutput {
+                raw_response: valid_plan_window(FIRST_DAY),
+                tool_loop_state: aiwattcoach::domain::llm_tools::LlmToolLoopState::default(),
+            })
+        })
     }
 
-    fn correct_invalid_days(
+    fn correct_invalid_days_with_state(
         &self,
         _user_id: &str,
         _workout_id: &str,
@@ -532,7 +554,11 @@ impl TrainingPlanGenerator for BlockingTrainingPlanGenerator {
         _planning_context: Option<&TrainingPlanPlanningContext>,
         _invalid_day_sections: &str,
         _issues: Vec<ValidationIssue>,
-    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<String, TrainingPlanError>> {
+        _restored_state: Option<aiwattcoach::domain::llm_tools::LlmToolLoopState>,
+        _checkpoint: Option<aiwattcoach::domain::training_plan::TrainingPlanToolLoopCheckpoint>,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<TrainingPlanPhaseOutput, TrainingPlanError>,
+    > {
         Box::pin(
             async move { unreachable!("correction should not run in blocking generator test") },
         )

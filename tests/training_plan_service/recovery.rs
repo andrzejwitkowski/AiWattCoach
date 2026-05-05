@@ -1,4 +1,83 @@
 use super::support::*;
+use aiwattcoach::domain::training_plan::BoxFuture;
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone, Default)]
+struct CheckpointingInitialPlanGenerator {
+    restored_states: Arc<Mutex<Vec<Option<LlmToolLoopState>>>>,
+    initial_calls: Arc<Mutex<u32>>,
+}
+
+impl CheckpointingInitialPlanGenerator {
+    fn restored_states(&self) -> Vec<Option<LlmToolLoopState>> {
+        self.restored_states.lock().unwrap().clone()
+    }
+}
+
+impl TrainingPlanGenerator for CheckpointingInitialPlanGenerator {
+    fn generate_workout_recap(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<WorkoutRecap, TrainingPlanError>> {
+        Box::pin(async move { unreachable!("recovery test uses stored recap") })
+    }
+
+    fn generate_initial_plan_window_with_state(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        restored_state: Option<LlmToolLoopState>,
+        checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
+        self.restored_states.lock().unwrap().push(restored_state);
+        let call_number = {
+            let mut initial_calls = self.initial_calls.lock().unwrap();
+            *initial_calls += 1;
+            *initial_calls
+        };
+
+        Box::pin(async move {
+            if call_number == 1 {
+                checkpoint.expect("expected initial checkpoint callback")(LlmToolLoopState {
+                    round_count: 2,
+                    ..LlmToolLoopState::default()
+                })
+                .await?;
+                return Err(TrainingPlanError::Unavailable(
+                    "simulated crash after initial tool round".to_string(),
+                ));
+            }
+
+            Ok(TrainingPlanPhaseOutput {
+                raw_response: valid_plan_window(FIRST_DAY),
+                tool_loop_state: LlmToolLoopState {
+                    round_count: 3,
+                    ..LlmToolLoopState::default()
+                },
+            })
+        })
+    }
+
+    fn correct_invalid_days_with_state(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _saved_at_epoch_seconds: i64,
+        _workout_recap: &WorkoutRecap,
+        _planning_context: Option<&TrainingPlanPlanningContext>,
+        _invalid_day_sections: &str,
+        _issues: Vec<ValidationIssue>,
+        _restored_state: Option<LlmToolLoopState>,
+        _checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
+        Box::pin(async move { unreachable!("recovery test does not use correction flow") })
+    }
+}
 
 #[tokio::test]
 async fn reclaim_resumes_from_stored_checkpoints_without_regenerating_completed_phases() {
@@ -25,6 +104,14 @@ async fn reclaim_resumes_from_stored_checkpoints_without_regenerating_completed_
     let operation = built.operations.stored_operation();
     assert_eq!(operation.status, WorkflowStatus::Completed);
     assert!(operation.validation_issues.is_empty());
+    assert_eq!(
+        built.generator.initial_restored_states(),
+        Vec::<Option<LlmToolLoopState>>::new()
+    );
+    assert_eq!(
+        built.generator.correction_restored_states(),
+        Vec::<Option<LlmToolLoopState>>::new()
+    );
 }
 
 #[tokio::test]
@@ -58,6 +145,62 @@ async fn reclaim_with_stored_recap_skips_redundant_workout_summary_persistence()
         .filter(|attempt| attempt.phase == WorkflowPhase::WorkoutRecap)
         .count();
     assert_eq!(recap_attempts, 1);
+    assert_eq!(built.generator.initial_restored_states(), vec![None]);
+}
+
+#[tokio::test]
+async fn reclaim_reuses_persisted_initial_tool_loop_state_before_raw_response_exists() {
+    let call_log = new_call_log();
+    let snapshots = InMemoryTrainingPlanSnapshotRepository::new();
+    let projected_days =
+        InMemoryTrainingPlanProjectedDayRepository::new(snapshots.snapshots.clone());
+    let operations = InMemoryTrainingPlanOperationRepository::with_operation(
+        call_log.clone(),
+        stale_pending_operation_with_recap_only(),
+    );
+    let generator = CheckpointingInitialPlanGenerator::default();
+    let workout_summary = StubWorkoutSummaryPort::new(call_log);
+    let service = TrainingPlanGenerationService::new(
+        snapshots,
+        projected_days,
+        operations.clone(),
+        generator.clone(),
+        workout_summary,
+        FixedClock {
+            now_epoch_seconds: date_epoch(SECOND_DAY),
+        },
+    );
+
+    let error = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        TrainingPlanError::Unavailable("simulated crash after initial tool round".to_string())
+    );
+
+    let failed_operation = operations.stored_operation();
+    assert_eq!(failed_operation.status, WorkflowStatus::Failed);
+    assert!(failed_operation.raw_plan_response.is_none());
+    assert_eq!(
+        failed_operation
+            .initial_plan_tool_loop_state
+            .as_ref()
+            .map(|state| state.round_count),
+        Some(2)
+    );
+
+    service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    let restored = generator.restored_states();
+    assert_eq!(restored.len(), 2);
+    assert_eq!(restored[0], None);
+    assert_eq!(restored[1].as_ref().map(|state| state.round_count), Some(2));
 }
 
 #[tokio::test]

@@ -140,6 +140,7 @@ async fn websocket_streams_tool_message_before_coach_message() {
             id: "tool-1".to_string(),
             name: "lookupCalendar".to_string(),
             arguments_json: r#"{"date":"2026-05-02"}"#.to_string(),
+            arguments_preview: None,
         });
     let app =
         workout_summary_test_app(TestIdentityServiceWithSession::default(), service.clone()).await;

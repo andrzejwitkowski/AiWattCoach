@@ -26,7 +26,10 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
         .await
         .unwrap();
 
-    assert_eq!(response.assistant_text(), Some("Gemini coach reply"));
+    assert_eq!(
+        response.response.assistant_text(),
+        Some("Gemini coach reply")
+    );
 
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);

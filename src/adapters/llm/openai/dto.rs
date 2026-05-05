@@ -4,8 +4,45 @@ use serde::{Deserialize, Serialize};
 pub struct OpenAiChatRequest {
     pub model: String,
     pub messages: Vec<OpenAiMessage>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub tools: Vec<OpenAiTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<OpenAiToolChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct OpenAiTool {
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub function: OpenAiFunctionDefinition,
+}
+
+#[derive(Serialize)]
+pub struct OpenAiFunctionDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum OpenAiToolChoice {
+    String(String),
+    Named(OpenAiNamedToolChoice),
+}
+
+#[derive(Serialize)]
+pub struct OpenAiNamedToolChoice {
+    #[serde(rename = "type")]
+    pub choice_type: String,
+    pub function: OpenAiNamedFunctionChoice,
+}
+
+#[derive(Serialize)]
+pub struct OpenAiNamedFunctionChoice {
+    pub name: String,
 }
 
 #[derive(Serialize)]

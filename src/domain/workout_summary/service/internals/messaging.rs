@@ -80,11 +80,11 @@ where
         user_id: &str,
         workout_id: &str,
         operation: CoachReplyOperation,
-        response: &crate::domain::llm::LlmChatResponse,
+        public_tool_calls: &[crate::domain::workout_summary::PublicToolCall],
     ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
         let mut operation = operation;
 
-        for tool_call in response.tool_calls() {
+        for tool_call in public_tool_calls {
             if self
                 .tool_call_is_already_materialized(user_id, workout_id, &operation, &tool_call.id)
                 .await?
@@ -99,16 +99,8 @@ where
                 continue;
             }
 
-            self.append_tool_message(
-                user_id,
-                workout_id,
-                crate::domain::workout_summary::PublicToolCall {
-                    id: tool_call.id.clone(),
-                    name: tool_call.name.clone(),
-                    arguments_json: tool_call.arguments_json.clone(),
-                },
-            )
-            .await?;
+            self.append_tool_message(user_id, workout_id, tool_call.clone())
+                .await?;
             operation.public_tool_call_ids.push(tool_call.id.clone());
         }
 

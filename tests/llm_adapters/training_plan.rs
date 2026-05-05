@@ -5,7 +5,7 @@ use aiwattcoach::{
     domain::ai_workflow::ValidationIssue,
     domain::llm::{
         BoxFuture as LlmBoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse,
-        LlmError, LlmProvider, LlmProviderConfig, LlmTokenUsage,
+        LlmError, LlmFinishReason, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall,
     },
     domain::training_context::{
         IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
@@ -20,7 +20,8 @@ use aiwattcoach::{
 };
 
 use crate::support::{
-    CapturingChatPort, FixedClock, FixedGeminiConfigProvider, StubTrainingContextBuilder,
+    CapturingChatPort, FixedClock, FixedGeminiConfigProvider, FixedOpenAiConfigProvider,
+    StubTrainingContextBuilder,
 };
 
 #[derive(Clone)]
@@ -322,7 +323,7 @@ async fn training_plan_generator_builds_initial_window_request_with_recap() {
         .await
         .unwrap();
 
-    assert_eq!(response, "Gemini coach reply");
+    assert_eq!(response.raw_response, "Gemini coach reply");
 
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);
@@ -415,7 +416,7 @@ async fn training_plan_generator_builds_correction_request_with_issues_and_inval
         .await
         .unwrap();
 
-    assert_eq!(response, "Gemini coach reply");
+    assert_eq!(response.raw_response, "Gemini coach reply");
 
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 1);
@@ -463,6 +464,64 @@ async fn training_plan_generator_does_not_reject_large_context_before_calling_ch
 #[derive(Clone, Default)]
 struct BlankAssistantChatPort;
 
+#[derive(Clone, Default)]
+struct ToolCallingChatPort {
+    requests: Arc<std::sync::Mutex<Vec<LlmChatRequest>>>,
+}
+
+impl ToolCallingChatPort {
+    fn requests(&self) -> Vec<LlmChatRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+impl LlmChatPort for ToolCallingChatPort {
+    fn chat(
+        &self,
+        _config: LlmProviderConfig,
+        request: LlmChatRequest,
+    ) -> LlmBoxFuture<Result<LlmChatResponse, LlmError>> {
+        let call_index = {
+            let mut requests = self.requests.lock().unwrap();
+            requests.push(request);
+            requests.len()
+        };
+        Box::pin(async move {
+            if call_index == 1 {
+                return Ok(LlmChatResponse {
+                    provider: LlmProvider::OpenAi,
+                    model: "gpt-4o-mini".to_string(),
+                    message: LlmChatMessage::assistant_with_tool_calls(
+                        "",
+                        vec![LlmToolCall {
+                            id: "tool-1".to_string(),
+                            name: "simulate_forward_load".to_string(),
+                            arguments_json: serde_json::json!({
+                                "dated_workout_text": "2023-11-15\nEndurance\n- 45m 65%"
+                            })
+                            .to_string(),
+                        }],
+                    ),
+                    finish_reason: Some(LlmFinishReason::ToolCalls),
+                    provider_request_id: Some("req-tool-1".to_string()),
+                    usage: LlmTokenUsage::default(),
+                    cache: Default::default(),
+                });
+            }
+
+            Ok(LlmChatResponse {
+                provider: LlmProvider::OpenAi,
+                model: "gpt-4o-mini".to_string(),
+                message: LlmChatMessage::assistant("2023-11-15\nRest Day"),
+                finish_reason: Some(LlmFinishReason::Stop),
+                provider_request_id: Some("req-tool-2".to_string()),
+                usage: LlmTokenUsage::default(),
+                cache: Default::default(),
+            })
+        })
+    }
+}
+
 impl LlmChatPort for BlankAssistantChatPort {
     fn chat(
         &self,
@@ -502,5 +561,51 @@ async fn training_plan_generator_fails_when_llm_returns_blank_assistant_text() {
         aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
             "LLM returned no assistant text".to_string(),
         )
+    );
+}
+
+#[tokio::test]
+async fn training_plan_generator_runs_shared_tool_loop_for_openai_plan_generation() {
+    let chat_port = Arc::new(ToolCallingChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedOpenAiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+
+    let response = generator
+        .generate_initial_plan_window(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "openai",
+                "gpt-4o-mini",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.raw_response, "2023-11-15\nRest Day");
+    assert_eq!(response.tool_loop_state.round_count, 2);
+    assert_eq!(response.tool_loop_state.public_tool_calls.len(), 1);
+    assert_eq!(
+        response.tool_loop_state.public_tool_calls[0]
+            .arguments_preview
+            .as_deref(),
+        Some("1 dated day from 2023-11-15 to 2023-11-15")
+    );
+
+    let requests = chat_port.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].tools.len(), 1);
+    assert_eq!(requests[0].tools[0].name, "simulate_forward_load");
+    assert_eq!(
+        requests[1].conversation.last().unwrap().role,
+        aiwattcoach::domain::llm::LlmMessageRole::Tool
     );
 }

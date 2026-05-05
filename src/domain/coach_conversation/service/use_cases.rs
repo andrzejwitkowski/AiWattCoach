@@ -1,4 +1,4 @@
-use crate::domain::llm::{LlmChatResponse, LlmError};
+use crate::domain::llm::LlmError;
 
 use super::{
     super::{
@@ -79,8 +79,14 @@ where
         messages: &[CoachConversationMessage],
         user_message: &CoachConversationMessage,
         operation: CoachConversationReplyOperation,
-    ) -> Result<(CoachConversationReplyOperation, LlmChatResponse), CoachConversationError> {
-        let llm_response = match self
+    ) -> Result<
+        (
+            CoachConversationReplyOperation,
+            crate::domain::llm_tools::LlmToolLoopOutput,
+        ),
+        CoachConversationError,
+    > {
+        let llm_output = match self
             .request_reply_from_llm(conversation, messages, user_message)
             .await
         {
@@ -102,37 +108,41 @@ where
             Err(error) => return Err(error),
         };
         let operation = self
-            .persist_provider_response_checkpoint(conversation, operation, &llm_response)
+            .persist_provider_response_checkpoint(conversation, operation, &llm_output)
             .await?;
         let operation = self
-            .materialize_public_tool_messages(conversation, operation, &llm_response)
+            .materialize_public_tool_messages(
+                conversation,
+                operation,
+                &llm_output.state.public_tool_calls,
+            )
             .await?;
-        let operation = if llm_response.tool_calls().is_empty() {
+        let operation = if llm_output.state.public_tool_calls.is_empty() {
             operation
         } else {
             self.persist_post_provider_operation(operation, "persist_public_tool_messages")
                 .await?
         };
 
-        Ok((operation, llm_response))
+        Ok((operation, llm_output))
     }
 
     async fn persist_provider_response_checkpoint(
         &self,
         conversation: &CoachConversation,
         operation: CoachConversationReplyOperation,
-        llm_response: &LlmChatResponse,
+        llm_output: &crate::domain::llm_tools::LlmToolLoopOutput,
     ) -> Result<CoachConversationReplyOperation, CoachConversationError> {
         let operation =
             operation.record_provider_response(PendingCoachConversationReplyCheckpoint {
-                provider: llm_response.provider.clone(),
-                model: llm_response.model.clone(),
-                provider_request_id: llm_response.provider_request_id.clone(),
-                provider_cache_id: llm_response.cache.provider_cache_id.clone(),
-                token_usage: llm_response.usage.clone(),
-                cache_usage: llm_response.cache.clone(),
-                provider_transcript: vec![llm_response.message.clone()],
-                finish_reason: llm_response.finish_reason.clone(),
+                provider: llm_output.response.provider.clone(),
+                model: llm_output.response.model.clone(),
+                provider_request_id: llm_output.response.provider_request_id.clone(),
+                provider_cache_id: llm_output.response.cache.provider_cache_id.clone(),
+                token_usage: llm_output.response.usage.clone(),
+                cache_usage: llm_output.response.cache.clone(),
+                provider_transcript: llm_output.state.provider_transcript.clone(),
+                finish_reason: llm_output.state.finish_reason.clone(),
                 updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
             });
         let operation = self
@@ -350,7 +360,7 @@ where
             let messages = service
                 .list_messages(&conversation.user_id, &conversation.conversation_id)
                 .await?;
-            let (operation, llm_response) = service
+            let (operation, llm_output) = service
                 .request_and_checkpoint_calendar_reply(
                     &conversation,
                     &messages,
@@ -359,7 +369,7 @@ where
                 )
                 .await?;
 
-            let Some(coach_content) = final_assistant_text(&llm_response) else {
+            let Some(coach_content) = final_assistant_text(&llm_output.response) else {
                 let error = LlmError::InvalidResponse(
                     "assistant reply missing final text message".to_string(),
                 );
@@ -388,13 +398,13 @@ where
                 )
                 .await?;
             let completed_reply = CompletedCoachConversationReply {
-                provider: llm_response.provider,
-                model: llm_response.model,
-                provider_request_id: llm_response.provider_request_id,
+                provider: llm_output.response.provider,
+                model: llm_output.response.model,
+                provider_request_id: llm_output.response.provider_request_id,
                 coach_message_id: coach_message.id.clone(),
-                provider_cache_id: llm_response.cache.provider_cache_id.clone(),
-                token_usage: llm_response.usage,
-                cache_usage: llm_response.cache,
+                provider_cache_id: llm_output.response.cache.provider_cache_id.clone(),
+                token_usage: llm_output.response.usage,
+                cache_usage: llm_output.response.cache,
                 updated_at_epoch_seconds: service.clock.now_epoch_seconds(),
             };
             service

@@ -40,7 +40,10 @@ impl LlmChatPort for OpenAiClient {
         let message_count = request.conversation.len();
         let has_system_prompt = !request.system_prompt.trim().is_empty();
         let has_stable_context = !request.stable_context.trim().is_empty();
-        let payload = mapping::map_request(&config, request);
+        let payload = match mapping::map_request(&config, request) {
+            Ok(payload) => payload,
+            Err(error) => return Box::pin(async move { Err(error) }),
+        };
 
         Box::pin(async move {
             tracing::info!(

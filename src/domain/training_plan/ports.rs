@@ -1,15 +1,17 @@
-use std::{future::Future, pin::Pin};
+use std::{future::Future, pin::Pin, sync::Arc};
 
-use crate::domain::ai_workflow::ValidationIssue;
 use crate::domain::workout_summary::WorkoutRecap;
+use crate::domain::{ai_workflow::ValidationIssue, llm_tools::LlmToolLoopState};
 
 use super::{
     TrainingPlanError, TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
-    TrainingPlanPlanningContext, TrainingPlanProjectedDay, TrainingPlanReplacementResult,
-    TrainingPlanSnapshot,
+    TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanProjectedDay,
+    TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
+pub type TrainingPlanToolLoopCheckpoint =
+    Arc<dyn Fn(LlmToolLoopState) -> BoxFuture<Result<(), TrainingPlanError>> + Send + Sync>;
 
 pub trait TrainingPlanSnapshotRepository: Send + Sync + 'static {
     fn find_by_operation_key(
@@ -70,6 +72,21 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
         saved_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<WorkoutRecap, TrainingPlanError>>;
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "training plan initial generation needs workout identity, recap context, planning context, restore state, and checkpoint callback together"
+    )]
+    fn generate_initial_plan_window_with_state(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+        workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
+        restored_state: Option<LlmToolLoopState>,
+        checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>>;
+
     fn generate_initial_plan_window(
         &self,
         user_id: &str,
@@ -77,7 +94,34 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
         saved_at_epoch_seconds: i64,
         workout_recap: &WorkoutRecap,
         planning_context: Option<&TrainingPlanPlanningContext>,
-    ) -> BoxFuture<Result<String, TrainingPlanError>>;
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
+        self.generate_initial_plan_window_with_state(
+            user_id,
+            workout_id,
+            saved_at_epoch_seconds,
+            workout_recap,
+            planning_context,
+            None,
+            None,
+        )
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "training plan correction needs workout identity, recap context, planning context, and validation payload together"
+    )]
+    fn correct_invalid_days_with_state(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        saved_at_epoch_seconds: i64,
+        workout_recap: &WorkoutRecap,
+        planning_context: Option<&TrainingPlanPlanningContext>,
+        invalid_day_sections: &str,
+        issues: Vec<ValidationIssue>,
+        restored_state: Option<LlmToolLoopState>,
+        checkpoint: Option<TrainingPlanToolLoopCheckpoint>,
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>>;
 
     #[expect(
         clippy::too_many_arguments,
@@ -92,7 +136,19 @@ pub trait TrainingPlanGenerator: Send + Sync + 'static {
         planning_context: Option<&TrainingPlanPlanningContext>,
         invalid_day_sections: &str,
         issues: Vec<ValidationIssue>,
-    ) -> BoxFuture<Result<String, TrainingPlanError>>;
+    ) -> BoxFuture<Result<TrainingPlanPhaseOutput, TrainingPlanError>> {
+        self.correct_invalid_days_with_state(
+            user_id,
+            workout_id,
+            saved_at_epoch_seconds,
+            workout_recap,
+            planning_context,
+            invalid_day_sections,
+            issues,
+            None,
+            None,
+        )
+    }
 }
 
 pub trait TrainingPlanWorkoutSummaryPort: Send + Sync + 'static {
