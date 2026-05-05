@@ -14,7 +14,15 @@ use super::{LlmTool, ToolExecutionContext};
 
 const SIMULATE_FORWARD_LOAD_TOOL_NAME: &str = "simulate_forward_load";
 
-type PlannedLoadEstimate = (f64, Option<i32>, String, bool, Option<String>);
+/// Estimate of planned load for a single day from one source.
+#[derive(Clone, Debug)]
+struct PlannedLoadEstimate {
+    tss: f64,
+    duration_seconds: Option<i32>,
+    source: String,
+    is_rest: bool,
+    rest_reason: Option<String>,
+}
 
 #[derive(Deserialize)]
 struct SimulateForwardLoadArgs {
@@ -123,104 +131,36 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
     };
 
     let ftp_watts = context.training_context.history.ftp_current;
-    let (mut ctl, mut atl) = resolve_load_baseline(&context.training_context);
+    let baseline = snapshot_baseline(&context.training_context);
+    let (mut ctl, mut atl) = (baseline.ctl, baseline.atl);
     let mut days = Vec::with_capacity(14);
 
     for offset in 1..=14 {
         let date = today + Duration::days(offset);
         let date_key = format_date(date);
 
-        // Input from LLM takes highest priority — it is the plan being proposed.
-        let input = input_day_estimate(&input_days, &date_key, ftp_watts);
-
-        // For days the LLM did not explicitly provide, fall back to already
-        // scheduled workouts and projections.
-        let upcoming = upcoming_day_estimate(
+        let estimates = select_estimates_for_day(
+            &input_days,
             &context.training_context.upcoming_days,
-            &date_key,
-            ftp_watts,
-        );
-        let projected = projected_day_estimate(
             &context.training_context.projected_days,
+            &context.training_context.future_events,
             &date_key,
             ftp_watts,
         );
 
-        // Future events (races) are always additive — they exist independently
-        // of the training plan.
-        let future = future_event_estimate(&context.training_context.future_events, &date_key);
+        let combined = combine_estimates(estimates);
 
-        let mut total_tss = 0.0;
-        let mut total_duration: i32 = 0;
-        let mut sources = Vec::new();
-        let mut is_rest_day = true;
-        let mut rest_reason: Option<String> = None;
-
-        // If LLM provided an explicit day, it overrides upcoming/projected.
-        // Otherwise aggregate fallback sources.
-        let estimates: Vec<PlannedLoadEstimate> = if input.is_some() {
-            [input, future].into_iter().flatten().collect()
-        } else {
-            [upcoming, projected, future]
-                .into_iter()
-                .flatten()
-                .collect()
-        };
-
-        for estimate in estimates {
-            let (tss, duration, source, rest, reason) = estimate;
-            total_tss += tss;
-            if let Some(d) = duration {
-                total_duration += d;
-            }
-            sources.push(source);
-            if !rest {
-                is_rest_day = false;
-            }
-            if rest && rest_reason.is_none() {
-                rest_reason = reason;
-            }
-        }
-
-        let (planned_tss, planned_duration_seconds, source, rest_day, rest_day_reason) =
-            if sources.is_empty() {
-                (
-                    0.0,
-                    None,
-                    "empty".to_string(),
-                    true,
-                    Some("no planned load".to_string()),
-                )
-            } else {
-                let source_label = if sources.len() == 1 {
-                    sources.into_iter().next().unwrap()
-                } else {
-                    sources.join("+")
-                };
-                (
-                    total_tss,
-                    if total_duration > 0 {
-                        Some(total_duration)
-                    } else {
-                        None
-                    },
-                    source_label,
-                    is_rest_day,
-                    rest_reason,
-                )
-            };
-
-        ctl = update_load(ctl, planned_tss, 42.0);
-        atl = update_load(atl, planned_tss, 7.0);
+        ctl = update_load(ctl, combined.tss, 42.0);
+        atl = update_load(atl, combined.tss, 7.0);
         let tsb = round_to_2(ctl - atl);
 
         days.push(ForwardLoadDay {
             date: date_key,
-            planned_tss: round_to_2(planned_tss),
-            planned_duration_seconds,
-            source,
-            rest_day,
-            rest_day_reason,
+            planned_tss: round_to_2(combined.tss),
+            planned_duration_seconds: combined.duration_seconds,
+            source: combined.source,
+            rest_day: combined.is_rest,
+            rest_day_reason: combined.rest_reason,
             ctl: round_to_2(ctl),
             atl: round_to_2(atl),
             tsb,
@@ -230,14 +170,105 @@ fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -
     json!(SimulateForwardLoadResponse {
         baseline: ForwardLoadBaseline {
             today: context.today.clone(),
-            ctl: round_to_2(ctl_from_context(&context.training_context)),
-            atl: round_to_2(atl_from_context(&context.training_context)),
-            tsb: round_to_2(tsb_from_context(&context.training_context)),
+            ctl: round_to_2(baseline.ctl),
+            atl: round_to_2(baseline.atl),
+            tsb: round_to_2(baseline.tsb),
             ftp_watts,
         },
         days,
     })
     .to_string()
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Baseline {
+    ctl: f64,
+    atl: f64,
+    tsb: f64,
+}
+
+fn snapshot_baseline(training_context: &TrainingContext) -> Baseline {
+    let ctl = ctl_from_context(training_context);
+    let atl = atl_from_context(training_context);
+    let tsb = tsb_from_context(training_context);
+    Baseline { ctl, atl, tsb }
+}
+
+/// Gather load estimates for a single day from all available sources.
+/// Input from LLM overrides upcoming/projected; future events are always additive.
+fn select_estimates_for_day(
+    input_days: &[crate::domain::intervals::PlannedWorkoutDay],
+    upcoming_days: &[UpcomingDayContext],
+    projected_days: &[ProjectedDayContext],
+    future_events: &[FuturePlannedEventContext],
+    date: &str,
+    ftp_watts: Option<i32>,
+) -> Vec<PlannedLoadEstimate> {
+    let input = input_day_estimate(input_days, date, ftp_watts);
+
+    if input.is_some() {
+        let future = future_event_estimate(future_events, date);
+        [input, future].into_iter().flatten().collect()
+    } else {
+        let upcoming = upcoming_day_estimate(upcoming_days, date, ftp_watts);
+        let projected = projected_day_estimate(projected_days, date, ftp_watts);
+        let future = future_event_estimate(future_events, date);
+        [upcoming, projected, future]
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+}
+
+/// Combine multiple source estimates into a single day summary.
+fn combine_estimates(estimates: Vec<PlannedLoadEstimate>) -> PlannedLoadEstimate {
+    if estimates.is_empty() {
+        return PlannedLoadEstimate {
+            tss: 0.0,
+            duration_seconds: None,
+            source: "empty".to_string(),
+            is_rest: true,
+            rest_reason: Some("no planned load".to_string()),
+        };
+    }
+
+    let mut total_tss = 0.0;
+    let mut total_duration: i32 = 0;
+    let mut sources = Vec::new();
+    let mut is_rest_day = true;
+    let mut rest_reason: Option<String> = None;
+
+    for estimate in estimates {
+        total_tss += estimate.tss;
+        if let Some(d) = estimate.duration_seconds {
+            total_duration += d;
+        }
+        sources.push(estimate.source);
+        if !estimate.is_rest {
+            is_rest_day = false;
+        }
+        if estimate.is_rest && rest_reason.is_none() {
+            rest_reason = estimate.rest_reason;
+        }
+    }
+
+    let source_label = if sources.len() == 1 {
+        sources.into_iter().next().unwrap()
+    } else {
+        sources.join("+")
+    };
+
+    PlannedLoadEstimate {
+        tss: total_tss,
+        duration_seconds: if total_duration > 0 {
+            Some(total_duration)
+        } else {
+            None
+        },
+        source: source_label,
+        is_rest: is_rest_day,
+        rest_reason,
+    }
 }
 
 fn input_day_estimate(
@@ -247,29 +278,29 @@ fn input_day_estimate(
 ) -> Option<PlannedLoadEstimate> {
     let day = days.iter().find(|day| day.date == date)?;
     if day.is_rest_day() {
-        return Some((
-            0.0,
-            None,
-            "input".to_string(),
-            true,
-            day.rest_day_reason().map(str::to_string),
-        ));
+        return Some(PlannedLoadEstimate {
+            tss: 0.0,
+            duration_seconds: None,
+            source: "input".to_string(),
+            is_rest: true,
+            rest_reason: day.rest_day_reason().map(str::to_string),
+        });
     }
 
     let workout = day.planned_workout()?;
     let raw = serialize_planned_workout(workout);
     let parsed = parse_workout_doc(Some(raw.as_str()), ftp_watts);
 
-    Some((
-        parsed
+    Some(PlannedLoadEstimate {
+        tss: parsed
             .summary
             .estimated_training_stress_score
             .unwrap_or(0.0),
-        Some(parsed.summary.total_duration_seconds),
-        "input".to_string(),
-        false,
-        None,
-    ))
+        duration_seconds: Some(parsed.summary.total_duration_seconds),
+        source: "input".to_string(),
+        is_rest: false,
+        rest_reason: None,
+    })
 }
 
 /// Aggregate all already-scheduled workouts for an upcoming day.
@@ -309,17 +340,17 @@ fn upcoming_day_estimate(
         return None;
     }
 
-    Some((
-        total_tss,
-        if total_duration > 0 {
+    Some(PlannedLoadEstimate {
+        tss: total_tss,
+        duration_seconds: if total_duration > 0 {
             Some(total_duration)
         } else {
             None
         },
-        "upcoming".to_string(),
-        false,
-        None,
-    ))
+        source: "upcoming".to_string(),
+        is_rest: false,
+        rest_reason: None,
+    })
 }
 
 /// Aggregate all workouts for a projected day.  Only returns a rest-day
@@ -359,20 +390,26 @@ fn projected_day_estimate(
     }
 
     if !has_any {
-        return Some((0.0, None, "projected".to_string(), true, rest_reason));
+        return Some(PlannedLoadEstimate {
+            tss: 0.0,
+            duration_seconds: None,
+            source: "projected".to_string(),
+            is_rest: true,
+            rest_reason,
+        });
     }
 
-    Some((
-        total_tss,
-        if total_duration > 0 {
+    Some(PlannedLoadEstimate {
+        tss: total_tss,
+        duration_seconds: if total_duration > 0 {
             Some(total_duration)
         } else {
             None
         },
-        "projected".to_string(),
-        false,
-        None,
-    ))
+        source: "projected".to_string(),
+        is_rest: false,
+        rest_reason: None,
+    })
 }
 
 /// Sum all future events that fall on the requested date.
@@ -398,24 +435,17 @@ fn future_event_estimate(
         return None;
     }
 
-    Some((
-        total_tss,
-        if total_duration > 0 {
+    Some(PlannedLoadEstimate {
+        tss: total_tss,
+        duration_seconds: if total_duration > 0 {
             Some(total_duration)
         } else {
             None
         },
-        "future_event".to_string(),
-        false,
-        None,
-    ))
-}
-
-fn resolve_load_baseline(training_context: &TrainingContext) -> (f64, f64) {
-    (
-        ctl_from_context(training_context),
-        atl_from_context(training_context),
-    )
+        source: "future_event".to_string(),
+        is_rest: false,
+        rest_reason: None,
+    })
 }
 
 fn ctl_from_context(training_context: &TrainingContext) -> f64 {
