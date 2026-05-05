@@ -199,22 +199,22 @@ pub fn run_tool_loop_with_checkpoint(
     })
 }
 
-/// All tools registered in the system, keyed by name.
-fn find_tool(name: &str) -> Option<Box<dyn LlmTool>> {
-    match name {
-        "simulate_forward_load" => Some(Box::new(SimulateForwardLoad)),
-        _ => None,
-    }
+/// Single registry of all tools.  Adding a tool is a one-line change here.
+fn all_tools() -> Vec<Box<dyn LlmTool>> {
+    vec![Box::new(SimulateForwardLoad)]
 }
 
-/// Tools exposed for a given scope. Add new tools here to make them
-/// available to LLM requests in that scope.
+/// Resolve a tool by its declared name.
+fn find_tool(name: &str) -> Option<Box<dyn LlmTool>> {
+    all_tools().into_iter().find(|tool| tool.name() == name)
+}
+
+/// Tools exposed for a given scope.  Filters the global registry.
 fn tools_for_scope(scope: ToolScope) -> Vec<Box<dyn LlmTool>> {
-    match scope {
-        ToolScope::WorkoutSummaryChat
-        | ToolScope::CalendarCoachChat
-        | ToolScope::TrainingPlanGeneration => vec![Box::new(SimulateForwardLoad)],
-    }
+    // When we have tools that are scope-specific, filter here.
+    // Currently all tools are available in every tool-enabled scope.
+    let _ = scope;
+    all_tools()
 }
 
 pub fn tool_definitions_for_scope(

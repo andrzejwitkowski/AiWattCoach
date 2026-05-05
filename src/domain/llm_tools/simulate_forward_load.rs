@@ -286,18 +286,21 @@ fn upcoming_day_estimate(
 
     for workout in &upcoming.planned_workouts {
         has_any = true;
-        if let Some(tss) = workout.estimated_training_stress_score {
-            total_tss += tss;
-        } else if let Some(raw) = workout.raw_workout_doc.as_deref() {
-            let parsed = parse_workout_doc(Some(raw), ftp_watts);
-            total_tss += parsed
-                .summary
-                .estimated_training_stress_score
-                .unwrap_or(0.0);
-        }
-        // Derive duration from raw_workout_doc if available.
-        if let Some(raw) = workout.raw_workout_doc.as_deref() {
-            let parsed = parse_workout_doc(Some(raw), ftp_watts);
+        let parsed = workout
+            .raw_workout_doc
+            .as_deref()
+            .map(|raw| parse_workout_doc(Some(raw), ftp_watts));
+
+        total_tss += workout
+            .estimated_training_stress_score
+            .or_else(|| {
+                parsed
+                    .as_ref()
+                    .and_then(|p| p.summary.estimated_training_stress_score)
+            })
+            .unwrap_or(0.0);
+
+        if let Some(parsed) = parsed.as_ref() {
             total_duration += parsed.summary.total_duration_seconds;
         }
     }
