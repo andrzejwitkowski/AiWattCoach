@@ -74,14 +74,14 @@ impl LlmTool for SimulateForwardLoad {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.".to_string(),
+            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.\n\nFormat: Each day starts with a YYYY-MM-DD header on its own line, followed by workout steps or 'Rest Day'.\nExample:\n2026-05-05\n- 90m 65%\n2026-05-06\nRest Day: recovery\n2026-05-07\n- 3x10m Threshold 95%\n- 10m cooldown".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
                     "dated_workout_text": {
                         "type": "string",
-                        "description": "Optional. Dated workout text for days you want to override or add, in YYYY-MM-DD plus workout-builder format. If omitted, the simulation uses only existing scheduled workouts, projections, and events from context."
+                        "description": "Optional. Dated workout text for days you want to override or add. Format: each day starts with YYYY-MM-DD header on its own line, followed by workout steps (e.g. '- 90m 65%') or 'Rest Day'. Use newline (\\n) between lines. If omitted, the simulation uses only existing scheduled workouts, projections, and events from context."
                     }
                 }
             })
