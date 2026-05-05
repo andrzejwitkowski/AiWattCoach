@@ -74,7 +74,7 @@ impl LlmTool for SimulateForwardLoad {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.".to_string(),
+            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.\n\nFormat: Each day starts with a YYYY-MM-DD header on its own line, followed by workout steps or 'Rest Day'. You can use section titles, ramps, repeat headers (Nx), and power targets in %FTP or watts.\n\nExample 1 - Simple:\n2026-05-05\n- 90m 65%\n2026-05-06\nRest Day: recovery\n\nExample 2 - Complex interval session:\n2026-05-07\nWarmup\n- 15m ramp 55-75%\n\nMain Set\n4x\n- 2m 105%\n- 1m 65%\n\n3x\n- 3m 95%\n- 2m 65%\n\nCooldown\n- 10m 55%".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,
