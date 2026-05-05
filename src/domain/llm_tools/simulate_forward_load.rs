@@ -4,17 +4,20 @@ use serde_json::json;
 
 use crate::domain::{
     intervals::{parse_planned_workout_days, parse_workout_doc, serialize_planned_workout},
+    llm::LlmToolDefinition,
     training_context::{
         FuturePlannedEventContext, ProjectedDayContext, TrainingContext, UpcomingDayContext,
     },
 };
 
-use super::SIMULATE_FORWARD_LOAD_TOOL_NAME;
+use super::{LlmTool, ToolExecutionContext};
+
+const SIMULATE_FORWARD_LOAD_TOOL_NAME: &str = "simulate_forward_load";
 
 type PlannedLoadEstimate = (f64, Option<i32>, String, bool, Option<String>);
 
 #[derive(Deserialize)]
-pub(super) struct SimulateForwardLoadArgs {
+struct SimulateForwardLoadArgs {
     /// Dated workout text for days the LLM wants to override or add.
     /// If omitted, the simulation uses only context sources
     /// (upcoming days, projected days, future events).
@@ -49,10 +52,52 @@ struct ForwardLoadDay {
     tsb: f64,
 }
 
-pub(super) fn simulate_forward_load(
-    arguments_json: &str,
-    context: &super::ToolExecutionContext,
-) -> String {
+/// Simulates forward training load for 14 days from today.
+/// Automatically includes context sources (upcoming workouts, projected
+/// workouts, future events). LLM only needs to provide `dated_workout_text`
+/// for days it wants to override or add.
+pub struct SimulateForwardLoad;
+
+impl LlmTool for SimulateForwardLoad {
+    fn name(&self) -> &'static str {
+        SIMULATE_FORWARD_LOAD_TOOL_NAME
+    }
+
+    fn definition(&self) -> LlmToolDefinition {
+        LlmToolDefinition {
+            name: self.name().to_string(),
+            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.".to_string(),
+            input_schema_json: json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "dated_workout_text": {
+                        "type": "string",
+                        "description": "Optional. Dated workout text for days you want to override or add, in YYYY-MM-DD plus workout-builder format. If omitted, the simulation uses only existing scheduled workouts, projections, and events from context."
+                    }
+                }
+            })
+            .to_string(),
+        }
+    }
+
+    fn execute(&self, arguments_json: &str, context: &ToolExecutionContext) -> String {
+        simulate_forward_load(arguments_json, context)
+    }
+
+    fn preview_arguments(&self, arguments_json: &str) -> Option<String> {
+        let args: SimulateForwardLoadArgs = serde_json::from_str(arguments_json).ok()?;
+        let text = args.dated_workout_text.as_deref()?;
+        let parsed = parse_planned_workout_days(text).ok()?;
+        let first = parsed.days.first()?.date.clone();
+        let last = parsed.days.last()?.date.clone();
+        let count = parsed.days.len();
+        let day_word = if count == 1 { "day" } else { "days" };
+        Some(format!("{count} dated {day_word} from {first} to {last}"))
+    }
+}
+
+fn simulate_forward_load(arguments_json: &str, context: &ToolExecutionContext) -> String {
     let args = match serde_json::from_str::<SimulateForwardLoadArgs>(arguments_json) {
         Ok(args) => args,
         Err(error) => {
@@ -193,22 +238,6 @@ pub(super) fn simulate_forward_load(
         days,
     })
     .to_string()
-}
-
-pub(super) fn preview_tool_arguments(tool_name: &str, arguments_json: &str) -> Option<String> {
-    match tool_name {
-        SIMULATE_FORWARD_LOAD_TOOL_NAME => {
-            let args: SimulateForwardLoadArgs = serde_json::from_str(arguments_json).ok()?;
-            let text = args.dated_workout_text.as_deref()?;
-            let parsed = parse_planned_workout_days(text).ok()?;
-            let first = parsed.days.first()?.date.clone();
-            let last = parsed.days.last()?.date.clone();
-            let count = parsed.days.len();
-            let day_word = if count == 1 { "day" } else { "days" };
-            Some(format!("{count} dated {day_word} from {first} to {last}"))
-        }
-        _ => None,
-    }
 }
 
 fn input_day_estimate(
@@ -445,11 +474,12 @@ fn round_to_2(value: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{preview_tool_arguments, simulate_forward_load};
-    use crate::domain::llm_tools::ToolExecutionContext;
+    use super::SimulateForwardLoad;
+    use crate::domain::llm_tools::{LlmTool, ToolExecutionContext};
+    use crate::domain::training_context::PlannedWorkoutContext;
     use crate::domain::training_context::{
-        AthleteProfileContext, PlannedWorkoutContext, ProjectedDayContext, ProjectedWorkoutContext,
-        TrainingContext, UpcomingDayContext,
+        AthleteProfileContext, ProjectedDayContext, ProjectedWorkoutContext, TrainingContext,
+        UpcomingDayContext,
     };
 
     fn sample_context() -> ToolExecutionContext {
@@ -534,8 +564,8 @@ mod tests {
 
     #[test]
     fn preview_tool_arguments_summarizes_dated_text_range() {
-        let preview = preview_tool_arguments(
-            "simulate_forward_load",
+        let tool = SimulateForwardLoad;
+        let preview = tool.preview_arguments(
             r#"{"dated_workout_text":"2026-05-05\n- 60m 65%\n2026-05-06\nRest Day"}"#,
         );
 
@@ -547,10 +577,8 @@ mod tests {
 
     #[test]
     fn preview_tool_arguments_uses_singular_day() {
-        let preview = preview_tool_arguments(
-            "simulate_forward_load",
-            r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#,
-        );
+        let tool = SimulateForwardLoad;
+        let preview = tool.preview_arguments(r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#);
 
         assert_eq!(
             preview.as_deref(),
@@ -560,7 +588,8 @@ mod tests {
 
     #[test]
     fn simulate_forward_load_returns_14_day_sequence() {
-        let response = simulate_forward_load(
+        let tool = SimulateForwardLoad;
+        let response = tool.execute(
             r#"{"dated_workout_text":"2026-05-05\n- 60m 65%\n2026-05-06\nRest Day: absorb load"}"#,
             &sample_context(),
         );
@@ -574,7 +603,8 @@ mod tests {
 
     #[test]
     fn simulate_forward_load_aggregates_multiple_projected_workouts() {
-        let response = simulate_forward_load(
+        let tool = SimulateForwardLoad;
+        let response = tool.execute(
             r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#,
             &sample_context(),
         );
@@ -614,8 +644,8 @@ mod tests {
             },
         ];
 
-        let response =
-            simulate_forward_load(r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#, &ctx);
+        let tool = SimulateForwardLoad;
+        let response = tool.execute(r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#, &ctx);
 
         assert!(response.contains("\"2026-05-08\""));
         assert!(response.contains("\"source\":\"future_event\""));
@@ -623,7 +653,8 @@ mod tests {
 
     #[test]
     fn simulate_forward_load_without_input_uses_context_sources() {
-        let response = simulate_forward_load(r#"{}"#, &sample_context());
+        let tool = SimulateForwardLoad;
+        let response = tool.execute(r#"{}"#, &sample_context());
 
         // 2026-05-05 should have "upcoming" source (from calendar)
         assert!(response.contains("\"2026-05-05\""));
@@ -637,8 +668,8 @@ mod tests {
     #[test]
     fn simulate_forward_load_input_overrides_upcoming() {
         let ctx = sample_context();
-        let response =
-            simulate_forward_load(r#"{"dated_workout_text":"2026-05-05\n- 120m 60%"}"#, &ctx);
+        let tool = SimulateForwardLoad;
+        let response = tool.execute(r#"{"dated_workout_text":"2026-05-05\n- 120m 60%"}"#, &ctx);
 
         // 2026-05-05 should use input, not upcoming
         assert!(response.contains("\"2026-05-05\""));

@@ -1,7 +1,6 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use crate::domain::{
     llm::{
@@ -14,15 +13,28 @@ use crate::domain::{
 };
 
 pub const TOOL_LOOP_MAX_ROUNDS: u32 = 6;
-const SIMULATE_FORWARD_LOAD_TOOL_NAME: &str = "simulate_forward_load";
 
 mod simulate_forward_load;
+pub use simulate_forward_load::SimulateForwardLoad;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolScope {
     WorkoutSummaryChat,
     CalendarCoachChat,
     TrainingPlanGeneration,
+}
+
+/// Common interface for all LLM-callable tools.
+///
+/// To add a new tool:
+/// 1. Create a struct (e.g. `struct MyTool`) and implement this trait.
+/// 2. Register it in `tools_for_scope` so the appropriate scopes expose it.
+/// 3. (Optional) Re-export the struct from `mod.rs`.
+pub trait LlmTool: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn definition(&self) -> LlmToolDefinition;
+    fn execute(&self, arguments_json: &str, context: &ToolExecutionContext) -> String;
+    fn preview_arguments(&self, arguments_json: &str) -> Option<String>;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -187,6 +199,24 @@ pub fn run_tool_loop_with_checkpoint(
     })
 }
 
+/// All tools registered in the system, keyed by name.
+fn find_tool(name: &str) -> Option<Box<dyn LlmTool>> {
+    match name {
+        "simulate_forward_load" => Some(Box::new(SimulateForwardLoad)),
+        _ => None,
+    }
+}
+
+/// Tools exposed for a given scope. Add new tools here to make them
+/// available to LLM requests in that scope.
+fn tools_for_scope(scope: ToolScope) -> Vec<Box<dyn LlmTool>> {
+    match scope {
+        ToolScope::WorkoutSummaryChat
+        | ToolScope::CalendarCoachChat
+        | ToolScope::TrainingPlanGeneration => vec![Box::new(SimulateForwardLoad)],
+    }
+}
+
 pub fn tool_definitions_for_scope(
     scope: ToolScope,
     provider: &LlmProvider,
@@ -194,26 +224,10 @@ pub fn tool_definitions_for_scope(
     if !provider_supports_tools(provider) {
         return Vec::new();
     }
-
-    match scope {
-        ToolScope::WorkoutSummaryChat
-        | ToolScope::CalendarCoachChat
-        | ToolScope::TrainingPlanGeneration => vec![LlmToolDefinition {
-            name: SIMULATE_FORWARD_LOAD_TOOL_NAME.to_string(),
-            description: "Simulate 14 days of forward training load from today. The tool automatically includes already-scheduled workouts (upcoming days), projected workouts, and future events (races). Only provide dated_workout_text for days you want to override or add new workouts.".to_string(),
-            input_schema_json: json!({
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                    "dated_workout_text": {
-                        "type": "string",
-                        "description": "Optional. Dated workout text for days you want to override or add, in YYYY-MM-DD plus workout-builder format. If omitted, the simulation uses only existing scheduled workouts, projections, and events from context."
-                    }
-                }
-            })
-            .to_string(),
-        }],
-    }
+    tools_for_scope(scope)
+        .into_iter()
+        .map(|tool| tool.definition())
+        .collect()
 }
 
 fn provider_supports_tools(provider: &LlmProvider) -> bool {
@@ -225,10 +239,8 @@ pub fn public_tool_call_from_llm(tool_call: &crate::domain::llm::LlmToolCall) ->
         id: tool_call.id.clone(),
         name: tool_call.name.clone(),
         arguments_json: tool_call.arguments_json.clone(),
-        arguments_preview: simulate_forward_load::preview_tool_arguments(
-            &tool_call.name,
-            &tool_call.arguments_json,
-        ),
+        arguments_preview: find_tool(&tool_call.name)
+            .and_then(|tool| tool.preview_arguments(&tool_call.arguments_json)),
     }
 }
 
@@ -254,11 +266,9 @@ fn execute_tool_call(
     arguments_json: &str,
     context: &ToolExecutionContext,
 ) -> String {
-    match tool_name {
-        SIMULATE_FORWARD_LOAD_TOOL_NAME => {
-            simulate_forward_load::simulate_forward_load(arguments_json, context)
-        }
-        _ => json!({
+    match find_tool(tool_name) {
+        Some(tool) => tool.execute(arguments_json, context),
+        None => serde_json::json!({
             "error": format!("unknown tool: {tool_name}")
         })
         .to_string(),
