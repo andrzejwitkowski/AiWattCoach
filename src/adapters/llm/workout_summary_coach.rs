@@ -10,7 +10,10 @@ use crate::domain::{
         LlmChatRequest, LlmContextCache, LlmContextCacheRepository, LlmError, LlmMessageRole,
         LlmProvider, UserLlmConfigProvider,
     },
-    llm_tools::{run_tool_loop, LlmToolLoopOutput, ToolExecutionContext, ToolScope},
+    llm_tools::{
+        run_tool_loop, GetSelectedWorkoutDataPort, LlmToolLoopOutput, ToolExecutionContext,
+        ToolScope,
+    },
     training_context::TrainingContextBuilder,
     workout_summary::{WorkoutCoach, WorkoutSummary},
 };
@@ -24,6 +27,7 @@ where
     config_provider: Arc<dyn UserLlmConfigProvider>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
     context_cache_repository: Option<Arc<dyn LlmContextCacheRepository>>,
+    data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     clock: Time,
 }
 
@@ -42,6 +46,7 @@ where
             config_provider,
             training_context_builder,
             context_cache_repository: None,
+            data_port: None,
             clock,
         }
     }
@@ -51,6 +56,11 @@ where
         context_cache_repository: Arc<dyn LlmContextCacheRepository>,
     ) -> Self {
         self.context_cache_repository = Some(context_cache_repository);
+        self
+    }
+
+    pub fn with_data_port(mut self, data_port: Arc<dyn GetSelectedWorkoutDataPort>) -> Self {
+        self.data_port = Some(data_port);
         self
     }
 }
@@ -70,6 +80,7 @@ where
         let config_provider = self.config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
         let context_cache_repository = self.context_cache_repository.clone();
+        let data_port = self.data_port.clone();
         let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let summary = summary.clone();
@@ -189,8 +200,10 @@ where
                 ..Default::default()
             };
             let tool_context = ToolExecutionContext {
+                user_id: user_id.clone(),
                 training_context: training_context.context.clone(),
                 today: current_date_string(clock.now_epoch_seconds()),
+                data_port,
             };
 
             tracing::info!(

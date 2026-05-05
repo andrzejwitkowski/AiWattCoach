@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-05 | user | get_selected_workout 4-loop review hardening
+
+- Problem: the first implementation exposed `get_selected_workout` without enough behavioral hardening: invalid dates were not rejected, past planned workouts were not marked `not_completed`, races were still returned when a completed workout existed, race lookup loaded all user races instead of using the repository range query, stream `secondary_series` was dropped, the main tool function mixed loading and mapping phases, and the initial adapter test was mostly a print-only simulation.
+- Fix: added strict `YYYY-MM-DD` parsing, returned planned status as `planned` or `not_completed`, hid race entries whenever completed workouts exist for the requested day, switched the tool data port to race date-range lookup, included optional `secondary_data` for streams, split the tool into focused loading/mapping helpers, moved the data port/adapter into the tool module, and replaced the print-heavy test with assertions over tool definition exposure and replayed tool results.
+- Prevention: when adding an LLM tool that reads domain data, review the response contract against each user requirement before relying on provider-loop tests. Cover success, invalid-input, missing-data, and scope/wiring behavior with assertions, and verify repository reads use the narrowest available port method.
+
 ### 2026-05-04 | user | misleading LlmChatRequest tool placeholder fields
 
 - Problem: multiple request builders (`coach_conversation/service/request.rs`, `workout_summary_coach.rs`, `training_plan_generator.rs`) constructed `LlmChatRequest` with `tools: Vec::new()` and `tool_choice: LlmToolChoice::None`, but every one of those requests was then passed to `run_tool_loop` or `run_tool_loop_with_checkpoint`, which unconditionally overwrote both fields based on `ToolScope`. The placeholder values made it look like requests were sent without tools, which wasted review time and hid the real behavior.

@@ -62,8 +62,10 @@ where
             request,
             ToolScope::CalendarCoachChat,
             ToolExecutionContext {
+                user_id: conversation.user_id.clone(),
                 training_context: prepared.training_context.clone(),
                 today: current_date_string(self.clock.now_epoch_seconds()),
+                data_port: self.data_port.clone(),
             },
             None,
         )

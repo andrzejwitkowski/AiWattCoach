@@ -13,8 +13,8 @@ use crate::domain::{
         UserLlmConfigProvider,
     },
     llm_tools::{
-        run_tool_loop_with_checkpoint, LlmToolLoopState, ToolExecutionContext, ToolLoopCheckpoint,
-        ToolScope,
+        run_tool_loop_with_checkpoint, GetSelectedWorkoutDataPort, LlmToolLoopState,
+        ToolExecutionContext, ToolLoopCheckpoint, ToolScope,
     },
     training_context::TrainingContextBuilder,
     training_plan::{
@@ -42,6 +42,7 @@ where
     llm_chat_port: Arc<dyn LlmChatPort>,
     llm_config_provider: Arc<dyn UserLlmConfigProvider>,
     training_context_builder: Arc<dyn TrainingContextBuilder>,
+    data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
     clock: Time,
 }
 
@@ -59,8 +60,14 @@ where
             llm_chat_port,
             llm_config_provider,
             training_context_builder,
+            data_port: None,
             clock,
         }
+    }
+
+    pub fn with_data_port(mut self, data_port: Arc<dyn GetSelectedWorkoutDataPort>) -> Self {
+        self.data_port = Some(data_port);
+        self
     }
 }
 
@@ -200,6 +207,7 @@ where
         let llm_chat_port = self.llm_chat_port.clone();
         let llm_config_provider = self.llm_config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
+        let data_port = self.data_port.clone();
         let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -231,7 +239,7 @@ where
             conversation.push(LlmChatMessage::user(user_prompt));
 
             let request = LlmChatRequest {
-                user_id,
+                user_id: user_id.clone(),
                 system_prompt: training_plan_initial_window_system_prompt(
                     context.context.profile.availability_configured,
                 ),
@@ -244,8 +252,10 @@ where
                 ..Default::default()
             };
             let tool_context = ToolExecutionContext {
+                user_id,
                 training_context: context.context.clone(),
                 today: current_date_string(clock.now_epoch_seconds()),
+                data_port,
             };
 
             let response = run_tool_loop_with_checkpoint(
@@ -286,6 +296,7 @@ where
         let llm_chat_port = self.llm_chat_port.clone();
         let llm_config_provider = self.llm_config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
+        let data_port = self.data_port.clone();
         let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
@@ -325,7 +336,7 @@ where
             conversation.push(LlmChatMessage::user(user_prompt));
 
             let request = LlmChatRequest {
-                user_id,
+                user_id: user_id.clone(),
                 system_prompt: training_plan_correction_system_prompt(
                     context.context.profile.availability_configured,
                 ),
@@ -338,8 +349,10 @@ where
                 ..Default::default()
             };
             let tool_context = ToolExecutionContext {
+                user_id,
                 training_context: context.context.clone(),
                 today: current_date_string(clock.now_epoch_seconds()),
+                data_port,
             };
 
             let response = run_tool_loop_with_checkpoint(

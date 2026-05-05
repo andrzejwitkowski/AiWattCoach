@@ -89,8 +89,14 @@ impl LlmTool for SimulateForwardLoad {
         }
     }
 
-    fn execute(&self, arguments_json: &str, context: &ToolExecutionContext) -> String {
-        simulate_forward_load(arguments_json, context)
+    fn execute(
+        &self,
+        arguments_json: &str,
+        context: &ToolExecutionContext,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = String> + Send>> {
+        let args = arguments_json.to_string();
+        let ctx = context.clone();
+        Box::pin(async move { simulate_forward_load(&args, &ctx) })
     }
 
     fn preview_arguments(&self, arguments_json: &str) -> Option<String> {
@@ -590,8 +596,10 @@ mod tests {
         training_context.history.ftp_current = Some(300);
 
         ToolExecutionContext {
+            user_id: "user-1".to_string(),
             training_context,
             today: "2026-05-04".to_string(),
+            data_port: None,
         }
     }
 
@@ -622,10 +630,10 @@ mod tests {
     #[test]
     fn simulate_forward_load_returns_14_day_sequence() {
         let tool = SimulateForwardLoad;
-        let response = tool.execute(
+        let response = futures::executor::block_on(tool.execute(
             r#"{"dated_workout_text":"2026-05-05\n- 60m 65%\n2026-05-06\nRest Day: absorb load"}"#,
             &sample_context(),
-        );
+        ));
 
         assert!(response.contains("\"baseline\""));
         assert!(response.contains("\"2026-05-05\""));
@@ -637,10 +645,10 @@ mod tests {
     #[test]
     fn simulate_forward_load_aggregates_multiple_projected_workouts() {
         let tool = SimulateForwardLoad;
-        let response = tool.execute(
+        let response = futures::executor::block_on(tool.execute(
             r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#,
             &sample_context(),
-        );
+        ));
 
         // 2026-05-06 has two projected workouts (90m 65% + 30m easy spin).
         assert!(response.contains("\"2026-05-06\""));
@@ -678,7 +686,9 @@ mod tests {
         ];
 
         let tool = SimulateForwardLoad;
-        let response = tool.execute(r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#, &ctx);
+        let response = futures::executor::block_on(
+            tool.execute(r#"{"dated_workout_text":"2026-05-05\n- 60m 65%"}"#, &ctx),
+        );
 
         assert!(response.contains("\"2026-05-08\""));
         assert!(response.contains("\"source\":\"future_event\""));
@@ -687,7 +697,7 @@ mod tests {
     #[test]
     fn simulate_forward_load_without_input_uses_context_sources() {
         let tool = SimulateForwardLoad;
-        let response = tool.execute(r#"{}"#, &sample_context());
+        let response = futures::executor::block_on(tool.execute(r#"{}"#, &sample_context()));
 
         // 2026-05-05 should have "upcoming" source (from calendar)
         assert!(response.contains("\"2026-05-05\""));
@@ -702,7 +712,9 @@ mod tests {
     fn simulate_forward_load_input_overrides_upcoming() {
         let ctx = sample_context();
         let tool = SimulateForwardLoad;
-        let response = tool.execute(r#"{"dated_workout_text":"2026-05-05\n- 120m 60%"}"#, &ctx);
+        let response = futures::executor::block_on(
+            tool.execute(r#"{"dated_workout_text":"2026-05-05\n- 120m 60%"}"#, &ctx),
+        );
 
         // 2026-05-05 should use input, not upcoming
         assert!(response.contains("\"2026-05-05\""));

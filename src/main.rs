@@ -98,6 +98,7 @@ use aiwattcoach::{
         IdentityServiceDependencies,
     },
     domain::intervals::IntervalsService,
+    domain::llm_tools::GetSelectedWorkoutDataAdapter,
     domain::planned_workouts::AuthoritativePlannedWorkoutRepository,
     domain::races::{AuthoritativeRaceRepository, RaceService},
     domain::settings::UserSettingsService,
@@ -336,6 +337,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         planned_completed_link_repository.clone(),
         external_sync_state_repository.clone(),
     );
+    let get_selected_workout_data_port = Arc::new(GetSelectedWorkoutDataAdapter {
+        completed: authoritative_completed_workout_repository.clone(),
+        planned: planned_workout_repository.clone(),
+        races: race_repository.clone(),
+        summaries: workout_summary_repository.clone(),
+    });
     let training_load_recompute_service = Arc::new(TrainingLoadRecomputeService::new(
         authoritative_completed_workout_repository.clone(),
         ftp_history_repository.clone(),
@@ -558,7 +565,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     training_context_builder.clone(),
                     SystemClock,
                 )
-                .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
+                .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
+                .with_data_port(get_selected_workout_data_port.clone()),
             ),
         )
         .with_athlete_summary_service(athlete_summary_direct_service.clone())
@@ -582,7 +590,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             UuidIdGenerator,
         )
         .with_settings_service(settings_service.clone())
-        .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
+        .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
+        .with_data_port(get_selected_workout_data_port.clone()),
     );
     let training_plan_direct_service = Arc::new(
         TrainingPlanGenerationService::new(
@@ -594,7 +603,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 llm_config_provider.clone(),
                 training_context_builder.clone(),
                 SystemClock,
-            ),
+            )
+            .with_data_port(get_selected_workout_data_port.clone()),
             TrainingPlanWorkoutSummaryAdapter::new(workout_summary_direct_service.clone()),
             SystemClock,
         )

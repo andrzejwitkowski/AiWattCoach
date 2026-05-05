@@ -602,8 +602,10 @@ async fn training_plan_generator_runs_shared_tool_loop_for_openai_plan_generatio
 
     let requests = chat_port.requests();
     assert_eq!(requests.len(), 2);
-    assert_eq!(requests[0].tools.len(), 1);
-    assert_eq!(requests[0].tools[0].name, "simulate_forward_load");
+    assert_eq!(requests[0].tools.len(), 2);
+    let tool_names: Vec<String> = requests[0].tools.iter().map(|t| t.name.clone()).collect();
+    assert!(tool_names.contains(&"simulate_forward_load".to_string()));
+    assert!(tool_names.contains(&"get_selected_workout".to_string()));
     assert_eq!(
         requests[1].conversation.last().unwrap().role,
         aiwattcoach::domain::llm::LlmMessageRole::Tool
