@@ -40,7 +40,7 @@ pub fn compute_power_curve(
     workout: &CompletedWorkout,
     resolution_seconds: u16,
 ) -> Result<CompletedWorkoutPowerCurve, PowerCurveError> {
-    if resolution_seconds < 5 || resolution_seconds % 5 != 0 {
+    if resolution_seconds < 5 || !resolution_seconds.is_multiple_of(5) {
         return Err(PowerCurveError::InvalidResolution);
     }
 

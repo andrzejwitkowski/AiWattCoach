@@ -102,7 +102,7 @@ async fn execute_power_curve(arguments_json: &str, context: &ToolExecutionContex
     };
 
     let resolution = args.resolution_seconds;
-    if resolution < 5 || resolution % 5 != 0 {
+    if resolution < 5 || !resolution.is_multiple_of(5) {
         return json!({
             "error": "invalid resolution",
             "reason": "resolution_seconds must be a multiple of 5, minimum 5"
