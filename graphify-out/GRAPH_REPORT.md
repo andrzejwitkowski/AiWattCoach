@@ -1,11 +1,11 @@
 # Graph Report - AiWattCoach  (2026-05-06)
 
 ## Corpus Check
-- 800 files · ~498,152 words
+- 798 files · ~497,382 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8432 nodes · 11263 edges · 778 communities detected
+- 8427 nodes · 11257 edges · 777 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -953,7 +953,7 @@ Nodes (19): AiAgentsConfig, AnalysisOptions, availability_from_days_derives_conf
 
 ### Community 34 - "Community 34"
 Cohesion: 0.09
-Nodes (27): all_tools(), available_tools_for_scope(), execute_available_tool_call(), find_tool(), LlmTool, LlmToolLoopOutput, LlmToolLoopState, merge_public_tool_calls() (+19 more)
+Nodes (28): all_tools(), available_tools_for_scope(), execute_available_tool_call(), find_tool(), LlmTool, LlmToolLoopOutput, LlmToolLoopState, merge_public_tool_calls() (+20 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.08
@@ -4030,7 +4030,7 @@ Cohesion: 1.0
 Nodes (0): 
 
 ## Knowledge Gaps
-- **762 isolated node(s):** `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange`, `MetricsBackfillCall`, `ManualWahooSyncCall` (+757 more)
+- **763 isolated node(s):** `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange`, `MetricsBackfillCall`, `ManualWahooSyncCall` (+758 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 517`** (2 nodes): `async()`, `App.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4578,12 +4578,12 @@ Nodes (0):
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `FixedClock` connect `Community 3` to `Community 0`, `Community 89`, `Community 5`?**
+- **Why does `FixedClock` connect `Community 3` to `Community 0`, `Community 90`, `Community 5`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **Why does `RecordingCalendarRefresh` connect `Community 3` to `Community 0`, `Community 19`, `Community 5`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange` to the rest of the system?**
-  _762 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _763 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
