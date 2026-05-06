@@ -29,6 +29,13 @@ fn preview_tool_arguments_rejects_invalid_date() {
 }
 
 #[test]
+fn preview_tool_arguments_rejects_unknown_fields() {
+    let tool = GetSelectedWorkout;
+    let preview = tool.preview_arguments(r#"{"date":"2026-05-05","extra":true}"#);
+    assert_eq!(preview, None);
+}
+
+#[test]
 fn get_selected_workout_returns_completed_data_and_hides_race() {
     let tool = GetSelectedWorkout;
     let context = sample_context(TestDataPort {
@@ -81,6 +88,31 @@ fn get_selected_workout_downsamples_large_streams() {
         .expect("stream data should be an array");
 
     assert!(stream_data.len() <= 256);
+}
+
+#[test]
+fn get_selected_workout_downsampling_keeps_both_ends_for_near_limit_streams() {
+    let tool = GetSelectedWorkout;
+    let mut workout = sample_completed_workout(None);
+    workout.details.streams[0].primary_series =
+        Some(CompletedWorkoutSeries::Integers((0_i64..257_i64).collect()));
+    let context = sample_context(TestDataPort {
+        completed: vec![workout],
+        planned: Vec::new(),
+        races: Vec::new(),
+        summaries: Vec::new(),
+    });
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-05"}"#, &context));
+    let json: serde_json::Value =
+        serde_json::from_str(&response).expect("response should be valid json");
+    let stream_data = json["workouts"][0]["streams"][0]["data"]
+        .as_array()
+        .expect("stream data should be an array");
+
+    assert_eq!(stream_data.len(), 256);
+    assert_eq!(stream_data.first(), Some(&serde_json::json!(0)));
+    assert_eq!(stream_data.last(), Some(&serde_json::json!(256)));
 }
 
 #[test]

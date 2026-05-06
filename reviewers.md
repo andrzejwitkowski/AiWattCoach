@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | CodeRabbit | get_selected_workout schema/runtime parity and stream sampling fidelity
+
+- Problem: two follow-up review comments on PR #186 were still valid. `GetSelectedWorkoutArgs` advertised `additionalProperties: false` in the tool schema but runtime deserialization still accepted unknown keys, and the stream downsampler used `div_ceil + step_by`, which under-filled streams just above the sample cap and could drop the tail sample.
+- Fix: added `#[serde(deny_unknown_fields)]` to `GetSelectedWorkoutArgs`, switched stream sampling to an evenly spaced index-based sampler that returns up to `MAX_STREAM_SAMPLES` while keeping both ends, and added focused regressions for unknown tool arguments and the `257 -> 256 samples including last point` case.
+- Prevention: when a tool schema promises `additionalProperties: false`, mirror that promise in serde with `deny_unknown_fields` so runtime validation matches the advertised contract. For capped numeric series, avoid coarse `step_by` sampling when fidelity near the limit matters; use index-based spacing and assert both sample count and endpoint retention in tests.
+
 ### 2026-05-06 | Copilot | get_selected_workout non-finite float stream serialization
 
 - Problem: `get_selected_workout` serialized sampled float streams with `json!(value)`, which panics for non-finite values like `NaN` or `+/-inf`. That made one malformed stream sample capable of crashing tool response building instead of returning a safe payload.

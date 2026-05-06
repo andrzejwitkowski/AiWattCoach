@@ -22,6 +22,7 @@ use response::{build_selected_workout_response, SelectedDate, SelectedWorkoutDat
 const GET_SELECTED_WORKOUT_TOOL_NAME: &str = "get_selected_workout";
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct GetSelectedWorkoutArgs {
     date: String,
 }

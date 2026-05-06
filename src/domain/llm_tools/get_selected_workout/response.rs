@@ -217,22 +217,17 @@ fn sampled_values<T>(values: &[T], max_samples: usize) -> Vec<serde_json::Value>
 where
     T: Serialize,
 {
-    if values.len() <= max_samples {
-        return values.iter().map(|value| json!(value)).collect();
-    }
-
-    let step = values.len().div_ceil(max_samples);
-    values
-        .iter()
-        .step_by(step)
-        .take(max_samples)
-        .map(|value| json!(value))
+    sampled_indices(values.len(), max_samples)
+        .into_iter()
+        .map(|index| json!(&values[index]))
         .collect()
 }
 
 fn sampled_float_values(values: &[f64], max_samples: usize) -> Vec<serde_json::Value> {
-    sampled_float_iter(values, max_samples)
-        .map(|value| {
+    sampled_indices(values.len(), max_samples)
+        .into_iter()
+        .map(|index| {
+            let value = values[index];
             if value.is_finite() {
                 json!(value)
             } else {
@@ -242,13 +237,19 @@ fn sampled_float_values(values: &[f64], max_samples: usize) -> Vec<serde_json::V
         .collect()
 }
 
-fn sampled_float_iter(values: &[f64], max_samples: usize) -> Box<dyn Iterator<Item = &f64> + '_> {
-    if values.len() <= max_samples {
-        return Box::new(values.iter());
+fn sampled_indices(len: usize, max_samples: usize) -> Vec<usize> {
+    if max_samples == 0 || len == 0 {
+        return Vec::new();
     }
 
-    let step = values.len().div_ceil(max_samples);
-    Box::new(values.iter().step_by(step).take(max_samples))
+    if len <= max_samples || max_samples == 1 {
+        return (0..len.min(max_samples)).collect();
+    }
+
+    let last_index = len - 1;
+    (0..max_samples)
+        .map(|index| index * last_index / (max_samples - 1))
+        .collect()
 }
 
 fn map_planned_workout(
