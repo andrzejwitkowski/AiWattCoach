@@ -243,9 +243,16 @@ async fn tool_loop_sends_get_selected_workout_when_data_port_is_available() {
         .iter()
         .find(|message| matches!(message.role, LlmMessageRole::Tool))
         .expect("second request should include tool result");
+    let replayed_tool_result_json: serde_json::Value =
+        serde_json::from_str(replayed_tool_result.content.as_str())
+            .expect("tool result should be valid json");
     assert_eq!(
-        replayed_tool_result.content,
-        r#"{"date":"2026-05-05","races":[],"workouts":[]}"#
+        replayed_tool_result_json,
+        serde_json::json!({
+            "date": "2026-05-05",
+            "races": [],
+            "workouts": [],
+        })
     );
 }
 

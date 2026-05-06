@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | user | get_selected_workout adapter test JSON object ordering
+
+- Problem: the new positive-path `llm_adapters` regression for `get_selected_workout` compared the replayed tool result as an exact JSON string. The payload is a JSON object, so serde may serialize `workouts` and `races` in a different key order even when the response is semantically identical, which caused a false test failure.
+- Fix: changed the assertion in `tests/llm_adapters/get_selected_workout.rs` to parse the tool result and compare structured JSON values instead of raw string order.
+- Prevention: never use exact string equality for JSON objects in tests unless field order is itself part of the contract. Parse and compare structured JSON so harmless serialization-order changes do not create fake regressions.
+
 ### 2026-05-06 | Copilot + CodeRabbit | get_selected_workout review follow-up on debug redaction and gating tests
 
 - Problem: the follow-up review on PR #186 was still right in two places. `ToolExecutionContext` had a custom `Debug` impl that would print raw `user_id` and the full `TrainingContext`, which is too much user-specific data for routine logs, and the adapter-level tool-loop test only exercised the hidden-tool path with `data_port: None` while its old name implied normal tool exposure.
