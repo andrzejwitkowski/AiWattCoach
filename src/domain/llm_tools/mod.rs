@@ -17,6 +17,9 @@ pub const TOOL_LOOP_MAX_ROUNDS: u32 = 6;
 mod simulate_forward_load;
 pub use simulate_forward_load::SimulateForwardLoad;
 
+mod get_selected_workout;
+pub use get_selected_workout::{GetSelectedWorkout, GetSelectedWorkoutDataPort};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolScope {
     WorkoutSummaryChat,
@@ -33,8 +36,15 @@ pub enum ToolScope {
 pub trait LlmTool: Send + Sync {
     fn name(&self) -> &'static str;
     fn definition(&self) -> LlmToolDefinition;
-    fn execute(&self, arguments_json: &str, context: &ToolExecutionContext) -> String;
+    fn execute(
+        &self,
+        arguments_json: &str,
+        context: &ToolExecutionContext,
+    ) -> Pin<Box<dyn Future<Output = String> + Send>>;
     fn preview_arguments(&self, arguments_json: &str) -> Option<String>;
+    fn is_available(&self, _context: &ToolExecutionContext) -> bool {
+        true
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -68,10 +78,28 @@ impl LlmToolLoopOutput {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ToolExecutionContext {
+    pub user_id: String,
     pub training_context: TrainingContext,
     pub today: String,
+    pub data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
+}
+
+impl std::fmt::Debug for ToolExecutionContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolExecutionContext")
+            .field("user_id", &redacted_user_id(&self.user_id))
+            .field("training_context", &self.training_context.redacted_debug())
+            .field("today", &self.today)
+            .field("data_port", &self.data_port.is_some())
+            .finish()
+    }
+}
+
+fn redacted_user_id(user_id: &str) -> String {
+    let _ = user_id;
+    "[redacted]".to_string()
 }
 
 type BoxToolFuture = Pin<Box<dyn Future<Output = Result<LlmToolLoopOutput, LlmError>> + Send>>;
@@ -127,7 +155,7 @@ pub fn run_tool_loop_with_checkpoint(
             conversation.extend(state.provider_transcript.clone());
         }
 
-        let tools = tool_definitions_for_scope(scope, &config.provider);
+        let tools = tool_definitions_for_scope(scope, &config.provider, &tool_context);
         let tool_choice = if tools.is_empty() {
             LlmToolChoice::None
         } else {
@@ -169,14 +197,13 @@ pub fn run_tool_loop_with_checkpoint(
             }
 
             for tool_call in response.tool_calls() {
-                let tool_message = LlmChatMessage::tool(
-                    tool_call.id.clone(),
-                    execute_tool_call(
-                        tool_call.name.as_str(),
-                        tool_call.arguments_json.as_str(),
-                        &tool_context,
-                    ),
-                );
+                let result = execute_tool_call(
+                    tool_call.name.as_str(),
+                    tool_call.arguments_json.as_str(),
+                    &tool_context,
+                )
+                .await;
+                let tool_message = LlmChatMessage::tool(tool_call.id.clone(), result);
                 provider_transcript.push(tool_message.clone());
                 conversation.push(tool_message);
             }
@@ -201,7 +228,7 @@ pub fn run_tool_loop_with_checkpoint(
 
 /// Single registry of all tools.  Adding a tool is a one-line change here.
 fn all_tools() -> Vec<Box<dyn LlmTool>> {
-    vec![Box::new(SimulateForwardLoad)]
+    vec![Box::new(SimulateForwardLoad), Box::new(GetSelectedWorkout)]
 }
 
 /// Resolve a tool by its declared name.
@@ -220,12 +247,14 @@ fn tools_for_scope(scope: ToolScope) -> Vec<Box<dyn LlmTool>> {
 pub fn tool_definitions_for_scope(
     scope: ToolScope,
     provider: &LlmProvider,
+    tool_context: &ToolExecutionContext,
 ) -> Vec<LlmToolDefinition> {
     if !provider_supports_tools(provider) {
         return Vec::new();
     }
     tools_for_scope(scope)
         .into_iter()
+        .filter(|tool| tool.is_available(tool_context))
         .map(|tool| tool.definition())
         .collect()
 }
@@ -261,13 +290,13 @@ fn merge_public_tool_calls(
     existing
 }
 
-fn execute_tool_call(
+async fn execute_tool_call(
     tool_name: &str,
     arguments_json: &str,
     context: &ToolExecutionContext,
 ) -> String {
     match find_tool(tool_name) {
-        Some(tool) => tool.execute(arguments_json, context),
+        Some(tool) => tool.execute(arguments_json, context).await,
         None => serde_json::json!({
             "error": format!("unknown tool: {tool_name}")
         })

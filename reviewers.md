@@ -21,6 +21,42 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | CodeRabbit | get_selected_workout schema/runtime parity and stream sampling fidelity
+
+- Problem: two follow-up review comments on PR #186 were still valid. `GetSelectedWorkoutArgs` advertised `additionalProperties: false` in the tool schema but runtime deserialization still accepted unknown keys, and the stream downsampler used `div_ceil + step_by`, which under-filled streams just above the sample cap and could drop the tail sample.
+- Fix: added `#[serde(deny_unknown_fields)]` to `GetSelectedWorkoutArgs`, switched stream sampling to an evenly spaced index-based sampler that returns up to `MAX_STREAM_SAMPLES` while keeping both ends, and added focused regressions for unknown tool arguments and the `257 -> 256 samples including last point` case.
+- Prevention: when a tool schema promises `additionalProperties: false`, mirror that promise in serde with `deny_unknown_fields` so runtime validation matches the advertised contract. For capped numeric series, avoid coarse `step_by` sampling when fidelity near the limit matters; use index-based spacing and assert both sample count and endpoint retention in tests.
+
+### 2026-05-06 | Copilot | get_selected_workout non-finite float stream serialization
+
+- Problem: `get_selected_workout` serialized sampled float streams with `json!(value)`, which panics for non-finite values like `NaN` or `+/-inf`. That made one malformed stream sample capable of crashing tool response building instead of returning a safe payload.
+- Fix: split float sampling onto a dedicated path in `response.rs` that preserves the existing sampling behavior but maps non-finite float samples to JSON `null`, and added a regression covering `NaN`, `INFINITY`, and `NEG_INFINITY` in a completed-workout stream.
+- Prevention: when serializing provider or activity float series into JSON, do not send raw `f64` through generic `json!(...)` helpers unless you have already normalized non-finite values. Add a focused regression the first time a float stream is exposed to an LLM or REST payload.
+
+### 2026-05-06 | user | get_selected_workout adapter test JSON object ordering
+
+- Problem: the new positive-path `llm_adapters` regression for `get_selected_workout` compared the replayed tool result as an exact JSON string. The payload is a JSON object, so serde may serialize `workouts` and `races` in a different key order even when the response is semantically identical, which caused a false test failure.
+- Fix: changed the assertion in `tests/llm_adapters/get_selected_workout.rs` to parse the tool result and compare structured JSON values instead of raw string order.
+- Prevention: never use exact string equality for JSON objects in tests unless field order is itself part of the contract. Parse and compare structured JSON so harmless serialization-order changes do not create fake regressions.
+
+### 2026-05-06 | Copilot + CodeRabbit | get_selected_workout review follow-up on debug redaction and gating tests
+
+- Problem: the follow-up review on PR #186 was still right in two places. `ToolExecutionContext` had a custom `Debug` impl that would print raw `user_id` and the full `TrainingContext`, which is too much user-specific data for routine logs, and the adapter-level tool-loop test only exercised the hidden-tool path with `data_port: None` while its old name implied normal tool exposure.
+- Fix: moved tool availability behind a trait-level `is_available(...)` hook instead of a name-based match, redacted `ToolExecutionContext` debug output to a fully hidden `user_id`, a summarized `TrainingContext`, and a boolean `data_port` flag, rewrote the JSON-fragile unit assertion to parse structured response fields, renamed the `data_port: None` tool-loop regression to match its real gating behavior, and added a separate positive-path regression proving `get_selected_workout` is exposed when a real `data_port` is present.
+- Prevention: when adding custom `Debug` on request or execution context structs, treat them as log surfaces and default to redacted identifiers plus shape summaries rather than full nested state. When a test is about conditional capability exposure, name it after the gating condition and add the opposite-path assertion too so review cannot mistake a defensive path for the primary behavior.
+
+### 2026-05-06 | Copilot + CodeRabbit | get_selected_workout tool wiring and payload hardening
+
+- Problem: review feedback on PR #186 was still correct in multiple places. The branch leaked a concrete `GetSelectedWorkoutDataAdapter` through the domain surface, advertised `get_selected_workout` even when `ToolExecutionContext.data_port` was `None`, wired the tool to raw planned/race repositories instead of authoritative filtered views, duplicated canonical planned-workout serialization in another module, and returned uncapped streams plus only a partial completed-workout metrics payload.
+- Fix: moved `GetSelectedWorkoutDataAdapter` into `src/adapters/llm/get_selected_workout_data.rs` and kept the domain export to the port only, gated tool definitions on `data_port` availability in the shared tool loop, switched `main.rs` wiring to authoritative planned/race repositories, extracted shared canonical planned-workout serialization into `src/domain/planned_workouts/mod.rs`, expanded the tool response to the full `CompletedWorkoutMetrics` shape, and capped stream samples in `get_selected_workout` to a bounded downsampled payload with updated regressions.
+- Prevention: when adding a new LLM tool backed by repository I/O, review four boundaries before shipping: domain vs adapter ownership, conditional tool exposure, authoritative vs raw read-model sources, and payload size limits for any raw arrays sent back to the model. If two features serialize the same canonical workout text, extract one shared helper instead of copying the mapper.
+
+### 2026-05-05 | user | get_selected_workout 4-loop review hardening
+
+- Problem: the first implementation exposed `get_selected_workout` without enough behavioral hardening: invalid dates were not rejected, past planned workouts were not marked `not_completed`, races were still returned when a completed workout existed, race lookup loaded all user races instead of using the repository range query, stream `secondary_series` was dropped, the main tool function mixed loading and mapping phases, and the initial adapter test was mostly a print-only simulation.
+- Fix: added strict `YYYY-MM-DD` parsing, returned planned status as `planned` or `not_completed`, hid race entries whenever completed workouts exist for the requested day, switched the tool data port to race date-range lookup, included optional `secondary_data` for streams, split the tool into focused loading/mapping helpers, moved the data port/adapter into the tool module, and replaced the print-heavy test with assertions over tool definition exposure and replayed tool results.
+- Prevention: when adding an LLM tool that reads domain data, review the response contract against each user requirement before relying on provider-loop tests. Cover success, invalid-input, missing-data, and scope/wiring behavior with assertions, and verify repository reads use the narrowest available port method.
+
 ### 2026-05-04 | user | misleading LlmChatRequest tool placeholder fields
 
 - Problem: multiple request builders (`coach_conversation/service/request.rs`, `workout_summary_coach.rs`, `training_plan_generator.rs`) constructed `LlmChatRequest` with `tools: Vec::new()` and `tool_choice: LlmToolChoice::None`, but every one of those requests was then passed to `run_tool_loop` or `run_tool_loop_with_checkpoint`, which unconditionally overwrote both fields based on `ToolScope`. The placeholder values made it look like requests were sent without tools, which wasted review time and hid the real behavior.

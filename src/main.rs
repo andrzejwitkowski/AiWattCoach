@@ -18,8 +18,8 @@ use aiwattcoach::{
         llm::{
             adapter::LlmAdapter, athlete_summary_generator::AthleteSummaryLlmGenerator,
             dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
-            openai::client::OpenAiClient, openrouter::client::OpenRouterClient,
-            settings_adapter::SettingsLlmConfigProvider,
+            get_selected_workout_data::GetSelectedWorkoutDataAdapter, openai::client::OpenAiClient,
+            openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
             workout_summary_coach::LlmWorkoutCoach,
         },
@@ -398,6 +398,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         race_repository.clone(),
         external_observation_repository.clone(),
     );
+    let get_selected_workout_data_port = Arc::new(GetSelectedWorkoutDataAdapter {
+        completed: authoritative_completed_workout_repository.clone(),
+        planned: authoritative_planned_workout_repository.clone(),
+        races: authoritative_race_repository.clone(),
+        summaries: workout_summary_repository.clone(),
+    });
     let calendar_entry_view_repository =
         MongoCalendarEntryViewRepository::new(mongo_client.clone(), &mongo_database);
     calendar_entry_view_repository.ensure_indexes().await?;
@@ -558,7 +564,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     training_context_builder.clone(),
                     SystemClock,
                 )
-                .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
+                .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
+                .with_data_port(get_selected_workout_data_port.clone()),
             ),
         )
         .with_athlete_summary_service(athlete_summary_direct_service.clone())
@@ -582,7 +589,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             UuidIdGenerator,
         )
         .with_settings_service(settings_service.clone())
-        .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone())),
+        .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
+        .with_data_port(get_selected_workout_data_port.clone()),
     );
     let training_plan_direct_service = Arc::new(
         TrainingPlanGenerationService::new(
@@ -594,7 +602,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 llm_config_provider.clone(),
                 training_context_builder.clone(),
                 SystemClock,
-            ),
+            )
+            .with_data_port(get_selected_workout_data_port.clone()),
             TrainingPlanWorkoutSummaryAdapter::new(workout_summary_direct_service.clone()),
             SystemClock,
         )
