@@ -83,7 +83,7 @@ impl LlmChatPort for RecordingLlmPort {
 }
 
 #[tokio::test]
-async fn tool_loop_hides_get_selected_workout_without_data_port_and_replays_error() {
+async fn tool_loop_hides_get_selected_workout_without_data_port_and_stops_with_scope_error() {
     let port = RecordingLlmPort::default();
     let result = run_tool_loop(
         Arc::new(port.clone()),
@@ -110,9 +110,9 @@ async fn tool_loop_hides_get_selected_workout_without_data_port_and_replays_erro
         None,
     )
     .await
-    .expect("tool loop should finish after the tool result is replayed");
+    .expect("tool loop should finish after the hidden tool is rejected");
 
-    assert_eq!(result.state.round_count, 2);
+    assert_eq!(result.state.round_count, 1);
     assert_eq!(result.state.public_tool_calls.len(), 1);
     assert_eq!(
         result.state.public_tool_calls[0].name,
@@ -126,7 +126,7 @@ async fn tool_loop_hides_get_selected_workout_without_data_port_and_replays_erro
     );
 
     let requests = port.requests();
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 1);
     let first_tool_names = requests[0]
         .tools
         .iter()
@@ -135,18 +135,19 @@ async fn tool_loop_hides_get_selected_workout_without_data_port_and_replays_erro
     assert!(first_tool_names.contains(&"simulate_forward_load"));
     assert!(!first_tool_names.contains(&"get_selected_workout"));
 
-    let replayed_tool_result = requests[1]
-        .conversation
+    let recorded_tool_result = result
+        .state
+        .provider_transcript
         .iter()
         .find(|message| matches!(message.role, LlmMessageRole::Tool))
-        .expect("second request should include tool result");
+        .expect("tool result should be recorded in the transcript");
     assert_eq!(
-        replayed_tool_result.tool_call_id.as_deref(),
+        recorded_tool_result.tool_call_id.as_deref(),
         Some("call_get_workout_1")
     );
     assert_eq!(
-        replayed_tool_result.content,
-        r#"{"error":"data port not available"}"#
+        recorded_tool_result.content,
+        r#"{"error":"tool not available in this scope: get_selected_workout"}"#
     );
 }
 

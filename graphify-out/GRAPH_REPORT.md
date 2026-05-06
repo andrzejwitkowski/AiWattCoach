@@ -1,7 +1,7 @@
 # Graph Report - AiWattCoach  (2026-05-06)
 
 ## Corpus Check
-- 800 files · ~498,725 words
+- 800 files · ~498,945 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -1625,7 +1625,7 @@ Nodes (1): InMemoryUserSettingsRepository
 
 ### Community 191 - "Community 191"
 Cohesion: 0.21
-Nodes (7): cache(), empty_training_context(), EmptyDataPort, RecordingLlmPort, tool_loop_hides_get_selected_workout_without_data_port_and_replays_error(), tool_loop_sends_get_selected_workout_when_data_port_is_available(), usage()
+Nodes (7): cache(), empty_training_context(), EmptyDataPort, RecordingLlmPort, tool_loop_hides_get_selected_workout_without_data_port_and_stops_with_scope_error(), tool_loop_sends_get_selected_workout_when_data_port_is_available(), usage()
 
 ### Community 192 - "Community 192"
 Cohesion: 0.14

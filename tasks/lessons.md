@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- When a shared tool loop or orchestrator changes from replaying an error into another provider round to stopping immediately, update adapter tests to match the new round-count and transcript contract. Do not leave tests asserting a second request or an older tool-local error payload after the control-flow boundary has intentionally moved up a layer.
 - For Intervals.icu client transport logging, keep `BodyLoggingMode::None` as the shared default. Do not switch the shared trace helper to full request/response body previews just because one debugging task needs more visibility; add any body-preview logging only on the narrow call paths whose tests and logging guide explicitly permit it.
 - If provider debugging requires payload inspection, verify outbound adapter clients log both request and response body previews on success as well as failure. Metadata-only logs are usually not enough for LLM, OAuth, or third-party API incident diagnosis.
 - If an LLM aggregator intermittently returns an assistant turn with neither text nor tool calls, do not immediately relax downstream final-text validation. First contain it at the adapter boundary with a narrowly targeted retry for that exact transient response shape, and add a regression that proves the retry happens once and no more.
