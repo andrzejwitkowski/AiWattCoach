@@ -42,6 +42,13 @@ pub trait CompletedWorkoutRepository: Clone + Send + Sync + 'static {
         workout: CompletedWorkout,
     ) -> BoxFuture<Result<CompletedWorkout, CompletedWorkoutError>>;
 
+    /// Persists a 5-second power curve for a completed workout only if one is
+    /// not already stored.
+    ///
+    /// Implementations must use an atomic check-and-set to avoid overwriting
+    /// a curve written by a concurrent caller. The default implementation is a
+    /// no-op, suitable for in-memory or test repositories that do not need
+    /// durable power-curve storage.
     fn set_power_curve_5s_if_missing(
         &self,
         _user_id: &str,

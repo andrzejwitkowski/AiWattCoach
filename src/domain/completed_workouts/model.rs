@@ -100,6 +100,12 @@ pub struct CompletedWorkoutDetails {
     pub gap_zone_times: Vec<i32>,
 }
 
+/// Precomputed mean-max power curve at 5-second resolution.
+///
+/// Holds the maximum average power for successive durations starting at
+/// `duration_start_seconds` and stepping by `duration_step_seconds`.
+/// `max_average_watts[i]` corresponds to duration
+/// `duration_start_seconds + i * duration_step_seconds`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompletedWorkoutPowerCurve {
     pub resolution_seconds: u16,

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use super::SelectedWorkoutPowerCurve;
 use crate::domain::{
@@ -10,9 +10,11 @@ use crate::domain::{
     training_context::TrainingContext,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct TestDataPort {
     workouts: Vec<CompletedWorkout>,
+    #[allow(clippy::type_complexity)]
+    persisted: Arc<Mutex<Vec<(String, CompletedWorkoutPowerCurve)>>>,
 }
 
 impl GetSelectedWorkoutDataPort for TestDataPort {
@@ -69,12 +71,17 @@ impl GetSelectedWorkoutDataPort for TestDataPort {
     fn persist_power_curve_5s_if_missing(
         &self,
         _user_id: &str,
-        _completed_workout_id: &str,
-        _curve: CompletedWorkoutPowerCurve,
+        completed_workout_id: &str,
+        curve: CompletedWorkoutPowerCurve,
     ) -> crate::domain::completed_workouts::BoxFuture<
         Result<(), crate::domain::completed_workouts::CompletedWorkoutError>,
     > {
-        Box::pin(async { Ok(()) })
+        let persisted = self.persisted.clone();
+        let id = completed_workout_id.to_string();
+        Box::pin(async move {
+            persisted.lock().expect("mutex poisoned").push((id, curve));
+            Ok(())
+        })
     }
 }
 
@@ -169,6 +176,7 @@ async fn returns_stored_5s_curve_when_present() {
     );
     let port = TestDataPort {
         workouts: vec![workout],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -192,16 +200,21 @@ async fn computes_5s_ad_hoc_when_cache_missing() {
     );
     let port = TestDataPort {
         workouts: vec![workout],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
     let result = tool
-        .execute(r#"{"date":"2026-05-05"}"#, &sample_context(port))
+        .execute(r#"{"date":"2026-05-05"}"#, &sample_context(port.clone()))
         .await;
     let parsed = parse_response(&result);
     assert_eq!(parsed["source"], "computed_and_persisted_5s");
     assert_eq!(parsed["resolution_seconds"], 5);
     assert!(!parsed["max_average_watts"].as_array().unwrap().is_empty());
+
+    let persisted = port.persisted.lock().expect("mutex poisoned");
+    assert_eq!(persisted.len(), 1);
+    assert_eq!(persisted[0].0, "cw-1");
 }
 
 #[tokio::test]
@@ -215,6 +228,7 @@ async fn computes_ad_hoc_for_non_5s_resolution() {
     );
     let port = TestDataPort {
         workouts: vec![workout],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -236,6 +250,7 @@ async fn returns_error_for_details_unavailable_workout() {
     workout.details_unavailable_reason = Some("no fit file".to_string());
     let port = TestDataPort {
         workouts: vec![workout],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -278,6 +293,7 @@ async fn returns_error_for_missing_watts_stream() {
     );
     let port = TestDataPort {
         workouts: vec![workout],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -300,6 +316,7 @@ async fn rejects_invalid_resolution() {
     );
     let port = TestDataPort {
         workouts: vec![workout],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -317,6 +334,7 @@ async fn rejects_invalid_resolution() {
 async fn returns_error_for_no_workouts_on_date() {
     let port = TestDataPort {
         workouts: Vec::new(),
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -336,6 +354,7 @@ async fn requires_workout_id_for_multiple_workouts() {
     let w2 = workout_with_watts("cw-2", "2026-05-05", "Workout B", vec![150, 200, 250], None);
     let port = TestDataPort {
         workouts: vec![w1, w2],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -357,6 +376,7 @@ async fn selects_specific_workout_by_id() {
     let w2 = workout_with_watts("cw-2", "2026-05-05", "Workout B", vec![150, 200, 250], None);
     let port = TestDataPort {
         workouts: vec![w1, w2],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -376,6 +396,7 @@ async fn rejects_unknown_fields() {
     let workout = workout_with_watts("cw-1", "2026-05-05", "Threshold", vec![200, 250, 300], None);
     let port = TestDataPort {
         workouts: vec![workout],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -396,6 +417,7 @@ async fn rejects_unknown_fields() {
 async fn rejects_invalid_date() {
     let port = TestDataPort {
         workouts: Vec::new(),
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -411,6 +433,7 @@ async fn returns_error_for_resolution_larger_than_data() {
     let workout = workout_with_watts("cw-1", "2026-05-05", "Threshold", vec![200, 250, 300], None);
     let port = TestDataPort {
         workouts: vec![workout],
+        ..Default::default()
     };
 
     let tool = SelectedWorkoutPowerCurve;
@@ -442,6 +465,7 @@ fn tool_definition_schema_is_parseable() {
 fn is_available_when_data_port_present() {
     let port = TestDataPort {
         workouts: Vec::new(),
+        ..Default::default()
     };
     let context = sample_context(port);
 

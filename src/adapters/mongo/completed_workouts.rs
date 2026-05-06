@@ -33,6 +33,7 @@ struct CompletedWorkoutDocument {
     details: CompletedWorkoutDetailsDocument,
     details_unavailable_reason: Option<String>,
     #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     power_curve_5s: Option<CompletedWorkoutPowerCurveDocument>,
 }
 
@@ -324,20 +325,18 @@ impl CompletedWorkoutRepository for MongoCompletedWorkoutRepository {
         let user_id = user_id.to_string();
         let completed_workout_id = completed_workout_id.to_string();
         let curve_doc = map_power_curve_to_document(&curve);
-        let curve_bson = match mongodb::bson::to_document(&curve_doc) {
-            Ok(doc) => doc,
-            Err(err) => {
-                let message = err.to_string();
-                return Box::pin(async move { Err(CompletedWorkoutError::Repository(message)) });
-            }
-        };
         Box::pin(async move {
+            let curve_bson = mongodb::bson::to_document(&curve_doc)
+                .map_err(|err| CompletedWorkoutError::Repository(err.to_string()))?;
             collection
                 .update_one(
                     doc! {
                         "user_id": &user_id,
                         "completed_workout_id": &completed_workout_id,
-                        "power_curve_5s": { "$exists": false },
+                        "$or": [
+                            { "power_curve_5s": { "$exists": false } },
+                            { "power_curve_5s": null },
+                        ],
                     },
                     doc! { "$set": { "power_curve_5s": curve_bson } },
                 )

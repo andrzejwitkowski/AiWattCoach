@@ -29,6 +29,12 @@ fn default_resolution() -> u16 {
     5
 }
 
+/// LLM-callable tool that returns the power curve (mean-max average watts) for a
+/// selected completed workout.
+///
+/// At 5-second resolution the tool prefers a persisted cache; if none exists it
+/// computes the curve and stores it. Other resolutions are computed on-the-fly
+/// and never persisted.
 pub struct SelectedWorkoutPowerCurve;
 
 impl LlmTool for SelectedWorkoutPowerCurve {
@@ -95,6 +101,15 @@ async fn execute_power_curve(arguments_json: &str, context: &ToolExecutionContex
         Err(err) => return json!({ "error": err }).to_string(),
     };
 
+    let resolution = args.resolution_seconds;
+    if resolution < 5 || resolution % 5 != 0 {
+        return json!({
+            "error": "invalid resolution",
+            "reason": "resolution_seconds must be a multiple of 5, minimum 5"
+        })
+        .to_string();
+    }
+
     let Some(port) = context.data_port.as_ref() else {
         return json!({ "error": "data port not available" }).to_string();
     };
@@ -114,15 +129,6 @@ async fn execute_power_curve(arguments_json: &str, context: &ToolExecutionContex
         Ok(w) => w,
         Err(err) => return json!({ "error": err }).to_string(),
     };
-
-    let resolution = args.resolution_seconds;
-    if resolution < 5 || resolution % 5 != 0 {
-        return json!({
-            "error": "invalid resolution",
-            "reason": "resolution_seconds must be a multiple of 5, minimum 5"
-        })
-        .to_string();
-    }
 
     if workout.details_unavailable_reason.is_some() {
         return build_unavailable_response(
@@ -147,19 +153,31 @@ async fn execute_power_curve(arguments_json: &str, context: &ToolExecutionContex
 
         match compute_power_curve(&workout, 5) {
             Ok(curve) => {
-                let _ = port
+                let source = match port
                     .persist_power_curve_5s_if_missing(
                         &context.user_id,
                         &workout.completed_workout_id,
                         curve.clone(),
                     )
-                    .await;
+                    .await
+                {
+                    Ok(()) => "computed_and_persisted_5s",
+                    Err(err) => {
+                        tracing::warn!(
+                            user_id = %context.user_id,
+                            completed_workout_id = %workout.completed_workout_id,
+                            error = %err,
+                            "failed to persist 5s power curve"
+                        );
+                        "computed_5s_not_persisted"
+                    }
+                };
                 return build_power_curve_response(
                     &args.date,
                     &workout.completed_workout_id,
                     workout.name.as_deref(),
                     &curve,
-                    "computed_and_persisted_5s",
+                    source,
                 );
             }
             Err(err) => {
