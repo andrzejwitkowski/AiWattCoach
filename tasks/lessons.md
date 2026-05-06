@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- If the shared tool loop rejects a tool call because the tool is unavailable in the active scope or runtime context, do not continue into another LLM round by default. Record the diagnostic `tool` message for persistence/debugging, then stop so the caller sees a deterministic invalid-response path instead of burning through the max-round limit on the same impossible tool call.
 - If a live provider bug reappears in the same shape as an earlier resolved incident, first diff the current code against the last verified provider contract in git history. Do not assume the current branch still carries the earlier hotfix just because the repo has tests for it.
 - If an external workout format already accepts the repo's canonical repeat-header syntax like `Main Set 4x`, do not add a provider-specific serializer that splits the title and repeat count across lines. Syntax-preserving reuse is safer than speculative reshaping.
 - When adding a unique index to a shared sync-state collection, scope the partial filter to the exact canonical entity kind that requires the invariant. A broader `external_id`-only partial filter can turn harmless historical duplicates in other kinds into a startup rollout failure.

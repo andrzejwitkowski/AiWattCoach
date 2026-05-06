@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | user | PR #188 unavailable tool calls should stop the loop immediately
+
+- Problem: the `tool_loop_rejects_runtime_calls_for_tools_not_available_in_scope` regression on `feat/tool-prompt-guidance` still failed because `run_tool_loop(...)` recorded the unavailable-tool error as a `tool` message but then kept asking the model for another round. A provider or test double that repeated the same forbidden tool call would never converge and instead hit `tool loop exceeded 6 rounds`.
+- Fix: changed `src/domain/llm_tools/mod.rs` so `execute_available_tool_call(...)` distinguishes a normal tool result from the specific runtime `tool not available in this scope` case, and `run_tool_loop(...)` now returns immediately after appending that unavailable-tool `tool` message to the provider transcript instead of continuing into another round.
+- Prevention: when the shared tool loop detects a runtime impossibility caused by scope/provider availability filtering, do not feed the error back into another model round by default. Persist the diagnostic tool message, then stop deterministically so higher layers can surface the invalid-response path instead of spinning to the max-round guard.
+
 ### 2026-05-06 | user | PR #188 tool-scope runtime gating and training-plan focus date
 
 - Problem: follow-up review on PR #188 exposed two real continuity issues in the new shared tool-prompt-guidance flow. Training-plan tool calls still set `ToolExecutionContext.today` from the host clock, so `simulate_forward_load` could reason from the wrong date instead of the focused workout window. Separately, `run_tool_loop_with_checkpoint(...)` advertised only scope-available tools in the provider request, but runtime execution still resolved tool calls from the global registry, which meant a model response could execute a tool that was not actually available in the active scope.

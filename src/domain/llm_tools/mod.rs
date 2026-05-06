@@ -207,16 +207,32 @@ pub fn run_tool_loop_with_checkpoint(
             }
 
             for tool_call in response.tool_calls() {
-                let result = execute_available_tool_call(
+                let execution_result = execute_available_tool_call(
                     available_tools.as_slice(),
                     tool_call.name.as_str(),
                     tool_call.arguments_json.as_str(),
                     &tool_context,
                 )
                 .await;
+                let (result, tool_unavailable) = match execution_result {
+                    ToolExecutionResult::Success(result) => (result, false),
+                    ToolExecutionResult::ToolUnavailable(result) => (result, true),
+                };
                 let tool_message = LlmChatMessage::tool(tool_call.id.clone(), result);
                 provider_transcript.push(tool_message.clone());
                 conversation.push(tool_message);
+
+                if tool_unavailable {
+                    return Ok(LlmToolLoopOutput {
+                        response: response.clone(),
+                        state: LlmToolLoopState {
+                            provider_transcript,
+                            finish_reason: response.finish_reason.clone(),
+                            public_tool_calls,
+                            round_count,
+                        },
+                    });
+                }
             }
 
             state = LlmToolLoopState {
@@ -357,18 +373,25 @@ fn merge_public_tool_calls(
     existing
 }
 
+enum ToolExecutionResult {
+    Success(String),
+    ToolUnavailable(String),
+}
+
 async fn execute_available_tool_call(
     available_tools: &[Box<dyn LlmTool>],
     tool_name: &str,
     arguments_json: &str,
     context: &ToolExecutionContext,
-) -> String {
+) -> ToolExecutionResult {
     match available_tools.iter().find(|tool| tool.name() == tool_name) {
-        Some(tool) => tool.execute(arguments_json, context).await,
-        None => serde_json::json!({
-            "error": format!("tool not available in this scope: {tool_name}")
-        })
-        .to_string(),
+        Some(tool) => ToolExecutionResult::Success(tool.execute(arguments_json, context).await),
+        None => ToolExecutionResult::ToolUnavailable(
+            serde_json::json!({
+                "error": format!("tool not available in this scope: {tool_name}")
+            })
+            .to_string(),
+        ),
     }
 }
 

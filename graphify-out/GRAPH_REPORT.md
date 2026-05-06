@@ -1,11 +1,11 @@
 # Graph Report - AiWattCoach  (2026-05-06)
 
 ## Corpus Check
-- 798 files · ~497,118 words
+- 798 files · ~497,382 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8426 nodes · 11256 edges · 777 communities detected
+- 8427 nodes · 11257 edges · 777 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -820,35 +820,35 @@ Nodes (55): build_daily_training_load_snapshots_falls_back_to_provider_ftp_after
 
 ### Community 1 - "Community 1"
 Cohesion: 0.02
-Nodes (59): athlete_summary_generate_task_handler(), AthleteSummaryGenerateTaskHandler, AthleteSummaryGenerateTaskHandler<Base>, AthleteSummaryTaskPayload, AthleteSummaryTaskResultHandler, AthleteSummaryTaskResultHandler<Base>, build_completed_checkpoint(), build_force_dedupe_key() (+51 more)
+Nodes (40): AssertingIntervalsApi, capture_request(), CapturedRequest, CapturingChatPort, FailingReusableCacheRepository, FakeIntervalsApi, FakeIntervalsSettings, FixedClock (+32 more)
 
 ### Community 2 - "Community 2"
+Cohesion: 0.02
+Nodes (59): athlete_summary_generate_task_handler(), AthleteSummaryGenerateTaskHandler, AthleteSummaryGenerateTaskHandler<Base>, AthleteSummaryTaskPayload, AthleteSummaryTaskResultHandler, AthleteSummaryTaskResultHandler<Base>, build_completed_checkpoint(), build_force_dedupe_key() (+51 more)
+
+### Community 3 - "Community 3"
 Cohesion: 0.04
 Nodes (79): calendar_entry_view_service_lists_mixed_entries_by_date_range(), completed_workout_projection_carries_local_summary(), completed_workout_projection_handles_short_start_date_local_without_panicking(), computes_5s_ad_hoc_when_cache_missing(), computes_ad_hoc_for_non_5s_resolution(), FixedClock, get_selected_workout_downsamples_large_streams(), get_selected_workout_downsampling_keeps_both_ends_for_near_limit_streams() (+71 more)
 
-### Community 3 - "Community 3"
-Cohesion: 0.02
-Nodes (25): AssertingIntervalsApi, FakeIntervalsApi, FakeIntervalsSettings, FixedIdGenerator, RecordingCalendarRefresh, RecordingImports, RecordingImportService, RecordingIntervalsApi (+17 more)
-
 ### Community 4 - "Community 4"
-Cohesion: 0.02
-Nodes (38): capture_request(), CapturedRequest, CapturingChatPort, external_import_service(), external_import_service_without_refresh(), FailingReusableCacheRepository, FixedClock, FixedGeminiConfigProvider (+30 more)
-
-### Community 5 - "Community 5"
 Cohesion: 0.03
 Nodes (27): auth_test_app(), auth_test_app_with_custom_settings(), auth_test_app_with_custom_settings_and_limited_whitelist_rate(), auth_test_app_with_limited_whitelist_rate(), auth_test_app_with_settings(), auth_test_app_with_wahoo(), auth_test_app_with_wahoo_webhook(), auth_test_app_without_identity() (+19 more)
 
-### Community 6 - "Community 6"
+### Community 5 - "Community 5"
 Cohesion: 0.05
 Nodes (25): FakeIntervalsService, FakeProjectionRepository, FixedPlannedWorkoutTokenRepository, InMemoryCalendarEntryViewRepository, InMemoryUserSettingsRepository, list_events_hydrates_actual_workout_from_linked_completed_workout(), list_events_reads_from_calendar_entry_view_only(), list_events_skips_completed_entries_even_with_planned_backlink() (+17 more)
 
-### Community 7 - "Community 7"
+### Community 6 - "Community 6"
 Cohesion: 0.04
 Nodes (34): EmptyCalendarLabelSource, EmptyTrainingPlanProjectionRepository, frontend_fixture(), FrontendFixture, get_json(), InMemoryCalendarEntryViewRepository, InMemoryCompletedWorkoutRepository, intervals_test_app() (+26 more)
 
-### Community 8 - "Community 8"
+### Community 7 - "Community 7"
 Cohesion: 0.07
 Nodes (35): epoch_seconds_to_utc_date(), FailingFtpHistoryRepository, find_settings_does_not_create_defaults_when_missing(), FtpHistoryWritePort, InMemoryProviderPollStateRepository, InMemoryUserSettingsRepository, map_poll_state_error(), map_training_load_error() (+27 more)
+
+### Community 8 - "Community 8"
+Cohesion: 0.03
+Nodes (23): external_import_service(), external_import_service_without_refresh(), InMemoryCompletedWorkoutRepository, InMemoryObservationRepository, InMemoryPlannedCompletedWorkoutLinkRepository, InMemoryPlannedWorkoutRepository, InMemoryPlannedWorkoutTokenRepository, InMemoryPlannedWorkoutWahooSyncRepository (+15 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.05
@@ -952,7 +952,7 @@ Nodes (19): AiAgentsConfig, AnalysisOptions, availability_from_days_derives_conf
 
 ### Community 34 - "Community 34"
 Cohesion: 0.09
-Nodes (27): all_tools(), available_tools_for_scope(), execute_available_tool_call(), find_tool(), LlmTool, LlmToolLoopOutput, LlmToolLoopState, merge_public_tool_calls() (+19 more)
+Nodes (28): all_tools(), available_tools_for_scope(), execute_available_tool_call(), find_tool(), LlmTool, LlmToolLoopOutput, LlmToolLoopState, merge_public_tool_calls() (+20 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.08
@@ -4025,7 +4025,7 @@ Cohesion: 1.0
 Nodes (0): 
 
 ## Knowledge Gaps
-- **762 isolated node(s):** `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange`, `MetricsBackfillCall`, `ManualWahooSyncCall` (+757 more)
+- **763 isolated node(s):** `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange`, `MetricsBackfillCall`, `ManualWahooSyncCall` (+758 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 516`** (2 nodes): `async()`, `App.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4573,17 +4573,17 @@ Nodes (0):
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `FixedClock` connect `Community 2` to `Community 0`, `Community 90`, `Community 6`?**
+- **Why does `FixedClock` connect `Community 3` to `Community 0`, `Community 90`, `Community 5`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **Why does `RecordingCalendarRefresh` connect `Community 2` to `Community 0`, `Community 19`, `Community 6`?**
+- **Why does `RecordingCalendarRefresh` connect `Community 3` to `Community 0`, `Community 19`, `Community 5`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange` to the rest of the system?**
-  _762 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _763 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.04 - nodes in this community are weakly interconnected._
-- **Should `Community 3` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
+- **Should `Community 3` be split into smaller, more focused modules?**
+  _Cohesion score 0.04 - nodes in this community are weakly interconnected._
