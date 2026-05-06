@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | user | PR #188 tool-scope runtime gating and training-plan focus date
+
+- Problem: follow-up review on PR #188 exposed two real continuity issues in the new shared tool-prompt-guidance flow. Training-plan tool calls still set `ToolExecutionContext.today` from the host clock, so `simulate_forward_load` could reason from the wrong date instead of the focused workout window. Separately, `run_tool_loop_with_checkpoint(...)` advertised only scope-available tools in the provider request, but runtime execution still resolved tool calls from the global registry, which meant a model response could execute a tool that was not actually available in the active scope.
+- Fix: changed `src/adapters/llm/training_plan_generator.rs` to derive training-plan tool-loop `today` from `training_context.history.window_end`, and changed `src/domain/llm_tools/mod.rs` to compute `available_tools` once per request and reuse that filtered set for both serialized tool definitions and runtime execution. Added regressions for focus-date derivation and for rejecting tool calls to tools that are not available in the current scope.
+- Prevention: when a tool loop depends on a synthetic execution context, anchor date/time fields to the workflow's explicit focus window rather than the machine clock unless the feature truly wants wall-clock behavior. When request assembly filters tools by scope, provider, or runtime prerequisites, execute from that same filtered set at runtime instead of re-looking up tools from a global registry.
+
 ### 2026-05-06 | user | shared LLM tool prompt guidance and request accounting
 
 - Problem: tool-specific usage instructions lived as hand-written prompt prose in one calendar-coach prompt, while other tool-enabled flows had no equivalent guidance. A naive fix inside `run_tool_loop(...)` would also have created request-accounting drift, because token-budget checks and Gemini cache hashes were computed from the pre-injection system prompt instead of the real provider prompt.
