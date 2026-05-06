@@ -3,7 +3,7 @@ use std::{future::Future, pin::Pin};
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 
-use super::{CompletedWorkout, CompletedWorkoutError};
+use super::{CompletedWorkout, CompletedWorkoutError, CompletedWorkoutPowerCurve};
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -41,6 +41,15 @@ pub trait CompletedWorkoutRepository: Clone + Send + Sync + 'static {
         &self,
         workout: CompletedWorkout,
     ) -> BoxFuture<Result<CompletedWorkout, CompletedWorkoutError>>;
+
+    fn set_power_curve_5s_if_missing(
+        &self,
+        _user_id: &str,
+        _completed_workout_id: &str,
+        _curve: CompletedWorkoutPowerCurve,
+    ) -> BoxFuture<Result<(), CompletedWorkoutError>> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 impl CompletedWorkoutRepository for () {
@@ -234,6 +243,31 @@ impl CompletedWorkoutRepository for NoopCompletedWorkoutRepository {
             });
             stored.push(workout.clone());
             Ok(workout)
+        })
+    }
+
+    fn set_power_curve_5s_if_missing(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+        curve: CompletedWorkoutPowerCurve,
+    ) -> BoxFuture<Result<(), CompletedWorkoutError>> {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        Box::pin(async move {
+            let mut stored = stored
+                .lock()
+                .expect("completed workout repo mutex poisoned");
+            if let Some(workout) = stored
+                .iter_mut()
+                .find(|w| w.user_id == user_id && w.completed_workout_id == completed_workout_id)
+            {
+                if workout.power_curve_5s.is_none() {
+                    workout.power_curve_5s = Some(curve);
+                }
+            }
+            Ok(())
         })
     }
 }

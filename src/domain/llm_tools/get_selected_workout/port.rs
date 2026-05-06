@@ -1,5 +1,5 @@
 use crate::domain::{
-    completed_workouts::{CompletedWorkout, CompletedWorkoutError},
+    completed_workouts::{CompletedWorkout, CompletedWorkoutError, CompletedWorkoutPowerCurve},
     planned_workouts::{PlannedWorkout, PlannedWorkoutError},
     races::{Race, RaceError},
     workout_summary::{WorkoutSummary, WorkoutSummaryError},
@@ -35,4 +35,13 @@ pub trait GetSelectedWorkoutDataPort: Send + Sync {
         user_id: &str,
         workout_ids: Vec<String>,
     ) -> crate::domain::workout_summary::BoxFuture<Result<Vec<WorkoutSummary>, WorkoutSummaryError>>;
+
+    fn persist_power_curve_5s_if_missing(
+        &self,
+        _user_id: &str,
+        _completed_workout_id: &str,
+        _curve: CompletedWorkoutPowerCurve,
+    ) -> crate::domain::completed_workouts::BoxFuture<Result<(), CompletedWorkoutError>> {
+        Box::pin(async { Ok(()) })
+    }
 }

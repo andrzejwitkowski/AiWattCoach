@@ -20,6 +20,9 @@ pub use simulate_forward_load::SimulateForwardLoad;
 mod get_selected_workout;
 pub use get_selected_workout::{GetSelectedWorkout, GetSelectedWorkoutDataPort};
 
+mod selected_workout_power_curve;
+pub use selected_workout_power_curve::SelectedWorkoutPowerCurve;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolScope {
     WorkoutSummaryChat,
@@ -228,7 +231,11 @@ pub fn run_tool_loop_with_checkpoint(
 
 /// Single registry of all tools.  Adding a tool is a one-line change here.
 fn all_tools() -> Vec<Box<dyn LlmTool>> {
-    vec![Box::new(SimulateForwardLoad), Box::new(GetSelectedWorkout)]
+    vec![
+        Box::new(SimulateForwardLoad),
+        Box::new(GetSelectedWorkout),
+        Box::new(SelectedWorkoutPowerCurve),
+    ]
 }
 
 /// Resolve a tool by its declared name.

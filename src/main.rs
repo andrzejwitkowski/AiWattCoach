@@ -91,6 +91,7 @@ use aiwattcoach::{
     },
     domain::completed_workouts::{
         AuthoritativeCompletedWorkoutRepository, CompletedWorkoutReadService,
+        PowerCurveCompletedWorkoutRepository,
     },
     domain::external_sync::ExternalImportService,
     domain::identity::{
@@ -305,6 +306,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let completed_workout_repository =
         MongoCompletedWorkoutRepository::new(mongo_client.clone(), &mongo_database);
     completed_workout_repository.ensure_indexes().await?;
+    let completed_workout_repository =
+        PowerCurveCompletedWorkoutRepository::new(completed_workout_repository);
     let wahoo_fit_file_repository =
         MongoWahooFitFileRepository::new(mongo_client.clone(), &mongo_database);
     wahoo_fit_file_repository.ensure_indexes().await?;

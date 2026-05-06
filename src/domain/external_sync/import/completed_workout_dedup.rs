@@ -192,6 +192,7 @@ pub(super) fn merge_completed_workout(
         metrics: merge_completed_workout_metrics(existing.metrics, incoming.metrics),
         details: merged_details,
         details_unavailable_reason,
+        power_curve_5s: None,
     }
 }
 

@@ -374,6 +374,7 @@ pub(crate) fn canonical_completed_workout_from_activity(activity: &Activity) -> 
             gap_zone_times: activity.details.gap_zone_times.clone(),
         },
         details_unavailable_reason: activity.details_unavailable_reason.clone(),
+        power_curve_5s: None,
     }
 }
 

@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::domain::completed_workouts::{
     BoxFuture as CompletedWorkoutBoxFuture, CompletedWorkout, CompletedWorkoutDetails,
     CompletedWorkoutError, CompletedWorkoutInterval, CompletedWorkoutIntervalGroup,
-    CompletedWorkoutMetrics, CompletedWorkoutRepository, CompletedWorkoutSeries,
-    CompletedWorkoutStream, CompletedWorkoutZoneTime,
+    CompletedWorkoutMetrics, CompletedWorkoutPowerCurve, CompletedWorkoutRepository,
+    CompletedWorkoutSeries, CompletedWorkoutStream, CompletedWorkoutZoneTime,
 };
 
 #[derive(Clone)]
@@ -32,6 +32,19 @@ struct CompletedWorkoutDocument {
     metrics: CompletedWorkoutMetricsDocument,
     details: CompletedWorkoutDetailsDocument,
     details_unavailable_reason: Option<String>,
+    #[serde(default)]
+    power_curve_5s: Option<CompletedWorkoutPowerCurveDocument>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CompletedWorkoutPowerCurveDocument {
+    resolution_seconds: u16,
+    sample_period_seconds: u16,
+    source_samples: usize,
+    valid_power_samples: usize,
+    duration_start_seconds: u32,
+    duration_step_seconds: u16,
+    max_average_watts: Vec<Option<i32>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -300,6 +313,39 @@ impl CompletedWorkoutRepository for MongoCompletedWorkoutRepository {
             Ok(workout)
         })
     }
+
+    fn set_power_curve_5s_if_missing(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+        curve: CompletedWorkoutPowerCurve,
+    ) -> CompletedWorkoutBoxFuture<Result<(), CompletedWorkoutError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let completed_workout_id = completed_workout_id.to_string();
+        let curve_doc = map_power_curve_to_document(&curve);
+        let curve_bson = match mongodb::bson::to_document(&curve_doc) {
+            Ok(doc) => doc,
+            Err(err) => {
+                let message = err.to_string();
+                return Box::pin(async move { Err(CompletedWorkoutError::Repository(message)) });
+            }
+        };
+        Box::pin(async move {
+            collection
+                .update_one(
+                    doc! {
+                        "user_id": &user_id,
+                        "completed_workout_id": &completed_workout_id,
+                        "power_curve_5s": { "$exists": false },
+                    },
+                    doc! { "$set": { "power_curve_5s": curve_bson } },
+                )
+                .await
+                .map_err(|error| CompletedWorkoutError::Repository(error.to_string()))?;
+            Ok(())
+        })
+    }
 }
 
 fn map_workout_to_document(workout: &CompletedWorkout) -> CompletedWorkoutDocument {
@@ -319,13 +365,17 @@ fn map_workout_to_document(workout: &CompletedWorkout) -> CompletedWorkoutDocume
         metrics: map_metrics_to_document(&workout.metrics),
         details: map_details_to_document(&workout.details),
         details_unavailable_reason: workout.details_unavailable_reason.clone(),
+        power_curve_5s: workout
+            .power_curve_5s
+            .as_ref()
+            .map(map_power_curve_to_document),
     }
 }
 
 fn map_document_to_domain(
     document: CompletedWorkoutDocument,
 ) -> Result<CompletedWorkout, CompletedWorkoutError> {
-    Ok(CompletedWorkout::new(
+    let mut workout = CompletedWorkout::new(
         document.completed_workout_id,
         document.user_id,
         document.start_date_local,
@@ -341,7 +391,37 @@ fn map_document_to_domain(
         map_metrics_to_domain(document.metrics),
         map_details_to_domain(document.details),
         document.details_unavailable_reason,
-    ))
+    );
+    workout.power_curve_5s = document.power_curve_5s.map(map_power_curve_to_domain);
+    Ok(workout)
+}
+
+fn map_power_curve_to_document(
+    curve: &CompletedWorkoutPowerCurve,
+) -> CompletedWorkoutPowerCurveDocument {
+    CompletedWorkoutPowerCurveDocument {
+        resolution_seconds: curve.resolution_seconds,
+        sample_period_seconds: curve.sample_period_seconds,
+        source_samples: curve.source_samples,
+        valid_power_samples: curve.valid_power_samples,
+        duration_start_seconds: curve.duration_start_seconds,
+        duration_step_seconds: curve.duration_step_seconds,
+        max_average_watts: curve.max_average_watts.clone(),
+    }
+}
+
+fn map_power_curve_to_domain(
+    doc: CompletedWorkoutPowerCurveDocument,
+) -> CompletedWorkoutPowerCurve {
+    CompletedWorkoutPowerCurve {
+        resolution_seconds: doc.resolution_seconds,
+        sample_period_seconds: doc.sample_period_seconds,
+        source_samples: doc.source_samples,
+        valid_power_samples: doc.valid_power_samples,
+        duration_start_seconds: doc.duration_start_seconds,
+        duration_step_seconds: doc.duration_step_seconds,
+        max_average_watts: doc.max_average_watts,
+    }
 }
 
 fn map_metrics_to_document(metrics: &CompletedWorkoutMetrics) -> CompletedWorkoutMetricsDocument {
@@ -621,7 +701,7 @@ fn map_stream_series(value: Option<serde_json::Value>) -> Option<CompletedWorkou
 #[cfg(test)]
 mod tests {
     use crate::domain::completed_workouts::{
-        CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutInterval,
+        compute_power_curve, CompletedWorkout, CompletedWorkoutDetails, CompletedWorkoutInterval,
         CompletedWorkoutIntervalGroup, CompletedWorkoutMetrics, CompletedWorkoutSeries,
         CompletedWorkoutStream, CompletedWorkoutZoneTime,
     };
@@ -721,5 +801,103 @@ mod tests {
         let mapped = map_document_to_domain(map_workout_to_document(&workout)).unwrap();
 
         assert_eq!(mapped, workout);
+    }
+
+    #[test]
+    fn power_curve_round_trip_preserves_5s_curve() {
+        let mut workout = CompletedWorkout::new(
+            "completed-1".to_string(),
+            "user-1".to_string(),
+            "2026-05-10T08:00:00".to_string(),
+            Some("activity-1".to_string()),
+            Some("planned-1".to_string()),
+            Some("Threshold Ride".to_string()),
+            Some("Strong day".to_string()),
+            Some("Ride".to_string()),
+            Some("external-1".to_string()),
+            true,
+            Some(3600),
+            Some(42_000.0),
+            CompletedWorkoutMetrics::default(),
+            CompletedWorkoutDetails {
+                intervals: Vec::new(),
+                interval_groups: Vec::new(),
+                streams: vec![CompletedWorkoutStream {
+                    stream_type: "watts".to_string(),
+                    name: Some("Power".to_string()),
+                    primary_series: Some(CompletedWorkoutSeries::Integers(vec![
+                        200, 250, 300, 275, 225, 180, 240, 260, 255, 215,
+                    ])),
+                    secondary_series: None,
+                    value_type_is_array: false,
+                    custom: false,
+                    all_null: false,
+                }],
+                interval_summary: Vec::new(),
+                skyline_chart: Vec::new(),
+                power_zone_times: Vec::new(),
+                heart_rate_zone_times: Vec::new(),
+                pace_zone_times: Vec::new(),
+                gap_zone_times: Vec::new(),
+            },
+            None,
+        );
+        workout.power_curve_5s = compute_power_curve(&workout, 5).ok();
+
+        let mapped = map_document_to_domain(map_workout_to_document(&workout)).unwrap();
+        assert_eq!(mapped, workout);
+        assert!(mapped.power_curve_5s.is_some());
+    }
+
+    #[test]
+    fn legacy_document_without_power_curve_maps_to_none() {
+        let doc = mongodb::bson::doc! {
+            "user_id": "user-1",
+            "completed_workout_id": "completed-1",
+            "start_date_local": "2026-05-10T08:00:00",
+            "source_activity_id": mongodb::bson::Bson::Null,
+            "planned_workout_id": mongodb::bson::Bson::Null,
+            "name": "Threshold Ride",
+            "description": mongodb::bson::Bson::Null,
+            "activity_type": "Ride",
+            "external_id": mongodb::bson::Bson::Null,
+            "trainer": true,
+            "duration_seconds": 3600i32,
+            "distance_meters": mongodb::bson::Bson::Null,
+            "metrics": {
+                "training_stress_score": mongodb::bson::Bson::Null,
+                "normalized_power_watts": mongodb::bson::Bson::Null,
+                "intensity_factor": mongodb::bson::Bson::Null,
+                "efficiency_factor": mongodb::bson::Bson::Null,
+                "variability_index": mongodb::bson::Bson::Null,
+                "average_power_watts": mongodb::bson::Bson::Null,
+                "ftp_watts": mongodb::bson::Bson::Null,
+                "total_work_joules": mongodb::bson::Bson::Null,
+                "calories": mongodb::bson::Bson::Null,
+                "trimp": mongodb::bson::Bson::Null,
+                "power_load": mongodb::bson::Bson::Null,
+                "heart_rate_load": mongodb::bson::Bson::Null,
+                "pace_load": mongodb::bson::Bson::Null,
+                "strain_score": mongodb::bson::Bson::Null,
+            },
+            "details": {
+                "intervals": [],
+                "interval_groups": [],
+                "streams": [],
+                "interval_summary": [],
+                "skyline_chart": [],
+                "power_zone_times": [],
+                "heart_rate_zone_times": [],
+                "pace_zone_times": [],
+                "gap_zone_times": [],
+            },
+            "details_unavailable_reason": mongodb::bson::Bson::Null,
+        };
+        let document: super::CompletedWorkoutDocument =
+            mongodb::bson::from_document(doc).expect("legacy document should deserialize");
+        assert!(document.power_curve_5s.is_none());
+
+        let workout = map_document_to_domain(document).unwrap();
+        assert!(workout.power_curve_5s.is_none());
     }
 }
