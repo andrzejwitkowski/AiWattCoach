@@ -42,7 +42,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .get(url.clone())
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .query(&[("oldest", &range.oldest), ("newest", &range.newest)]);
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(|error| {
                     let error = map_connection_error(error);
@@ -139,7 +139,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let request = client
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
@@ -193,7 +193,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
                         .and_then(|file| file.file_contents_base64.clone()),
                     filename: file_upload.as_ref().map(|file| file.filename.clone()),
                 });
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
@@ -265,7 +265,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
                         .and_then(|file| file.file_contents_base64.clone()),
                     filename: file_upload.as_ref().map(|file| file.filename.clone()),
                 });
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
@@ -319,7 +319,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let request = client
                 .delete(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
@@ -350,7 +350,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let request = client
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
@@ -380,7 +380,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 .get(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key))
                 .query(&[("oldest", &range.oldest), ("newest", &range.newest)]);
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
@@ -469,10 +469,9 @@ impl IntervalsApiPort for IntervalsIcuClient {
                 multipart::Part::bytes(upload.file_bytes).file_name(upload.filename),
             );
 
-            let response =
-                Self::execute_and_log_with_trace_no_body(&client, request.multipart(form))
-                    .await
-                    .map_err(map_connection_error)?;
+            let response = Self::execute_and_log_with_trace(&client, request.multipart(form))
+                .await
+                .map_err(map_connection_error)?;
             let created = response.status == StatusCode::CREATED;
             if !response.status.is_success() {
                 return Err(super::errors::map_error_response_from_logged_response(response).error);
@@ -528,7 +527,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
                     commute: activity.commute,
                     race: activity.race,
                 });
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 
@@ -559,7 +558,7 @@ impl IntervalsApiPort for IntervalsIcuClient {
             let request = client
                 .delete(url)
                 .basic_auth("API_KEY", Some(&credentials.api_key));
-            let response = Self::execute_and_log_with_trace_no_body(&client, request)
+            let response = Self::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(map_connection_error)?;
 

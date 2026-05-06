@@ -50,6 +50,8 @@
 
 ## Small Review Fixes
 
+- If provider debugging requires payload inspection, verify outbound adapter clients log both request and response body previews on success as well as failure. Metadata-only logs are usually not enough for LLM, OAuth, or third-party API incident diagnosis.
+- If an LLM aggregator intermittently returns an assistant turn with neither text nor tool calls, do not immediately relax downstream final-text validation. First contain it at the adapter boundary with a narrowly targeted retry for that exact transient response shape, and add a regression that proves the retry happens once and no more.
 - If a live provider bug reappears in the same shape as an earlier resolved incident, first diff the current code against the last verified provider contract in git history. Do not assume the current branch still carries the earlier hotfix just because the repo has tests for it.
 - If an external workout format already accepts the repo's canonical repeat-header syntax like `Main Set 4x`, do not add a provider-specific serializer that splits the title and repeat count across lines. Syntax-preserving reuse is safer than speculative reshaping.
 - When adding a unique index to a shared sync-state collection, scope the partial filter to the exact canonical entity kind that requires the invariant. A broader `external_id`-only partial filter can turn harmless historical duplicates in other kinds into a startup rollout failure.

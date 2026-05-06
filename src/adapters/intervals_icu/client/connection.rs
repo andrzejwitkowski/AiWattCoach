@@ -19,7 +19,7 @@ impl IntervalsConnectionTester for IntervalsIcuClient {
             let url = IntervalsIcuClient::athlete_url_impl(&base_url, &athlete_id, "");
 
             let request = client.get(&url).basic_auth("API_KEY", Some(&api_key));
-            let response = IntervalsIcuClient::execute_and_log_with_trace_no_body(&client, request)
+            let response = IntervalsIcuClient::execute_and_log_with_trace(&client, request)
                 .await
                 .map_err(|_| IntervalsConnectionError::Unavailable)?;
 

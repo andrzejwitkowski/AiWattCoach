@@ -63,7 +63,7 @@ impl IntervalsIcuClient {
         client: &Client,
         request: RequestBuilder,
     ) -> Result<LoggedResponse, ApiFailure> {
-        let logged = Self::execute_and_log_with_trace_no_body(client, request)
+        let logged = Self::execute_and_log_with_trace(client, request)
             .await
             .map_err(|error| ApiFailure {
                 status: error.status(),

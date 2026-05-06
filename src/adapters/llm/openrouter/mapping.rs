@@ -14,6 +14,9 @@ use super::dto::{
     OpenRouterToolChoice as OpenRouterToolChoiceDto, OpenRouterToolFunctionCall, OpenRouterUsage,
 };
 
+const EMPTY_MESSAGE_RESPONSE_ERROR: &str =
+    "OpenRouter returned neither message content nor tool calls";
+
 pub fn map_request(
     config: &LlmProviderConfig,
     request: LlmChatRequest,
@@ -76,7 +79,7 @@ pub fn map_response(
     let message = map_response_message(choice.message);
     if message.content.trim().is_empty() && message.tool_calls.is_empty() {
         return Err(LlmError::InvalidResponse(
-            "OpenRouter returned neither message content nor tool calls".to_string(),
+            EMPTY_MESSAGE_RESPONSE_ERROR.to_string(),
         ));
     }
 
@@ -118,6 +121,10 @@ pub fn map_response(
             cache_expires_at_epoch_seconds: None,
         },
     })
+}
+
+pub(super) fn is_empty_response_error(error: &LlmError) -> bool {
+    matches!(error, LlmError::InvalidResponse(message) if message == EMPTY_MESSAGE_RESPONSE_ERROR)
 }
 
 fn map_tool_definition(tool: LlmToolDefinition) -> Result<OpenRouterTool, LlmError> {

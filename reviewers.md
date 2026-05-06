@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | user | outbound adapter client request and response body logging
+
+- Problem: debugging provider issues was unnecessarily slow because several outbound adapter clients still logged only metadata or only failure summaries. In particular, LLM and Google OAuth clients did not emit request/response body previews on successful calls, and most Intervals call sites still routed through the `no_body` helper despite the shared logging module already supporting full body previews.
+- Fix: enabled request and response body preview logging across adapter HTTP clients: switched Intervals trace helper call sites onto full body logging, added response body previews to Wahoo client logging, added request/response body previews to OpenAI/Gemini/OpenRouter clients, and added explicit request/response body logging for Google OAuth token and userinfo calls.
+- Prevention: when a provider/client issue is likely to require payload inspection, verify the real outbound adapter logs include both request and response body previews for the success and failure paths. Do not assume metadata-only client logs are enough for LLM or OAuth debugging.
+
+### 2026-05-06 | user | OpenRouter empty assistant turn retry in workout-summary chat
+
+- Problem: live workout-summary coach logs showed OpenRouter responses for `google/gemini-3-flash-preview` that mapped to an assistant message with neither final text nor tool calls, which the adapter treated as a hard invalid response on the first occurrence. That made a transient provider-side empty turn fail the whole post-workout conversation even though the domain already had the right final-text guard for genuinely empty completed replies.
+- Fix: kept the domain contract unchanged, added a focused OpenRouter adapter helper to detect the specific `neither message content nor tool calls` mapping failure, retried that exact empty-turn case once inside `src/adapters/llm/openrouter/client.rs`, and added an adapter regression that simulates an empty first OpenRouter turn followed by a normal recovery response.
+- Prevention: when an aggregator/provider occasionally returns an empty assistant turn, prefer a narrowly scoped adapter-level retry for that exact transient transport/protocol shape instead of weakening the domain's final-response contract. Add a regression that proves both the retry trigger and the single-retry bound.
+
 ### 2026-05-06 | user | PR #188 tool-scope runtime gating and training-plan focus date
 
 - Problem: follow-up review on PR #188 exposed two real continuity issues in the new shared tool-prompt-guidance flow. Training-plan tool calls still set `ToolExecutionContext.today` from the host clock, so `simulate_forward_load` could reason from the wrong date instead of the focused workout window. Separately, `run_tool_loop_with_checkpoint(...)` advertised only scope-available tools in the provider request, but runtime execution still resolved tool calls from the global registry, which meant a model response could execute a tool that was not actually available in the active scope.

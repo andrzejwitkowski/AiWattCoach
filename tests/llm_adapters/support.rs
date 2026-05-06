@@ -34,6 +34,7 @@ use tokio::task::JoinHandle;
 #[derive(Clone, Default)]
 pub(crate) struct MockServerState {
     requests: Arc<Mutex<Vec<CapturedRequest>>>,
+    openrouter_empty_then_success_calls: Arc<Mutex<u32>>,
 }
 
 #[derive(Clone, Debug)]
@@ -429,6 +430,45 @@ async fn openrouter_handler(
                 "total_tokens": 145,
                 "cost": 0.000014,
                 "cache_discount": 0.000014
+            }
+        }))
+        .into_response();
+    }
+    if model == "google/gemini-3-flash-preview-empty-then-success" {
+        let mut calls = state.openrouter_empty_then_success_calls.lock().unwrap();
+        *calls += 1;
+        if *calls == 1 {
+            return Json(json!({
+                "id": "openrouter-req-empty-1",
+                "model": model,
+                "choices": [{
+                    "message": {
+                        "content": [
+                            { "type": "text" }
+                        ]
+                    }
+                }],
+                "usage": {
+                    "prompt_tokens": 120,
+                    "completion_tokens": 0,
+                    "total_tokens": 120
+                }
+            }))
+            .into_response();
+        }
+
+        return Json(json!({
+            "id": "openrouter-req-empty-2",
+            "model": model,
+            "choices": [{
+                "message": {
+                    "content": "Recovered after retry"
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 12,
+                "total_tokens": 132
             }
         }))
         .into_response();
