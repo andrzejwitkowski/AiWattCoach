@@ -39,6 +39,9 @@ pub enum ToolScope {
 pub trait LlmTool: Send + Sync {
     fn name(&self) -> &'static str;
     fn definition(&self) -> LlmToolDefinition;
+    fn prompt_guidance(&self) -> Option<&'static str> {
+        None
+    }
     fn execute(
         &self,
         arguments_json: &str,
@@ -251,19 +254,71 @@ fn tools_for_scope(scope: ToolScope) -> Vec<Box<dyn LlmTool>> {
     all_tools()
 }
 
+fn available_tools_for_scope(
+    scope: ToolScope,
+    provider: &LlmProvider,
+    tool_context: &ToolExecutionContext,
+) -> Vec<Box<dyn LlmTool>> {
+    if !provider_supports_tools(provider) {
+        return Vec::new();
+    }
+
+    tools_for_scope(scope)
+        .into_iter()
+        .filter(|tool| tool.is_available(tool_context))
+        .collect()
+}
+
 pub fn tool_definitions_for_scope(
     scope: ToolScope,
     provider: &LlmProvider,
     tool_context: &ToolExecutionContext,
 ) -> Vec<LlmToolDefinition> {
-    if !provider_supports_tools(provider) {
-        return Vec::new();
-    }
-    tools_for_scope(scope)
+    available_tools_for_scope(scope, provider, tool_context)
         .into_iter()
-        .filter(|tool| tool.is_available(tool_context))
         .map(|tool| tool.definition())
         .collect()
+}
+
+pub fn with_tool_prompt_guidance(
+    system_prompt: &str,
+    scope: ToolScope,
+    provider: &LlmProvider,
+    tool_context: &ToolExecutionContext,
+) -> String {
+    let guidance = tool_prompt_guidance_for_scope(scope, provider, tool_context);
+    if guidance.is_empty() {
+        return system_prompt.to_string();
+    }
+
+    if system_prompt.trim().is_empty() {
+        return guidance;
+    }
+
+    format!("{system_prompt}\n\n{guidance}")
+}
+
+fn tool_prompt_guidance_for_scope(
+    scope: ToolScope,
+    provider: &LlmProvider,
+    tool_context: &ToolExecutionContext,
+) -> String {
+    let guidance_lines: Vec<String> = available_tools_for_scope(scope, provider, tool_context)
+        .into_iter()
+        .filter_map(|tool| {
+            tool.prompt_guidance()
+                .map(|guidance| format!("- `{}`: {guidance}", tool.name()))
+        })
+        .collect();
+
+    if guidance_lines.is_empty() {
+        return String::new();
+    }
+
+    format!(
+        "Tool usage guidance: when a tool can provide more specific or up-to-date facts than the packed context, call it instead of guessing. Use these tools deliberately:\n{}",
+        guidance_lines.join("\n")
+    )
 }
 
 fn provider_supports_tools(provider: &LlmProvider) -> bool {
@@ -313,7 +368,12 @@ async fn execute_tool_call(
 
 #[cfg(test)]
 mod tests {
-    use super::LlmToolLoopState;
+    use std::sync::Arc;
+
+    use super::{with_tool_prompt_guidance, GetSelectedWorkoutDataPort, LlmToolLoopState};
+    use crate::domain::{llm::LlmProvider, training_context::TrainingContext};
+
+    use super::{ToolExecutionContext, ToolScope};
 
     #[test]
     fn tool_loop_state_defaults_empty() {
@@ -321,5 +381,118 @@ mod tests {
         assert!(state.provider_transcript.is_empty());
         assert!(state.public_tool_calls.is_empty());
         assert_eq!(state.round_count, 0);
+    }
+
+    #[test]
+    fn prompt_guidance_lists_available_tools_for_supported_provider() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::CalendarCoachChat,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(true),
+        );
+
+        assert!(prompt.contains("Tool usage guidance"));
+        assert!(prompt.contains("`simulate_forward_load`"));
+        assert!(prompt.contains("`get_selected_workout`"));
+        assert!(prompt.contains("`selected_workout_power_curve`"));
+        assert!(prompt.contains("call it instead of guessing"));
+    }
+
+    #[test]
+    fn prompt_guidance_hides_data_tools_without_data_port() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::CalendarCoachChat,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(false),
+        );
+
+        assert!(prompt.contains("`simulate_forward_load`"));
+        assert!(!prompt.contains("`get_selected_workout`"));
+        assert!(!prompt.contains("`selected_workout_power_curve`"));
+    }
+
+    #[test]
+    fn prompt_guidance_is_not_added_for_provider_without_tool_support() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::CalendarCoachChat,
+            &LlmProvider::Gemini,
+            &sample_tool_context(true),
+        );
+
+        assert_eq!(prompt, "Base prompt.");
+    }
+
+    fn sample_tool_context(with_data_port: bool) -> ToolExecutionContext {
+        ToolExecutionContext {
+            user_id: "user-1".to_string(),
+            training_context: TrainingContext {
+                focus_kind: "calendar".to_string(),
+                ..TrainingContext::default()
+            },
+            today: "2026-05-06".to_string(),
+            data_port: with_data_port.then(|| {
+                Arc::new(NoopGetSelectedWorkoutDataPort) as Arc<dyn GetSelectedWorkoutDataPort>
+            }),
+        }
+    }
+
+    #[derive(Clone)]
+    struct NoopGetSelectedWorkoutDataPort;
+
+    impl GetSelectedWorkoutDataPort for NoopGetSelectedWorkoutDataPort {
+        fn list_completed_by_date_range(
+            &self,
+            _user_id: &str,
+            _oldest: &str,
+            _newest: &str,
+        ) -> crate::domain::completed_workouts::BoxFuture<
+            Result<
+                Vec<crate::domain::completed_workouts::CompletedWorkout>,
+                crate::domain::completed_workouts::CompletedWorkoutError,
+            >,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+
+        fn list_planned_by_date_range(
+            &self,
+            _user_id: &str,
+            _oldest: &str,
+            _newest: &str,
+        ) -> crate::domain::planned_workouts::BoxFuture<
+            Result<
+                Vec<crate::domain::planned_workouts::PlannedWorkout>,
+                crate::domain::planned_workouts::PlannedWorkoutError,
+            >,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+
+        fn list_races_by_date_range(
+            &self,
+            _user_id: &str,
+            _oldest: &str,
+            _newest: &str,
+        ) -> crate::domain::races::BoxFuture<
+            Result<Vec<crate::domain::races::Race>, crate::domain::races::RaceError>,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+
+        fn find_summaries_by_workout_ids(
+            &self,
+            _user_id: &str,
+            _workout_ids: Vec<String>,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<
+                Vec<crate::domain::workout_summary::WorkoutSummary>,
+                crate::domain::workout_summary::WorkoutSummaryError,
+            >,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
     }
 }

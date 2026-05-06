@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | user | shared LLM tool prompt guidance and request accounting
+
+- Problem: tool-specific usage instructions lived as hand-written prompt prose in one calendar-coach prompt, while other tool-enabled flows had no equivalent guidance. A naive fix inside `run_tool_loop(...)` would also have created request-accounting drift, because token-budget checks and Gemini cache hashes were computed from the pre-injection system prompt instead of the real provider prompt.
+- Fix: added a shared `LlmTool::prompt_guidance()` hook plus `with_tool_prompt_guidance(...)` in `src/domain/llm_tools/mod.rs`, used it while assembling calendar coach, workout summary, and training-plan tool-enabled requests before token-budget and cache-hash calculations, and removed the duplicated calendar-only tool prose. Added regressions for provider/data-port gating and training-plan prompt coverage.
+- Prevention: when adding prompt guidance for tool-enabled flows, inject it through a shared request-assembly helper before any token estimation, cache hashing, or provider dispatch. Do not hide real prompt bytes behind a late mutation in the tool loop, and do not duplicate per-tool instructions across multiple feature-specific prompt strings.
+
 ### 2026-05-06 | CodeRabbit | get_selected_workout schema/runtime parity and stream sampling fidelity
 
 - Problem: two follow-up review comments on PR #186 were still valid. `GetSelectedWorkoutArgs` advertised `additionalProperties: false` in the tool schema but runtime deserialization still accepted unknown keys, and the stream downsampler used `div_ceil + step_by`, which under-filled streams just above the sample cap and could drop the tail sample.
