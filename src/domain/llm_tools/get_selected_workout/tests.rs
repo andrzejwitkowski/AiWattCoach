@@ -39,19 +39,24 @@ fn get_selected_workout_returns_completed_data_and_hides_race() {
     });
 
     let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-05"}"#, &context));
+    let json: serde_json::Value =
+        serde_json::from_str(&response).expect("response should be valid json");
+    let workout = &json["workouts"][0];
+    let stream = &workout["streams"][0];
+    let conversation = &workout["ai_conversation"][0];
 
-    assert!(response.contains(r#""kind":"completed""#));
-    assert!(response.contains(r#""workout_id":"completed-1""#));
-    assert!(response.contains(r#""stream_type":"watts""#));
-    assert!(response.contains(r#""data":[250,260,270]"#));
-    assert!(response.contains(r#""secondary_data":[251,261,271]"#));
-    assert!(response.contains(r#""role":"coach""#));
-    assert!(response.contains(r#""ai_summary":"Strong threshold execution""#));
-    assert!(response.contains(r#""variability_index":null"#));
-    assert!(response.contains(r#""total_work_joules":null"#));
-    assert!(response.contains(r#""strain_score":null"#));
-    assert!(response.contains(r#""races":[]"#));
-    assert!(!response.contains(r#""kind":"planned""#));
+    assert_eq!(workout["kind"], "completed");
+    assert_eq!(workout["workout_id"], "completed-1");
+    assert_eq!(stream["stream_type"], "watts");
+    assert_eq!(stream["data"], serde_json::json!([250, 260, 270]));
+    assert_eq!(stream["secondary_data"], serde_json::json!([251, 261, 271]));
+    assert_eq!(conversation["role"], "coach");
+    assert_eq!(workout["ai_summary"], "Strong threshold execution");
+    assert!(workout["metrics"]["variability_index"].is_null());
+    assert!(workout["metrics"]["total_work_joules"].is_null());
+    assert!(workout["metrics"]["strain_score"].is_null());
+    assert_eq!(json["races"], serde_json::json!([]));
+    assert_ne!(workout["kind"], "planned");
 }
 
 #[test]

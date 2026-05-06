@@ -42,6 +42,9 @@ pub trait LlmTool: Send + Sync {
         context: &ToolExecutionContext,
     ) -> Pin<Box<dyn Future<Output = String> + Send>>;
     fn preview_arguments(&self, arguments_json: &str) -> Option<String>;
+    fn is_available(&self, _context: &ToolExecutionContext) -> bool {
+        true
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -86,12 +89,17 @@ pub struct ToolExecutionContext {
 impl std::fmt::Debug for ToolExecutionContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ToolExecutionContext")
-            .field("user_id", &self.user_id)
-            .field("training_context", &self.training_context)
+            .field("user_id", &redacted_user_id(&self.user_id))
+            .field("training_context", &self.training_context.redacted_debug())
             .field("today", &self.today)
             .field("data_port", &self.data_port.is_some())
             .finish()
     }
+}
+
+fn redacted_user_id(user_id: &str) -> String {
+    let _ = user_id;
+    "[redacted]".to_string()
 }
 
 type BoxToolFuture = Pin<Box<dyn Future<Output = Result<LlmToolLoopOutput, LlmError>> + Send>>;
@@ -246,16 +254,9 @@ pub fn tool_definitions_for_scope(
     }
     tools_for_scope(scope)
         .into_iter()
-        .filter(|tool| tool_available(tool.name(), tool_context))
+        .filter(|tool| tool.is_available(tool_context))
         .map(|tool| tool.definition())
         .collect()
-}
-
-fn tool_available(name: &str, tool_context: &ToolExecutionContext) -> bool {
-    match name {
-        "get_selected_workout" => tool_context.data_port.is_some(),
-        _ => true,
-    }
 }
 
 fn provider_supports_tools(provider: &LlmProvider) -> bool {

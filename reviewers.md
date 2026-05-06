@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | Copilot + CodeRabbit | get_selected_workout review follow-up on debug redaction and gating tests
+
+- Problem: the follow-up review on PR #186 was still right in two places. `ToolExecutionContext` had a custom `Debug` impl that would print raw `user_id` and the full `TrainingContext`, which is too much user-specific data for routine logs, and the adapter-level tool-loop test only exercised the hidden-tool path with `data_port: None` while its old name implied normal tool exposure.
+- Fix: moved tool availability behind a trait-level `is_available(...)` hook instead of a name-based match, redacted `ToolExecutionContext` debug output to a fully hidden `user_id`, a summarized `TrainingContext`, and a boolean `data_port` flag, rewrote the JSON-fragile unit assertion to parse structured response fields, renamed the `data_port: None` tool-loop regression to match its real gating behavior, and added a separate positive-path regression proving `get_selected_workout` is exposed when a real `data_port` is present.
+- Prevention: when adding custom `Debug` on request or execution context structs, treat them as log surfaces and default to redacted identifiers plus shape summaries rather than full nested state. When a test is about conditional capability exposure, name it after the gating condition and add the opposite-path assertion too so review cannot mistake a defensive path for the primary behavior.
+
 ### 2026-05-06 | Copilot + CodeRabbit | get_selected_workout tool wiring and payload hardening
 
 - Problem: review feedback on PR #186 was still correct in multiple places. The branch leaked a concrete `GetSelectedWorkoutDataAdapter` through the domain surface, advertised `get_selected_workout` even when `ToolExecutionContext.data_port` was `None`, wired the tool to raw planned/race repositories instead of authoritative filtered views, duplicated canonical planned-workout serialization in another module, and returned uncapped streams plus only a partial completed-workout metrics payload.

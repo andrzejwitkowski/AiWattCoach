@@ -68,6 +68,10 @@ impl LlmTool for GetSelectedWorkout {
         parse_date(&args.date)?;
         Some(format!("date {}", args.date))
     }
+
+    fn is_available(&self, context: &ToolExecutionContext) -> bool {
+        context.data_port.is_some()
+    }
 }
 
 async fn get_selected_workout(arguments_json: &str, context: &ToolExecutionContext) -> String {
