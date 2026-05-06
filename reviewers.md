@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | Copilot | get_selected_workout non-finite float stream serialization
+
+- Problem: `get_selected_workout` serialized sampled float streams with `json!(value)`, which panics for non-finite values like `NaN` or `+/-inf`. That made one malformed stream sample capable of crashing tool response building instead of returning a safe payload.
+- Fix: split float sampling onto a dedicated path in `response.rs` that preserves the existing sampling behavior but maps non-finite float samples to JSON `null`, and added a regression covering `NaN`, `INFINITY`, and `NEG_INFINITY` in a completed-workout stream.
+- Prevention: when serializing provider or activity float series into JSON, do not send raw `f64` through generic `json!(...)` helpers unless you have already normalized non-finite values. Add a focused regression the first time a float stream is exposed to an LLM or REST payload.
+
 ### 2026-05-06 | user | get_selected_workout adapter test JSON object ordering
 
 - Problem: the new positive-path `llm_adapters` regression for `get_selected_workout` compared the replayed tool result as an exact JSON string. The payload is a JSON object, so serde may serialize `workouts` and `races` in a different key order even when the response is semantically identical, which caused a false test failure.

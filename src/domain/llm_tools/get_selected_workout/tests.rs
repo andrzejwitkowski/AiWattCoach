@@ -84,6 +84,33 @@ fn get_selected_workout_downsamples_large_streams() {
 }
 
 #[test]
+fn get_selected_workout_maps_non_finite_float_stream_values_to_null() {
+    let tool = GetSelectedWorkout;
+    let mut workout = sample_completed_workout(None);
+    workout.details.streams[0].primary_series = Some(CompletedWorkoutSeries::Floats(vec![
+        123.4,
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    ]));
+    let context = sample_context(TestDataPort {
+        completed: vec![workout],
+        planned: Vec::new(),
+        races: Vec::new(),
+        summaries: Vec::new(),
+    });
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-05"}"#, &context));
+    let json: serde_json::Value =
+        serde_json::from_str(&response).expect("response should be valid json");
+
+    assert_eq!(
+        json["workouts"][0]["streams"][0]["data"],
+        serde_json::json!([123.4, null, null, null])
+    );
+}
+
+#[test]
 fn get_selected_workout_marks_past_uncompleted_plan() {
     let tool = GetSelectedWorkout;
     let context = sample_context(TestDataPort {

@@ -206,7 +206,7 @@ fn series_values(
 ) -> Vec<serde_json::Value> {
     match series {
         Some(CompletedWorkoutSeries::Integers(v)) => sampled_values(v, max_samples),
-        Some(CompletedWorkoutSeries::Floats(v)) => sampled_values(v, max_samples),
+        Some(CompletedWorkoutSeries::Floats(v)) => sampled_float_values(v, max_samples),
         Some(CompletedWorkoutSeries::Bools(v)) => sampled_values(v, max_samples),
         Some(CompletedWorkoutSeries::Strings(v)) => sampled_values(v, max_samples),
         None => Vec::new(),
@@ -228,6 +228,27 @@ where
         .take(max_samples)
         .map(|value| json!(value))
         .collect()
+}
+
+fn sampled_float_values(values: &[f64], max_samples: usize) -> Vec<serde_json::Value> {
+    sampled_float_iter(values, max_samples)
+        .map(|value| {
+            if value.is_finite() {
+                json!(value)
+            } else {
+                serde_json::Value::Null
+            }
+        })
+        .collect()
+}
+
+fn sampled_float_iter(values: &[f64], max_samples: usize) -> Box<dyn Iterator<Item = &f64> + '_> {
+    if values.len() <= max_samples {
+        return Box::new(values.iter());
+    }
+
+    let step = values.len().div_ceil(max_samples);
+    Box::new(values.iter().step_by(step).take(max_samples))
 }
 
 fn map_planned_workout(
