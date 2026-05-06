@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- When a shared tool loop or orchestrator changes from replaying an error into another provider round to stopping immediately, update adapter tests to match the new round-count and transcript contract. Do not leave tests asserting a second request or an older tool-local error payload after the control-flow boundary has intentionally moved up a layer.
 - If the shared tool loop rejects a tool call because the tool is unavailable in the active scope or runtime context, do not continue into another LLM round by default. Record the diagnostic `tool` message for persistence/debugging, then stop so the caller sees a deterministic invalid-response path instead of burning through the max-round limit on the same impossible tool call.
 - If a live provider bug reappears in the same shape as an earlier resolved incident, first diff the current code against the last verified provider contract in git history. Do not assume the current branch still carries the earlier hotfix just because the repo has tests for it.
 - If an external workout format already accepts the repo's canonical repeat-header syntax like `Main Set 4x`, do not add a provider-specific serializer that splits the title and repeat count across lines. Syntax-preserving reuse is safer than speculative reshaping.

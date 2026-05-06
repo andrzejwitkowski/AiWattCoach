@@ -21,6 +21,11 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | user | PR #189 stale llm_adapters expectation after unavailable-tool loop fix
+
+- Problem: after `run_tool_loop(...)` was hardened to stop immediately on hidden/unavailable tool calls, `tests/llm_adapters/get_selected_workout.rs` still expected the old two-round replay flow with a second provider request and the tool-local `{"error":"data port not available"}` result. That left PR #189 red even though the runtime behavior had intentionally changed.
+- Fix: updated the hidden-tool adapter regression to assert the new one-round contract: the provider request exposes only the actually available tools, the loop records one public tool call plus one `tool` transcript entry, and the recorded tool result is the scope-level `tool not available in this scope: get_selected_workout` error without a replay round.
+- Prevention: when shared loop/orchestrator behavior changes a control-flow boundary, re-check adapter tests that were asserting the old round count, replay shape, or error payload. Tests around hidden tools should assert the current contract directly instead of assuming a second provider turn still occurs.
 ### 2026-05-06 | user | PR #188 unavailable tool calls should stop the loop immediately
 
 - Problem: the `tool_loop_rejects_runtime_calls_for_tools_not_available_in_scope` regression on `feat/tool-prompt-guidance` still failed because `run_tool_loop(...)` recorded the unavailable-tool error as a `tool` message but then kept asking the model for another round. A provider or test double that repeated the same forbidden tool call would never converge and instead hit `tool loop exceeded 6 rounds`.
