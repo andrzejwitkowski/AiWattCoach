@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | user | Intervals client body logging scope regression on PR #189
+
+- Problem: the outbound-adapter logging change broadened Intervals.icu transport logging too far. `IntervalsIcuClient::execute_and_log_with_trace(...)` was switched to unconditional full request/response body previews, which violated the repo logging guide and broke adapter observability tests that intentionally require normal list/create/detail success paths to log no transport body previews while still keeping summarized failure diagnostics.
+- Fix: restored `BodyLoggingMode::None` support in `src/adapters/intervals_icu/client/logging.rs`, renamed the Intervals helper back to a no-body default in `src/adapters/intervals_icu/client.rs`, and rewired the Intervals API/detail/connection call sites to use that no-body helper again. Kept the existing adapter-level failure logs that already record hashed response-body summaries where needed.
+- Prevention: when adding body preview logging to outbound clients, do not widen a shared helper that fronts an entire provider adapter unless the repo's logging guide and observability tests explicitly allow that broader surface. For Intervals specifically, keep the transport helper no-body by default and add payload previews only on narrowly scoped paths with dedicated tests.
+
 ### 2026-05-06 | user | outbound adapter client request and response body logging
 
 - Problem: debugging provider issues was unnecessarily slow because several outbound adapter clients still logged only metadata or only failure summaries. In particular, LLM and Google OAuth clients did not emit request/response body previews on successful calls, and most Intervals call sites still routed through the `no_body` helper despite the shared logging module already supporting full body previews.

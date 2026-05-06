@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- For Intervals.icu client transport logging, keep `BodyLoggingMode::None` as the shared default. Do not switch the shared trace helper to full request/response body previews just because one debugging task needs more visibility; add any body-preview logging only on the narrow call paths whose tests and logging guide explicitly permit it.
 - If provider debugging requires payload inspection, verify outbound adapter clients log both request and response body previews on success as well as failure. Metadata-only logs are usually not enough for LLM, OAuth, or third-party API incident diagnosis.
 - If an LLM aggregator intermittently returns an assistant turn with neither text nor tool calls, do not immediately relax downstream final-text validation. First contain it at the adapter boundary with a narrowly targeted retry for that exact transient response shape, and add a regression that proves the retry happens once and no more.
 - If the shared tool loop rejects a tool call because the tool is unavailable in the active scope or runtime context, do not continue into another LLM round by default. Record the diagnostic `tool` message for persistence/debugging, then stop so the caller sees a deterministic invalid-response path instead of burning through the max-round limit on the same impossible tool call.

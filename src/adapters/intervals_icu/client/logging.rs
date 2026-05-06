@@ -23,17 +23,55 @@ pub struct LoggedResponse {
 
 #[derive(Clone, Copy, Debug)]
 pub enum BodyLoggingMode {
+    None,
     Full,
 }
 
 pub async fn execute_and_log(
     client: &reqwest::Client,
     request: RequestBuilder,
-    _body_logging: BodyLoggingMode,
+    body_logging: BodyLoggingMode,
 ) -> Result<LoggedResponse, reqwest::Error> {
     let request = request.build()?;
 
-    execute_and_log_with_body(client, request).await
+    match body_logging {
+        BodyLoggingMode::None => execute_and_log_without_body(client, request).await,
+        BodyLoggingMode::Full => execute_and_log_with_body(client, request).await,
+    }
+}
+
+async fn execute_and_log_without_body(
+    client: &reqwest::Client,
+    request: Request,
+) -> Result<LoggedResponse, reqwest::Error> {
+    let method = request.method().clone();
+    let url = request.url().clone();
+    let headers = request.headers().clone();
+
+    log_request(&method, &url, &headers, None);
+
+    let start = Instant::now();
+    let response = client
+        .execute(request)
+        .await
+        .inspect_err(|error| log_transport_failure(&method, &url, error, "request_send_failed"))?;
+    let latency = start.elapsed();
+
+    let status = response.status();
+    let resp_headers = response.headers().clone();
+    let body = response
+        .bytes()
+        .await
+        .inspect_err(|error| log_transport_failure(&method, &url, error, "response_read_failed"))?;
+
+    log_response(&method, &url, status, latency, None);
+
+    Ok(LoggedResponse {
+        status,
+        headers: resp_headers,
+        body,
+        url,
+    })
 }
 
 /// Logs an outgoing request and response, consuming the response body.

@@ -1153,7 +1153,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_frontend_src_features_calendar_workoutdetails_ts",
-      "community": 18
+      "community": 19
     },
     {
       "label": "plannedEventKey()",
@@ -1161,7 +1161,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L72",
       "id": "workoutdetails_plannedeventkey",
-      "community": 18
+      "community": 19
     },
     {
       "label": "isPlannedWorkoutEvent()",
@@ -1169,7 +1169,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L106",
       "id": "workoutdetails_isplannedworkoutevent",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildPlannedWorkoutBars()",
@@ -1177,7 +1177,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L124",
       "id": "workoutdetails_buildplannedworkoutbars",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildCompletedWorkoutBars()",
@@ -1185,7 +1185,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L150",
       "id": "workoutdetails_buildcompletedworkoutbars",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildCompletedWorkoutPreviewBars()",
@@ -1193,7 +1193,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L178",
       "id": "workoutdetails_buildcompletedworkoutpreviewbars",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildMatchedWorkoutBars()",
@@ -1201,7 +1201,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L187",
       "id": "workoutdetails_buildmatchedworkoutbars",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildPlannedWorkoutPowerSeries()",
@@ -1209,7 +1209,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L209",
       "id": "workoutdetails_buildplannedworkoutpowerseries",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildPlannedWorkoutChartIntervals()",
@@ -1217,7 +1217,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L248",
       "id": "workoutdetails_buildplannedworkoutchartintervals",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildPlannedWorkoutStructureItems()",
@@ -1225,7 +1225,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L287",
       "id": "workoutdetails_buildplannedworkoutstructureitems",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildPlannedWorkoutStructureSections()",
@@ -1233,7 +1233,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L328",
       "id": "workoutdetails_buildplannedworkoutstructuresections",
-      "community": 18
+      "community": 19
     },
     {
       "label": "formatPlannedWorkoutIntervalLabel()",
@@ -1241,7 +1241,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L351",
       "id": "workoutdetails_formatplannedworkoutintervallabel",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildPlannedTargetLabel()",
@@ -1249,7 +1249,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L376",
       "id": "workoutdetails_buildplannedtargetlabel",
-      "community": 18
+      "community": 19
     },
     {
       "label": "selectWorkoutDetail()",
@@ -1257,7 +1257,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L388",
       "id": "workoutdetails_selectworkoutdetail",
-      "community": 18
+      "community": 19
     },
     {
       "label": "formatDurationLabel()",
@@ -1265,7 +1265,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L434",
       "id": "workoutdetails_formatdurationlabel",
-      "community": 18
+      "community": 19
     },
     {
       "label": "extractCompletedPowerValues()",
@@ -1273,7 +1273,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L452",
       "id": "workoutdetails_extractcompletedpowervalues",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildFiveSecondAveragePowerSeries()",
@@ -1281,7 +1281,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L461",
       "id": "workoutdetails_buildfivesecondaveragepowerseries",
-      "community": 18
+      "community": 19
     },
     {
       "label": "normalizeWidthUnits()",
@@ -1289,7 +1289,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L483",
       "id": "workoutdetails_normalizewidthunits",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildGroupedPlannedWorkoutSections()",
@@ -1297,7 +1297,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L491",
       "id": "workoutdetails_buildgroupedplannedworkoutsections",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildPlannedWorkoutSectionStep()",
@@ -1305,7 +1305,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L597",
       "id": "workoutdetails_buildplannedworkoutsectionstep",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildExpandedGroupedPlannedChartSteps()",
@@ -1313,7 +1313,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L611",
       "id": "workoutdetails_buildexpandedgroupedplannedchartsteps",
-      "community": 18
+      "community": 19
     },
     {
       "label": "isWorkoutStepLine()",
@@ -1321,7 +1321,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L648",
       "id": "workoutdetails_isworkoutstepline",
-      "community": 18
+      "community": 19
     },
     {
       "label": "parseWorkoutSectionRepeatCount()",
@@ -1329,7 +1329,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L652",
       "id": "workoutdetails_parseworkoutsectionrepeatcount",
-      "community": 18
+      "community": 19
     },
     {
       "label": "selectHigherTarget()",
@@ -1337,7 +1337,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L663",
       "id": "workoutdetails_selecthighertarget",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildPlannedWorkoutIntervalDetail()",
@@ -1345,7 +1345,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L672",
       "id": "workoutdetails_buildplannedworkoutintervaldetail",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildExpandedPlannedSegments()",
@@ -1353,7 +1353,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L692",
       "id": "workoutdetails_buildexpandedplannedsegments",
-      "community": 18
+      "community": 19
     },
     {
       "label": "inferSegmentRepeatCount()",
@@ -1361,7 +1361,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L725",
       "id": "workoutdetails_infersegmentrepeatcount",
-      "community": 18
+      "community": 19
     },
     {
       "label": "plannedIntervalTotalDurationSeconds()",
@@ -1369,7 +1369,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L746",
       "id": "workoutdetails_plannedintervaltotaldurationseconds",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildSegmentDetail()",
@@ -1377,7 +1377,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L752",
       "id": "workoutdetails_buildsegmentdetail",
-      "community": 18
+      "community": 19
     },
     {
       "label": "plannedSampleCount()",
@@ -1385,7 +1385,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L761",
       "id": "workoutdetails_plannedsamplecount",
-      "community": 18
+      "community": 19
     },
     {
       "label": "plannedTargetValue()",
@@ -1393,7 +1393,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L769",
       "id": "workoutdetails_plannedtargetvalue",
-      "community": 18
+      "community": 19
     },
     {
       "label": "plannedIntervalAggregateDurationSeconds()",
@@ -1401,7 +1401,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L780",
       "id": "workoutdetails_plannedintervalaggregatedurationseconds",
-      "community": 18
+      "community": 19
     },
     {
       "label": "plannedBarHeight()",
@@ -1409,7 +1409,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L790",
       "id": "workoutdetails_plannedbarheight",
-      "community": 18
+      "community": 19
     },
     {
       "label": "plannedBarColor()",
@@ -1417,7 +1417,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L806",
       "id": "workoutdetails_plannedbarcolor",
-      "community": 18
+      "community": 19
     },
     {
       "label": "completedBarHeight()",
@@ -1425,7 +1425,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L814",
       "id": "workoutdetails_completedbarheight",
-      "community": 18
+      "community": 19
     },
     {
       "label": "plannedTargetValueOrNull()",
@@ -1433,7 +1433,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L827",
       "id": "workoutdetails_plannedtargetvalueornull",
-      "community": 18
+      "community": 19
     },
     {
       "label": "resolvePlannedZoneId()",
@@ -1441,7 +1441,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L838",
       "id": "workoutdetails_resolveplannedzoneid",
-      "community": 18
+      "community": 19
     },
     {
       "label": "formatDefinitionLabel()",
@@ -1449,7 +1449,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L871",
       "id": "workoutdetails_formatdefinitionlabel",
-      "community": 18
+      "community": 19
     },
     {
       "label": "normalizeWorkoutText()",
@@ -1457,7 +1457,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L886",
       "id": "workoutdetails_normalizeworkouttext",
-      "community": 18
+      "community": 19
     },
     {
       "label": "startsWithRepeat()",
@@ -1465,7 +1465,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L890",
       "id": "workoutdetails_startswithrepeat",
-      "community": 18
+      "community": 19
     },
     {
       "label": "shouldWrapRepeatBlock()",
@@ -1473,7 +1473,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L894",
       "id": "workoutdetails_shouldwraprepeatblock",
-      "community": 18
+      "community": 19
     },
     {
       "label": "trimTrailingZeros()",
@@ -1481,7 +1481,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L898",
       "id": "workoutdetails_trimtrailingzeros",
-      "community": 18
+      "community": 19
     },
     {
       "label": "buildSkylineChartBars()",
@@ -1489,7 +1489,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L902",
       "id": "workoutdetails_buildskylinechartbars",
-      "community": 18
+      "community": 19
     },
     {
       "label": "decodeSkylineChartBars()",
@@ -1497,7 +1497,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L913",
       "id": "workoutdetails_decodeskylinechartbars",
-      "community": 18
+      "community": 19
     },
     {
       "label": "decodeBase64Bytes()",
@@ -1505,7 +1505,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L940",
       "id": "workoutdetails_decodebase64bytes",
-      "community": 18
+      "community": 19
     },
     {
       "label": "parseSkylineChart()",
@@ -1513,7 +1513,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L945",
       "id": "workoutdetails_parseskylinechart",
-      "community": 18
+      "community": 19
     },
     {
       "label": "readPackedVarints()",
@@ -1521,7 +1521,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L990",
       "id": "workoutdetails_readpackedvarints",
-      "community": 18
+      "community": 19
     },
     {
       "label": "readSingleVarint()",
@@ -1529,7 +1529,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L1016",
       "id": "workoutdetails_readsinglevarint",
-      "community": 18
+      "community": 19
     },
     {
       "label": "skipField()",
@@ -1537,7 +1537,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L1025",
       "id": "workoutdetails_skipfield",
-      "community": 18
+      "community": 19
     },
     {
       "label": "readVarint()",
@@ -1545,7 +1545,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L1044",
       "id": "workoutdetails_readvarint",
-      "community": 18
+      "community": 19
     },
     {
       "label": "inferZoneFromPower()",
@@ -1553,7 +1553,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L1066",
       "id": "workoutdetails_inferzonefrompower",
-      "community": 18
+      "community": 19
     },
     {
       "label": "resolveCompletedZoneId()",
@@ -1561,7 +1561,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/frontend/src/features/calendar/workoutDetails.ts",
       "source_location": "L1074",
       "id": "workoutdetails_resolvecompletedzoneid",
-      "community": 18
+      "community": 19
     },
     {
       "label": "dateUtils.ts",
@@ -26361,23 +26361,23 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/google_oauth/logging.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_google_oauth_logging_rs",
-      "community": 39
+      "community": 37
     },
     {
       "label": "log_request()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L170",
+      "source_location": "L208",
       "id": "logging_log_request",
-      "community": 39
+      "community": 37
     },
     {
       "label": "log_response()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L212",
+      "source_location": "L250",
       "id": "logging_log_response",
-      "community": 39
+      "community": 37
     },
     {
       "label": "preview_form_body()",
@@ -26385,7 +26385,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/google_oauth/logging.rs",
       "source_location": "L52",
       "id": "logging_preview_form_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "truncate_logged_body()",
@@ -26393,7 +26393,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/llm/logging.rs",
       "source_location": "L12",
       "id": "logging_truncate_logged_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "mod.rs",
@@ -27297,7 +27297,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/wahoo/client/logging.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_wahoo_client_logging_rs",
-      "community": 39
+      "community": 37
     },
     {
       "label": "LoggedResponse",
@@ -27305,7 +27305,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
       "source_location": "L17",
       "id": "logging_loggedresponse",
-      "community": 39
+      "community": 37
     },
     {
       "label": "BodyLoggingMode",
@@ -27313,15 +27313,15 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
       "source_location": "L25",
       "id": "logging_bodyloggingmode",
-      "community": 39
+      "community": 37
     },
     {
       "label": "execute_and_log()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L29",
+      "source_location": "L30",
       "id": "logging_execute_and_log",
-      "community": 39
+      "community": 37
     },
     {
       "label": "execute_and_log_with_body_request()",
@@ -27329,15 +27329,15 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/wahoo/client/logging.rs",
       "source_location": "L34",
       "id": "logging_execute_and_log_with_body_request",
-      "community": 39
+      "community": 37
     },
     {
       "label": "format_request_body()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L83",
+      "source_location": "L121",
       "id": "logging_format_request_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "preview_form_fields()",
@@ -27345,71 +27345,71 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/wahoo/client/logging.rs",
       "source_location": "L88",
       "id": "logging_preview_form_fields",
-      "community": 39
+      "community": 37
     },
     {
       "label": "preview_text()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L152",
+      "source_location": "L190",
       "id": "logging_preview_text",
-      "community": 39
+      "community": 37
     },
     {
       "label": "format_response_body()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L101",
+      "source_location": "L139",
       "id": "logging_format_response_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "redact_json_value()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L127",
+      "source_location": "L165",
       "id": "logging_redact_json_value",
-      "community": 39
+      "community": 37
     },
     {
       "label": "format_binary_body()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L164",
+      "source_location": "L202",
       "id": "logging_format_binary_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "response_log_level()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L226",
+      "source_location": "L264",
       "id": "logging_response_log_level",
-      "community": 39
+      "community": 37
     },
     {
       "label": "log_transport_failure()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L320",
+      "source_location": "L358",
       "id": "logging_log_transport_failure",
-      "community": 39
+      "community": 37
     },
     {
       "label": "is_sensitive_header()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L332",
+      "source_location": "L370",
       "id": "logging_is_sensitive_header",
-      "community": 39
+      "community": 37
     },
     {
       "label": "sanitized_url()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L339",
+      "source_location": "L377",
       "id": "logging_sanitized_url",
-      "community": 39
+      "community": 37
     },
     {
       "label": "format_request_body_redacts_workout_token_in_form_preview()",
@@ -27417,7 +27417,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/wahoo/client/logging.rs",
       "source_location": "L363",
       "id": "logging_format_request_body_redacts_workout_token_in_form_preview",
-      "community": 39
+      "community": 37
     },
     {
       "label": "sanitized_url_keeps_safe_wahoo_query_params()",
@@ -27425,7 +27425,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/wahoo/client/logging.rs",
       "source_location": "L376",
       "id": "logging_sanitized_url_keeps_safe_wahoo_query_params",
-      "community": 39
+      "community": 37
     },
     {
       "label": "dev_adapter.rs",
@@ -27705,7 +27705,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/llm/logging.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_llm_logging_rs",
-      "community": 39
+      "community": 37
     },
     {
       "label": "serialize_logged_body()",
@@ -27713,7 +27713,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/llm/logging.rs",
       "source_location": "L5",
       "id": "logging_serialize_logged_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "settings_adapter.rs",
@@ -29036,11 +29036,11 @@
       "community": 182
     },
     {
-      "label": ".execute_and_log_with_trace()",
+      "label": ".execute_and_log_with_trace_no_body()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client.rs",
       "source_location": "L91",
-      "id": "client_intervalsicuclient_execute_and_log_with_trace",
+      "id": "client_intervalsicuclient_execute_and_log_with_trace_no_body",
       "community": 182
     },
     {
@@ -29073,7 +29073,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_import_mapping_rs",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_event_to_import_command()",
@@ -29081,7 +29081,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L19",
       "id": "import_mapping_map_event_to_import_command",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_workout_event_import()",
@@ -29089,7 +29089,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L37",
       "id": "import_mapping_map_workout_event_import",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_race_event_import()",
@@ -29097,7 +29097,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L61",
       "id": "import_mapping_map_race_event_import",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_special_day_event_import()",
@@ -29105,7 +29105,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L84",
       "id": "import_mapping_map_special_day_event_import",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_activity_to_import_command()",
@@ -29113,7 +29113,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L101",
       "id": "import_mapping_map_activity_to_import_command",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_activity_metrics_to_import_command()",
@@ -29121,7 +29121,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L106",
       "id": "import_mapping_map_activity_metrics_to_import_command",
-      "community": 38
+      "community": 39
     },
     {
       "label": "build_activity_import_command()",
@@ -29129,7 +29129,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L150",
       "id": "import_mapping_build_activity_import_command",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_activity_to_completed_workout()",
@@ -29137,7 +29137,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L174",
       "id": "import_mapping_map_activity_to_completed_workout",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_stream_series()",
@@ -29145,7 +29145,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L294",
       "id": "import_mapping_map_stream_series",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_event_to_planned_workout_payload()",
@@ -29153,7 +29153,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L333",
       "id": "import_mapping_map_event_to_planned_workout_payload",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_planned_workout_line()",
@@ -29161,7 +29161,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L350",
       "id": "import_mapping_map_planned_workout_line",
-      "community": 38
+      "community": 39
     },
     {
       "label": "event_date()",
@@ -29169,7 +29169,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L402",
       "id": "import_mapping_event_date",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_race_priority()",
@@ -29177,7 +29177,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L406",
       "id": "import_mapping_map_race_priority",
-      "community": 38
+      "community": 39
     },
     {
       "label": "infer_race_discipline()",
@@ -29185,7 +29185,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L416",
       "id": "import_mapping_infer_race_discipline",
-      "community": 38
+      "community": 39
     },
     {
       "label": "infer_race_distance_meters()",
@@ -29193,7 +29193,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L431",
       "id": "import_mapping_infer_race_distance_meters",
-      "community": 38
+      "community": 39
     },
     {
       "label": "parse_first_distance_meters()",
@@ -29201,7 +29201,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L437",
       "id": "import_mapping_parse_first_distance_meters",
-      "community": 38
+      "community": 39
     },
     {
       "label": "parse_distance_token()",
@@ -29209,7 +29209,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L459",
       "id": "import_mapping_parse_distance_token",
-      "community": 38
+      "community": 39
     },
     {
       "label": "parse_split_distance_tokens()",
@@ -29217,7 +29217,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L472",
       "id": "import_mapping_parse_split_distance_tokens",
-      "community": 38
+      "community": 39
     },
     {
       "label": "kilometers_to_meters()",
@@ -29225,7 +29225,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L483",
       "id": "import_mapping_kilometers_to_meters",
-      "community": 38
+      "community": 39
     },
     {
       "label": "map_special_day_kind()",
@@ -29233,7 +29233,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L492",
       "id": "import_mapping_map_special_day_kind",
-      "community": 38
+      "community": 39
     },
     {
       "label": "hash_event()",
@@ -29241,7 +29241,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L502",
       "id": "import_mapping_hash_event",
-      "community": 38
+      "community": 39
     },
     {
       "label": "hash_activity()",
@@ -29249,7 +29249,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L516",
       "id": "import_mapping_hash_activity",
-      "community": 38
+      "community": 39
     },
     {
       "label": "FixedIdGenerator",
@@ -29257,7 +29257,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L560",
       "id": "import_mapping_fixedidgenerator",
-      "community": 38
+      "community": 39
     },
     {
       "label": ".new_id()",
@@ -29265,7 +29265,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L563",
       "id": "import_mapping_fixedidgenerator_new_id",
-      "community": 38
+      "community": 39
     },
     {
       "label": "maps_workout_event_into_planned_workout_import()",
@@ -29273,7 +29273,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L569",
       "id": "import_mapping_maps_workout_event_into_planned_workout_import",
-      "community": 38
+      "community": 39
     },
     {
       "label": "maps_race_event_into_race_import()",
@@ -29281,7 +29281,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L605",
       "id": "import_mapping_maps_race_event_into_race_import",
-      "community": 38
+      "community": 39
     },
     {
       "label": "maps_race_event_distance_when_unit_is_split_by_space()",
@@ -29289,7 +29289,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L640",
       "id": "import_mapping_maps_race_event_distance_when_unit_is_split_by_space",
-      "community": 38
+      "community": 39
     },
     {
       "label": "maps_race_event_distance_when_first_distance_token_is_invalid()",
@@ -29297,7 +29297,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L667",
       "id": "import_mapping_maps_race_event_distance_when_first_distance_token_is_invalid",
-      "community": 38
+      "community": 39
     },
     {
       "label": "maps_special_event_into_special_day_import()",
@@ -29305,7 +29305,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L694",
       "id": "import_mapping_maps_special_event_into_special_day_import",
-      "community": 38
+      "community": 39
     },
     {
       "label": "maps_activity_into_completed_workout_import()",
@@ -29313,7 +29313,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L732",
       "id": "import_mapping_maps_activity_into_completed_workout_import",
-      "community": 38
+      "community": 39
     },
     {
       "label": "activity_hash_changes_when_persisted_details_change()",
@@ -29321,7 +29321,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L757",
       "id": "import_mapping_activity_hash_changes_when_persisted_details_change",
-      "community": 38
+      "community": 39
     },
     {
       "label": "activity_hash_changes_when_details_unavailable_reason_changes()",
@@ -29329,7 +29329,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L780",
       "id": "import_mapping_activity_hash_changes_when_details_unavailable_reason_changes",
-      "community": 38
+      "community": 39
     },
     {
       "label": "sample_activity()",
@@ -29337,7 +29337,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/import_mapping.rs",
       "source_location": "L809",
       "id": "import_mapping_sample_activity",
-      "community": 38
+      "community": 39
     },
     {
       "label": "settings_adapter.rs",
@@ -30201,79 +30201,87 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
-      "community": 39
+      "community": 37
+    },
+    {
+      "label": "execute_and_log_without_body()",
+      "file_type": "code",
+      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
+      "source_location": "L43",
+      "id": "logging_execute_and_log_without_body",
+      "community": 37
     },
     {
       "label": "execute_and_log_with_body()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L42",
+      "source_location": "L80",
       "id": "logging_execute_and_log_with_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "preview_json()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L147",
+      "source_location": "L185",
       "id": "logging_preview_json",
-      "community": 39
+      "community": 37
     },
     {
       "label": "log_response_with_body()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L234",
+      "source_location": "L272",
       "id": "logging_log_response_with_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "log_response_without_body()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L279",
+      "source_location": "L317",
       "id": "logging_log_response_without_body",
-      "community": 39
+      "community": 37
     },
     {
       "label": "redact_json_redacts_nested()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L381",
+      "source_location": "L419",
       "id": "logging_redact_json_redacts_nested",
-      "community": 39
+      "community": 37
     },
     {
       "label": "preview_text_short()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L398",
+      "source_location": "L436",
       "id": "logging_preview_text_short",
-      "community": 39
+      "community": 37
     },
     {
       "label": "preview_text_truncates()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L403",
+      "source_location": "L441",
       "id": "logging_preview_text_truncates",
-      "community": 39
+      "community": 37
     },
     {
       "label": "format_binary_body_formats_binary_payloads()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L412",
+      "source_location": "L450",
       "id": "logging_format_binary_body_formats_binary_payloads",
-      "community": 39
+      "community": 37
     },
     {
       "label": "sanitized_url_keeps_safe_intervals_query_params()",
       "file_type": "code",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L419",
+      "source_location": "L457",
       "id": "logging_sanitized_url_keeps_safe_intervals_query_params",
-      "community": 39
+      "community": 37
     },
     {
       "label": "errors.rs",
@@ -30406,15 +30414,15 @@
     {
       "label": "connection.rs",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/connection.rs",
+      "source_file": "src/adapters/intervals_icu/client/connection.rs",
       "source_location": "L1",
-      "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_connection_rs",
+      "id": "src_adapters_intervals_icu_client_connection_rs",
       "community": 734
     },
     {
       "label": "IntervalsIcuClient",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/connection.rs",
+      "source_file": "src/adapters/intervals_icu/client/connection.rs",
       "source_location": "L7",
       "id": "connection_intervalsicuclient",
       "community": 581
@@ -30422,7 +30430,7 @@
     {
       "label": ".test_connection()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/connection.rs",
+      "source_file": "src/adapters/intervals_icu/client/connection.rs",
       "source_location": "L8",
       "id": "connection_intervalsicuclient_test_connection",
       "community": 581
@@ -30430,15 +30438,15 @@
     {
       "label": "api.rs",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L1",
-      "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_api_rs",
+      "id": "src_adapters_intervals_icu_client_api_rs",
       "community": 735
     },
     {
       "label": "IntervalsIcuClient",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L20",
       "id": "api_intervalsicuclient",
       "community": 222
@@ -30446,7 +30454,7 @@
     {
       "label": ".list_events()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L21",
       "id": "api_intervalsicuclient_list_events",
       "community": 222
@@ -30454,7 +30462,7 @@
     {
       "label": ".get_event()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L129",
       "id": "api_intervalsicuclient_get_event",
       "community": 222
@@ -30462,7 +30470,7 @@
     {
       "label": ".create_event()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L161",
       "id": "api_intervalsicuclient_create_event",
       "community": 222
@@ -30470,7 +30478,7 @@
     {
       "label": ".update_event()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L232",
       "id": "api_intervalsicuclient_update_event",
       "community": 222
@@ -30478,7 +30486,7 @@
     {
       "label": ".delete_event()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L309",
       "id": "api_intervalsicuclient_delete_event",
       "community": 222
@@ -30486,7 +30494,7 @@
     {
       "label": ".download_fit()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L337",
       "id": "api_intervalsicuclient_download_fit",
       "community": 222
@@ -30494,7 +30502,7 @@
     {
       "label": ".list_activities()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L368",
       "id": "api_intervalsicuclient_list_activities",
       "community": 222
@@ -30502,7 +30510,7 @@
     {
       "label": ".get_activity()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L417",
       "id": "api_intervalsicuclient_get_activity",
       "community": 222
@@ -30510,7 +30518,7 @@
     {
       "label": ".upload_activity()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L432",
       "id": "api_intervalsicuclient_upload_activity",
       "community": 222
@@ -30518,31 +30526,31 @@
     {
       "label": ".update_activity()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
-      "source_location": "L506",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
+      "source_location": "L507",
       "id": "api_intervalsicuclient_update_activity",
       "community": 222
     },
     {
       "label": ".delete_activity()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
-      "source_location": "L547",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
+      "source_location": "L548",
       "id": "api_intervalsicuclient_delete_activity",
       "community": 222
     },
     {
       "label": "details.rs",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L1",
-      "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_details_rs",
+      "id": "src_adapters_intervals_icu_client_details_rs",
       "community": 736
     },
     {
       "label": "IntervalsIcuClient",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L18",
       "id": "details_intervalsicuclient",
       "community": 413
@@ -30550,7 +30558,7 @@
     {
       "label": ".request_activity()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L19",
       "id": "details_intervalsicuclient_request_activity",
       "community": 413
@@ -30558,7 +30566,7 @@
     {
       "label": ".fetch_base_activity()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L38",
       "id": "details_intervalsicuclient_fetch_base_activity",
       "community": 413
@@ -30566,7 +30574,7 @@
     {
       "label": ".send_request()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L62",
       "id": "details_intervalsicuclient_send_request",
       "community": 413
@@ -30574,7 +30582,7 @@
     {
       "label": ".fetch_activity_details()",
       "file_type": "code",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L84",
       "id": "details_intervalsicuclient_fetch_activity_details",
       "community": 413
@@ -41809,7 +41817,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/settings/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_settings_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "validation.rs",
@@ -42369,7 +42377,7 @@
       "source_file": "src/domain/calendar_labels/mod.rs",
       "source_location": "L1",
       "id": "src_domain_calendar_labels_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -42889,7 +42897,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_wahoo_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "tests.rs",
@@ -42905,7 +42913,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L25",
       "id": "tests_testclock",
-      "community": 0
+      "community": 17
     },
     {
       "label": ".now_epoch_seconds()",
@@ -42913,7 +42921,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L28",
       "id": "tests_testclock_now_epoch_seconds",
-      "community": 0
+      "community": 17
     },
     {
       "label": "TestIds",
@@ -43353,7 +43361,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_wahoo_webhook_mod_rs",
-      "community": 138
+      "community": 139
     },
     {
       "label": "WahooWebhookAccepted",
@@ -43361,7 +43369,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L14",
       "id": "mod_wahoowebhookaccepted",
-      "community": 138
+      "community": 139
     },
     {
       "label": "WahooWebhookOutcome",
@@ -43369,7 +43377,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L20",
       "id": "mod_wahoowebhookoutcome",
-      "community": 138
+      "community": 139
     },
     {
       "label": "ManualWahooSyncResult",
@@ -43377,7 +43385,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L26",
       "id": "mod_manualwahoosyncresult",
-      "community": 138
+      "community": 139
     },
     {
       "label": "WahooWebhookError",
@@ -43385,7 +43393,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L33",
       "id": "mod_wahoowebhookerror",
-      "community": 138
+      "community": 139
     },
     {
       "label": ".fmt()",
@@ -43393,7 +43401,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L45",
       "id": "mod_wahoowebhookerror_fmt",
-      "community": 138
+      "community": 139
     },
     {
       "label": "WahooWebhookUseCases",
@@ -43401,7 +43409,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L61",
       "id": "mod_wahoowebhookusecases",
-      "community": 138
+      "community": 139
     },
     {
       "label": "std::sync::Arc<T>",
@@ -43433,7 +43441,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L98",
       "id": "mod_wahoowebhookservice",
-      "community": 138
+      "community": 139
     },
     {
       "label": "ImportedWorkout",
@@ -43441,7 +43449,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L117",
       "id": "mod_importedworkout",
-      "community": 138
+      "community": 139
     },
     {
       "label": "WahooWebhookService<SettingsRepo, Imports, Wahoo, TrainingLoad, Queue, Time>",
@@ -43505,7 +43513,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/internals/mod.rs",
       "source_location": "L28",
       "id": "mod_map_settings_error",
-      "community": 138
+      "community": 139
     },
     {
       "label": "map_import_error()",
@@ -43513,7 +43521,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L350",
       "id": "mod_map_import_error",
-      "community": 138
+      "community": 139
     },
     {
       "label": "map_queue_error()",
@@ -43521,7 +43529,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L354",
       "id": "mod_map_queue_error",
-      "community": 138
+      "community": 139
     },
     {
       "label": "map_training_load_error()",
@@ -43529,7 +43537,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L358",
       "id": "mod_map_training_load_error",
-      "community": 138
+      "community": 139
     },
     {
       "label": "map_wahoo_error()",
@@ -43537,7 +43545,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/wahoo/webhook/mod.rs",
       "source_location": "L362",
       "id": "mod_map_wahoo_error",
-      "community": 138
+      "community": 139
     },
     {
       "label": "tests.rs",
@@ -43889,7 +43897,7 @@
       "source_file": "src/domain/task_scheduler/mod.rs",
       "source_location": "L1",
       "id": "src_domain_task_scheduler_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -44593,7 +44601,7 @@
       "source_file": "src/domain/athlete_summary/mod.rs",
       "source_location": "L1",
       "id": "src_domain_athlete_summary_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -45681,7 +45689,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_workout_summary_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -46025,7 +46033,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L7",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".new()",
@@ -46033,7 +46041,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/mod.rs",
       "source_location": "L207",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_new",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".with_coach()",
@@ -46041,7 +46049,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/mod.rs",
       "source_location": "L217",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_with_coach",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".with_athlete_summary_service()",
@@ -46049,7 +46057,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/mod.rs",
       "source_location": "L238",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_with_athlete_summary_service",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".with_settings_service()",
@@ -46057,7 +46065,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/mod.rs",
       "source_location": "L246",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_with_settings_service",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".with_training_plan_service()",
@@ -46065,7 +46073,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/mod.rs",
       "source_location": "L254",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_with_training_plan_service",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".with_latest_completed_activity_service()",
@@ -46073,7 +46081,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/mod.rs",
       "source_location": "L262",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_with_latest_completed_activity_service",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".with_completed_workout_target_service()",
@@ -46081,7 +46089,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/mod.rs",
       "source_location": "L270",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_with_completed_workout_target_service",
-      "community": 139
+      "community": 138
     },
     {
       "label": "tests.rs",
@@ -47057,7 +47065,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_workout_summary_service_scheduler_tests_workout_summary_support_rs",
-      "community": 37
+      "community": 38
     },
     {
       "label": "InMemoryWorkoutSummaryRepository",
@@ -47065,7 +47073,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L24",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".with_summary()",
@@ -47073,7 +47081,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L29",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_with_summary",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".find_by_user_id_and_workout_id()",
@@ -47081,7 +47089,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L42",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_find_by_user_id_and_workout_id",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".find_by_user_id_and_workout_ids()",
@@ -47089,7 +47097,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L60",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_find_by_user_id_and_workout_ids",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".create()",
@@ -47097,7 +47105,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L77",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_create",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".update_rpe()",
@@ -47105,7 +47113,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L92",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_update_rpe",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".append_message()",
@@ -47113,7 +47121,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L112",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_append_message",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".set_saved_state()",
@@ -47121,7 +47129,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L139",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_set_saved_state",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".replace_provider_transcript()",
@@ -47129,7 +47137,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L159",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_replace_provider_transcript",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".persist_workout_recap()",
@@ -47137,7 +47145,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L185",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_persist_workout_recap",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".find_message_by_id()",
@@ -47145,7 +47153,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L209",
       "id": "workout_summary_support_inmemoryworkoutsummaryrepository_find_message_by_id",
-      "community": 37
+      "community": 38
     },
     {
       "label": "InMemoryCoachReplyOperationRepository",
@@ -47153,7 +47161,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L240",
       "id": "workout_summary_support_inmemorycoachreplyoperationrepository",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".seed()",
@@ -47161,7 +47169,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L245",
       "id": "workout_summary_support_inmemorycoachreplyoperationrepository_seed",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".get()",
@@ -47169,7 +47177,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L259",
       "id": "workout_summary_support_inmemorycoachreplyoperationrepository_get",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".find_by_user_message_id()",
@@ -47177,7 +47185,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L278",
       "id": "workout_summary_support_inmemorycoachreplyoperationrepository_find_by_user_message_id",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".claim_pending()",
@@ -47185,7 +47193,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L301",
       "id": "workout_summary_support_inmemorycoachreplyoperationrepository_claim_pending",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".upsert()",
@@ -47193,7 +47201,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L344",
       "id": "workout_summary_support_inmemorycoachreplyoperationrepository_upsert",
-      "community": 37
+      "community": 38
     },
     {
       "label": "TestCoach",
@@ -47201,7 +47209,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L365",
       "id": "workout_summary_support_testcoach",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".failing()",
@@ -47209,7 +47217,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L370",
       "id": "workout_summary_support_testcoach_failing",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".successful()",
@@ -47217,7 +47225,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L376",
       "id": "workout_summary_support_testcoach_successful",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".reply()",
@@ -47225,7 +47233,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L382",
       "id": "workout_summary_support_testcoach_reply",
-      "community": 37
+      "community": 38
     },
     {
       "label": "BlockingCoach",
@@ -47233,7 +47241,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L412",
       "id": "workout_summary_support_blockingcoach",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".new()",
@@ -47241,7 +47249,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L418",
       "id": "workout_summary_support_blockingcoach_new",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".reply()",
@@ -47249,7 +47257,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L427",
       "id": "workout_summary_support_blockingcoach_reply",
-      "community": 37
+      "community": 38
     },
     {
       "label": "StaticAthleteSummaryService",
@@ -47257,7 +47265,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L457",
       "id": "workout_summary_support_staticathletesummaryservice",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".get_summary_state()",
@@ -47265,7 +47273,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L462",
       "id": "workout_summary_support_staticathletesummaryservice_get_summary_state",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".generate_summary()",
@@ -47273,7 +47281,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L475",
       "id": "workout_summary_support_staticathletesummaryservice_generate_summary",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".ensure_fresh_summary()",
@@ -47281,7 +47289,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L484",
       "id": "workout_summary_support_staticathletesummaryservice_ensure_fresh_summary",
-      "community": 37
+      "community": 38
     },
     {
       "label": ".ensure_fresh_summary_state()",
@@ -47289,7 +47297,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L492",
       "id": "workout_summary_support_staticathletesummaryservice_ensure_fresh_summary_state",
-      "community": 37
+      "community": 38
     },
     {
       "label": "sample_athlete_summary()",
@@ -47297,7 +47305,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L507",
       "id": "workout_summary_support_sample_athlete_summary",
-      "community": 37
+      "community": 38
     },
     {
       "label": "existing_summary()",
@@ -47305,7 +47313,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L519",
       "id": "workout_summary_support_existing_summary",
-      "community": 37
+      "community": 38
     },
     {
       "label": "direct_service()",
@@ -47313,7 +47321,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L537",
       "id": "workout_summary_support_direct_service",
-      "community": 37
+      "community": 38
     },
     {
       "label": "direct_service_with_operation_repository()",
@@ -47321,7 +47329,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L557",
       "id": "workout_summary_support_direct_service_with_operation_repository",
-      "community": 37
+      "community": 38
     },
     {
       "label": "direct_service_with_athlete_summary()",
@@ -47329,7 +47337,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/scheduler/tests/workout_summary_support.rs",
       "source_location": "L579",
       "id": "workout_summary_support_direct_service_with_athlete_summary",
-      "community": 37
+      "community": 38
     },
     {
       "label": "recovery.rs",
@@ -47465,7 +47473,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/internals/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_workout_summary_service_internals_mod_rs",
-      "community": 138
+      "community": 139
     },
     {
       "label": "AppendMessageInput",
@@ -47473,7 +47481,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/internals/mod.rs",
       "source_location": "L8",
       "id": "mod_appendmessageinput",
-      "community": 138
+      "community": 139
     },
     {
       "label": ".coach()",
@@ -47481,7 +47489,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/internals/mod.rs",
       "source_location": "L17",
       "id": "mod_appendmessageinput_coach",
-      "community": 138
+      "community": 139
     },
     {
       "label": "push_unique_workout_id()",
@@ -47489,7 +47497,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/workout_summary/service/internals/mod.rs",
       "source_location": "L42",
       "id": "mod_push_unique_workout_id",
-      "community": 138
+      "community": 139
     },
     {
       "label": "messaging.rs",
@@ -47833,7 +47841,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L14",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_get_summary",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".create_summary()",
@@ -47841,7 +47849,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L25",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_create_summary",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".list_summaries()",
@@ -47849,7 +47857,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L36",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_list_summaries",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".update_rpe()",
@@ -47857,7 +47865,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L46",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_update_rpe",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".mark_saved()",
@@ -47865,7 +47873,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L58",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_mark_saved",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".reopen_summary()",
@@ -47873,7 +47881,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L69",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_reopen_summary",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".persist_workout_recap()",
@@ -47881,7 +47889,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L80",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_persist_workout_recap",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".send_message()",
@@ -47889,7 +47897,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L96",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_send_message",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".append_user_message()",
@@ -47897,7 +47905,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L112",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_append_user_message",
-      "community": 139
+      "community": 138
     },
     {
       "label": ".generate_coach_reply()",
@@ -47905,7 +47913,7 @@
       "source_file": "src/domain/workout_summary/service/use_cases/mod.rs",
       "source_location": "L128",
       "id": "mod_workoutsummaryservice_repo_ops_time_ids_generate_coach_reply",
-      "community": 139
+      "community": 138
     },
     {
       "label": "read.rs",
@@ -48313,7 +48321,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_llm_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -48657,7 +48665,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/calendar/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_calendar_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "tests.rs",
@@ -48841,7 +48849,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L77",
       "id": "tests_inmemoryexternalsyncstaterepository",
-      "community": 19
+      "community": 17
     },
     {
       "label": "FixedPlannedWorkoutTokenRepository",
@@ -48929,7 +48937,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L117",
       "id": "tests_inmemoryexternalsyncstaterepository_upsert",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".find_by_canonical_entities()",
@@ -48937,7 +48945,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L140",
       "id": "tests_inmemoryexternalsyncstaterepository_find_by_canonical_entities",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".find_by_provider_and_canonical_entity()",
@@ -48953,7 +48961,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L187",
       "id": "tests_inmemoryexternalsyncstaterepository_find_by_provider_and_canonical_entities",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".delete_by_provider_and_canonical_entity()",
@@ -48961,7 +48969,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L213",
       "id": "tests_inmemoryexternalsyncstaterepository_delete_by_provider_and_canonical_entity",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".find_by_wahoo_plan_id()",
@@ -48969,7 +48977,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L236",
       "id": "tests_inmemoryexternalsyncstaterepository_find_by_wahoo_plan_id",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".find_by_wahoo_workout_token()",
@@ -48977,7 +48985,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L259",
       "id": "tests_inmemoryexternalsyncstaterepository_find_by_wahoo_workout_token",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".find_by_provider_and_external_id()",
@@ -48985,7 +48993,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L310",
       "id": "tests_inmemoryexternalsyncstaterepository_find_by_provider_and_external_id",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".find_planned_workout_by_provider_and_external_id()",
@@ -48993,7 +49001,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L284",
       "id": "tests_inmemoryexternalsyncstaterepository_find_planned_workout_by_provider_and_external_id",
-      "community": 19
+      "community": 17
     },
     {
       "label": "InMemoryCalendarEntryViewRepository",
@@ -50265,7 +50273,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/planned_workouts/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_planned_workouts_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "serialize_canonical_planned_workout()",
@@ -50273,7 +50281,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/planned_workouts/mod.rs",
       "source_location": "L15",
       "id": "mod_serialize_canonical_planned_workout",
-      "community": 51
+      "community": 52
     },
     {
       "label": "map_canonical_line_to_intervals_line()",
@@ -50281,7 +50289,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/planned_workouts/mod.rs",
       "source_location": "L29",
       "id": "mod_map_canonical_line_to_intervals_line",
-      "community": 51
+      "community": 52
     },
     {
       "label": "tests.rs",
@@ -51009,7 +51017,7 @@
       "source_file": "src/domain/identity/mod.rs",
       "source_location": "L1",
       "id": "src_domain_identity_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -51241,7 +51249,7 @@
       "source_file": "src/domain/planned_workout_wahoo_syncs/mod.rs",
       "source_location": "L1",
       "id": "src_domain_planned_workout_wahoo_syncs_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -51449,7 +51457,7 @@
       "source_file": "src/domain/special_days/mod.rs",
       "source_location": "L1",
       "id": "src_domain_special_days_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "tests.rs",
@@ -51601,7 +51609,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L1",
       "id": "src_domain_special_days_authoritative_rs",
-      "community": 43
+      "community": 45
     },
     {
       "label": "AuthoritativeSpecialDayRepository",
@@ -51609,7 +51617,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L10",
       "id": "authoritative_authoritativespecialdayrepository",
-      "community": 43
+      "community": 45
     },
     {
       "label": "AuthoritativeSpecialDayRepository<SpecialDays, Observations>",
@@ -51617,7 +51625,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L19",
       "id": "authoritative_authoritativespecialdayrepository_specialdays_observations",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".new()",
@@ -51625,7 +51633,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L24",
       "id": "authoritative_authoritativespecialdayrepository_specialdays_observations_new",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".filter_visible()",
@@ -51633,7 +51641,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L31",
       "id": "authoritative_authoritativespecialdayrepository_specialdays_observations_filter_visible",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".list_by_user_id()",
@@ -51641,7 +51649,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L71",
       "id": "authoritative_authoritativespecialdayrepository_specialdays_observations_list_by_user_id",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".list_by_user_id_and_date_range()",
@@ -51649,7 +51657,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L83",
       "id": "authoritative_authoritativespecialdayrepository_specialdays_observations_list_by_user_id_and_date_range",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".upsert()",
@@ -51657,7 +51665,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L102",
       "id": "authoritative_authoritativespecialdayrepository_specialdays_observations_upsert",
-      "community": 43
+      "community": 45
     },
     {
       "label": "TestObservations",
@@ -51665,7 +51673,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L131",
       "id": "authoritative_testobservations",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".upsert()",
@@ -51673,7 +51681,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L195",
       "id": "authoritative_testobservations_upsert",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".find_by_canonical_entities()",
@@ -51681,7 +51689,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L204",
       "id": "authoritative_testobservations_find_by_canonical_entities",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".find_by_provider_and_external_id()",
@@ -51689,7 +51697,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L227",
       "id": "authoritative_testobservations_find_by_provider_and_external_id",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".find_by_dedup_key()",
@@ -51697,7 +51705,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L238",
       "id": "authoritative_testobservations_find_by_dedup_key",
-      "community": 43
+      "community": 45
     },
     {
       "label": "sample_day()",
@@ -51705,7 +51713,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L177",
       "id": "authoritative_sample_day",
-      "community": 43
+      "community": 45
     },
     {
       "label": "hides_externally_imported_special_days_from_reads()",
@@ -51713,7 +51721,7 @@
       "source_file": "src/domain/special_days/authoritative.rs",
       "source_location": "L190",
       "id": "authoritative_hides_externally_imported_special_days_from_reads",
-      "community": 43
+      "community": 45
     },
     {
       "label": "mod.rs",
@@ -52489,7 +52497,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_llm_tools_get_selected_workout_mod_rs",
-      "community": 52
+      "community": 51
     },
     {
       "label": "GetSelectedWorkoutArgs",
@@ -52497,7 +52505,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L26",
       "id": "mod_getselectedworkoutargs",
-      "community": 52
+      "community": 51
     },
     {
       "label": "GetSelectedWorkout",
@@ -52505,7 +52513,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L31",
       "id": "mod_getselectedworkout",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".name()",
@@ -52513,7 +52521,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L34",
       "id": "mod_getselectedworkout_name",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".definition()",
@@ -52521,7 +52529,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L38",
       "id": "mod_getselectedworkout_definition",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".prompt_guidance()",
@@ -52529,7 +52537,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L57",
       "id": "mod_getselectedworkout_prompt_guidance",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".execute()",
@@ -52537,7 +52545,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L63",
       "id": "mod_getselectedworkout_execute",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".preview_arguments()",
@@ -52545,7 +52553,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L73",
       "id": "mod_getselectedworkout_preview_arguments",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".is_available()",
@@ -52553,7 +52561,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L79",
       "id": "mod_getselectedworkout_is_available",
-      "community": 52
+      "community": 51
     },
     {
       "label": "get_selected_workout()",
@@ -52561,7 +52569,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L84",
       "id": "mod_get_selected_workout",
-      "community": 52
+      "community": 51
     },
     {
       "label": "parse_args()",
@@ -52569,7 +52577,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L299",
       "id": "mod_parse_args",
-      "community": 52
+      "community": 51
     },
     {
       "label": "parse_date()",
@@ -52577,7 +52585,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L311",
       "id": "mod_parse_date",
-      "community": 52
+      "community": 51
     },
     {
       "label": "load_selected_workout_data()",
@@ -52585,7 +52593,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L125",
       "id": "mod_load_selected_workout_data",
-      "community": 52
+      "community": 51
     },
     {
       "label": "load_completed()",
@@ -52593,7 +52601,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L144",
       "id": "mod_load_completed",
-      "community": 52
+      "community": 51
     },
     {
       "label": "load_planned()",
@@ -52601,7 +52609,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L154",
       "id": "mod_load_planned",
-      "community": 52
+      "community": 51
     },
     {
       "label": "load_races()",
@@ -52609,7 +52617,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L164",
       "id": "mod_load_races",
-      "community": 52
+      "community": 51
     },
     {
       "label": "load_summaries()",
@@ -52617,7 +52625,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/get_selected_workout/mod.rs",
       "source_location": "L174",
       "id": "mod_load_summaries",
-      "community": 52
+      "community": 51
     },
     {
       "label": "tests.rs",
@@ -52801,7 +52809,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_llm_tools_selected_workout_power_curve_mod_rs",
-      "community": 52
+      "community": 51
     },
     {
       "label": "PowerCurveArgs",
@@ -52809,7 +52817,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L20",
       "id": "mod_powercurveargs",
-      "community": 52
+      "community": 51
     },
     {
       "label": "default_resolution()",
@@ -52817,7 +52825,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L28",
       "id": "mod_default_resolution",
-      "community": 52
+      "community": 51
     },
     {
       "label": "SelectedWorkoutPowerCurve",
@@ -52825,7 +52833,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L38",
       "id": "mod_selectedworkoutpowercurve",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".name()",
@@ -52833,7 +52841,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L41",
       "id": "mod_selectedworkoutpowercurve_name",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".definition()",
@@ -52841,7 +52849,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L45",
       "id": "mod_selectedworkoutpowercurve_definition",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".prompt_guidance()",
@@ -52849,7 +52857,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L73",
       "id": "mod_selectedworkoutpowercurve_prompt_guidance",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".execute()",
@@ -52857,7 +52865,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L79",
       "id": "mod_selectedworkoutpowercurve_execute",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".preview_arguments()",
@@ -52865,7 +52873,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L89",
       "id": "mod_selectedworkoutpowercurve_preview_arguments",
-      "community": 52
+      "community": 51
     },
     {
       "label": ".is_available()",
@@ -52873,7 +52881,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L99",
       "id": "mod_selectedworkoutpowercurve_is_available",
-      "community": 52
+      "community": 51
     },
     {
       "label": "execute_power_curve()",
@@ -52881,7 +52889,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L104",
       "id": "mod_execute_power_curve",
-      "community": 52
+      "community": 51
     },
     {
       "label": "select_workout()",
@@ -52889,7 +52897,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L219",
       "id": "mod_select_workout",
-      "community": 52
+      "community": 51
     },
     {
       "label": "power_curve_error_reason()",
@@ -52897,7 +52905,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L254",
       "id": "mod_power_curve_error_reason",
-      "community": 52
+      "community": 51
     },
     {
       "label": "build_unavailable_response()",
@@ -52905,7 +52913,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/llm_tools/selected_workout_power_curve/mod.rs",
       "source_location": "L277",
       "id": "mod_build_unavailable_response",
-      "community": 52
+      "community": 51
     },
     {
       "label": "tests.rs",
@@ -53393,7 +53401,7 @@
       "source_file": "src/domain/training_load/mod.rs",
       "source_location": "L1",
       "id": "src_domain_training_load_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "use_cases.rs",
@@ -53937,7 +53945,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_coach_conversation_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -53945,7 +53953,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_coach_conversation_model_rs",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationSurface",
@@ -53953,7 +53961,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L10",
       "id": "model_coachconversationsurface",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".as_str()",
@@ -53961,7 +53969,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L15",
       "id": "model_coachconversationsurface_as_str",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationStatus",
@@ -53969,7 +53977,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L23",
       "id": "model_coachconversationstatus",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationFocus",
@@ -53977,7 +53985,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L29",
       "id": "model_coachconversationfocus",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".kind()",
@@ -53985,7 +53993,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L34",
       "id": "model_coachconversationfocus_kind",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".cache_scope_suffix()",
@@ -53993,7 +54001,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L40",
       "id": "model_coachconversationfocus_cache_scope_suffix",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversation",
@@ -54001,7 +54009,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L48",
       "id": "model_coachconversation",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".new()",
@@ -54009,7 +54017,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L60",
       "id": "model_coachconversation_new",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".archive()",
@@ -54017,7 +54025,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L79",
       "id": "model_coachconversation_archive",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationMessageRole",
@@ -54025,7 +54033,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L94",
       "id": "model_coachconversationmessagerole",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationMessage",
@@ -54033,7 +54041,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L102",
       "id": "model_coachconversationmessage",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationReplyOperationFailureKind",
@@ -54041,7 +54049,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L113",
       "id": "model_coachconversationreplyoperationfailurekind",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".from_llm_error()",
@@ -54049,7 +54057,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L127",
       "id": "model_coachconversationreplyoperationfailurekind_from_llm_error",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".to_llm_error()",
@@ -54057,7 +54065,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L142",
       "id": "model_coachconversationreplyoperationfailurekind_to_llm_error",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationReplyOperationStatus",
@@ -54065,7 +54073,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L174",
       "id": "model_coachconversationreplyoperationstatus",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationReplyOperation",
@@ -54073,7 +54081,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L181",
       "id": "model_coachconversationreplyoperation",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationReplyClaimResult",
@@ -54081,7 +54089,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L207",
       "id": "model_coachconversationreplyclaimresult",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CompletedCoachConversationReply",
@@ -54089,7 +54097,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L213",
       "id": "model_completedcoachconversationreply",
-      "community": 44
+      "community": 43
     },
     {
       "label": "PendingCoachConversationReplyCheckpoint",
@@ -54097,7 +54105,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L225",
       "id": "model_pendingcoachconversationreplycheckpoint",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".pending()",
@@ -54105,7 +54113,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L238",
       "id": "model_coachconversationreplyoperation_pending",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".is_stale()",
@@ -54113,7 +54121,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L272",
       "id": "model_coachconversationreplyoperation_is_stale",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".reclaim()",
@@ -54121,7 +54129,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L277",
       "id": "model_coachconversationreplyoperation_reclaim",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".record_provider_response()",
@@ -54129,7 +54137,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L307",
       "id": "model_coachconversationreplyoperation_record_provider_response",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".mark_completed()",
@@ -54137,7 +54145,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L342",
       "id": "model_coachconversationreplyoperation_mark_completed",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".mark_completed_from_existing_message()",
@@ -54145,7 +54153,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L369",
       "id": "model_coachconversationreplyoperation_mark_completed_from_existing_message",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".mark_failed()",
@@ -54153,7 +54161,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L400",
       "id": "model_coachconversationreplyoperation_mark_failed",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationError",
@@ -54161,7 +54169,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L431",
       "id": "model_coachconversationerror",
-      "community": 44
+      "community": 43
     },
     {
       "label": ".fmt()",
@@ -54169,7 +54177,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L441",
       "id": "model_coachconversationerror_fmt",
-      "community": 44
+      "community": 43
     },
     {
       "label": "PersistedConversationUserMessage",
@@ -54177,7 +54185,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L461",
       "id": "model_persistedconversationusermessage",
-      "community": 44
+      "community": 43
     },
     {
       "label": "CoachConversationReply",
@@ -54185,7 +54193,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L469",
       "id": "model_coachconversationreply",
-      "community": 44
+      "community": 43
     },
     {
       "label": "SendConversationMessageResult",
@@ -54193,7 +54201,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L477",
       "id": "model_sendconversationmessageresult",
-      "community": 44
+      "community": 43
     },
     {
       "label": "validate_conversation_message_content()",
@@ -54201,7 +54209,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/coach_conversation/model.rs",
       "source_location": "L484",
       "id": "model_validate_conversation_message_content",
-      "community": 44
+      "community": 43
     },
     {
       "label": "request.rs",
@@ -56849,7 +56857,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_intervals_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -57385,7 +57393,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_intervals_planned_workout_parser_rs",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_planned_workout()",
@@ -57393,7 +57401,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L9",
       "id": "parser_parse_planned_workout",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_planned_workout_days()",
@@ -57401,7 +57409,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L37",
       "id": "parser_parse_planned_workout_days",
-      "community": 17
+      "community": 18
     },
     {
       "label": "serialize_planned_workout()",
@@ -57409,7 +57417,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L80",
       "id": "parser_serialize_planned_workout",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_day()",
@@ -57417,7 +57425,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L89",
       "id": "parser_parse_day",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_rest_day_reason()",
@@ -57425,7 +57433,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L110",
       "id": "parser_parse_rest_day_reason",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_step()",
@@ -57433,7 +57441,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L128",
       "id": "parser_parse_step",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_repeat()",
@@ -57441,7 +57449,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L173",
       "id": "parser_parse_repeat",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_duration_token()",
@@ -57449,7 +57457,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L153",
       "id": "parser_parse_duration_token",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_target()",
@@ -57457,7 +57465,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L226",
       "id": "parser_parse_target",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_percent_target()",
@@ -57465,7 +57473,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L330",
       "id": "parser_parse_percent_target",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_watts_target()",
@@ -57473,7 +57481,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L248",
       "id": "parser_parse_watts_target",
-      "community": 17
+      "community": 18
     },
     {
       "label": "serialize_line()",
@@ -57481,7 +57489,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L265",
       "id": "parser_serialize_line",
-      "community": 17
+      "community": 18
     },
     {
       "label": "serialize_planned_workout_for_intervals()",
@@ -57489,7 +57497,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L284",
       "id": "parser_serialize_planned_workout_for_intervals",
-      "community": 17
+      "community": 18
     },
     {
       "label": "serialize_duration()",
@@ -57497,7 +57505,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L336",
       "id": "parser_serialize_duration",
-      "community": 17
+      "community": 18
     },
     {
       "label": "serialize_target()",
@@ -57505,7 +57513,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L345",
       "id": "parser_serialize_target",
-      "community": 17
+      "community": 18
     },
     {
       "label": "format_number()",
@@ -57513,7 +57521,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L358",
       "id": "parser_format_number",
-      "community": 17
+      "community": 18
     },
     {
       "label": "normalize_spaces()",
@@ -57521,7 +57529,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L366",
       "id": "parser_normalize_spaces",
-      "community": 17
+      "community": 18
     },
     {
       "label": "is_exact_date()",
@@ -57529,7 +57537,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L370",
       "id": "parser_is_exact_date",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_planned_workout_preserves_blank_lines()",
@@ -57537,7 +57545,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L379",
       "id": "parser_parse_planned_workout_preserves_blank_lines",
-      "community": 17
+      "community": 18
     },
     {
       "label": "serialize_planned_workout_preserves_blank_lines()",
@@ -57545,7 +57553,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L419",
       "id": "parser_serialize_planned_workout_preserves_blank_lines",
-      "community": 17
+      "community": 18
     },
     {
       "label": "intervals_serializer_splits_titled_repeats_and_keeps_group_spacing()",
@@ -57553,7 +57561,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/planned_workout/parser.rs",
       "source_location": "L448",
       "id": "parser_intervals_serializer_splits_titled_repeats_and_keeps_group_spacing",
-      "community": 17
+      "community": 18
     },
     {
       "label": "events.rs",
@@ -57737,7 +57745,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_intervals_workout_parser_rs",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_workout_doc()",
@@ -57745,7 +57753,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L5",
       "id": "parser_parse_workout_doc",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_workout_line()",
@@ -57753,7 +57761,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L81",
       "id": "parser_parse_workout_line",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_repeat_and_duration()",
@@ -57761,7 +57769,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L120",
       "id": "parser_parse_repeat_and_duration",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_repeat_header_count()",
@@ -57769,7 +57777,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L141",
       "id": "parser_parse_repeat_header_count",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_target_percent_range()",
@@ -57777,7 +57785,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L178",
       "id": "parser_parse_target_percent_range",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_zone_token()",
@@ -57785,7 +57793,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L208",
       "id": "parser_parse_zone_token",
-      "community": 17
+      "community": 18
     },
     {
       "label": "normalize_definition()",
@@ -57793,7 +57801,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L214",
       "id": "parser_normalize_definition",
-      "community": 17
+      "community": 18
     },
     {
       "label": "append_interval_segments()",
@@ -57801,7 +57809,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L218",
       "id": "parser_append_interval_segments",
-      "community": 17
+      "community": 18
     },
     {
       "label": "append_segment()",
@@ -57809,7 +57817,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L234",
       "id": "parser_append_segment",
-      "community": 17
+      "community": 18
     },
     {
       "label": "zone_for_percent()",
@@ -57817,7 +57825,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L279",
       "id": "parser_zone_for_percent",
-      "community": 17
+      "community": 18
     },
     {
       "label": "percent_for_zone()",
@@ -57825,7 +57833,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L291",
       "id": "parser_percent_for_zone",
-      "community": 17
+      "community": 18
     },
     {
       "label": "build_workout_summary()",
@@ -57833,7 +57841,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L303",
       "id": "parser_build_workout_summary",
-      "community": 17
+      "community": 18
     },
     {
       "label": "mean_target_percent()",
@@ -57841,7 +57849,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L364",
       "id": "parser_mean_target_percent",
-      "community": 17
+      "community": 18
     },
     {
       "label": "mean_target_percent_from_bounds()",
@@ -57849,7 +57857,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/intervals/workout/parser.rs",
       "source_location": "L370",
       "id": "parser_mean_target_percent_from_bounds",
-      "community": 17
+      "community": 18
     },
     {
       "label": "matching.rs",
@@ -58057,7 +58065,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L1",
       "id": "src_domain_intervals_workout_pest_parser_parser_rs",
-      "community": 17
+      "community": 18
     },
     {
       "label": "WorkoutDocParser",
@@ -58065,7 +58073,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L15",
       "id": "parser_workoutdocparser",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_workout_ast()",
@@ -58073,7 +58081,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L17",
       "id": "parser_parse_workout_ast",
-      "community": 17
+      "community": 18
     },
     {
       "label": "push_pending_repeat()",
@@ -58081,7 +58089,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L55",
       "id": "parser_push_pending_repeat",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_step_line()",
@@ -58089,7 +58097,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L73",
       "id": "parser_parse_step_line",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_repeat_header()",
@@ -58097,7 +58105,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L82",
       "id": "parser_parse_repeat_header",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_step_body()",
@@ -58105,7 +58113,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L118",
       "id": "parser_parse_step_body",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_time_amount()",
@@ -58113,7 +58121,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L175",
       "id": "parser_parse_time_amount",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_distance_amount()",
@@ -58121,7 +58129,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L226",
       "id": "parser_parse_distance_amount",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_kind_pair()",
@@ -58129,7 +58137,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L255",
       "id": "parser_parse_kind_pair",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_target_pair()",
@@ -58137,7 +58145,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L268",
       "id": "parser_parse_target_pair",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_cadence_pair()",
@@ -58145,7 +58153,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L283",
       "id": "parser_parse_cadence_pair",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_text_metadata_pair()",
@@ -58153,7 +58161,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L310",
       "id": "parser_parse_text_metadata_pair",
-      "community": 17
+      "community": 18
     },
     {
       "label": "PercentTargetKind",
@@ -58161,7 +58169,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L324",
       "id": "parser_percenttargetkind",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_pace_target()",
@@ -58169,7 +58177,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L367",
       "id": "parser_parse_pace_target",
-      "community": 17
+      "community": 18
     },
     {
       "label": "parse_amount_pair()",
@@ -58177,7 +58185,7 @@
       "source_file": "src/domain/intervals/workout/pest_parser/parser.rs",
       "source_location": "L378",
       "id": "parser_parse_amount_pair",
-      "community": 17
+      "community": 18
     },
     {
       "label": "ports.rs",
@@ -58233,7 +58241,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/training_plan/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_training_plan_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -59545,7 +59553,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/calendar_view/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_calendar_view_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "projection.rs",
@@ -60705,7 +60713,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/completed_workouts/ports.rs",
       "source_location": "L62",
       "id": "ports",
-      "community": 51
+      "community": 52
     },
     {
       "label": ".find_by_user_id_and_completed_workout_id()",
@@ -60713,7 +60721,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/completed_workouts/ports.rs",
       "source_location": "L63",
       "id": "ports_find_by_user_id_and_completed_workout_id",
-      "community": 51
+      "community": 52
     },
     {
       "label": ".find_by_user_id_and_source_activity_id()",
@@ -60721,7 +60729,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/completed_workouts/ports.rs",
       "source_location": "L71",
       "id": "ports_find_by_user_id_and_source_activity_id",
-      "community": 51
+      "community": 52
     },
     {
       "label": ".find_latest_by_user_id()",
@@ -60729,7 +60737,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/completed_workouts/ports.rs",
       "source_location": "L79",
       "id": "ports_find_latest_by_user_id",
-      "community": 51
+      "community": 52
     },
     {
       "label": ".list_by_user_id()",
@@ -60737,7 +60745,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/completed_workouts/ports.rs",
       "source_location": "L86",
       "id": "ports_list_by_user_id",
-      "community": 51
+      "community": 52
     },
     {
       "label": ".list_by_user_id_and_date_range()",
@@ -60745,7 +60753,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/completed_workouts/ports.rs",
       "source_location": "L93",
       "id": "ports_list_by_user_id_and_date_range",
-      "community": 51
+      "community": 52
     },
     {
       "label": ".upsert()",
@@ -60753,7 +60761,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/completed_workouts/ports.rs",
       "source_location": "L102",
       "id": "ports_upsert",
-      "community": 51
+      "community": 52
     },
     {
       "label": "NoopCompletedWorkoutRepository",
@@ -61121,7 +61129,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/completed_workouts/mod.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_completed_workouts_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "power_curve.rs",
@@ -61729,7 +61737,7 @@
       "source_file": "src/domain/planned_completed_links/mod.rs",
       "source_location": "L1",
       "id": "src_domain_planned_completed_links_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -61809,7 +61817,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L1",
       "id": "src_domain_races_service_rs",
-      "community": 45
+      "community": 44
     },
     {
       "label": "RaceService",
@@ -61817,7 +61825,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L16",
       "id": "service_raceservice",
-      "community": 45
+      "community": 44
     },
     {
       "label": "RaceService<Repository, Intervals, SyncStates, Time, Ids>",
@@ -61825,7 +61833,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L42",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".new()",
@@ -61833,7 +61841,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L51",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_new",
-      "community": 45
+      "community": 44
     },
     {
       "label": "RaceService<Repository, Intervals, SyncStates, Time, Ids, PollStates, Refresh>",
@@ -61841,7 +61849,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L70",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".with_provider_poll_states()",
@@ -61849,7 +61857,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L81",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_with_provider_poll_states",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".with_calendar_view_refresh()",
@@ -61857,7 +61865,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L99",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_with_calendar_view_refresh",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".mark_calendar_poll_due_soon()",
@@ -61865,7 +61873,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L117",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_mark_calendar_poll_due_soon",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".refresh_race_date()",
@@ -61873,7 +61881,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L149",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_refresh_race_date",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".list_races_impl()",
@@ -61881,7 +61889,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L159",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_list_races_impl",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".get_race_impl()",
@@ -61889,7 +61897,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L169",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_get_race_impl",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".create_race_impl()",
@@ -61897,7 +61905,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L176",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_create_race_impl",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".update_race_impl()",
@@ -61905,7 +61913,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L192",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_update_race_impl",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".delete_race_impl()",
@@ -61913,7 +61921,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L215",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_delete_race_impl",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".sync_pending_race()",
@@ -61921,7 +61929,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L284",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_sync_pending_race",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".find_existing_remote_race_event()",
@@ -61929,7 +61937,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L420",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_find_existing_remote_race_event",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".list_races()",
@@ -61937,7 +61945,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L458",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_list_races",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".get_race()",
@@ -61945,7 +61953,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L469",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_get_race",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".create_race()",
@@ -61953,7 +61961,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L476",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_create_race",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".update_race()",
@@ -61961,7 +61969,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L486",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_update_race",
-      "community": 45
+      "community": 44
     },
     {
       "label": ".delete_race()",
@@ -61969,7 +61977,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L498",
       "id": "service_raceservice_repository_intervals_syncstates_time_ids_pollstates_refresh_delete_race",
-      "community": 45
+      "community": 44
     },
     {
       "label": "validate_request()",
@@ -61977,7 +61985,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L506",
       "id": "service_validate_request",
-      "community": 45
+      "community": 44
     },
     {
       "label": "is_valid_date_format()",
@@ -61985,7 +61993,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L537",
       "id": "service_is_valid_date_format",
-      "community": 45
+      "community": 44
     },
     {
       "label": "projected_event_start_date_local()",
@@ -61993,7 +62001,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L573",
       "id": "service_projected_event_start_date_local",
-      "community": 45
+      "community": 44
     },
     {
       "label": "projected_event_name()",
@@ -62001,7 +62009,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L577",
       "id": "service_projected_event_name",
-      "community": 45
+      "community": 44
     },
     {
       "label": "projected_event_type()",
@@ -62009,7 +62017,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L581",
       "id": "service_projected_event_type",
-      "community": 45
+      "community": 44
     },
     {
       "label": "projected_event_category()",
@@ -62017,7 +62025,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L593",
       "id": "service_projected_event_category",
-      "community": 45
+      "community": 44
     },
     {
       "label": "projected_event_description()",
@@ -62025,7 +62033,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L601",
       "id": "service_projected_event_description",
-      "community": 45
+      "community": 44
     },
     {
       "label": "canonical_race_id_marker()",
@@ -62033,7 +62041,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L611",
       "id": "service_canonical_race_id_marker",
-      "community": 45
+      "community": 44
     },
     {
       "label": "map_intervals_error()",
@@ -62041,7 +62049,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L615",
       "id": "service_map_intervals_error",
-      "community": 45
+      "community": 44
     },
     {
       "label": "map_sync_repository_error()",
@@ -62049,7 +62057,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L628",
       "id": "service_map_sync_repository_error",
-      "community": 45
+      "community": 44
     },
     {
       "label": "race_entity_ref()",
@@ -62057,7 +62065,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L635",
       "id": "service_race_entity_ref",
-      "community": 45
+      "community": 44
     },
     {
       "label": "parse_intervals_event_id()",
@@ -62065,7 +62073,7 @@
       "source_file": "src/domain/races/service.rs",
       "source_location": "L639",
       "id": "service_parse_intervals_event_id",
-      "community": 45
+      "community": 44
     },
     {
       "label": "mod.rs",
@@ -62073,7 +62081,7 @@
       "source_file": "src/domain/races/mod.rs",
       "source_location": "L1",
       "id": "src_domain_races_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "tests.rs",
@@ -62081,7 +62089,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L1",
       "id": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_domain_races_tests_rs",
-      "community": 19
+      "community": 17
     },
     {
       "label": "TestIdGenerator",
@@ -62089,7 +62097,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L34",
       "id": "tests_testidgenerator",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".default()",
@@ -62097,7 +62105,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L39",
       "id": "tests_testidgenerator_default",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".new_id()",
@@ -62105,7 +62113,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L47",
       "id": "tests_testidgenerator_new_id",
-      "community": 19
+      "community": 17
     },
     {
       "label": "InMemoryRaceRepository",
@@ -62113,7 +62121,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L53",
       "id": "tests_inmemoryracerepository",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".with_races()",
@@ -62121,7 +62129,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L59",
       "id": "tests_inmemoryracerepository_with_races",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".with_delete_error()",
@@ -62129,7 +62137,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L66",
       "id": "tests_inmemoryracerepository_with_delete_error",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".stored()",
@@ -62137,7 +62145,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L71",
       "id": "tests_inmemoryracerepository_stored",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".with_dropped_synced_writes()",
@@ -62145,7 +62153,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L84",
       "id": "tests_inmemoryexternalsyncstaterepository_with_dropped_synced_writes",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".with_delete_error()",
@@ -62153,7 +62161,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L92",
       "id": "tests_inmemoryexternalsyncstaterepository_with_delete_error",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".stored()",
@@ -62161,7 +62169,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L100",
       "id": "tests_inmemoryexternalsyncstaterepository_stored",
-      "community": 19
+      "community": 17
     },
     {
       "label": "InMemoryProviderPollStateRepository",
@@ -62169,7 +62177,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L106",
       "id": "tests_inmemoryproviderpollstaterepository",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".stored()",
@@ -62177,7 +62185,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L111",
       "id": "tests_inmemoryproviderpollstaterepository_stored",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".upsert()",
@@ -62185,7 +62193,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L337",
       "id": "tests_inmemoryproviderpollstaterepository_upsert",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".list_due()",
@@ -62193,7 +62201,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L356",
       "id": "tests_inmemoryproviderpollstaterepository_list_due",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".find_by_provider_and_stream()",
@@ -62201,7 +62209,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L374",
       "id": "tests_inmemoryproviderpollstaterepository_find_by_provider_and_stream",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".list_by_user_id()",
@@ -62209,7 +62217,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L398",
       "id": "tests_inmemoryracerepository_list_by_user_id",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".list_by_user_id_and_range()",
@@ -62217,7 +62225,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L412",
       "id": "tests_inmemoryracerepository_list_by_user_id_and_range",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".find_by_user_id_and_race_id()",
@@ -62225,7 +62233,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L433",
       "id": "tests_inmemoryracerepository_find_by_user_id_and_race_id",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".upsert()",
@@ -62233,7 +62241,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L451",
       "id": "tests_inmemoryracerepository_upsert",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".delete()",
@@ -62241,7 +62249,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L463",
       "id": "tests_inmemoryracerepository_delete",
-      "community": 19
+      "community": 17
     },
     {
       "label": "RecordingIntervalsService",
@@ -62249,7 +62257,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L482",
       "id": "tests_recordingintervalsservice",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".stored()",
@@ -62257,7 +62265,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L499",
       "id": "tests_recordingcalendarrefresh_stored",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".with_failed_updates()",
@@ -62265,7 +62273,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L525",
       "id": "tests_recordingintervalsservice_with_failed_updates",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".with_listed_events()",
@@ -62273,7 +62281,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L532",
       "id": "tests_recordingintervalsservice_with_listed_events",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".list_events()",
@@ -62281,7 +62289,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L541",
       "id": "tests_recordingintervalsservice_list_events",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".get_event()",
@@ -62289,7 +62297,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L555",
       "id": "tests_recordingintervalsservice_get_event",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".create_event()",
@@ -62297,7 +62305,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L563",
       "id": "tests_recordingintervalsservice_create_event",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".update_event()",
@@ -62305,7 +62313,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L588",
       "id": "tests_recordingintervalsservice_update_event",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".delete_event()",
@@ -62313,7 +62321,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L623",
       "id": "tests_recordingintervalsservice_delete_event",
-      "community": 19
+      "community": 17
     },
     {
       "label": ".download_fit()",
@@ -62321,7 +62329,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L635",
       "id": "tests_recordingintervalsservice_download_fit",
-      "community": 19
+      "community": 17
     },
     {
       "label": "create_race_persists_and_syncs_to_intervals()",
@@ -62329,7 +62337,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L645",
       "id": "tests_create_race_persists_and_syncs_to_intervals",
-      "community": 19
+      "community": 17
     },
     {
       "label": "priority_race_creates_matching_intervals_categories()",
@@ -62337,7 +62345,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L701",
       "id": "tests_priority_race_creates_matching_intervals_categories",
-      "community": 19
+      "community": 17
     },
     {
       "label": "update_race_marks_failure_when_intervals_update_fails()",
@@ -62345,7 +62353,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L748",
       "id": "tests_update_race_marks_failure_when_intervals_update_fails",
-      "community": 19
+      "community": 17
     },
     {
       "label": "delete_race_deletes_remote_event_before_local_remove()",
@@ -62353,7 +62361,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L812",
       "id": "tests_delete_race_deletes_remote_event_before_local_remove",
-      "community": 19
+      "community": 17
     },
     {
       "label": "create_race_retry_after_lost_final_sync_write_updates_existing_remote_event()",
@@ -62361,7 +62369,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L862",
       "id": "tests_create_race_retry_after_lost_final_sync_write_updates_existing_remote_event",
-      "community": 19
+      "community": 17
     },
     {
       "label": "create_race_retry_without_external_id_reuses_existing_remote_event()",
@@ -62369,7 +62377,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L908",
       "id": "tests_create_race_retry_without_external_id_reuses_existing_remote_event",
-      "community": 19
+      "community": 17
     },
     {
       "label": "update_race_ignores_other_users_sync_state_and_calls_intervals_with_current_user()",
@@ -62377,7 +62385,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L978",
       "id": "tests_update_race_ignores_other_users_sync_state_and_calls_intervals_with_current_user",
-      "community": 19
+      "community": 17
     },
     {
       "label": "delete_race_keeps_sync_state_when_local_delete_fails()",
@@ -62385,7 +62393,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L1049",
       "id": "tests_delete_race_keeps_sync_state_when_local_delete_fails",
-      "community": 19
+      "community": 17
     },
     {
       "label": "delete_race_refreshes_calendar_view_when_sync_state_delete_fails_after_local_delete()",
@@ -62393,7 +62401,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L1111",
       "id": "tests_delete_race_refreshes_calendar_view_when_sync_state_delete_fails_after_local_delete",
-      "community": 19
+      "community": 17
     },
     {
       "label": "validate_request_rejects_distance_above_upper_bound()",
@@ -62401,7 +62409,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L1162",
       "id": "tests_validate_request_rejects_distance_above_upper_bound",
-      "community": 19
+      "community": 17
     },
     {
       "label": "validate_request_rejects_invalid_date_format()",
@@ -62409,7 +62417,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L1168",
       "id": "tests_validate_request_rejects_invalid_date_format",
-      "community": 19
+      "community": 17
     },
     {
       "label": "validate_request_accepts_valid_date()",
@@ -62417,7 +62425,7 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/domain/races/tests.rs",
       "source_location": "L1186",
       "id": "tests_validate_request_accepts_valid_date",
-      "community": 19
+      "community": 17
     },
     {
       "label": "model.rs",
@@ -62561,7 +62569,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L1",
       "id": "src_domain_races_authoritative_rs",
-      "community": 43
+      "community": 45
     },
     {
       "label": "AuthoritativeRaceRepository",
@@ -62569,7 +62577,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L10",
       "id": "authoritative_authoritativeracerepository",
-      "community": 43
+      "community": 45
     },
     {
       "label": "AuthoritativeRaceRepository<Races, Observations>",
@@ -62577,7 +62585,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L19",
       "id": "authoritative_authoritativeracerepository_races_observations",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".new()",
@@ -62585,7 +62593,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L24",
       "id": "authoritative_authoritativeracerepository_races_observations_new",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".filter_visible()",
@@ -62593,7 +62601,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L31",
       "id": "authoritative_authoritativeracerepository_races_observations_filter_visible",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".list_by_user_id()",
@@ -62601,7 +62609,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L64",
       "id": "authoritative_authoritativeracerepository_races_observations_list_by_user_id",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".list_by_user_id_and_range()",
@@ -62609,7 +62617,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L73",
       "id": "authoritative_authoritativeracerepository_races_observations_list_by_user_id_and_range",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".find_by_user_id_and_race_id()",
@@ -62617,7 +62625,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L90",
       "id": "authoritative_authoritativeracerepository_races_observations_find_by_user_id_and_race_id",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".upsert()",
@@ -62625,7 +62633,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L112",
       "id": "authoritative_authoritativeracerepository_races_observations_upsert",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".delete()",
@@ -62633,7 +62641,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L116",
       "id": "authoritative_authoritativeracerepository_races_observations_delete",
-      "community": 43
+      "community": 45
     },
     {
       "label": "TestRaces",
@@ -62641,7 +62649,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L136",
       "id": "authoritative_testraces",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".list_by_user_id()",
@@ -62649,7 +62657,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L141",
       "id": "authoritative_testraces_list_by_user_id",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".list_by_user_id_and_range()",
@@ -62657,7 +62665,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L152",
       "id": "authoritative_testraces_list_by_user_id_and_range",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".find_by_user_id_and_race_id()",
@@ -62665,7 +62673,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L170",
       "id": "authoritative_testraces_find_by_user_id_and_race_id",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".upsert()",
@@ -62673,7 +62681,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L185",
       "id": "authoritative_testraces_upsert",
-      "community": 43
+      "community": 45
     },
     {
       "label": ".delete()",
@@ -62681,7 +62689,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L189",
       "id": "authoritative_testraces_delete",
-      "community": 43
+      "community": 45
     },
     {
       "label": "sample_race()",
@@ -62689,7 +62697,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L250",
       "id": "authoritative_sample_race",
-      "community": 43
+      "community": 45
     },
     {
       "label": "hides_externally_imported_races_from_reads()",
@@ -62697,7 +62705,7 @@
       "source_file": "src/domain/races/authoritative.rs",
       "source_location": "L266",
       "id": "authoritative_hides_externally_imported_races_from_reads",
-      "community": 43
+      "community": 45
     },
     {
       "label": "mod.rs",
@@ -65513,7 +65521,7 @@
       "source_file": "src/domain/wahoo_fit_files/mod.rs",
       "source_location": "L1",
       "id": "src_domain_wahoo_fit_files_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "model.rs",
@@ -65793,7 +65801,7 @@
       "source_file": "src/domain/external_sync/mod.rs",
       "source_location": "L1",
       "id": "src_domain_external_sync_mod_rs",
-      "community": 51
+      "community": 52
     },
     {
       "label": "tests.rs",
@@ -117441,7 +117449,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L181",
+      "source_location": "L219",
       "weight": 1.0,
       "_src": "logging_log_request",
       "_tgt": "logging_is_sensitive_header",
@@ -117453,7 +117461,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L170",
+      "source_location": "L208",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_log_request",
@@ -117465,7 +117473,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L55",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_src": "logging_execute_and_log_without_body",
+      "_tgt": "logging_log_request",
+      "source": "logging_log_request",
+      "target": "logging_execute_and_log_without_body",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
+      "source_location": "L93",
       "weight": 1.0,
       "_src": "logging_execute_and_log_with_body",
       "_tgt": "logging_log_request",
@@ -117477,7 +117497,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L176",
+      "source_location": "L214",
       "weight": 1.0,
       "_src": "logging_log_request",
       "_tgt": "logging_sanitized_url",
@@ -117537,7 +117557,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L212",
+      "source_location": "L250",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_log_response",
@@ -117549,7 +117569,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L73",
+      "source_location": "L67",
+      "weight": 1.0,
+      "_src": "logging_execute_and_log_without_body",
+      "_tgt": "logging_log_response",
+      "source": "logging_log_response",
+      "target": "logging_execute_and_log_without_body",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
+      "source_location": "L111",
       "weight": 1.0,
       "_src": "logging_execute_and_log_with_body",
       "_tgt": "logging_log_response",
@@ -117561,7 +117593,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L219",
+      "source_location": "L257",
       "weight": 1.0,
       "_src": "logging_log_response",
       "_tgt": "logging_sanitized_url",
@@ -117573,7 +117605,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L221",
+      "source_location": "L259",
       "weight": 1.0,
       "_src": "logging_log_response",
       "_tgt": "logging_log_response_with_body",
@@ -117585,7 +117617,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L222",
+      "source_location": "L260",
       "weight": 1.0,
       "_src": "logging_log_response",
       "_tgt": "logging_log_response_without_body",
@@ -119853,7 +119885,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L29",
+      "source_location": "L30",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_execute_and_log",
@@ -119865,7 +119897,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L36",
+      "source_location": "L38",
+      "weight": 1.0,
+      "_src": "logging_execute_and_log",
+      "_tgt": "logging_execute_and_log_without_body",
+      "source": "logging_execute_and_log",
+      "target": "logging_execute_and_log_without_body",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
+      "source_location": "L39",
       "weight": 1.0,
       "_src": "logging_execute_and_log",
       "_tgt": "logging_execute_and_log_with_body",
@@ -119913,7 +119957,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L90",
+      "source_location": "L128",
       "weight": 1.0,
       "_src": "logging_format_request_body",
       "_tgt": "logging_format_binary_body",
@@ -119937,7 +119981,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L98",
+      "source_location": "L136",
       "weight": 1.0,
       "_src": "logging_format_request_body",
       "_tgt": "logging_preview_text",
@@ -119961,7 +120005,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L83",
+      "source_location": "L121",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_format_request_body",
@@ -119973,7 +120017,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L53",
+      "source_location": "L91",
       "weight": 1.0,
       "_src": "logging_execute_and_log_with_body",
       "_tgt": "logging_format_request_body",
@@ -119985,7 +120029,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L94",
+      "source_location": "L132",
       "weight": 1.0,
       "_src": "logging_format_request_body",
       "_tgt": "logging_redact_json_value",
@@ -119997,7 +120041,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L95",
+      "source_location": "L133",
       "weight": 1.0,
       "_src": "logging_format_request_body",
       "_tgt": "logging_preview_json",
@@ -120033,7 +120077,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L152",
+      "source_location": "L190",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_preview_text",
@@ -120045,7 +120089,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L149",
+      "source_location": "L187",
       "weight": 1.0,
       "_src": "logging_preview_json",
       "_tgt": "logging_preview_text",
@@ -120057,7 +120101,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L405",
+      "source_location": "L443",
       "weight": 1.0,
       "_src": "logging_preview_text_truncates",
       "_tgt": "logging_preview_text",
@@ -120069,7 +120113,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L115",
+      "source_location": "L153",
       "weight": 1.0,
       "_src": "logging_format_response_body",
       "_tgt": "logging_format_binary_body",
@@ -120081,7 +120125,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L119",
+      "source_location": "L157",
       "weight": 1.0,
       "_src": "logging_format_response_body",
       "_tgt": "logging_redact_json_value",
@@ -120093,7 +120137,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L101",
+      "source_location": "L139",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_format_response_body",
@@ -120105,7 +120149,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L71",
+      "source_location": "L109",
       "weight": 1.0,
       "_src": "logging_execute_and_log_with_body",
       "_tgt": "logging_format_response_body",
@@ -120117,7 +120161,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L120",
+      "source_location": "L158",
       "weight": 1.0,
       "_src": "logging_format_response_body",
       "_tgt": "logging_preview_json",
@@ -120129,7 +120173,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L127",
+      "source_location": "L165",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_redact_json_value",
@@ -120141,7 +120185,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L390",
+      "source_location": "L428",
       "weight": 1.0,
       "_src": "logging_redact_json_redacts_nested",
       "_tgt": "logging_redact_json_value",
@@ -120153,7 +120197,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L164",
+      "source_location": "L202",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_format_binary_body",
@@ -120165,7 +120209,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L414",
+      "source_location": "L452",
       "weight": 1.0,
       "_src": "logging_format_binary_body_formats_binary_payloads",
       "_tgt": "logging_format_binary_body",
@@ -120177,7 +120221,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L226",
+      "source_location": "L264",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_response_log_level",
@@ -120189,7 +120233,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L241",
+      "source_location": "L279",
       "weight": 1.0,
       "_src": "logging_log_response_with_body",
       "_tgt": "logging_response_log_level",
@@ -120201,7 +120245,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L285",
+      "source_location": "L323",
       "weight": 1.0,
       "_src": "logging_log_response_without_body",
       "_tgt": "logging_response_log_level",
@@ -120213,7 +120257,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L320",
+      "source_location": "L358",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_log_transport_failure",
@@ -120225,7 +120269,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L61",
+      "source_location": "L57",
+      "weight": 1.0,
+      "_src": "logging_execute_and_log_without_body",
+      "_tgt": "logging_log_transport_failure",
+      "source": "logging_log_transport_failure",
+      "target": "logging_execute_and_log_without_body",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
+      "source_location": "L99",
       "weight": 1.0,
       "_src": "logging_execute_and_log_with_body",
       "_tgt": "logging_log_transport_failure",
@@ -120237,7 +120293,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L332",
+      "source_location": "L370",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_is_sensitive_header",
@@ -120249,7 +120305,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L339",
+      "source_location": "L377",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_sanitized_url",
@@ -123000,9 +123056,9 @@
       "source_location": "L91",
       "weight": 1.0,
       "_src": "client_intervalsicuclient",
-      "_tgt": "client_intervalsicuclient_execute_and_log_with_trace",
+      "_tgt": "client_intervalsicuclient_execute_and_log_with_trace_no_body",
       "source": "client_intervalsicuclient",
-      "target": "client_intervalsicuclient_execute_and_log_with_trace",
+      "target": "client_intervalsicuclient_execute_and_log_with_trace_no_body",
       "confidence_score": 1.0
     },
     {
@@ -123059,10 +123115,10 @@
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client.rs",
       "source_location": "L97",
       "weight": 1.0,
-      "_src": "client_intervalsicuclient_execute_and_log_with_trace",
+      "_src": "client_intervalsicuclient_execute_and_log_with_trace_no_body",
       "_tgt": "client_intervalsicuclient_with_trace_context",
       "source": "client_intervalsicuclient_with_trace_context",
-      "target": "client_intervalsicuclient_execute_and_log_with_trace",
+      "target": "client_intervalsicuclient_execute_and_log_with_trace_no_body",
       "confidence_score": 1.0
     },
     {
@@ -125181,7 +125237,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L42",
+      "source_location": "L43",
+      "weight": 1.0,
+      "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
+      "_tgt": "logging_execute_and_log_without_body",
+      "source": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
+      "target": "logging_execute_and_log_without_body",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
+      "source_location": "L80",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_execute_and_log_with_body",
@@ -125193,7 +125261,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L147",
+      "source_location": "L185",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_preview_json",
@@ -125205,7 +125273,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L234",
+      "source_location": "L272",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_log_response_with_body",
@@ -125217,7 +125285,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L279",
+      "source_location": "L317",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_log_response_without_body",
@@ -125229,7 +125297,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L381",
+      "source_location": "L419",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_redact_json_redacts_nested",
@@ -125241,7 +125309,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L398",
+      "source_location": "L436",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_preview_text_short",
@@ -125253,7 +125321,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L403",
+      "source_location": "L441",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_preview_text_truncates",
@@ -125265,7 +125333,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L412",
+      "source_location": "L450",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_format_binary_body_formats_binary_payloads",
@@ -125277,7 +125345,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/logging.rs",
-      "source_location": "L419",
+      "source_location": "L457",
       "weight": 1.0,
       "_src": "users_andrzej_witkowski_ideaprojects_aiwattcoach_src_adapters_intervals_icu_client_logging_rs",
       "_tgt": "logging_sanitized_url_keeps_safe_intervals_query_params",
@@ -125516,7 +125584,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/connection.rs",
+      "source_file": "src/adapters/intervals_icu/client/connection.rs",
       "source_location": "L8",
       "weight": 1.0,
       "_src": "connection_intervalsicuclient",
@@ -125528,7 +125596,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L21",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125540,7 +125608,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L129",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125552,7 +125620,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L161",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125564,7 +125632,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L232",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125576,7 +125644,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L309",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125588,7 +125656,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L337",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125600,7 +125668,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L368",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125612,7 +125680,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L417",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125624,7 +125692,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
       "source_location": "L432",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
@@ -125636,8 +125704,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
-      "source_location": "L506",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
+      "source_location": "L507",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
       "_tgt": "api_intervalsicuclient_update_activity",
@@ -125648,8 +125716,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/api.rs",
-      "source_location": "L547",
+      "source_file": "src/adapters/intervals_icu/client/api.rs",
+      "source_location": "L548",
       "weight": 1.0,
       "_src": "api_intervalsicuclient",
       "_tgt": "api_intervalsicuclient_delete_activity",
@@ -125660,7 +125728,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L19",
       "weight": 1.0,
       "_src": "details_intervalsicuclient",
@@ -125672,7 +125740,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L38",
       "weight": 1.0,
       "_src": "details_intervalsicuclient",
@@ -125684,7 +125752,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L62",
       "weight": 1.0,
       "_src": "details_intervalsicuclient",
@@ -125696,7 +125764,7 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L84",
       "weight": 1.0,
       "_src": "details_intervalsicuclient",
@@ -125708,7 +125776,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L35",
       "weight": 1.0,
       "_src": "details_intervalsicuclient_request_activity",
@@ -125720,7 +125788,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L45",
       "weight": 1.0,
       "_src": "details_intervalsicuclient_fetch_base_activity",
@@ -125732,7 +125800,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L94",
       "weight": 1.0,
       "_src": "details_intervalsicuclient_fetch_activity_details",
@@ -125744,7 +125812,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "/Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/intervals_icu/client/details.rs",
+      "source_file": "src/adapters/intervals_icu/client/details.rs",
       "source_location": "L99",
       "weight": 1.0,
       "_src": "details_intervalsicuclient_fetch_activity_details",

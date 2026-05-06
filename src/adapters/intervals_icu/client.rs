@@ -88,14 +88,14 @@ impl IntervalsIcuClient {
         request.headers(headers)
     }
 
-    async fn execute_and_log_with_trace(
+    async fn execute_and_log_with_trace_no_body(
         client: &Client,
         request: RequestBuilder,
     ) -> Result<logging::LoggedResponse, reqwest::Error> {
         logging::execute_and_log(
             client,
             Self::with_trace_context(request),
-            logging::BodyLoggingMode::Full,
+            logging::BodyLoggingMode::None,
         )
         .await
     }
