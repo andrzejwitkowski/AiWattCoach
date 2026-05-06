@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-06 | Copilot + CodeRabbit | get_selected_workout tool wiring and payload hardening
+
+- Problem: review feedback on PR #186 was still correct in multiple places. The branch leaked a concrete `GetSelectedWorkoutDataAdapter` through the domain surface, advertised `get_selected_workout` even when `ToolExecutionContext.data_port` was `None`, wired the tool to raw planned/race repositories instead of authoritative filtered views, duplicated canonical planned-workout serialization in another module, and returned uncapped streams plus only a partial completed-workout metrics payload.
+- Fix: moved `GetSelectedWorkoutDataAdapter` into `src/adapters/llm/get_selected_workout_data.rs` and kept the domain export to the port only, gated tool definitions on `data_port` availability in the shared tool loop, switched `main.rs` wiring to authoritative planned/race repositories, extracted shared canonical planned-workout serialization into `src/domain/planned_workouts/mod.rs`, expanded the tool response to the full `CompletedWorkoutMetrics` shape, and capped stream samples in `get_selected_workout` to a bounded downsampled payload with updated regressions.
+- Prevention: when adding a new LLM tool backed by repository I/O, review four boundaries before shipping: domain vs adapter ownership, conditional tool exposure, authoritative vs raw read-model sources, and payload size limits for any raw arrays sent back to the model. If two features serialize the same canonical workout text, extract one shared helper instead of copying the mapper.
+
 ### 2026-05-05 | user | get_selected_workout 4-loop review hardening
 
 - Problem: the first implementation exposed `get_selected_workout` without enough behavioral hardening: invalid dates were not rejected, past planned workouts were not marked `not_completed`, races were still returned when a completed workout existed, race lookup loaded all user races instead of using the repository range query, stream `secondary_series` was dropped, the main tool function mixed loading and mapping phases, and the initial adapter test was mostly a print-only simulation.

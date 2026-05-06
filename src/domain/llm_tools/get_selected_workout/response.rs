@@ -11,6 +11,8 @@ use crate::domain::{
 
 use super::parse_date;
 
+const MAX_STREAM_SAMPLES: usize = 256;
+
 #[derive(Serialize)]
 pub(super) struct GetSelectedWorkoutResponse {
     date: String,
@@ -63,8 +65,16 @@ struct CompletedWorkoutMetricsDto {
     normalized_power_watts: Option<i32>,
     intensity_factor: Option<f64>,
     efficiency_factor: Option<f64>,
+    variability_index: Option<f64>,
     average_power_watts: Option<i32>,
     ftp_watts: Option<i32>,
+    total_work_joules: Option<i32>,
+    calories: Option<i32>,
+    trimp: Option<f64>,
+    power_load: Option<i32>,
+    heart_rate_load: Option<i32>,
+    pace_load: Option<i32>,
+    strain_score: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -146,8 +156,16 @@ fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary
             normalized_power_watts: workout.metrics.normalized_power_watts,
             intensity_factor: workout.metrics.intensity_factor,
             efficiency_factor: workout.metrics.efficiency_factor,
+            variability_index: workout.metrics.variability_index,
             average_power_watts: workout.metrics.average_power_watts,
             ftp_watts: workout.metrics.ftp_watts,
+            total_work_joules: workout.metrics.total_work_joules,
+            calories: workout.metrics.calories,
+            trimp: workout.metrics.trimp,
+            power_load: workout.metrics.power_load,
+            heart_rate_load: workout.metrics.heart_rate_load,
+            pace_load: workout.metrics.pace_load,
+            strain_score: workout.metrics.strain_score,
         },
         streams: workout
             .details
@@ -155,11 +173,11 @@ fn map_completed_workout(workout: &CompletedWorkout, summaries: &[WorkoutSummary
             .iter()
             .map(|stream| StreamDto {
                 stream_type: stream.stream_type.clone(),
-                data: series_values(stream.primary_series.as_ref()),
+                data: series_values(stream.primary_series.as_ref(), MAX_STREAM_SAMPLES),
                 secondary_data: stream
                     .secondary_series
                     .as_ref()
-                    .map(|series| series_values(Some(series))),
+                    .map(|series| series_values(Some(series), MAX_STREAM_SAMPLES)),
             })
             .collect(),
         ai_conversation: summary
@@ -173,7 +191,7 @@ fn map_conversation_message(
     message: &crate::domain::workout_summary::ConversationMessage,
 ) -> ConversationMessageDto {
     ConversationMessageDto {
-        role: match message.role {
+        role: match &message.role {
             MessageRole::User => "user".to_string(),
             MessageRole::Coach => "coach".to_string(),
             MessageRole::Tool => "tool".to_string(),
@@ -182,14 +200,34 @@ fn map_conversation_message(
     }
 }
 
-fn series_values(series: Option<&CompletedWorkoutSeries>) -> Vec<serde_json::Value> {
+fn series_values(
+    series: Option<&CompletedWorkoutSeries>,
+    max_samples: usize,
+) -> Vec<serde_json::Value> {
     match series {
-        Some(CompletedWorkoutSeries::Integers(v)) => v.iter().map(|x| json!(x)).collect(),
-        Some(CompletedWorkoutSeries::Floats(v)) => v.iter().map(|x| json!(x)).collect(),
-        Some(CompletedWorkoutSeries::Bools(v)) => v.iter().map(|x| json!(x)).collect(),
-        Some(CompletedWorkoutSeries::Strings(v)) => v.iter().map(|x| json!(x)).collect(),
+        Some(CompletedWorkoutSeries::Integers(v)) => sampled_values(v, max_samples),
+        Some(CompletedWorkoutSeries::Floats(v)) => sampled_values(v, max_samples),
+        Some(CompletedWorkoutSeries::Bools(v)) => sampled_values(v, max_samples),
+        Some(CompletedWorkoutSeries::Strings(v)) => sampled_values(v, max_samples),
         None => Vec::new(),
     }
+}
+
+fn sampled_values<T>(values: &[T], max_samples: usize) -> Vec<serde_json::Value>
+where
+    T: Serialize,
+{
+    if values.len() <= max_samples {
+        return values.iter().map(|value| json!(value)).collect();
+    }
+
+    let step = values.len().div_ceil(max_samples);
+    values
+        .iter()
+        .step_by(step)
+        .take(max_samples)
+        .map(|value| json!(value))
+        .collect()
 }
 
 fn map_planned_workout(
@@ -204,7 +242,8 @@ fn map_planned_workout(
         status: planned_status(selected_date, today).to_string(),
         rest_day: plan.rest_day,
         rest_day_reason: plan.rest_day_reason.clone(),
-        raw_workout_doc: (!plan.rest_day).then(|| serialize_planned_workout(&plan.workout.lines)),
+        raw_workout_doc: (!plan.rest_day)
+            .then(|| crate::domain::planned_workouts::serialize_canonical_planned_workout(plan)),
     }
 }
 
@@ -232,67 +271,4 @@ fn build_race_entries(races: Vec<Race>, include_races: bool, date: &str) -> Vec<
             priority: race.priority.as_str().to_string(),
         })
         .collect()
-}
-
-fn serialize_planned_workout(
-    lines: &[crate::domain::planned_workouts::PlannedWorkoutLine],
-) -> String {
-    let mapped: Vec<crate::domain::intervals::PlannedWorkoutLine> =
-        lines.iter().map(map_planned_workout_line).collect();
-
-    crate::domain::intervals::serialize_planned_workout(&crate::domain::intervals::PlannedWorkout {
-        lines: mapped,
-    })
-}
-
-fn map_planned_workout_line(
-    line: &crate::domain::planned_workouts::PlannedWorkoutLine,
-) -> crate::domain::intervals::PlannedWorkoutLine {
-    match line {
-        crate::domain::planned_workouts::PlannedWorkoutLine::BlankLine => {
-            crate::domain::intervals::PlannedWorkoutLine::BlankLine
-        }
-        crate::domain::planned_workouts::PlannedWorkoutLine::Text(t) => {
-            crate::domain::intervals::PlannedWorkoutLine::Text(
-                crate::domain::intervals::PlannedWorkoutText {
-                    text: t.text.clone(),
-                },
-            )
-        }
-        crate::domain::planned_workouts::PlannedWorkoutLine::Repeat(r) => {
-            crate::domain::intervals::PlannedWorkoutLine::Repeat(
-                crate::domain::intervals::PlannedWorkoutRepeat {
-                    title: r.title.clone(),
-                    count: r.count,
-                },
-            )
-        }
-        crate::domain::planned_workouts::PlannedWorkoutLine::Step(s) => {
-            crate::domain::intervals::PlannedWorkoutLine::Step(map_planned_workout_step(s))
-        }
-    }
-}
-
-fn map_planned_workout_step(
-    step: &crate::domain::planned_workouts::PlannedWorkoutStep,
-) -> crate::domain::intervals::PlannedWorkoutStep {
-    crate::domain::intervals::PlannedWorkoutStep {
-        duration_seconds: step.duration_seconds,
-        kind: match step.kind {
-            crate::domain::planned_workouts::PlannedWorkoutStepKind::Steady => {
-                crate::domain::intervals::PlannedWorkoutStepKind::Steady
-            }
-            crate::domain::planned_workouts::PlannedWorkoutStepKind::Ramp => {
-                crate::domain::intervals::PlannedWorkoutStepKind::Ramp
-            }
-        },
-        target: match step.target {
-            crate::domain::planned_workouts::PlannedWorkoutTarget::PercentFtp { min, max } => {
-                crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max }
-            }
-            crate::domain::planned_workouts::PlannedWorkoutTarget::WattsRange { min, max } => {
-                crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max }
-            }
-        },
-    }
 }

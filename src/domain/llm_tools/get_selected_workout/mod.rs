@@ -16,7 +16,7 @@ use crate::domain::{
 mod port;
 mod response;
 
-pub use port::{GetSelectedWorkoutDataAdapter, GetSelectedWorkoutDataPort};
+pub use port::GetSelectedWorkoutDataPort;
 use response::{build_selected_workout_response, SelectedDate, SelectedWorkoutData};
 
 const GET_SELECTED_WORKOUT_TOOL_NAME: &str = "get_selected_workout";
@@ -37,7 +37,7 @@ impl LlmTool for GetSelectedWorkout {
     fn definition(&self) -> LlmToolDefinition {
         LlmToolDefinition {
             name: self.name().to_string(),
-            description: "Get detailed workout data for a specific date. Returns completed workouts with full statistics, raw power/cadence/heart-rate streams, and AI conversation history. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
+            description: "Get detailed workout data for a specific date. Returns completed workouts with full statistics, capped raw power/cadence/heart-rate streams, and AI conversation history. Also returns planned workouts (if future or not completed) and basic race info if no completed workout exists for that day.".to_string(),
             input_schema_json: json!({
                 "type": "object",
                 "additionalProperties": false,

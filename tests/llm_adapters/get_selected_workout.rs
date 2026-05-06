@@ -125,19 +125,7 @@ async fn tool_loop_sends_get_selected_workout_definition_and_replays_result() {
         .map(|tool| tool.name.as_str())
         .collect::<Vec<_>>();
     assert!(first_tool_names.contains(&"simulate_forward_load"));
-    assert!(first_tool_names.contains(&"get_selected_workout"));
-
-    let selected_tool = requests[0]
-        .tools
-        .iter()
-        .find(|tool| tool.name == "get_selected_workout")
-        .expect("get_selected_workout tool should be exposed");
-    assert!(selected_tool
-        .description
-        .contains("raw power/cadence/heart-rate streams"));
-    assert!(selected_tool
-        .input_schema_json
-        .contains(r#""required":["date"]"#));
+    assert!(!first_tool_names.contains(&"get_selected_workout"));
 
     let replayed_tool_result = requests[1]
         .conversation

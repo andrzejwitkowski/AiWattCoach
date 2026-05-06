@@ -19,7 +19,7 @@ pub fn project_planned_workout_entry(
     let raw_workout_doc = if workout.rest_day {
         None
     } else {
-        Some(serialize_planned_workout(workout))
+        Some(crate::domain::planned_workouts::serialize_canonical_planned_workout(workout))
     };
 
     CalendarEntryView {
@@ -160,72 +160,6 @@ fn planned_workout_title(workout: &PlannedWorkout) -> String {
             _ => None,
         })
         .unwrap_or_else(|| "Planned workout".to_string())
-}
-
-fn serialize_planned_workout(workout: &PlannedWorkout) -> String {
-    let structured = crate::domain::intervals::PlannedWorkout {
-        lines: workout
-            .workout
-            .lines
-            .iter()
-            .cloned()
-            .map(map_canonical_line_to_intervals_line)
-            .collect(),
-    };
-
-    crate::domain::intervals::serialize_planned_workout(&structured)
-}
-
-fn map_canonical_line_to_intervals_line(
-    line: crate::domain::planned_workouts::PlannedWorkoutLine,
-) -> crate::domain::intervals::PlannedWorkoutLine {
-    match line {
-        crate::domain::planned_workouts::PlannedWorkoutLine::BlankLine => {
-            crate::domain::intervals::PlannedWorkoutLine::BlankLine
-        }
-        crate::domain::planned_workouts::PlannedWorkoutLine::Text(text) => {
-            crate::domain::intervals::PlannedWorkoutLine::Text(
-                crate::domain::intervals::PlannedWorkoutText { text: text.text },
-            )
-        }
-        crate::domain::planned_workouts::PlannedWorkoutLine::Repeat(repeat) => {
-            crate::domain::intervals::PlannedWorkoutLine::Repeat(
-                crate::domain::intervals::PlannedWorkoutRepeat {
-                    title: repeat.title,
-                    count: repeat.count,
-                },
-            )
-        }
-        crate::domain::planned_workouts::PlannedWorkoutLine::Step(step) => {
-            crate::domain::intervals::PlannedWorkoutLine::Step(
-                crate::domain::intervals::PlannedWorkoutStep {
-                    duration_seconds: step.duration_seconds,
-                    kind: match step.kind {
-                        crate::domain::planned_workouts::PlannedWorkoutStepKind::Steady => {
-                            crate::domain::intervals::PlannedWorkoutStepKind::Steady
-                        }
-                        crate::domain::planned_workouts::PlannedWorkoutStepKind::Ramp => {
-                            crate::domain::intervals::PlannedWorkoutStepKind::Ramp
-                        }
-                    },
-                    target: match step.target {
-                        crate::domain::planned_workouts::PlannedWorkoutTarget::PercentFtp {
-                            min,
-                            max,
-                        } => {
-                            crate::domain::intervals::PlannedWorkoutTarget::PercentFtp { min, max }
-                        }
-                        crate::domain::planned_workouts::PlannedWorkoutTarget::WattsRange {
-                            min,
-                            max,
-                        } => {
-                            crate::domain::intervals::PlannedWorkoutTarget::WattsRange { min, max }
-                        }
-                    },
-                },
-            )
-        }
-    }
 }
 
 fn special_day_title(kind: &SpecialDayKind) -> String {

@@ -18,8 +18,8 @@ use aiwattcoach::{
         llm::{
             adapter::LlmAdapter, athlete_summary_generator::AthleteSummaryLlmGenerator,
             dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
-            openai::client::OpenAiClient, openrouter::client::OpenRouterClient,
-            settings_adapter::SettingsLlmConfigProvider,
+            get_selected_workout_data::GetSelectedWorkoutDataAdapter, openai::client::OpenAiClient,
+            openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
             workout_summary_coach::LlmWorkoutCoach,
         },
@@ -98,7 +98,6 @@ use aiwattcoach::{
         IdentityServiceDependencies,
     },
     domain::intervals::IntervalsService,
-    domain::llm_tools::GetSelectedWorkoutDataAdapter,
     domain::planned_workouts::AuthoritativePlannedWorkoutRepository,
     domain::races::{AuthoritativeRaceRepository, RaceService},
     domain::settings::UserSettingsService,
@@ -337,12 +336,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         planned_completed_link_repository.clone(),
         external_sync_state_repository.clone(),
     );
-    let get_selected_workout_data_port = Arc::new(GetSelectedWorkoutDataAdapter {
-        completed: authoritative_completed_workout_repository.clone(),
-        planned: planned_workout_repository.clone(),
-        races: race_repository.clone(),
-        summaries: workout_summary_repository.clone(),
-    });
     let training_load_recompute_service = Arc::new(TrainingLoadRecomputeService::new(
         authoritative_completed_workout_repository.clone(),
         ftp_history_repository.clone(),
@@ -405,6 +398,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         race_repository.clone(),
         external_observation_repository.clone(),
     );
+    let get_selected_workout_data_port = Arc::new(GetSelectedWorkoutDataAdapter {
+        completed: authoritative_completed_workout_repository.clone(),
+        planned: authoritative_planned_workout_repository.clone(),
+        races: authoritative_race_repository.clone(),
+        summaries: workout_summary_repository.clone(),
+    });
     let calendar_entry_view_repository =
         MongoCalendarEntryViewRepository::new(mongo_client.clone(), &mongo_database);
     calendar_entry_view_repository.ensure_indexes().await?;

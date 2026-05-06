@@ -18,9 +18,7 @@ mod simulate_forward_load;
 pub use simulate_forward_load::SimulateForwardLoad;
 
 mod get_selected_workout;
-pub use get_selected_workout::{
-    GetSelectedWorkout, GetSelectedWorkoutDataAdapter, GetSelectedWorkoutDataPort,
-};
+pub use get_selected_workout::{GetSelectedWorkout, GetSelectedWorkoutDataPort};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolScope {
@@ -149,7 +147,7 @@ pub fn run_tool_loop_with_checkpoint(
             conversation.extend(state.provider_transcript.clone());
         }
 
-        let tools = tool_definitions_for_scope(scope, &config.provider);
+        let tools = tool_definitions_for_scope(scope, &config.provider, &tool_context);
         let tool_choice = if tools.is_empty() {
             LlmToolChoice::None
         } else {
@@ -241,14 +239,23 @@ fn tools_for_scope(scope: ToolScope) -> Vec<Box<dyn LlmTool>> {
 pub fn tool_definitions_for_scope(
     scope: ToolScope,
     provider: &LlmProvider,
+    tool_context: &ToolExecutionContext,
 ) -> Vec<LlmToolDefinition> {
     if !provider_supports_tools(provider) {
         return Vec::new();
     }
     tools_for_scope(scope)
         .into_iter()
+        .filter(|tool| tool_available(tool.name(), tool_context))
         .map(|tool| tool.definition())
         .collect()
+}
+
+fn tool_available(name: &str, tool_context: &ToolExecutionContext) -> bool {
+    match name {
+        "get_selected_workout" => tool_context.data_port.is_some(),
+        _ => true,
+    }
 }
 
 fn provider_supports_tools(provider: &LlmProvider) -> bool {
