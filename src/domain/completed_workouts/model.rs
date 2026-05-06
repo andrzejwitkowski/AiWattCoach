@@ -9,7 +9,7 @@ pub enum CompletedWorkoutSeries {
     Strings(Vec<String>),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct CompletedWorkoutMetrics {
     pub training_stress_score: Option<i32>,
     pub normalized_power_watts: Option<i32>,
@@ -100,6 +100,23 @@ pub struct CompletedWorkoutDetails {
     pub gap_zone_times: Vec<i32>,
 }
 
+/// Precomputed mean-max power curve at 5-second resolution.
+///
+/// Holds the maximum average power for successive durations starting at
+/// `duration_start_seconds` and stepping by `duration_step_seconds`.
+/// `max_average_watts[i]` corresponds to duration
+/// `duration_start_seconds + i * duration_step_seconds`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CompletedWorkoutPowerCurve {
+    pub resolution_seconds: u16,
+    pub sample_period_seconds: u16,
+    pub source_samples: usize,
+    pub valid_power_samples: usize,
+    pub duration_start_seconds: u32,
+    pub duration_step_seconds: u16,
+    pub max_average_watts: Vec<Option<i32>>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompletedWorkout {
     pub completed_workout_id: String,
@@ -117,6 +134,7 @@ pub struct CompletedWorkout {
     pub metrics: CompletedWorkoutMetrics,
     pub details: CompletedWorkoutDetails,
     pub details_unavailable_reason: Option<String>,
+    pub power_curve_5s: Option<CompletedWorkoutPowerCurve>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -172,6 +190,7 @@ impl CompletedWorkout {
             metrics,
             details,
             details_unavailable_reason,
+            power_curve_5s: None,
         }
     }
 }

@@ -160,6 +160,7 @@ pub(crate) fn sample_completed_workout(
             gap_zone_times: Vec::new(),
         },
         details_unavailable_reason: None,
+        power_curve_5s: None,
     }
 }
 

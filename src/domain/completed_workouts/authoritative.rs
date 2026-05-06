@@ -152,6 +152,16 @@ where
     ) -> BoxFuture<Result<CompletedWorkout, CompletedWorkoutError>> {
         self.workouts.upsert(workout)
     }
+
+    fn set_power_curve_5s_if_missing(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+        curve: crate::domain::completed_workouts::CompletedWorkoutPowerCurve,
+    ) -> BoxFuture<Result<(), CompletedWorkoutError>> {
+        self.workouts
+            .set_power_curve_5s_if_missing(user_id, completed_workout_id, curve)
+    }
 }
 
 impl<Workouts, SyncStates> AuthoritativeCompletedWorkoutRepository<Workouts, SyncStates>

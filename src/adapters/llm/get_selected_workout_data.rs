@@ -1,5 +1,8 @@
 use crate::domain::{
-    completed_workouts::{CompletedWorkout, CompletedWorkoutError, CompletedWorkoutRepository},
+    completed_workouts::{
+        CompletedWorkout, CompletedWorkoutError, CompletedWorkoutPowerCurve,
+        CompletedWorkoutRepository,
+    },
     llm_tools::GetSelectedWorkoutDataPort,
     planned_workouts::{PlannedWorkout, PlannedWorkoutError, PlannedWorkoutRepository},
     races::{Race, RaceError, RaceRepository},
@@ -74,5 +77,15 @@ where
     {
         self.summaries
             .find_by_user_id_and_workout_ids(user_id, workout_ids)
+    }
+
+    fn persist_power_curve_5s_if_missing(
+        &self,
+        user_id: &str,
+        completed_workout_id: &str,
+        curve: CompletedWorkoutPowerCurve,
+    ) -> crate::domain::completed_workouts::BoxFuture<Result<(), CompletedWorkoutError>> {
+        self.completed
+            .set_power_curve_5s_if_missing(user_id, completed_workout_id, curve)
     }
 }
