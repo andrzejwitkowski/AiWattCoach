@@ -1,5 +1,6 @@
 mod context_prelude;
 mod error;
+mod logging;
 mod model;
 mod ports;
 mod transcript;
@@ -12,6 +13,7 @@ pub(crate) use transcript::{
 };
 
 pub use error::LlmError;
+pub use logging::{llm_full_debug_logging_enabled, serialize_logged_body, truncate_logged_body};
 pub use model::{
     hash_text, llm_request_timeout, LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse,
     LlmContextCache, LlmFinishReason, LlmMessageRole, LlmProvider, LlmProviderConfig,

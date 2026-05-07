@@ -61,23 +61,17 @@ impl GoogleOAuthPort for GoogleOAuthClient {
 
         Box::pin(async move {
             let token_form = vec![
-                ("code".to_string(), code.clone()),
-                ("client_id".to_string(), client_id.clone()),
-                ("client_secret".to_string(), client_secret.clone()),
-                ("redirect_uri".to_string(), redirect_url.clone()),
+                ("code".to_string(), code),
+                ("client_id".to_string(), client_id),
+                ("client_secret".to_string(), client_secret),
+                ("redirect_uri".to_string(), redirect_url),
                 ("grant_type".to_string(), "authorization_code".to_string()),
             ];
             logging::log_request("POST", GOOGLE_TOKEN_URL, &token_form);
 
             let token_response = client
                 .post(GOOGLE_TOKEN_URL)
-                .form(&[
-                    ("code", code.as_str()),
-                    ("client_id", client_id.as_str()),
-                    ("client_secret", client_secret.as_str()),
-                    ("redirect_uri", redirect_url.as_str()),
-                    ("grant_type", "authorization_code"),
-                ])
+                .form(&token_form)
                 .send()
                 .await
                 .map_err(|error| IdentityError::External(error.to_string()))?;

@@ -3,6 +3,7 @@ use aiwattcoach::{
     domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition},
 };
 
+use crate::shared_support::tracing_capture::capture_tracing_logs;
 use crate::support::{
     gemini_client, openai_client, openai_forbidden_client, openrouter_client, sample_request,
     MockServer,
@@ -504,6 +505,38 @@ async fn openrouter_client_retries_once_after_empty_assistant_turn() {
 
     let requests = server.requests();
     assert_eq!(requests.len(), 2);
+}
+
+#[tokio::test]
+async fn openrouter_client_logs_success_response_body() {
+    let server = MockServer::start().await;
+    let client = openrouter_client(&server.base_url);
+
+    let (_, logs) = capture_tracing_logs(|| async {
+        client
+            .chat(
+                LlmProviderConfig {
+                    provider: LlmProvider::OpenRouter,
+                    model: "openai/gpt-4o-mini".to_string(),
+                    api_key: "or-key".to_string(),
+                },
+                sample_request(),
+            )
+            .await
+            .unwrap()
+    })
+    .await;
+
+    assert!(
+        logs.contains("sending openrouter chat request"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("openrouter chat request succeeded"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("\"response_body\":"), "logs were: {logs}");
+    assert!(logs.contains("OpenRouter says hi"), "logs were: {logs}");
 }
 
 #[tokio::test]
