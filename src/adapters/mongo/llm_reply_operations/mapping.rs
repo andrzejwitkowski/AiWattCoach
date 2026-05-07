@@ -151,6 +151,7 @@ fn failure_kind_as_str(failure_kind: &LlmReplyOperationFailureKind) -> &'static 
         LlmReplyOperationFailureKind::ProviderRejected => "provider_rejected",
         LlmReplyOperationFailureKind::RateLimited => "rate_limited",
         LlmReplyOperationFailureKind::InvalidResponse => "invalid_response",
+        LlmReplyOperationFailureKind::Checkpoint => "checkpoint",
         LlmReplyOperationFailureKind::Internal => "internal",
     }
 }
@@ -166,6 +167,7 @@ fn map_failure_kind(value: String) -> Result<LlmReplyOperationFailureKind, Strin
         "provider_rejected" => Ok(LlmReplyOperationFailureKind::ProviderRejected),
         "rate_limited" => Ok(LlmReplyOperationFailureKind::RateLimited),
         "invalid_response" => Ok(LlmReplyOperationFailureKind::InvalidResponse),
+        "checkpoint" => Ok(LlmReplyOperationFailureKind::Checkpoint),
         "internal" => Ok(LlmReplyOperationFailureKind::Internal),
         other => Err(format!("unknown reply operation failure kind: {other}")),
     }

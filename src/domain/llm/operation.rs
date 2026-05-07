@@ -18,6 +18,7 @@ pub enum LlmReplyOperationFailureKind {
     ProviderRejected,
     RateLimited,
     InvalidResponse,
+    Checkpoint,
     Internal,
 }
 
@@ -33,7 +34,8 @@ impl LlmReplyOperationFailureKind {
             LlmError::ProviderRejected(_) => Self::ProviderRejected,
             LlmError::RateLimited(_) => Self::RateLimited,
             LlmError::InvalidResponse(_) => Self::InvalidResponse,
-            LlmError::Checkpoint(_) | LlmError::Internal(_) => Self::Internal,
+            LlmError::Checkpoint(_) => Self::Checkpoint,
+            LlmError::Internal(_) => Self::Internal,
         }
     }
 
@@ -61,6 +63,9 @@ impl LlmReplyOperationFailureKind {
             Self::InvalidResponse => LlmError::InvalidResponse(
                 message.unwrap_or_else(|| "invalid provider response".to_string()),
             ),
+            Self::Checkpoint => {
+                LlmError::Checkpoint(message.unwrap_or_else(|| "checkpoint error".to_string()))
+            }
             Self::Internal => {
                 LlmError::Internal(message.unwrap_or_else(|| "internal llm error".to_string()))
             }
@@ -70,7 +75,11 @@ impl LlmReplyOperationFailureKind {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Self::Transport | Self::RateLimited | Self::InvalidResponse | Self::Internal
+            Self::Transport
+                | Self::RateLimited
+                | Self::InvalidResponse
+                | Self::Checkpoint
+                | Self::Internal
         )
     }
 }
