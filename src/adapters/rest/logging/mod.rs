@@ -8,6 +8,8 @@ use std::sync::OnceLock;
 
 use tower::{Layer, Service};
 
+pub const DEFAULT_LOG_PREVIEW_MAX_BODY_BYTES: usize = 200 * 1024;
+
 /// Per-endpoint logging configuration.
 ///
 /// Attach this to request extensions via a layer to control
@@ -27,7 +29,7 @@ impl Default for EndpointLogConfig {
         Self {
             log_request_body: false,
             log_response_body: false,
-            max_body_bytes: 204800,
+            max_body_bytes: DEFAULT_LOG_PREVIEW_MAX_BODY_BYTES,
         }
     }
 }
@@ -145,7 +147,7 @@ mod tests {
         let config = EndpointLogConfig::default();
         assert!(!config.log_request_body);
         assert!(!config.log_response_body);
-        assert_eq!(config.max_body_bytes, 204800);
+        assert_eq!(config.max_body_bytes, DEFAULT_LOG_PREVIEW_MAX_BODY_BYTES);
     }
 
     #[test]
@@ -205,6 +207,6 @@ mod tests {
 
         assert!(!config.log_request_body);
         assert!(!config.log_response_body);
-        assert_eq!(config.max_body_bytes, 204800);
+        assert_eq!(config.max_body_bytes, DEFAULT_LOG_PREVIEW_MAX_BODY_BYTES);
     }
 }

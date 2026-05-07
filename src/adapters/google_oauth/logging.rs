@@ -1,4 +1,5 @@
 use reqwest::StatusCode;
+use sha2::Digest;
 
 use crate::telemetry::is_sensitive_key;
 
@@ -17,7 +18,8 @@ pub(super) fn log_request(method: &str, url: &str, body: &[(String, String)]) {
 }
 
 pub(super) fn log_response(method: &str, url: &str, status: StatusCode, body: &str) {
-    let body = truncate_logged_body(body);
+    let response_body_bytes = body.len();
+    let response_body_hash = body_hash(body.as_bytes());
 
     if status.is_server_error() {
         tracing::error!(
@@ -25,7 +27,8 @@ pub(super) fn log_response(method: &str, url: &str, status: StatusCode, body: &s
             http.method = method,
             http.url = url,
             http.status_code = status.as_u16(),
-            response_body = body,
+            response_body_bytes,
+            response_body_hash,
             "outgoing response"
         );
     } else if status.is_client_error() {
@@ -34,7 +37,8 @@ pub(super) fn log_response(method: &str, url: &str, status: StatusCode, body: &s
             http.method = method,
             http.url = url,
             http.status_code = status.as_u16(),
-            response_body = body,
+            response_body_bytes,
+            response_body_hash,
             "outgoing response"
         );
     } else {
@@ -43,7 +47,8 @@ pub(super) fn log_response(method: &str, url: &str, status: StatusCode, body: &s
             http.method = method,
             http.url = url,
             http.status_code = status.as_u16(),
-            response_body = body,
+            response_body_bytes,
+            response_body_hash,
             "outgoing response"
         );
     }
@@ -53,7 +58,7 @@ pub(super) fn preview_form_body(body: &[(String, String)]) -> String {
     let redacted = body
         .iter()
         .map(|(key, value)| {
-            let safe_value = if is_sensitive_key(key) {
+            let safe_value = if is_sensitive_oauth_form_key(key) {
                 "[REDACTED]".to_string()
             } else {
                 value.clone()
@@ -75,4 +80,37 @@ pub(super) fn truncate_logged_body(body: &str) -> String {
 
     let truncated: String = body.chars().take(MAX_LOGGED_BODY_CHARS).collect();
     format!("{truncated}...(truncated)")
+}
+
+fn is_sensitive_oauth_form_key(key: &str) -> bool {
+    key.eq_ignore_ascii_case("code") || is_sensitive_key(key)
+}
+
+fn body_hash(bytes: &[u8]) -> String {
+    let digest = sha2::Sha256::digest(bytes);
+    format!("{digest:x}")[..12].to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{body_hash, preview_form_body};
+
+    #[test]
+    fn preview_form_body_redacts_oauth_code() {
+        let preview = preview_form_body(&[
+            ("code".to_string(), "oauth-code-123".to_string()),
+            ("grant_type".to_string(), "authorization_code".to_string()),
+        ]);
+
+        assert!(preview.contains("[REDACTED]"));
+        assert!(!preview.contains("oauth-code-123"));
+    }
+
+    #[test]
+    fn body_hash_returns_short_sha_preview() {
+        let hash = body_hash(br#"{"access_token":"secret"}"#);
+
+        assert_eq!(hash.len(), 12);
+        assert!(hash.chars().all(|ch| ch.is_ascii_hexdigit()));
+    }
 }

@@ -454,6 +454,52 @@ mod tests {
     }
 
     #[test]
+    fn format_request_body_redacts_sensitive_json_fields() {
+        let preview = format_request_body(&Method::POST, br#"{"api_key":"secret","label":"safe"}"#);
+
+        assert!(preview.contains("[REDACTED]"));
+        assert!(!preview.contains("secret"));
+        assert!(preview.contains("safe"));
+    }
+
+    #[test]
+    fn format_request_body_reports_not_applicable_for_get() {
+        let preview = format_request_body(&Method::GET, br#"{"api_key":"secret"}"#);
+
+        assert!(preview.contains("not applicable for GET"));
+    }
+
+    #[test]
+    fn format_request_body_summarizes_binary_payloads() {
+        let preview = format_request_body(&Method::POST, &[0, 159, 146, 150]);
+
+        assert!(preview.contains("binary("));
+    }
+
+    #[test]
+    fn format_response_body_redacts_json_payloads() {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+
+        let preview =
+            format_response_body(br#"{"access_token":"secret","label":"safe"}"#, &headers);
+
+        assert!(preview.contains("[REDACTED]"));
+        assert!(!preview.contains("secret"));
+        assert!(preview.contains("safe"));
+    }
+
+    #[test]
+    fn format_response_body_summarizes_non_json_payloads() {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "text/plain".parse().unwrap());
+
+        let preview = format_response_body(b"plain text", &headers);
+
+        assert!(preview.contains("binary("));
+    }
+
+    #[test]
     fn sanitized_url_keeps_safe_intervals_query_params() {
         let url = reqwest::Url::parse("https://intervals.icu/api/v1/athlete/athlete-7/activities?oldest=2026-03-01&newest=2026-03-31&page=2&per_page=20&api_key=secret").unwrap();
         assert_eq!(

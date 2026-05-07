@@ -63,7 +63,7 @@ async fn execute_and_log_with_body_request(
 
     let response_body_preview = format_response_body(&body, status);
 
-    log_response(&method, &url, status, latency, Some(&response_body_preview));
+    log_response(&method, &url, status, latency, &response_body_preview);
 
     Ok(LoggedResponse { status, body })
 }
@@ -125,9 +125,13 @@ fn preview_text(text: &str) -> String {
     )
 }
 
-fn format_response_body(bytes: &[u8], _status: StatusCode) -> String {
+fn format_response_body(bytes: &[u8], status: StatusCode) -> String {
     if bytes.is_empty() {
         return "(empty)".to_string();
+    }
+
+    if status.is_success() {
+        return format_binary_body(bytes);
     }
 
     let body_str = match std::str::from_utf8(bytes) {
@@ -216,10 +220,10 @@ fn log_response(
     url: &reqwest::Url,
     status: StatusCode,
     latency: std::time::Duration,
-    body_preview: Option<&str>,
+    body_preview: &str,
 ) {
-    match (response_log_level(status), body_preview) {
-        (tracing::Level::ERROR, Some(body)) => tracing::event!(
+    match response_log_level(status) {
+        tracing::Level::ERROR => tracing::event!(
             tracing::Level::ERROR,
             provider = CLIENT_NAME,
             client = CLIENT_LABEL,
@@ -227,10 +231,10 @@ fn log_response(
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
-            response_body = body,
+            response_body = body_preview,
             "outgoing response"
         ),
-        (tracing::Level::WARN, Some(body)) => tracing::event!(
+        tracing::Level::WARN => tracing::event!(
             tracing::Level::WARN,
             provider = CLIENT_NAME,
             client = CLIENT_LABEL,
@@ -238,39 +242,8 @@ fn log_response(
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
-            response_body = body,
+            response_body = body_preview,
             "outgoing response"
-        ),
-        (_, Some(body)) => tracing::event!(
-            tracing::Level::INFO,
-            provider = CLIENT_NAME,
-            client = CLIENT_LABEL,
-            http.method = %method,
-            http.url = %sanitized_url(url),
-            http.status_code = status.as_u16(),
-            latency_ms = latency.as_millis(),
-            response_body = body,
-            "outgoing response"
-        ),
-        (tracing::Level::ERROR, None) => tracing::event!(
-            tracing::Level::ERROR,
-            provider = CLIENT_NAME,
-            client = CLIENT_LABEL,
-            http.method = %method,
-            http.url = %sanitized_url(url),
-            http.status_code = status.as_u16(),
-            latency_ms = latency.as_millis(),
-            "outgoing response (no body)"
-        ),
-        (tracing::Level::WARN, None) => tracing::event!(
-            tracing::Level::WARN,
-            provider = CLIENT_NAME,
-            client = CLIENT_LABEL,
-            http.method = %method,
-            http.url = %sanitized_url(url),
-            http.status_code = status.as_u16(),
-            latency_ms = latency.as_millis(),
-            "outgoing response (no body)"
         ),
         _ => tracing::event!(
             tracing::Level::INFO,
@@ -280,7 +253,8 @@ fn log_response(
             http.url = %sanitized_url(url),
             http.status_code = status.as_u16(),
             latency_ms = latency.as_millis(),
-            "outgoing response (no body)"
+            response_body = body_preview,
+            "outgoing response"
         ),
     }
 }
@@ -356,8 +330,8 @@ fn sanitized_url(url: &reqwest::Url) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_request_body, sanitized_url};
-    use reqwest::Method;
+    use super::{format_request_body, format_response_body, sanitized_url};
+    use reqwest::{Method, StatusCode};
 
     #[test]
     fn format_request_body_redacts_workout_token_in_form_preview() {
@@ -370,6 +344,25 @@ mod tests {
         assert!(preview.contains("workout[workout_token]"));
         assert!(preview.contains("[REDACTED]"));
         assert!(!preview.contains("secret-token"));
+    }
+
+    #[test]
+    fn format_response_body_summarizes_success_payloads() {
+        let preview = format_response_body(b"plain success body", StatusCode::OK);
+
+        assert!(preview.starts_with("binary(18 bytes,hash="));
+    }
+
+    #[test]
+    fn format_response_body_redacts_error_json_payloads() {
+        let preview = format_response_body(
+            br#"{"access_token":"secret","reason":"bad request"}"#,
+            StatusCode::BAD_REQUEST,
+        );
+
+        assert!(preview.contains("[REDACTED]"));
+        assert!(!preview.contains("secret"));
+        assert!(preview.contains("bad request"));
     }
 
     #[test]

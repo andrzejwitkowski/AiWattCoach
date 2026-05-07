@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{
     llm::{
-        merge_provider_transcript_entries, LlmChatMessage, LlmChatPort, LlmChatRequest,
-        LlmChatResponse, LlmError, LlmFinishReason, LlmProvider, LlmProviderConfig, LlmToolChoice,
-        LlmToolDefinition,
+        llm_full_debug_logging_enabled, merge_provider_transcript_entries, truncate_logged_body,
+        LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError, LlmFinishReason,
+        LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition,
     },
     training_context::TrainingContext,
     workout_summary::PublicToolCall,
@@ -162,22 +162,57 @@ pub fn run_tool_loop_with_checkpoint(
         }
 
         let available_tools = available_tools_for_scope(scope, &config.provider, &tool_context);
-        let tools = available_tools
+        request.tools = available_tools
             .iter()
             .map(|tool| tool.definition())
             .collect::<Vec<_>>();
-        let tool_choice = if tools.is_empty() {
+        request.tool_choice = if request.tools.is_empty() {
             LlmToolChoice::None
         } else {
             LlmToolChoice::Auto
         };
 
+        tracing::info!(
+            provider = %config.provider,
+            model = %config.model,
+            scope = %tool_scope_name(scope),
+            restored_round_count = state.round_count,
+            restored_provider_transcript_messages = state.provider_transcript.len(),
+            available_tool_names = ?available_tools.iter().map(|tool| tool.name()).collect::<Vec<_>>(),
+            full_debug_logging = llm_full_debug_logging_enabled(),
+            "starting llm tool loop"
+        );
+
         for _ in state.round_count..TOOL_LOOP_MAX_ROUNDS {
+            let round = state.round_count.saturating_add(1);
             request.conversation = conversation.clone();
-            request.tools = tools.clone();
-            request.tool_choice = tool_choice.clone();
+
+            tracing::info!(
+                provider = %config.provider,
+                model = %config.model,
+                scope = %tool_scope_name(scope),
+                round,
+                conversation_messages = request.conversation.len(),
+                provider_transcript_messages = state.provider_transcript.len(),
+                tool_count = request.tools.len(),
+                tool_choice = %tool_choice_name(&request.tool_choice),
+                conversation = %logged_conversation(&request.conversation),
+                "sending llm tool loop round"
+            );
 
             let response = chat_port.chat(config.clone(), request.clone()).await?;
+            tracing::info!(
+                provider = %response.provider,
+                model = %response.model,
+                scope = %tool_scope_name(scope),
+                round,
+                finish_reason = ?response.finish_reason,
+                tool_call_count = response.tool_calls().len(),
+                assistant_message = %logged_message(&response.message),
+                usage = ?response.usage,
+                cache = ?response.cache,
+                "received llm tool loop response"
+            );
             let new_public_tool_calls = response
                 .tool_calls()
                 .iter()
@@ -195,6 +230,15 @@ pub fn run_tool_loop_with_checkpoint(
             conversation.push(response.message.clone());
 
             if response.tool_calls().is_empty() {
+                tracing::info!(
+                    provider = %response.provider,
+                    model = %response.model,
+                    scope = %tool_scope_name(scope),
+                    round,
+                    finish_reason = ?response.finish_reason,
+                    final_assistant_message = %logged_message(&response.message),
+                    "llm tool loop finished without tool calls"
+                );
                 return Ok(LlmToolLoopOutput {
                     response: response.clone(),
                     state: LlmToolLoopState {
@@ -207,6 +251,20 @@ pub fn run_tool_loop_with_checkpoint(
             }
 
             for tool_call in response.tool_calls() {
+                tracing::info!(
+                    provider = %response.provider,
+                    model = %response.model,
+                    scope = %tool_scope_name(scope),
+                    round,
+                    tool_call_id = %tool_call.id,
+                    tool_name = %tool_call.name,
+                    arguments_json = %truncate_logged_body(&tool_call.arguments_json),
+                    arguments_preview = ?available_tools
+                        .iter()
+                        .find(|tool| tool.name() == tool_call.name.as_str())
+                        .and_then(|tool| tool.preview_arguments(&tool_call.arguments_json)),
+                    "executing llm tool call"
+                );
                 let execution_result = execute_available_tool_call(
                     available_tools.as_slice(),
                     tool_call.name.as_str(),
@@ -219,10 +277,30 @@ pub fn run_tool_loop_with_checkpoint(
                     ToolExecutionResult::ToolUnavailable(result) => (result, true),
                 };
                 let tool_message = LlmChatMessage::tool(tool_call.id.clone(), result);
+                tracing::info!(
+                    provider = %response.provider,
+                    model = %response.model,
+                    scope = %tool_scope_name(scope),
+                    round,
+                    tool_call_id = %tool_call.id,
+                    tool_name = %tool_call.name,
+                    tool_unavailable,
+                    tool_result = %truncate_logged_body(&tool_message.content),
+                    "completed llm tool call"
+                );
                 provider_transcript.push(tool_message.clone());
                 conversation.push(tool_message);
 
                 if tool_unavailable {
+                    tracing::warn!(
+                        provider = %response.provider,
+                        model = %response.model,
+                        scope = %tool_scope_name(scope),
+                        round,
+                        tool_call_id = %tool_call.id,
+                        tool_name = %tool_call.name,
+                        "llm tool loop stopped because requested tool was unavailable"
+                    );
                     return Ok(LlmToolLoopOutput {
                         response: response.clone(),
                         state: LlmToolLoopState {
@@ -247,6 +325,14 @@ pub fn run_tool_loop_with_checkpoint(
             }
         }
 
+        tracing::warn!(
+            provider = %config.provider,
+            model = %config.model,
+            scope = %tool_scope_name(scope),
+            max_rounds = TOOL_LOOP_MAX_ROUNDS,
+            "llm tool loop exceeded max rounds"
+        );
+
         Err(LlmError::InvalidResponse(format!(
             "tool loop exceeded {TOOL_LOOP_MAX_ROUNDS} rounds"
         )))
@@ -265,6 +351,51 @@ fn all_tools() -> Vec<Box<dyn LlmTool>> {
 /// Resolve a tool by its declared name.
 fn find_tool(name: &str) -> Option<Box<dyn LlmTool>> {
     all_tools().into_iter().find(|tool| tool.name() == name)
+}
+
+fn tool_scope_name(scope: ToolScope) -> &'static str {
+    match scope {
+        ToolScope::WorkoutSummaryChat => "workout_summary_chat",
+        ToolScope::CalendarCoachChat => "calendar_coach_chat",
+        ToolScope::TrainingPlanGeneration => "training_plan_generation",
+    }
+}
+
+fn tool_choice_name(choice: &LlmToolChoice) -> &'static str {
+    match choice {
+        LlmToolChoice::None => "none",
+        LlmToolChoice::Auto => "auto",
+        LlmToolChoice::Required => "required",
+        LlmToolChoice::Named(_) => "named",
+    }
+}
+
+fn logged_conversation(conversation: &[LlmChatMessage]) -> String {
+    if llm_full_debug_logging_enabled() {
+        truncate_logged_body(
+            &serde_json::to_string(conversation)
+                .unwrap_or_else(|error| format!("(conversation serialization failed: {error})")),
+        )
+    } else {
+        format!("{} messages", conversation.len())
+    }
+}
+
+fn logged_message(message: &LlmChatMessage) -> String {
+    if llm_full_debug_logging_enabled() {
+        truncate_logged_body(
+            &serde_json::to_string(message)
+                .unwrap_or_else(|error| format!("(message serialization failed: {error})")),
+        )
+    } else {
+        format!(
+            "role={:?} content_chars={} tool_calls={} tool_call_id_present={}",
+            message.role,
+            message.content.chars().count(),
+            message.tool_calls.len(),
+            message.tool_call_id.is_some()
+        )
+    }
 }
 
 /// Tools exposed for a given scope.  Filters the global registry.

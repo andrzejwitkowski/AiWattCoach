@@ -440,6 +440,9 @@ fn training_plan_planning_guidelines(availability_configured: bool) -> String {
     )
 }
 
+/// Uses the current planning window end as the synthetic "today" anchor for
+/// both initial generation and correction. Callers should rebuild the training
+/// context before correction if they want that planning anchor refreshed.
 fn training_plan_tool_context_today(training_context: &TrainingContext) -> String {
     training_context.history.window_end.clone()
 }
