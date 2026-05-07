@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-07 | user | PR #192 Google OAuth adapter logging review follow-up
+
+- Problem: the adapter-body-logging branch still logged Google OAuth token-exchange request data too broadly and emitted raw success response bodies for token and userinfo calls. That left the authorization `code` visible in request previews and kept secret-bearing provider responses in normal logs longer than needed.
+- Fix: updated `src/adapters/google_oauth/logging.rs` to redact the OAuth `code` explicitly in form previews and to replace raw response-body logging with `response_body_bytes` plus a short `response_body_hash`. Also simplified `src/adapters/google_oauth/client.rs` so the logged token form is the same payload sent on the wire, without extra cloned copies. Added focused unit coverage for the new redaction and hash helper behavior.
+- Prevention: for OAuth/token adapters, treat authorization codes like secrets even if the shared redaction helper does not already catch the exact field name. When success responses can contain bearer tokens or profile data, prefer body size/hash diagnostics over logging the raw payload.
+
 ### 2026-05-07 | user | missing human-debuggable LLM tool-loop logs
 
 - Problem: debugging calendar and coach failures was still too indirect because the logs showed outbound provider requests, but not the actual shared tool-loop progression. We could not see a clean round-by-round trace of assistant tool calls, tool arguments, tool results, or the final assistant turn, which made incidents like `get_selected_workout` hard to diagnose from logs alone.

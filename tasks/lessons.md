@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- For OAuth adapter logging, redact authorization `code` fields explicitly even if the generic sensitive-key helper does not catch that exact name, and avoid logging raw token/userinfo success bodies when size-plus-hash diagnostics are enough.
 - If provider request logs still leave LLM failures opaque, instrument the shared tool loop itself instead of only the outer adapter. For human debugging you usually need the whole sequence: round start, provider assistant message, tool call, tool result, and final assistant turn. If that is too verbose for normal operation, put the full payload logging behind an explicit env flag rather than forcing operators to guess from message counts.
 - If one preview model path keeps returning structurally empty completions after the existing retry for that exact provider error, prefer a narrow workflow-specific fallback to a more stable model on the same provider before adding a global fallback. Keep the trigger exact so normal tool, rate-limit, and prompt errors still surface without silent model switching.
 - When a shared tool loop or orchestrator changes from replaying an error into another provider round to stopping immediately, update adapter tests to match the new round-count and transcript contract. Do not leave tests asserting a second request or an older tool-local error payload after the control-flow boundary has intentionally moved up a layer.
