@@ -1,22 +1,19 @@
 use crate::domain::llm::LlmError;
+use crate::domain::llm::{
+    resolve_llm_reply_operation, LlmReplyClaimResult, LlmReplyOperation,
+    LlmReplyResolutionWorkflow, ResolvedLlmReplyOperation,
+};
 
 use super::{
     super::{
         BoxFuture, CoachConversation, CoachConversationError, CoachConversationMessage,
-        CoachConversationMessageRole, CoachConversationReply, CoachConversationReplyClaimResult,
-        CoachConversationReplyOperation, CoachConversationReplyOperationStatus,
+        CoachConversationMessageRole, CoachConversationReply, CoachConversationReplyOperation,
         CompletedCoachConversationReply, PendingCoachConversationReplyCheckpoint,
         PersistedConversationUserMessage, SendConversationMessageResult,
     },
     transcript::final_assistant_text,
     CoachConversationUseCases, SharedCoachConversationService, STALE_PENDING_TIMEOUT_SECONDS,
 };
-
-enum CalendarReplyOperationResolution {
-    Reply(CoachConversationReply),
-    Continue(CoachConversationReplyOperation),
-    Error(CoachConversationError),
-}
 
 impl<Conversations, Messages, Ops, Time, Ids>
     SharedCoachConversationService<Conversations, Messages, Ops, Time, Ids>
@@ -27,52 +24,6 @@ where
     Time: crate::domain::identity::Clock + Clone,
     Ids: crate::domain::identity::IdGenerator + Clone,
 {
-    async fn handle_claimed_calendar_reply_operation(
-        &self,
-        conversation: &CoachConversation,
-        user_message: &CoachConversationMessage,
-        operation: CoachConversationReplyOperation,
-    ) -> Result<CalendarReplyOperationResolution, CoachConversationError> {
-        if let Some(reply) = self
-            .try_recover_pending_operation(conversation, &operation)
-            .await?
-        {
-            return Ok(CalendarReplyOperationResolution::Reply(reply));
-        }
-
-        let _ = user_message;
-        Ok(CalendarReplyOperationResolution::Continue(operation))
-    }
-
-    async fn handle_existing_calendar_reply_operation(
-        &self,
-        conversation: &CoachConversation,
-        existing: CoachConversationReplyOperation,
-    ) -> Result<CalendarReplyOperationResolution, CoachConversationError> {
-        match existing.status {
-            CoachConversationReplyOperationStatus::Completed => {
-                Ok(CalendarReplyOperationResolution::Reply(
-                    self.get_completed_reply(conversation, existing).await?,
-                ))
-            }
-            CoachConversationReplyOperationStatus::Failed => Ok(
-                CalendarReplyOperationResolution::Error(self.map_existing_llm_failure(existing)),
-            ),
-            CoachConversationReplyOperationStatus::Pending => {
-                if let Some(reply) = self
-                    .try_recover_pending_operation(conversation, &existing)
-                    .await?
-                {
-                    return Ok(CalendarReplyOperationResolution::Reply(reply));
-                }
-
-                Ok(CalendarReplyOperationResolution::Error(
-                    CoachConversationError::ReplyAlreadyPending,
-                ))
-            }
-        }
-    }
-
     async fn request_and_checkpoint_calendar_reply(
         &self,
         conversation: &CoachConversation,
@@ -134,17 +85,7 @@ where
         llm_output: &crate::domain::llm_tools::LlmToolLoopOutput,
     ) -> Result<CoachConversationReplyOperation, CoachConversationError> {
         let operation =
-            operation.record_provider_response(PendingCoachConversationReplyCheckpoint {
-                provider: llm_output.response.provider.clone(),
-                model: llm_output.response.model.clone(),
-                provider_request_id: llm_output.response.provider_request_id.clone(),
-                provider_cache_id: llm_output.response.cache.provider_cache_id.clone(),
-                token_usage: llm_output.response.usage.clone(),
-                cache_usage: llm_output.response.cache.clone(),
-                provider_transcript: llm_output.state.provider_transcript.clone(),
-                finish_reason: llm_output.state.finish_reason.clone(),
-                updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
-            });
+            operation.record_provider_response(self.build_pending_reply_checkpoint(llm_output));
         let operation = self
             .persist_post_provider_operation(operation, "persist_provider_response_checkpoint")
             .await?;
@@ -170,6 +111,28 @@ where
         }
 
         Ok(operation)
+    }
+
+    fn build_pending_reply_checkpoint(
+        &self,
+        llm_output: &crate::domain::llm_tools::LlmToolLoopOutput,
+    ) -> PendingCoachConversationReplyCheckpoint {
+        LlmReplyOperation::pending_checkpoint_from_tool_loop(
+            llm_output,
+            self.clock.now_epoch_seconds(),
+        )
+    }
+
+    fn build_completed_reply(
+        &self,
+        llm_response: &crate::domain::llm::LlmChatResponse,
+        reply_message_id: String,
+    ) -> CompletedCoachConversationReply {
+        LlmReplyOperation::completed_reply_from_response(
+            llm_response,
+            reply_message_id,
+            self.clock.now_epoch_seconds(),
+        )
     }
 }
 
@@ -323,38 +286,10 @@ where
                 .await?;
             let pending_operation =
                 service.build_pending_reply_operation(&conversation, &user_message);
-            let stale_before_epoch_seconds =
-                service.clock.now_epoch_seconds() - STALE_PENDING_TIMEOUT_SECONDS;
-
-            let operation = match service
-                .reply_operations
-                .claim_pending(pending_operation, stale_before_epoch_seconds)
-                .await?
-            {
-                CoachConversationReplyClaimResult::Claimed(operation) => {
-                    match service
-                        .handle_claimed_calendar_reply_operation(
-                            &conversation,
-                            &user_message,
-                            operation,
-                        )
-                        .await?
-                    {
-                        CalendarReplyOperationResolution::Reply(reply) => return Ok(reply),
-                        CalendarReplyOperationResolution::Continue(operation) => operation,
-                        CalendarReplyOperationResolution::Error(error) => return Err(error),
-                    }
-                }
-                CoachConversationReplyClaimResult::Existing(existing) => {
-                    match service
-                        .handle_existing_calendar_reply_operation(&conversation, existing)
-                        .await?
-                    {
-                        CalendarReplyOperationResolution::Reply(reply) => return Ok(reply),
-                        CalendarReplyOperationResolution::Continue(operation) => operation,
-                        CalendarReplyOperationResolution::Error(error) => return Err(error),
-                    }
-                }
+            let operation = match resolve_llm_reply_operation(&service, pending_operation).await? {
+                ResolvedLlmReplyOperation::Continue(operation) => *operation,
+                ResolvedLlmReplyOperation::Reply(reply) => return Ok(reply),
+                ResolvedLlmReplyOperation::Error(error) => return Err(error),
             };
 
             let messages = service
@@ -383,7 +318,7 @@ where
                 return Err(CoachConversationError::Llm(error));
             };
 
-            let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+            let coach_message_id = operation.reply_message_id.clone().ok_or_else(|| {
                 CoachConversationError::Repository(
                     "pending coach reply operation missing reserved coach message id".to_string(),
                 )
@@ -397,16 +332,8 @@ where
                     None,
                 )
                 .await?;
-            let completed_reply = CompletedCoachConversationReply {
-                provider: llm_output.response.provider,
-                model: llm_output.response.model,
-                provider_request_id: llm_output.response.provider_request_id,
-                coach_message_id: coach_message.id.clone(),
-                provider_cache_id: llm_output.response.cache.provider_cache_id.clone(),
-                token_usage: llm_output.response.usage,
-                cache_usage: llm_output.response.cache,
-                updated_at_epoch_seconds: service.clock.now_epoch_seconds(),
-            };
+            let completed_reply =
+                service.build_completed_reply(&llm_output.response, coach_message.id.clone());
             service
                 .persist_post_provider_operation(
                     operation.mark_completed(completed_reply),
@@ -424,5 +351,72 @@ where
                 athlete_summary_was_regenerated: false,
             })
         })
+    }
+}
+
+impl<Conversations, Messages, Ops, Time, Ids> LlmReplyResolutionWorkflow
+    for SharedCoachConversationService<Conversations, Messages, Ops, Time, Ids>
+where
+    Conversations: super::super::CoachConversationRepository + Clone,
+    Messages: super::super::CoachConversationMessageRepository + Clone,
+    Ops: super::super::CoachConversationReplyOperationRepository + Clone,
+    Time: crate::domain::identity::Clock + Clone,
+    Ids: crate::domain::identity::IdGenerator + Clone,
+{
+    type Reply = CoachConversationReply;
+    type Error = CoachConversationError;
+
+    fn stale_before_epoch_seconds(&self) -> i64 {
+        self.clock.now_epoch_seconds() - STALE_PENDING_TIMEOUT_SECONDS
+    }
+
+    fn claim_pending(
+        &self,
+        operation: CoachConversationReplyOperation,
+        stale_before_epoch_seconds: i64,
+    ) -> BoxFuture<Result<LlmReplyClaimResult, Self::Error>> {
+        let reply_operations = self.reply_operations.clone();
+        Box::pin(async move {
+            reply_operations
+                .claim_pending(operation, stale_before_epoch_seconds)
+                .await
+        })
+    }
+
+    fn recover_pending_operation(
+        &self,
+        operation: &CoachConversationReplyOperation,
+    ) -> BoxFuture<Result<Option<Self::Reply>, Self::Error>> {
+        let service = self.clone();
+        let operation = operation.clone();
+        Box::pin(async move {
+            let conversation = service
+                .get_existing_active_conversation(&operation.user_id, &operation.scope_id)
+                .await?;
+            service
+                .try_recover_pending_operation(&conversation, &operation)
+                .await
+        })
+    }
+
+    fn get_completed_reply(
+        &self,
+        operation: CoachConversationReplyOperation,
+    ) -> BoxFuture<Result<Self::Reply, Self::Error>> {
+        let service = self.clone();
+        Box::pin(async move {
+            let conversation = service
+                .get_existing_active_conversation(&operation.user_id, &operation.scope_id)
+                .await?;
+            service.get_completed_reply(&conversation, operation).await
+        })
+    }
+
+    fn map_existing_llm_failure(&self, operation: CoachConversationReplyOperation) -> Self::Error {
+        self.existing_llm_failure_to_error(operation)
+    }
+
+    fn reply_already_pending_error(&self) -> Self::Error {
+        CoachConversationError::ReplyAlreadyPending
     }
 }

@@ -236,7 +236,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
         Box::pin(async move {
             let key = (
                 operation.user_id.clone(),
-                operation.workout_id.clone(),
+                operation.scope_id.clone(),
                 operation.user_message_id.clone(),
             );
             let mut operations = operations.lock().unwrap();
@@ -250,7 +250,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
                 };
                 if reclaimable {
                     let fallback_coach_message_id =
-                        operation.coach_message_id.clone().ok_or_else(|| {
+                        operation.reply_message_id.clone().ok_or_else(|| {
                             WorkoutSummaryError::Repository(
                                 "pending coach reply operation missing reserved coach message id"
                                     .to_string(),
@@ -280,7 +280,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
             operations.lock().unwrap().insert(
                 (
                     operation.user_id.clone(),
-                    operation.workout_id.clone(),
+                    operation.scope_id.clone(),
                     operation.user_message_id.clone(),
                 ),
                 operation.clone(),

@@ -33,14 +33,13 @@ use aiwattcoach::{
             calendar_planned_workouts::MongoCalendarPlannedWorkoutSource,
             client::{create_client, ensure_database_exists, verify_connection},
             coach_conversation_messages::MongoCoachConversationMessageRepository,
-            coach_conversation_reply_operations::MongoCoachConversationReplyOperationRepository,
             coach_conversations::MongoCoachConversationRepository,
-            coach_reply_operations::MongoCoachReplyOperationRepository,
             completed_workouts::MongoCompletedWorkoutRepository,
             external_observations::MongoExternalObservationRepository,
             external_sync_states::MongoExternalSyncStateRepository,
             ftp_history::MongoFtpHistoryRepository,
             llm_context_cache::MongoLlmContextCacheRepository,
+            llm_reply_operations::MongoLlmReplyOperationRepository,
             login_state::MongoLoginStateRepository,
             planned_completed_links::MongoPlannedCompletedWorkoutLinkRepository,
             planned_workout_tokens::MongoPlannedWorkoutTokenRepository,
@@ -239,8 +238,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     athlete_summary_generation_operation_repository
         .ensure_indexes()
         .await?;
-    let coach_reply_operation_repository =
-        MongoCoachReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
+    let coach_reply_operation_repository = MongoLlmReplyOperationRepository::new(
+        mongo_client.clone(),
+        &mongo_database,
+        "workout_summary",
+    );
+    let coach_conversation_reply_operation_repository = MongoLlmReplyOperationRepository::new(
+        mongo_client.clone(),
+        &mongo_database,
+        "coach_conversation",
+    );
     coach_reply_operation_repository.ensure_indexes().await?;
     let coach_conversation_repository =
         MongoCoachConversationRepository::new(mongo_client.clone(), &mongo_database);
@@ -248,11 +255,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let coach_conversation_message_repository =
         MongoCoachConversationMessageRepository::new(mongo_client.clone(), &mongo_database);
     coach_conversation_message_repository
-        .ensure_indexes()
-        .await?;
-    let coach_conversation_reply_operation_repository =
-        MongoCoachConversationReplyOperationRepository::new(mongo_client.clone(), &mongo_database);
-    coach_conversation_reply_operation_repository
         .ensure_indexes()
         .await?;
     let training_plan_snapshot_repository =

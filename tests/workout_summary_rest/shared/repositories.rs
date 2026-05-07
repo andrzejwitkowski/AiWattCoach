@@ -246,12 +246,12 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     fn find_by_user_message_id(
         &self,
         user_id: &str,
-        workout_id: &str,
+        scope_id: &str,
         user_message_id: &str,
     ) -> BoxFuture<Result<Option<CoachReplyOperation>, WorkoutSummaryError>> {
         let key = (
             user_id.to_string(),
-            workout_id.to_string(),
+            scope_id.to_string(),
             user_message_id.to_string(),
         );
         let operations = self.operations.clone();
@@ -265,7 +265,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         let key = (
             operation.user_id.clone(),
-            operation.workout_id.clone(),
+            operation.scope_id.clone(),
             operation.user_message_id.clone(),
         );
         let operations = self.operations.clone();
@@ -287,7 +287,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
         let key = (
             operation.user_id.clone(),
-            operation.workout_id.clone(),
+            operation.scope_id.clone(),
             operation.user_message_id.clone(),
         );
         let operations = self.operations.clone();

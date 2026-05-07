@@ -40,7 +40,7 @@ where
         conversation: &CoachConversation,
         operation: &CoachConversationReplyOperation,
     ) -> Result<Option<CoachConversationReply>, CoachConversationError> {
-        let Some(existing_coach_message_id) = operation.coach_message_id.clone() else {
+        let Some(existing_coach_message_id) = operation.reply_message_id.clone() else {
             return Ok(None);
         };
 
@@ -114,7 +114,7 @@ where
             return Err(CoachConversationError::Llm(error));
         };
 
-        let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+        let coach_message_id = operation.reply_message_id.clone().ok_or_else(|| {
             CoachConversationError::Repository(
                 "pending coach reply operation missing reserved coach message id".to_string(),
             )

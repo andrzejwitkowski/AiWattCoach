@@ -89,7 +89,7 @@ where
         workout_id: &str,
         operation: CoachReplyOperation,
     ) -> Result<CoachReply, WorkoutSummaryError> {
-        let coach_message_id = operation.coach_message_id.ok_or_else(|| {
+        let coach_message_id = operation.reply_message_id.ok_or_else(|| {
             WorkoutSummaryError::Repository(
                 "completed coach reply operation missing coach message id".to_string(),
             )
@@ -106,7 +106,7 @@ where
         })
     }
 
-    pub(in super::super) fn map_existing_llm_failure(
+    pub(in super::super) fn existing_llm_failure_to_error(
         &self,
         operation: CoachReplyOperation,
     ) -> WorkoutSummaryError {
@@ -155,7 +155,7 @@ where
                 Ok(saved) => {
                     if attempt > 1 {
                         info!(
-                            workout_id = %saved.workout_id,
+                            workout_id = %saved.scope_id,
                             user_message_id = %saved.user_message_id,
                             attempt,
                             max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
@@ -172,7 +172,7 @@ where
                     }
 
                     warn!(
-                        workout_id = %operation.workout_id,
+                        workout_id = %operation.scope_id,
                         user_message_id = %operation.user_message_id,
                         attempt,
                         max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
@@ -227,7 +227,7 @@ where
         user_message_id: &str,
         operation: &CoachReplyOperation,
     ) -> Result<Option<CoachReply>, WorkoutSummaryError> {
-        let Some(existing_coach_message_id) = operation.coach_message_id.clone() else {
+        let Some(existing_coach_message_id) = operation.reply_message_id.clone() else {
             return Ok(None);
         };
 
@@ -391,7 +391,7 @@ where
         operation: &CoachReplyOperation,
         content: String,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
-        let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+        let coach_message_id = operation.reply_message_id.clone().ok_or_else(|| {
             WorkoutSummaryError::Repository(
                 "pending coach reply operation missing reserved coach message id".to_string(),
             )

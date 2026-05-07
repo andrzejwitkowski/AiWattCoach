@@ -35,12 +35,12 @@ impl InMemoryCoachReplyOperationRepository {
     pub(crate) fn seed(&self, operation: CoachReplyOperation) {
         self.calls.lock().unwrap().push(format!(
             "seed:{}:{}:{:?}",
-            operation.workout_id, operation.user_message_id, operation.status
+            operation.scope_id, operation.user_message_id, operation.status
         ));
         self.operations.lock().unwrap().insert(
             (
                 operation.user_id.clone(),
-                operation.workout_id.clone(),
+                operation.scope_id.clone(),
                 operation.user_message_id.clone(),
             ),
             operation,
@@ -86,11 +86,11 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
         Box::pin(async move {
             calls.lock().unwrap().push(format!(
                 "claim_pending:{}:{}",
-                operation.workout_id, operation.user_message_id
+                operation.scope_id, operation.user_message_id
             ));
             let key = (
                 operation.user_id.clone(),
-                operation.workout_id.clone(),
+                operation.scope_id.clone(),
                 operation.user_message_id.clone(),
             );
             let mut operations = operations.lock().unwrap();
@@ -104,7 +104,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
                 };
                 if reclaimable {
                     let fallback_coach_message_id =
-                        operation.coach_message_id.clone().ok_or_else(|| {
+                        operation.reply_message_id.clone().ok_or_else(|| {
                             WorkoutSummaryError::Repository(
                                 "pending coach reply operation missing reserved coach message id"
                                     .to_string(),
@@ -138,7 +138,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
         Box::pin(async move {
             calls.lock().unwrap().push(format!(
                 "upsert:{}:{}:{:?}",
-                operation.workout_id, operation.user_message_id, operation.status
+                operation.scope_id, operation.user_message_id, operation.status
             ));
             if let Some(message) = fail_next_upsert.lock().unwrap().take() {
                 return Err(WorkoutSummaryError::Repository(message));
@@ -161,7 +161,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
             operations.lock().unwrap().insert(
                 (
                     operation.user_id.clone(),
-                    operation.workout_id.clone(),
+                    operation.scope_id.clone(),
                     operation.user_message_id.clone(),
                 ),
                 operation.clone(),

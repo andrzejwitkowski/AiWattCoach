@@ -8,11 +8,10 @@ use crate::domain::{
 };
 
 use super::{
-    validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyClaimResult,
-    CoachReplyOperation, CoachReplyOperationRepository, CoachReplyOperationStatus,
-    CompletedCoachReply, ConversationMessage, MessageRole, PendingCoachReplyCheckpoint,
-    PersistedUserMessage, SendMessageResult, WorkoutCoach, WorkoutRecap, WorkoutSummary,
-    WorkoutSummaryError, WorkoutSummaryRepository,
+    validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyOperation,
+    CoachReplyOperationRepository, CompletedCoachReply, ConversationMessage, MessageRole,
+    PendingCoachReplyCheckpoint, PersistedUserMessage, SendMessageResult, WorkoutCoach,
+    WorkoutRecap, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
 };
 
 mod internals;

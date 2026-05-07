@@ -1,14 +1,11 @@
 use tracing::{info, warn};
 
-use crate::domain::llm::final_assistant_text;
+use crate::domain::llm::{
+    final_assistant_text, resolve_llm_reply_operation, LlmReplyClaimResult, LlmReplyOperation,
+    LlmReplyResolutionWorkflow, ResolvedLlmReplyOperation,
+};
 
 use super::*;
-
-enum CoachReplyOperationResolution {
-    Continue(CoachReplyOperation),
-    Reply(CoachReply),
-    Error(WorkoutSummaryError),
-}
 
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
 where
@@ -103,15 +100,17 @@ where
         let user_message = self
             .load_persisted_user_message(user_id, &target.storage_workout_id, &user_message_id)
             .await?;
-        let operation = match self
-            .claim_coach_reply_operation(user_id, &target.storage_workout_id, &user_message)
-            .await?
-        {
-            CoachReplyOperationResolution::Continue(operation) => operation,
-            CoachReplyOperationResolution::Reply(reply) => {
+        let pending_operation = self.build_pending_coach_reply_operation(
+            user_id,
+            &target.storage_workout_id,
+            &user_message,
+        );
+        let operation = match resolve_llm_reply_operation(self, pending_operation).await? {
+            ResolvedLlmReplyOperation::Continue(operation) => *operation,
+            ResolvedLlmReplyOperation::Reply(reply) => {
                 return Ok(self.present_coach_reply(reply, &target.requested_workout_id));
             }
-            CoachReplyOperationResolution::Error(error) => return Err(error),
+            ResolvedLlmReplyOperation::Error(error) => return Err(error),
         };
 
         info!(
@@ -169,43 +168,6 @@ where
         Ok(user_message)
     }
 
-    async fn claim_coach_reply_operation(
-        &self,
-        user_id: &str,
-        workout_id: &str,
-        user_message: &ConversationMessage,
-    ) -> Result<CoachReplyOperationResolution, WorkoutSummaryError> {
-        let pending_operation =
-            self.build_pending_coach_reply_operation(user_id, workout_id, user_message);
-        let stale_before_epoch_seconds =
-            self.clock.now_epoch_seconds() - STALE_PENDING_TIMEOUT_SECONDS;
-
-        match self
-            .reply_operations
-            .claim_pending(pending_operation, stale_before_epoch_seconds)
-            .await?
-        {
-            CoachReplyClaimResult::Claimed(operation) => {
-                self.handle_claimed_coach_reply_operation(
-                    user_id,
-                    workout_id,
-                    user_message,
-                    operation,
-                )
-                .await
-            }
-            CoachReplyClaimResult::Existing(existing) => {
-                self.handle_existing_coach_reply_operation(
-                    user_id,
-                    workout_id,
-                    user_message,
-                    existing,
-                )
-                .await
-            }
-        }
-    }
-
     fn build_pending_coach_reply_operation(
         &self,
         user_id: &str,
@@ -221,53 +183,6 @@ where
             self.ids.new_id("message"),
             now,
         )
-    }
-
-    async fn handle_claimed_coach_reply_operation(
-        &self,
-        user_id: &str,
-        workout_id: &str,
-        user_message: &ConversationMessage,
-        operation: CoachReplyOperation,
-    ) -> Result<CoachReplyOperationResolution, WorkoutSummaryError> {
-        if let Some(reply) = self
-            .try_recover_pending_operation(user_id, workout_id, &user_message.id, &operation)
-            .await?
-        {
-            return Ok(CoachReplyOperationResolution::Reply(reply));
-        }
-
-        Ok(CoachReplyOperationResolution::Continue(operation))
-    }
-
-    async fn handle_existing_coach_reply_operation(
-        &self,
-        user_id: &str,
-        workout_id: &str,
-        user_message: &ConversationMessage,
-        existing: CoachReplyOperation,
-    ) -> Result<CoachReplyOperationResolution, WorkoutSummaryError> {
-        match existing.status {
-            CoachReplyOperationStatus::Completed => Ok(CoachReplyOperationResolution::Reply(
-                self.get_completed_reply(user_id, workout_id, existing)
-                    .await?,
-            )),
-            CoachReplyOperationStatus::Failed => Ok(CoachReplyOperationResolution::Error(
-                self.map_existing_llm_failure(existing),
-            )),
-            CoachReplyOperationStatus::Pending => {
-                if let Some(reply) = self
-                    .try_recover_pending_operation(user_id, workout_id, &user_message.id, &existing)
-                    .await?
-                {
-                    return Ok(CoachReplyOperationResolution::Reply(reply));
-                }
-
-                Ok(CoachReplyOperationResolution::Error(
-                    WorkoutSummaryError::ReplyAlreadyPending,
-                ))
-            }
-        }
     }
 
     async fn request_and_checkpoint_coach_reply(
@@ -363,17 +278,8 @@ where
         operation: CoachReplyOperation,
         llm_output: &crate::domain::llm_tools::LlmToolLoopOutput,
     ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
-        let operation = operation.record_provider_response(PendingCoachReplyCheckpoint {
-            provider: llm_output.response.provider.clone(),
-            model: llm_output.response.model.clone(),
-            provider_request_id: llm_output.response.provider_request_id.clone(),
-            provider_cache_id: llm_output.response.cache.provider_cache_id.clone(),
-            token_usage: llm_output.response.usage.clone(),
-            cache_usage: llm_output.response.cache.clone(),
-            provider_transcript: llm_output.state.provider_transcript.clone(),
-            finish_reason: llm_output.state.finish_reason.clone(),
-            updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
-        });
+        let operation =
+            operation.record_provider_response(self.build_pending_reply_checkpoint(llm_output));
         let operation = self
             .persist_post_provider_operation(operation, "persist_success_checkpoint")
             .await?;
@@ -429,7 +335,7 @@ where
         let coach_content = self
             .require_final_assistant_text(operation, llm_response)
             .await?;
-        let coach_message_id = operation.coach_message_id.clone().ok_or_else(|| {
+        let coach_message_id = operation.reply_message_id.clone().ok_or_else(|| {
             WorkoutSummaryError::Repository(
                 "pending coach reply operation missing reserved coach message id".to_string(),
             )
@@ -452,19 +358,33 @@ where
         llm_response: &crate::domain::llm::LlmChatResponse,
         coach_message: &ConversationMessage,
     ) -> Result<(), WorkoutSummaryError> {
-        let completed = operation.mark_completed(CompletedCoachReply {
-            provider: llm_response.provider.clone(),
-            model: llm_response.model.clone(),
-            provider_request_id: llm_response.provider_request_id.clone(),
-            coach_message_id: coach_message.id.clone(),
-            provider_cache_id: llm_response.cache.provider_cache_id.clone(),
-            token_usage: llm_response.usage.clone(),
-            cache_usage: llm_response.cache.clone(),
-            updated_at_epoch_seconds: self.clock.now_epoch_seconds(),
-        });
+        let completed = operation
+            .mark_completed(self.build_completed_reply(llm_response, coach_message.id.clone()));
         self.persist_post_provider_operation(completed, "persist_completed_reply")
             .await?;
         Ok(())
+    }
+
+    fn build_pending_reply_checkpoint(
+        &self,
+        llm_output: &crate::domain::llm_tools::LlmToolLoopOutput,
+    ) -> PendingCoachReplyCheckpoint {
+        LlmReplyOperation::pending_checkpoint_from_tool_loop(
+            llm_output,
+            self.clock.now_epoch_seconds(),
+        )
+    }
+
+    fn build_completed_reply(
+        &self,
+        llm_response: &crate::domain::llm::LlmChatResponse,
+        reply_message_id: String,
+    ) -> CompletedCoachReply {
+        LlmReplyOperation::completed_reply_from_response(
+            llm_response,
+            reply_message_id,
+            self.clock.now_epoch_seconds(),
+        )
     }
 
     async fn build_coach_reply_result(
@@ -480,5 +400,74 @@ where
             coach_message,
             athlete_summary_was_regenerated,
         })
+    }
+}
+
+impl<Repo, Ops, Time, Ids> LlmReplyResolutionWorkflow
+    for WorkoutSummaryService<Repo, Ops, Time, Ids>
+where
+    Repo: WorkoutSummaryRepository + Clone,
+    Ops: CoachReplyOperationRepository + Clone,
+    Time: Clock + Clone,
+    Ids: IdGenerator + Clone,
+{
+    type Reply = CoachReply;
+    type Error = WorkoutSummaryError;
+
+    fn stale_before_epoch_seconds(&self) -> i64 {
+        self.clock.now_epoch_seconds() - STALE_PENDING_TIMEOUT_SECONDS
+    }
+
+    fn claim_pending(
+        &self,
+        operation: CoachReplyOperation,
+        stale_before_epoch_seconds: i64,
+    ) -> crate::domain::llm::BoxFuture<Result<LlmReplyClaimResult, Self::Error>> {
+        let reply_operations = self.reply_operations.clone();
+        Box::pin(async move {
+            reply_operations
+                .claim_pending(operation, stale_before_epoch_seconds)
+                .await
+        })
+    }
+
+    fn recover_pending_operation(
+        &self,
+        operation: &CoachReplyOperation,
+    ) -> crate::domain::llm::BoxFuture<Result<Option<Self::Reply>, Self::Error>> {
+        let service = self.clone();
+        let operation = operation.clone();
+        Box::pin(async move {
+            service
+                .try_recover_pending_operation(
+                    &operation.user_id,
+                    &operation.scope_id,
+                    &operation.user_message_id,
+                    &operation,
+                )
+                .await
+        })
+    }
+
+    fn get_completed_reply(
+        &self,
+        operation: CoachReplyOperation,
+    ) -> crate::domain::llm::BoxFuture<Result<Self::Reply, Self::Error>> {
+        let service = self.clone();
+        let user_id = operation.user_id.clone();
+        let scope_id = operation.scope_id.clone();
+        Box::pin(async move {
+            service
+                .get_completed_reply(&user_id, &scope_id, operation)
+                .await
+        })
+    }
+
+    fn map_existing_llm_failure(&self, operation: CoachReplyOperation) -> Self::Error {
+        self.existing_llm_failure_to_error(operation)
+    }
+
+    fn reply_already_pending_error(&self) -> Self::Error {
+        WorkoutSummaryError::ReplyAlreadyPending
     }
 }

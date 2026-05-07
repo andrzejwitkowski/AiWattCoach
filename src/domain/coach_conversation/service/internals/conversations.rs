@@ -135,7 +135,7 @@ where
         conversation: &CoachConversation,
         operation: CoachConversationReplyOperation,
     ) -> Result<CoachConversationReply, CoachConversationError> {
-        let coach_message_id = operation.coach_message_id.ok_or_else(|| {
+        let coach_message_id = operation.reply_message_id.ok_or_else(|| {
             CoachConversationError::Repository(
                 "completed coach reply operation missing coach message id".to_string(),
             )

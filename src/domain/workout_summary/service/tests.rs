@@ -7,8 +7,8 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::LlmError,
     workout_summary::{
-        CoachReplyOperation, CoachReplyOperationRepository, MockWorkoutCoach, WorkoutSummaryError,
-        WorkoutSummaryRepository, WorkoutSummaryService,
+        CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
+        MockWorkoutCoach, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
     },
 };
 
@@ -31,7 +31,7 @@ impl IdGenerator for FixedIds {
 }
 
 #[test]
-fn map_existing_llm_failure_falls_back_to_internal_error_when_kind_is_missing() {
+fn existing_llm_failure_to_error_falls_back_to_internal_when_kind_is_missing() {
     let service = WorkoutSummaryService::with_coach(
         StubSummaryRepository,
         StubReplyOperations,
@@ -55,7 +55,7 @@ fn map_existing_llm_failure_falls_back_to_internal_error_when_kind_is_missing() 
     operation.failure_kind = None;
 
     assert_eq!(
-        service.map_existing_llm_failure(operation),
+        service.existing_llm_failure_to_error(operation),
         WorkoutSummaryError::Llm(LlmError::Internal(
             "persisted failure without kind".to_string()
         ))
@@ -202,7 +202,7 @@ impl CoachReplyOperationRepository for StubReplyOperations {
         &self,
         _operation: CoachReplyOperation,
         _stale_before_epoch_seconds: i64,
-    ) -> super::BoxFuture<Result<super::CoachReplyClaimResult, WorkoutSummaryError>> {
+    ) -> super::BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         Box::pin(async { Err(WorkoutSummaryError::NotFound) })
     }
 
@@ -233,7 +233,7 @@ impl CoachReplyOperationRepository for NonRepositoryFailingReplyOperations {
         &self,
         _operation: CoachReplyOperation,
         _stale_before_epoch_seconds: i64,
-    ) -> super::BoxFuture<Result<super::CoachReplyClaimResult, WorkoutSummaryError>> {
+    ) -> super::BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         Box::pin(async { Err(WorkoutSummaryError::NotFound) })
     }
 
