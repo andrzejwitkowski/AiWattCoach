@@ -1,11 +1,9 @@
-use std::time::Duration;
-
 use crate::domain::coach_conversation::CoachConversationReplyOperation;
 use crate::domain::llm::{
     merge_provider_transcript_entries, next_provider_transcript_updated_at_epoch_seconds,
+    persistence::{retry_persist, RetryConfig, RetryContext},
     LlmChatMessage, LlmError,
 };
-use tracing::{info, warn};
 
 use super::super::*;
 
@@ -24,62 +22,43 @@ where
         operation: &CoachConversationReplyOperation,
         write_label: &'static str,
     ) -> Result<(), CoachConversationError> {
-        let mut last_error = None;
+        let service = self.clone();
+        let user_id = conversation.user_id.clone();
+        let conversation_id = conversation.conversation_id.clone();
+        let provider_transcript = operation.provider_transcript.clone();
+        let ctx = RetryContext {
+            write_label,
+            user_message_id: operation.user_message_id.clone(),
+            scope_label: "conversation_id",
+            scope_value: conversation_id.clone(),
+            operation_status: None,
+        };
 
-        for attempt in 1..=POST_PROVIDER_WRITE_ATTEMPTS {
-            let latest = self
-                .conversations
-                .find_by_user_id_and_conversation_id(
-                    &conversation.user_id,
-                    &conversation.conversation_id,
-                )
-                .await?
-                .ok_or(CoachConversationError::NotFound)?;
-            let merged = merge_provider_transcript_entries(
-                latest.provider_transcript.clone(),
-                &operation.provider_transcript,
-            );
-
-            match self.replace_provider_transcript(&latest, merged).await {
-                Ok(()) => {
-                    if attempt > 1 {
-                        info!(
-                            conversation_id = %conversation.conversation_id,
-                            user_message_id = %operation.user_message_id,
-                            attempt,
-                            max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
-                            write_label,
-                            "recovered provider transcript write after retry"
-                        );
-                    }
-                    return Ok(());
-                }
-                Err(error @ CoachConversationError::Repository(_)) => {
-                    if attempt == POST_PROVIDER_WRITE_ATTEMPTS {
-                        return Err(error);
-                    }
-
-                    warn!(
-                        conversation_id = %conversation.conversation_id,
-                        user_message_id = %operation.user_message_id,
-                        attempt,
-                        max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
-                        write_label,
-                        error = %error,
-                        "retrying provider transcript write after repository error"
-                    );
-                    last_error = Some(error);
-                    tokio::time::sleep(Duration::from_millis(25 * attempt as u64)).await;
-                }
-                Err(error) => return Err(error),
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| {
-            CoachConversationError::Repository(
-                "provider transcript write failed without error".to_string(),
-            )
-        }))
+        retry_persist(
+            RetryConfig {
+                max_attempts: POST_PROVIDER_WRITE_ATTEMPTS,
+                backoff_base_ms: 25,
+            },
+            |e| matches!(e, CoachConversationError::Repository(_)),
+            || {
+                let svc = service.clone();
+                let uid = user_id.clone();
+                let cid = conversation_id.clone();
+                let pt = provider_transcript.clone();
+                Box::pin(async move {
+                    let latest = svc
+                        .conversations
+                        .find_by_user_id_and_conversation_id(&uid, &cid)
+                        .await?
+                        .ok_or(CoachConversationError::NotFound)?;
+                    let merged =
+                        merge_provider_transcript_entries(latest.provider_transcript.clone(), &pt);
+                    svc.replace_provider_transcript(&latest, merged).await
+                })
+            },
+            &ctx,
+        )
+        .await
     }
 
     pub(in super::super) fn existing_llm_failure_to_error(
@@ -102,50 +81,29 @@ where
         operation: CoachConversationReplyOperation,
         write_label: &'static str,
     ) -> Result<CoachConversationReplyOperation, CoachConversationError> {
-        let mut last_error = None;
+        let repo = self.reply_operations.clone();
+        let ctx = RetryContext {
+            write_label,
+            user_message_id: operation.user_message_id.clone(),
+            scope_label: "conversation_id",
+            scope_value: operation.scope_id.clone(),
+            operation_status: Some(format!("{:?}", operation.status)),
+        };
 
-        for attempt in 1..=POST_PROVIDER_WRITE_ATTEMPTS {
-            match self.reply_operations.upsert(operation.clone()).await {
-                Ok(saved) => {
-                    if attempt > 1 {
-                        info!(
-                            conversation_id = %saved.scope_id,
-                            user_message_id = %saved.user_message_id,
-                            attempt,
-                            max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
-                            operation_status = ?saved.status,
-                            write_label,
-                            "recovered post-provider coach reply write after retry"
-                        );
-                    }
-                    return Ok(saved);
-                }
-                Err(error @ CoachConversationError::Repository(_)) => {
-                    if attempt == POST_PROVIDER_WRITE_ATTEMPTS {
-                        return Err(error);
-                    }
-
-                    warn!(
-                        conversation_id = %operation.scope_id,
-                        user_message_id = %operation.user_message_id,
-                        attempt,
-                        max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
-                        operation_status = ?operation.status,
-                        write_label,
-                        error = %error,
-                        "retrying post-provider coach reply write after repository error"
-                    );
-                    last_error = Some(error);
-                }
-                Err(error) => return Err(error),
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| {
-            CoachConversationError::Repository(
-                "post-provider coach reply write failed without error".to_string(),
-            )
-        }))
+        retry_persist(
+            RetryConfig {
+                max_attempts: POST_PROVIDER_WRITE_ATTEMPTS,
+                backoff_base_ms: 25,
+            },
+            |e| matches!(e, CoachConversationError::Repository(_)),
+            || {
+                let op = operation.clone();
+                let r = repo.clone();
+                Box::pin(async move { r.upsert(op).await })
+            },
+            &ctx,
+        )
+        .await
     }
 
     async fn replace_provider_transcript(

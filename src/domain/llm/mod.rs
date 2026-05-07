@@ -4,6 +4,7 @@ mod logging;
 mod model;
 mod operation;
 mod orchestrator;
+pub(crate) mod persistence;
 mod ports;
 mod transcript;
 
