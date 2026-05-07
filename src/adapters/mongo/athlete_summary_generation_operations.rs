@@ -5,7 +5,7 @@ use mongodb::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::durable_ops::{mongo_claim_pending, ClaimOutcome};
+use super::durable_ops::{mongo_claim_pending, ClaimInput, ClaimOutcome, OpMetadata};
 use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_required_epoch_seconds};
 use crate::domain::athlete_summary::{
     AthleteSummaryError, AthleteSummaryGenerationClaimResult, AthleteSummaryGenerationOperation,
@@ -117,10 +117,12 @@ impl AthleteSummaryGenerationOperationRepository
             let user_id = document.user_id.clone();
 
             mongo_claim_pending(
-                &collection,
-                document,
-                operation,
-                stale_before_epoch_seconds,
+                ClaimInput {
+                    collection,
+                    document,
+                    operation,
+                    stale_before_epoch_seconds,
+                },
                 || doc! { "user_id": &user_id },
                 |doc| map_document_to_domain(doc).map_err(|e| e.to_string()),
                 |op, s| {
@@ -128,9 +130,11 @@ impl AthleteSummaryGenerationOperationRepository
                         && op.last_attempt_at_epoch_seconds <= s
                         || matches!(op.status, AthleteSummaryGenerationOperationStatus::Failed)
                 },
-                |op| i64::from(op.attempt_count),
-                |op| op.updated_at_epoch_seconds,
-                |op| op.last_attempt_at_epoch_seconds,
+                |op| OpMetadata {
+                    attempt_count: i64::from(op.attempt_count),
+                    updated_at_epoch_seconds: op.updated_at_epoch_seconds,
+                    last_attempt_at_epoch_seconds: op.last_attempt_at_epoch_seconds,
+                },
                 |existing, pending, _now| {
                     let reclaimed = Self::reclaim_operation(existing, pending);
                     let doc = map_domain_to_document(&reclaimed).map_err(|e| e.to_string())?;

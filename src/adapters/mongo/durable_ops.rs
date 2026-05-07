@@ -10,25 +10,36 @@ pub(super) enum ClaimOutcome<Op> {
     Existing(Op),
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(super) struct OpMetadata {
+    pub attempt_count: i64,
+    pub updated_at_epoch_seconds: i64,
+    pub last_attempt_at_epoch_seconds: i64,
+}
+
+pub(super) struct ClaimInput<Doc, Op>
+where
+    Doc: Send + Sync,
+{
+    pub collection: Collection<Doc>,
+    pub document: Doc,
+    pub operation: Op,
+    pub stale_before_epoch_seconds: i64,
+}
+
 pub(super) async fn mongo_claim_pending<Doc, Op>(
-    collection: &Collection<Doc>,
-    document: Doc,
-    operation: Op,
-    stale_before_epoch_seconds: i64,
+    input: ClaimInput<Doc, Op>,
     unique_filter: impl Fn() -> Document,
     map_document_to_operation: impl Fn(Doc) -> Result<Op, String>,
     is_reclaimable: impl Fn(&Op, i64) -> bool,
-    attempt_count: impl Fn(&Op) -> i64,
-    updated_at: impl Fn(&Op) -> i64,
-    last_attempt_at: impl Fn(&Op) -> i64,
+    op_metadata: impl Fn(&Op) -> OpMetadata,
     build_reclaimed: impl FnOnce(&Op, &Op, i64) -> Result<(Op, Doc), String>,
 ) -> Result<ClaimOutcome<Op>, String>
 where
     Doc: Serialize + DeserializeOwned + Unpin + Send + Sync,
 {
-    let inserted = collection
-        .insert_one(&document)
+    let inserted = input
+        .collection
+        .insert_one(&input.document)
         .await
         .map(|_| true)
         .or_else(|error| {
@@ -40,10 +51,11 @@ where
         })?;
 
     if inserted {
-        return Ok(ClaimOutcome::Claimed(operation));
+        return Ok(ClaimOutcome::Claimed(input.operation));
     }
 
-    let existing_document = collection
+    let existing_document = input
+        .collection
         .find_one(unique_filter())
         .await
         .map_err(|error| error.to_string())?
@@ -51,19 +63,27 @@ where
 
     let existing = map_document_to_operation(existing_document)?;
 
-    if !is_reclaimable(&existing, stale_before_epoch_seconds) {
+    if !is_reclaimable(&existing, input.stale_before_epoch_seconds) {
         return Ok(ClaimOutcome::Existing(existing));
     }
 
-    let pending_last_attempt = last_attempt_at(&operation);
-    let (reclaimed_op, reclaimed_document) =
-        build_reclaimed(&existing, &operation, pending_last_attempt)?;
+    let pending_meta = op_metadata(&input.operation);
+    let (reclaimed_op, reclaimed_document) = build_reclaimed(
+        &existing,
+        &input.operation,
+        pending_meta.last_attempt_at_epoch_seconds,
+    )?;
 
+    let existing_meta = op_metadata(&existing);
     let mut cas_filter = unique_filter();
-    cas_filter.insert("attempt_count", attempt_count(&existing));
-    cas_filter.insert("updated_at_epoch_seconds", updated_at(&existing));
+    cas_filter.insert("attempt_count", existing_meta.attempt_count);
+    cas_filter.insert(
+        "updated_at_epoch_seconds",
+        existing_meta.updated_at_epoch_seconds,
+    );
 
-    let replaced = collection
+    let replaced = input
+        .collection
         .find_one_and_replace(cas_filter, &reclaimed_document)
         .await
         .map_err(|error| error.to_string())?;
@@ -72,7 +92,8 @@ where
         return Ok(ClaimOutcome::Claimed(reclaimed_op));
     }
 
-    let latest_document = collection
+    let latest_document = input
+        .collection
         .find_one(unique_filter())
         .await
         .map_err(|error| error.to_string())?

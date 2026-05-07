@@ -1,6 +1,6 @@
 use mongodb::bson::doc;
 
-use super::super::durable_ops::{mongo_claim_pending, ClaimOutcome};
+use super::super::durable_ops::{mongo_claim_pending, ClaimInput, ClaimOutcome, OpMetadata};
 use super::mapping::{map_document_to_operation, map_operation_to_document};
 use super::MongoLlmReplyOperationRepository;
 use crate::domain::coach_conversation::{
@@ -53,19 +53,23 @@ impl MongoLlmReplyOperationRepository {
         let fallback_message_id = operation.reply_message_id.clone();
 
         mongo_claim_pending(
-            &self.collection,
-            document,
-            operation,
-            stale_before_epoch_seconds,
+            ClaimInput {
+                collection: self.collection.clone(),
+                document,
+                operation,
+                stale_before_epoch_seconds,
+            },
             || doc! { "user_id": &user_id, "scope_type": scope_type, "scope_id": &scope_id, "user_message_id": &user_message_id },
             map_document_to_operation,
             |op, s| {
                 matches!(op.status, LlmReplyOperationStatus::Pending) && op.is_stale(s)
                     || matches!(op.status, LlmReplyOperationStatus::Failed)
             },
-            |op| i64::from(op.attempt_count),
-            |op| op.updated_at_epoch_seconds,
-            |op| op.last_attempt_at_epoch_seconds,
+            |op| OpMetadata {
+                attempt_count: i64::from(op.attempt_count),
+                updated_at_epoch_seconds: op.updated_at_epoch_seconds,
+                last_attempt_at_epoch_seconds: op.last_attempt_at_epoch_seconds,
+            },
             |existing, _pending, now| {
                 let fallback = fallback_message_id.ok_or_else(|| {
                     "pending reply operation missing reserved reply message id".to_string()
