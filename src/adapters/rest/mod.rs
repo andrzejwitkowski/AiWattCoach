@@ -56,8 +56,8 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
     let static_files = ServeDir::new(&frontend_dist);
     let spa_index = ServeFile::new(frontend_dist.join("index.html"));
 
-    let write_log_config = EndpointLogConfig::request_only().with_max_body_bytes(10240);
-    let settings_read_log_config = EndpointLogConfig::response_only().with_max_body_bytes(10240);
+    let write_log_config = EndpointLogConfig::request_only().with_max_body_bytes(204800);
+    let settings_read_log_config = EndpointLogConfig::response_only().with_max_body_bytes(204800);
     Router::new()
         .route("/health", get(health::health_check))
         .route("/ready", get(health::readiness_check))

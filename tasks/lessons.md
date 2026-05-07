@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- If one preview model path keeps returning structurally empty completions after the existing retry for that exact provider error, prefer a narrow workflow-specific fallback to a more stable model on the same provider before adding a global fallback. Keep the trigger exact so normal tool, rate-limit, and prompt errors still surface without silent model switching.
 - When a shared tool loop or orchestrator changes from replaying an error into another provider round to stopping immediately, update adapter tests to match the new round-count and transcript contract. Do not leave tests asserting a second request or an older tool-local error payload after the control-flow boundary has intentionally moved up a layer.
 - For Intervals.icu client transport logging, keep `BodyLoggingMode::None` as the shared default. Do not switch the shared trace helper to full request/response body previews just because one debugging task needs more visibility; add any body-preview logging only on the narrow call paths whose tests and logging guide explicitly permit it.
 - If provider debugging requires payload inspection, verify outbound adapter clients log both request and response body previews on success as well as failure. Metadata-only logs are usually not enough for LLM, OAuth, or third-party API incident diagnosis.
@@ -152,6 +153,7 @@
 - Do not reuse `mongodb::Client` or similar async driver clients across separate `#[tokio::test]` runtimes via `OnceLock` or other process-global singletons. A client tied to a runtime that has already shut down can fail later with cancelled-task or runtime-shutdown errors.
 - If this repo's broad Rust suites hit host-level `SIGKILL`s during verification, do not treat that alone as a product failure. Stop parallel test launches, switch to sequential targeted test filters for the touched behavior, and keep `cargo fmt --check`, `cargo clippy -D warnings`, and `bun run verify:arch` as the reliable completion gates.
 - In async scheduler or worker tests, do not make the first assertion depend on eventually written worker-heartbeat projections. First synchronize on an owned signal like `Notify` or on primary task state, then poll the projected worker state without `expect(...)` until it catches up.
+- On this machine, do not run the full `cargo test --lib` unit-test binary as a routine verification step because it is known to get killed with host-level `SIGKILL`. Prefer narrower verification such as `cargo check --lib`, `cargo clippy`, focused integration tests, and only attempt the broad lib binary when the user explicitly wants that risk.
 
 ## Projection Window Semantics
 

@@ -68,7 +68,7 @@ Always set a route-specific preview cap with `with_max_body_bytes(...)` when bod
 
 ### Body limits
 
-`with_max_body_bytes(...)` only limits what is written to logs. It does not limit how much of the request body the transport accepts. The default is 10 KB (10240 bytes).
+`with_max_body_bytes(...)` only limits what is written to logs. It does not limit how much of the request body the transport accepts. The default is 200 KB (204800 bytes).
 
 The `RequestLogLayer` has a hard cap of 10 MB (`MAX_COLLECT_BYTES`) on how much body it will buffer. This prevents unbounded memory allocation when a route with body logging enabled receives an unexpectedly large payload. Routes that accept genuinely large bodies (like file uploads) should be excluded from body logging entirely, as buffering multi-megabyte payloads is impractical.
 

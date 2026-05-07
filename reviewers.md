@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-07 | user | REST endpoint body log preview limit
+
+- Problem: the REST endpoint logging preview cap was still set to `10 KB` by default and in the router-level request/response logging groups, which was too small for the current debugging needs.
+- Fix: raised the endpoint body preview limit to `200 KB` (`204800` bytes) in `src/adapters/rest/logging/mod.rs` and the explicit router logging configs in `src/adapters/rest/mod.rs`, then updated the logging guide and unit-test expectations to match.
+- Prevention: when changing an adapter default that is also restated in route wiring and docs, grep for both the raw byte value and the human-readable size so code, tests, and documentation stay aligned in one patch.
+
+### 2026-05-06 | user | workout-summary OpenRouter empty-turn fallback to Pro model
+
+- Problem: live workout-summary logs still showed `openrouter/google/gemini-3-flash-preview` returning two consecutive empty assistant turns (`neither message content nor tool calls`) even after the narrow one-retry adapter fix. The retry improved resilience to a single transient empty turn but still left the workflow failing whenever that preview model path returned the same malformed response twice in a row.
+- Fix: added a workout-summary-specific fallback in `src/adapters/llm/workout_summary_coach.rs`: when the selected config is `openrouter/google/gemini-3-flash-preview` and the first `run_tool_loop(...)` attempt still fails with the exact empty-turn invalid-response error, the coach logs the fallback and retries once with `google/gemini-3.1-pro` while keeping the same provider, API key, request payload, and tool scope.
+- Prevention: when a provider-specific preview model keeps emitting structurally empty completions after the existing retry budget, prefer a narrow fallback to a stable higher-tier model inside the affected workflow rather than broadening the fallback globally across every OpenRouter call. Gate it on the exact malformed-response signature so normal failures keep surfacing honestly.
+
 ### 2026-05-06 | user | PR #189 stale llm_adapters expectation after unavailable-tool loop fix
 
 - Problem: after `run_tool_loop(...)` was hardened to stop immediately on hidden/unavailable tool calls, `tests/llm_adapters/get_selected_workout.rs` still expected the old two-round replay flow with a second provider request and the tool-local `{"error":"data port not available"}` result. That left PR #189 red even though the runtime behavior had intentionally changed.
