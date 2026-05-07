@@ -54,6 +54,12 @@ impl LlmTool for GetSelectedWorkout {
         }
     }
 
+    fn prompt_guidance(&self) -> Option<&'static str> {
+        Some(
+            "use for questions about a specific date when you need detailed completed, planned, race, or workout-summary data instead of relying only on packed context",
+        )
+    }
+
     fn execute(
         &self,
         arguments_json: &str,

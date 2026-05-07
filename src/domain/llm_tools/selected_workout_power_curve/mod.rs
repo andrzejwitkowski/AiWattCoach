@@ -70,6 +70,12 @@ impl LlmTool for SelectedWorkoutPowerCurve {
         }
     }
 
+    fn prompt_guidance(&self) -> Option<&'static str> {
+        Some(
+            "use after selecting a completed workout when the answer needs mean-max power or duration-specific power facts; prefer this over estimating power curve shape from summary metrics",
+        )
+    }
+
     fn execute(
         &self,
         arguments_json: &str,

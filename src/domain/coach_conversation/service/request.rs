@@ -2,7 +2,9 @@ use crate::domain::llm::{
     approximate_token_budget_for_model, hash_text, LlmChatMessage, LlmChatRequest, LlmChatResponse,
     LlmContextCache, LlmError, LlmProvider, LlmProviderConfig,
 };
-use crate::domain::llm_tools::{run_tool_loop, LlmToolLoopOutput, ToolExecutionContext, ToolScope};
+use crate::domain::llm_tools::{
+    run_tool_loop, with_tool_prompt_guidance, LlmToolLoopOutput, ToolExecutionContext, ToolScope,
+};
 
 use super::{
     super::{CoachConversation, CoachConversationError, CoachConversationMessage},
@@ -12,11 +14,9 @@ use super::{
     },
     SharedCoachConversationService,
 };
-use crate::domain::training_context::TrainingContext;
-
 struct PreparedCalendarLlmRequest {
     config: LlmProviderConfig,
-    training_context: TrainingContext,
+    tool_context: ToolExecutionContext,
     system_prompt: String,
     stable_context: String,
     volatile_context: String,
@@ -61,12 +61,7 @@ where
             prepared.config.clone(),
             request,
             ToolScope::CalendarCoachChat,
-            ToolExecutionContext {
-                user_id: conversation.user_id.clone(),
-                training_context: prepared.training_context.clone(),
-                today: current_date_string(self.clock.now_epoch_seconds()),
-                data_port: self.data_port.clone(),
-            },
+            prepared.tool_context.clone(),
             None,
         )
         .await
@@ -94,7 +89,18 @@ where
             .build_calendar_overview_context(&conversation.user_id)
             .await
             .map_err(CoachConversationError::Llm)?;
-        let system_prompt = calendar_coach_system_prompt();
+        let tool_context = ToolExecutionContext {
+            user_id: conversation.user_id.clone(),
+            training_context: training_context.context.clone(),
+            today: current_date_string(self.clock.now_epoch_seconds()),
+            data_port: self.data_port.clone(),
+        };
+        let system_prompt = with_tool_prompt_guidance(
+            &calendar_coach_system_prompt(),
+            ToolScope::CalendarCoachChat,
+            &config.provider,
+            &tool_context,
+        );
         let stable_context =
             build_calendar_stable_context(conversation, &training_context.rendered.stable_context);
         let volatile_context = build_calendar_volatile_context(
@@ -127,7 +133,7 @@ where
 
         Ok(PreparedCalendarLlmRequest {
             config,
-            training_context: training_context.context,
+            tool_context,
             system_prompt,
             stable_context,
             volatile_context,

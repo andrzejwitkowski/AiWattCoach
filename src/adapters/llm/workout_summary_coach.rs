@@ -11,8 +11,8 @@ use crate::domain::{
         LlmProvider, UserLlmConfigProvider,
     },
     llm_tools::{
-        run_tool_loop, GetSelectedWorkoutDataPort, LlmToolLoopOutput, ToolExecutionContext,
-        ToolScope,
+        run_tool_loop, with_tool_prompt_guidance, GetSelectedWorkoutDataPort, LlmToolLoopOutput,
+        ToolExecutionContext, ToolScope,
     },
     training_context::TrainingContextBuilder,
     workout_summary::{WorkoutCoach, WorkoutSummary},
@@ -105,7 +105,18 @@ where
             );
             let volatile_context =
                 build_volatile_context(&training_context.rendered.volatile_context);
-            let system_prompt = workout_coach_system_prompt();
+            let tool_context = ToolExecutionContext {
+                user_id: user_id.clone(),
+                training_context: training_context.context.clone(),
+                today: current_date_string(clock.now_epoch_seconds()),
+                data_port,
+            };
+            let system_prompt = with_tool_prompt_guidance(
+                &workout_coach_system_prompt(),
+                ToolScope::WorkoutSummaryChat,
+                &config.provider,
+                &tool_context,
+            );
             let conversation = build_conversation(
                 summary.messages.as_slice(),
                 &summary.provider_transcript,
@@ -199,13 +210,6 @@ where
                 reusable_cache_id,
                 ..Default::default()
             };
-            let tool_context = ToolExecutionContext {
-                user_id: user_id.clone(),
-                training_context: training_context.context.clone(),
-                today: current_date_string(clock.now_epoch_seconds()),
-                data_port,
-            };
-
             tracing::info!(
                 user_id = %user_id,
                 workout_id = %summary.workout_id,

@@ -61,7 +61,9 @@ async fn execute_and_log_with_body_request(
         .await
         .inspect_err(|error| log_transport_failure(&method, &url, error, "response_read_failed"))?;
 
-    log_response(&method, &url, status, latency, None);
+    let response_body_preview = format_response_body(&body, status);
+
+    log_response(&method, &url, status, latency, Some(&response_body_preview));
 
     Ok(LoggedResponse { status, body })
 }
@@ -123,6 +125,44 @@ fn preview_text(text: &str) -> String {
     )
 }
 
+fn format_response_body(bytes: &[u8], _status: StatusCode) -> String {
+    if bytes.is_empty() {
+        return "(empty)".to_string();
+    }
+
+    let body_str = match std::str::from_utf8(bytes) {
+        Ok(value) => value,
+        Err(_) => return format_binary_body(bytes),
+    };
+
+    if let Ok(mut json_value) = serde_json::from_str::<serde_json::Value>(body_str) {
+        redact_json_value(&mut json_value);
+        return preview_text(&json_value.to_string());
+    }
+
+    preview_text(body_str)
+}
+
+fn redact_json_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, val) in map.iter_mut() {
+                if is_sensitive_key(key) {
+                    *val = serde_json::Value::String("[REDACTED]".to_string());
+                } else {
+                    redact_json_value(val);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                redact_json_value(item);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn format_binary_body(bytes: &[u8]) -> String {
     let digest = sha2::Sha256::digest(bytes);
     let hash = format!("{digest:x}");
@@ -176,10 +216,43 @@ fn log_response(
     url: &reqwest::Url,
     status: StatusCode,
     latency: std::time::Duration,
-    _body_preview: Option<&str>,
+    body_preview: Option<&str>,
 ) {
-    match response_log_level(status) {
-        tracing::Level::ERROR => tracing::event!(
+    match (response_log_level(status), body_preview) {
+        (tracing::Level::ERROR, Some(body)) => tracing::event!(
+            tracing::Level::ERROR,
+            provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
+            http.method = %method,
+            http.url = %sanitized_url(url),
+            http.status_code = status.as_u16(),
+            latency_ms = latency.as_millis(),
+            response_body = body,
+            "outgoing response"
+        ),
+        (tracing::Level::WARN, Some(body)) => tracing::event!(
+            tracing::Level::WARN,
+            provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
+            http.method = %method,
+            http.url = %sanitized_url(url),
+            http.status_code = status.as_u16(),
+            latency_ms = latency.as_millis(),
+            response_body = body,
+            "outgoing response"
+        ),
+        (_, Some(body)) => tracing::event!(
+            tracing::Level::INFO,
+            provider = CLIENT_NAME,
+            client = CLIENT_LABEL,
+            http.method = %method,
+            http.url = %sanitized_url(url),
+            http.status_code = status.as_u16(),
+            latency_ms = latency.as_millis(),
+            response_body = body,
+            "outgoing response"
+        ),
+        (tracing::Level::ERROR, None) => tracing::event!(
             tracing::Level::ERROR,
             provider = CLIENT_NAME,
             client = CLIENT_LABEL,
@@ -189,7 +262,7 @@ fn log_response(
             latency_ms = latency.as_millis(),
             "outgoing response (no body)"
         ),
-        tracing::Level::WARN => tracing::event!(
+        (tracing::Level::WARN, None) => tracing::event!(
             tracing::Level::WARN,
             provider = CLIENT_NAME,
             client = CLIENT_LABEL,

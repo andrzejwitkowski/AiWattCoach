@@ -484,6 +484,29 @@ async fn openrouter_client_parses_numeric_usage_fields() {
 }
 
 #[tokio::test]
+async fn openrouter_client_retries_once_after_empty_assistant_turn() {
+    let server = MockServer::start().await;
+    let client = openrouter_client(&server.base_url);
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "google/gemini-3-flash-preview-empty-then-success".to_string(),
+                api_key: "or-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.assistant_text(), Some("Recovered after retry"));
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 2);
+}
+
+#[tokio::test]
 async fn openai_client_maps_forbidden_to_credentials_not_configured() {
     let server = MockServer::start().await;
     let client = openai_forbidden_client(&server.base_url);

@@ -92,7 +92,12 @@ impl IntervalsIcuClient {
         client: &Client,
         request: RequestBuilder,
     ) -> Result<logging::LoggedResponse, reqwest::Error> {
-        logging::execute_and_log_no_body(client, Self::with_trace_context(request)).await
+        logging::execute_and_log(
+            client,
+            Self::with_trace_context(request),
+            logging::BodyLoggingMode::None,
+        )
+        .await
     }
 
     fn activity_url(&self, activity_id: &str, path: &str) -> String {

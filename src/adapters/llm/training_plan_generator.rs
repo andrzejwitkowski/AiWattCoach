@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use chrono::TimeZone;
 use serde_json::json;
 
 use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
@@ -13,10 +12,10 @@ use crate::domain::{
         UserLlmConfigProvider,
     },
     llm_tools::{
-        run_tool_loop_with_checkpoint, GetSelectedWorkoutDataPort, LlmToolLoopState,
-        ToolExecutionContext, ToolLoopCheckpoint, ToolScope,
+        run_tool_loop_with_checkpoint, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
+        LlmToolLoopState, ToolExecutionContext, ToolLoopCheckpoint, ToolScope,
     },
-    training_context::TrainingContextBuilder,
+    training_context::{TrainingContext, TrainingContextBuilder},
     training_plan::{
         TrainingPlanConversationRole, TrainingPlanError, TrainingPlanGenerator,
         TrainingPlanPhaseOutput, TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint,
@@ -208,7 +207,6 @@ where
         let llm_config_provider = self.llm_config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
         let data_port = self.data_port.clone();
-        let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         let workout_recap = workout_recap.clone();
@@ -238,11 +236,24 @@ where
             let mut conversation = planning_conversation_messages(planning_context.as_ref());
             conversation.push(LlmChatMessage::user(user_prompt));
 
-            let request = LlmChatRequest {
-                user_id: user_id.clone(),
-                system_prompt: training_plan_initial_window_system_prompt(
+            let tool_context = ToolExecutionContext {
+                user_id,
+                training_context: context.context.clone(),
+                today: training_plan_tool_context_today(&context.context),
+                data_port,
+            };
+            let system_prompt = with_tool_prompt_guidance(
+                &training_plan_initial_window_system_prompt(
                     context.context.profile.availability_configured,
                 ),
+                ToolScope::TrainingPlanGeneration,
+                &config.provider,
+                &tool_context,
+            );
+
+            let request = LlmChatRequest {
+                user_id: tool_context.user_id.clone(),
+                system_prompt,
                 stable_context,
                 volatile_context,
                 conversation,
@@ -251,13 +262,6 @@ where
                 reusable_cache_id: None,
                 ..Default::default()
             };
-            let tool_context = ToolExecutionContext {
-                user_id,
-                training_context: context.context.clone(),
-                today: current_date_string(clock.now_epoch_seconds()),
-                data_port,
-            };
-
             let response = run_tool_loop_with_checkpoint(
                 llm_chat_port,
                 config,
@@ -297,7 +301,6 @@ where
         let llm_config_provider = self.llm_config_provider.clone();
         let training_context_builder = self.training_context_builder.clone();
         let data_port = self.data_port.clone();
-        let clock = self.clock.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         let workout_recap = workout_recap.clone();
@@ -335,11 +338,24 @@ where
             let mut conversation = planning_conversation_messages(planning_context.as_ref());
             conversation.push(LlmChatMessage::user(user_prompt));
 
-            let request = LlmChatRequest {
-                user_id: user_id.clone(),
-                system_prompt: training_plan_correction_system_prompt(
+            let tool_context = ToolExecutionContext {
+                user_id,
+                training_context: context.context.clone(),
+                today: training_plan_tool_context_today(&context.context),
+                data_port,
+            };
+            let system_prompt = with_tool_prompt_guidance(
+                &training_plan_correction_system_prompt(
                     context.context.profile.availability_configured,
                 ),
+                ToolScope::TrainingPlanGeneration,
+                &config.provider,
+                &tool_context,
+            );
+
+            let request = LlmChatRequest {
+                user_id: tool_context.user_id.clone(),
+                system_prompt,
                 stable_context,
                 volatile_context,
                 conversation,
@@ -348,13 +364,6 @@ where
                 reusable_cache_id: None,
                 ..Default::default()
             };
-            let tool_context = ToolExecutionContext {
-                user_id,
-                training_context: context.context.clone(),
-                today: current_date_string(clock.now_epoch_seconds()),
-                data_port,
-            };
-
             let response = run_tool_loop_with_checkpoint(
                 llm_chat_port,
                 config,
@@ -431,12 +440,8 @@ fn training_plan_planning_guidelines(availability_configured: bool) -> String {
     )
 }
 
-fn current_date_string(now_epoch_seconds: i64) -> String {
-    chrono::Utc
-        .timestamp_opt(now_epoch_seconds, 0)
-        .single()
-        .map(|now| now.date_naive().format("%Y-%m-%d").to_string())
-        .unwrap_or_else(|| "1970-01-01".to_string())
+fn training_plan_tool_context_today(training_context: &TrainingContext) -> String {
+    training_context.history.window_end.clone()
 }
 
 fn training_plan_stable_context(
@@ -488,6 +493,12 @@ fn planning_conversation_messages(
 mod tests {
     use super::{
         training_plan_correction_system_prompt, training_plan_initial_window_system_prompt,
+        training_plan_tool_context_today,
+    };
+    use crate::domain::{
+        llm::LlmProvider,
+        llm_tools::{with_tool_prompt_guidance, ToolExecutionContext, ToolScope},
+        training_context::TrainingContext,
     };
 
     #[test]
@@ -524,6 +535,50 @@ mod tests {
         ] {
             assert!(prompt.contains("Weekly availability is not configured in this context."));
             assert!(!prompt.contains("Weekly availability is mandatory and must be respected"));
+        }
+    }
+
+    #[test]
+    fn training_plan_prompt_guidance_includes_forward_load_tool() {
+        let prompt = with_tool_prompt_guidance(
+            &training_plan_initial_window_system_prompt(true),
+            ToolScope::TrainingPlanGeneration,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(),
+        );
+
+        assert!(prompt.contains("`simulate_forward_load`"));
+        assert!(prompt.contains("future fatigue"));
+        assert!(!prompt.contains("`get_selected_workout`"));
+        assert!(!prompt.contains("`selected_workout_power_curve`"));
+    }
+
+    #[test]
+    fn training_plan_tool_context_today_uses_focus_window_end() {
+        let today = training_plan_tool_context_today(&TrainingContext {
+            history: crate::domain::training_context::HistoricalTrainingContext {
+                window_end: "2026-05-01".to_string(),
+                ..Default::default()
+            },
+            ..TrainingContext::default()
+        });
+
+        assert_eq!(today, "2026-05-01");
+    }
+
+    fn sample_tool_context() -> ToolExecutionContext {
+        ToolExecutionContext {
+            user_id: "user-1".to_string(),
+            training_context: TrainingContext {
+                focus_kind: "training_plan".to_string(),
+                history: crate::domain::training_context::HistoricalTrainingContext {
+                    window_end: "2026-05-06".to_string(),
+                    ..Default::default()
+                },
+                ..TrainingContext::default()
+            },
+            today: "2026-05-06".to_string(),
+            data_port: None,
         }
     }
 }

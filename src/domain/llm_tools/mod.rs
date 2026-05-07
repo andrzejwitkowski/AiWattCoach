@@ -39,6 +39,9 @@ pub enum ToolScope {
 pub trait LlmTool: Send + Sync {
     fn name(&self) -> &'static str;
     fn definition(&self) -> LlmToolDefinition;
+    fn prompt_guidance(&self) -> Option<&'static str> {
+        None
+    }
     fn execute(
         &self,
         arguments_json: &str,
@@ -158,7 +161,11 @@ pub fn run_tool_loop_with_checkpoint(
             conversation.extend(state.provider_transcript.clone());
         }
 
-        let tools = tool_definitions_for_scope(scope, &config.provider, &tool_context);
+        let available_tools = available_tools_for_scope(scope, &config.provider, &tool_context);
+        let tools = available_tools
+            .iter()
+            .map(|tool| tool.definition())
+            .collect::<Vec<_>>();
         let tool_choice = if tools.is_empty() {
             LlmToolChoice::None
         } else {
@@ -200,15 +207,32 @@ pub fn run_tool_loop_with_checkpoint(
             }
 
             for tool_call in response.tool_calls() {
-                let result = execute_tool_call(
+                let execution_result = execute_available_tool_call(
+                    available_tools.as_slice(),
                     tool_call.name.as_str(),
                     tool_call.arguments_json.as_str(),
                     &tool_context,
                 )
                 .await;
+                let (result, tool_unavailable) = match execution_result {
+                    ToolExecutionResult::Success(result) => (result, false),
+                    ToolExecutionResult::ToolUnavailable(result) => (result, true),
+                };
                 let tool_message = LlmChatMessage::tool(tool_call.id.clone(), result);
                 provider_transcript.push(tool_message.clone());
                 conversation.push(tool_message);
+
+                if tool_unavailable {
+                    return Ok(LlmToolLoopOutput {
+                        response: response.clone(),
+                        state: LlmToolLoopState {
+                            provider_transcript,
+                            finish_reason: response.finish_reason.clone(),
+                            public_tool_calls,
+                            round_count,
+                        },
+                    });
+                }
             }
 
             state = LlmToolLoopState {
@@ -251,19 +275,71 @@ fn tools_for_scope(scope: ToolScope) -> Vec<Box<dyn LlmTool>> {
     all_tools()
 }
 
+fn available_tools_for_scope(
+    scope: ToolScope,
+    provider: &LlmProvider,
+    tool_context: &ToolExecutionContext,
+) -> Vec<Box<dyn LlmTool>> {
+    if !provider_supports_tools(provider) {
+        return Vec::new();
+    }
+
+    tools_for_scope(scope)
+        .into_iter()
+        .filter(|tool| tool.is_available(tool_context))
+        .collect()
+}
+
 pub fn tool_definitions_for_scope(
     scope: ToolScope,
     provider: &LlmProvider,
     tool_context: &ToolExecutionContext,
 ) -> Vec<LlmToolDefinition> {
-    if !provider_supports_tools(provider) {
-        return Vec::new();
-    }
-    tools_for_scope(scope)
+    available_tools_for_scope(scope, provider, tool_context)
         .into_iter()
-        .filter(|tool| tool.is_available(tool_context))
         .map(|tool| tool.definition())
         .collect()
+}
+
+pub fn with_tool_prompt_guidance(
+    system_prompt: &str,
+    scope: ToolScope,
+    provider: &LlmProvider,
+    tool_context: &ToolExecutionContext,
+) -> String {
+    let guidance = tool_prompt_guidance_for_scope(scope, provider, tool_context);
+    if guidance.is_empty() {
+        return system_prompt.to_string();
+    }
+
+    if system_prompt.trim().is_empty() {
+        return guidance;
+    }
+
+    format!("{system_prompt}\n\n{guidance}")
+}
+
+fn tool_prompt_guidance_for_scope(
+    scope: ToolScope,
+    provider: &LlmProvider,
+    tool_context: &ToolExecutionContext,
+) -> String {
+    let guidance_lines: Vec<String> = available_tools_for_scope(scope, provider, tool_context)
+        .into_iter()
+        .filter_map(|tool| {
+            tool.prompt_guidance()
+                .map(|guidance| format!("- `{}`: {guidance}", tool.name()))
+        })
+        .collect();
+
+    if guidance_lines.is_empty() {
+        return String::new();
+    }
+
+    format!(
+        "Tool usage guidance: when a tool can provide more specific or up-to-date facts than the packed context, call it instead of guessing. Use these tools deliberately:\n{}",
+        guidance_lines.join("\n")
+    )
 }
 
 fn provider_supports_tools(provider: &LlmProvider) -> bool {
@@ -297,23 +373,43 @@ fn merge_public_tool_calls(
     existing
 }
 
-async fn execute_tool_call(
+enum ToolExecutionResult {
+    Success(String),
+    ToolUnavailable(String),
+}
+
+async fn execute_available_tool_call(
+    available_tools: &[Box<dyn LlmTool>],
     tool_name: &str,
     arguments_json: &str,
     context: &ToolExecutionContext,
-) -> String {
-    match find_tool(tool_name) {
-        Some(tool) => tool.execute(arguments_json, context).await,
-        None => serde_json::json!({
-            "error": format!("unknown tool: {tool_name}")
-        })
-        .to_string(),
+) -> ToolExecutionResult {
+    match available_tools.iter().find(|tool| tool.name() == tool_name) {
+        Some(tool) => ToolExecutionResult::Success(tool.execute(arguments_json, context).await),
+        None => ToolExecutionResult::ToolUnavailable(
+            serde_json::json!({
+                "error": format!("tool not available in this scope: {tool_name}")
+            })
+            .to_string(),
+        ),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::LlmToolLoopState;
+    use std::sync::Arc;
+
+    use super::{
+        run_tool_loop, with_tool_prompt_guidance, GetSelectedWorkoutDataPort, LlmToolLoopState,
+        ToolExecutionContext, ToolScope,
+    };
+    use crate::domain::{
+        llm::{
+            LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmError,
+            LlmFinishReason, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall,
+        },
+        training_context::TrainingContext,
+    };
 
     #[test]
     fn tool_loop_state_defaults_empty() {
@@ -321,5 +417,194 @@ mod tests {
         assert!(state.provider_transcript.is_empty());
         assert!(state.public_tool_calls.is_empty());
         assert_eq!(state.round_count, 0);
+    }
+
+    #[test]
+    fn prompt_guidance_lists_available_tools_for_supported_provider() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::CalendarCoachChat,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(true),
+        );
+
+        assert!(prompt.contains("Tool usage guidance"));
+        assert!(prompt.contains("`simulate_forward_load`"));
+        assert!(prompt.contains("`get_selected_workout`"));
+        assert!(prompt.contains("`selected_workout_power_curve`"));
+        assert!(prompt.contains("call it instead of guessing"));
+    }
+
+    #[test]
+    fn prompt_guidance_hides_data_tools_without_data_port() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::CalendarCoachChat,
+            &LlmProvider::OpenAi,
+            &sample_tool_context(false),
+        );
+
+        assert!(prompt.contains("`simulate_forward_load`"));
+        assert!(!prompt.contains("`get_selected_workout`"));
+        assert!(!prompt.contains("`selected_workout_power_curve`"));
+    }
+
+    #[test]
+    fn prompt_guidance_is_not_added_for_provider_without_tool_support() {
+        let prompt = with_tool_prompt_guidance(
+            "Base prompt.",
+            ToolScope::CalendarCoachChat,
+            &LlmProvider::Gemini,
+            &sample_tool_context(true),
+        );
+
+        assert_eq!(prompt, "Base prompt.");
+    }
+
+    #[test]
+    fn tool_loop_rejects_runtime_calls_for_tools_not_available_in_scope() {
+        let response = futures::executor::block_on(run_tool_loop(
+            Arc::new(SingleResponseLlmChatPort::tool_call("get_selected_workout")),
+            sample_provider_config(),
+            LlmChatRequest {
+                user_id: "user-1".to_string(),
+                conversation: vec![LlmChatMessage::user("hello")],
+                ..Default::default()
+            },
+            ToolScope::CalendarCoachChat,
+            sample_tool_context(false),
+            None,
+        ))
+        .expect("tool loop should finish");
+
+        let tool_message = response
+            .state
+            .provider_transcript
+            .iter()
+            .find(|message| matches!(message.role, crate::domain::llm::LlmMessageRole::Tool))
+            .expect("tool message should be recorded");
+
+        assert!(tool_message
+            .content
+            .contains("tool not available in this scope"));
+        assert!(tool_message.content.contains("get_selected_workout"));
+    }
+
+    fn sample_tool_context(with_data_port: bool) -> ToolExecutionContext {
+        ToolExecutionContext {
+            user_id: "user-1".to_string(),
+            training_context: TrainingContext {
+                focus_kind: "calendar".to_string(),
+                ..TrainingContext::default()
+            },
+            today: "2026-05-06".to_string(),
+            data_port: with_data_port.then(|| {
+                Arc::new(NoopGetSelectedWorkoutDataPort) as Arc<dyn GetSelectedWorkoutDataPort>
+            }),
+        }
+    }
+
+    #[derive(Clone)]
+    struct NoopGetSelectedWorkoutDataPort;
+
+    #[derive(Clone)]
+    struct SingleResponseLlmChatPort {
+        response: LlmChatResponse,
+    }
+
+    impl SingleResponseLlmChatPort {
+        fn tool_call(tool_name: &str) -> Self {
+            Self {
+                response: LlmChatResponse {
+                    provider: LlmProvider::OpenAi,
+                    model: "gpt-4o-mini".to_string(),
+                    message: LlmChatMessage::assistant_with_tool_calls(
+                        "",
+                        vec![LlmToolCall {
+                            id: "tool-1".to_string(),
+                            name: tool_name.to_string(),
+                            arguments_json: r#"{"date":"2026-05-06"}"#.to_string(),
+                        }],
+                    ),
+                    finish_reason: Some(LlmFinishReason::ToolCalls),
+                    provider_request_id: None,
+                    usage: LlmTokenUsage::default(),
+                    cache: LlmCacheUsage::default(),
+                },
+            }
+        }
+    }
+
+    impl crate::domain::llm::LlmChatPort for SingleResponseLlmChatPort {
+        fn chat(
+            &self,
+            _config: LlmProviderConfig,
+            _request: LlmChatRequest,
+        ) -> crate::domain::llm::BoxFuture<Result<LlmChatResponse, LlmError>> {
+            let response = self.response.clone();
+            Box::pin(async move { Ok(response) })
+        }
+    }
+
+    fn sample_provider_config() -> LlmProviderConfig {
+        LlmProviderConfig {
+            provider: LlmProvider::OpenAi,
+            model: "gpt-4o-mini".to_string(),
+            api_key: "test-key".to_string(),
+        }
+    }
+
+    impl GetSelectedWorkoutDataPort for NoopGetSelectedWorkoutDataPort {
+        fn list_completed_by_date_range(
+            &self,
+            _user_id: &str,
+            _oldest: &str,
+            _newest: &str,
+        ) -> crate::domain::completed_workouts::BoxFuture<
+            Result<
+                Vec<crate::domain::completed_workouts::CompletedWorkout>,
+                crate::domain::completed_workouts::CompletedWorkoutError,
+            >,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+
+        fn list_planned_by_date_range(
+            &self,
+            _user_id: &str,
+            _oldest: &str,
+            _newest: &str,
+        ) -> crate::domain::planned_workouts::BoxFuture<
+            Result<
+                Vec<crate::domain::planned_workouts::PlannedWorkout>,
+                crate::domain::planned_workouts::PlannedWorkoutError,
+            >,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+
+        fn list_races_by_date_range(
+            &self,
+            _user_id: &str,
+            _oldest: &str,
+            _newest: &str,
+        ) -> crate::domain::races::BoxFuture<
+            Result<Vec<crate::domain::races::Race>, crate::domain::races::RaceError>,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+
+        fn find_summaries_by_workout_ids(
+            &self,
+            _user_id: &str,
+            _workout_ids: Vec<String>,
+        ) -> crate::domain::workout_summary::BoxFuture<
+            Result<
+                Vec<crate::domain::workout_summary::WorkoutSummary>,
+                crate::domain::workout_summary::WorkoutSummaryError,
+            >,
+        > {
+            Box::pin(async { Ok(Vec::new()) })
+        }
     }
 }

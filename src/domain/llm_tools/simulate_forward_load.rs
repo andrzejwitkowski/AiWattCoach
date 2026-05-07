@@ -89,6 +89,12 @@ impl LlmTool for SimulateForwardLoad {
         }
     }
 
+    fn prompt_guidance(&self) -> Option<&'static str> {
+        Some(
+            "use when reasoning about future fatigue, load progression, or the impact of planned workouts; prefer this over mental arithmetic from CTL/ATL/TSB alone",
+        )
+    }
+
     fn execute(
         &self,
         arguments_json: &str,

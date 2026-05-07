@@ -1109,7 +1109,7 @@ async fn calendar_coach_marks_fresh_tool_only_response_as_failed() {
     assert_eq!(
         error,
         CoachConversationError::Llm(LlmError::InvalidResponse(
-            "tool loop exceeded 6 rounds".to_string(),
+            "assistant reply missing final text message".to_string(),
         ))
     );
     let stored = reply_operations

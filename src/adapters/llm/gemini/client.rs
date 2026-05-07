@@ -1,5 +1,6 @@
 use reqwest::StatusCode;
 
+use crate::adapters::llm::logging::{serialize_logged_body, truncate_logged_body};
 use crate::domain::llm::{
     BoxFuture, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError, LlmProviderConfig,
 };
@@ -10,7 +11,6 @@ use super::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
-const MAX_LOGGED_RESPONSE_BODY_CHARS: usize = 400;
 
 #[derive(Clone)]
 pub struct GeminiClient {
@@ -64,6 +64,7 @@ impl LlmChatPort for GeminiClient {
                         message_count,
                         has_system_prompt,
                         has_stable_context,
+                        request_body = %serialize_logged_body(&cache_request),
                         "sending gemini cache create request"
                     );
                     let cache_response = client
@@ -103,17 +104,24 @@ impl LlmChatPort for GeminiClient {
                                     model = %model,
                                     url = %cache_url,
                                     error = %message,
-                                    response_body = %truncate_logged_response_body(&cache_body),
+                                    response_body = %truncate_logged_body(&cache_body),
                                     "gemini cache create json parsing failed"
                                 );
                                 LlmError::InvalidResponse(message)
                             })?;
+                        tracing::info!(
+                            provider = "gemini",
+                            model = %model,
+                            url = %cache_url,
+                            response_body = %truncate_logged_body(&cache_body),
+                            cache_created = provider_cache_id.is_some(),
+                            "gemini cache create request succeeded"
+                        );
                         provider_cache_id = cache.name;
                         cache_expires_at_epoch_seconds = cache
                             .expire_time
                             .as_deref()
                             .and_then(parse_expire_time_epoch_seconds);
-                        tracing::info!(provider = "gemini", model = %model, cache_created = provider_cache_id.is_some(), "gemini cache create request succeeded");
                     } else {
                         let status = cache_response.status();
                         let body = cache_response.text().await.unwrap_or_default();
@@ -122,7 +130,7 @@ impl LlmChatPort for GeminiClient {
                             model = %model,
                             url = %cache_url,
                             status = status.as_u16(),
-                            response_body = %truncate_logged_response_body(&body),
+                            response_body = %truncate_logged_body(&body),
                             "gemini cache create request failed"
                         );
                     }
@@ -141,6 +149,7 @@ impl LlmChatPort for GeminiClient {
                 message_count,
                 has_system_prompt,
                 has_stable_context,
+                request_body = %serialize_logged_body(&payload),
                 "sending gemini generate request"
             );
             let response = client
@@ -168,7 +177,7 @@ impl LlmChatPort for GeminiClient {
                     model = %model,
                     url = %generate_url,
                     status = status.as_u16(),
-                    response_body = %truncate_logged_response_body(&body),
+                    response_body = %truncate_logged_body(&body),
                     "gemini generate request failed"
                 );
                 return Err(map_error(status, body));
@@ -194,11 +203,19 @@ impl LlmChatPort for GeminiClient {
                         model = %model,
                         url = %generate_url,
                         error = %message,
-                        response_body = %truncate_logged_response_body(&response_body),
+                        response_body = %truncate_logged_body(&response_body),
                         "gemini generate json parsing failed"
                     );
                     LlmError::InvalidResponse(message)
                 })?;
+
+            tracing::info!(
+                provider = "gemini",
+                model = %model,
+                url = %generate_url,
+                response_body = %truncate_logged_body(&response_body),
+                "gemini generate request succeeded"
+            );
 
             mapping::map_response(
                 &config,
@@ -212,6 +229,7 @@ impl LlmChatPort for GeminiClient {
                     model = %model,
                     url = %generate_url,
                     error = %error,
+                    response_body = %truncate_logged_body(&response_body),
                     "gemini response mapping failed"
                 );
                 error
@@ -222,15 +240,6 @@ impl LlmChatPort for GeminiClient {
 
 fn normalize_gemini_model_name(model: &str) -> &str {
     model.strip_prefix("google/").unwrap_or(model)
-}
-
-fn truncate_logged_response_body(body: &str) -> String {
-    if body.chars().count() <= MAX_LOGGED_RESPONSE_BODY_CHARS {
-        return body.to_string();
-    }
-
-    let truncated: String = body.chars().take(MAX_LOGGED_RESPONSE_BODY_CHARS).collect();
-    format!("{truncated}...(truncated)")
 }
 
 fn parse_expire_time_epoch_seconds(value: &str) -> Option<i64> {

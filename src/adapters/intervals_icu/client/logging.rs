@@ -23,8 +23,8 @@ pub struct LoggedResponse {
 
 #[derive(Clone, Copy, Debug)]
 pub enum BodyLoggingMode {
-    Full,
     None,
+    Full,
 }
 
 pub async fn execute_and_log(
@@ -35,16 +35,43 @@ pub async fn execute_and_log(
     let request = request.build()?;
 
     match body_logging {
-        BodyLoggingMode::Full => execute_and_log_with_body(client, request).await,
         BodyLoggingMode::None => execute_and_log_without_body(client, request).await,
+        BodyLoggingMode::Full => execute_and_log_with_body(client, request).await,
     }
 }
 
-pub async fn execute_and_log_no_body(
+async fn execute_and_log_without_body(
     client: &reqwest::Client,
-    request: RequestBuilder,
+    request: Request,
 ) -> Result<LoggedResponse, reqwest::Error> {
-    execute_and_log(client, request, BodyLoggingMode::None).await
+    let method = request.method().clone();
+    let url = request.url().clone();
+    let headers = request.headers().clone();
+
+    log_request(&method, &url, &headers, None);
+
+    let start = Instant::now();
+    let response = client
+        .execute(request)
+        .await
+        .inspect_err(|error| log_transport_failure(&method, &url, error, "request_send_failed"))?;
+    let latency = start.elapsed();
+
+    let status = response.status();
+    let resp_headers = response.headers().clone();
+    let body = response
+        .bytes()
+        .await
+        .inspect_err(|error| log_transport_failure(&method, &url, error, "response_read_failed"))?;
+
+    log_response(&method, &url, status, latency, None);
+
+    Ok(LoggedResponse {
+        status,
+        headers: resp_headers,
+        body,
+        url,
+    })
 }
 
 /// Logs an outgoing request and response, consuming the response body.
@@ -82,42 +109,6 @@ async fn execute_and_log_with_body(
     let response_body_preview = format_response_body(&body, &resp_headers);
 
     log_response(&method, &url, status, latency, Some(&response_body_preview));
-
-    Ok(LoggedResponse {
-        status,
-        headers: resp_headers,
-        body,
-        url,
-    })
-}
-
-/// Logs an outgoing request and response, but does NOT log body contents.
-/// Useful for large binary payloads (e.g. .fit files).
-async fn execute_and_log_without_body(
-    client: &reqwest::Client,
-    request: Request,
-) -> Result<LoggedResponse, reqwest::Error> {
-    let method = request.method().clone();
-    let url = request.url().clone();
-    let headers = request.headers().clone();
-
-    log_request(&method, &url, &headers, None);
-
-    let start = Instant::now();
-    let response = client
-        .execute(request)
-        .await
-        .inspect_err(|error| log_transport_failure(&method, &url, error, "request_send_failed"))?;
-    let latency = start.elapsed();
-
-    let status = response.status();
-    let resp_headers = response.headers().clone();
-    let body = response
-        .bytes()
-        .await
-        .inspect_err(|error| log_transport_failure(&method, &url, error, "response_read_failed"))?;
-
-    log_response(&method, &url, status, latency, None);
 
     Ok(LoggedResponse {
         status,

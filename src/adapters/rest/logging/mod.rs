@@ -27,7 +27,7 @@ impl Default for EndpointLogConfig {
         Self {
             log_request_body: false,
             log_response_body: false,
-            max_body_bytes: 10240,
+            max_body_bytes: 204800,
         }
     }
 }
@@ -145,7 +145,7 @@ mod tests {
         let config = EndpointLogConfig::default();
         assert!(!config.log_request_body);
         assert!(!config.log_response_body);
-        assert_eq!(config.max_body_bytes, 10240);
+        assert_eq!(config.max_body_bytes, 204800);
     }
 
     #[test]
@@ -205,6 +205,6 @@ mod tests {
 
         assert!(!config.log_request_body);
         assert!(!config.log_response_body);
-        assert_eq!(config.max_body_bytes, 10240);
+        assert_eq!(config.max_body_bytes, 204800);
     }
 }

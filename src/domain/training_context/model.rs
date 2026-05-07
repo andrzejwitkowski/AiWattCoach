@@ -34,7 +34,7 @@ pub struct TrainingContextBuildResult {
     pub rendered: RenderedTrainingContext,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct TrainingContext {
     pub generated_at_epoch_seconds: i64,
     pub focus_workout_id: Option<String>,
