@@ -106,7 +106,7 @@ where
         })
     }
 
-    pub(in super::super) fn map_existing_llm_failure(
+    pub(in super::super) fn existing_llm_failure_to_error(
         &self,
         operation: CoachReplyOperation,
     ) -> WorkoutSummaryError {

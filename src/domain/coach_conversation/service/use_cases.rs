@@ -413,7 +413,7 @@ where
     }
 
     fn map_existing_llm_failure(&self, operation: CoachConversationReplyOperation) -> Self::Error {
-        self.map_existing_llm_failure(operation)
+        self.existing_llm_failure_to_error(operation)
     }
 
     fn reply_already_pending_error(&self) -> Self::Error {

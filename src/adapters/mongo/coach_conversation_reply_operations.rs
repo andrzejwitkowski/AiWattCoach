@@ -247,6 +247,8 @@ fn map_operation_to_document(
 ) -> CoachConversationReplyOperationDocument {
     CoachConversationReplyOperationDocument {
         user_id: operation.user_id.clone(),
+        // Domain `scope_id` is persisted under the legacy `conversation_id` field name
+        // to preserve backward compatibility with existing Mongo documents.
         conversation_id: operation.scope_id.clone(),
         user_message_id: operation.user_message_id.clone(),
         status: status_as_str(&operation.status).to_string(),
@@ -261,6 +263,7 @@ fn map_operation_to_document(
             .map(|provider| provider.as_str().to_string()),
         model: operation.model.clone(),
         provider_request_id: operation.provider_request_id.clone(),
+        // Domain `reply_message_id` is persisted under the legacy `coach_message_id` field name.
         coach_message_id: operation.reply_message_id.clone(),
         cache_scope_key: operation.cache_scope_key.clone(),
         provider_cache_id: operation.provider_cache_id.clone(),
