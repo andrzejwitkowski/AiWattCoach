@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::domain::{
     athlete_summary::AthleteSummaryGenerator,
     llm::{
-        approximate_token_budget_for_model, hash_text, LlmChatMessage, LlmChatPort, LlmChatRequest,
-        LlmChatResponse, LlmError, LlmMessageRole, UserLlmConfigProvider,
+        hash_text, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError,
+        LlmMessageRole, UserLlmConfigProvider,
     },
     training_context::TrainingContextBuilder,
 };
@@ -57,17 +57,6 @@ impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
                 context.rendered.volatile_context
             );
             let user_prompt = "Create an up-to-date athlete summary for future coaching conversations. Keep it textual, high signal, and do not include raw data dumps.";
-            let estimated_tokens = stable_context.len() / 4
-                + volatile_context.len() / 4
-                + user_prompt.len() / 4
-                + ATHLETE_SUMMARY_SYSTEM_PROMPT.len() / 4;
-
-            if estimated_tokens > approximate_token_budget_for_model(&config.model) {
-                return Err(LlmError::ContextTooLarge(
-                    "athlete summary source exceeds the selected model token budget".to_string(),
-                ));
-            }
-
             let request = LlmChatRequest {
                 user_id: user_id.clone(),
                 system_prompt: ATHLETE_SUMMARY_SYSTEM_PROMPT.to_string(),

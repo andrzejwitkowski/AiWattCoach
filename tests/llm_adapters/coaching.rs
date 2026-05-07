@@ -59,7 +59,6 @@ async fn llm_workout_coach_logs_redacted_builder_request_metadata_only() {
     .await;
 
     assert!(logs.contains("prepared workout summary llm request"));
-    assert!(logs.contains("estimated_request_tokens"));
     assert!(logs.contains("system_prompt_chars"));
     assert!(logs.contains("stable_context_chars"));
     assert!(logs.contains("volatile_context_chars"));

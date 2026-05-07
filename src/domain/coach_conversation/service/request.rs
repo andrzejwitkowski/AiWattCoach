@@ -1,6 +1,6 @@
 use crate::domain::llm::{
-    approximate_token_budget_for_model, hash_text, LlmChatMessage, LlmChatRequest, LlmChatResponse,
-    LlmContextCache, LlmError, LlmProvider, LlmProviderConfig,
+    hash_text, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmContextCache, LlmProvider,
+    LlmProviderConfig,
 };
 use crate::domain::llm_tools::{
     run_tool_loop, with_tool_prompt_guidance, LlmToolLoopOutput, ToolExecutionContext, ToolScope,
@@ -113,14 +113,6 @@ where
             &user_message.id,
         );
 
-        self.ensure_request_fits_model_budget(
-            &config.model,
-            &system_prompt,
-            &stable_context,
-            &volatile_context,
-            &llm_conversation,
-        )?;
-
         let cache_scope_key = Some(format!(
             "calendar-coach:{}:{}",
             conversation.user_id,
@@ -143,35 +135,6 @@ where
             reusable_cache_id,
         })
     }
-
-    fn ensure_request_fits_model_budget(
-        &self,
-        model: &str,
-        system_prompt: &str,
-        stable_context: &str,
-        volatile_context: &str,
-        conversation: &[LlmChatMessage],
-    ) -> Result<(), CoachConversationError> {
-        let estimated_request_tokens = approximate_token_usage(stable_context)
-            + approximate_token_usage(volatile_context)
-            + approximate_token_usage(system_prompt)
-            + conversation
-                .iter()
-                .map(estimate_message_token_usage)
-                .sum::<usize>();
-        let token_budget = approximate_token_budget_for_model(model);
-
-        if estimated_request_tokens > token_budget {
-            return Err(CoachConversationError::Llm(LlmError::ContextTooLarge(
-                format!(
-                    "packed training context exceeds model limits: estimated {estimated_request_tokens} tokens exceeds {token_budget} token budget"
-                ),
-            )));
-        }
-
-        Ok(())
-    }
-
     async fn find_reusable_cache_id(
         &self,
         conversation: &CoachConversation,
@@ -246,19 +209,4 @@ fn current_date_string(now_epoch_seconds: i64) -> String {
                 .format("%Y-%m-%d")
                 .to_string()
         })
-}
-
-fn estimate_message_token_usage(message: &LlmChatMessage) -> usize {
-    approximate_token_usage(&message.content)
-        + message
-            .tool_calls
-            .iter()
-            .map(|tool| {
-                approximate_token_usage(&tool.name) + approximate_token_usage(&tool.arguments_json)
-            })
-            .sum::<usize>()
-}
-
-fn approximate_token_usage(value: &str) -> usize {
-    value.chars().count().div_ceil(3)
 }

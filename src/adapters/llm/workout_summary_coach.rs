@@ -5,10 +5,9 @@ use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
 use crate::domain::{
     identity::Clock,
     llm::{
-        approximate_token_budget_for_model, hash_text,
-        rebuild_conversation_with_provider_transcript, BoxFuture, LlmChatMessage, LlmChatPort,
-        LlmChatRequest, LlmContextCache, LlmContextCacheRepository, LlmError, LlmMessageRole,
-        LlmProvider, UserLlmConfigProvider,
+        hash_text, rebuild_conversation_with_provider_transcript, BoxFuture, LlmChatMessage,
+        LlmChatPort, LlmChatRequest, LlmContextCache, LlmContextCacheRepository, LlmError,
+        LlmMessageRole, LlmProvider, UserLlmConfigProvider,
     },
     llm_tools::{
         run_tool_loop, with_tool_prompt_guidance, GetSelectedWorkoutDataPort, LlmToolLoopOutput,
@@ -122,29 +121,6 @@ where
                 &summary.provider_transcript,
                 &user_message,
             );
-            let estimated_request_tokens = approximate_token_usage(&stable_context)
-                + approximate_token_usage(&volatile_context)
-                + approximate_token_usage(&system_prompt)
-                + conversation
-                    .iter()
-                    .map(|message| {
-                        approximate_token_usage(&message.content)
-                            + message
-                                .tool_calls
-                                .iter()
-                                .map(|tool| {
-                                    approximate_token_usage(&tool.name)
-                                        + approximate_token_usage(&tool.arguments_json)
-                                })
-                                .sum::<usize>()
-                    })
-                    .sum::<usize>();
-            let token_budget = approximate_token_budget_for_model(&config.model);
-            if estimated_request_tokens > token_budget {
-                return Err(LlmError::ContextTooLarge(format!(
-                    "packed training context exceeds model limits: estimated {estimated_request_tokens} tokens exceeds {token_budget} token budget"
-                )));
-            }
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
             let context_hash = hash_text(&format!("{system_prompt}\n{stable_context}"));
             let reusable_cache_id = if config.provider == LlmProvider::Gemini {
@@ -215,7 +191,6 @@ where
                 workout_id = %summary.workout_id,
                 provider = %config.provider,
                 model = %config.model,
-                estimated_request_tokens,
                 system_prompt_chars = request.system_prompt.chars().count(),
                 stable_context_chars = request.stable_context.chars().count(),
                 volatile_context_chars = request.volatile_context.chars().count(),
@@ -302,11 +277,6 @@ fn build_stable_context(
 fn build_volatile_context(packed_training_context: &str) -> String {
     format!("training_context_volatile={packed_training_context}")
 }
-
-fn approximate_token_usage(value: &str) -> usize {
-    value.chars().count().div_ceil(3)
-}
-
 fn current_date_string(now_epoch_seconds: i64) -> String {
     chrono::DateTime::from_timestamp(now_epoch_seconds, 0)
         .map(|time| time.date_naive().format("%Y-%m-%d").to_string())
