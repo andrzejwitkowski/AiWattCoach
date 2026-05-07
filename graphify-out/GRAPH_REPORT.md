@@ -1,7 +1,7 @@
-# Graph Report - AiWattCoach  (2026-05-06)
+# Graph Report - pr188-ci  (2026-05-07)
 
 ## Corpus Check
-- 800 files · ~498,945 words
+- 800 files · ~499,341 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -802,16 +802,16 @@
 10. `RecordingWahooService` - 23 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `capture_tracing_logs_restores_outer_capture_after_nested_call()` --calls--> `capture_tracing_logs()`  [EXTRACTED]
+  /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/tests/settings_rest/tracing_capture.rs → /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/tests/health_check/tracing_capture.rs
+- `format_request_body_redacts_workout_token_in_form_preview()` --calls--> `format_request_body()`  [EXTRACTED]
+  /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/src/adapters/wahoo/client/logging.rs → /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/src/adapters/intervals_icu/client/logging.rs
+- `refresh_calendar_view()` --calls--> `resolve_user_id()`  [EXTRACTED]
+  /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/src/adapters/rest/calendar/handlers.rs → /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/src/adapters/rest/completed_workouts/handlers.rs
 - `get_event()` --calls--> `resolve_user_id()`  [EXTRACTED]
-  src/adapters/rest/intervals/handlers.rs → /Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/rest/completed_workouts/handlers.rs
+  /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/src/adapters/rest/intervals/handlers.rs → /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/src/adapters/rest/completed_workouts/handlers.rs
 - `create_event()` --calls--> `resolve_user_id()`  [EXTRACTED]
-  src/adapters/rest/intervals/handlers.rs → /Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/rest/completed_workouts/handlers.rs
-- `update_event()` --calls--> `resolve_user_id()`  [EXTRACTED]
-  src/adapters/rest/intervals/handlers.rs → /Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/rest/completed_workouts/handlers.rs
-- `delete_event()` --calls--> `resolve_user_id()`  [EXTRACTED]
-  src/adapters/rest/intervals/handlers.rs → /Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/rest/completed_workouts/handlers.rs
-- `download_fit()` --calls--> `resolve_user_id()`  [EXTRACTED]
-  src/adapters/rest/intervals/handlers.rs → /Users/andrzej.witkowski/IdeaProjects/AiWattCoach/src/adapters/rest/completed_workouts/handlers.rs
+  /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/src/adapters/rest/intervals/handlers.rs → /private/var/folders/7z/81v7tyq17_g0shbx66kkpb9h0000gp/T/opencode/pr188-ci/src/adapters/rest/completed_workouts/handlers.rs
 
 ## Communities
 
@@ -4042,9 +4042,9 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 521`** (2 nodes): `buildSettings()`, `AvailabilityCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 522`** (2 nodes): `OptionsCard.tsx`, `handleToggle()`
+- **Thin community `Community 522`** (2 nodes): `handleToggle()`, `OptionsCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 523`** (2 nodes): `IntervalsCard.test.tsx`, `buildSettings()`
+- **Thin community `Community 523`** (2 nodes): `buildSettings()`, `IntervalsCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 524`** (2 nodes): `WahooCard.test.tsx`, `buildSettings()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4078,7 +4078,7 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 539`** (2 nodes): `compressMiniChartWidth()`, `CalendarMiniChart.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 540`** (2 nodes): `useCompletedWorkoutSummary()`, `useCompletedWorkoutSummary.ts`
+- **Thin community `Community 540`** (2 nodes): `useCompletedWorkoutSummary.ts`, `useCompletedWorkoutSummary()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 541`** (2 nodes): `wrapper()`, `calendar.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4128,7 +4128,7 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 564`** (2 nodes): `buildResponse()`, `AppHomePage.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 565`** (2 nodes): `LandingPage.tsx`, `LandingPage()`
+- **Thin community `Community 565`** (2 nodes): `LandingPage()`, `LandingPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 566`** (2 nodes): `RacesPage.tsx`, `RacesPage()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4140,7 +4140,7 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 570`** (2 nodes): `assert_valid_traceparent()`, `assertions.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 571`** (2 nodes): `assert_log_entry_contains()`, `test_support.rs`
+- **Thin community `Community 571`** (2 nodes): `test_support.rs`, `assert_log_entry_contains()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 572`** (2 nodes): `assert_event_order()`, `assertions.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4164,7 +4164,7 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 582`** (2 nodes): `is_duplicate_key_error()`, `error.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 583`** (2 nodes): `bson_or_null()`, `repository.rs`
+- **Thin community `Community 583`** (2 nodes): `repository.rs`, `bson_or_null()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 584`** (2 nodes): `CoachReplyOperationDocument`, `document.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4180,7 +4180,7 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 590`** (2 nodes): `status_class.rs`, `status_class()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 591`** (2 nodes): `CalendarLabelsService`, `service.rs`
+- **Thin community `Community 591`** (2 nodes): `service.rs`, `CalendarLabelsService`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 592`** (2 nodes): `CoachReplyOperationResolution`, `chat.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4197,19 +4197,19 @@ Nodes (0):
         (),
     >`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 594`** (2 nodes): `SpecialDayService`, `service.rs`
+- **Thin community `Community 594`** (2 nodes): `service.rs`, `SpecialDayService`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 595`** (2 nodes): `SpecialDayService<Repository>`, `.new()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 596`** (2 nodes): `GetSelectedWorkoutDataPort`, `port.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 597`** (2 nodes): `build_power_curve_response()`, `response.rs`
+- **Thin community `Community 597`** (2 nodes): `response.rs`, `build_power_curve_response()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 598`** (2 nodes): `CalendarReplyOperationResolution`, `use_cases.rs`
+- **Thin community `Community 598`** (2 nodes): `use_cases.rs`, `CalendarReplyOperationResolution`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 599`** (2 nodes): `map_settings_error()`, `messaging.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 600`** (2 nodes): `refresh_completed_workout_day()`, `refresh.rs`
+- **Thin community `Community 600`** (2 nodes): `refresh.rs`, `refresh_completed_workout_day()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 601`** (2 nodes): `IntervalsService<
         Api,
