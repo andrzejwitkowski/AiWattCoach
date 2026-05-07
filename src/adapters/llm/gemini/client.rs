@@ -109,15 +109,16 @@ impl LlmChatPort for GeminiClient {
                                 );
                                 LlmError::InvalidResponse(message)
                             })?;
+                        provider_cache_id = cache.name;
+                        let cache_created = provider_cache_id.is_some();
                         tracing::info!(
                             provider = "gemini",
                             model = %model,
                             url = %cache_url,
                             response_body = %truncate_logged_body(&cache_body),
-                            cache_created = provider_cache_id.is_some(),
+                            cache_created,
                             "gemini cache create request succeeded"
                         );
-                        provider_cache_id = cache.name;
                         cache_expires_at_epoch_seconds = cache
                             .expire_time
                             .as_deref()

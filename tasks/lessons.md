@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- When a shared logged-body helper is reused across LLM adapters, redact structured JSON before serialization and truncate by char boundary lookup instead of scanning the full string just to decide whether to cut it.
 - For OAuth adapter logging, redact authorization `code` fields explicitly even if the generic sensitive-key helper does not catch that exact name, and avoid logging raw token/userinfo success bodies when size-plus-hash diagnostics are enough.
 - If provider request logs still leave LLM failures opaque, instrument the shared tool loop itself instead of only the outer adapter. For human debugging you usually need the whole sequence: round start, provider assistant message, tool call, tool result, and final assistant turn. If that is too verbose for normal operation, put the full payload logging behind an explicit env flag rather than forcing operators to guess from message counts.
 - If one preview model path keeps returning structurally empty completions after the existing retry for that exact provider error, prefer a narrow workflow-specific fallback to a more stable model on the same provider before adding a global fallback. Keep the trigger exact so normal tool, rate-limit, and prompt errors still surface without silent model switching.

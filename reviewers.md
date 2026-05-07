@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-07 | CodeRabbit | PR #192 logging follow-up on redaction and safe previews
+
+- Problem: the first adapter-body-logging follow-up still left several review-confirmed gaps. Shared `domain::llm::serialize_logged_body(...)` still serialized raw secret-bearing payloads before truncation, Gemini cache-create success logs computed `cache_created` from stale pre-assignment state, Wahoo success responses still logged full preview content instead of a safe summary, Intervals full-body formatting lacked focused tests, and the raised REST preview cap still repeated the raw `204800` literal in behavior and tests.
+- Fix: added structured JSON redaction plus cheaper `char_indices().nth(...)` truncation in `src/domain/llm/logging.rs` with a focused secret-redaction regression, fixed Gemini cache-create success logging to compute `cache_created` after assigning the new cache id, changed Wahoo success-path response logging to emit the hashed binary summary and simplified the dead `Option<&str>` response logger surface, added focused Intervals tests for request/response formatting branches, extracted `DEFAULT_LOG_PREVIEW_MAX_BODY_BYTES` in REST logging, reused `available_tools` for hot-loop argument previews, and documented the training-plan tool-context anchor.
+- Prevention: when adding shared logging helpers, review both security and hot-path cost together: redact structured payloads before serialization, avoid full-string scans when a bounded preview is enough, and prefer byte/hash summaries for non-safe success responses. If a review calls out logging branches or constants as dead or duplicated, fix the production path and add narrow tests in the same patch.
+
 ### 2026-05-07 | user | PR #192 Google OAuth adapter logging review follow-up
 
 - Problem: the adapter-body-logging branch still logged Google OAuth token-exchange request data too broadly and emitted raw success response bodies for token and userinfo calls. That left the authorization `code` visible in request previews and kept secret-bearing provider responses in normal logs longer than needed.

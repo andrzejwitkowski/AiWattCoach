@@ -162,11 +162,11 @@ pub fn run_tool_loop_with_checkpoint(
         }
 
         let available_tools = available_tools_for_scope(scope, &config.provider, &tool_context);
-        let tools = available_tools
+        request.tools = available_tools
             .iter()
             .map(|tool| tool.definition())
             .collect::<Vec<_>>();
-        let tool_choice = if tools.is_empty() {
+        request.tool_choice = if request.tools.is_empty() {
             LlmToolChoice::None
         } else {
             LlmToolChoice::Auto
@@ -186,8 +186,6 @@ pub fn run_tool_loop_with_checkpoint(
         for _ in state.round_count..TOOL_LOOP_MAX_ROUNDS {
             let round = state.round_count.saturating_add(1);
             request.conversation = conversation.clone();
-            request.tools = tools.clone();
-            request.tool_choice = tool_choice.clone();
 
             tracing::info!(
                 provider = %config.provider,
@@ -261,7 +259,9 @@ pub fn run_tool_loop_with_checkpoint(
                     tool_call_id = %tool_call.id,
                     tool_name = %tool_call.name,
                     arguments_json = %truncate_logged_body(&tool_call.arguments_json),
-                    arguments_preview = ?find_tool(&tool_call.name)
+                    arguments_preview = ?available_tools
+                        .iter()
+                        .find(|tool| tool.name() == tool_call.name.as_str())
                         .and_then(|tool| tool.preview_arguments(&tool_call.arguments_json)),
                     "executing llm tool call"
                 );
