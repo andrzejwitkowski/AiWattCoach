@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn format_response_body_redacts_error_json_payloads() {
         let preview = format_response_body(
-            br#"{"access_token":"secret","message":"bad request"}"#,
+            br#"{"access_token":"secret","reason":"bad request"}"#,
             StatusCode::BAD_REQUEST,
         );
 
