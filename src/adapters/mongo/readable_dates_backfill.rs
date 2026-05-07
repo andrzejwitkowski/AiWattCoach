@@ -267,7 +267,7 @@ const COLLECTION_SPECS: &[CollectionBackfillSpec] = &[
         array_fields: &[],
     },
     CollectionBackfillSpec {
-        collection_name: "coach_reply_operations",
+        collection_name: "llm_reply_operations",
         root_fields: &[
             RootTimestampField {
                 epoch_path: "started_at_epoch_seconds",

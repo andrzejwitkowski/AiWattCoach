@@ -2,9 +2,10 @@ use mongodb::bson::DateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub(super) struct CoachReplyOperationDocument {
+pub(super) struct LlmReplyOperationDocument {
     pub(super) user_id: String,
-    pub(super) workout_id: String,
+    pub(super) scope_id: String,
+    pub(super) scope_type: String,
     pub(super) user_message_id: String,
     pub(super) status: String,
     pub(super) failure_kind: Option<String>,
