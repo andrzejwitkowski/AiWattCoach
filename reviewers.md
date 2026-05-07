@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-07 | user | get_selected_workout missing calendar-day fallback
+
+- Problem: the calendar coach called `get_selected_workout` for a day that visibly had a planned workout in the packed `TrainingContext`, but the tool only looked in the planned-workout repository. When that repo view was empty for the selected day, the tool returned no planned workout and the model confidently answered that the day was free.
+- Fix: kept the repository-backed path as the primary source, but added a narrow fallback in `src/domain/llm_tools/get_selected_workout/` that synthesizes planned-workout entries from `training_context.recent_days`, `upcoming_days`, and `projected_days` only when both planned and completed repository data are absent for the selected date. Added focused regressions for recent-day and projected-day fallback coverage.
+- Prevention: when an LLM tool answers questions about a day that already exists in the request-scoped training context, verify that the tool does not rely exclusively on a secondary repository view for presence/absence decisions. If the packed context is the user-visible source of truth for that turn, add a bounded fallback before telling the model that nothing is scheduled.
+
 ### 2026-05-07 | user | REST endpoint body log preview limit
 
 - Problem: the REST endpoint logging preview cap was still set to `10 KB` by default and in the router-level request/response logging groups, which was too small for the current debugging needs.

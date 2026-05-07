@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- If an LLM tool answers about a date that is already present in the packed `TrainingContext`, do not rely only on a repository read-model to decide that nothing is scheduled there. First check whether the same day already carries planned-workout data in `recent_days`, `upcoming_days`, or `projected_days`, and add a focused fallback if the repository view can legitimately lag or be absent.
 - If one preview model path keeps returning structurally empty completions after the existing retry for that exact provider error, prefer a narrow workflow-specific fallback to a more stable model on the same provider before adding a global fallback. Keep the trigger exact so normal tool, rate-limit, and prompt errors still surface without silent model switching.
 - When a shared tool loop or orchestrator changes from replaying an error into another provider round to stopping immediately, update adapter tests to match the new round-count and transcript contract. Do not leave tests asserting a second request or an older tool-local error payload after the control-flow boundary has intentionally moved up a layer.
 - For Intervals.icu client transport logging, keep `BodyLoggingMode::None` as the shared default. Do not switch the shared trace helper to full request/response body previews just because one debugging task needs more visibility; add any body-preview logging only on the narrow call paths whose tests and logging guide explicitly permit it.

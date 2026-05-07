@@ -10,6 +10,9 @@ use crate::domain::{
     llm_tools::{LlmTool, ToolExecutionContext},
     planned_workouts::PlannedWorkout,
     races::Race,
+    training_context::{
+        PlannedWorkoutContext, ProjectedWorkoutContext, RecentDayContext, UpcomingDayContext,
+    },
     workout_summary::WorkoutSummary,
 };
 
@@ -17,7 +20,9 @@ mod port;
 mod response;
 
 pub use port::GetSelectedWorkoutDataPort;
-use response::{build_selected_workout_response, SelectedDate, SelectedWorkoutData};
+use response::{
+    build_selected_workout_response, SelectedDate, SelectedPlannedWorkout, SelectedWorkoutData,
+};
 
 const GET_SELECTED_WORKOUT_TOOL_NAME: &str = "get_selected_workout";
 
@@ -129,7 +134,16 @@ async fn load_selected_workout_data(
 ) -> Result<SelectedWorkoutData, String> {
     let user_id = &context.user_id;
     let completed = load_completed(port, user_id, &date.value).await?;
-    let planned = load_planned(port, user_id, &date.value).await?;
+    let planned = load_planned(port, user_id, &date.value)
+        .await?
+        .into_iter()
+        .map(SelectedPlannedWorkout::from_planned_workout)
+        .collect::<Vec<_>>();
+    let planned = if planned.is_empty() && completed.is_empty() {
+        load_planned_from_training_context(date, context)
+    } else {
+        planned
+    };
     let races = load_races(port, user_id, &date.value).await?;
     let summaries = load_summaries(port, user_id, &completed).await?;
 
@@ -139,6 +153,97 @@ async fn load_selected_workout_data(
         races,
         summaries,
     })
+}
+
+fn load_planned_from_training_context(
+    date: &SelectedDate,
+    context: &ToolExecutionContext,
+) -> Vec<SelectedPlannedWorkout> {
+    let mut planned = context
+        .training_context
+        .recent_days
+        .iter()
+        .filter(|day| day.date == date.value)
+        .flat_map(selected_planned_from_recent_day)
+        .collect::<Vec<_>>();
+
+    planned.extend(
+        context
+            .training_context
+            .upcoming_days
+            .iter()
+            .filter(|day| day.date == date.value)
+            .flat_map(selected_planned_from_upcoming_day),
+    );
+
+    planned.extend(
+        context
+            .training_context
+            .projected_days
+            .iter()
+            .filter(|day| day.date == date.value)
+            .flat_map(selected_planned_from_projected_day),
+    );
+
+    planned
+}
+
+fn selected_planned_from_recent_day(day: &RecentDayContext) -> Vec<SelectedPlannedWorkout> {
+    day.planned_workouts
+        .iter()
+        .map(selected_planned_from_planned_context)
+        .collect()
+}
+
+fn selected_planned_from_upcoming_day(day: &UpcomingDayContext) -> Vec<SelectedPlannedWorkout> {
+    day.planned_workouts
+        .iter()
+        .map(selected_planned_from_planned_context)
+        .collect()
+}
+
+fn selected_planned_from_projected_day(
+    day: &crate::domain::training_context::ProjectedDayContext,
+) -> Vec<SelectedPlannedWorkout> {
+    day.workouts
+        .iter()
+        .enumerate()
+        .map(|(index, workout)| {
+            selected_planned_from_projected_context(day.date.as_str(), workout, index)
+        })
+        .collect()
+}
+
+fn selected_planned_from_planned_context(
+    workout: &PlannedWorkoutContext,
+) -> SelectedPlannedWorkout {
+    SelectedPlannedWorkout {
+        planned_workout_id: format!("context-event:{}", workout.event_id),
+        date: workout
+            .start_date_local
+            .get(..10)
+            .unwrap_or(&workout.start_date_local)
+            .to_string(),
+        name: workout.name.clone(),
+        rest_day: false,
+        rest_day_reason: None,
+        raw_workout_doc: workout.raw_workout_doc.clone(),
+    }
+}
+
+fn selected_planned_from_projected_context(
+    date: &str,
+    workout: &ProjectedWorkoutContext,
+    index: usize,
+) -> SelectedPlannedWorkout {
+    SelectedPlannedWorkout {
+        planned_workout_id: format!("projected:{}:{date}:{index}", workout.source_workout_id),
+        date: date.to_string(),
+        name: workout.name.clone(),
+        rest_day: workout.rest_day,
+        rest_day_reason: workout.rest_day_reason.clone(),
+        raw_workout_doc: workout.raw_workout_doc.clone(),
+    }
 }
 
 async fn load_completed(
