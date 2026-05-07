@@ -10,7 +10,10 @@ use crate::domain::{
     llm_tools::{GetSelectedWorkoutDataPort, LlmTool, ToolExecutionContext},
     planned_workouts::{PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine},
     races::{Race, RaceDiscipline, RacePriority},
-    training_context::TrainingContext,
+    training_context::{
+        PlannedWorkoutContext, ProjectedDayContext, ProjectedWorkoutContext, RecentDayContext,
+        TrainingContext, UpcomingDayContext,
+    },
     workout_summary::{ConversationMessage, MessageRole, WorkoutSummary},
 };
 
@@ -160,6 +163,72 @@ fn get_selected_workout_marks_past_uncompleted_plan() {
 }
 
 #[test]
+fn get_selected_workout_falls_back_to_recent_day_planned_context_when_repo_is_empty() {
+    let tool = GetSelectedWorkout;
+    let mut context = sample_context(TestDataPort::default());
+    context.training_context.recent_days = vec![RecentDayContext {
+        date: "2026-05-07".to_string(),
+        free_day: false,
+        sick_day: false,
+        sick_note: None,
+        workouts: Vec::new(),
+        planned_workouts: vec![sample_planned_day_context("2026-05-07")],
+        special_days: Vec::new(),
+    }];
+    context.today = "2026-05-07".to_string();
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-07"}"#, &context));
+
+    assert!(response.contains(r#""kind":"planned""#));
+    assert!(response.contains(r#""name":"Aerobic Depth""#));
+    assert!(response.contains(r#""raw_workout_doc":"- 90m 65%""#));
+}
+
+#[test]
+fn get_selected_workout_falls_back_to_projected_day_context_when_repo_is_empty() {
+    let tool = GetSelectedWorkout;
+    let mut context = sample_context(TestDataPort::default());
+    context.training_context.projected_days = vec![ProjectedDayContext {
+        date: "2026-05-08".to_string(),
+        workouts: vec![ProjectedWorkoutContext {
+            source_workout_id: "source-1".to_string(),
+            start_date_local: "2026-05-08T00:00:00".to_string(),
+            name: Some("Projected Endurance".to_string()),
+            interval_blocks: Vec::new(),
+            raw_workout_doc: Some("- 120m 70%".to_string()),
+            rest_day: false,
+            rest_day_reason: None,
+        }],
+    }];
+    context.today = "2026-05-07".to_string();
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-08"}"#, &context));
+
+    assert!(response.contains(r#""kind":"planned""#));
+    assert!(response.contains(r#""name":"Projected Endurance""#));
+    assert!(response.contains(r#""raw_workout_doc":"- 120m 70%""#));
+}
+
+#[test]
+fn get_selected_workout_falls_back_to_upcoming_day_planned_context_when_repo_is_empty() {
+    let tool = GetSelectedWorkout;
+    let mut context = sample_context(TestDataPort::default());
+    context.training_context.upcoming_days = vec![UpcomingDayContext {
+        date: "2026-05-09".to_string(),
+        free_day: false,
+        planned_workouts: vec![sample_planned_day_context("2026-05-09")],
+        special_days: Vec::new(),
+    }];
+    context.today = "2026-05-07".to_string();
+
+    let response = futures::executor::block_on(tool.execute(r#"{"date":"2026-05-09"}"#, &context));
+
+    assert!(response.contains(r#""kind":"planned""#));
+    assert!(response.contains(r#""name":"Aerobic Depth""#));
+    assert!(response.contains(r#""raw_workout_doc":"- 90m 65%""#));
+}
+
+#[test]
 fn get_selected_workout_returns_basic_race_when_no_completed_workout_exists() {
     let tool = GetSelectedWorkout;
     let context = sample_context(TestDataPort {
@@ -288,6 +357,21 @@ fn sample_context(data_port: TestDataPort) -> ToolExecutionContext {
         },
         today: "2026-05-05".to_string(),
         data_port: Some(Arc::new(data_port)),
+    }
+}
+
+fn sample_planned_day_context(date: &str) -> PlannedWorkoutContext {
+    PlannedWorkoutContext {
+        event_id: 77,
+        start_date_local: format!("{date}T06:00:00"),
+        name: Some("Aerobic Depth".to_string()),
+        category: "WORKOUT".to_string(),
+        interval_blocks: Vec::new(),
+        raw_workout_doc: Some("- 90m 65%".to_string()),
+        estimated_training_stress_score: Some(55.0),
+        estimated_intensity_factor: Some(0.65),
+        estimated_normalized_power_watts: Some(210),
+        completed: false,
     }
 }
 

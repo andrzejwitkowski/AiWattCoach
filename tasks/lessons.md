@@ -50,6 +50,7 @@
 
 ## Small Review Fixes
 
+- If an LLM tool answers about a date that is already present in the packed `TrainingContext`, do not rely only on a repository read-model to decide that nothing is scheduled there. First check whether the same day already carries planned-workout data in `recent_days`, `upcoming_days`, or `projected_days`, and add a focused fallback if the repository view can legitimately lag or be absent.
 - When a shared logged-body helper is reused across LLM adapters, redact structured JSON before serialization and truncate by char boundary lookup instead of scanning the full string just to decide whether to cut it.
 - For OAuth adapter logging, redact authorization `code` fields explicitly even if the generic sensitive-key helper does not catch that exact name, and avoid logging raw token/userinfo success bodies when size-plus-hash diagnostics are enough.
 - If provider request logs still leave LLM failures opaque, instrument the shared tool loop itself instead of only the outer adapter. For human debugging you usually need the whole sequence: round start, provider assistant message, tool call, tool result, and final assistant turn. If that is too verbose for normal operation, put the full payload logging behind an explicit env flag rather than forcing operators to guess from message counts.

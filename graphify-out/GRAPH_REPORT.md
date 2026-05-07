@@ -1,11 +1,11 @@
-# Graph Report - AiWattCoach  (2026-05-06)
+# Graph Report - AiWattCoach  (2026-05-07)
 
 ## Corpus Check
-- 800 files · ~498,945 words
+- 801 files · ~501,491 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8434 nodes · 11269 edges · 778 communities detected
+- 8464 nodes · 11316 edges · 778 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -797,9 +797,9 @@
 5. `TestIntervalsServer` - 27 edges
 6. `FakeIntervalsApi` - 25 edges
 7. `WahooOAuthClient` - 25 edges
-8. `sample_planned_workout()` - 25 edges
-9. `required_settings_map()` - 24 edges
-10. `RecordingWahooService` - 23 edges
+8. `sample_context()` - 25 edges
+9. `sample_planned_workout()` - 25 edges
+10. `required_settings_map()` - 24 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `get_event()` --calls--> `resolve_user_id()`  [EXTRACTED]
@@ -817,187 +817,187 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.02
-Nodes (54): build_daily_training_load_snapshots_falls_back_to_provider_ftp_after_ftp_is_cleared(), build_daily_training_load_snapshots_falls_back_to_provider_tss_before_app_entry_when_provider_ftp_is_missing(), build_daily_training_load_snapshots_keeps_intervals_if_and_ef_averages(), build_daily_training_load_snapshots_uses_provider_ftp_before_app_entry_and_app_ftp_after(), completed_workout_read_service_accepts_canonical_completed_workout_ids(), completed_workout_read_service_falls_back_to_canonical_completed_workout_id(), completed_workout_repository_finds_by_source_activity_id(), completed_workout_repository_finds_latest_by_user() (+46 more)
+Nodes (49): build_daily_training_load_snapshots_falls_back_to_provider_ftp_after_ftp_is_cleared(), build_daily_training_load_snapshots_falls_back_to_provider_tss_before_app_entry_when_provider_ftp_is_missing(), build_daily_training_load_snapshots_keeps_intervals_if_and_ef_averages(), build_daily_training_load_snapshots_uses_provider_ftp_before_app_entry_and_app_ftp_after(), completed_workout_read_service_accepts_canonical_completed_workout_ids(), completed_workout_read_service_falls_back_to_canonical_completed_workout_id(), completed_workout_repository_finds_by_source_activity_id(), completed_workout_repository_finds_latest_by_user() (+41 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.02
-Nodes (40): AssertingIntervalsApi, capture_request(), CapturedRequest, CapturingChatPort, FailingReusableCacheRepository, FakeIntervalsApi, FakeIntervalsSettings, FixedClock (+32 more)
-
-### Community 2 - "Community 2"
-Cohesion: 0.02
 Nodes (59): athlete_summary_generate_task_handler(), AthleteSummaryGenerateTaskHandler, AthleteSummaryGenerateTaskHandler<Base>, AthleteSummaryTaskPayload, AthleteSummaryTaskResultHandler, AthleteSummaryTaskResultHandler<Base>, build_completed_checkpoint(), build_force_dedupe_key() (+51 more)
 
-### Community 3 - "Community 3"
+### Community 2 - "Community 2"
 Cohesion: 0.04
-Nodes (79): calendar_entry_view_service_lists_mixed_entries_by_date_range(), completed_workout_projection_carries_local_summary(), completed_workout_projection_handles_short_start_date_local_without_panicking(), computes_5s_ad_hoc_when_cache_missing(), computes_ad_hoc_for_non_5s_resolution(), FixedClock, get_selected_workout_downsamples_large_streams(), get_selected_workout_downsampling_keeps_both_ends_for_near_limit_streams() (+71 more)
+Nodes (81): calendar_entry_view_service_lists_mixed_entries_by_date_range(), completed_workout_projection_carries_local_summary(), completed_workout_projection_handles_short_start_date_local_without_panicking(), computes_5s_ad_hoc_when_cache_missing(), computes_ad_hoc_for_non_5s_resolution(), FixedClock, get_selected_workout_downsamples_large_streams(), get_selected_workout_downsampling_keeps_both_ends_for_near_limit_streams() (+73 more)
+
+### Community 3 - "Community 3"
+Cohesion: 0.02
+Nodes (25): AssertingIntervalsApi, FakeIntervalsApi, FakeIntervalsSettings, FixedIdGenerator, RecordingCalendarRefresh, RecordingImports, RecordingImportService, RecordingIntervalsApi (+17 more)
 
 ### Community 4 - "Community 4"
+Cohesion: 0.02
+Nodes (38): capture_request(), CapturedRequest, CapturingChatPort, external_import_service(), external_import_service_without_refresh(), FailingReusableCacheRepository, FixedClock, FixedGeminiConfigProvider (+30 more)
+
+### Community 5 - "Community 5"
 Cohesion: 0.03
 Nodes (27): auth_test_app(), auth_test_app_with_custom_settings(), auth_test_app_with_custom_settings_and_limited_whitelist_rate(), auth_test_app_with_limited_whitelist_rate(), auth_test_app_with_settings(), auth_test_app_with_wahoo(), auth_test_app_with_wahoo_webhook(), auth_test_app_without_identity() (+19 more)
 
-### Community 5 - "Community 5"
+### Community 6 - "Community 6"
 Cohesion: 0.05
 Nodes (25): FakeIntervalsService, FakeProjectionRepository, FixedPlannedWorkoutTokenRepository, InMemoryCalendarEntryViewRepository, InMemoryUserSettingsRepository, list_events_hydrates_actual_workout_from_linked_completed_workout(), list_events_reads_from_calendar_entry_view_only(), list_events_skips_completed_entries_even_with_planned_backlink() (+17 more)
 
-### Community 6 - "Community 6"
+### Community 7 - "Community 7"
 Cohesion: 0.04
 Nodes (34): EmptyCalendarLabelSource, EmptyTrainingPlanProjectionRepository, frontend_fixture(), FrontendFixture, get_json(), InMemoryCalendarEntryViewRepository, InMemoryCompletedWorkoutRepository, intervals_test_app() (+26 more)
 
-### Community 7 - "Community 7"
+### Community 8 - "Community 8"
 Cohesion: 0.07
 Nodes (35): epoch_seconds_to_utc_date(), FailingFtpHistoryRepository, find_settings_does_not_create_defaults_when_missing(), FtpHistoryWritePort, InMemoryProviderPollStateRepository, InMemoryUserSettingsRepository, map_poll_state_error(), map_training_load_error() (+27 more)
-
-### Community 8 - "Community 8"
-Cohesion: 0.03
-Nodes (23): external_import_service(), external_import_service_without_refresh(), InMemoryCompletedWorkoutRepository, InMemoryObservationRepository, InMemoryPlannedCompletedWorkoutLinkRepository, InMemoryPlannedWorkoutRepository, InMemoryPlannedWorkoutTokenRepository, InMemoryPlannedWorkoutWahooSyncRepository (+15 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.05
 Nodes (49): AiAgentsDocument, AvailabilityDayDocument, AvailabilityDocument, backfill_wahoo_user_id_updates_only_wahoo_fields(), bootstrap_intervals_updated_at(), build_intervals_poll_bootstrap_filter(), build_intervals_poll_bootstrap_filter_matches_non_empty_credentials_or_existing_users(), build_intervals_poll_bootstrap_filter_omits_user_id_clause_without_existing_users() (+41 more)
 
 ### Community 10 - "Community 10"
+Cohesion: 0.05
+Nodes (21): create_race_persists_and_syncs_to_intervals(), create_race_retry_after_lost_final_sync_write_updates_existing_remote_event(), create_race_retry_without_external_id_reuses_existing_remote_event(), delete_race_deletes_remote_event_before_local_remove(), delete_race_keeps_sync_state_when_local_delete_fails(), delete_race_refreshes_calendar_view_when_sync_state_delete_fails_after_local_delete(), FailingCalendarRefresh, InMemoryExternalSyncStateRepository (+13 more)
+
+### Community 11 - "Community 11"
 Cohesion: 0.07
 Nodes (54): admin_get_user_settings(), athlete_summary_service(), auth_and_get_calendar_labels_service(), auth_and_get_calendar_service(), CompletedWorkoutPath, CompletedWorkoutSummaryPath, connection_tester(), create_activity() (+46 more)
 
-### Community 11 - "Community 11"
+### Community 12 - "Community 12"
 Cohesion: 0.05
 Nodes (19): calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls(), calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_trimmed_content(), calendar_coach_generate_reply_uses_calendar_overview_context_and_no_summary_text(), calendar_coach_marks_fresh_tool_only_response_as_failed(), calendar_coach_marks_tool_only_recovery_as_failed(), calendar_coach_retries_provider_transcript_write_after_compare_and_set_conflict(), calendar_coach_send_message_result_keeps_summary_regeneration_hint_false(), configured_settings() (+11 more)
 
-### Community 12 - "Community 12"
+### Community 13 - "Community 13"
 Cohesion: 0.04
 Nodes (16): default_dev_coach(), DevWorkoutCoach, existing_summary(), existing_summary_with_finished_conversation(), PersistCheckingTrainingPlanService, RecordingCompletedWorkoutTargetService, RecordingLatestCompletedActivityService, RecordingTrainingPlanService (+8 more)
 
-### Community 13 - "Community 13"
+### Community 14 - "Community 14"
 Cohesion: 0.07
 Nodes (22): AuthoritativeCompletedWorkoutRepository, AuthoritativeCompletedWorkoutRepository<Workouts, SyncStates>, AuthoritativePlannedWorkoutRepository, AuthoritativePlannedWorkoutRepository<Planned, Completed, Links, SyncStates>, expanded_completed_workout_range(), hides_legacy_externally_imported_planned_workouts(), hides_planned_workout_when_authoritative_completed_links_to_it(), hides_planned_workout_when_authoritative_completed_workout_crosses_date_boundary() (+14 more)
 
-### Community 14 - "Community 14"
+### Community 15 - "Community 15"
 Cohesion: 0.07
 Nodes (34): build_direct_event_matches(), build_local_events(), canonical_event_id(), CompletedWorkoutReadPort, date_key(), dedup_completed_workouts_for_prompt(), dedup_completed_workouts_for_prompt_keeps_preferred_duplicate(), default_special_day_name() (+26 more)
 
-### Community 15 - "Community 15"
+### Community 16 - "Community 16"
 Cohesion: 0.09
 Nodes (31): assert_event_order(), completed_operation(), completed_operation_at(), ensure_fresh_summary_fails_when_generator_returns_blank_assistant_text(), ensure_fresh_summary_generates_when_missing(), ensure_fresh_summary_reads_repository_once_when_summary_is_fresh(), ensure_fresh_summary_regenerates_when_older_than_monday(), ensure_fresh_summary_reuses_summary_generated_this_week() (+23 more)
 
-### Community 16 - "Community 16"
+### Community 17 - "Community 17"
 Cohesion: 0.04
 Nodes (1): RecordingMissingSettingsService
 
-### Community 17 - "Community 17"
-Cohesion: 0.06
-Nodes (15): create_race_persists_and_syncs_to_intervals(), create_race_retry_after_lost_final_sync_write_updates_existing_remote_event(), create_race_retry_without_external_id_reuses_existing_remote_event(), delete_race_deletes_remote_event_before_local_remove(), delete_race_keeps_sync_state_when_local_delete_fails(), delete_race_refreshes_calendar_view_when_sync_state_delete_fails_after_local_delete(), InMemoryExternalSyncStateRepository, InMemoryProviderPollStateRepository (+7 more)
-
 ### Community 18 - "Community 18"
+Cohesion: 0.09
+Nodes (46): body_hash(), body_hash_returns_short_sha_preview(), BodyLoggingMode, execute_and_log(), execute_and_log_with_body(), execute_and_log_with_body_request(), execute_and_log_without_body(), format_binary_body() (+38 more)
+
+### Community 19 - "Community 19"
 Cohesion: 0.07
 Nodes (46): append_interval_segments(), append_segment(), build_workout_summary(), format_number(), is_exact_date(), mean_target_percent(), mean_target_percent_from_bounds(), normalize_definition() (+38 more)
 
-### Community 19 - "Community 19"
+### Community 20 - "Community 20"
 Cohesion: 0.08
 Nodes (46): buildCompletedWorkoutBars(), buildCompletedWorkoutPreviewBars(), buildExpandedGroupedPlannedChartSteps(), buildExpandedPlannedSegments(), buildGroupedPlannedWorkoutSections(), buildPlannedTargetLabel(), buildPlannedWorkoutBars(), buildPlannedWorkoutChartIntervals() (+38 more)
 
-### Community 20 - "Community 20"
+### Community 21 - "Community 21"
 Cohesion: 0.06
 Nodes (32): choose_preferred_planned_workout_link(), completed_workout_refresh_dates(), CompletedWorkoutTargetUseCases, existing_link_candidate(), ExternalCompletedWorkoutImport, ExternalImportCommand, ExternalImportError, ExternalImportOutcome (+24 more)
 
-### Community 21 - "Community 21"
+### Community 22 - "Community 22"
 Cohesion: 0.05
 Nodes (11): InMemoryAthleteSummaryOperationRepository, InMemoryAthleteSummaryRepository, InMemoryTaskRepository, InMemoryTaskWorkerRepository, llm_response(), run_test_task(), spawn_test_task_worker(), StubGenerator (+3 more)
 
-### Community 22 - "Community 22"
+### Community 23 - "Community 23"
 Cohesion: 0.05
 Nodes (44): ActivityDetailsDto, ActivityDto, ActivityIntervalDto, ActivityIntervalGroupDto, ActivityMetricsDto, ActivityPath, ActivityStreamDto, ActivityZoneTimeDto (+36 more)
 
-### Community 23 - "Community 23"
+### Community 24 - "Community 24"
 Cohesion: 0.08
 Nodes (20): calendar_coach_test_app(), CoachState, FrontendFixture, get_current_conversation_requires_authentication(), get_current_conversation_returns_active_conversation(), get_json(), sample_conversation(), send_message_returns_updated_transcript() (+12 more)
 
-### Community 24 - "Community 24"
+### Community 25 - "Community 25"
 Cohesion: 0.06
 Nodes (24): AlwaysFailingCoach, CapturingAthleteSummaryCoach, CountingCoach, FailingAthleteSummaryService, generate_coach_reply_continues_when_athlete_summary_is_unavailable(), generate_coach_reply_logs_user_id_when_llm_call_fails(), generate_coach_reply_marks_fresh_tool_only_response_as_failed(), generate_coach_reply_marks_tool_only_recovery_as_failed() (+16 more)
 
-### Community 25 - "Community 25"
+### Community 26 - "Community 26"
 Cohesion: 0.05
 Nodes (10): capture_request(), CapturedRequest, gemini_cache_handler(), gemini_generate_handler(), MockServerState, openai_handler(), openrouter_handler(), ServerState (+2 more)
 
-### Community 26 - "Community 26"
+### Community 27 - "Community 27"
 Cohesion: 0.1
 Nodes (15): build_create_plan_form(), build_update_plan_form(), create_plan_form_uses_data_uri_and_required_fields(), map_file_reference(), map_plan(), map_user(), map_workout(), map_workout_summary() (+7 more)
 
-### Community 27 - "Community 27"
+### Community 28 - "Community 28"
 Cohesion: 0.06
 Nodes (28): Activity, ActivityDeduplicationIdentity, ActivityDetails, ActivityFallbackIdentity, ActivityInterval, ActivityIntervalGroup, ActivityMetrics, ActivityStream (+20 more)
 
-### Community 28 - "Community 28"
+### Community 29 - "Community 29"
+Cohesion: 0.08
+Nodes (28): all_tools(), available_tools_for_scope(), execute_available_tool_call(), find_tool(), LlmTool, LlmToolLoopOutput, LlmToolLoopState, merge_public_tool_calls() (+20 more)
+
+### Community 30 - "Community 30"
 Cohesion: 0.09
 Nodes (17): advance_calendar_cursor(), advance_completed_workout_cursor(), default_wahoo_cursor_page(), default_wahoo_cursor_resume_per_page(), epoch_seconds_to_date(), format_date(), format_wahoo_resume_cursor(), parse_date_cursor() (+9 more)
 
-### Community 29 - "Community 29"
+### Community 31 - "Community 31"
 Cohesion: 0.06
 Nodes (12): finish_server_shutdown(), NotFoundWorkoutSummaryService, planning_context_ignores_public_tool_messages(), planning_context_not_found_maps_to_validation_error(), reconcile_intervals_poll_states(), should_reset_poll_state(), shutdown_signal(), StaticWorkoutSummaryService (+4 more)
 
-### Community 30 - "Community 30"
+### Community 32 - "Community 32"
 Cohesion: 0.07
 Nodes (23): completed_workout_document_round_trip_preserves_fields(), CompletedWorkoutDetailsDocument, CompletedWorkoutDocument, CompletedWorkoutIntervalDocument, CompletedWorkoutIntervalGroupDocument, CompletedWorkoutMetricsDocument, CompletedWorkoutPowerCurveDocument, CompletedWorkoutStreamDocument (+15 more)
 
-### Community 31 - "Community 31"
+### Community 33 - "Community 33"
 Cohesion: 0.07
 Nodes (10): ctrl_c_registration_error_logs_and_finishes_shutdown_future(), FixedClock, park_wahoo_poll_states_disables_legacy_wahoo_completed_polling(), reconcile_intervals_poll_states_seeds_missing_states_for_existing_connected_users(), reconcile_wahoo_user_ids_backfills_missing_ids_for_connected_users(), RecordingWahooService, SharedLogBuffer, sigterm_registration_error_logs_and_finishes_shutdown_future() (+2 more)
 
-### Community 32 - "Community 32"
+### Community 34 - "Community 34"
 Cohesion: 0.05
 Nodes (33): AiAgentsDto, AvailabilityDayDto, AvailabilityDayRequest, AvailabilityDto, CalendarActivityLabelDto, CalendarCustomLabelDto, CalendarEventDto, CalendarHealthLabelDto (+25 more)
 
-### Community 33 - "Community 33"
+### Community 35 - "Community 35"
 Cohesion: 0.07
 Nodes (19): AiAgentsConfig, AnalysisOptions, availability_from_days_derives_configured_state(), availability_from_days_orders_weekdays_canonically(), availability_is_not_configured_without_any_available_days(), AvailabilityDay, AvailabilitySettings, cycling_settings_debug_redacts_sensitive_profile_fields() (+11 more)
 
-### Community 34 - "Community 34"
-Cohesion: 0.09
-Nodes (28): all_tools(), available_tools_for_scope(), execute_available_tool_call(), find_tool(), LlmTool, LlmToolLoopOutput, LlmToolLoopState, merge_public_tool_calls() (+20 more)
+### Community 36 - "Community 36"
+Cohesion: 0.08
+Nodes (19): build_unavailable_response(), execute_power_curve(), get_selected_workout(), GetSelectedWorkout, GetSelectedWorkoutArgs, load_completed(), load_planned(), load_planned_from_training_context() (+11 more)
 
-### Community 35 - "Community 35"
+### Community 37 - "Community 37"
 Cohesion: 0.08
 Nodes (5): FixedClock, RepositoryErrorSettingsService, test_availability(), TestSettingsService, UpdateIntervalsErrorSettingsService
 
-### Community 36 - "Community 36"
+### Community 38 - "Community 38"
 Cohesion: 0.1
 Nodes (30): atl_from_context(), Baseline, combine_estimates(), ctl_from_context(), format_date(), ForwardLoadBaseline, ForwardLoadDay, future_event_estimate() (+22 more)
 
-### Community 37 - "Community 37"
-Cohesion: 0.15
-Nodes (28): BodyLoggingMode, execute_and_log(), execute_and_log_with_body(), execute_and_log_with_body_request(), execute_and_log_without_body(), format_binary_body(), format_binary_body_formats_binary_payloads(), format_request_body() (+20 more)
-
-### Community 38 - "Community 38"
+### Community 39 - "Community 39"
 Cohesion: 0.08
 Nodes (10): BlockingCoach, direct_service(), direct_service_with_athlete_summary(), direct_service_with_operation_repository(), existing_summary(), InMemoryCoachReplyOperationRepository, InMemoryWorkoutSummaryRepository, sample_athlete_summary() (+2 more)
 
-### Community 39 - "Community 39"
+### Community 40 - "Community 40"
 Cohesion: 0.12
 Nodes (31): activity_hash_changes_when_details_unavailable_reason_changes(), activity_hash_changes_when_persisted_details_change(), build_activity_import_command(), event_date(), FixedIdGenerator, hash_activity(), hash_event(), infer_race_discipline() (+23 more)
 
-### Community 40 - "Community 40"
+### Community 41 - "Community 41"
 Cohesion: 0.08
 Nodes (26): AuthMeResponse, build_session_cookie(), buildAuthUrl(), buildGoogleLoginUrl(), buildWahooConnectUrl(), clear_session_cookie(), ClientMetadata, current_user() (+18 more)
-
-### Community 41 - "Community 41"
-Cohesion: 0.07
-Nodes (16): approximate_token_budget_for_model(), LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmContextCache, LlmFinishReason, LlmMessageRole (+8 more)
 
 ### Community 42 - "Community 42"
 Cohesion: 0.06
 Nodes (6): alias_backed_summary(), AliasSummaryRepository, event_id_only_summary(), EventIdOnlySummaryRepository, summary_for_workout_id(), TestWorkoutSummaryRepository
 
 ### Community 43 - "Community 43"
+Cohesion: 0.1
+Nodes (9): AuthoritativeRaceRepository, AuthoritativeRaceRepository<Races, Observations>, AuthoritativeSpecialDayRepository, AuthoritativeSpecialDayRepository<SpecialDays, Observations>, hides_externally_imported_races_from_reads(), hides_externally_imported_special_days_from_reads(), sample_day(), TestObservations (+1 more)
+
+### Community 44 - "Community 44"
 Cohesion: 0.06
 Nodes (16): CoachConversation, CoachConversationError, CoachConversationFocus, CoachConversationMessage, CoachConversationMessageRole, CoachConversationReply, CoachConversationReplyClaimResult, CoachConversationReplyOperation (+8 more)
 
-### Community 44 - "Community 44"
+### Community 45 - "Community 45"
 Cohesion: 0.11
 Nodes (13): canonical_race_id_marker(), is_valid_date_format(), parse_intervals_event_id(), projected_event_category(), projected_event_description(), projected_event_name(), projected_event_start_date_local(), projected_event_type() (+5 more)
-
-### Community 45 - "Community 45"
-Cohesion: 0.1
-Nodes (9): AuthoritativeRaceRepository, AuthoritativeRaceRepository<Races, Observations>, AuthoritativeSpecialDayRepository, AuthoritativeSpecialDayRepository<SpecialDays, Observations>, hides_externally_imported_races_from_reads(), hides_externally_imported_special_days_from_reads(), sample_day(), TestObservations (+1 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.06
@@ -1020,8 +1020,8 @@ Cohesion: 0.07
 Nodes (15): CoachReply, CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationFailureKind, CoachReplyOperationStatus, CompletedCoachReply, ConversationMessage, MessageRole (+7 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.1
-Nodes (16): build_unavailable_response(), execute_power_curve(), get_selected_workout(), GetSelectedWorkout, GetSelectedWorkoutArgs, load_completed(), load_planned(), load_races() (+8 more)
+Cohesion: 0.08
+Nodes (14): LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmContextCache, LlmFinishReason, LlmMessageRole, LlmProvider (+6 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.06
@@ -1237,100 +1237,100 @@ Cohesion: 0.13
 Nodes (11): is_allowed_availability_duration(), validate_availability(), validate_availability_day(), validate_availability_derives_not_configured_when_all_days_unavailable(), validate_availability_ignores_incoming_false_configured_when_days_are_available(), validate_availability_rejects_duration_for_unavailable_day(), validate_availability_rejects_invalid_duration_for_available_day(), validate_optional_profile_text() (+3 more)
 
 ### Community 98 - "Community 98"
+Cohesion: 0.13
+Nodes (19): build_race_entries(), build_selected_workout_response(), build_workout_entries(), CompletedWorkoutMetricsDto, ConversationMessageDto, GetSelectedWorkoutResponse, map_completed_workout(), map_planned_workout() (+11 more)
+
+### Community 99 - "Community 99"
 Cohesion: 0.09
 Nodes (6): FtpHistoryRepository, InMemoryFtpHistoryRepository, InMemoryTrainingLoadDailySnapshotRepository, NoopFtpHistoryRepository, NoopTrainingLoadDailySnapshotRepository, TrainingLoadDailySnapshotRepository
 
-### Community 99 - "Community 99"
+### Community 100 - "Community 100"
 Cohesion: 0.33
 Nodes (17): mongo_fixture_or_skip(), MongoFixture, sample_operation(), sample_projected_days(), sample_snapshot(), sample_snapshot_for_user(), training_plan_generation_operation_repository_round_trips_and_reclaims_failed_operations(), training_plan_generation_operation_repository_round_trips_recap_timestamp() (+9 more)
 
-### Community 100 - "Community 100"
+### Community 101 - "Community 101"
 Cohesion: 0.16
 Nodes (19): ActivityPath, AthletePath, capture_request(), create_event_handler(), delete_activity_handler(), delete_event_handler(), download_fit_handler(), EventPath (+11 more)
 
-### Community 101 - "Community 101"
+### Community 102 - "Community 102"
 Cohesion: 0.11
 Nodes (1): TestIntervalsService
 
-### Community 102 - "Community 102"
+### Community 103 - "Community 103"
 Cohesion: 0.1
 Nodes (0): 
 
-### Community 103 - "Community 103"
+### Community 104 - "Community 104"
 Cohesion: 0.1
 Nodes (20): OpenRouterCacheControl, OpenRouterChatRequest, OpenRouterChatResponse, OpenRouterChoice, OpenRouterContentPart, OpenRouterFunctionDefinition, OpenRouterMessage, OpenRouterMessageContent (+12 more)
 
-### Community 104 - "Community 104"
+### Community 105 - "Community 105"
 Cohesion: 0.18
 Nodes (15): collect_body(), format_body_for_logging(), format_response_body_for_logging(), log_request(), log_response(), preserves_large_request_body_when_body_logging_enabled(), preserves_large_response_body_when_body_logging_enabled(), request_logging_json_preview_honors_configured_limit() (+7 more)
 
-### Community 105 - "Community 105"
+### Community 106 - "Community 106"
 Cohesion: 0.14
 Nodes (2): CoachReplyTaskResultHandler<Base>, SchedulerBackedWorkoutSummaryService<Base, Tasks, Workers, Time, Ids>
 
-### Community 106 - "Community 106"
+### Community 107 - "Community 107"
 Cohesion: 0.13
 Nodes (11): build_pending_approval_redirect(), compute_session_expiry(), GoogleLoginOutcome, GoogleLoginStart, GoogleLoginSuccess, IdentityService, IdentityService<Users, Sessions, LoginStates, Whitelist, GoogleOAuth, Time, Ids>, IdentityServiceConfig (+3 more)
 
-### Community 107 - "Community 107"
+### Community 108 - "Community 108"
 Cohesion: 0.12
 Nodes (10): AppUser, assign_roles(), authorize_admin_access(), AuthSession, GoogleIdentity, IdentityError, LoginState, normalize_email() (+2 more)
 
-### Community 108 - "Community 108"
+### Community 109 - "Community 109"
 Cohesion: 0.22
 Nodes (16): escaped_near_limit_valid_payload_is_still_accepted(), frontend_fixture(), FrontendFixture, log_ingestion_does_not_emit_request_body_log(), log_ingestion_rejects_requests_with_mismatched_origin(), log_ingestion_rejects_requests_without_origin(), log_ingestion_returns_not_found_when_disabled(), logs_request() (+8 more)
 
-### Community 109 - "Community 109"
+### Community 110 - "Community 110"
 Cohesion: 0.14
 Nodes (6): BlockingTaskWorkerRepository, RecordingTaskWorkerRepository, worker_active_task_update_rolls_back_cache_when_persist_fails(), worker_active_task_updates_are_serialized_before_persist(), worker_heartbeat_is_serialized_with_active_task_updates(), worker_heartbeat_rolls_back_cache_when_persist_fails()
 
-### Community 110 - "Community 110"
+### Community 111 - "Community 111"
 Cohesion: 0.15
 Nodes (1): TestWorkoutSummaryService
 
-### Community 111 - "Community 111"
+### Community 112 - "Community 112"
 Cohesion: 0.11
 Nodes (6): SaveFlowOperationRepository, SaveFlowProjectionRepository, SaveFlowSnapshotRepository, SaveFlowTrainingPlanGenerator, scheduler_backed_training_plan_service(), SchedulerBackedTrainingPlanHarness
 
-### Community 112 - "Community 112"
+### Community 113 - "Community 113"
+Cohesion: 0.1
+Nodes (0): 
+
+### Community 114 - "Community 114"
 Cohesion: 0.13
 Nodes (6): GeminiClient, map_error(), normalize_gemini_model_name(), OpenAiClient, OpenRouterClient, send_chat_request()
 
-### Community 113 - "Community 113"
+### Community 115 - "Community 115"
 Cohesion: 0.14
 Nodes (10): CoachConversationDocument, focus_as_str(), map_document_to_domain(), map_domain_to_document(), map_focus(), map_status(), map_surface(), MongoCoachConversationRepository (+2 more)
 
-### Community 114 - "Community 114"
+### Community 116 - "Community 116"
 Cohesion: 0.18
 Nodes (12): canonical_entity_kind_as_str(), external_object_kind_as_str(), ExternalObservationDocument, map_canonical_entity_kind(), map_document_to_observation(), map_external_object_kind(), map_observation_to_document(), map_provider() (+4 more)
 
-### Community 115 - "Community 115"
+### Community 117 - "Community 117"
 Cohesion: 0.17
 Nodes (17): accepts_html(), apply_incoming_trace_context(), internal_error_response(), is_api_route(), is_file_like_path(), is_health_request(), log_response_event(), make_request_span() (+9 more)
 
-### Community 116 - "Community 116"
-Cohesion: 0.15
-Nodes (18): build_race_entries(), build_selected_workout_response(), build_workout_entries(), CompletedWorkoutMetricsDto, ConversationMessageDto, GetSelectedWorkoutResponse, map_completed_workout(), map_planned_workout() (+10 more)
-
-### Community 117 - "Community 117"
+### Community 118 - "Community 118"
 Cohesion: 0.11
 Nodes (0): 
 
-### Community 118 - "Community 118"
+### Community 119 - "Community 119"
 Cohesion: 0.14
 Nodes (2): AdminIdentityErrorService, TestIdentityServiceWithSession
 
-### Community 119 - "Community 119"
+### Community 120 - "Community 120"
 Cohesion: 0.11
 Nodes (8): ResponseActivity, ResponseActivityGroup, ResponseActivityId, ResponseActivityInterval, ResponseActivityIntervals, ResponseActivityStream, ResponseEvent, ResponseUpload
 
-### Community 120 - "Community 120"
-Cohesion: 0.11
-Nodes (3): InMemoryCompletedWorkoutRepository, InMemoryPlannedWorkoutRepository, InMemorySpecialDayRepository
-
 ### Community 121 - "Community 121"
 Cohesion: 0.11
-Nodes (0): 
+Nodes (3): InMemoryCompletedWorkoutRepository, InMemoryPlannedWorkoutRepository, InMemorySpecialDayRepository
 
 ### Community 122 - "Community 122"
 Cohesion: 0.19
@@ -1397,12 +1397,12 @@ Cohesion: 0.18
 Nodes (15): binary_body_preview_format(), body_preview_truncates(), format_binary_body_preview(), format_body_preview(), header_redaction(), is_sensitive_header(), redact_headers(), redact_sensitive_child_value() (+7 more)
 
 ### Community 138 - "Community 138"
-Cohesion: 0.12
-Nodes (1): WorkoutSummaryService<Repo, Ops, Time, Ids>
-
-### Community 139 - "Community 139"
 Cohesion: 0.11
 Nodes (9): AppendMessageInput, ImportedWorkout, ManualWahooSyncResult, map_settings_error(), WahooWebhookAccepted, WahooWebhookError, WahooWebhookOutcome, WahooWebhookService (+1 more)
+
+### Community 139 - "Community 139"
+Cohesion: 0.12
+Nodes (1): WorkoutSummaryService<Repo, Ops, Time, Ids>
 
 ### Community 140 - "Community 140"
 Cohesion: 0.18
@@ -1564,20 +1564,20 @@ Cohesion: 0.14
 Nodes (1): ScopedIntervalsService
 
 ### Community 176 - "Community 176"
+Cohesion: 0.2
+Nodes (8): cache(), empty_training_context(), EmptyDataPort, RecordingLlmPort, tool_loop_hides_get_selected_workout_without_data_port_and_stops_with_scope_error(), tool_loop_logs_round_trip_and_tool_execution_details(), tool_loop_sends_get_selected_workout_when_data_port_is_available(), usage()
+
+### Community 177 - "Community 177"
 Cohesion: 0.18
 Nodes (7): mapLegacyStatus(), mapLegacySyncDocument(), readConfig(), readEnv(), resolveEpochSeconds(), resolveLegacyLastSyncedEpochSeconds(), toDateOrNull()
 
-### Community 177 - "Community 177"
+### Community 178 - "Community 178"
 Cohesion: 0.26
 Nodes (14): base_values(), client_log_ingestion_can_be_enabled_explicitly(), client_log_ingestion_defaults_to_disabled(), dev_auth_can_supply_google_oauth_defaults(), dev_intervals_can_be_enabled_explicitly(), dev_llm_coach_can_be_enabled_explicitly(), dev_llm_coach_defaults_to_disabled(), legacy_time_stream_cleanup_can_be_enabled_explicitly() (+6 more)
 
-### Community 178 - "Community 178"
+### Community 179 - "Community 179"
 Cohesion: 0.13
 Nodes (1): WahooOAuthAdapter
-
-### Community 179 - "Community 179"
-Cohesion: 0.21
-Nodes (10): approximate_token_usage(), build_conversation(), build_conversation_replays_hidden_assistant_turns_by_position(), build_conversation_replays_last_hidden_assistant_tool_calls(), build_stable_context(), build_volatile_context(), current_date_string(), LlmWorkoutCoach (+2 more)
 
 ### Community 180 - "Community 180"
 Cohesion: 0.13
@@ -1624,12 +1624,12 @@ Cohesion: 0.14
 Nodes (1): InMemoryUserSettingsRepository
 
 ### Community 191 - "Community 191"
-Cohesion: 0.21
-Nodes (7): cache(), empty_training_context(), EmptyDataPort, RecordingLlmPort, tool_loop_hides_get_selected_workout_without_data_port_and_stops_with_scope_error(), tool_loop_sends_get_selected_workout_when_data_port_is_available(), usage()
-
-### Community 192 - "Community 192"
 Cohesion: 0.14
 Nodes (0): 
+
+### Community 192 - "Community 192"
+Cohesion: 0.22
+Nodes (9): build_conversation(), build_conversation_replays_hidden_assistant_turns_by_position(), build_conversation_replays_last_hidden_assistant_tool_calls(), build_stable_context(), build_volatile_context(), current_date_string(), LlmWorkoutCoach, LlmWorkoutCoach<Time> (+1 more)
 
 ### Community 193 - "Community 193"
 Cohesion: 0.14
@@ -1920,227 +1920,227 @@ Nodes (3): PlannedWorkoutWahooSyncError, PlannedWorkoutWahooSyncRecord, PlannedW
 
 ### Community 262 - "Community 262"
 Cohesion: 0.29
-Nodes (5): approximate_token_usage(), current_date_string(), estimate_message_token_usage(), PreparedCalendarLlmRequest, SharedCoachConversationService<Conversations, Messages, Ops, Time, Ids>
-
-### Community 263 - "Community 263"
-Cohesion: 0.29
 Nodes (1): SharedCoachConversationService<Conversations, Messages, Ops, Time, Ids>
 
-### Community 264 - "Community 264"
+### Community 263 - "Community 263"
 Cohesion: 0.35
 Nodes (9): detect_intervals_from_power_stream(), detected_interval_candidates(), evaluate_activity_match(), extract_float_stream(), extract_integer_stream(), find_best_activity_match(), IntervalCandidate, matching_segments() (+1 more)
 
-### Community 265 - "Community 265"
+### Community 264 - "Community 264"
 Cohesion: 0.18
 Nodes (10): CompactFocus, CompactPlannedWorkout, CompactPlannedWorkoutRef, CompactProjectedDay, CompactProjectedWorkout, CompactRecentDay, CompactRecentWorkout, CompactSpecialDay (+2 more)
 
-### Community 266 - "Community 266"
+### Community 265 - "Community 265"
 Cohesion: 0.18
 Nodes (3): WahooFitFile, WahooFitFileError, WahooFitFileStage
 
-### Community 267 - "Community 267"
+### Community 266 - "Community 266"
 Cohesion: 0.22
 Nodes (3): buildProtocol(), buildWorkoutSummaryWebSocketUrl(), StaleWorkoutSelectionError
 
-### Community 268 - "Community 268"
+### Community 267 - "Community 267"
 Cohesion: 0.38
 Nodes (8): createWorkoutSummary(), ensureWorkoutSummary(), getWorkoutSummary(), normalizeWorkoutTargetId(), reopenWorkoutSummary(), saveWorkoutSummary(), sendWorkoutSummaryMessage(), updateWorkoutSummaryRpe()
 
-### Community 269 - "Community 269"
+### Community 268 - "Community 268"
 Cohesion: 0.22
 Nodes (2): formatRaceDate(), parseRaceDate()
 
-### Community 270 - "Community 270"
+### Community 269 - "Community 269"
 Cohesion: 0.56
 Nodes (7): calendar_entry_view_calendar_source_reads_race_labels_from_persisted_view(), mongo_fixture_or_skip(), MongoFixture, race_calendar_hides_only_intervals_events_linked_to_races_in_requested_range(), race_repository_creates_expected_indexes(), race_repository_round_trips_race_and_lists_by_date_range(), sample_race()
+
+### Community 270 - "Community 270"
+Cohesion: 0.2
+Nodes (0): 
 
 ### Community 271 - "Community 271"
 Cohesion: 0.2
 Nodes (0): 
 
 ### Community 272 - "Community 272"
-Cohesion: 0.2
-Nodes (0): 
-
-### Community 273 - "Community 273"
 Cohesion: 0.33
 Nodes (6): maintenance_config_rejects_zero_timeout_sweep_interval(), maintenance_config_rejects_zero_worker_heartbeat_interval(), spawn_task_scheduler_maintenance_loop(), TaskSchedulerMaintenanceConfig, TaskSchedulerWorkerConfig, validate_task_scheduler_maintenance_config()
 
-### Community 274 - "Community 274"
+### Community 273 - "Community 273"
 Cohesion: 0.24
 Nodes (3): chat_times_out_when_model_exceeds_deadline(), LlmAdapter, with_timeout()
 
-### Community 275 - "Community 275"
+### Community 274 - "Community 274"
 Cohesion: 0.22
 Nodes (3): LlmContextCacheDocument, map_domain_to_document(), MongoLlmContextCacheRepository
 
-### Community 276 - "Community 276"
+### Community 275 - "Community 275"
 Cohesion: 0.22
 Nodes (2): MongoWhitelistRepository, WhitelistEntryDocument
 
-### Community 277 - "Community 277"
+### Community 276 - "Community 276"
 Cohesion: 0.22
 Nodes (3): database_needs_bootstrap(), ensure_database_exists(), MongoConnectionError
 
-### Community 278 - "Community 278"
+### Community 277 - "Community 277"
 Cohesion: 0.22
 Nodes (3): FtpHistoryDocument, map_domain_to_document(), MongoFtpHistoryRepository
 
-### Community 279 - "Community 279"
+### Community 278 - "Community 278"
 Cohesion: 0.24
 Nodes (5): AthleteSummaryDocument, map_document_to_domain(), map_document_to_domain_returns_repository_error_when_generated_at_is_missing(), map_domain_to_document(), MongoAthleteSummaryRepository
 
-### Community 280 - "Community 280"
+### Community 279 - "Community 279"
 Cohesion: 0.27
 Nodes (5): map_intervals_update(), map_intervals_update_clears_credentials_when_blank_values_are_sent(), map_intervals_update_marks_connection_inactive_when_credentials_change(), map_settings_to_dto(), map_settings_to_dto_masks_ai_agent_keys()
 
-### Community 281 - "Community 281"
+### Community 280 - "Community 280"
 Cohesion: 0.4
 Nodes (9): auth_and_get_race_service(), create_race(), delete_race(), get_race(), list_races(), map_request(), parse_discipline(), parse_priority() (+1 more)
 
-### Community 282 - "Community 282"
+### Community 281 - "Community 281"
 Cohesion: 0.33
 Nodes (2): std::sync::Arc<T>, WahooWebhookService<SettingsRepo, Imports, Wahoo, TrainingLoad, Queue, Time>
 
-### Community 283 - "Community 283"
+### Community 282 - "Community 282"
 Cohesion: 0.4
 Nodes (2): restore_worker_state(), TaskSchedulerService<Tasks, Workers, Time>
 
-### Community 284 - "Community 284"
+### Community 283 - "Community 283"
 Cohesion: 0.31
 Nodes (7): mark_task_timed_out(), recover_task(), sweep_timeout_candidate(), task_heartbeat_is_fresh(), TaskSchedulerService<Tasks, Workers, Time>, worker_is_fresh(), worker_reports_task_active()
 
-### Community 285 - "Community 285"
+### Community 284 - "Community 284"
 Cohesion: 0.24
 Nodes (3): llm_error_is_retryable(), WorkoutSummaryCoachReplyTaskHandler, WorkoutSummaryCoachReplyTaskHandler<Base>
 
-### Community 286 - "Community 286"
+### Community 285 - "Community 285"
 Cohesion: 0.31
 Nodes (3): candidate_workout_ids(), not_completed_workout_target_error(), WorkoutSummaryService<Repo, Ops, Time, Ids>
 
-### Community 287 - "Community 287"
+### Community 286 - "Community 286"
 Cohesion: 0.33
 Nodes (4): has_finished_conversation(), matches_latest_completed_activity_id(), RecapSnapshot, WorkoutSummaryService<Repo, Ops, Time, Ids>
 
-### Community 288 - "Community 288"
+### Community 287 - "Community 287"
 Cohesion: 0.22
 Nodes (7): classify_tsb_zone(), round_to_2(), TrainingLoadDashboardReadService, TrainingLoadDashboardReadService<Snapshots>, TrainingLoadDashboardReadUseCases, TrainingLoadRecomputeService, TrainingLoadRecomputeUseCases
 
-### Community 289 - "Community 289"
+### Community 288 - "Community 288"
 Cohesion: 0.38
 Nodes (9): build_standalone_completed_entries(), group_completed_workouts_by_planned_id(), index_planned_entry_positions(), merge_completed_workout_into_planned_entry(), merge_single_completed_match_into_planned_entries(), merge_workout_entries(), rebuild_calendar_entries(), should_keep_completed_workout_as_standalone_entry() (+1 more)
 
-### Community 290 - "Community 290"
+### Community 289 - "Community 289"
 Cohesion: 0.2
 Nodes (2): CompletedWorkoutRepository, NoopCompletedWorkoutRepository
 
-### Community 291 - "Community 291"
+### Community 290 - "Community 290"
 Cohesion: 0.31
 Nodes (6): builder_ignores_snapshot_ftp_when_snapshot_window_is_incomplete(), builder_ignores_snapshot_windows_with_missing_days_inside_range(), builder_uses_ftp_history_for_chronological_ftp_change(), builder_uses_training_load_snapshots_for_historical_aggregates_and_trend(), seed_snapshot_trend(), seed_snapshot_trend_with_gap()
 
-### Community 292 - "Community 292"
+### Community 291 - "Community 291"
 Cohesion: 0.36
 Nodes (5): buildDayItems(), buildGenericEventItem(), formatMinutes(), summarizeCompletedActivity(), summarizePlannedEvent()
 
-### Community 293 - "Community 293"
+### Community 292 - "Community 292"
 Cohesion: 0.33
 Nodes (5): formatMetricValue(), formatNumber(), formatSignedMetricValue(), formatTwoDecimalValue(), formatWattsValue()
 
-### Community 294 - "Community 294"
+### Community 293 - "Community 293"
 Cohesion: 0.39
 Nodes (6): formatLogMessage(), generateTraceparent(), getFrontendTraceparent(), getTraceId(), randomHex(), sendFrontendLog()
+
+### Community 294 - "Community 294"
+Cohesion: 0.22
+Nodes (0): 
 
 ### Community 295 - "Community 295"
 Cohesion: 0.22
 Nodes (0): 
 
 ### Community 296 - "Community 296"
-Cohesion: 0.22
-Nodes (0): 
-
-### Community 297 - "Community 297"
 Cohesion: 0.31
 Nodes (1): InMemoryAthleteSummaryService
 
-### Community 298 - "Community 298"
+### Community 297 - "Community 297"
 Cohesion: 0.31
 Nodes (4): dashboard_test_app(), FrontendFixture, shared_frontend_fixture(), test_mongo_client()
 
-### Community 299 - "Community 299"
+### Community 298 - "Community 298"
 Cohesion: 0.22
 Nodes (0): 
 
-### Community 300 - "Community 300"
+### Community 299 - "Community 299"
 Cohesion: 0.22
 Nodes (8): GeminiCachedContentResponse, GeminiCandidate, GeminiContent, GeminiCreateCacheRequest, GeminiGenerateContentRequest, GeminiGenerateContentResponse, GeminiTextPart, GeminiUsageMetadata
 
-### Community 301 - "Community 301"
+### Community 300 - "Community 300"
 Cohesion: 0.28
 Nodes (3): map_activity_response(), should_persist_stream(), should_persist_stream_type()
 
-### Community 302 - "Community 302"
+### Community 301 - "Community 301"
 Cohesion: 0.28
 Nodes (3): map_document_to_domain(), MongoWahooConnectStateRepository, WahooConnectStateDocument
 
-### Community 303 - "Community 303"
+### Community 302 - "Community 302"
 Cohesion: 0.28
 Nodes (5): ErrorResponse, log_calendar_coach_error(), log_workout_summary_error(), map_calendar_coach_error(), map_workout_summary_error()
 
-### Community 304 - "Community 304"
+### Community 303 - "Community 303"
 Cohesion: 0.22
 Nodes (7): AthleteSummary, AthleteSummaryError, AthleteSummaryGenerationClaimResult, AthleteSummaryGenerationOperation, AthleteSummaryGenerationOperationStatus, AthleteSummaryState, EnsuredAthleteSummary
+
+### Community 304 - "Community 304"
+Cohesion: 0.22
+Nodes (0): 
 
 ### Community 305 - "Community 305"
 Cohesion: 0.22
 Nodes (0): 
 
 ### Community 306 - "Community 306"
-Cohesion: 0.22
-Nodes (0): 
-
-### Community 307 - "Community 307"
 Cohesion: 0.28
 Nodes (1): SharedCoachConversationService<Conversations, Messages, Ops, Time, Ids>
 
-### Community 308 - "Community 308"
+### Community 307 - "Community 307"
 Cohesion: 0.22
 Nodes (8): CadenceRange, ParserTarget, RepeatBlockAst, StepAmount, StepKind, WorkoutAst, WorkoutItem, WorkoutStepAst
 
-### Community 309 - "Community 309"
+### Community 308 - "Community 308"
 Cohesion: 0.22
 Nodes (2): CalendarEntryViewRepository, InMemoryCalendarEntryViewRepository
 
-### Community 310 - "Community 310"
+### Community 309 - "Community 309"
 Cohesion: 0.22
 Nodes (6): CalendarEntryKind, CalendarEntryRace, CalendarEntrySummary, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError
 
-### Community 311 - "Community 311"
+### Community 310 - "Community 310"
 Cohesion: 0.22
 Nodes (1): PowerCurveCompletedWorkoutRepository<Repo>
 
-### Community 312 - "Community 312"
+### Community 311 - "Community 311"
 Cohesion: 0.22
 Nodes (0): 
 
-### Community 313 - "Community 313"
+### Community 312 - "Community 312"
 Cohesion: 0.32
 Nodes (3): completedIntervalDurationSeconds(), matchedIntervalDurationSeconds(), normalizeWidthUnits()
 
-### Community 314 - "Community 314"
+### Community 313 - "Community 313"
 Cohesion: 0.29
 Nodes (2): countRangeCalls(), hasRangeCall()
 
-### Community 315 - "Community 315"
+### Community 314 - "Community 314"
 Cohesion: 0.5
 Nodes (6): lock_telemetry_env(), restore_env_var(), setup_telemetry_accepts_service_name_override_without_otlp_endpoint(), setup_telemetry_child_process_probe(), setup_telemetry_rejects_malformed_otlp_endpoint(), telemetry_env_lock()
 
-### Community 316 - "Community 316"
+### Community 315 - "Community 315"
 Cohesion: 0.36
 Nodes (1): TestAthleteSummaryService
 
-### Community 317 - "Community 317"
+### Community 316 - "Community 316"
 Cohesion: 0.36
 Nodes (4): SpawnedApp, workout_summary_websocket_creates_and_reuses_gemini_cache(), workout_summary_websocket_sends_system_message_before_reply_when_summary_generation_is_needed(), workout_summary_websocket_skips_system_message_when_athlete_summary_is_fresh()
+
+### Community 317 - "Community 317"
+Cohesion: 0.25
+Nodes (0): 
 
 ### Community 318 - "Community 318"
 Cohesion: 0.25
@@ -2159,56 +2159,56 @@ Cohesion: 0.25
 Nodes (0): 
 
 ### Community 322 - "Community 322"
-Cohesion: 0.25
-Nodes (0): 
-
-### Community 323 - "Community 323"
 Cohesion: 0.5
 Nodes (4): builds_same_origin_callback_redirect(), DevGoogleOAuthClient, rejects_invalid_dev_code_as_unauthenticated(), returns_configured_identity_for_dev_code()
 
-### Community 324 - "Community 324"
+### Community 323 - "Community 323"
 Cohesion: 0.25
 Nodes (2): IntervalsSettingsAdapter, SettingsIntervalsProvider
 
-### Community 325 - "Community 325"
+### Community 324 - "Community 324"
 Cohesion: 0.29
 Nodes (2): has_any_backfillable_details(), needs_detail_backfill()
 
-### Community 326 - "Community 326"
+### Community 325 - "Community 325"
 Cohesion: 0.25
 Nodes (0): 
 
-### Community 327 - "Community 327"
+### Community 326 - "Community 326"
 Cohesion: 0.25
 Nodes (2): ActivityUploadOperationDocument, MongoActivityUploadOperationRepository
 
-### Community 328 - "Community 328"
+### Community 327 - "Community 327"
 Cohesion: 0.36
 Nodes (5): current_api_key_is_saved(), map_validation_error_to_response(), merge_ai_connection_config(), MergedAiConnectionConfig, selected_key_was_not_provided()
 
-### Community 329 - "Community 329"
+### Community 328 - "Community 328"
 Cohesion: 0.43
 Nodes (7): log_calendar_error(), log_calendar_label_error(), map_calendar_error(), map_calendar_error_for_provider(), map_calendar_error_returns_generic_credentials_payload_without_provider(), map_calendar_label_error(), validation_error_code()
 
-### Community 330 - "Community 330"
+### Community 329 - "Community 329"
 Cohesion: 0.25
 Nodes (2): EventFileUpload, normalize_optional_upload_field()
 
-### Community 331 - "Community 331"
+### Community 330 - "Community 330"
 Cohesion: 0.36
 Nodes (6): canonical_activity_id(), CompletedWorkoutSummaryDto, map_completed_workout_to_activity(), map_completed_workout_to_dto(), map_series_to_json(), map_stream_to_activity_stream()
 
-### Community 332 - "Community 332"
+### Community 331 - "Community 331"
 Cohesion: 0.25
 Nodes (2): SerializedWorkoutSummaryError, WorkoutSummaryCoachReplyTaskPayload
 
-### Community 333 - "Community 333"
+### Community 332 - "Community 332"
 Cohesion: 0.25
 Nodes (4): CalendarUseCases, HiddenCalendarEventSource, NoopPlannedWorkoutSyncRepository, PlannedWorkoutSyncRepository
 
-### Community 334 - "Community 334"
+### Community 333 - "Community 333"
 Cohesion: 0.25
 Nodes (7): Clock, GoogleOAuthPort, IdGenerator, LoginStateRepository, SessionRepository, UserRepository, WhitelistRepository
+
+### Community 334 - "Community 334"
+Cohesion: 0.36
+Nodes (3): current_date_string(), PreparedCalendarLlmRequest, SharedCoachConversationService<Conversations, Messages, Ops, Time, Ids>
 
 ### Community 335 - "Community 335"
 Cohesion: 0.25
@@ -4030,7 +4030,7 @@ Cohesion: 1.0
 Nodes (0): 
 
 ## Knowledge Gaps
-- **763 isolated node(s):** `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange`, `MetricsBackfillCall`, `ManualWahooSyncCall` (+758 more)
+- **765 isolated node(s):** `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange`, `MetricsBackfillCall`, `ManualWahooSyncCall` (+760 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 517`** (2 nodes): `async()`, `App.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -4578,17 +4578,17 @@ Nodes (0):
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `FixedClock` connect `Community 3` to `Community 0`, `Community 89`, `Community 5`?**
+- **Why does `FixedClock` connect `Community 2` to `Community 0`, `Community 89`, `Community 6`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **Why does `RecordingCalendarRefresh` connect `Community 3` to `Community 0`, `Community 17`, `Community 5`?**
+- **Why does `RecordingCalendarRefresh` connect `Community 10` to `Community 0`, `Community 2`, `Community 6`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `StoredConversation`, `DetailBackfillCall`, `MetricsBackfillRange` to the rest of the system?**
-  _763 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _765 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.02 - nodes in this community are weakly interconnected._
-- **Should `Community 3` be split into smaller, more focused modules?**
   _Cohesion score 0.04 - nodes in this community are weakly interconnected._
+- **Should `Community 3` be split into smaller, more focused modules?**
+  _Cohesion score 0.02 - nodes in this community are weakly interconnected._

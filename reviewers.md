@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-07 | user | get_selected_workout missing calendar-day fallback
+
+- Problem: the calendar coach called `get_selected_workout` for a day that visibly had a planned workout in the packed `TrainingContext`, but the tool only looked in the planned-workout repository. When that repo view was empty for the selected day, the tool returned no planned workout and the model confidently answered that the day was free.
+- Fix: kept the repository-backed path as the primary source, but added a narrow fallback in `src/domain/llm_tools/get_selected_workout/` that synthesizes planned-workout entries from `training_context.recent_days`, `upcoming_days`, and `projected_days` only when both planned and completed repository data are absent for the selected date. Added focused regressions for recent-day and projected-day fallback coverage.
+- Prevention: when an LLM tool answers questions about a day that already exists in the request-scoped training context, verify that the tool does not rely exclusively on a secondary repository view for presence/absence decisions. If the packed context is the user-visible source of truth for that turn, add a bounded fallback before telling the model that nothing is scheduled.
+
 ### 2026-05-07 | CodeRabbit | PR #192 logging follow-up on redaction and safe previews
 
 - Problem: the first adapter-body-logging follow-up still left several review-confirmed gaps. Shared `domain::llm::serialize_logged_body(...)` still serialized raw secret-bearing payloads before truncation, Gemini cache-create success logs computed `cache_created` from stale pre-assignment state, Wahoo success responses still logged full preview content instead of a safe summary, Intervals full-body formatting lacked focused tests, and the raised REST preview cap still repeated the raw `204800` literal in behavior and tests.

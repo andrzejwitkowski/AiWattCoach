@@ -27,9 +27,33 @@ pub(super) struct SelectedDate {
 
 pub(super) struct SelectedWorkoutData {
     pub(super) completed: Vec<CompletedWorkout>,
-    pub(super) planned: Vec<PlannedWorkout>,
+    pub(super) planned: Vec<SelectedPlannedWorkout>,
     pub(super) races: Vec<Race>,
     pub(super) summaries: Vec<WorkoutSummary>,
+}
+
+pub(super) struct SelectedPlannedWorkout {
+    pub(super) planned_workout_id: String,
+    pub(super) date: String,
+    pub(super) name: Option<String>,
+    pub(super) rest_day: bool,
+    pub(super) rest_day_reason: Option<String>,
+    pub(super) raw_workout_doc: Option<String>,
+}
+
+impl SelectedPlannedWorkout {
+    pub(super) fn from_planned_workout(workout: PlannedWorkout) -> Self {
+        Self {
+            planned_workout_id: workout.planned_workout_id.clone(),
+            date: workout.date.clone(),
+            name: workout.name.clone(),
+            rest_day: workout.rest_day,
+            rest_day_reason: workout.rest_day_reason.clone(),
+            raw_workout_doc: (!workout.rest_day).then(|| {
+                crate::domain::planned_workouts::serialize_canonical_planned_workout(&workout)
+            }),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -253,7 +277,7 @@ fn sampled_indices(len: usize, max_samples: usize) -> Vec<usize> {
 }
 
 fn map_planned_workout(
-    plan: &PlannedWorkout,
+    plan: &SelectedPlannedWorkout,
     selected_date: &SelectedDate,
     today: &str,
 ) -> WorkoutEntry {
@@ -264,8 +288,7 @@ fn map_planned_workout(
         status: planned_status(selected_date, today).to_string(),
         rest_day: plan.rest_day,
         rest_day_reason: plan.rest_day_reason.clone(),
-        raw_workout_doc: (!plan.rest_day)
-            .then(|| crate::domain::planned_workouts::serialize_canonical_planned_workout(plan)),
+        raw_workout_doc: plan.raw_workout_doc.clone(),
     }
 }
 
