@@ -7,8 +7,8 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::LlmError,
     workout_summary::{
-        CoachReplyOperation, CoachReplyOperationRepository, MockWorkoutCoach, WorkoutSummaryError,
-        WorkoutSummaryRepository, WorkoutSummaryService,
+        CoachReplyClaimResult, CoachReplyOperation, CoachReplyOperationRepository,
+        MockWorkoutCoach, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
     },
 };
 
@@ -202,7 +202,7 @@ impl CoachReplyOperationRepository for StubReplyOperations {
         &self,
         _operation: CoachReplyOperation,
         _stale_before_epoch_seconds: i64,
-    ) -> super::BoxFuture<Result<super::CoachReplyClaimResult, WorkoutSummaryError>> {
+    ) -> super::BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         Box::pin(async { Err(WorkoutSummaryError::NotFound) })
     }
 
@@ -233,7 +233,7 @@ impl CoachReplyOperationRepository for NonRepositoryFailingReplyOperations {
         &self,
         _operation: CoachReplyOperation,
         _stale_before_epoch_seconds: i64,
-    ) -> super::BoxFuture<Result<super::CoachReplyClaimResult, WorkoutSummaryError>> {
+    ) -> super::BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         Box::pin(async { Err(WorkoutSummaryError::NotFound) })
     }
 

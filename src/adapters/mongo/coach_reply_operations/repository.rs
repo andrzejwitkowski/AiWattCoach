@@ -82,7 +82,7 @@ impl CoachReplyOperationRepository for MongoCoachReplyOperationRepository {
             }
 
             let fallback_coach_message_id =
-                operation.coach_message_id.clone().ok_or_else(|| {
+                operation.reply_message_id.clone().ok_or_else(|| {
                     WorkoutSummaryError::Repository(
                         "pending coach reply operation missing reserved coach message id"
                             .to_string(),

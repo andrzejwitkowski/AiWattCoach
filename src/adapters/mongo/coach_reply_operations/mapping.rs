@@ -53,7 +53,7 @@ pub(super) fn map_operation_to_document(
 ) -> CoachReplyOperationDocument {
     CoachReplyOperationDocument {
         user_id: operation.user_id.clone(),
-        workout_id: operation.workout_id.clone(),
+        workout_id: operation.scope_id.clone(),
         user_message_id: operation.user_message_id.clone(),
         status: match operation.status {
             CoachReplyOperationStatus::Pending => "pending",
@@ -71,7 +71,7 @@ pub(super) fn map_operation_to_document(
             .map(|provider| provider.as_str().to_string()),
         model: operation.model.clone(),
         provider_request_id: operation.provider_request_id.clone(),
-        coach_message_id: operation.coach_message_id.clone(),
+        coach_message_id: operation.reply_message_id.clone(),
         cache_scope_key: operation.cache_scope_key.clone(),
         provider_cache_id: operation.provider_cache_id.clone(),
         token_usage: operation.token_usage.clone(),
@@ -114,7 +114,7 @@ pub(super) fn map_document_to_operation(
 ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
     Ok(CoachReplyOperation {
         user_id: document.user_id,
-        workout_id: document.workout_id,
+        scope_id: document.workout_id,
         user_message_id: document.user_message_id,
         status: match document.status.as_str() {
             "pending" => CoachReplyOperationStatus::Pending,
@@ -142,7 +142,7 @@ pub(super) fn map_document_to_operation(
             .transpose()?,
         model: document.model,
         provider_request_id: document.provider_request_id,
-        coach_message_id: document.coach_message_id,
+        reply_message_id: document.coach_message_id,
         cache_scope_key: document.cache_scope_key,
         provider_cache_id: document.provider_cache_id,
         token_usage: document.token_usage,

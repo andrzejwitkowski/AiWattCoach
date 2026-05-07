@@ -249,7 +249,7 @@ impl InMemoryCoachReplyOperationRepository {
             .insert(
                 (
                     operation.user_id.clone(),
-                    operation.workout_id.clone(),
+                    operation.scope_id.clone(),
                     operation.user_message_id.clone(),
                 ),
                 operation,
@@ -308,7 +308,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
         Box::pin(async move {
             let key = (
                 operation.user_id.clone(),
-                operation.workout_id.clone(),
+                operation.scope_id.clone(),
                 operation.user_message_id.clone(),
             );
             let mut operations = operations.lock().expect("reply op mutex poisoned");
@@ -323,7 +323,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
 
                 if reclaimable {
                     let fallback_coach_message_id = operation
-                        .coach_message_id
+                        .reply_message_id
                         .clone()
                         .unwrap_or_else(|| "coach-message-fallback".to_string());
                     let reclaimed = existing.reclaim(
@@ -351,7 +351,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
             operations.lock().expect("reply op mutex poisoned").insert(
                 (
                     operation.user_id.clone(),
-                    operation.workout_id.clone(),
+                    operation.scope_id.clone(),
                     operation.user_message_id.clone(),
                 ),
                 operation.clone(),

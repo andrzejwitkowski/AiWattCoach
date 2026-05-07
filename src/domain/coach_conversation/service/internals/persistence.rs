@@ -109,7 +109,7 @@ where
                 Ok(saved) => {
                     if attempt > 1 {
                         info!(
-                            conversation_id = %saved.conversation_id,
+                            conversation_id = %saved.scope_id,
                             user_message_id = %saved.user_message_id,
                             attempt,
                             max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
@@ -126,7 +126,7 @@ where
                     }
 
                     warn!(
-                        conversation_id = %operation.conversation_id,
+                        conversation_id = %operation.scope_id,
                         user_message_id = %operation.user_message_id,
                         attempt,
                         max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,

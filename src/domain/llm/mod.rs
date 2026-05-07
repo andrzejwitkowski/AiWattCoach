@@ -2,6 +2,8 @@ mod context_prelude;
 mod error;
 mod logging;
 mod model;
+mod operation;
+mod orchestrator;
 mod ports;
 mod transcript;
 
@@ -18,5 +20,12 @@ pub use model::{
     hash_text, llm_request_timeout, LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse,
     LlmContextCache, LlmFinishReason, LlmMessageRole, LlmProvider, LlmProviderConfig,
     LlmTokenUsage, LlmToolCall, LlmToolChoice, LlmToolDefinition, LLM_REQUEST_TIMEOUT_SECONDS,
+};
+pub use operation::{
+    CompletedLlmReply, LlmReplyClaimResult, LlmReplyOperation, LlmReplyOperationFailureKind,
+    LlmReplyOperationStatus, PendingLlmReplyCheckpoint,
+};
+pub(crate) use orchestrator::{
+    resolve_llm_reply_operation, LlmReplyResolutionWorkflow, ResolvedLlmReplyOperation,
 };
 pub use ports::{BoxFuture, LlmChatPort, LlmContextCacheRepository, UserLlmConfigProvider};

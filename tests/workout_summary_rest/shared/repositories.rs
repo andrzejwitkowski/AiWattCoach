@@ -265,7 +265,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     ) -> BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
         let key = (
             operation.user_id.clone(),
-            operation.workout_id.clone(),
+            operation.scope_id.clone(),
             operation.user_message_id.clone(),
         );
         let operations = self.operations.clone();
@@ -287,7 +287,7 @@ impl CoachReplyOperationRepository for InMemoryCoachReplyOperationRepository {
     ) -> BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
         let key = (
             operation.user_id.clone(),
-            operation.workout_id.clone(),
+            operation.scope_id.clone(),
             operation.user_message_id.clone(),
         );
         let operations = self.operations.clone();
