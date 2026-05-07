@@ -147,6 +147,29 @@ Sensitive key patterns (checked case-insensitively by `is_sensitive_key` in `src
 
 External HTTP client logging belongs in adapter code, not in domain services or REST handlers.
 
+### Full LLM debug logging
+
+Normal LLM logging already records provider request metadata and truncated request/response payload previews in the adapter layer.
+
+When you need to debug the conversation with tools end to end, enable:
+
+```text
+ENABLE_LLM_FULL_DEBUG_LOGGING=true
+```
+
+With that flag enabled:
+
+- LLM request and response body previews use a much larger cap (`20_000` chars instead of `400`).
+- The shared `run_tool_loop(...)` logs each round with:
+  - scope, provider, model, round number
+  - the serialized conversation sent into the round
+  - the assistant message returned by the provider
+  - each tool call name, id, raw arguments, and preview
+  - each tool result payload
+  - the final assistant message when the loop stops without further tool calls
+
+Keep this flag off by default. It is intentionally verbose and can include user prompts, packed context excerpts, tool arguments, and tool results that are useful for debugging but too noisy for routine operation.
+
 Current example:
 
 - `src/adapters/intervals_icu/client/logging.rs`
@@ -228,6 +251,8 @@ When you add or change logging behavior:
 
 - run `cargo clippy --all-targets --all-features -- -D warnings`
 - run the most relevant integration tests, usually one or more of:
+  - `cargo test openrouter_client_logs_success_response_body --test llm_adapters -- --nocapture`
+  - `cargo test tool_loop_logs_round_trip_and_tool_execution_details --test llm_adapters -- --nocapture`
   - `cargo test --test intervals_adapters -- --nocapture`
   - `cargo test --test intervals_rest -- --nocapture`
   - `cargo test --test settings_rest -- --nocapture`

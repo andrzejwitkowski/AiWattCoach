@@ -1,8 +1,8 @@
 use reqwest::StatusCode;
 
-use crate::adapters::llm::logging::{serialize_logged_body, truncate_logged_body};
 use crate::domain::llm::{
-    BoxFuture, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError, LlmProviderConfig,
+    serialize_logged_body, truncate_logged_body, BoxFuture, LlmChatPort, LlmChatRequest,
+    LlmChatResponse, LlmError, LlmProviderConfig,
 };
 
 use super::{

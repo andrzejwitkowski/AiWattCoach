@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use crate::shared_support::tracing_capture::capture_tracing_logs;
 use aiwattcoach::domain::llm::{
     LlmCacheUsage, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmFinishReason,
     LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall,
@@ -254,6 +255,68 @@ async fn tool_loop_sends_get_selected_workout_when_data_port_is_available() {
             "races": [],
             "workouts": [],
         })
+    );
+}
+
+#[tokio::test]
+async fn tool_loop_logs_round_trip_and_tool_execution_details() {
+    let port = RecordingLlmPort::default();
+
+    let (_, logs) = capture_tracing_logs(|| async {
+        run_tool_loop(
+            Arc::new(port.clone()),
+            LlmProviderConfig {
+                provider: LlmProvider::OpenRouter,
+                model: "google/gemini-3.1-pro".to_string(),
+                api_key: "test-key".to_string(),
+            },
+            LlmChatRequest {
+                user_id: "user-123".to_string(),
+                system_prompt: "You are an AI cycling coach.".to_string(),
+                stable_context: "Athlete profile".to_string(),
+                volatile_context: "Today is 2026-05-05".to_string(),
+                conversation: vec![LlmChatMessage::user("What was my workout on May 5th?")],
+                ..Default::default()
+            },
+            ToolScope::CalendarCoachChat,
+            ToolExecutionContext {
+                user_id: "user-123".to_string(),
+                training_context: empty_training_context(),
+                today: "2026-05-05".to_string(),
+                data_port: Some(Arc::new(EmptyDataPort)),
+            },
+            None,
+        )
+        .await
+        .expect("tool loop should finish after the tool result is replayed")
+    })
+    .await;
+
+    assert!(logs.contains("starting llm tool loop"), "logs were: {logs}");
+    assert!(
+        logs.contains("sending llm tool loop round"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("received llm tool loop response"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("executing llm tool call"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("completed llm tool call"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("llm tool loop finished without tool calls"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("get_selected_workout"), "logs were: {logs}");
+    assert!(
+        logs.contains(r#"{\"date\":\"2026-05-05\"}"#) || logs.contains(r#"{"date":"2026-05-05"}"#),
+        "logs were: {logs}"
     );
 }
 

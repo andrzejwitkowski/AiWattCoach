@@ -1,8 +1,8 @@
 use reqwest::StatusCode;
 
-use crate::adapters::llm::logging::{serialize_logged_body, truncate_logged_body};
 use crate::domain::llm::{
-    BoxFuture, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError, LlmProviderConfig,
+    serialize_logged_body, truncate_logged_body, BoxFuture, LlmChatPort, LlmChatRequest,
+    LlmChatResponse, LlmError, LlmProviderConfig,
 };
 
 use super::{dto::OpenRouterChatResponse, mapping};
@@ -66,7 +66,17 @@ impl LlmChatPort for OpenRouterClient {
                 let mapped = mapping::map_response(&config, response);
 
                 match mapped {
-                    Ok(response) => return Ok(response),
+                    Ok(response) => {
+                        tracing::info!(
+                            provider = "openrouter",
+                            model = %config.model,
+                            url = %url,
+                            attempt,
+                            response_body = %truncate_logged_body(&response_body),
+                            "openrouter chat request succeeded"
+                        );
+                        return Ok(response);
+                    }
                     Err(error) if attempt == 1 && mapping::is_empty_response_error(&error) => {
                         tracing::warn!(
                             provider = "openrouter",
@@ -178,7 +188,7 @@ fn map_error(status: StatusCode, body: String) -> LlmError {
 
 #[cfg(test)]
 mod tests {
-    use crate::adapters::llm::logging::truncate_logged_body;
+    use crate::domain::llm::truncate_logged_body;
 
     const MAX_LOGGED_RESPONSE_BODY_CHARS: usize = 400;
 

@@ -1,11 +1,11 @@
 use reqwest::StatusCode;
 
 use crate::domain::llm::{
-    BoxFuture, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError, LlmProviderConfig,
+    serialize_logged_body, truncate_logged_body, BoxFuture, LlmChatPort, LlmChatRequest,
+    LlmChatResponse, LlmError, LlmProviderConfig,
 };
 
 use super::{dto::OpenAiChatResponse, mapping};
-use crate::adapters::llm::logging::{serialize_logged_body, truncate_logged_body};
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 #[derive(Clone)]

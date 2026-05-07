@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-07 | user | missing human-debuggable LLM tool-loop logs
+
+- Problem: debugging calendar and coach failures was still too indirect because the logs showed outbound provider requests, but not the actual shared tool-loop progression. We could not see a clean round-by-round trace of assistant tool calls, tool arguments, tool results, or the final assistant turn, which made incidents like `get_selected_workout` hard to diagnose from logs alone.
+- Fix: moved shared LLM body-truncation helpers into `src/domain/llm/logging.rs`, added `ENABLE_LLM_FULL_DEBUG_LOGGING` to raise LLM payload preview limits for debugging, added OpenRouter success-path `response_body` logging, and added shared `run_tool_loop(...)` tracing for loop start, each round request/response, each tool call, each tool result, unavailable-tool stop, and final assistant completion. Added focused `llm_adapters` regressions that capture tracing logs for both OpenRouter success logging and the shared tool-loop trace.
+- Prevention: when a workflow depends on shared LLM tool calling, do not stop observability at the adapter request boundary. Make sure logs can reconstruct the full round trip: provider response, tool call, tool result, and final assistant turn. If full payloads are too noisy for normal operation, gate them behind an explicit debug flag instead of leaving the tool loop opaque.
+
 ### 2026-05-07 | user | REST endpoint body log preview limit
 
 - Problem: the REST endpoint logging preview cap was still set to `10 KB` by default and in the router-level request/response logging groups, which was too small for the current debugging needs.
