@@ -55,8 +55,9 @@ where
         return Ok(ClaimOutcome::Existing(existing));
     }
 
-    let now_epoch = last_attempt_at(&operation);
-    let (reclaimed_op, reclaimed_document) = build_reclaimed(&existing, &operation, now_epoch)?;
+    let pending_last_attempt = last_attempt_at(&operation);
+    let (reclaimed_op, reclaimed_document) =
+        build_reclaimed(&existing, &operation, pending_last_attempt)?;
 
     let mut cas_filter = unique_filter();
     cas_filter.insert("attempt_count", attempt_count(&existing));

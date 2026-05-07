@@ -57,14 +57,7 @@ impl MongoLlmReplyOperationRepository {
             document,
             operation,
             stale_before_epoch_seconds,
-            || {
-                doc! {
-                    "user_id": &user_id,
-                    "scope_type": scope_type,
-                    "scope_id": &scope_id,
-                    "user_message_id": &user_message_id,
-                }
-            },
+            || doc! { "user_id": &user_id, "scope_type": scope_type, "scope_id": &scope_id, "user_message_id": &user_message_id },
             map_document_to_operation,
             |op, s| {
                 matches!(op.status, LlmReplyOperationStatus::Pending) && op.is_stale(s)
