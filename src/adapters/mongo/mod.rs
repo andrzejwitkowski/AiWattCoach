@@ -9,6 +9,7 @@ pub mod client;
 pub mod coach_conversation_messages;
 pub mod coach_conversations;
 pub mod completed_workouts;
+mod durable_ops;
 mod error;
 pub mod external_observations;
 pub mod external_sync_states;

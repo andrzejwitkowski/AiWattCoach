@@ -14,7 +14,7 @@ use crate::domain::{
     },
 };
 
-use super::error::is_duplicate_key_error;
+use super::durable_ops::{mongo_claim_pending, ClaimOutcome};
 use super::time::{
     optional_epoch_seconds_to_bson_datetime, required_epoch_seconds_to_bson_datetime,
     resolve_optional_epoch_seconds, resolve_required_epoch_seconds,
@@ -140,76 +140,35 @@ impl TrainingPlanGenerationOperationRepository for MongoTrainingPlanGenerationOp
         let collection = self.collection.clone();
         Box::pin(async move {
             let document = map_operation_to_document(&operation)?;
-            let inserted = collection
-                .insert_one(&document)
-                .await
-                .map(|_| true)
-                .or_else(|error| {
-                    if is_duplicate_key_error(&error) {
-                        Ok(false)
-                    } else {
-                        Err(TrainingPlanError::Repository(error.to_string()))
-                    }
-                })?;
+            let operation_key = document.operation_key.clone();
 
-            if inserted {
-                return Ok(TrainingPlanGenerationClaimResult::Claimed(operation));
-            }
-
-            let existing_document = collection
-                .find_one(doc! { "operation_key": &document.operation_key })
-                .await
-                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
-                .ok_or_else(|| {
-                    TrainingPlanError::Repository(
-                        "claimed training plan generation operation disappeared before reload"
-                            .to_string(),
-                    )
-                })?;
-            let existing = map_document_to_operation(existing_document)?;
-            let reclaimable = match existing.status {
-                WorkflowStatus::Pending => {
-                    existing.last_attempt_at_epoch_seconds <= stale_before_epoch_seconds
-                }
-                WorkflowStatus::Failed => true,
-                WorkflowStatus::Completed => false,
-            };
-
-            if !reclaimable {
-                return Ok(TrainingPlanGenerationClaimResult::Existing(existing));
-            }
-
-            let reclaimed = existing.reclaim(operation.last_attempt_at_epoch_seconds);
-            let reclaimed_document = map_operation_to_document(&reclaimed)?;
-            let replaced = collection
-                .find_one_and_replace(
-                    doc! {
-                        "operation_key": &document.operation_key,
-                        "attempt_count": i64::from(existing.attempt_count),
-                        "updated_at_epoch_seconds": existing.updated_at_epoch_seconds,
-                    },
-                    &reclaimed_document,
-                )
-                .await
-                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
-
-            if replaced.is_some() {
-                return Ok(TrainingPlanGenerationClaimResult::Claimed(reclaimed));
-            }
-
-            let latest = collection
-                .find_one(doc! { "operation_key": &document.operation_key })
-                .await
-                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
-                .ok_or_else(|| {
-                    TrainingPlanError::Repository(
-                        "reclaimed training plan generation operation disappeared before reload"
-                            .to_string(),
-                    )
-                })?;
-            Ok(TrainingPlanGenerationClaimResult::Existing(
-                map_document_to_operation(latest)?,
-            ))
+            mongo_claim_pending(
+                &collection,
+                document,
+                operation,
+                stale_before_epoch_seconds,
+                || doc! { "operation_key": &operation_key },
+                |doc| map_document_to_operation(doc).map_err(|e| e.to_string()),
+                |op, s| {
+                    matches!(op.status, WorkflowStatus::Pending)
+                        && op.last_attempt_at_epoch_seconds <= s
+                        || matches!(op.status, WorkflowStatus::Failed)
+                },
+                |op| i64::from(op.attempt_count),
+                |op| op.updated_at_epoch_seconds,
+                |op| op.last_attempt_at_epoch_seconds,
+                |existing, _pending, now| {
+                    let reclaimed = existing.reclaim(now);
+                    let doc = map_operation_to_document(&reclaimed).map_err(|e| e.to_string())?;
+                    Ok((reclaimed, doc))
+                },
+            )
+            .await
+            .map_err(TrainingPlanError::Repository)
+            .map(|outcome| match outcome {
+                ClaimOutcome::Claimed(op) => TrainingPlanGenerationClaimResult::Claimed(op),
+                ClaimOutcome::Existing(op) => TrainingPlanGenerationClaimResult::Existing(op),
+            })
         })
     }
 

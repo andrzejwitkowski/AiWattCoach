@@ -5,7 +5,7 @@ use mongodb::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::error::is_duplicate_key_error;
+use super::durable_ops::{mongo_claim_pending, ClaimOutcome};
 use super::time::{optional_epoch_seconds_to_bson_datetime, resolve_required_epoch_seconds};
 use crate::domain::athlete_summary::{
     AthleteSummaryError, AthleteSummaryGenerationClaimResult, AthleteSummaryGenerationOperation,
@@ -114,78 +114,35 @@ impl AthleteSummaryGenerationOperationRepository
         let collection = self.collection.clone();
         Box::pin(async move {
             let document = map_domain_to_document(&operation)?;
+            let user_id = document.user_id.clone();
 
-            let inserted = collection
-                .insert_one(&document)
-                .await
-                .map(|_| true)
-                .or_else(|error| {
-                    if is_duplicate_key_error(&error) {
-                        Ok(false)
-                    } else {
-                        Err(AthleteSummaryError::Repository(error.to_string()))
-                    }
-                })?;
-
-            if inserted {
-                return Ok(AthleteSummaryGenerationClaimResult::Claimed(operation));
-            }
-
-            let existing_document = collection
-                .find_one(doc! { "user_id": &document.user_id })
-                .await
-                .map_err(|error| AthleteSummaryError::Repository(error.to_string()))?
-                .ok_or_else(|| {
-                    AthleteSummaryError::Repository(
-                        "claimed athlete summary generation operation disappeared before reload"
-                            .to_string(),
-                    )
-                })?;
-            let existing = map_document_to_domain(existing_document)?;
-            let reclaimable = match existing.status {
-                AthleteSummaryGenerationOperationStatus::Pending => {
-                    existing.last_attempt_at_epoch_seconds <= stale_before_epoch_seconds
-                }
-                AthleteSummaryGenerationOperationStatus::Failed => true,
-                AthleteSummaryGenerationOperationStatus::Completed => false,
-            };
-
-            if !reclaimable {
-                return Ok(AthleteSummaryGenerationClaimResult::Existing(existing));
-            }
-
-            let reclaimed = Self::reclaim_operation(&existing, &operation);
-            let reclaimed_document = map_domain_to_document(&reclaimed)?;
-            let replaced = collection
-                .find_one_and_replace(
-                    doc! {
-                        "user_id": &document.user_id,
-                        "attempt_count": i64::from(existing.attempt_count),
-                        "updated_at_epoch_seconds": existing.updated_at_epoch_seconds,
-                    },
-                    &reclaimed_document,
-                )
-                .await
-                .map_err(|error| AthleteSummaryError::Repository(error.to_string()))?;
-
-            if replaced.is_some() {
-                return Ok(AthleteSummaryGenerationClaimResult::Claimed(reclaimed));
-            }
-
-            let latest = collection
-                .find_one(doc! { "user_id": &document.user_id })
-                .await
-                .map_err(|error| AthleteSummaryError::Repository(error.to_string()))?
-                .ok_or_else(|| {
-                    AthleteSummaryError::Repository(
-                        "reclaimed athlete summary generation operation disappeared before reload"
-                            .to_string(),
-                    )
-                })?;
-
-            Ok(AthleteSummaryGenerationClaimResult::Existing(
-                map_document_to_domain(latest)?,
-            ))
+            mongo_claim_pending(
+                &collection,
+                document,
+                operation,
+                stale_before_epoch_seconds,
+                || doc! { "user_id": &user_id },
+                |doc| map_document_to_domain(doc).map_err(|e| e.to_string()),
+                |op, s| {
+                    matches!(op.status, AthleteSummaryGenerationOperationStatus::Pending)
+                        && op.last_attempt_at_epoch_seconds <= s
+                        || matches!(op.status, AthleteSummaryGenerationOperationStatus::Failed)
+                },
+                |op| i64::from(op.attempt_count),
+                |op| op.updated_at_epoch_seconds,
+                |op| op.last_attempt_at_epoch_seconds,
+                |existing, pending, _now| {
+                    let reclaimed = Self::reclaim_operation(existing, pending);
+                    let doc = map_domain_to_document(&reclaimed).map_err(|e| e.to_string())?;
+                    Ok((reclaimed, doc))
+                },
+            )
+            .await
+            .map_err(AthleteSummaryError::Repository)
+            .map(|outcome| match outcome {
+                ClaimOutcome::Claimed(op) => AthleteSummaryGenerationClaimResult::Claimed(op),
+                ClaimOutcome::Existing(op) => AthleteSummaryGenerationClaimResult::Existing(op),
+            })
         })
     }
 
