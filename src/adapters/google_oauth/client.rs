@@ -5,6 +5,8 @@ use crate::{
     domain::identity::{BoxFuture, GoogleIdentity, GoogleOAuthPort, IdentityError},
 };
 
+use super::logging;
+
 const GOOGLE_AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL: &str = "https://openidconnect.googleapis.com/v1/userinfo";
@@ -58,6 +60,15 @@ impl GoogleOAuthPort for GoogleOAuthClient {
         let code = code.to_string();
 
         Box::pin(async move {
+            let token_form = vec![
+                ("code".to_string(), code.clone()),
+                ("client_id".to_string(), client_id.clone()),
+                ("client_secret".to_string(), client_secret.clone()),
+                ("redirect_uri".to_string(), redirect_url.clone()),
+                ("grant_type".to_string(), "authorization_code".to_string()),
+            ];
+            logging::log_request("POST", GOOGLE_TOKEN_URL, &token_form);
+
             let token_response = client
                 .post(GOOGLE_TOKEN_URL)
                 .form(&[
@@ -71,14 +82,21 @@ impl GoogleOAuthPort for GoogleOAuthClient {
                 .await
                 .map_err(|error| IdentityError::External(error.to_string()))?;
 
-            let token_response = token_response
-                .error_for_status()
-                .map_err(|error| IdentityError::External(error.to_string()))?;
-            let token_payload: GoogleTokenResponse = token_response
-                .json()
+            let token_status = token_response.status();
+            let token_body = token_response
+                .text()
                 .await
                 .map_err(|error| IdentityError::External(error.to_string()))?;
+            logging::log_response("POST", GOOGLE_TOKEN_URL, token_status, &token_body);
+            if !token_status.is_success() {
+                return Err(IdentityError::External(format!(
+                    "Google token exchange failed with status {token_status}"
+                )));
+            }
+            let token_payload: GoogleTokenResponse = serde_json::from_str(&token_body)
+                .map_err(|error| IdentityError::External(error.to_string()))?;
 
+            logging::log_request("GET", GOOGLE_USERINFO_URL, &[]);
             let user_info_response = client
                 .get(GOOGLE_USERINFO_URL)
                 .bearer_auth(&token_payload.access_token)
@@ -86,12 +104,23 @@ impl GoogleOAuthPort for GoogleOAuthClient {
                 .await
                 .map_err(|error| IdentityError::External(error.to_string()))?;
 
-            let user_info_response = user_info_response
-                .error_for_status()
-                .map_err(|error| IdentityError::External(error.to_string()))?;
-            let user_info: GoogleUserInfoResponse = user_info_response
-                .json()
+            let user_info_status = user_info_response.status();
+            let user_info_body = user_info_response
+                .text()
                 .await
+                .map_err(|error| IdentityError::External(error.to_string()))?;
+            logging::log_response(
+                "GET",
+                GOOGLE_USERINFO_URL,
+                user_info_status,
+                &user_info_body,
+            );
+            if !user_info_status.is_success() {
+                return Err(IdentityError::External(format!(
+                    "Google userinfo request failed with status {user_info_status}"
+                )));
+            }
+            let user_info: GoogleUserInfoResponse = serde_json::from_str(&user_info_body)
                 .map_err(|error| IdentityError::External(error.to_string()))?;
 
             GoogleIdentity::new(

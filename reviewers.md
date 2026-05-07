@@ -21,11 +21,40 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-07 | user | REST endpoint body log preview limit
+
+- Problem: the REST endpoint logging preview cap was still set to `10 KB` by default and in the router-level request/response logging groups, which was too small for the current debugging needs.
+- Fix: raised the endpoint body preview limit to `200 KB` (`204800` bytes) in `src/adapters/rest/logging/mod.rs` and the explicit router logging configs in `src/adapters/rest/mod.rs`, then updated the logging guide and unit-test expectations to match.
+- Prevention: when changing an adapter default that is also restated in route wiring and docs, grep for both the raw byte value and the human-readable size so code, tests, and documentation stay aligned in one patch.
+
+### 2026-05-06 | user | workout-summary OpenRouter empty-turn fallback to Pro model
+
+- Problem: live workout-summary logs still showed `openrouter/google/gemini-3-flash-preview` returning two consecutive empty assistant turns (`neither message content nor tool calls`) even after the narrow one-retry adapter fix. The retry improved resilience to a single transient empty turn but still left the workflow failing whenever that preview model path returned the same malformed response twice in a row.
+- Fix: added a workout-summary-specific fallback in `src/adapters/llm/workout_summary_coach.rs`: when the selected config is `openrouter/google/gemini-3-flash-preview` and the first `run_tool_loop(...)` attempt still fails with the exact empty-turn invalid-response error, the coach logs the fallback and retries once with `google/gemini-3.1-pro` while keeping the same provider, API key, request payload, and tool scope.
+- Prevention: when a provider-specific preview model keeps emitting structurally empty completions after the existing retry budget, prefer a narrow fallback to a stable higher-tier model inside the affected workflow rather than broadening the fallback globally across every OpenRouter call. Gate it on the exact malformed-response signature so normal failures keep surfacing honestly.
 ### 2026-05-06 | user | PR #189 stale llm_adapters expectation after unavailable-tool loop fix
 
 - Problem: after `run_tool_loop(...)` was hardened to stop immediately on hidden/unavailable tool calls, `tests/llm_adapters/get_selected_workout.rs` still expected the old two-round replay flow with a second provider request and the tool-local `{"error":"data port not available"}` result. That left PR #189 red even though the runtime behavior had intentionally changed.
 - Fix: updated the hidden-tool adapter regression to assert the new one-round contract: the provider request exposes only the actually available tools, the loop records one public tool call plus one `tool` transcript entry, and the recorded tool result is the scope-level `tool not available in this scope: get_selected_workout` error without a replay round.
 - Prevention: when shared loop/orchestrator behavior changes a control-flow boundary, re-check adapter tests that were asserting the old round count, replay shape, or error payload. Tests around hidden tools should assert the current contract directly instead of assuming a second provider turn still occurs.
+
+### 2026-05-06 | user | Intervals client body logging scope regression on PR #189
+
+- Problem: the outbound-adapter logging change broadened Intervals.icu transport logging too far. `IntervalsIcuClient::execute_and_log_with_trace(...)` was switched to unconditional full request/response body previews, which violated the repo logging guide and broke adapter observability tests that intentionally require normal list/create/detail success paths to log no transport body previews while still keeping summarized failure diagnostics.
+- Fix: restored `BodyLoggingMode::None` support in `src/adapters/intervals_icu/client/logging.rs`, renamed the Intervals helper back to a no-body default in `src/adapters/intervals_icu/client.rs`, and rewired the Intervals API/detail/connection call sites to use that no-body helper again. Kept the existing adapter-level failure logs that already record hashed response-body summaries where needed.
+- Prevention: when adding body preview logging to outbound clients, do not widen a shared helper that fronts an entire provider adapter unless the repo's logging guide and observability tests explicitly allow that broader surface. For Intervals specifically, keep the transport helper no-body by default and add payload previews only on narrowly scoped paths with dedicated tests.
+
+### 2026-05-06 | user | outbound adapter client request and response body logging
+
+- Problem: debugging provider issues was unnecessarily slow because several outbound adapter clients still logged only metadata or only failure summaries. In particular, LLM and Google OAuth clients did not emit request/response body previews on successful calls, and most Intervals call sites still routed through the `no_body` helper despite the shared logging module already supporting full body previews.
+- Fix: enabled request and response body preview logging across adapter HTTP clients: switched Intervals trace helper call sites onto full body logging, added response body previews to Wahoo client logging, added request/response body previews to OpenAI/Gemini/OpenRouter clients, and added explicit request/response body logging for Google OAuth token and userinfo calls.
+- Prevention: when a provider/client issue is likely to require payload inspection, verify the real outbound adapter logs include both request and response body previews for the success and failure paths. Do not assume metadata-only client logs are enough for LLM or OAuth debugging.
+
+### 2026-05-06 | user | OpenRouter empty assistant turn retry in workout-summary chat
+
+- Problem: live workout-summary coach logs showed OpenRouter responses for `google/gemini-3-flash-preview` that mapped to an assistant message with neither final text nor tool calls, which the adapter treated as a hard invalid response on the first occurrence. That made a transient provider-side empty turn fail the whole post-workout conversation even though the domain already had the right final-text guard for genuinely empty completed replies.
+- Fix: kept the domain contract unchanged, added a focused OpenRouter adapter helper to detect the specific `neither message content nor tool calls` mapping failure, retried that exact empty-turn case once inside `src/adapters/llm/openrouter/client.rs`, and added an adapter regression that simulates an empty first OpenRouter turn followed by a normal recovery response.
+- Prevention: when an aggregator/provider occasionally returns an empty assistant turn, prefer a narrowly scoped adapter-level retry for that exact transient transport/protocol shape instead of weakening the domain's final-response contract. Add a regression that proves both the retry trigger and the single-retry bound.
 ### 2026-05-06 | user | PR #188 unavailable tool calls should stop the loop immediately
 
 - Problem: the `tool_loop_rejects_runtime_calls_for_tools_not_available_in_scope` regression on `feat/tool-prompt-guidance` still failed because `run_tool_loop(...)` recorded the unavailable-tool error as a `tool` message but then kept asking the model for another round. A provider or test double that repeated the same forbidden tool call would never converge and instead hit `tool loop exceeded 6 rounds`.
