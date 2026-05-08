@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -7,9 +7,8 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::{LlmError, LLM_REQUEST_TIMEOUT_SECONDS},
     task_scheduler::{
-        NewTask, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler, TaskRepository,
-        TaskRunOutcome, TaskSchedulerError, TaskSchedulerService, TaskWorkerConfig,
-        TaskWorkerRepository,
+        NewTask, RetryStrategy, ScheduledTask, TaskRepository, TaskSchedulerError,
+        TaskSchedulerService, TaskWorkerConfig, TaskWorkerRepository,
     },
     workout_summary::{
         CoachReply, ConversationMessage, PersistedUserMessage, SendMessageResult, WorkoutSummary,
@@ -66,16 +65,6 @@ pub(crate) fn coach_reply_dedupe_key(
     user_message_id: &str,
 ) -> String {
     format!("workout-summary:{user_id}:{workout_id}:{user_message_id}")
-}
-
-pub(crate) fn parse_task_payload(
-    task: &ScheduledTask,
-) -> Result<WorkoutSummaryCoachReplyTaskPayload, WorkoutSummaryError> {
-    serde_json::from_value(task.payload.clone()).map_err(|error| {
-        WorkoutSummaryError::Repository(format!(
-            "invalid workout summary coach reply task payload: {error}"
-        ))
-    })
 }
 
 pub(crate) fn map_task_scheduler_error(error: TaskSchedulerError) -> WorkoutSummaryError {

@@ -1,5 +1,6 @@
 mod model;
 mod ports;
+mod runner;
 mod service;
 mod worker;
 
@@ -10,5 +11,6 @@ pub use model::{
     TaskWorker,
 };
 pub use ports::{BoxFuture, TaskRepository, TaskWorkerRepository};
+pub use runner::{scheduled_task_handler, ScheduledTaskRunner, TaskFailurePolicy};
 pub use service::{FailTaskInput, ResultTaskHandler, TaskSchedulerService};
 pub use worker::{SharedTaskHandler, TaskHandler, TaskRunOutcome, TaskWorkerConfig};

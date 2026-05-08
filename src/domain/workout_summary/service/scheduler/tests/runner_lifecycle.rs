@@ -114,10 +114,7 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
             if task.status == TaskStatus::Failed {
                 assert_eq!(
                     task.error_message,
-                    Some(
-                        "invalid workout summary coach reply task payload: missing field `workout_id`"
-                            .to_string()
-                    )
+                    Some("invalid task payload: missing field `workout_id`".to_string())
                 );
                 assert!(task.checkpoint.is_none());
                 break;

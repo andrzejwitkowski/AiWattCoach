@@ -1,4 +1,9 @@
-use tracing::warn;
+use crate::domain::task_scheduler::{
+    scheduled_task_handler, BoxFuture as TaskSchedulerBoxFuture, ScheduledTaskRunner,
+    SharedTaskHandler, TaskFailurePolicy,
+};
+use std::sync::Arc;
+use std::time::Duration;
 
 use super::super::STALE_PENDING_TIMEOUT_SECONDS;
 use super::checkpoint::serialize_completed_coach_reply_checkpoint;
@@ -8,16 +13,50 @@ fn llm_error_is_retryable(error: &LlmError) -> bool {
     error.is_retryable()
 }
 
-struct WorkoutSummaryCoachReplyTaskHandler<Base> {
+struct WorkoutSummaryCoachReplyRunner<Base> {
     base: Arc<Base>,
 }
 
-impl<Base> WorkoutSummaryCoachReplyTaskHandler<Base>
+impl<Base> ScheduledTaskRunner for WorkoutSummaryCoachReplyRunner<Base>
 where
     Base: WorkoutSummaryUseCases + 'static,
 {
-    fn map_task_failure(error: WorkoutSummaryError) -> TaskRunOutcome {
-        let (retryable, retry_delay_seconds) = match &error {
+    type Payload = WorkoutSummaryCoachReplyTaskPayload;
+    type Output = CoachReply;
+    type Error = WorkoutSummaryError;
+
+    fn task_type(&self) -> &'static str {
+        COACH_REPLY_TASK_TYPE
+    }
+
+    fn execute(
+        &self,
+        payload: Self::Payload,
+    ) -> TaskSchedulerBoxFuture<Result<Self::Output, Self::Error>> {
+        let base = self.base.clone();
+        Box::pin(async move {
+            base.generate_coach_reply(
+                &payload.user_id,
+                &payload.workout_id,
+                payload.user_message_id,
+            )
+            .await
+        })
+    }
+
+    fn serialize_checkpoint(
+        &self,
+        output: &Self::Output,
+    ) -> Result<serde_json::Value, Self::Error> {
+        serialize_completed_coach_reply_checkpoint(output)
+    }
+
+    fn serialize_error(&self, error: &Self::Error) -> Option<serde_json::Value> {
+        serde_json::to_value(serialize_workout_summary_error(error)).ok()
+    }
+
+    fn failure_policy(&self, error: &Self::Error) -> TaskFailurePolicy {
+        let (retryable, retry_delay_seconds) = match error {
             WorkoutSummaryError::Llm(llm_error) => (llm_error_is_retryable(llm_error), None),
             WorkoutSummaryError::Repository(_) => (true, None),
             WorkoutSummaryError::ReplyAlreadyPending => (true, Some(STALE_PENDING_TIMEOUT_SECONDS)),
@@ -26,64 +65,10 @@ where
             | WorkoutSummaryError::NotFound
             | WorkoutSummaryError::Validation(_) => (false, None),
         };
-
-        TaskRunOutcome::Failed {
-            checkpoint: serde_json::to_value(serialize_workout_summary_error(&error)).ok(),
-            error_message: error.to_string(),
+        TaskFailurePolicy {
             retryable,
             retry_delay_seconds,
         }
-    }
-
-    fn completed_checkpoint(task_id: &str, reply: &CoachReply) -> Option<serde_json::Value> {
-        match serialize_completed_coach_reply_checkpoint(reply) {
-            Ok(value) => Some(value),
-            Err(error) => {
-                warn!(task_id = %task_id, %error, "failed to serialize completed coach reply checkpoint");
-                None
-            }
-        }
-    }
-}
-
-impl<Base> TaskHandler for WorkoutSummaryCoachReplyTaskHandler<Base>
-where
-    Base: WorkoutSummaryUseCases + 'static,
-{
-    fn task_type(&self) -> &'static str {
-        COACH_REPLY_TASK_TYPE
-    }
-
-    fn run(&self, task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
-        let base = self.base.clone();
-        Box::pin(async move {
-            let payload = match parse_task_payload(&task) {
-                Ok(payload) => payload,
-                Err(error) => {
-                    warn!(task_id = %task.id, %error, "invalid workout summary coach reply task payload");
-                    return TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    };
-                }
-            };
-
-            match base
-                .generate_coach_reply(
-                    &payload.user_id,
-                    &payload.workout_id,
-                    payload.user_message_id,
-                )
-                .await
-            {
-                Ok(reply) => TaskRunOutcome::Completed {
-                    checkpoint: Self::completed_checkpoint(&task.id, &reply),
-                },
-                Err(error) => Self::map_task_failure(error),
-            }
-        })
     }
 }
 
@@ -91,7 +76,7 @@ pub fn workout_summary_coach_reply_task_handler<Base>(base: Arc<Base>) -> Shared
 where
     Base: WorkoutSummaryUseCases + 'static,
 {
-    Arc::new(WorkoutSummaryCoachReplyTaskHandler { base })
+    scheduled_task_handler(Arc::new(WorkoutSummaryCoachReplyRunner { base }))
 }
 
 pub fn spawn_workout_summary_coach_reply_task_runner<Base, Tasks, Workers, Time>(

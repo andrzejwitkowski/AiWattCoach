@@ -1,14 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::warn;
 
 use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::{LlmError, LLM_REQUEST_TIMEOUT_SECONDS},
     task_scheduler::{
-        NewTask, ResultTaskHandler, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler,
-        TaskRepository, TaskRunOutcome, TaskSchedulerError, TaskSchedulerService,
-        TaskWorkerRepository,
+        NewTask, ResultTaskHandler, RetryStrategy, ScheduledTask, SharedTaskHandler,
+        TaskRepository, TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
     },
 };
 
@@ -42,16 +40,6 @@ fn coach_conversation_reply_dedupe_key(
     user_message_id: &str,
 ) -> String {
     format!("coach-conversation:{user_id}:{conversation_id}:{user_message_id}")
-}
-
-fn parse_task_payload(
-    task: &ScheduledTask,
-) -> Result<CoachConversationReplyTaskPayload, CoachConversationError> {
-    serde_json::from_value(task.payload.clone()).map_err(|error| {
-        CoachConversationError::Repository(format!(
-            "invalid coach conversation reply task payload: {error}"
-        ))
-    })
 }
 
 fn map_task_scheduler_error(error: TaskSchedulerError) -> CoachConversationError {
@@ -369,33 +357,58 @@ where
     }
 }
 
-struct CoachConversationReplyTaskHandler<Base> {
+struct CoachConversationReplyRunner<Base> {
     base: Arc<Base>,
 }
 
-impl<Base> CoachConversationReplyTaskHandler<Base>
+impl<Base> crate::domain::task_scheduler::ScheduledTaskRunner for CoachConversationReplyRunner<Base>
 where
     Base: CoachConversationUseCases + 'static,
 {
-    fn completed_checkpoint(
-        task_id: &str,
-        reply: &CoachConversationReply,
-    ) -> Result<serde_json::Value, CoachConversationError> {
-        serde_json::to_value(CompletedCoachConversationReplyTaskCheckpoint {
-            coach_message: reply.coach_message.clone(),
-            athlete_summary_was_regenerated: reply.athlete_summary_was_regenerated,
-        })
-        .map_err(|error| {
-            let error = CoachConversationError::Repository(format!(
-                "failed to serialize completed coach conversation reply task checkpoint: {error}"
-            ));
-            warn!(task_id = %task_id, error = %error, "failed to serialize completed coach conversation reply task checkpoint");
-            error
+    type Payload = CoachConversationReplyTaskPayload;
+    type Output = CoachConversationReply;
+    type Error = CoachConversationError;
+
+    fn task_type(&self) -> &'static str {
+        COACH_CONVERSATION_REPLY_TASK_TYPE
+    }
+
+    fn execute(&self, payload: Self::Payload) -> BoxFuture<Result<Self::Output, Self::Error>> {
+        let base = self.base.clone();
+        Box::pin(async move {
+            base.generate_calendar_reply(
+                &payload.user_id,
+                &payload.conversation_id,
+                payload.user_message_id,
+            )
+            .await
         })
     }
 
-    fn map_task_failure(error: CoachConversationError) -> TaskRunOutcome {
-        let (retryable, retry_delay_seconds) = match &error {
+    fn serialize_checkpoint(
+        &self,
+        output: &Self::Output,
+    ) -> Result<serde_json::Value, Self::Error> {
+        serde_json::to_value(CompletedCoachConversationReplyTaskCheckpoint {
+            coach_message: output.coach_message.clone(),
+            athlete_summary_was_regenerated: output.athlete_summary_was_regenerated,
+        })
+        .map_err(|error| {
+            CoachConversationError::Repository(format!(
+                "failed to serialize completed coach conversation reply task checkpoint: {error}"
+            ))
+        })
+    }
+
+    fn serialize_error(&self, _error: &Self::Error) -> Option<serde_json::Value> {
+        None
+    }
+
+    fn failure_policy(
+        &self,
+        error: &Self::Error,
+    ) -> crate::domain::task_scheduler::TaskFailurePolicy {
+        let (retryable, retry_delay_seconds) = match error {
             CoachConversationError::Llm(llm_error) => (llm_error_is_retryable(llm_error), None),
             CoachConversationError::Repository(_) => (true, None),
             CoachConversationError::ReplyAlreadyPending => {
@@ -405,61 +418,10 @@ where
             | CoachConversationError::Archived
             | CoachConversationError::Validation(_) => (false, None),
         };
-
-        TaskRunOutcome::Failed {
-            checkpoint: None,
-            error_message: error.to_string(),
+        crate::domain::task_scheduler::TaskFailurePolicy {
             retryable,
             retry_delay_seconds,
         }
-    }
-}
-
-impl<Base> TaskHandler for CoachConversationReplyTaskHandler<Base>
-where
-    Base: CoachConversationUseCases + 'static,
-{
-    fn task_type(&self) -> &'static str {
-        COACH_CONVERSATION_REPLY_TASK_TYPE
-    }
-
-    fn run(&self, task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
-        let base = self.base.clone();
-        Box::pin(async move {
-            let payload = match parse_task_payload(&task) {
-                Ok(payload) => payload,
-                Err(error) => {
-                    tracing::warn!(
-                        task_id = %task.id,
-                        error = %error,
-                        "invalid coach conversation reply task payload"
-                    );
-                    return TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    };
-                }
-            };
-
-            match base
-                .generate_calendar_reply(
-                    &payload.user_id,
-                    &payload.conversation_id,
-                    payload.user_message_id,
-                )
-                .await
-            {
-                Ok(reply) => match Self::completed_checkpoint(&task.id, &reply) {
-                    Ok(checkpoint) => TaskRunOutcome::Completed {
-                        checkpoint: Some(checkpoint),
-                    },
-                    Err(error) => Self::map_task_failure(error),
-                },
-                Err(error) => Self::map_task_failure(error),
-            }
-        })
     }
 }
 
@@ -467,5 +429,7 @@ pub fn coach_conversation_reply_task_handler<Base>(base: Arc<Base>) -> SharedTas
 where
     Base: CoachConversationUseCases + 'static,
 {
-    Arc::new(CoachConversationReplyTaskHandler { base })
+    crate::domain::task_scheduler::scheduled_task_handler(Arc::new(CoachConversationReplyRunner {
+        base,
+    }))
 }

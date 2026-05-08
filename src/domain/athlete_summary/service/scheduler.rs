@@ -6,9 +6,9 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::{LlmError, LLM_REQUEST_TIMEOUT_SECONDS},
     task_scheduler::{
-        NewTask, ResultTaskHandler, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler,
-        TaskRepository, TaskRunOutcome, TaskSchedulerError, TaskSchedulerService,
-        TaskWorkerRepository,
+        scheduled_task_handler, NewTask, ResultTaskHandler, RetryStrategy, ScheduledTask,
+        ScheduledTaskRunner, SharedTaskHandler, TaskFailurePolicy, TaskRepository,
+        TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
     },
 };
 
@@ -56,16 +56,6 @@ struct CompletedAthleteSummaryTaskCheckpoint {
 
 #[cfg(test)]
 mod tests;
-
-fn parse_task_payload(
-    task: &ScheduledTask,
-) -> Result<AthleteSummaryTaskPayload, AthleteSummaryError> {
-    serde_json::from_value(task.payload.clone()).map_err(|error| {
-        AthleteSummaryError::Repository(format!(
-            "invalid athlete summary generate task payload: {error}"
-        ))
-    })
-}
 
 fn map_task_scheduler_error(error: TaskSchedulerError) -> AthleteSummaryError {
     match error {
@@ -207,16 +197,40 @@ fn build_completed_checkpoint(user_id: &str) -> Result<serde_json::Value, Athlet
     })
 }
 
-struct AthleteSummaryGenerateTaskHandler<Base> {
+struct AthleteSummaryGenerateRunner<Base> {
     base: Arc<Base>,
 }
 
-impl<Base> AthleteSummaryGenerateTaskHandler<Base>
+impl<Base> ScheduledTaskRunner for AthleteSummaryGenerateRunner<Base>
 where
     Base: AthleteSummaryUseCases + 'static,
 {
-    fn map_task_failure(error: AthleteSummaryError) -> TaskRunOutcome {
-        let (retryable, retry_delay_seconds) = match &error {
+    type Payload = AthleteSummaryTaskPayload;
+    type Output = AthleteSummary;
+    type Error = AthleteSummaryError;
+
+    fn task_type(&self) -> &'static str {
+        ATHLETE_SUMMARY_GENERATE_TASK_TYPE
+    }
+
+    fn execute(&self, payload: Self::Payload) -> BoxFuture<Result<Self::Output, Self::Error>> {
+        let base = self.base.clone();
+        Box::pin(async move { base.generate_summary(&payload.user_id, payload.force).await })
+    }
+
+    fn serialize_checkpoint(
+        &self,
+        output: &Self::Output,
+    ) -> Result<serde_json::Value, Self::Error> {
+        build_completed_checkpoint(&output.user_id)
+    }
+
+    fn serialize_error(&self, error: &Self::Error) -> Option<serde_json::Value> {
+        serde_json::to_value(serialize_athlete_summary_error(error)).ok()
+    }
+
+    fn failure_policy(&self, error: &Self::Error) -> TaskFailurePolicy {
+        let (retryable, retry_delay_seconds) = match error {
             AthleteSummaryError::Llm(llm_error) => (llm_error.is_retryable(), None),
             AthleteSummaryError::Repository(_) => (true, None),
             AthleteSummaryError::Unavailable(message)
@@ -228,54 +242,10 @@ where
                 (false, None)
             }
         };
-
-        TaskRunOutcome::Failed {
-            checkpoint: serde_json::to_value(serialize_athlete_summary_error(&error)).ok(),
-            error_message: error.to_string(),
+        TaskFailurePolicy {
             retryable,
             retry_delay_seconds,
         }
-    }
-}
-
-impl<Base> TaskHandler for AthleteSummaryGenerateTaskHandler<Base>
-where
-    Base: AthleteSummaryUseCases + 'static,
-{
-    fn task_type(&self) -> &'static str {
-        ATHLETE_SUMMARY_GENERATE_TASK_TYPE
-    }
-
-    fn run(&self, task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
-        let base = self.base.clone();
-        Box::pin(async move {
-            let payload = match parse_task_payload(&task) {
-                Ok(payload) => payload,
-                Err(error) => {
-                    return TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    };
-                }
-            };
-
-            match base.generate_summary(&payload.user_id, payload.force).await {
-                Ok(summary) => match build_completed_checkpoint(&summary.user_id) {
-                    Ok(checkpoint) => TaskRunOutcome::Completed {
-                        checkpoint: Some(checkpoint),
-                    },
-                    Err(error) => TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    },
-                },
-                Err(error) => Self::map_task_failure(error),
-            }
-        })
     }
 }
 
@@ -283,7 +253,7 @@ pub fn athlete_summary_generate_task_handler<Base>(base: Arc<Base>) -> SharedTas
 where
     Base: AthleteSummaryUseCases + 'static,
 {
-    Arc::new(AthleteSummaryGenerateTaskHandler { base })
+    scheduled_task_handler(Arc::new(AthleteSummaryGenerateRunner { base }))
 }
 
 #[derive(Clone)]

@@ -7,9 +7,9 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::LLM_REQUEST_TIMEOUT_SECONDS,
     task_scheduler::{
-        BoxFuture as TaskSchedulerBoxFuture, NewTask, ResultTaskHandler, RetryStrategy,
-        ScheduledTask, SharedTaskHandler, TaskHandler, TaskRepository, TaskRunOutcome,
-        TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
+        scheduled_task_handler, BoxFuture as TaskSchedulerBoxFuture, NewTask, ResultTaskHandler,
+        RetryStrategy, ScheduledTask, ScheduledTaskRunner, SharedTaskHandler, TaskFailurePolicy,
+        TaskRepository, TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
     },
     workout_summary::WorkoutRecap,
 };
@@ -110,14 +110,6 @@ where
     }
 }
 
-fn parse_task_payload(task: &ScheduledTask) -> Result<TrainingPlanTaskPayload, TrainingPlanError> {
-    serde_json::from_value(task.payload.clone()).map_err(|error| {
-        TrainingPlanError::Repository(format!(
-            "invalid training plan generate task payload: {error}"
-        ))
-    })
-}
-
 fn map_task_scheduler_error(error: TaskSchedulerError) -> TrainingPlanError {
     match error {
         TaskSchedulerError::Validation(message)
@@ -200,60 +192,50 @@ fn build_completed_checkpoint(
     })
 }
 
-struct TrainingPlanGenerateTaskHandler<Base> {
+struct TrainingPlanGenerateRunner<Base> {
     base: Arc<Base>,
 }
 
-impl<Base> TaskHandler for TrainingPlanGenerateTaskHandler<Base>
+impl<Base> ScheduledTaskRunner for TrainingPlanGenerateRunner<Base>
 where
     Base: TrainingPlanSchedulerExecutor,
 {
+    type Payload = TrainingPlanTaskPayload;
+    type Output = GeneratedTrainingPlan;
+    type Error = TrainingPlanError;
+
     fn task_type(&self) -> &'static str {
         TRAINING_PLAN_GENERATE_TASK_TYPE
     }
 
-    fn run(&self, task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
+    fn execute(&self, payload: Self::Payload) -> BoxFuture<Result<Self::Output, Self::Error>> {
         let base = self.base.clone();
         Box::pin(async move {
-            let payload = match parse_task_payload(&task) {
-                Ok(payload) => payload,
-                Err(error) => {
-                    return TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    };
-                }
-            };
-
-            match base
-                .generate_for_saved_workout(
-                    &payload.user_id,
-                    &payload.workout_id,
-                    payload.saved_at_epoch_seconds,
-                )
-                .await
-            {
-                Ok(generated) => match build_completed_checkpoint(&generated) {
-                    Ok(checkpoint) => TaskRunOutcome::Completed {
-                        checkpoint: Some(checkpoint),
-                    },
-                    Err(error) => TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    },
-                },
-                Err(error) => TaskRunOutcome::Failed {
-                    checkpoint: serde_json::to_value(serialize_training_plan_error(&error)).ok(),
-                    error_message: error.to_string(),
-                    retryable: false,
-                    retry_delay_seconds: None,
-                },
-            }
+            base.generate_for_saved_workout(
+                &payload.user_id,
+                &payload.workout_id,
+                payload.saved_at_epoch_seconds,
+            )
+            .await
         })
+    }
+
+    fn serialize_checkpoint(
+        &self,
+        output: &Self::Output,
+    ) -> Result<serde_json::Value, Self::Error> {
+        build_completed_checkpoint(output)
+    }
+
+    fn serialize_error(&self, error: &Self::Error) -> Option<serde_json::Value> {
+        serde_json::to_value(serialize_training_plan_error(error)).ok()
+    }
+
+    fn failure_policy(&self, _error: &Self::Error) -> TaskFailurePolicy {
+        TaskFailurePolicy {
+            retryable: false,
+            retry_delay_seconds: None,
+        }
     }
 }
 
@@ -262,7 +244,7 @@ pub fn training_plan_generate_task_handler<Base>(base: Arc<Base>) -> SharedTaskH
 where
     Base: TrainingPlanSchedulerExecutor,
 {
-    Arc::new(TrainingPlanGenerateTaskHandler { base })
+    scheduled_task_handler(Arc::new(TrainingPlanGenerateRunner { base }))
 }
 
 #[derive(Clone)]
