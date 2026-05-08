@@ -36,6 +36,24 @@ struct CompletedCoachConversationReplyTaskCheckpoint {
     athlete_summary_was_regenerated: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum SerializedCoachConversationError {
+    NotFound,
+    Archived,
+    ReplyAlreadyPending,
+    Repository {
+        message: String,
+    },
+    Validation {
+        message: String,
+    },
+    Llm {
+        error_kind: String,
+        message: Option<String>,
+    },
+}
+
 fn coach_conversation_reply_dedupe_key(
     user_id: &str,
     conversation_id: &str,
@@ -64,6 +82,120 @@ fn map_task_scheduler_error(error: TaskSchedulerError) -> CoachConversationError
 
 fn llm_error_is_retryable(error: &LlmError) -> bool {
     error.is_retryable()
+}
+
+fn serialize_coach_conversation_error(
+    error: &CoachConversationError,
+) -> SerializedCoachConversationError {
+    match error {
+        CoachConversationError::NotFound => SerializedCoachConversationError::NotFound,
+        CoachConversationError::Archived => SerializedCoachConversationError::Archived,
+        CoachConversationError::ReplyAlreadyPending => {
+            SerializedCoachConversationError::ReplyAlreadyPending
+        }
+        CoachConversationError::Repository(message) => {
+            SerializedCoachConversationError::Repository {
+                message: message.clone(),
+            }
+        }
+        CoachConversationError::Validation(message) => {
+            SerializedCoachConversationError::Validation {
+                message: message.clone(),
+            }
+        }
+        CoachConversationError::Llm(error) => SerializedCoachConversationError::Llm {
+            error_kind: match error {
+                LlmError::CredentialsNotConfigured => "credentials_not_configured",
+                LlmError::ProviderNotConfigured => "provider_not_configured",
+                LlmError::ModelNotConfigured => "model_not_configured",
+                LlmError::ContextTooLarge(_) => "context_too_large",
+                LlmError::UnsupportedProvider(_) => "unsupported_provider",
+                LlmError::Transport(_) => "transport",
+                LlmError::ProviderRejected(_) => "provider_rejected",
+                LlmError::RateLimited(_) => "rate_limited",
+                LlmError::InvalidResponse(_) => "invalid_response",
+                LlmError::Checkpoint(_) => "checkpoint",
+                LlmError::Internal(_) => "internal",
+            }
+            .to_string(),
+            message: match error {
+                LlmError::CredentialsNotConfigured
+                | LlmError::ProviderNotConfigured
+                | LlmError::ModelNotConfigured => None,
+                LlmError::ContextTooLarge(message)
+                | LlmError::UnsupportedProvider(message)
+                | LlmError::Transport(message)
+                | LlmError::ProviderRejected(message)
+                | LlmError::RateLimited(message)
+                | LlmError::InvalidResponse(message)
+                | LlmError::Checkpoint(message)
+                | LlmError::Internal(message) => Some(message.clone()),
+            },
+        },
+    }
+}
+
+fn deserialize_coach_conversation_error(
+    error: SerializedCoachConversationError,
+) -> CoachConversationError {
+    match error {
+        SerializedCoachConversationError::NotFound => CoachConversationError::NotFound,
+        SerializedCoachConversationError::Archived => CoachConversationError::Archived,
+        SerializedCoachConversationError::ReplyAlreadyPending => {
+            CoachConversationError::ReplyAlreadyPending
+        }
+        SerializedCoachConversationError::Repository { message } => {
+            CoachConversationError::Repository(message)
+        }
+        SerializedCoachConversationError::Validation { message } => {
+            CoachConversationError::Validation(message)
+        }
+        SerializedCoachConversationError::Llm {
+            error_kind,
+            message,
+        } => CoachConversationError::Llm(match error_kind.as_str() {
+            "credentials_not_configured" => LlmError::CredentialsNotConfigured,
+            "provider_not_configured" => LlmError::ProviderNotConfigured,
+            "model_not_configured" => LlmError::ModelNotConfigured,
+            "context_too_large" => LlmError::ContextTooLarge(
+                message
+                    .unwrap_or_else(|| "packed training context exceeds model limits".to_string()),
+            ),
+            "unsupported_provider" => LlmError::UnsupportedProvider(
+                message.unwrap_or_else(|| "unknown provider".to_string()),
+            ),
+            "transport" => {
+                LlmError::Transport(message.unwrap_or_else(|| "transport error".to_string()))
+            }
+            "provider_rejected" => LlmError::ProviderRejected(
+                message.unwrap_or_else(|| "provider rejected request".to_string()),
+            ),
+            "rate_limited" => LlmError::RateLimited(
+                message.unwrap_or_else(|| "provider rate limited request".to_string()),
+            ),
+            "invalid_response" => LlmError::InvalidResponse(
+                message.unwrap_or_else(|| "invalid provider response".to_string()),
+            ),
+            _ => LlmError::Internal(message.unwrap_or_else(|| "internal llm error".to_string())),
+        }),
+    }
+}
+
+fn parse_failed_checkpoint(
+    task: &ScheduledTask,
+) -> Result<Option<CoachConversationError>, CoachConversationError> {
+    task.checkpoint
+        .clone()
+        .map(|value| {
+            serde_json::from_value::<SerializedCoachConversationError>(value)
+                .map(deserialize_coach_conversation_error)
+                .map_err(|error| {
+                    CoachConversationError::Repository(format!(
+                        "invalid failed coach conversation task checkpoint: {error}"
+                    ))
+                })
+        })
+        .transpose()
 }
 
 #[derive(Clone)]
@@ -110,15 +242,16 @@ where
     }
 
     fn parse_failed(&self, task: &ScheduledTask) -> Result<Self::Error, Self::Error> {
-        Ok(task
-            .error_message
-            .clone()
-            .map(CoachConversationError::Repository)
-            .unwrap_or_else(|| {
-                CoachConversationError::Repository(
-                    "coach conversation reply task failed without an error message".to_string(),
-                )
-            }))
+        Ok(parse_failed_checkpoint(task)?.unwrap_or_else(|| {
+            task.error_message
+                .clone()
+                .map(CoachConversationError::Repository)
+                .unwrap_or_else(|| {
+                    CoachConversationError::Repository(
+                        "coach conversation reply task failed without an error message".to_string(),
+                    )
+                })
+        }))
     }
 
     fn finish(&self, completed: Self::Completed) -> BoxFuture<Result<Self::Output, Self::Error>> {
@@ -407,7 +540,7 @@ where
         };
 
         TaskRunOutcome::Failed {
-            checkpoint: None,
+            checkpoint: serde_json::to_value(serialize_coach_conversation_error(&error)).ok(),
             error_message: error.to_string(),
             retryable,
             retry_delay_seconds,
@@ -468,4 +601,48 @@ where
     Base: CoachConversationUseCases + 'static,
 {
     Arc::new(CoachConversationReplyTaskHandler { base })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::task_scheduler::{RetryStrategy, TaskStatus};
+
+    #[test]
+    fn parse_failed_restores_serialized_llm_error_from_task_checkpoint() {
+        let error =
+            CoachConversationError::Llm(LlmError::ProviderRejected("invalid model".to_string()));
+        let task = ScheduledTask {
+            id: "task-1".to_string(),
+            user_id: "user-1".to_string(),
+            task_type: COACH_CONVERSATION_REPLY_TASK_TYPE.to_string(),
+            status: TaskStatus::Failed,
+            payload: serde_json::json!({}),
+            checkpoint: Some(
+                serde_json::to_value(serialize_coach_conversation_error(&error))
+                    .expect("failed checkpoint should serialize"),
+            ),
+            retry_strategy: RetryStrategy::Never,
+            dedupe_key: "dedupe-1".to_string(),
+            error_message: Some(error.to_string()),
+            attempt_count: 1,
+            next_attempt_at_epoch_seconds: 0,
+            claimed_by: None,
+            lease_expires_at_epoch_seconds: None,
+            last_heartbeat_at_epoch_seconds: None,
+            execution_timeout_seconds: 1,
+            timed_out_at_epoch_seconds: None,
+            leader_only: false,
+            created_at_epoch_seconds: 0,
+            updated_at_epoch_seconds: 0,
+            started_at_epoch_seconds: None,
+            finished_at_epoch_seconds: Some(0),
+        };
+
+        let parsed = parse_failed_checkpoint(&task)
+            .expect("failed checkpoint should parse")
+            .expect("failed checkpoint should contain an error");
+
+        assert_eq!(parsed, error);
+    }
 }
