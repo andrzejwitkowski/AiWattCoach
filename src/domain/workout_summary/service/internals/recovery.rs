@@ -1,7 +1,8 @@
-use std::time::Duration;
-
 use crate::domain::{
-    llm::{last_nonempty_assistant_content, merge_provider_transcript_entries},
+    llm::{
+        last_nonempty_assistant_content, merge_provider_transcript_entries,
+        persistence::{retry_persist, RetryConfig, RetryContext},
+    },
     llm_tools::public_tool_call_from_llm,
 };
 
@@ -24,63 +25,45 @@ where
         operation: &CoachReplyOperation,
         write_label: &'static str,
     ) -> Result<(), WorkoutSummaryError> {
-        let mut last_error = None;
+        let service = self.clone();
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let provider_transcript = operation.provider_transcript.clone();
+        let ctx = RetryContext {
+            write_label,
+            user_message_id: operation.user_message_id.clone(),
+            scope_label: "workout_id",
+            scope_value: workout_id.clone(),
+            operation_status: None,
+        };
 
-        for attempt in 1..=POST_PROVIDER_WRITE_ATTEMPTS {
-            let summary = self.get_existing_summary(user_id, workout_id).await?;
-            let merged = merge_provider_transcript_entries(
-                summary.provider_transcript,
-                &operation.provider_transcript,
-            );
-
-            match self
-                .replace_provider_transcript(
-                    user_id,
-                    workout_id,
-                    summary.updated_at_epoch_seconds,
-                    merged,
-                )
-                .await
-            {
-                Ok(()) => {
-                    if attempt > 1 {
-                        info!(
-                            workout_id = %workout_id,
-                            user_message_id = %operation.user_message_id,
-                            attempt,
-                            max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
-                            write_label,
-                            "recovered provider transcript write after retry"
-                        );
-                    }
-                    return Ok(());
-                }
-                Err(error @ WorkoutSummaryError::Repository(_)) => {
-                    if attempt == POST_PROVIDER_WRITE_ATTEMPTS {
-                        return Err(error);
-                    }
-
-                    warn!(
-                        workout_id = %workout_id,
-                        user_message_id = %operation.user_message_id,
-                        attempt,
-                        max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
-                        write_label,
-                        error = %error,
-                        "retrying provider transcript write after repository error"
-                    );
-                    last_error = Some(error);
-                    tokio::time::sleep(Duration::from_millis(25 * attempt as u64)).await;
-                }
-                Err(error) => return Err(error),
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| {
-            WorkoutSummaryError::Repository(
-                "provider transcript write failed without error".to_string(),
-            )
-        }))
+        retry_persist(
+            RetryConfig {
+                max_attempts: POST_PROVIDER_WRITE_ATTEMPTS,
+                backoff_base_ms: 25,
+            },
+            |e| matches!(e, WorkoutSummaryError::Repository(_)),
+            || {
+                let svc = service.clone();
+                let uid = user_id.clone();
+                let wid = workout_id.clone();
+                let pt = provider_transcript.clone();
+                Box::pin(async move {
+                    let summary = svc.get_existing_summary(&uid, &wid).await?;
+                    let merged =
+                        merge_provider_transcript_entries(summary.provider_transcript, &pt);
+                    svc.replace_provider_transcript(
+                        &uid,
+                        &wid,
+                        summary.updated_at_epoch_seconds,
+                        merged,
+                    )
+                    .await
+                })
+            },
+            &ctx,
+        )
+        .await
     }
 
     pub(in super::super) async fn get_completed_reply(
@@ -148,50 +131,29 @@ where
         operation: CoachReplyOperation,
         write_label: &'static str,
     ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
-        let mut last_error = None;
+        let repo = self.reply_operations.clone();
+        let ctx = RetryContext {
+            write_label,
+            user_message_id: operation.user_message_id.clone(),
+            scope_label: "workout_id",
+            scope_value: operation.scope_id.clone(),
+            operation_status: Some(format!("{:?}", operation.status)),
+        };
 
-        for attempt in 1..=POST_PROVIDER_WRITE_ATTEMPTS {
-            match self.reply_operations.upsert(operation.clone()).await {
-                Ok(saved) => {
-                    if attempt > 1 {
-                        info!(
-                            workout_id = %saved.scope_id,
-                            user_message_id = %saved.user_message_id,
-                            attempt,
-                            max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
-                            operation_status = ?saved.status,
-                            write_label,
-                            "recovered post-provider coach reply write after retry"
-                        );
-                    }
-                    return Ok(saved);
-                }
-                Err(error @ WorkoutSummaryError::Repository(_)) => {
-                    if attempt == POST_PROVIDER_WRITE_ATTEMPTS {
-                        return Err(error);
-                    }
-
-                    warn!(
-                        workout_id = %operation.scope_id,
-                        user_message_id = %operation.user_message_id,
-                        attempt,
-                        max_attempts = POST_PROVIDER_WRITE_ATTEMPTS,
-                        operation_status = ?operation.status,
-                        write_label,
-                        error = %error,
-                        "retrying post-provider coach reply write after repository error"
-                    );
-                    last_error = Some(error);
-                }
-                Err(error) => return Err(error),
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| {
-            WorkoutSummaryError::Repository(
-                "post-provider coach reply write failed without error".to_string(),
-            )
-        }))
+        retry_persist(
+            RetryConfig {
+                max_attempts: POST_PROVIDER_WRITE_ATTEMPTS,
+                backoff_base_ms: 25,
+            },
+            |e| matches!(e, WorkoutSummaryError::Repository(_)),
+            || {
+                let op = operation.clone();
+                let r = repo.clone();
+                Box::pin(async move { r.upsert(op).await })
+            },
+            &ctx,
+        )
+        .await
     }
 
     pub(in super::super) async fn ensure_athlete_summary(

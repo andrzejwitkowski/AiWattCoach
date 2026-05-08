@@ -1,6 +1,6 @@
 use mongodb::bson::doc;
 
-use super::super::error::is_duplicate_key_error;
+use super::super::durable_ops::{mongo_claim_pending, ClaimInput, ClaimOutcome, OpMetadata};
 use super::mapping::{map_document_to_operation, map_operation_to_document};
 use super::MongoLlmReplyOperationRepository;
 use crate::domain::coach_conversation::{
@@ -45,86 +45,45 @@ impl MongoLlmReplyOperationRepository {
         operation: LlmReplyOperation,
         stale_before_epoch_seconds: i64,
     ) -> Result<LlmReplyClaimResult, String> {
-        let collection = self.collection.clone();
         let document = map_operation_to_document(&operation, self.scope_type);
+        let scope_type = self.scope_type;
+        let user_id = document.user_id.clone();
+        let scope_id = document.scope_id.clone();
+        let user_message_id = document.user_message_id.clone();
+        let fallback_message_id = operation.reply_message_id.clone();
 
-        let inserted = collection
-            .insert_one(&document)
-            .await
-            .map(|_| true)
-            .or_else(|error| {
-                if is_duplicate_key_error(&error) {
-                    Ok(false)
-                } else {
-                    Err(error.to_string())
-                }
-            })?;
-
-        if inserted {
-            return Ok(LlmReplyClaimResult::Claimed(operation));
-        }
-
-        let existing_document = collection
-            .find_one(doc! {
-                "user_id": &document.user_id,
-                "scope_type": &document.scope_type,
-                "scope_id": &document.scope_id,
-                "user_message_id": &document.user_message_id,
-            })
-            .await
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "claimed reply operation disappeared before reload".to_string())?;
-
-        let existing = map_document_to_operation(existing_document)?;
-        let reclaimable = match existing.status {
-            LlmReplyOperationStatus::Pending => existing.is_stale(stale_before_epoch_seconds),
-            LlmReplyOperationStatus::Failed => true,
-            LlmReplyOperationStatus::Completed => false,
-        };
-
-        if !reclaimable {
-            return Ok(LlmReplyClaimResult::Existing(existing));
-        }
-
-        let fallback_message_id = operation.reply_message_id.clone().ok_or_else(|| {
-            "pending reply operation missing reserved reply message id".to_string()
-        })?;
-        let reclaimed =
-            existing.reclaim(fallback_message_id, operation.last_attempt_at_epoch_seconds);
-        let reclaimed_document = map_operation_to_document(&reclaimed, self.scope_type);
-        let replaced = collection
-            .find_one_and_replace(
-                doc! {
-                    "user_id": &document.user_id,
-                    "scope_type": &document.scope_type,
-                    "scope_id": &document.scope_id,
-                    "user_message_id": &document.user_message_id,
-                    "attempt_count": i64::from(existing.attempt_count),
-                    "updated_at_epoch_seconds": existing.updated_at_epoch_seconds,
-                },
-                &reclaimed_document,
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-
-        if replaced.is_some() {
-            return Ok(LlmReplyClaimResult::Claimed(reclaimed));
-        }
-
-        let latest = collection
-            .find_one(doc! {
-                "user_id": &document.user_id,
-                "scope_type": &document.scope_type,
-                "scope_id": &document.scope_id,
-                "user_message_id": &document.user_message_id,
-            })
-            .await
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "reclaimed reply operation disappeared before reload".to_string())?;
-
-        Ok(LlmReplyClaimResult::Existing(map_document_to_operation(
-            latest,
-        )?))
+        mongo_claim_pending(
+            ClaimInput {
+                collection: self.collection.clone(),
+                document,
+                operation,
+                stale_before_epoch_seconds,
+            },
+            || doc! { "user_id": &user_id, "scope_type": scope_type, "scope_id": &scope_id, "user_message_id": &user_message_id },
+            map_document_to_operation,
+            |op, s| {
+                matches!(op.status, LlmReplyOperationStatus::Pending) && op.is_stale(s)
+                    || matches!(op.status, LlmReplyOperationStatus::Failed)
+            },
+            |op| OpMetadata {
+                attempt_count: i64::from(op.attempt_count),
+                updated_at_epoch_seconds: op.updated_at_epoch_seconds,
+                last_attempt_at_epoch_seconds: op.last_attempt_at_epoch_seconds,
+            },
+            |existing, _pending, now| {
+                let fallback = fallback_message_id.ok_or_else(|| {
+                    "pending reply operation missing reserved reply message id".to_string()
+                })?;
+                let reclaimed = existing.reclaim(fallback, now);
+                let doc = map_operation_to_document(&reclaimed, scope_type);
+                Ok((reclaimed, doc))
+            },
+        )
+        .await
+        .map(|outcome| match outcome {
+            ClaimOutcome::Claimed(op) => LlmReplyClaimResult::Claimed(op),
+            ClaimOutcome::Existing(op) => LlmReplyClaimResult::Existing(op),
+        })
     }
 
     async fn do_upsert(&self, operation: LlmReplyOperation) -> Result<LlmReplyOperation, String> {
