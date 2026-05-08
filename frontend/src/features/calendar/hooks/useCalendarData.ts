@@ -71,6 +71,7 @@ type UseCalendarDataResult = {
   scrollAdjustment: CalendarScrollAdjustment;
   loadMorePast: () => Promise<void>;
   loadMoreFuture: () => Promise<void>;
+  replaceEvent: (nextEvent: IntervalEvent) => void;
 };
 
 type WeekStore = Map<string, CalendarWeek>;
@@ -268,6 +269,49 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     }
   }, [beginPagination, endPagination, ensureWeeks, prefetchBuffer]);
 
+  const replaceEvent = useCallback((nextEvent: IntervalEvent) => {
+    const nextDateKey = extractDateKey(nextEvent.startDateLocal);
+
+    setStore((current) => {
+      let changed = false;
+      const next = new Map(current);
+
+      for (const [weekKey, week] of current) {
+        let weekChanged = false;
+        const days = week.days.map((day) => {
+          const matchingEventIndex = day.events.findIndex((event) => isSameCalendarEvent(event, nextEvent));
+          if (matchingEventIndex === -1) {
+            return day;
+          }
+
+          weekChanged = true;
+          changed = true;
+
+          const remainingEvents = day.events.filter((_, index) => index !== matchingEventIndex);
+          const nextEvents = day.dateKey === nextDateKey
+            ? insertEventSorted([...remainingEvents, nextEvent])
+            : remainingEvents;
+
+          return {
+            ...day,
+            events: nextEvents,
+          };
+        });
+
+        if (weekChanged) {
+          next.set(weekKey, {
+            ...week,
+            days,
+          });
+        }
+      }
+
+      return changed ? next : current;
+    });
+
+    invalidateCalendarEventCache(nextDateKey);
+  }, []);
+
   const weeks = useMemo(() =>
     Array.from({ length: CALENDAR_VISIBLE_WEEKS }, (_, i) => {
       const mondayDate = addWeeks(windowStart, i);
@@ -290,7 +334,19 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     store.get(toDateKey(addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS))) ?? createPlaceholderWeek(addWeeks(windowStart, CALENDAR_VISIBLE_WEEKS), 'idle'),
     [store, windowStart]);
 
-  return { state, weeks, renderedWeeks, topPreviewWeek, bottomPreviewWeek, isLoadingPast, isLoadingFuture, scrollAdjustment, loadMorePast, loadMoreFuture };
+  return {
+    state,
+    weeks,
+    renderedWeeks,
+    topPreviewWeek,
+    bottomPreviewWeek,
+    isLoadingPast,
+    isLoadingFuture,
+    scrollAdjustment,
+    loadMorePast,
+    loadMoreFuture,
+    replaceEvent,
+  };
 }
 
 function buildCalendarWeek(
@@ -424,6 +480,39 @@ function pruneWeekKeySet(weekKeys: Set<string>, retainedWeekKeys: Set<string>): 
 export function invalidateCalendarCache() {
   eventsCacheRef.clear();
   labelsCacheRef.clear();
+}
+
+function invalidateCalendarEventCache(dateKey: string) {
+  for (const cacheKey of eventsCacheRef.keys()) {
+    const [, oldest, newest] = cacheKey.split('|');
+    if (!oldest || !newest) {
+      continue;
+    }
+
+    if (dateKey >= oldest && dateKey <= newest) {
+      eventsCacheRef.delete(cacheKey);
+    }
+  }
+}
+
+function isSameCalendarEvent(currentEvent: IntervalEvent, nextEvent: IntervalEvent): boolean {
+  const currentProjectedWorkoutId = currentEvent.projectedWorkout?.projectedWorkoutId;
+  const nextProjectedWorkoutId = nextEvent.projectedWorkout?.projectedWorkoutId;
+  if (currentProjectedWorkoutId && nextProjectedWorkoutId) {
+    return currentProjectedWorkoutId === nextProjectedWorkoutId;
+  }
+
+  return currentEvent.calendarEntryId === nextEvent.calendarEntryId;
+}
+
+function insertEventSorted(events: IntervalEvent[]): IntervalEvent[] {
+  return [...events].sort((left, right) => {
+    if (left.startDateLocal !== right.startDateLocal) {
+      return left.startDateLocal.localeCompare(right.startDateLocal);
+    }
+
+    return left.id - right.id;
+  });
 }
 
 export const __resetCachesForTesting = invalidateCalendarCache;

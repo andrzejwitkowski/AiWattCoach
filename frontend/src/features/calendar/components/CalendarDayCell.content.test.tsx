@@ -274,9 +274,9 @@ describe('CalendarDayCell content', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const dayCell = container.firstElementChild as HTMLElement;
 
-    expect(within(dayCell).getByText('Modified')).toBeInTheDocument();
+    expect(within(dayCell).getAllByText('Modified')).toHaveLength(2);
     expect(dayCell.className).toContain('border-[#b9b082]/50');
-    expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Not Synced');
+    expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Modified');
   });
 
   it('shows a disconnected sync indicator for unsynced planned workouts', () => {
@@ -311,6 +311,74 @@ describe('CalendarDayCell content', () => {
     expect(dayCell.className).toContain('border-[#b9b082]/50');
     expect(within(dayCell).getByText('Not Synced')).toBeInTheDocument();
     expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Not Synced');
+  });
+
+  it('shows a pending sync indicator for pending planned workouts', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 12),
+      dateKey: '2026-04-12',
+      events: [
+        makeEvent({
+          id: 9061,
+          name: 'Pending Workout',
+          plannedSource: 'predicted',
+          syncStatus: 'pending',
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-12',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-04-12',
+            sourceWorkoutId: 'w1',
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 2700,
+              estimatedTrainingStressScore: 19,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(dayCell.className).toContain('border-[#b9b082]/50');
+    expect(within(dayCell).getByText('Sync Pending')).toBeInTheDocument();
+    expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Sync Pending');
+  });
+
+  it('shows a failed sync indicator for failed planned workouts', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 13),
+      dateKey: '2026-04-13',
+      events: [
+        makeEvent({
+          id: 9062,
+          name: 'Failed Workout',
+          plannedSource: 'predicted',
+          syncStatus: 'failed',
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-13',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-04-13',
+            sourceWorkoutId: 'w1',
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 2700,
+              estimatedTrainingStressScore: 19,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(dayCell.className).toContain('border-[#b9b082]/50');
+    expect(within(dayCell).getByText('Sync Failed')).toBeInTheDocument();
+    expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Sync Failed');
   });
 
   it('shows a connected sync indicator for synced planned workouts', () => {

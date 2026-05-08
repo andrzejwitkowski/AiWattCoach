@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-08 | user | calendar planned-workout sync status stale after Intervals sync
+
+- Problem: after a successful planned-workout sync to Intervals.icu, the workout detail modal updated to `synced` but the calendar grid still showed `not synced`. The frontend stored loaded weeks and `/api/calendar/events` responses in a local cache, yet the sync flow only updated the modal-local event state and never patched the calendar week store or invalidated cached event ranges. The day-cell UI also flattened `modified`, `pending`, and `failed` into the same `not synced` label, which hid the backend's more precise status values.
+- Fix: extended `useCalendarData(...)` with a focused `replaceEvent(...)` updater that replaces a predicted event in the in-memory week store by projected-workout identity and invalidates only cached calendar-event ranges that cover the synced date. Wired `CalendarGrid` to pass that updater into `WorkoutDetailModal`, so successful sync responses now update both the modal and the visible calendar cell immediately. Also changed `CalendarDayCell` to render distinct labels for `modified`, `pending`, and `failed`, and added focused frontend regressions for the hook replacement flow and the new badge labels.
+- Prevention: whenever a modal or detail view can mutate data that is also rendered in a parent collection, verify the parent store/cache is patched or invalidated in the same flow. Do not stop at local modal state updates. For status badges, keep UI labels aligned with the real backend enum instead of collapsing several semantically different states into one fallback string.
+
 ### 2026-05-08 | user | calendar coach scheduler error propagation after shared scheduled-task refactor
 
 - Problem: the calendar coach scheduler wrapper still parsed every failed task from `task.error_message` as `CoachConversationError::Repository(...)` and never serialized typed task failures into the persisted checkpoint. After the shared scheduled-task refactor, real `Llm(...)` failures from the worker were therefore downgraded to repository errors, so the websocket/UI always showed `calendar coach service unavailable` and hid the actual provider/tool-loop failure behind a misleading service-level message.

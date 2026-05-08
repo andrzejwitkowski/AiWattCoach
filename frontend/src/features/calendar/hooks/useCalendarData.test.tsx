@@ -436,6 +436,89 @@ describe('useCalendarData', () => {
     expect(workoutDay?.events[0]?.name).toBe('Active Recovery');
   });
 
+  it('replaces a predicted workout in the loaded window and invalidates the matching events cache range', async () => {
+    const workoutDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 1));
+    const initialEvent: IntervalEvent = {
+      id: 5906112577594034,
+      calendarEntryId: 'predicted:training-plan:user-1:w1:1775719860:2026-04-11',
+      startDateLocal: workoutDateKey,
+      name: 'Active Recovery',
+      category: 'WORKOUT',
+      description: null,
+      restDay: false,
+      restDayReason: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: 'Active Recovery\n- 45m 50%',
+        intervals: [],
+        segments: [],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 2700,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: 0.5,
+          estimatedTrainingStressScore: 19,
+        },
+      },
+      actualWorkout: null,
+      plannedSource: 'predicted',
+      syncStatus: 'unsynced',
+      linkedIntervalsEventId: null,
+      projectedWorkout: {
+        projectedWorkoutId: 'training-plan:user-1:w1:1775719860:2026-04-11',
+        operationKey: 'training-plan:user-1:w1:1775719860',
+        date: workoutDateKey,
+        sourceWorkoutId: 'w1',
+        restDay: false,
+      },
+    };
+
+    vi.mocked(listCalendarEvents).mockResolvedValue([initialEvent]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
+    mockNoDetailedEvents();
+    mockNoDetailedActivities();
+
+    const { result } = renderCalendarDataHook();
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    const syncedEvent: IntervalEvent = {
+      ...initialEvent,
+      id: 191,
+      syncStatus: 'synced',
+      linkedIntervalsEventId: 191,
+    };
+
+    await act(async () => {
+      result.current.replaceEvent(syncedEvent);
+    });
+
+    const updatedWorkoutDay = result.current.weeks
+      .flatMap((week) => week.days)
+      .find((day) => day.dateKey === workoutDateKey);
+    expect(updatedWorkoutDay?.events).toHaveLength(1);
+    expect(updatedWorkoutDay?.events[0]?.id).toBe(191);
+    expect(updatedWorkoutDay?.events[0]?.syncStatus).toBe('synced');
+    expect(updatedWorkoutDay?.events[0]?.linkedIntervalsEventId).toBe(191);
+
+    vi.mocked(listCalendarEvents).mockResolvedValue([syncedEvent]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
+    mockNoDetailedEvents();
+    mockNoDetailedActivities();
+
+    await act(async () => {
+      await result.current.loadMoreFuture();
+    });
+
+    expect(vi.mocked(listCalendarEvents).mock.calls.length).toBeGreaterThan(1);
+  });
+
   it('keeps completed workout activities in the calendar window on list payloads only', async () => {
     const workoutDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 2));
 

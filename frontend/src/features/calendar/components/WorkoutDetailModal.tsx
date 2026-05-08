@@ -14,6 +14,7 @@ type WorkoutDetailModalProps = {
     apiBaseUrl: string;
     selection: WorkoutDetailSelection | null;
     onClose: () => void;
+    onEventSynced?: (event: IntervalEvent) => void;
 };
 
 type ModalState = {
@@ -22,7 +23,7 @@ type ModalState = {
     loading: boolean;
 };
 
-export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDetailModalProps) {
+export function WorkoutDetailModal({apiBaseUrl, selection, onClose, onEventSynced}: WorkoutDetailModalProps) {
     const {t} = useTranslation();
     const [state, setState] = useState<ModalState>({event: null, activity: null, loading: false});
     const [downloadingFit, setDownloadingFit] = useState(false);
@@ -183,7 +184,10 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
                             onSyncingToIntervalsChange={setSyncingToIntervals}
                             onSyncingToWahooChange={setSyncingToWahoo}
                             onSyncError={setSyncError}
-                            onEventSynced={(syncedEvent) => setState((current) => ({...current, event: syncedEvent}))}
+                            onEventSynced={(syncedEvent) => {
+                                setState((current) => ({...current, event: syncedEvent}));
+                                onEventSynced?.(syncedEvent);
+                            }}
                         />
                     ) : (
                         <p className="text-sm text-slate-400">{t('calendar.workoutDetailsUnavailable')}</p>

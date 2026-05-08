@@ -38,6 +38,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
     scrollAdjustment,
     loadMorePast,
     loadMoreFuture,
+    replaceEvent,
   } = useCalendarData({ apiBaseUrl });
   const [selection, setSelection] = useState<WorkoutDetailSelection | null>(null);
   const [dayItemsSelection, setDayItemsSelection] = useState<CalendarDayItemsSelection | null>(null);
@@ -275,7 +276,12 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
         }}
       />
       <RaceDayDetailModal selection={raceSelection} onClose={() => setRaceSelection(null)} />
-      <WorkoutDetailModal apiBaseUrl={apiBaseUrl} selection={selection} onClose={() => setSelection(null)} />
+      <WorkoutDetailModal
+        apiBaseUrl={apiBaseUrl}
+        selection={selection}
+        onClose={() => setSelection(null)}
+        onEventSynced={replaceEvent}
+      />
     </section>
   );
 }

@@ -148,6 +148,7 @@ function buildHookState(overrides: Partial<ReturnType<typeof useCalendarData>> =
     scrollAdjustment: { topDelta: 0, version: 0 },
     loadMorePast: vi.fn(),
     loadMoreFuture: vi.fn(),
+    replaceEvent: vi.fn(),
     ...overrides,
   };
 }
@@ -307,4 +308,5 @@ describe('CalendarGrid', () => {
     expect(raceDialog).toHaveTextContent(/grojec/i);
     expect(raceDialog).toHaveTextContent(/cat. b/i);
   });
+
 });
