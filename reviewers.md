@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-08 | user | calendar coach scheduler error propagation after shared scheduled-task refactor
+
+- Problem: the calendar coach scheduler wrapper still parsed every failed task from `task.error_message` as `CoachConversationError::Repository(...)` and never serialized typed task failures into the persisted checkpoint. After the shared scheduled-task refactor, real `Llm(...)` failures from the worker were therefore downgraded to repository errors, so the websocket/UI always showed `calendar coach service unavailable` and hid the actual provider/tool-loop failure behind a misleading service-level message.
+- Fix: updated `src/domain/coach_conversation/service/scheduler.rs` to serialize and deserialize typed `CoachConversationError` values through the task checkpoint, matching the existing workout-summary and athlete-summary scheduler pattern. `parse_failed(...)` now restores persisted `Llm`, `Validation`, `NotFound`, and other typed errors instead of flattening them to `Repository`, and added a focused regression for round-tripping an `LlmError::ProviderRejected` failure.
+- Prevention: when introducing or refactoring scheduler-backed wrappers, compare their failed-task checkpoint behavior across similar workflows. If sibling schedulers already preserve typed domain errors, do not leave one wrapper on a raw `error_message -> Repository(...)` fallback because that silently breaks user-facing error mapping and incident debugging.
+
 ### 2026-05-07 | CodeRabbit | PR #192 logging follow-up on redaction and safe previews
 
 - Problem: the first adapter-body-logging follow-up still left several review-confirmed gaps. Shared `domain::llm::serialize_logged_body(...)` still serialized raw secret-bearing payloads before truncation, Gemini cache-create success logs computed `cache_created` from stale pre-assignment state, Wahoo success responses still logged full preview content instead of a safe summary, Intervals full-body formatting lacked focused tests, and the raised REST preview cap still repeated the raw `204800` literal in behavior and tests.

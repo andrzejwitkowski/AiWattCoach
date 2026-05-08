@@ -183,3 +183,7 @@
 - Never set a struct field to a placeholder value in a builder or request constructor when that value is unconditionally overwritten later by an orchestrator, loop, or mapper. Examples include `tools: Vec::new()` and `tool_choice: LlmToolChoice::None` in an `LlmChatRequest` that is immediately passed to `run_tool_loop`, which replaces both fields based on scope. The placeholder makes every reader think the request is sent without tools, which hides the real behavior and wastes debugging time.
 - If a downstream stage owns a field, omit it from the upstream builder. Use `..Default::default()` or a dedicated builder helper so the struct literal only contains values the current layer is actually responsible for.
 - When reviewing code that builds a request and then passes it to an orchestrator, check whether every field in the literal survives to the wire unchanged. If a field is reassigned before the wire call, remove it from the literal and let the orchestrator set it.
+
+## Scheduler Error Propagation
+
+- When a scheduler-backed workflow already has typed domain errors like `Llm`, `Validation`, or `NotFound`, persist that typed error in the task checkpoint and restore it in the result handler. Do not collapse every failed task back into `Repository(error_message)`, or websocket/REST layers will surface the wrong public error and hide the real root cause.
