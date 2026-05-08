@@ -445,6 +445,28 @@ fn current_turn_tool_messages(
 
 fn client_error_message(error: &CoachConversationError) -> String {
     match error {
+        CoachConversationError::Llm(crate::domain::llm::LlmError::ContextTooLarge(_)) => {
+            "Conversation context is too large for the selected AI model".to_string()
+        }
+        CoachConversationError::Llm(crate::domain::llm::LlmError::CredentialsNotConfigured) => {
+            "AI provider credentials are not configured".to_string()
+        }
+        CoachConversationError::Llm(crate::domain::llm::LlmError::ProviderNotConfigured) => {
+            "AI provider is not configured".to_string()
+        }
+        CoachConversationError::Llm(crate::domain::llm::LlmError::ModelNotConfigured) => {
+            "AI model is not configured".to_string()
+        }
+        CoachConversationError::Llm(crate::domain::llm::LlmError::ProviderRejected(_)) => {
+            "AI provider rejected the request. Check model limits or available credits.".to_string()
+        }
+        CoachConversationError::Llm(crate::domain::llm::LlmError::RateLimited(_)) => {
+            "AI provider rate limited the request. Try again in a moment.".to_string()
+        }
+        CoachConversationError::Llm(llm_error) if llm_error.is_retryable() => {
+            "Calendar coach is temporarily unavailable".to_string()
+        }
+        CoachConversationError::Llm(_) => "Unable to process calendar coach request".to_string(),
         CoachConversationError::Repository(_) => "calendar coach service unavailable".to_string(),
         _ => error.to_string(),
     }
@@ -461,5 +483,24 @@ fn should_close_worker(error: &CoachConversationError) -> bool {
         }
         CoachConversationError::Repository(_) => true,
         CoachConversationError::Validation(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::client_error_message;
+    use crate::domain::{coach_conversation::CoachConversationError, llm::LlmError};
+
+    #[test]
+    fn client_error_message_hides_provider_rejected_payloads_behind_warning() {
+        let message =
+            client_error_message(&CoachConversationError::Llm(LlmError::ProviderRejected(
+                r#"{"error":{"message":"Insufficient credits","code":402}}"#.to_string(),
+            )));
+
+        assert_eq!(
+            message,
+            "AI provider rejected the request. Check model limits or available credits."
+        );
     }
 }
