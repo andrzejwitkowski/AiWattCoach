@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::domain::{
     athlete_summary::AthleteSummaryGenerator,
     llm::{
-        hash_text, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError,
-        LlmMessageRole, UserLlmConfigProvider,
+        build_chat_request, hash_text, LlmChatMessage, LlmChatPort, LlmChatRequestInput,
+        LlmChatResponse, LlmError, LlmMessageRole, UserLlmConfigProvider,
     },
     training_context::TrainingContextBuilder,
 };
@@ -57,7 +57,7 @@ impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
                 context.rendered.volatile_context
             );
             let user_prompt = "Create an up-to-date athlete summary for future coaching conversations. Keep it textual, high signal, and do not include raw data dumps.";
-            let request = LlmChatRequest {
+            let request = build_chat_request(LlmChatRequestInput {
                 user_id: user_id.clone(),
                 system_prompt: ATHLETE_SUMMARY_SYSTEM_PROMPT.to_string(),
                 stable_context: stable_context.clone(),
@@ -71,9 +71,7 @@ impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
                 cache_scope_key: Some("athlete-summary".to_string()),
                 cache_key: Some(hash_text(&stable_context)),
                 reusable_cache_id: None,
-                tools: Vec::new(),
-                tool_choice: crate::domain::llm::LlmToolChoice::None,
-            };
+            });
 
             llm_chat_port.chat(config, request).await
         })
