@@ -7,7 +7,7 @@ import { AuthenticationError, HttpError } from '../../../lib/httpClient';
 import type { CalendarLabel } from '../types';
 import { CALENDAR_BUFFER_WEEKS, CALENDAR_VISIBLE_WEEKS } from '../constants';
 import { addDays, getMondayOfWeek, parseDateKey, toDateKey } from '../utils/dateUtils';
-import { useCalendarData, __resetCachesForTesting } from './useCalendarData';
+import { useCalendarData, __getEventCacheKeysForTesting, __resetCachesForTesting } from './useCalendarData';
 
 vi.mock('../../intervals/api/intervals', () => ({
   listCalendarEvents: vi.fn(),
@@ -438,6 +438,9 @@ describe('useCalendarData', () => {
 
   it('replaces a predicted workout in the loaded window and invalidates the matching events cache range', async () => {
     const workoutDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 1));
+    const initialWindowOldest = toDateKey(addDays(getMondayOfWeek(new Date()), -(CALENDAR_BUFFER_WEEKS * 7)));
+    const initialWindowNewest = toDateKey(addDays(getMondayOfWeek(new Date()), ((CALENDAR_VISIBLE_WEEKS + CALENDAR_BUFFER_WEEKS) * 7) - 1));
+    const initialCacheKey = `|${initialWindowOldest}|${initialWindowNewest}`;
     const initialEvent: IntervalEvent = {
       id: 5906112577594034,
       calendarEntryId: 'predicted:training-plan:user-1:w1:1775719860:2026-04-11',
@@ -486,6 +489,8 @@ describe('useCalendarData', () => {
     await waitFor(() => {
       expect(result.current.state).toBe('ready');
     });
+    expect(hasRangeCall(vi.mocked(listCalendarEvents), initialWindowOldest, initialWindowNewest)).toBe(true);
+    expect(__getEventCacheKeysForTesting().some((key) => key.endsWith(initialCacheKey))).toBe(true);
 
     const syncedEvent: IntervalEvent = {
       ...initialEvent,
@@ -497,6 +502,7 @@ describe('useCalendarData', () => {
     await act(async () => {
       result.current.replaceEvent(syncedEvent);
     });
+    expect(__getEventCacheKeysForTesting().some((key) => key.endsWith(initialCacheKey))).toBe(false);
 
     const updatedWorkoutDay = result.current.weeks
       .flatMap((week) => week.days)
@@ -506,17 +512,96 @@ describe('useCalendarData', () => {
     expect(updatedWorkoutDay?.events[0]?.syncStatus).toBe('synced');
     expect(updatedWorkoutDay?.events[0]?.linkedIntervalsEventId).toBe(191);
 
-    vi.mocked(listCalendarEvents).mockResolvedValue([syncedEvent]);
+  });
+
+  it('moves a replaced event to a different loaded day and invalidates both cache ranges', async () => {
+    const monday = getMondayOfWeek(new Date());
+    const originalDateKey = toDateKey(addDays(monday, 1));
+    const movedDateKey = toDateKey(addDays(monday, 2));
+    const initialWindowOldest = toDateKey(addDays(monday, -(CALENDAR_BUFFER_WEEKS * 7)));
+    const initialWindowNewest = toDateKey(addDays(monday, ((CALENDAR_VISIBLE_WEEKS + CALENDAR_BUFFER_WEEKS) * 7) - 1));
+    const initialCacheKey = `|${initialWindowOldest}|${initialWindowNewest}`;
+    const initialEvent: IntervalEvent = {
+      id: 5906112577594034,
+      calendarEntryId: 'predicted:training-plan:user-1:w1:1775719860:2026-04-11',
+      startDateLocal: originalDateKey,
+      name: 'Active Recovery',
+      category: 'WORKOUT',
+      description: null,
+      restDay: false,
+      restDayReason: null,
+      indoor: false,
+      color: null,
+      eventDefinition: {
+        rawWorkoutDoc: 'Active Recovery\n- 45m 50%',
+        intervals: [],
+        segments: [],
+        summary: {
+          totalSegments: 1,
+          totalDurationSeconds: 2700,
+          estimatedNormalizedPowerWatts: null,
+          estimatedAveragePowerWatts: null,
+          estimatedIntensityFactor: 0.5,
+          estimatedTrainingStressScore: 19,
+        },
+      },
+      actualWorkout: null,
+      plannedSource: 'predicted',
+      syncStatus: 'unsynced',
+      linkedIntervalsEventId: null,
+      projectedWorkout: {
+        projectedWorkoutId: 'training-plan:user-1:w1:1775719860:2026-04-11',
+        operationKey: 'training-plan:user-1:w1:1775719860',
+        date: originalDateKey,
+        sourceWorkoutId: 'w1',
+        restDay: false,
+      },
+    };
+
+    vi.mocked(listCalendarEvents).mockResolvedValue([initialEvent]);
     vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
     mockNoCalendarLabels();
     mockNoDetailedEvents();
     mockNoDetailedActivities();
 
-    await act(async () => {
-      await result.current.loadMoreFuture();
-    });
+    const { result } = renderCalendarDataHook();
 
-    expect(vi.mocked(listCalendarEvents).mock.calls.length).toBeGreaterThan(1);
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+    expect(hasRangeCall(vi.mocked(listCalendarEvents), initialWindowOldest, initialWindowNewest)).toBe(true);
+    expect(__getEventCacheKeysForTesting().some((key) => key.endsWith(initialCacheKey))).toBe(true);
+
+    const movedEvent: IntervalEvent = {
+      ...initialEvent,
+      id: 191,
+      startDateLocal: movedDateKey,
+      syncStatus: 'synced',
+      linkedIntervalsEventId: 191,
+      projectedWorkout: initialEvent.projectedWorkout
+        ? {
+          ...initialEvent.projectedWorkout,
+          date: movedDateKey,
+        }
+        : null,
+    };
+
+    await act(async () => {
+      result.current.replaceEvent(movedEvent);
+    });
+    expect(__getEventCacheKeysForTesting().some((key) => key.endsWith(initialCacheKey))).toBe(false);
+
+    const originalDay = result.current.weeks
+      .flatMap((week) => week.days)
+      .find((day) => day.dateKey === originalDateKey);
+    const movedDay = result.current.weeks
+      .flatMap((week) => week.days)
+      .find((day) => day.dateKey === movedDateKey);
+
+    expect(originalDay?.events).toHaveLength(0);
+    expect(movedDay?.events).toHaveLength(1);
+    expect(movedDay?.events[0]?.id).toBe(191);
+    expect(movedDay?.events[0]?.startDateLocal).toBe(movedDateKey);
   });
 
   it('keeps completed workout activities in the calendar window on list payloads only', async () => {

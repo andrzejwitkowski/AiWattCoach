@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import '../../../i18n';
+import { ApiBaseUrlProvider } from '../../../lib/apiBaseUrl';
 import { HttpError } from '../../../lib/httpClient';
 import {
   downloadFit,
@@ -57,11 +58,12 @@ export function renderWorkoutDetailModal(options: RenderWorkoutDetailModalOption
     onClose,
     selection,
     ...render(
-      <WorkoutDetailModal
-        apiBaseUrl={options.apiBaseUrl ?? ''}
-        selection={selection}
-        onClose={onClose}
-      />,
+      <ApiBaseUrlProvider value={options.apiBaseUrl ?? ''}>
+        <WorkoutDetailModal
+          selection={selection}
+          onClose={onClose}
+        />
+      </ApiBaseUrlProvider>,
     ),
   };
 }

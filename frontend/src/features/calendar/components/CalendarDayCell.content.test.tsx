@@ -274,7 +274,7 @@ describe('CalendarDayCell content', () => {
     const { container } = render(<CalendarDayCell day={day} isToday={false} />);
     const dayCell = container.firstElementChild as HTMLElement;
 
-    expect(within(dayCell).getAllByText('Modified')).toHaveLength(2);
+    expect(within(dayCell).getByText('Modified')).toBeInTheDocument();
     expect(dayCell.className).toContain('border-[#b9b082]/50');
     expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Modified');
   });

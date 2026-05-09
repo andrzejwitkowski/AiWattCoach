@@ -2,6 +2,7 @@ import {X} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
+import {useApiBaseUrl} from '../../../lib/apiBaseUrl';
 import {downloadFit, loadActivity, loadEvent} from '../../intervals/api/intervals';
 import {AuthenticationError} from '../../../lib/httpClient';
 import type {IntervalEvent} from '../../intervals/types';
@@ -11,7 +12,6 @@ import {CompletedWorkoutDetailModal} from './CompletedWorkoutDetailModal';
 import {PlannedWorkoutDetailModal} from './PlannedWorkoutDetailModal';
 
 type WorkoutDetailModalProps = {
-    apiBaseUrl: string;
     selection: WorkoutDetailSelection | null;
     onClose: () => void;
     onEventSynced?: (event: IntervalEvent) => void;
@@ -23,7 +23,8 @@ type ModalState = {
     loading: boolean;
 };
 
-export function WorkoutDetailModal({apiBaseUrl, selection, onClose, onEventSynced}: WorkoutDetailModalProps) {
+export function WorkoutDetailModal({selection, onClose, onEventSynced}: WorkoutDetailModalProps) {
+    const apiBaseUrl = useApiBaseUrl();
     const {t} = useTranslation();
     const [state, setState] = useState<ModalState>({event: null, activity: null, loading: false});
     const [downloadingFit, setDownloadingFit] = useState(false);
@@ -87,10 +88,7 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose, onEventSynce
         summary: workoutSummary,
         isLoading: isSummaryLoading,
         summaryError,
-    } = useCompletedWorkoutSummary({
-        activityId: summaryTargetActivityId,
-        apiBaseUrl,
-    });
+    } = useCompletedWorkoutSummary({ activityId: summaryTargetActivityId });
 
     if (!selection) {
         return null;
@@ -177,7 +175,6 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose, onEventSynce
                         />
                     ) : event ? (
                         <PlannedWorkoutDetailModal
-                            apiBaseUrl={apiBaseUrl}
                             event={event}
                             syncingToIntervals={syncingToIntervals}
                             syncingToWahoo={syncingToWahoo}

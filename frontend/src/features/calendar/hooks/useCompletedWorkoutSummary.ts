@@ -1,13 +1,13 @@
 import {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
+import {useApiBaseUrl} from '../../../lib/apiBaseUrl';
 import {AuthenticationError, HttpError} from '../../../lib/httpClient';
 import {loadCompletedWorkoutSummary} from '../../intervals/api/intervals';
 import type {CompletedWorkoutSummary} from '../../intervals/types';
 
 type UseCompletedWorkoutSummaryOptions = {
   activityId: string | null;
-  apiBaseUrl: string;
 };
 
 type UseCompletedWorkoutSummaryResult = {
@@ -16,7 +16,8 @@ type UseCompletedWorkoutSummaryResult = {
   summaryError: string | null;
 };
 
-export function useCompletedWorkoutSummary({activityId, apiBaseUrl}: UseCompletedWorkoutSummaryOptions): UseCompletedWorkoutSummaryResult {
+export function useCompletedWorkoutSummary({activityId}: UseCompletedWorkoutSummaryOptions): UseCompletedWorkoutSummaryResult {
+  const apiBaseUrl = useApiBaseUrl();
   const {t} = useTranslation();
   const [summary, setSummary] = useState<CompletedWorkoutSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);

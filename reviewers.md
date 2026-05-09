@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-09 | Copilot + CodeRabbit | PR #202 calendar sync follow-up on modal API boundary and replaceEvent coverage
+
+- Problem: the calendar sync follow-up still threaded `apiBaseUrl` from `CalendarGrid` into `WorkoutDetailModal`, which violated the frontend rule that UI components should not pass API base URLs through props. The new `replaceEvent(...)` helper also assumed the event stayed on the same day, so a date-changing replacement could remove the old item without re-inserting it into the target day. Finally, the cache invalidation regression asserted only that another fetch happened, which could pass from ordinary pagination rather than from clearing the affected cached range, and the day cell rendered `modified` twice.
+- Fix: moved the modal path onto `useApiBaseUrl()` inside `WorkoutDetailModal`, `PlannedWorkoutDetailModal`, and `useCompletedWorkoutSummary(...)`, leaving component props UI-focused. Updated `replaceEvent(...)` to track affected date keys, move matching events across loaded days when `startDateLocal` changes, and invalidate cache ranges for both old and new dates. Strengthened `useCalendarData` coverage with explicit cache-entry assertions plus a cross-day move regression, and removed the duplicate `modified` label with the matching test update.
+- Prevention: when a review flags `apiBaseUrl` prop threading, follow the entire UI path and move the base URL lookup into the hook/component layer that actually performs I/O instead of stopping at one parent component. For collection patch helpers like `replaceEvent(...)`, test both in-place replacement and identity-preserving moves across groups/days. For cache invalidation tests, assert the specific invalidated cache entry or exact refetch range rather than a generic increase in call count.
+
 ### 2026-05-08 | user | calendar planned-workout sync status stale after Intervals sync
 
 - Problem: after a successful planned-workout sync to Intervals.icu, the workout detail modal updated to `synced` but the calendar grid still showed `not synced`. The frontend stored loaded weeks and `/api/calendar/events` responses in a local cache, yet the sync flow only updated the modal-local event state and never patched the calendar week store or invalidated cached event ranges. The day-cell UI also flattened `modified`, `pending`, and `failed` into the same `not synced` label, which hid the backend's more precise status values.

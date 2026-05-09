@@ -271,10 +271,12 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
   const replaceEvent = useCallback((nextEvent: IntervalEvent) => {
     const nextDateKey = extractDateKey(nextEvent.startDateLocal);
+    const affectedDateKeys = new Set<string>([nextDateKey]);
 
     setStore((current) => {
       let changed = false;
       const next = new Map(current);
+      let inserted = false;
 
       for (const [weekKey, week] of current) {
         let weekChanged = false;
@@ -286,11 +288,13 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
 
           weekChanged = true;
           changed = true;
+          affectedDateKeys.add(day.dateKey);
 
           const remainingEvents = day.events.filter((_, index) => index !== matchingEventIndex);
           const nextEvents = day.dateKey === nextDateKey
             ? insertEventSorted([...remainingEvents, nextEvent])
             : remainingEvents;
+          inserted ||= day.dateKey === nextDateKey;
 
           return {
             ...day,
@@ -306,10 +310,36 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
         }
       }
 
+      if (changed && !inserted) {
+        for (const [weekKey, week] of next) {
+          const targetDayIndex = week.days.findIndex((day) => day.dateKey === nextDateKey);
+          if (targetDayIndex === -1) {
+            continue;
+          }
+
+          const targetDay = week.days[targetDayIndex];
+          const days = week.days.map((day, index) => index === targetDayIndex
+            ? {
+              ...targetDay,
+              events: insertEventSorted([...targetDay.events, nextEvent]),
+            }
+            : day);
+
+          next.set(weekKey, {
+            ...week,
+            days,
+          });
+          inserted = true;
+          break;
+        }
+      }
+
       return changed ? next : current;
     });
 
-    invalidateCalendarEventCache(nextDateKey);
+    for (const dateKey of affectedDateKeys) {
+      invalidateCalendarEventCache(dateKey);
+    }
   }, []);
 
   const weeks = useMemo(() =>
@@ -516,3 +546,6 @@ function insertEventSorted(events: IntervalEvent[]): IntervalEvent[] {
 }
 
 export const __resetCachesForTesting = invalidateCalendarCache;
+export function __getEventCacheKeysForTesting(): string[] {
+  return Array.from(eventsCacheRef.keys());
+}

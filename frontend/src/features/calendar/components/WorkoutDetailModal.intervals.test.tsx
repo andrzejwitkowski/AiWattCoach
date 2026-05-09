@@ -1,6 +1,15 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../../lib/apiBaseUrl', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/apiBaseUrl')>('../../../lib/apiBaseUrl');
+
+  return {
+    ...actual,
+    useApiBaseUrl: () => '',
+  };
+});
+
 import {
   makeActivity,
   makeActivityInterval,
@@ -49,7 +58,6 @@ describe('WorkoutDetailModal interval sections', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-28',
           activity: makeActivity({ id: 'a25', startDateLocal: '2026-03-28T08:00:00', name: 'Outside Tempo', movingTimeSeconds: 3600, elapsedTimeSeconds: 3660, hasHeartRate: true }),
@@ -100,7 +108,6 @@ describe('WorkoutDetailModal interval sections', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-29',
           activity: makeActivity({ id: 'a26', startDateLocal: '2026-03-29T08:00:00', name: 'Metadata Filter Ride', movingTimeSeconds: 2400, elapsedTimeSeconds: 2460, hasHeartRate: true }),
@@ -152,7 +159,6 @@ describe('WorkoutDetailModal interval sections', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-30',
           activity: makeActivity({ id: 'a27', startDateLocal: '2026-03-30T08:00:00', name: 'Timestamped Ride', movingTimeSeconds: 2400, elapsedTimeSeconds: 2400, hasHeartRate: true }),

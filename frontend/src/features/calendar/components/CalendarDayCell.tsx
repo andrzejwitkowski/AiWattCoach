@@ -240,11 +240,6 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
                   {plannedSyncVisual.label}
                 </p>
               ) : null}
-              {plannedSyncStatus === 'modified' ? (
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffd7a1]">
-                  {t('calendar.modified')}
-                </p>
-              ) : null}
             </div>
           ) : null}
           <p className="truncate text-[11px] font-bold text-[#f9f9fd]">{title}</p>

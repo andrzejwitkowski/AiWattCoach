@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
+import {useApiBaseUrl} from '../../../lib/apiBaseUrl';
 import {AuthenticationError, HttpError} from '../../../lib/httpClient';
 import {syncPlannedWorkoutToIntervals, syncPlannedWorkoutToWahoo} from '../../intervals/api/intervals';
 import type {IntervalEvent} from '../../intervals/types';
@@ -15,7 +16,6 @@ import {MetricCard, WorkoutBars} from './WorkoutDetailPanelPrimitives';
 import {PowerChart} from './WorkoutDetailPowerChart';
 
 type PlannedWorkoutDetailModalProps = {
-  apiBaseUrl: string;
   event: IntervalEvent;
   syncingToIntervals: boolean;
   syncingToWahoo: boolean;
@@ -26,7 +26,6 @@ type PlannedWorkoutDetailModalProps = {
 };
 
 export function PlannedWorkoutDetailModal({
-  apiBaseUrl,
   event,
   syncingToIntervals,
   syncingToWahoo,
@@ -35,6 +34,7 @@ export function PlannedWorkoutDetailModal({
   onEventSynced,
   onSyncError,
 }: PlannedWorkoutDetailModalProps) {
+  const apiBaseUrl = useApiBaseUrl();
   const {t} = useTranslation();
   const bars = buildPlannedWorkoutBars(event);
   const structureSections = buildPlannedWorkoutStructureSections(event);

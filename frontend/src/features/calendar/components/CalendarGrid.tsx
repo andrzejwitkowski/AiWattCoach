@@ -277,7 +277,6 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
       />
       <RaceDayDetailModal selection={raceSelection} onClose={() => setRaceSelection(null)} />
       <WorkoutDetailModal
-        apiBaseUrl={apiBaseUrl}
         selection={selection}
         onClose={() => setSelection(null)}
         onEventSynced={replaceEvent}
