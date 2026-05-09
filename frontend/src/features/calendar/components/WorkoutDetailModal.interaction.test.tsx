@@ -2,6 +2,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../../lib/apiBaseUrl', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/apiBaseUrl')>('../../../lib/apiBaseUrl');
+
+  return {
+    ...actual,
+    useApiBaseUrl: () => '',
+  };
+});
+
 import {
   makeActivity,
   makeActivityInterval,
@@ -19,7 +28,6 @@ afterEach(() => {
 function renderActivityModal(activity = makeActivity()) {
   return render(
     <WorkoutDetailModal
-      apiBaseUrl=""
       selection={makeSelection({ activity })}
       onClose={vi.fn()}
     />,

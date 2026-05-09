@@ -1,6 +1,15 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../../lib/apiBaseUrl', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/apiBaseUrl')>('../../../lib/apiBaseUrl');
+
+  return {
+    ...actual,
+    useApiBaseUrl: () => '',
+  };
+});
+
 import {
   makeActivity,
   makeActivityInterval,
@@ -109,7 +118,6 @@ describe('WorkoutDetailModal completed mode', () => {
     const onClose = vi.fn();
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           event: makeEvent({ id: 21, name: 'Threshold', indoor: false }),
           activity: makeActivity({ id: 'a21', name: 'Threshold Ride', hasHeartRate: true }),
@@ -169,7 +177,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     const {rerender} = render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={null}
         onClose={vi.fn()}
       />,
@@ -177,7 +184,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     rerender(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={selection}
         onClose={vi.fn()}
       />,
@@ -194,7 +200,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-27',
           activity: makeActivity({
@@ -253,7 +258,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-26',
           event: makeEvent({ id: 22, startDateLocal: '2026-03-26', name: 'Over-Unders', indoor: false }),
@@ -304,7 +308,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-26',
           event: makeEvent({ id: 22, startDateLocal: '2026-03-26', name: 'Over-Unders', indoor: false }),
@@ -336,7 +339,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-26',
           activity: makeActivity({
@@ -377,7 +379,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-26',
           activity: makeActivity({
@@ -422,7 +423,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-04-05',
           activity: makeActivity({ id: 'a55', startDateLocal: '2026-04-05T08:00:00', name: 'Sprint Ride', movingTimeSeconds: 1800, elapsedTimeSeconds: 1800, hasHeartRate: true }),
@@ -453,7 +453,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-04-07',
           activity: makeActivity({ id: 'a77', startDateLocal: '2026-04-07T08:00:00', name: 'Endurance Ride' }),
@@ -483,7 +482,6 @@ describe('WorkoutDetailModal completed mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-04-08',
           activity: makeActivity({ id: 'a88', startDateLocal: '2026-04-08T08:00:00', name: 'Service Error Ride' }),

@@ -2,6 +2,7 @@ import {X} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
+import {useApiBaseUrl} from '../../../lib/apiBaseUrl';
 import {downloadFit, loadActivity, loadEvent} from '../../intervals/api/intervals';
 import {AuthenticationError} from '../../../lib/httpClient';
 import type {IntervalEvent} from '../../intervals/types';
@@ -11,9 +12,9 @@ import {CompletedWorkoutDetailModal} from './CompletedWorkoutDetailModal';
 import {PlannedWorkoutDetailModal} from './PlannedWorkoutDetailModal';
 
 type WorkoutDetailModalProps = {
-    apiBaseUrl: string;
     selection: WorkoutDetailSelection | null;
     onClose: () => void;
+    onEventSynced?: (event: IntervalEvent) => void;
 };
 
 type ModalState = {
@@ -22,7 +23,8 @@ type ModalState = {
     loading: boolean;
 };
 
-export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDetailModalProps) {
+export function WorkoutDetailModal({selection, onClose, onEventSynced}: WorkoutDetailModalProps) {
+    const apiBaseUrl = useApiBaseUrl();
     const {t} = useTranslation();
     const [state, setState] = useState<ModalState>({event: null, activity: null, loading: false});
     const [downloadingFit, setDownloadingFit] = useState(false);
@@ -86,10 +88,7 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
         summary: workoutSummary,
         isLoading: isSummaryLoading,
         summaryError,
-    } = useCompletedWorkoutSummary({
-        activityId: summaryTargetActivityId,
-        apiBaseUrl,
-    });
+    } = useCompletedWorkoutSummary({ activityId: summaryTargetActivityId });
 
     if (!selection) {
         return null;
@@ -176,14 +175,22 @@ export function WorkoutDetailModal({apiBaseUrl, selection, onClose}: WorkoutDeta
                         />
                     ) : event ? (
                         <PlannedWorkoutDetailModal
-                            apiBaseUrl={apiBaseUrl}
                             event={event}
                             syncingToIntervals={syncingToIntervals}
                             syncingToWahoo={syncingToWahoo}
                             onSyncingToIntervalsChange={setSyncingToIntervals}
                             onSyncingToWahooChange={setSyncingToWahoo}
                             onSyncError={setSyncError}
-                            onEventSynced={(syncedEvent) => setState((current) => ({...current, event: syncedEvent}))}
+                            onEventSynced={(syncedEvent) => {
+                                setState((current) => {
+                                    if (!current.event || !isSameSelectedEvent(current.event, syncedEvent)) {
+                                        return current;
+                                    }
+
+                                    return {...current, event: syncedEvent};
+                                });
+                                onEventSynced?.(syncedEvent);
+                            }}
                         />
                     ) : (
                         <p className="text-sm text-slate-400">{t('calendar.workoutDetailsUnavailable')}</p>
@@ -229,6 +236,16 @@ function hasMeaningfulEventDefinition(eventDefinition: IntervalEvent['eventDefin
         eventDefinition.intervals.length > 0
         || eventDefinition.segments.length > 0
     );
+}
+
+function isSameSelectedEvent(currentEvent: IntervalEvent, nextEvent: IntervalEvent): boolean {
+    const currentProjectedWorkoutId = currentEvent.projectedWorkout?.projectedWorkoutId;
+    const nextProjectedWorkoutId = nextEvent.projectedWorkout?.projectedWorkoutId;
+    if (currentProjectedWorkoutId && nextProjectedWorkoutId) {
+        return currentProjectedWorkoutId === nextProjectedWorkoutId;
+    }
+
+    return currentEvent.calendarEntryId === nextEvent.calendarEntryId;
 }
 
 function mergeEventDefinitions(

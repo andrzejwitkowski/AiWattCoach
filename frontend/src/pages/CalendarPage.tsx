@@ -14,7 +14,7 @@ export function CalendarPage({ apiBaseUrl }: CalendarPageProps) {
 
   return (
     <ApiBaseUrlProvider value={apiBaseUrl}>
-      <CalendarGrid apiBaseUrl={apiBaseUrl} />
+      <CalendarGrid />
       <CalendarCoachFab onClick={() => setIsCoachOpen(true)} />
       <CalendarCoachModal isOpen={isCoachOpen} onClose={() => setIsCoachOpen(false)} />
     </ApiBaseUrlProvider>

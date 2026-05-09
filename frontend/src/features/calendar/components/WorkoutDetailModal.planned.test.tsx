@@ -1,6 +1,15 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../../lib/apiBaseUrl', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/apiBaseUrl')>('../../../lib/apiBaseUrl');
+
+  return {
+    ...actual,
+    useApiBaseUrl: () => '',
+  };
+});
+
 import {
   makeActivity,
   makeEvent,
@@ -53,7 +62,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({ event: makeEvent({ id: 11, name: 'Sweet Spot' }) })}
         onClose={vi.fn()}
       />,
@@ -92,7 +100,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           event: makeEvent({ id: 12, name: 'Tempo Builder' }),
           activity: makeActivity({ id: 'missing-activity', name: 'Missing Activity', hasHeartRate: false }),
@@ -144,7 +151,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-27',
           event: makeEvent({ id: 32, startDateLocal: '2026-03-27', name: 'Plan only' }),
@@ -225,7 +231,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           event: makeEvent({ id: 77, name: 'VO2 Builder' }),
         })}
@@ -266,7 +271,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           event: makeEvent({ id: 88, name: 'Mixed Intervals' }),
         })}
@@ -301,7 +305,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-26',
           event: makeEvent({
@@ -353,7 +356,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-04-12',
           event: makeEvent({
@@ -405,7 +407,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-04-12',
           event: makeEvent({
@@ -457,7 +458,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-04-12',
           event: makeEvent({
@@ -509,7 +509,6 @@ describe('WorkoutDetailModal planned mode', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-04-12',
           event: makeEvent({

@@ -1,6 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../../lib/apiBaseUrl', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/apiBaseUrl')>('../../../lib/apiBaseUrl');
+
+  return {
+    ...actual,
+    useApiBaseUrl: () => '',
+  };
+});
+
 import {
   makeActivity,
   makeActivityInterval,
@@ -52,7 +61,6 @@ describe('WorkoutDetailModal charts and interaction', () => {
 
     const { container } = render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-30',
           activity: makeActivity({ id: 'a27', startDateLocal: '2026-03-30T06:45:00', name: null, movingTimeSeconds: 0, elapsedTimeSeconds: 0, hasHeartRate: true }),
@@ -110,7 +118,6 @@ describe('WorkoutDetailModal charts and interaction', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({ dateKey: '2026-03-30', event: makeEvent({ id: 44, startDateLocal: '2026-03-30', name: 'Tempo Build', indoor: false }) })}
         onClose={vi.fn()}
       />,
@@ -138,7 +145,6 @@ describe('WorkoutDetailModal charts and interaction', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({ dateKey: '2026-03-30', activity: makeActivity({ id: 'a-5s' }) })}
         onClose={vi.fn()}
       />,
@@ -166,7 +172,6 @@ describe('WorkoutDetailModal charts and interaction', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({ dateKey: '2026-03-30', activity: makeActivity({ id: 'a-max' }) })}
         onClose={vi.fn()}
       />,
@@ -190,7 +195,6 @@ describe('WorkoutDetailModal charts and interaction', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({ dateKey: '2026-03-30', activity: makeActivity({ id: 'a-zero' }) })}
         onClose={vi.fn()}
       />,
@@ -218,7 +222,7 @@ describe('WorkoutDetailModal charts and interaction', () => {
     );
     mockedLoadActivity.mockResolvedValue(undefined as never);
 
-    render(<WorkoutDetailModal apiBaseUrl="" selection={makeSelection({ dateKey: '2026-04-01', event: makeEvent({ id: 46, startDateLocal: '2026-04-01', name: 'Hover Test', indoor: false }) })} onClose={vi.fn()} />);
+    render(<WorkoutDetailModal selection={makeSelection({ dateKey: '2026-04-01', event: makeEvent({ id: 46, startDateLocal: '2026-04-01', name: 'Hover Test', indoor: false }) })} onClose={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByLabelText(/power chart/i)).toBeInTheDocument());
 
@@ -257,7 +261,7 @@ describe('WorkoutDetailModal charts and interaction', () => {
     );
     mockedLoadActivity.mockResolvedValue(undefined as never);
 
-    render(<WorkoutDetailModal apiBaseUrl="" selection={makeSelection({ dateKey: '2026-03-31', event: makeEvent({ id: 45, startDateLocal: '2026-03-31', name: 'Mixed durations', indoor: false }) })} onClose={vi.fn()} />);
+    render(<WorkoutDetailModal selection={makeSelection({ dateKey: '2026-03-31', event: makeEvent({ id: 45, startDateLocal: '2026-03-31', name: 'Mixed durations', indoor: false }) })} onClose={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText(/completed workout/i)).toBeInTheDocument());
 

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import '../../../i18n';
+import { ApiBaseUrlProvider } from '../../../lib/apiBaseUrl';
 import { CALENDAR_PAGINATION_TRIGGER_OFFSET } from '../constants';
 import type { CalendarWeek } from '../types';
 import { makeEvent } from '../testData';
@@ -148,8 +149,17 @@ function buildHookState(overrides: Partial<ReturnType<typeof useCalendarData>> =
     scrollAdjustment: { topDelta: 0, version: 0 },
     loadMorePast: vi.fn(),
     loadMoreFuture: vi.fn(),
+    replaceEvent: vi.fn(),
     ...overrides,
   };
+}
+
+function renderCalendarGrid(apiBaseUrl = '') {
+  return render(
+    <ApiBaseUrlProvider value={apiBaseUrl}>
+      <CalendarGrid />
+    </ApiBaseUrlProvider>,
+  );
 }
 
 describe('CalendarGrid', () => {
@@ -157,7 +167,7 @@ describe('CalendarGrid', () => {
     const loadMorePast = vi.fn();
     vi.mocked(useCalendarData).mockReturnValue(buildHookState({ loadMorePast }));
 
-    render(<CalendarGrid apiBaseUrl="" />);
+    renderCalendarGrid();
 
     const scroller = screen.getByRole('region', { name: /performance calendar/i });
     Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 600 });
@@ -183,7 +193,7 @@ describe('CalendarGrid', () => {
     const loadMoreFuture = vi.fn();
     vi.mocked(useCalendarData).mockReturnValue(buildHookState({ isLoadingFuture: true, loadMorePast, loadMoreFuture }));
 
-    render(<CalendarGrid apiBaseUrl="" />);
+    renderCalendarGrid();
 
     const scroller = screen.getByRole('region', { name: /performance calendar/i });
     Object.defineProperty(scroller, 'scrollTop', { configurable: true, value: 0 });
@@ -200,7 +210,7 @@ describe('CalendarGrid', () => {
     const loadMoreFuture = vi.fn();
     vi.mocked(useCalendarData).mockReturnValue(buildHookState({ isLoadingPast: true, loadMorePast, loadMoreFuture }));
 
-    render(<CalendarGrid apiBaseUrl="" />);
+    renderCalendarGrid();
 
     const scroller = screen.getByRole('region', { name: /performance calendar/i });
     Object.defineProperty(scroller, 'scrollTop', { configurable: true, value: 900 });
@@ -218,7 +228,7 @@ describe('CalendarGrid', () => {
 
     vi.mocked(useCalendarData).mockImplementation(() => hookState);
 
-    const { rerender } = render(<CalendarGrid apiBaseUrl="" />);
+    const { rerender } = renderCalendarGrid();
 
     const scroller = screen.getByRole('region', { name: /performance calendar/i });
     Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 200 });
@@ -230,7 +240,11 @@ describe('CalendarGrid', () => {
     expect(loadMoreFuture).toHaveBeenCalledTimes(1);
 
     hookState.scrollAdjustment = { topDelta: -360, version: 1 };
-    rerender(<CalendarGrid apiBaseUrl="" />);
+    rerender(
+      <ApiBaseUrlProvider value="">
+        <CalendarGrid />
+      </ApiBaseUrlProvider>,
+    );
 
     scroller.scrollTop = 480;
     fireEvent.scroll(scroller);
@@ -248,7 +262,7 @@ describe('CalendarGrid', () => {
   it('keeps loading feedback inside the preview and visible weeks only', () => {
     vi.mocked(useCalendarData).mockReturnValue(buildHookState({ isLoadingPast: true }));
 
-    render(<CalendarGrid apiBaseUrl="" />);
+    renderCalendarGrid();
 
     expect(screen.queryByText(/fetching data/i)).not.toBeInTheDocument();
   });
@@ -283,7 +297,7 @@ describe('CalendarGrid', () => {
     hookState.renderedWeeks[5]!.days[0] = multiItemDay;
     vi.mocked(useCalendarData).mockReturnValue(hookState);
 
-    const { container } = render(<CalendarGrid apiBaseUrl="" />);
+    const { container } = renderCalendarGrid();
 
     const dayButtons = Array.from(container.querySelectorAll('.calendar-grid button')) as HTMLButtonElement[];
     const raceDayButton = dayButtons.find((button) => button.textContent?.includes('Opener'));
@@ -307,4 +321,5 @@ describe('CalendarGrid', () => {
     expect(raceDialog).toHaveTextContent(/grojec/i);
     expect(raceDialog).toHaveTextContent(/cat. b/i);
   });
+
 });

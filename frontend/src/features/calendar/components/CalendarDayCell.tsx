@@ -240,11 +240,6 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
                   {plannedSyncVisual.label}
                 </p>
               ) : null}
-              {plannedSyncStatus === 'modified' ? (
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffd7a1]">
-                  {t('calendar.modified')}
-                </p>
-              ) : null}
             </div>
           ) : null}
           <p className="truncate text-[11px] font-bold text-[#f9f9fd]">{title}</p>
@@ -573,8 +568,32 @@ function getPlannedSyncVisual(
         label: t('calendar.synced'),
       };
     case 'modified':
+      return {
+        borderClass: 'border-[#b9b082]/50 shadow-[0_0_0_1px_rgba(185,176,130,0.08)]',
+        hoverBorderClass: 'hover:border-[#d0c792]/65',
+        icon: Link2Off,
+        iconClass: 'text-[#d8ce9c]',
+        badgeClass: 'inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#b9b082]/35 bg-[#b9b082]/10',
+        label: t('calendar.modified'),
+      };
     case 'failed':
+      return {
+        borderClass: 'border-[#b9b082]/50 shadow-[0_0_0_1px_rgba(185,176,130,0.08)]',
+        hoverBorderClass: 'hover:border-[#d0c792]/65',
+        icon: Link2Off,
+        iconClass: 'text-[#d8ce9c]',
+        badgeClass: 'inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#b9b082]/35 bg-[#b9b082]/10',
+        label: t('calendar.syncFailed'),
+      };
     case 'pending':
+      return {
+        borderClass: 'border-[#b9b082]/50 shadow-[0_0_0_1px_rgba(185,176,130,0.08)]',
+        hoverBorderClass: 'hover:border-[#d0c792]/65',
+        icon: Link2Off,
+        iconClass: 'text-[#d8ce9c]',
+        badgeClass: 'inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#b9b082]/35 bg-[#b9b082]/10',
+        label: t('calendar.syncPending'),
+      };
     case 'unsynced':
     default:
       return {

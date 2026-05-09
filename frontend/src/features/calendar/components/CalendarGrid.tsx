@@ -2,6 +2,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useApiBaseUrl } from '../../../lib/apiBaseUrl';
 import {
   CALENDAR_BUFFER_WEEKS,
   CALENDAR_PAGINATION_LOCK_RELEASE_DISTANCE,
@@ -22,11 +23,8 @@ import { WorkoutDetailModal } from './WorkoutDetailModal';
 import { CalendarWeekDayHeader } from './CalendarWeekDayHeader';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
-type CalendarGridProps = {
-  apiBaseUrl: string;
-};
-
-export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
+export function CalendarGrid() {
+  const apiBaseUrl = useApiBaseUrl();
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
   const {
@@ -38,6 +36,7 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
     scrollAdjustment,
     loadMorePast,
     loadMoreFuture,
+    replaceEvent,
   } = useCalendarData({ apiBaseUrl });
   const [selection, setSelection] = useState<WorkoutDetailSelection | null>(null);
   const [dayItemsSelection, setDayItemsSelection] = useState<CalendarDayItemsSelection | null>(null);
@@ -275,7 +274,11 @@ export function CalendarGrid({ apiBaseUrl }: CalendarGridProps) {
         }}
       />
       <RaceDayDetailModal selection={raceSelection} onClose={() => setRaceSelection(null)} />
-      <WorkoutDetailModal apiBaseUrl={apiBaseUrl} selection={selection} onClose={() => setSelection(null)} />
+      <WorkoutDetailModal
+        selection={selection}
+        onClose={() => setSelection(null)}
+        onEventSynced={replaceEvent}
+      />
     </section>
   );
 }

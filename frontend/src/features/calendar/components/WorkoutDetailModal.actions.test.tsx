@@ -14,6 +14,15 @@ import {
 } from './WorkoutDetailModal.testHelpers';
 import { WorkoutDetailModal } from './WorkoutDetailModal';
 
+vi.mock('../../../lib/apiBaseUrl', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/apiBaseUrl')>('../../../lib/apiBaseUrl');
+
+  return {
+    ...actual,
+    useApiBaseUrl: () => '',
+  };
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -55,7 +64,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({ dateKey: '2026-03-26', event: makeEvent({ id: 23, startDateLocal: '2026-03-26', name: 'Completed Workout', indoor: false }) })}
         onClose={vi.fn()}
       />,
@@ -103,7 +111,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({ dateKey: '2026-03-26', event: makeEvent({ id: 31, startDateLocal: '2026-03-26', name: 'Race Prep' }) })}
         onClose={vi.fn()}
       />,
@@ -173,7 +180,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
@@ -251,7 +257,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
@@ -309,7 +314,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
@@ -371,7 +375,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
@@ -432,7 +435,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
@@ -489,7 +491,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
@@ -545,7 +546,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
@@ -604,7 +604,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
@@ -641,7 +640,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-28',
           event: makeEvent({
@@ -673,7 +671,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: '2026-03-28',
           event: makeEvent({
@@ -728,7 +725,6 @@ describe('WorkoutDetailModal actions', () => {
 
     render(
       <WorkoutDetailModal
-        apiBaseUrl=""
         selection={makeSelection({
           dateKey: workoutDate,
           event: makeEvent({
