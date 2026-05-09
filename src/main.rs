@@ -73,7 +73,8 @@ use aiwattcoach::{
     build_app,
     config::{
         default_task_scheduler_worker_id, spawn_provider_polling_loop,
-        spawn_task_scheduler_maintenance_loop, spawn_task_worker, ProviderPollingService, Settings,
+        spawn_task_scheduler_maintenance_loop, spawn_task_worker,
+        workout_summary_task_worker_config, ProviderPollingService, Settings,
         TaskSchedulerMaintenanceConfig, TaskSchedulerWorkerConfig,
     },
     domain::athlete_summary::{
@@ -102,7 +103,7 @@ use aiwattcoach::{
     domain::races::{AuthoritativeRaceRepository, RaceService},
     domain::settings::UserSettingsService,
     domain::special_days::AuthoritativeSpecialDayRepository,
-    domain::task_scheduler::{TaskSchedulerService, TaskWorkerConfig},
+    domain::task_scheduler::TaskSchedulerService,
     domain::training_context::DefaultTrainingContextBuilder,
     domain::training_load::{TrainingLoadDashboardReadService, TrainingLoadRecomputeService},
     domain::training_plan::{
@@ -694,13 +695,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let workout_summary_task_worker = spawn_task_worker(
         shared_task_scheduler.clone(),
         format!("{}-workout-summary", default_task_scheduler_worker_id()),
-        TaskWorkerConfig {
-            is_leader: false,
-            lease_duration_seconds: 30,
-            heartbeat_interval: Duration::from_secs(10),
-            idle_poll_interval: Duration::from_millis(100),
-            max_concurrency: 4,
-        },
+        workout_summary_task_worker_config(),
         task_handlers,
     )?;
     let workout_summary_service = Arc::new(SchedulerBackedWorkoutSummaryService::new(

@@ -13,6 +13,7 @@ use super::support::{
     InMemoryTaskWorkerRepository, InMemoryWorkoutSummaryRepository, TestClock, TestCoach,
     TestIdGenerator,
 };
+use crate::test_support::spawn_test_workout_summary_task_worker;
 
 #[tokio::test]
 #[serial]
@@ -25,7 +26,7 @@ async fn scheduler_backed_send_message_waits_for_background_task_result() {
         InMemoryTaskWorkerRepository::default(),
         clock,
     );
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -64,7 +65,7 @@ async fn scheduler_backed_generate_coach_reply_waits_for_background_task_result(
         InMemoryTaskWorkerRepository::default(),
         clock,
     );
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -102,7 +103,7 @@ async fn scheduler_backed_generate_coach_reply_preserves_athlete_summary_regener
         InMemoryTaskWorkerRepository::default(),
         clock,
     );
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -136,7 +137,7 @@ async fn scheduler_backed_send_message_returns_failed_task_error() {
         InMemoryTaskWorkerRepository::default(),
         clock,
     );
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -196,7 +197,7 @@ async fn scheduler_backed_generate_coach_reply_waits_for_pending_operation_recla
         InMemoryTaskWorkerRepository::default(),
         clock.clone(),
     );
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -275,7 +276,7 @@ async fn scheduler_backed_generate_coach_reply_retries_after_failed_task_on_expl
         InMemoryTaskWorkerRepository::default(),
         clock,
     );
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -318,7 +319,7 @@ async fn scheduler_backed_send_message_does_not_accumulate_scheduler_state_acros
     let worker_repository = InMemoryTaskWorkerRepository::default();
     let scheduler =
         TaskSchedulerService::new(task_repository, worker_repository, TestClock::default());
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -362,7 +363,7 @@ async fn scheduler_backed_worker_restarts_do_not_accumulate_scheduler_state() {
     );
 
     for attempt in 0..10 {
-        let worker = spawn_workout_summary_coach_reply_task_runner(
+        let worker = spawn_test_workout_summary_task_worker(
             direct.clone(),
             scheduler.clone(),
             "worker-1".to_string(),
