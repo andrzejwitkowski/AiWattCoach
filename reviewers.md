@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-09 | CodeRabbit | PR #202 follow-up on provider-only CalendarGrid path and stale modal sync guard
+
+- Problem: after the first PR #202 review follow-up, `WorkoutDetailModal` and its inner hooks had already moved onto `useApiBaseUrl()`, but `CalendarGrid` itself still accepted `apiBaseUrl` as a prop and the tests still rendered it that way. A separate review also pointed out that the modal's local `onEventSynced(...)` handler updated `state.event` unconditionally, so a late sync completion could overwrite a newer selection with stale data. The new cache invalidation regression additionally derived related date keys from multiple `new Date()` calls, which could become flaky across a midnight rollover.
+- Fix: removed the remaining `apiBaseUrl` prop from `CalendarGrid`, resolved it inside the component via `useApiBaseUrl()`, and updated `CalendarPage` plus `CalendarGrid` tests to use the provider-only path. Guarded `WorkoutDetailModal` local sync updates with the current event identity before mutating modal state, while still forwarding the external callback. Also changed the cache invalidation regression to derive all related keys from one captured `monday` baseline.
+- Prevention: when a review asks to stop config prop threading, follow the path all the way to the outermost UI component in that feature and update the tests too, otherwise the cleanup remains half-done. For modal-local async completions, always compare the completion payload against the current selection before mutating local state. In date-sensitive tests, capture one baseline time value and derive every related key from it instead of calling `new Date()` repeatedly.
+
 ### 2026-05-09 | Copilot + CodeRabbit | PR #202 calendar sync follow-up on modal API boundary and replaceEvent coverage
 
 - Problem: the calendar sync follow-up still threaded `apiBaseUrl` from `CalendarGrid` into `WorkoutDetailModal`, which violated the frontend rule that UI components should not pass API base URLs through props. The new `replaceEvent(...)` helper also assumed the event stayed on the same day, so a date-changing replacement could remove the old item without re-inserting it into the target day. Finally, the cache invalidation regression asserted only that another fetch happened, which could pass from ordinary pagination rather than from clearing the affected cached range, and the day cell rendered `modified` twice.

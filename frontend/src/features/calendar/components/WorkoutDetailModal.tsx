@@ -182,7 +182,13 @@ export function WorkoutDetailModal({selection, onClose, onEventSynced}: WorkoutD
                             onSyncingToWahooChange={setSyncingToWahoo}
                             onSyncError={setSyncError}
                             onEventSynced={(syncedEvent) => {
-                                setState((current) => ({...current, event: syncedEvent}));
+                                setState((current) => {
+                                    if (!current.event || !isSameSelectedEvent(current.event, syncedEvent)) {
+                                        return current;
+                                    }
+
+                                    return {...current, event: syncedEvent};
+                                });
                                 onEventSynced?.(syncedEvent);
                             }}
                         />
@@ -230,6 +236,16 @@ function hasMeaningfulEventDefinition(eventDefinition: IntervalEvent['eventDefin
         eventDefinition.intervals.length > 0
         || eventDefinition.segments.length > 0
     );
+}
+
+function isSameSelectedEvent(currentEvent: IntervalEvent, nextEvent: IntervalEvent): boolean {
+    const currentProjectedWorkoutId = currentEvent.projectedWorkout?.projectedWorkoutId;
+    const nextProjectedWorkoutId = nextEvent.projectedWorkout?.projectedWorkoutId;
+    if (currentProjectedWorkoutId && nextProjectedWorkoutId) {
+        return currentProjectedWorkoutId === nextProjectedWorkoutId;
+    }
+
+    return currentEvent.calendarEntryId === nextEvent.calendarEntryId;
 }
 
 function mergeEventDefinitions(

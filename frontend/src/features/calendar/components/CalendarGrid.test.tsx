@@ -157,7 +157,7 @@ function buildHookState(overrides: Partial<ReturnType<typeof useCalendarData>> =
 function renderCalendarGrid(apiBaseUrl = '') {
   return render(
     <ApiBaseUrlProvider value={apiBaseUrl}>
-      <CalendarGrid apiBaseUrl={apiBaseUrl} />
+      <CalendarGrid />
     </ApiBaseUrlProvider>,
   );
 }
@@ -242,7 +242,7 @@ describe('CalendarGrid', () => {
     hookState.scrollAdjustment = { topDelta: -360, version: 1 };
     rerender(
       <ApiBaseUrlProvider value="">
-        <CalendarGrid apiBaseUrl="" />
+        <CalendarGrid />
       </ApiBaseUrlProvider>,
     );
 

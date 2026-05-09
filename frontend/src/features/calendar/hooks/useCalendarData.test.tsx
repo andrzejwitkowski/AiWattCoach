@@ -437,9 +437,10 @@ describe('useCalendarData', () => {
   });
 
   it('replaces a predicted workout in the loaded window and invalidates the matching events cache range', async () => {
-    const workoutDateKey = toDateKey(addDays(getMondayOfWeek(new Date()), 1));
-    const initialWindowOldest = toDateKey(addDays(getMondayOfWeek(new Date()), -(CALENDAR_BUFFER_WEEKS * 7)));
-    const initialWindowNewest = toDateKey(addDays(getMondayOfWeek(new Date()), ((CALENDAR_VISIBLE_WEEKS + CALENDAR_BUFFER_WEEKS) * 7) - 1));
+    const monday = getMondayOfWeek(new Date());
+    const workoutDateKey = toDateKey(addDays(monday, 1));
+    const initialWindowOldest = toDateKey(addDays(monday, -(CALENDAR_BUFFER_WEEKS * 7)));
+    const initialWindowNewest = toDateKey(addDays(monday, ((CALENDAR_VISIBLE_WEEKS + CALENDAR_BUFFER_WEEKS) * 7) - 1));
     const initialCacheKey = `|${initialWindowOldest}|${initialWindowNewest}`;
     const initialEvent: IntervalEvent = {
       id: 5906112577594034,
