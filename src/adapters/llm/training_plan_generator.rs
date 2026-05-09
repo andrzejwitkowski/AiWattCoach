@@ -8,8 +8,8 @@ use crate::domain::{
     ai_workflow::ValidationIssue,
     identity::Clock,
     llm::{
-        BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmError, LlmMessageRole,
-        UserLlmConfigProvider,
+        build_chat_request, BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequestInput, LlmError,
+        LlmMessageRole, UserLlmConfigProvider,
     },
     llm_tools::{
         run_tool_loop_with_checkpoint, with_tool_prompt_guidance, GetSelectedWorkoutDataPort,
@@ -110,7 +110,7 @@ where
             let response = llm_chat_port
                 .chat(
                     config.clone(),
-                    LlmChatRequest {
+                    build_chat_request(LlmChatRequestInput {
                         user_id,
                         system_prompt: training_plan_recap_system_prompt(),
                         stable_context,
@@ -119,9 +119,7 @@ where
                         cache_scope_key: None,
                         cache_key: None,
                         reusable_cache_id: None,
-                        tools: Vec::new(),
-                        tool_choice: crate::domain::llm::LlmToolChoice::None,
-                    },
+                    }),
                 )
                 .await
                 .map_err(map_llm_error)?;
@@ -251,7 +249,7 @@ where
                 &tool_context,
             );
 
-            let request = LlmChatRequest {
+            let request = build_chat_request(LlmChatRequestInput {
                 user_id: tool_context.user_id.clone(),
                 system_prompt,
                 stable_context,
@@ -260,8 +258,7 @@ where
                 cache_scope_key: None,
                 cache_key: None,
                 reusable_cache_id: None,
-                ..Default::default()
-            };
+            });
             let response = run_tool_loop_with_checkpoint(
                 llm_chat_port,
                 config,
@@ -353,7 +350,7 @@ where
                 &tool_context,
             );
 
-            let request = LlmChatRequest {
+            let request = build_chat_request(LlmChatRequestInput {
                 user_id: tool_context.user_id.clone(),
                 system_prompt,
                 stable_context,
@@ -362,8 +359,7 @@ where
                 cache_scope_key: None,
                 cache_key: None,
                 reusable_cache_id: None,
-                ..Default::default()
-            };
+            });
             let response = run_tool_loop_with_checkpoint(
                 llm_chat_port,
                 config,

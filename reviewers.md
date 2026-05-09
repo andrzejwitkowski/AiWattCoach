@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-09 | user | shared llm request builder review loop on Gemini cache logging semantics
+
+- Problem: the first `#200` extraction made `workout_summary_coach` call shared reusable-cache helpers even when the cache repository was disabled, then logged `no reusable gemini context cache found` and `persisted reusable gemini context cache` based only on provider and response state. That changed behavior from the pre-extraction flow, which logged those messages only when a real repository-backed lookup or upsert actually happened.
+- Fix: restored the old logging semantics in `src/adapters/llm/workout_summary_coach.rs` by gating the reusable-cache lookup logs on `Some(repository)` plus `Some(scope_key)` and by logging persisted cache success only when `persist_reusable_context_cache(...)` returned `Ok(Some(_))` rather than any non-error result.
+- Prevention: when a shared helper intentionally collapses `not applicable` and `cache miss` into the same `Ok(None)` shape, do not hang success or miss logs directly off that helper result in call sites that previously distinguished those cases. Preserve preconditions such as configured repositories and concrete scope keys before logging cache behavior.
+
 ### 2026-05-09 | user | shared task scheduler review follow-up on config visibility, training-plan scheduler API, and waiter cleanup
 
 - Problem: the first shared-scheduler follow-up left three review-confirmed issues. The new workout-summary worker config helper still reached through removed public re-exports and the crate test helper imported a private `config::task_scheduler` module. The training-plan scheduler refactor also left public items (`training_plan_generate_task_handler`, `SchedulerBackedTrainingPlanService`) depending on a scheduler-only private/public glue trait, which leaked internal recovery concerns into the domain surface. Finally, the shared `wait_for_result_task(...)` path cleaned up waiter entries before dropping its local `watch::Receiver`, so immediately completed or failed replayed tasks could leave stale entries in `task_waiters`.
