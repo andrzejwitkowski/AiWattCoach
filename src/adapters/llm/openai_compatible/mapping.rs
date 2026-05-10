@@ -27,6 +27,7 @@ pub fn map_request(
         content: Some(content.to_string()),
         tool_calls: Vec::new(),
         tool_call_id: None,
+        reasoning_content: None,
     })
     .collect::<Vec<_>>();
     messages.extend(request.conversation.drain(..).map(map_message));
@@ -61,8 +62,13 @@ pub fn map_response(
         .into_iter()
         .map(map_tool_call)
         .collect::<Vec<_>>();
+    let has_reasoning = choice
+        .message
+        .reasoning_content
+        .as_ref()
+        .is_some_and(|r| !r.trim().is_empty());
 
-    if content.trim().is_empty() && tool_calls.is_empty() {
+    if content.trim().is_empty() && tool_calls.is_empty() && !has_reasoning {
         return Err(crate::domain::llm::LlmError::InvalidResponse(format!(
             "{} returned neither message content nor tool calls",
             config.provider
@@ -86,10 +92,13 @@ pub fn map_response(
         .cached_tokens
         .or(usage.prompt_cache_hit_tokens);
 
+    let mut message = LlmChatMessage::assistant_with_tool_calls(content, tool_calls);
+    message.reasoning_content = choice.message.reasoning_content;
+
     Ok(LlmChatResponse {
         provider: config.provider.clone(),
         model: response.model.unwrap_or_else(|| config.model.clone()),
-        message: LlmChatMessage::assistant_with_tool_calls(content, tool_calls),
+        message,
         finish_reason: choice.finish_reason.map(map_finish_reason),
         provider_request_id: response.id,
         usage: LlmTokenUsage {
@@ -124,6 +133,7 @@ fn map_message(message: LlmChatMessage) -> OpenAiMessage {
             .map(map_domain_tool_call)
             .collect(),
         tool_call_id: message.tool_call_id,
+        reasoning_content: message.reasoning_content,
     }
 }
 

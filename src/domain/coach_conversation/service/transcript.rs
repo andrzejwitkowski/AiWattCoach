@@ -62,12 +62,14 @@ pub(super) fn build_calendar_conversation(
                 content: message.content.clone(),
                 tool_calls: Vec::new(),
                 tool_call_id: None,
+                reasoning_content: None,
             }),
             CoachConversationMessageRole::Coach => Some(LlmChatMessage {
                 role: LlmMessageRole::Assistant,
                 content: message.content.clone(),
                 tool_calls: Vec::new(),
                 tool_call_id: None,
+                reasoning_content: None,
             }),
             CoachConversationMessageRole::Tool | CoachConversationMessageRole::System => None,
         })

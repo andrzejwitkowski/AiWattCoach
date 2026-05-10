@@ -101,6 +101,8 @@ pub struct LlmChatMessage {
     pub content: String,
     pub tool_calls: Vec<LlmToolCall>,
     pub tool_call_id: Option<String>,
+    #[serde(default)]
+    pub reasoning_content: Option<String>,
 }
 
 impl LlmChatMessage {
@@ -110,6 +112,7 @@ impl LlmChatMessage {
             content: content.into(),
             tool_calls: Vec::new(),
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 
@@ -119,6 +122,7 @@ impl LlmChatMessage {
             content: content.into(),
             tool_calls: Vec::new(),
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 
@@ -128,6 +132,7 @@ impl LlmChatMessage {
             content: content.into(),
             tool_calls: Vec::new(),
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 
@@ -140,6 +145,7 @@ impl LlmChatMessage {
             content: content.into(),
             tool_calls,
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 
@@ -149,6 +155,7 @@ impl LlmChatMessage {
             content: content.into(),
             tool_calls: Vec::new(),
             tool_call_id: Some(tool_call_id.into()),
+            reasoning_content: None,
         }
     }
 }

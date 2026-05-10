@@ -120,10 +120,23 @@ async fn deepseek_handler(
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
     capture_request(&state, "/chat/completions", headers, body.clone());
+    let model = body
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or("deepseek-v4-flash");
+    let (content, reasoning_content) = if model == "deepseek-v4-pro" {
+        (String::new(), Some("thinking chain".to_string()))
+    } else {
+        ("DeepSeek says hi".to_string(), None)
+    };
+    let mut message = json!({ "content": content });
+    if let Some(rc) = reasoning_content {
+        message["reasoning_content"] = json!(rc);
+    }
     Json(json!({
         "id": "deepseek-req-1",
-        "model": body.get("model").and_then(Value::as_str).unwrap_or("deepseek-v4-flash"),
-        "choices": [{ "message": { "content": "DeepSeek says hi" } }],
+        "model": model,
+        "choices": [{ "message": message }],
         "usage": {
             "prompt_tokens": 100,
             "completion_tokens": 20,

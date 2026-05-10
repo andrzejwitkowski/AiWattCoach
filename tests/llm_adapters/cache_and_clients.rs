@@ -70,6 +70,31 @@ async fn deepseek_client_maps_response_and_cache_hit_tokens() {
 }
 
 #[tokio::test]
+async fn deepseek_client_maps_reasoning_content_for_thinking_models() {
+    let server = MockServer::start().await;
+    let client = deepseek_client(&server.base_url);
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-v4-pro".to_string(),
+                api_key: "deepseek-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.assistant_text(), Some(""));
+    assert_eq!(response.provider, LlmProvider::DeepSeek);
+    assert_eq!(
+        response.message.reasoning_content.as_deref(),
+        Some("thinking chain")
+    );
+}
+
+#[tokio::test]
 async fn openai_client_maps_tool_call_response_and_finish_reason() {
     let server = MockServer::start().await;
     let client = openai_client(&server.base_url);

@@ -67,6 +67,7 @@ impl AthleteSummaryGenerator for AthleteSummaryLlmGenerator {
                     content: user_prompt.to_string(),
                     tool_calls: Vec::new(),
                     tool_call_id: None,
+                    reasoning_content: None,
                 }],
                 cache_scope_key: Some("athlete-summary".to_string()),
                 cache_key: Some(hash_text(&stable_context)),
