@@ -24,6 +24,8 @@ pub(super) fn map_settings_to_dto(
             gemini_api_key_set: settings.ai_agents.gemini_api_key.is_some(),
             openrouter_api_key: mask_sensitive(&settings.ai_agents.openrouter_api_key),
             openrouter_api_key_set: settings.ai_agents.openrouter_api_key.is_some(),
+            deepseek_api_key: mask_sensitive(&settings.ai_agents.deepseek_api_key),
+            deepseek_api_key_set: settings.ai_agents.deepseek_api_key.is_some(),
             selected_provider: settings
                 .ai_agents
                 .selected_provider
@@ -114,6 +116,7 @@ pub(super) fn map_ai_agents_update(
     let openai_api_key = normalize_string_input(body.openai_api_key);
     let gemini_api_key = normalize_string_input(body.gemini_api_key);
     let openrouter_api_key = normalize_string_input(body.openrouter_api_key);
+    let deepseek_api_key = normalize_string_input(body.deepseek_api_key);
 
     let provider_changed = match &selected_provider_update {
         FieldUpdate::Missing => false,
@@ -162,6 +165,10 @@ pub(super) fn map_ai_agents_update(
         openrouter_api_key: apply_field_update(
             openrouter_api_key,
             current.ai_agents.openrouter_api_key.clone(),
+        ),
+        deepseek_api_key: apply_field_update(
+            deepseek_api_key,
+            current.ai_agents.deepseek_api_key.clone(),
         ),
         selected_provider: validation::validate_ai_provider(selected_provider)?,
         selected_model,
@@ -269,6 +276,20 @@ mod tests {
         assert_eq!(dto.ai_agents.openai_api_key.as_deref(), Some("***...1234"));
         assert!(dto.ai_agents.openai_api_key_set);
         assert_eq!(dto.ai_agents.gemini_api_key, None);
+    }
+
+    #[test]
+    fn map_settings_to_dto_masks_deepseek_api_key() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_700_000_000);
+        settings.ai_agents.deepseek_api_key = Some("sk-ds-secretkey5678".to_string());
+
+        let dto = map_settings_to_dto(&settings, false);
+
+        assert_eq!(
+            dto.ai_agents.deepseek_api_key.as_deref(),
+            Some("***...5678")
+        );
+        assert!(dto.ai_agents.deepseek_api_key_set);
     }
 
     #[test]

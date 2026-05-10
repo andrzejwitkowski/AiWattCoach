@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const llmProviderSchema = z.enum(['openai', 'gemini', 'openrouter']);
+export const llmProviderSchema = z.enum(['openai', 'gemini', 'openrouter', 'deepseek']);
 const availabilityWeekdaySchema = z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
 const aiAgentsSettingsSchema = z.object({
@@ -10,6 +10,8 @@ const aiAgentsSettingsSchema = z.object({
   geminiApiKeySet: z.boolean(),
   openrouterApiKey: z.string().nullable(),
   openrouterApiKeySet: z.boolean(),
+  deepseekApiKey: z.string().nullable(),
+  deepseekApiKeySet: z.boolean(),
   selectedProvider: llmProviderSchema.nullable().optional(),
   selectedModel: z.string().nullable().optional(),
 });
@@ -143,6 +145,7 @@ export const updateAiAgentsRequestSchema = z.object({
   openaiApiKey: z.string().nullable().optional(),
   geminiApiKey: z.string().nullable().optional(),
   openrouterApiKey: z.string().nullable().optional(),
+  deepseekApiKey: z.string().nullable().optional(),
   selectedProvider: z.union([llmProviderSchema, z.literal('')]).nullable().optional(),
   selectedModel: z.string().nullable().optional(),
 });

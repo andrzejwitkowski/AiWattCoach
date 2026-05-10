@@ -31,6 +31,8 @@ function buildSettings(overrides?: SettingsOverrides): UserSettingsResponse {
       geminiApiKeySet: false,
       openrouterApiKey: '***...9999',
       openrouterApiKeySet: true,
+      deepseekApiKey: null,
+      deepseekApiKeySet: false,
       selectedProvider: 'openrouter',
       selectedModel: 'google/gemini-3-flash-preview',
       ...overrides?.aiAgents,

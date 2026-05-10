@@ -22,6 +22,8 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['aiAgents']>): U
       geminiApiKeySet: false,
       openrouterApiKey: '***...9999',
       openrouterApiKeySet: true,
+      deepseekApiKey: null,
+      deepseekApiKeySet: false,
       selectedProvider: 'openrouter',
       selectedModel: 'openai/gpt-4o-mini',
       ...overrides,
@@ -135,6 +137,33 @@ describe('AiAgentsCard', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('saves deepseek provider, model, and key', async () => {
+    updateAiAgentsMock.mockResolvedValue(buildSettings());
+    const onSave = vi.fn();
+
+    render(<AiAgentsCard settings={buildSettings({ selectedProvider: null, selectedModel: null })} apiBaseUrl="" onSave={onSave} />);
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'deepseek' },
+    });
+    fireEvent.change(screen.getByLabelText(/model/i), {
+      target: { value: 'deepseek-v4-pro' },
+    });
+    fireEvent.change(screen.getByLabelText(/deepseek api key/i), {
+      target: { value: 'sk-ds-new-key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    await waitFor(() => {
+      expect(updateAiAgentsMock).toHaveBeenCalledWith('', {
+        deepseekApiKey: 'sk-ds-new-key',
+        selectedProvider: 'deepseek',
+        selectedModel: 'deepseek-v4-pro',
+      });
+    });
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
   it('clears plaintext api key fields after a successful save', async () => {
     updateAiAgentsMock.mockResolvedValue(buildSettings());
 
@@ -226,6 +255,16 @@ describe('AiAgentsCard', () => {
     expect(screen.getByLabelText(/model/i)).toHaveValue('gemini-3-flash-preview');
   });
 
+  it('autofills deepseek model when provider switches to deepseek', () => {
+    render(<AiAgentsCard settings={buildSettings({ selectedProvider: null, selectedModel: null })} apiBaseUrl="" onSave={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText(/active provider/i), {
+      target: { value: 'deepseek' },
+    });
+
+    expect(screen.getByLabelText(/model/i)).toHaveValue('deepseek-v4-flash');
+  });
+
   it('shows higher-end suggested models for each provider', () => {
     render(<AiAgentsCard settings={buildSettings({ selectedProvider: 'openai', selectedModel: 'gpt-5' })} apiBaseUrl="" onSave={() => {}} />);
 
@@ -275,6 +314,16 @@ describe('AiAgentsCard', () => {
     expect(openaiInput.parentElement?.parentElement).toHaveClass('opacity-60');
   });
 
+  it('emphasizes deepseek key field when deepseek is selected', () => {
+    render(<AiAgentsCard settings={buildSettings({ selectedProvider: 'deepseek', selectedModel: 'deepseek-v4-flash' })} apiBaseUrl="" onSave={() => {}} />);
+
+    const deepseekInput = screen.getByLabelText(/deepseek api key/i);
+    const openrouterInput = screen.getByLabelText(/openrouter api key/i);
+
+    expect(deepseekInput.parentElement?.parentElement).toHaveClass('opacity-100');
+    expect(openrouterInput.parentElement?.parentElement).toHaveClass('opacity-60');
+  });
+
   it('does not claim an inactive provider key is saved when none exists', () => {
     render(
       <AiAgentsCard
@@ -291,6 +340,6 @@ describe('AiAgentsCard', () => {
 
     expect(screen.getByText('Used by the active provider.')).toBeInTheDocument();
     expect(screen.getAllByText('Saved for quick provider switching.')).toHaveLength(1);
-    expect(screen.queryByText('Optional unless you switch to this provider.')).toBeInTheDocument();
+    expect(screen.queryAllByText('Optional unless you switch to this provider.')).toHaveLength(2);
   });
 });

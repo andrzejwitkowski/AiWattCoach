@@ -5,8 +5,8 @@ use aiwattcoach::{
 
 use crate::shared_support::tracing_capture::capture_tracing_logs;
 use crate::support::{
-    gemini_client, openai_client, openai_forbidden_client, openrouter_client, sample_request,
-    MockServer,
+    deepseek_client, gemini_client, openai_client, openai_forbidden_client, openrouter_client,
+    sample_request, MockServer,
 };
 
 #[tokio::test]
@@ -37,6 +37,36 @@ async fn openai_client_maps_response_and_cached_tokens() {
         Some("Bearer openai-key")
     );
     assert_eq!(requests[0].body["prompt_cache_key"], "cache-key-1");
+}
+
+#[tokio::test]
+async fn deepseek_client_maps_response_and_cache_hit_tokens() {
+    let server = MockServer::start().await;
+    let client = deepseek_client(&server.base_url);
+
+    let response = client
+        .chat(
+            LlmProviderConfig {
+                provider: LlmProvider::DeepSeek,
+                model: "deepseek-v4-flash".to_string(),
+                api_key: "deepseek-key".to_string(),
+            },
+            sample_request(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.assistant_text(), Some("DeepSeek says hi"));
+    assert_eq!(response.provider, LlmProvider::DeepSeek);
+    assert_eq!(response.cache.cached_read_tokens, Some(80));
+    assert!(response.cache.cache_hit);
+
+    let requests = server.requests();
+    assert_eq!(requests[0].path, "/chat/completions");
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some("Bearer deepseek-key")
+    );
 }
 
 #[tokio::test]

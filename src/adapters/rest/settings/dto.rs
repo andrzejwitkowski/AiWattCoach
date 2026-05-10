@@ -45,6 +45,10 @@ pub(super) struct AiAgentsDto {
     pub(super) openrouter_api_key: Option<String>,
     #[serde(rename = "openrouterApiKeySet")]
     pub(super) openrouter_api_key_set: bool,
+    #[serde(rename = "deepseekApiKey")]
+    pub(super) deepseek_api_key: Option<String>,
+    #[serde(rename = "deepseekApiKeySet")]
+    pub(super) deepseek_api_key_set: bool,
     #[serde(rename = "selectedProvider")]
     pub(super) selected_provider: Option<String>,
     #[serde(rename = "selectedModel")]
@@ -128,6 +132,8 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) gemini_api_key: OptionalStringInput,
     #[serde(default, rename = "openrouterApiKey")]
     pub(super) openrouter_api_key: OptionalStringInput,
+    #[serde(default, rename = "deepseekApiKey")]
+    pub(super) deepseek_api_key: OptionalStringInput,
     #[serde(default, rename = "selectedProvider")]
     pub(super) selected_provider: OptionalStringInput,
     #[serde(default, rename = "selectedModel")]

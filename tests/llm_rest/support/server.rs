@@ -37,6 +37,7 @@ impl TestLlmUpstreamServer {
         let state = MockServerState::default();
         let app = Router::new()
             .route("/v1/chat/completions", post(openai_handler))
+            .route("/chat/completions", post(deepseek_handler))
             .route("/api/v1/chat/completions", post(openrouter_handler))
             .route("/v1beta/cachedContents", post(gemini_cache_handler))
             .route(
@@ -56,6 +57,10 @@ impl TestLlmUpstreamServer {
             state,
             task,
         }
+    }
+
+    pub(crate) fn deepseek_base_url(&self) -> String {
+        format!("http://{}", self.address)
     }
 
     pub(crate) fn openai_base_url(&self) -> String {
@@ -104,6 +109,27 @@ async fn openai_handler(
             "completion_tokens": 20,
             "total_tokens": 120,
             "prompt_tokens_details": { "cached_tokens": 42 }
+        }
+    }))
+    .into_response()
+}
+
+async fn deepseek_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    capture_request(&state, "/chat/completions", headers, body.clone());
+    Json(json!({
+        "id": "deepseek-req-1",
+        "model": body.get("model").and_then(Value::as_str).unwrap_or("deepseek-v4-flash"),
+        "choices": [{ "message": { "content": "DeepSeek says hi" } }],
+        "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "prompt_cache_hit_tokens": 80,
+            "prompt_cache_miss_tokens": 20
         }
     }))
     .into_response()
