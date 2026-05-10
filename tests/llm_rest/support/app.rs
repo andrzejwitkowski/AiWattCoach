@@ -11,7 +11,8 @@ use std::{
 use aiwattcoach::{
     adapters::{
         llm::{
-            adapter::LlmAdapter, gemini::client::GeminiClient, openai::client::OpenAiClient,
+            adapter::LlmAdapter, gemini::client::GeminiClient,
+            openai_compatible::client::OpenAiCompatibleClient as OpenAiClient,
             openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
             workout_summary_coach::LlmWorkoutCoach,
         },
@@ -142,6 +143,7 @@ pub(crate) async fn llm_rest_test_context() -> LlmRestTestContext {
     let llm_http_client = reqwest::Client::new();
     let llm_adapter = Arc::new(LlmAdapter::live(
         OpenAiClient::new(llm_http_client.clone()).with_base_url(server.openai_base_url()),
+        OpenAiClient::new(llm_http_client.clone()).with_base_url(server.deepseek_base_url()),
         GeminiClient::new(llm_http_client.clone()).with_base_url(server.gemini_base_url()),
         OpenRouterClient::new(llm_http_client).with_base_url(server.openrouter_base_url()),
     ));

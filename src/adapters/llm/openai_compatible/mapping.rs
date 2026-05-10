@@ -1,7 +1,7 @@
 use crate::adapters::llm::context_prelude::non_empty_context_parts;
 use crate::domain::llm::{
     LlmCacheUsage, LlmChatMessage, LlmChatRequest, LlmChatResponse, LlmFinishReason,
-    LlmMessageRole, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
+    LlmMessageRole, LlmProviderConfig, LlmTokenUsage, LlmToolCall, LlmToolChoice,
     LlmToolDefinition,
 };
 
@@ -49,7 +49,10 @@ pub fn map_response(
     response: OpenAiChatResponse,
 ) -> Result<LlmChatResponse, crate::domain::llm::LlmError> {
     let choice = response.choices.into_iter().next().ok_or_else(|| {
-        crate::domain::llm::LlmError::InvalidResponse("OpenAI returned no choices".to_string())
+        crate::domain::llm::LlmError::InvalidResponse(format!(
+            "{} returned no choices",
+            config.provider
+        ))
     })?;
     let content = choice.message.content.unwrap_or_default();
     let tool_calls = choice
@@ -60,9 +63,10 @@ pub fn map_response(
         .collect::<Vec<_>>();
 
     if content.trim().is_empty() && tool_calls.is_empty() {
-        return Err(crate::domain::llm::LlmError::InvalidResponse(
-            "OpenAI returned neither message content nor tool calls".to_string(),
-        ));
+        return Err(crate::domain::llm::LlmError::InvalidResponse(format!(
+            "{} returned neither message content nor tool calls",
+            config.provider
+        )));
     }
 
     let usage = response.usage.unwrap_or(OpenAiUsage {
@@ -70,16 +74,20 @@ pub fn map_response(
         completion_tokens: None,
         total_tokens: None,
         prompt_tokens_details: None,
+        prompt_cache_hit_tokens: None,
+        prompt_cache_miss_tokens: None,
     });
     let prompt_details = usage
         .prompt_tokens_details
         .unwrap_or(OpenAiPromptTokenDetails {
             cached_tokens: None,
         });
-    let cached_tokens = prompt_details.cached_tokens;
+    let cached_tokens = prompt_details
+        .cached_tokens
+        .or(usage.prompt_cache_hit_tokens);
 
     Ok(LlmChatResponse {
-        provider: LlmProvider::OpenAi,
+        provider: config.provider.clone(),
         model: response.model.unwrap_or_else(|| config.model.clone()),
         message: LlmChatMessage::assistant_with_tool_calls(content, tool_calls),
         finish_reason: choice.finish_reason.map(map_finish_reason),

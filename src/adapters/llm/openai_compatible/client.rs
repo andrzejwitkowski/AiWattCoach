@@ -9,12 +9,12 @@ use super::{dto::OpenAiChatResponse, mapping};
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 #[derive(Clone)]
-pub struct OpenAiClient {
+pub struct OpenAiCompatibleClient {
     client: reqwest::Client,
     base_url: String,
 }
 
-impl OpenAiClient {
+impl OpenAiCompatibleClient {
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             client,
@@ -28,7 +28,7 @@ impl OpenAiClient {
     }
 }
 
-impl LlmChatPort for OpenAiClient {
+impl LlmChatPort for OpenAiCompatibleClient {
     fn chat(
         &self,
         config: LlmProviderConfig,
@@ -39,6 +39,7 @@ impl LlmChatPort for OpenAiClient {
         let message_count = request.conversation.len();
         let has_system_prompt = !request.system_prompt.trim().is_empty();
         let has_stable_context = !request.stable_context.trim().is_empty();
+        let provider_str = config.provider.as_str();
         let payload = match mapping::map_request(&config, request) {
             Ok(payload) => payload,
             Err(error) => return Box::pin(async move { Err(error) }),
@@ -46,14 +47,14 @@ impl LlmChatPort for OpenAiClient {
 
         Box::pin(async move {
             tracing::info!(
-                provider = "openai",
+                provider = provider_str,
                 model = %config.model,
                 url = %url,
                 message_count,
                 has_system_prompt,
                 has_stable_context,
                 request_body = %serialize_logged_body(&payload),
-                "sending openai chat request"
+                "sending openai-compatible chat request"
             );
 
             let response = client
@@ -65,11 +66,11 @@ impl LlmChatPort for OpenAiClient {
                 .map_err(|error| {
                     let message = error.without_url().to_string();
                     tracing::warn!(
-                        provider = "openai",
+                        provider = provider_str,
                         model = %config.model,
                         url = %url,
                         error = %message,
-                        "openai transport failure"
+                        "openai-compatible transport failure"
                     );
                     LlmError::Transport(message)
                 })?;
@@ -78,12 +79,12 @@ impl LlmChatPort for OpenAiClient {
             if !status.is_success() {
                 let body = response.text().await.unwrap_or_default();
                 tracing::warn!(
-                    provider = "openai",
+                    provider = provider_str,
                     model = %config.model,
                     url = %url,
                     status = status.as_u16(),
                     response_body = %truncate_logged_body(&body),
-                    "openai chat request failed"
+                    "openai-compatible chat request failed"
                 );
                 return Err(map_error(status, body));
             }
@@ -91,11 +92,11 @@ impl LlmChatPort for OpenAiClient {
             let response_body = response.text().await.map_err(|error| {
                 let message = error.without_url().to_string();
                 tracing::warn!(
-                    provider = "openai",
+                    provider = provider_str,
                     model = %config.model,
                     url = %url,
                     error = %message,
-                    "openai response body read failed"
+                    "openai-compatible response body read failed"
                 );
                 LlmError::InvalidResponse(message)
             })?;
@@ -104,32 +105,32 @@ impl LlmChatPort for OpenAiClient {
                 serde_json::from_str(&response_body).map_err(|error| {
                     let message = error.to_string();
                     tracing::warn!(
-                        provider = "openai",
+                        provider = provider_str,
                         model = %config.model,
                         url = %url,
                         error = %message,
                         response_body = %truncate_logged_body(&response_body),
-                        "openai response json parsing failed"
+                        "openai-compatible response json parsing failed"
                     );
                     LlmError::InvalidResponse(message)
                 })?;
 
             tracing::info!(
-                provider = "openai",
+                provider = provider_str,
                 model = %config.model,
                 url = %url,
                 response_body = %truncate_logged_body(&response_body),
-                "openai chat request succeeded"
+                "openai-compatible chat request succeeded"
             );
 
             mapping::map_response(&config, response).map_err(|error| {
                 tracing::warn!(
-                    provider = "openai",
+                    provider = provider_str,
                     model = %config.model,
                     url = %url,
                     error = %error,
                     response_body = %truncate_logged_body(&response_body),
-                    "openai response mapping failed"
+                    "openai-compatible response mapping failed"
                 );
                 error
             })

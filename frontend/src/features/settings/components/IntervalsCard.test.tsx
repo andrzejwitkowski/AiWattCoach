@@ -23,6 +23,8 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): 
       geminiApiKeySet: false,
       openrouterApiKey: null,
       openrouterApiKeySet: false,
+      deepseekApiKey: null,
+      deepseekApiKeySet: false,
       selectedProvider: null,
       selectedModel: null,
     },

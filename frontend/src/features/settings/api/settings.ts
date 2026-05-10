@@ -32,6 +32,10 @@ function normalizeAiAgentsPayload(data: unknown) {
       typeof candidate.openrouterApiKey === 'string'
         ? candidate.openrouterApiKey.trim()
         : candidate.openrouterApiKey,
+    deepseekApiKey:
+      typeof candidate.deepseekApiKey === 'string'
+        ? candidate.deepseekApiKey.trim()
+        : candidate.deepseekApiKey,
     selectedProvider:
       typeof candidate.selectedProvider === 'string'
         ? candidate.selectedProvider.trim()
@@ -43,7 +47,7 @@ function normalizeAiAgentsPayload(data: unknown) {
 
 function getAiAgentsFieldValue(
   data: unknown,
-  key: 'openaiApiKey' | 'geminiApiKey' | 'openrouterApiKey' | 'selectedProvider' | 'selectedModel',
+  key: 'openaiApiKey' | 'geminiApiKey' | 'openrouterApiKey' | 'deepseekApiKey' | 'selectedProvider' | 'selectedModel',
   validatedValue: string | null | undefined,
 ) {
   if (!data || typeof data !== 'object' || !(key in data)) {
@@ -104,6 +108,7 @@ export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   const openaiApiKey = getAiAgentsFieldValue(data, 'openaiApiKey', validated.openaiApiKey);
   const geminiApiKey = getAiAgentsFieldValue(data, 'geminiApiKey', validated.geminiApiKey);
   const openrouterApiKey = getAiAgentsFieldValue(data, 'openrouterApiKey', validated.openrouterApiKey);
+  const deepseekApiKey = getAiAgentsFieldValue(data, 'deepseekApiKey', validated.deepseekApiKey);
   const selectedProvider = getAiAgentsFieldValue(data, 'selectedProvider', validated.selectedProvider);
   const selectedModel = getAiAgentsFieldValue(data, 'selectedModel', validated.selectedModel);
 
@@ -115,6 +120,9 @@ export async function updateAiAgents(apiBaseUrl: string, data: unknown) {
   }
   if (openrouterApiKey !== undefined) {
     body.openrouterApiKey = openrouterApiKey;
+  }
+  if (deepseekApiKey !== undefined) {
+    body.deepseekApiKey = deepseekApiKey;
   }
   if (selectedProvider !== undefined) {
     body.selectedProvider = selectedProvider;
@@ -133,6 +141,7 @@ export async function testAiAgentsConnection(apiBaseUrl: string, data: unknown) 
   const openaiApiKey = getAiAgentsFieldValue(data, 'openaiApiKey', validated.openaiApiKey);
   const geminiApiKey = getAiAgentsFieldValue(data, 'geminiApiKey', validated.geminiApiKey);
   const openrouterApiKey = getAiAgentsFieldValue(data, 'openrouterApiKey', validated.openrouterApiKey);
+  const deepseekApiKey = getAiAgentsFieldValue(data, 'deepseekApiKey', validated.deepseekApiKey);
   const selectedProvider = getAiAgentsFieldValue(data, 'selectedProvider', validated.selectedProvider);
   const selectedModel = getAiAgentsFieldValue(data, 'selectedModel', validated.selectedModel);
 
@@ -144,6 +153,9 @@ export async function testAiAgentsConnection(apiBaseUrl: string, data: unknown) 
   }
   if (openrouterApiKey !== undefined) {
     body.openrouterApiKey = openrouterApiKey;
+  }
+  if (deepseekApiKey !== undefined) {
+    body.deepseekApiKey = deepseekApiKey;
   }
   if (selectedProvider !== undefined) {
     body.selectedProvider = selectedProvider;

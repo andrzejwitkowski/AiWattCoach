@@ -97,6 +97,10 @@ pub struct OpenAiUsage {
     pub completion_tokens: Option<u32>,
     pub total_tokens: Option<u32>,
     pub prompt_tokens_details: Option<OpenAiPromptTokenDetails>,
+    #[serde(default)]
+    pub prompt_cache_hit_tokens: Option<u32>,
+    #[serde(default)]
+    pub prompt_cache_miss_tokens: Option<u32>,
 }
 
 #[derive(Deserialize)]

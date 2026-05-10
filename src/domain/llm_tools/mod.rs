@@ -474,7 +474,10 @@ fn tool_prompt_guidance_for_scope(
 }
 
 fn provider_supports_tools(provider: &LlmProvider) -> bool {
-    matches!(provider, LlmProvider::OpenAi | LlmProvider::OpenRouter)
+    matches!(
+        provider,
+        LlmProvider::OpenAi | LlmProvider::OpenRouter | LlmProvider::DeepSeek
+    )
 }
 
 pub fn public_tool_call_from_llm(tool_call: &crate::domain::llm::LlmToolCall) -> PublicToolCall {

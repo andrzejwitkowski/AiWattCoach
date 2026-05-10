@@ -18,7 +18,8 @@ use aiwattcoach::{
         llm::{
             adapter::LlmAdapter, athlete_summary_generator::AthleteSummaryLlmGenerator,
             dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
-            get_selected_workout_data::GetSelectedWorkoutDataAdapter, openai::client::OpenAiClient,
+            get_selected_workout_data::GetSelectedWorkoutDataAdapter,
+            openai_compatible::client::OpenAiCompatibleClient,
             openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
             workout_summary_coach::LlmWorkoutCoach,
@@ -220,7 +221,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Arc::new(LlmAdapter::Dev(DevLlmCoachAdapter))
     } else {
         Arc::new(LlmAdapter::live(
-            OpenAiClient::new(llm_http_client.clone()),
+            OpenAiCompatibleClient::new(llm_http_client.clone()),
+            OpenAiCompatibleClient::new(llm_http_client.clone())
+                .with_base_url("https://api.deepseek.com"),
             GeminiClient::new(llm_http_client.clone()),
             OpenRouterClient::new(llm_http_client),
         ))

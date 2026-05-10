@@ -13,6 +13,7 @@ type DraftState = {
   openaiApiKey: string;
   geminiApiKey: string;
   openrouterApiKey: string;
+  deepseekApiKey: string;
   selectedProvider: string;
   selectedModel: string;
 };
@@ -31,6 +32,11 @@ const PROVIDER_OPTIONS: ProviderOption[] = [
     label: 'OpenRouter',
     suggestedModels: ['openai/gpt-5', 'google/gemini-3-flash-preview', 'anthropic/claude-sonnet-4.5'],
   },
+  {
+    value: 'deepseek',
+    label: 'DeepSeek',
+    suggestedModels: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+  },
 ];
 
 function clearDraftApiKeys(draft: DraftState): DraftState {
@@ -39,6 +45,7 @@ function clearDraftApiKeys(draft: DraftState): DraftState {
     openaiApiKey: '',
     geminiApiKey: '',
     openrouterApiKey: '',
+    deepseekApiKey: '',
   };
 }
 
@@ -65,6 +72,12 @@ function getProviderKeyState(provider: string, draft: DraftState, aiAgents: User
         draftValue: draft.openrouterApiKey.trim(),
         hasPersistedKey: aiAgents.openrouterApiKeySet,
         label: 'OpenRouter',
+      };
+    case 'deepseek':
+      return {
+        draftValue: draft.deepseekApiKey.trim(),
+        hasPersistedKey: aiAgents.deepseekApiKeySet,
+        label: 'DeepSeek',
       };
     default:
       return {
@@ -96,6 +109,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       openaiApiKey: '',
       geminiApiKey: '',
       openrouterApiKey: '',
+      deepseekApiKey: '',
       selectedProvider: aiAgents.selectedProvider ?? '',
       selectedModel: aiAgents.selectedModel ?? '',
     }),
@@ -106,6 +120,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
   const [showOpenai, setShowOpenai] = useState(false);
   const [showGemini, setShowGemini] = useState(false);
   const [showOpenrouter, setShowOpenrouter] = useState(false);
+  const [showDeepseek, setShowDeepseek] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [status, setStatus] = useState<{
@@ -132,6 +147,10 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         current.openrouterApiKey === previousPersisted.openrouterApiKey
           ? persistedDraft.openrouterApiKey
           : current.openrouterApiKey,
+      deepseekApiKey:
+        current.deepseekApiKey === previousPersisted.deepseekApiKey
+          ? persistedDraft.deepseekApiKey
+          : current.deepseekApiKey,
       selectedProvider:
         current.selectedProvider === previousPersisted.selectedProvider
           ? persistedDraft.selectedProvider
@@ -154,6 +173,10 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         current.openrouterApiKey === previousPersisted.openrouterApiKey
           ? persistedDraft.openrouterApiKey
           : current.openrouterApiKey,
+      deepseekApiKey:
+        current.deepseekApiKey === previousPersisted.deepseekApiKey
+          ? persistedDraft.deepseekApiKey
+          : current.deepseekApiKey,
       selectedProvider:
         current.selectedProvider === previousPersisted.selectedProvider
           ? persistedDraft.selectedProvider
@@ -170,12 +193,14 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     draft.openaiApiKey !== cleanDraft.openaiApiKey ||
     draft.geminiApiKey !== cleanDraft.geminiApiKey ||
     draft.openrouterApiKey !== cleanDraft.openrouterApiKey ||
+    draft.deepseekApiKey !== cleanDraft.deepseekApiKey ||
     draft.selectedProvider !== cleanDraft.selectedProvider ||
     draft.selectedModel !== cleanDraft.selectedModel;
   const hasAnyPersistedConnectionValue =
     aiAgents.openaiApiKeySet ||
     aiAgents.geminiApiKeySet ||
     aiAgents.openrouterApiKeySet ||
+    aiAgents.deepseekApiKeySet ||
     Boolean(aiAgents.selectedProvider) ||
     Boolean(aiAgents.selectedModel);
 
@@ -184,6 +209,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     const trimmedOpenai = draft.openaiApiKey.trim();
     const trimmedGemini = draft.geminiApiKey.trim();
     const trimmedOpenrouter = draft.openrouterApiKey.trim();
+    const trimmedDeepseek = draft.deepseekApiKey.trim();
     const trimmedProvider = draft.selectedProvider.trim();
     const trimmedModel = draft.selectedModel.trim();
 
@@ -195,6 +221,9 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     }
     if (trimmedOpenrouter) {
       request.openrouterApiKey = trimmedOpenrouter;
+    }
+    if (trimmedDeepseek) {
+      request.deepseekApiKey = trimmedDeepseek;
     }
     if (trimmedProvider !== persistedDraft.selectedProvider) {
       request.selectedProvider = trimmedProvider.length > 0 ? trimmedProvider : '';
@@ -214,6 +243,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
   const openaiHasKey = aiAgents.openaiApiKeySet || draft.openaiApiKey.trim().length > 0;
   const geminiHasKey = aiAgents.geminiApiKeySet || draft.geminiApiKey.trim().length > 0;
   const openrouterHasKey = aiAgents.openrouterApiKeySet || draft.openrouterApiKey.trim().length > 0;
+  const deepseekHasKey = aiAgents.deepseekApiKeySet || draft.deepseekApiKey.trim().length > 0;
   const providerKeyState = getProviderKeyState(draft.selectedProvider, draft, aiAgents);
   const hasMatchingProviderKey =
     providerKeyState.draftValue.length > 0 || providerKeyState.hasPersistedKey;
@@ -481,6 +511,24 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           }
           onVisibilityChange={() => setShowOpenrouter((value) => !value)}
           onChange={(value) => updateDraft('openrouterApiKey', value)}
+        />
+        <ApiKeyField
+          id="deepseek-api-key"
+          label="DeepSeek API Key"
+          placeholder={aiAgents.deepseekApiKeySet ? 'Already configured' : 'sk-...'}
+          value={draft.deepseekApiKey}
+          visible={showDeepseek}
+          configured={aiAgents.deepseekApiKeySet}
+          emphasized={!draft.selectedProvider || draft.selectedProvider === 'deepseek'}
+          helperText={
+            draft.selectedProvider === 'deepseek'
+              ? 'Used by the active provider.'
+              : deepseekHasKey
+                ? 'Saved for quick provider switching.'
+                : 'Optional unless you switch to this provider.'
+          }
+          onVisibilityChange={() => setShowDeepseek((value) => !value)}
+          onChange={(value) => updateDraft('deepseekApiKey', value)}
         />
       </div>
 
