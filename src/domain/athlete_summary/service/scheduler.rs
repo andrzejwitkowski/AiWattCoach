@@ -6,9 +6,10 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::{LlmError, LLM_REQUEST_TIMEOUT_SECONDS},
     task_scheduler::{
-        NewTask, ResultTaskHandler, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler,
-        TaskRepository, TaskRunOutcome, TaskSchedulerError, TaskSchedulerService,
-        TaskWorkerRepository,
+        build_scheduled_task, scheduled_task_handler, BuildScheduledTaskError,
+        NewScheduledTaskInput, ResultTaskHandler, RetryStrategy, ScheduledTask,
+        ScheduledTaskExecutor, SharedTaskHandler, TaskRepository, TaskRunOutcome,
+        TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
     },
 };
 
@@ -56,16 +57,6 @@ struct CompletedAthleteSummaryTaskCheckpoint {
 
 #[cfg(test)]
 mod tests;
-
-fn parse_task_payload(
-    task: &ScheduledTask,
-) -> Result<AthleteSummaryTaskPayload, AthleteSummaryError> {
-    serde_json::from_value(task.payload.clone()).map_err(|error| {
-        AthleteSummaryError::Repository(format!(
-            "invalid athlete summary generate task payload: {error}"
-        ))
-    })
-}
 
 fn map_task_scheduler_error(error: TaskSchedulerError) -> AthleteSummaryError {
     match error {
@@ -207,11 +198,11 @@ fn build_completed_checkpoint(user_id: &str) -> Result<serde_json::Value, Athlet
     })
 }
 
-struct AthleteSummaryGenerateTaskHandler<Base> {
+struct AthleteSummaryGenerateTaskExecutor<Base> {
     base: Arc<Base>,
 }
 
-impl<Base> AthleteSummaryGenerateTaskHandler<Base>
+impl<Base> AthleteSummaryGenerateTaskExecutor<Base>
 where
     Base: AthleteSummaryUseCases + 'static,
 {
@@ -238,44 +229,43 @@ where
     }
 }
 
-impl<Base> TaskHandler for AthleteSummaryGenerateTaskHandler<Base>
+impl<Base> ScheduledTaskExecutor for AthleteSummaryGenerateTaskExecutor<Base>
 where
     Base: AthleteSummaryUseCases + 'static,
 {
+    type Payload = AthleteSummaryTaskPayload;
+    type Output = AthleteSummary;
+    type Error = AthleteSummaryError;
+
     fn task_type(&self) -> &'static str {
         ATHLETE_SUMMARY_GENERATE_TASK_TYPE
     }
 
-    fn run(&self, task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
-        let base = self.base.clone();
-        Box::pin(async move {
-            let payload = match parse_task_payload(&task) {
-                Ok(payload) => payload,
-                Err(error) => {
-                    return TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    };
-                }
-            };
+    fn parse_error(&self, error: serde_json::Error) -> Self::Error {
+        AthleteSummaryError::Repository(format!(
+            "invalid athlete summary generate task payload: {error}"
+        ))
+    }
 
-            match base.generate_summary(&payload.user_id, payload.force).await {
-                Ok(summary) => match build_completed_checkpoint(&summary.user_id) {
-                    Ok(checkpoint) => TaskRunOutcome::Completed {
-                        checkpoint: Some(checkpoint),
-                    },
-                    Err(error) => TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    },
-                },
-                Err(error) => Self::map_task_failure(error),
-            }
-        })
+    fn run(
+        &self,
+        _task: ScheduledTask,
+        payload: Self::Payload,
+    ) -> BoxFuture<Result<Self::Output, Self::Error>> {
+        let base = self.base.clone();
+        Box::pin(async move { base.generate_summary(&payload.user_id, payload.force).await })
+    }
+
+    fn completed_checkpoint(
+        &self,
+        _task_id: &str,
+        output: &Self::Output,
+    ) -> Result<Option<serde_json::Value>, Self::Error> {
+        build_completed_checkpoint(&output.user_id).map(Some)
+    }
+
+    fn failed_outcome(&self, error: Self::Error) -> TaskRunOutcome {
+        Self::map_task_failure(error)
     }
 }
 
@@ -283,7 +273,9 @@ pub fn athlete_summary_generate_task_handler<Base>(base: Arc<Base>) -> SharedTas
 where
     Base: AthleteSummaryUseCases + 'static,
 {
-    Arc::new(AthleteSummaryGenerateTaskHandler { base })
+    Arc::new(scheduled_task_handler(AthleteSummaryGenerateTaskExecutor {
+        base,
+    }))
 }
 
 #[derive(Clone)]
@@ -408,31 +400,24 @@ where
             build_non_force_dedupe_key(user_id, self.current_refresh_window_start())
         };
 
-        ScheduledTask::new(
-            NewTask {
-                id: task_id,
+        build_scheduled_task(NewScheduledTaskInput {
+            id: task_id,
+            user_id: user_id.to_string(),
+            task_type: ATHLETE_SUMMARY_GENERATE_TASK_TYPE,
+            payload: AthleteSummaryTaskPayload {
                 user_id: user_id.to_string(),
-                task_type: ATHLETE_SUMMARY_GENERATE_TASK_TYPE.to_string(),
-                payload: serde_json::to_value(AthleteSummaryTaskPayload {
-                    user_id: user_id.to_string(),
-                    force,
-                })
-                .map_err(|error| {
-                    AthleteSummaryError::Repository(format!(
-                        "failed to serialize athlete summary task payload: {error}"
-                    ))
-                })?,
-                retry_strategy: RetryStrategy::Fixed {
-                    max_attempts: ATHLETE_SUMMARY_RETRY_MAX_ATTEMPTS,
-                    delay_seconds: ATHLETE_SUMMARY_RETRY_DELAY_SECONDS,
-                },
-                dedupe_key,
-                execution_timeout_seconds: ATHLETE_SUMMARY_EXECUTION_TIMEOUT_SECONDS,
-                leader_only: false,
+                force,
             },
-            self.scheduler.now_epoch_seconds(),
-        )
-        .map_err(map_task_scheduler_error)
+            retry_strategy: RetryStrategy::Fixed {
+                max_attempts: ATHLETE_SUMMARY_RETRY_MAX_ATTEMPTS,
+                delay_seconds: ATHLETE_SUMMARY_RETRY_DELAY_SECONDS,
+            },
+            dedupe_key,
+            execution_timeout_seconds: ATHLETE_SUMMARY_EXECUTION_TIMEOUT_SECONDS,
+            leader_only: false,
+            now_epoch_seconds: self.scheduler.now_epoch_seconds(),
+        })
+        .map_err(map_build_scheduled_task_error)
     }
 
     fn current_refresh_window_start(&self) -> i64 {
@@ -455,6 +440,15 @@ where
                 },
             )
             .await
+    }
+}
+
+fn map_build_scheduled_task_error(error: BuildScheduledTaskError) -> AthleteSummaryError {
+    match error {
+        BuildScheduledTaskError::SerializePayload(error) => AthleteSummaryError::Repository(
+            format!("failed to serialize athlete summary task payload: {error}"),
+        ),
+        BuildScheduledTaskError::Scheduler(error) => map_task_scheduler_error(error),
     }
 }
 

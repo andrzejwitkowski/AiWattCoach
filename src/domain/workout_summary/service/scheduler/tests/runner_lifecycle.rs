@@ -4,10 +4,11 @@ use serde_json::json;
 use serial_test::serial;
 use tokio::sync::Notify;
 
+use crate::config::spawn_task_worker;
 use crate::domain::identity::Clock;
 use crate::domain::task_scheduler::{
     BoxFuture, NewTask, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler,
-    TaskRunOutcome, TaskSchedulerError, TaskSchedulerService, TaskStatus,
+    TaskRunOutcome, TaskSchedulerError, TaskSchedulerService, TaskStatus, TaskWorkerConfig,
 };
 
 use super::super::*;
@@ -15,6 +16,7 @@ use super::support::{
     direct_service, existing_summary, BlockingCoach, InMemoryTaskRepository,
     InMemoryTaskWorkerRepository, InMemoryWorkoutSummaryRepository, TestClock, TestIdGenerator,
 };
+use crate::test_support::spawn_test_workout_summary_task_worker;
 
 #[tokio::test]
 #[serial]
@@ -33,7 +35,7 @@ async fn workout_summary_task_runner_reports_active_task_ids() {
         worker_repository.clone(),
         clock,
     );
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),
@@ -104,9 +106,8 @@ async fn workout_summary_task_runner_fails_invalid_payload_without_feature_speci
         .await
         .expect("task should enqueue");
 
-    let worker =
-        spawn_workout_summary_coach_reply_task_runner(direct, scheduler, "worker-1".to_string())
-            .expect("worker should spawn");
+    let worker = spawn_test_workout_summary_task_worker(direct, scheduler, "worker-1".to_string())
+        .expect("worker should spawn");
 
     tokio::time::timeout(std::time::Duration::from_secs(2), async {
         loop {
@@ -324,7 +325,7 @@ async fn task_worker_shutdown_aborts_inflight_handler_without_detaching_domain_w
         InMemoryTaskWorkerRepository::default(),
         TestClock::default(),
     );
-    let worker = spawn_workout_summary_coach_reply_task_runner(
+    let worker = spawn_test_workout_summary_task_worker(
         direct.clone(),
         scheduler.clone(),
         "worker-1".to_string(),

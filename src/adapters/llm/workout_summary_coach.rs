@@ -5,9 +5,11 @@ use super::context_prelude::PACKED_TRAINING_CONTEXT_LEGEND;
 use crate::domain::{
     identity::Clock,
     llm::{
-        hash_text, rebuild_conversation_with_provider_transcript, BoxFuture, LlmChatMessage,
-        LlmChatPort, LlmChatRequest, LlmContextCache, LlmContextCacheRepository, LlmError,
-        LlmMessageRole, LlmProvider, UserLlmConfigProvider,
+        build_chat_request, current_date_string, find_reusable_context_cache,
+        persist_reusable_context_cache, rebuild_conversation_with_provider_transcript,
+        reusable_context_cache_key, BoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequestInput,
+        LlmContextCacheRepository, LlmError, LlmMessageRole, LlmProvider,
+        ReusableContextCacheLookup, ReusableContextCacheUpsert, UserLlmConfigProvider,
     },
     llm_tools::{
         run_tool_loop, with_tool_prompt_guidance, GetSelectedWorkoutDataPort, LlmToolLoopOutput,
@@ -107,7 +109,7 @@ where
             let tool_context = ToolExecutionContext {
                 user_id: user_id.clone(),
                 training_context: training_context.context.clone(),
-                today: current_date_string(clock.now_epoch_seconds()),
+                today: current_date_string(&clock),
                 data_port,
             };
             let system_prompt = with_tool_prompt_guidance(
@@ -122,22 +124,44 @@ where
                 &user_message,
             );
             let cache_scope_key = Some(format!("workout-summary:{user_id}:{}", summary.workout_id));
-            let context_hash = hash_text(&format!("{system_prompt}\n{stable_context}"));
+            let context_hash = reusable_context_cache_key(&system_prompt, &stable_context);
             let reusable_cache_id = if config.provider == LlmProvider::Gemini {
-                match (&context_cache_repository, cache_scope_key.as_deref()) {
+                match (
+                    context_cache_repository.as_deref(),
+                    cache_scope_key.as_deref(),
+                ) {
                     (Some(repository), Some(scope_key)) => {
-                        let reusable = match repository
-                            .find_reusable(
-                                &user_id,
-                                &config.provider,
-                                &config.model,
-                                scope_key,
-                                &context_hash,
-                                clock.now_epoch_seconds(),
-                            )
-                            .await
+                        match find_reusable_context_cache(ReusableContextCacheLookup {
+                            repository: Some(repository),
+                            user_id: &user_id,
+                            provider: &config.provider,
+                            model: &config.model,
+                            scope_key: Some(scope_key),
+                            context_hash: &context_hash,
+                            now_epoch_seconds: clock.now_epoch_seconds(),
+                        })
+                        .await
                         {
-                            Ok(reusable) => reusable,
+                            Ok(Some(cache)) => {
+                                tracing::info!(
+                                    user_id = %user_id,
+                                    provider = %config.provider,
+                                    model = %config.model,
+                                    cache_scope_key = %scope_key,
+                                    "reusing persisted gemini context cache"
+                                );
+                                Some(cache.provider_cache_id)
+                            }
+                            Ok(None) => {
+                                tracing::info!(
+                                    user_id = %user_id,
+                                    provider = %config.provider,
+                                    model = %config.model,
+                                    cache_scope_key = %scope_key,
+                                    "no reusable gemini context cache found"
+                                );
+                                None
+                            }
                             Err(error) => {
                                 tracing::warn!(
                                     error = %error,
@@ -149,25 +173,6 @@ where
                                 );
                                 None
                             }
-                        };
-                        if let Some(cache) = reusable {
-                            tracing::info!(
-                                user_id = %user_id,
-                                provider = %config.provider,
-                                model = %config.model,
-                                cache_scope_key = %scope_key,
-                                "reusing persisted gemini context cache"
-                            );
-                            Some(cache.provider_cache_id)
-                        } else {
-                            tracing::info!(
-                                user_id = %user_id,
-                                provider = %config.provider,
-                                model = %config.model,
-                                cache_scope_key = %scope_key,
-                                "no reusable gemini context cache found"
-                            );
-                            None
                         }
                     }
                     _ => None,
@@ -175,7 +180,7 @@ where
             } else {
                 None
             };
-            let request = LlmChatRequest {
+            let request = build_chat_request(LlmChatRequestInput {
                 user_id: user_id.clone(),
                 system_prompt,
                 stable_context,
@@ -184,8 +189,7 @@ where
                 cache_scope_key: cache_scope_key.clone(),
                 cache_key: Some(context_hash.clone()),
                 reusable_cache_id,
-                ..Default::default()
-            };
+            });
             tracing::info!(
                 user_id = %user_id,
                 workout_id = %summary.workout_id,
@@ -208,39 +212,31 @@ where
             )
             .await?;
 
-            if config.provider == LlmProvider::Gemini {
-                if let (Some(repository), Some(scope_key), Some(provider_cache_id)) = (
-                    context_cache_repository,
-                    cache_scope_key,
-                    response.response.cache.provider_cache_id.clone(),
-                ) {
-                    if let Err(error) = repository
-                        .upsert(LlmContextCache {
-                            user_id: user_id.clone(),
-                            provider: config.provider.clone(),
-                            model: config.model.clone(),
-                            scope_key,
-                            context_hash,
-                            provider_cache_id,
-                            expires_at_epoch_seconds: response
-                                .response
-                                .cache
-                                .cache_expires_at_epoch_seconds,
-                            created_at_epoch_seconds: clock.now_epoch_seconds(),
-                            updated_at_epoch_seconds: clock.now_epoch_seconds(),
-                        })
-                        .await
-                    {
-                        tracing::warn!(error = %error, "failed to persist reusable gemini context cache");
-                    } else {
-                        tracing::info!(
-                            user_id = %user_id,
-                            provider = %config.provider,
-                            model = %config.model,
-                            "persisted reusable gemini context cache"
-                        );
-                    }
+            match persist_reusable_context_cache(ReusableContextCacheUpsert {
+                repository: context_cache_repository.as_deref(),
+                user_id: &user_id,
+                provider: &config.provider,
+                model: &config.model,
+                scope_key: cache_scope_key.as_deref(),
+                context_hash: &context_hash,
+                provider_cache_id: response.response.cache.provider_cache_id.as_deref(),
+                expires_at_epoch_seconds: response.response.cache.cache_expires_at_epoch_seconds,
+                now_epoch_seconds: clock.now_epoch_seconds(),
+            })
+            .await
+            {
+                Err(error) => {
+                    tracing::warn!(error = %error, "failed to persist reusable gemini context cache");
                 }
+                Ok(Some(_)) => {
+                    tracing::info!(
+                        user_id = %user_id,
+                        provider = %config.provider,
+                        model = %config.model,
+                        "persisted reusable gemini context cache"
+                    );
+                }
+                Ok(None) => {}
             }
 
             Ok(response)
@@ -276,16 +272,6 @@ fn build_stable_context(
 
 fn build_volatile_context(packed_training_context: &str) -> String {
     format!("training_context_volatile={packed_training_context}")
-}
-fn current_date_string(now_epoch_seconds: i64) -> String {
-    chrono::DateTime::from_timestamp(now_epoch_seconds, 0)
-        .map(|time| time.date_naive().format("%Y-%m-%d").to_string())
-        .unwrap_or_else(|| {
-            chrono::DateTime::UNIX_EPOCH
-                .date_naive()
-                .format("%Y-%m-%d")
-                .to_string()
-        })
 }
 
 fn workout_coach_system_prompt() -> String {

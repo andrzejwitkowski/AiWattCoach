@@ -6,9 +6,10 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::{LlmError, LLM_REQUEST_TIMEOUT_SECONDS},
     task_scheduler::{
-        NewTask, ResultTaskHandler, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler,
-        TaskRepository, TaskRunOutcome, TaskSchedulerError, TaskSchedulerService,
-        TaskWorkerRepository,
+        build_scheduled_task, scheduled_task_handler, BuildScheduledTaskError,
+        NewScheduledTaskInput, ResultTaskHandler, RetryStrategy, ScheduledTask,
+        ScheduledTaskExecutor, SharedTaskHandler, TaskRepository, TaskRunOutcome,
+        TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
     },
 };
 
@@ -60,16 +61,6 @@ fn coach_conversation_reply_dedupe_key(
     user_message_id: &str,
 ) -> String {
     format!("coach-conversation:{user_id}:{conversation_id}:{user_message_id}")
-}
-
-fn parse_task_payload(
-    task: &ScheduledTask,
-) -> Result<CoachConversationReplyTaskPayload, CoachConversationError> {
-    serde_json::from_value(task.payload.clone()).map_err(|error| {
-        CoachConversationError::Repository(format!(
-            "invalid coach conversation reply task payload: {error}"
-        ))
-    })
 }
 
 fn map_task_scheduler_error(error: TaskSchedulerError) -> CoachConversationError {
@@ -327,36 +318,29 @@ where
         conversation_id: &str,
         user_message_id: &str,
     ) -> Result<ScheduledTask, CoachConversationError> {
-        ScheduledTask::new(
-            NewTask {
-                id: self.ids.new_id("task"),
+        build_scheduled_task(NewScheduledTaskInput {
+            id: self.ids.new_id("task"),
+            user_id: user_id.to_string(),
+            task_type: COACH_CONVERSATION_REPLY_TASK_TYPE,
+            payload: CoachConversationReplyTaskPayload {
                 user_id: user_id.to_string(),
-                task_type: COACH_CONVERSATION_REPLY_TASK_TYPE.to_string(),
-                payload: serde_json::to_value(CoachConversationReplyTaskPayload {
-                    user_id: user_id.to_string(),
-                    conversation_id: conversation_id.to_string(),
-                    user_message_id: user_message_id.to_string(),
-                })
-                .map_err(|error| {
-                    CoachConversationError::Repository(format!(
-                        "failed to serialize coach conversation reply task payload: {error}"
-                    ))
-                })?,
-                retry_strategy: RetryStrategy::Fixed {
-                    max_attempts: 3,
-                    delay_seconds: 30,
-                },
-                dedupe_key: coach_conversation_reply_dedupe_key(
-                    user_id,
-                    conversation_id,
-                    user_message_id,
-                ),
-                execution_timeout_seconds: COACH_CONVERSATION_REPLY_EXECUTION_TIMEOUT_SECONDS,
-                leader_only: false,
+                conversation_id: conversation_id.to_string(),
+                user_message_id: user_message_id.to_string(),
             },
-            self.scheduler.now_epoch_seconds(),
-        )
-        .map_err(map_task_scheduler_error)
+            retry_strategy: RetryStrategy::Fixed {
+                max_attempts: 3,
+                delay_seconds: 30,
+            },
+            dedupe_key: coach_conversation_reply_dedupe_key(
+                user_id,
+                conversation_id,
+                user_message_id,
+            ),
+            execution_timeout_seconds: COACH_CONVERSATION_REPLY_EXECUTION_TIMEOUT_SECONDS,
+            leader_only: false,
+            now_epoch_seconds: self.scheduler.now_epoch_seconds(),
+        })
+        .map_err(map_build_scheduled_task_error)
     }
 
     async fn wait_for_reply_result(
@@ -502,15 +486,15 @@ where
     }
 }
 
-struct CoachConversationReplyTaskHandler<Base> {
+struct CoachConversationReplyTaskExecutor<Base> {
     base: Arc<Base>,
 }
 
-impl<Base> CoachConversationReplyTaskHandler<Base>
+impl<Base> CoachConversationReplyTaskExecutor<Base>
 where
     Base: CoachConversationUseCases + 'static,
 {
-    fn completed_checkpoint(
+    fn build_completed_checkpoint(
         task_id: &str,
         reply: &CoachConversationReply,
     ) -> Result<serde_json::Value, CoachConversationError> {
@@ -548,51 +532,58 @@ where
     }
 }
 
-impl<Base> TaskHandler for CoachConversationReplyTaskHandler<Base>
+impl<Base> ScheduledTaskExecutor for CoachConversationReplyTaskExecutor<Base>
 where
     Base: CoachConversationUseCases + 'static,
 {
+    type Payload = CoachConversationReplyTaskPayload;
+    type Output = CoachConversationReply;
+    type Error = CoachConversationError;
+
     fn task_type(&self) -> &'static str {
         COACH_CONVERSATION_REPLY_TASK_TYPE
     }
 
-    fn run(&self, task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
+    fn parse_error(&self, error: serde_json::Error) -> Self::Error {
+        CoachConversationError::Repository(format!(
+            "invalid coach conversation reply task payload: {error}"
+        ))
+    }
+
+    fn on_parse_error(&self, task: &ScheduledTask, error: &Self::Error) {
+        tracing::warn!(
+            task_id = %task.id,
+            error = %error,
+            "invalid coach conversation reply task payload"
+        );
+    }
+
+    fn run(
+        &self,
+        _task: ScheduledTask,
+        payload: Self::Payload,
+    ) -> BoxFuture<Result<Self::Output, Self::Error>> {
         let base = self.base.clone();
         Box::pin(async move {
-            let payload = match parse_task_payload(&task) {
-                Ok(payload) => payload,
-                Err(error) => {
-                    tracing::warn!(
-                        task_id = %task.id,
-                        error = %error,
-                        "invalid coach conversation reply task payload"
-                    );
-                    return TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    };
-                }
-            };
-
-            match base
-                .generate_calendar_reply(
-                    &payload.user_id,
-                    &payload.conversation_id,
-                    payload.user_message_id,
-                )
-                .await
-            {
-                Ok(reply) => match Self::completed_checkpoint(&task.id, &reply) {
-                    Ok(checkpoint) => TaskRunOutcome::Completed {
-                        checkpoint: Some(checkpoint),
-                    },
-                    Err(error) => Self::map_task_failure(error),
-                },
-                Err(error) => Self::map_task_failure(error),
-            }
+            base.generate_calendar_reply(
+                &payload.user_id,
+                &payload.conversation_id,
+                payload.user_message_id,
+            )
+            .await
         })
+    }
+
+    fn completed_checkpoint(
+        &self,
+        task_id: &str,
+        output: &Self::Output,
+    ) -> Result<Option<serde_json::Value>, Self::Error> {
+        Self::build_completed_checkpoint(task_id, output).map(Some)
+    }
+
+    fn failed_outcome(&self, error: Self::Error) -> TaskRunOutcome {
+        Self::map_task_failure(error)
     }
 }
 
@@ -600,7 +591,18 @@ pub fn coach_conversation_reply_task_handler<Base>(base: Arc<Base>) -> SharedTas
 where
     Base: CoachConversationUseCases + 'static,
 {
-    Arc::new(CoachConversationReplyTaskHandler { base })
+    Arc::new(scheduled_task_handler(CoachConversationReplyTaskExecutor {
+        base,
+    }))
+}
+
+fn map_build_scheduled_task_error(error: BuildScheduledTaskError) -> CoachConversationError {
+    match error {
+        BuildScheduledTaskError::SerializePayload(error) => CoachConversationError::Repository(
+            format!("failed to serialize coach conversation reply task payload: {error}"),
+        ),
+        BuildScheduledTaskError::Scheduler(error) => map_task_scheduler_error(error),
+    }
 }
 
 #[cfg(test)]
