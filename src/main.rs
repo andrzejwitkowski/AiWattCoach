@@ -216,6 +216,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     );
     let llm_http_client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(180))
         .build()?;
     let llm_adapter = if dev_llm_coach_enabled {
         Arc::new(LlmAdapter::Dev(DevLlmCoachAdapter))
