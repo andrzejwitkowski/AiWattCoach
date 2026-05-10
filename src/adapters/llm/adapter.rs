@@ -6,24 +6,31 @@ use crate::domain::llm::{
 };
 
 use super::{
-    dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient, openai::client::OpenAiClient,
-    openrouter::client::OpenRouterClient,
+    dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
+    openai_compatible::client::OpenAiCompatibleClient, openrouter::client::OpenRouterClient,
 };
 
 #[derive(Clone)]
 pub enum LlmAdapter {
     Dev(DevLlmCoachAdapter),
     Live {
-        openai: OpenAiClient,
+        openai: OpenAiCompatibleClient,
+        deepseek: OpenAiCompatibleClient,
         gemini: GeminiClient,
         openrouter: OpenRouterClient,
     },
 }
 
 impl LlmAdapter {
-    pub fn live(openai: OpenAiClient, gemini: GeminiClient, openrouter: OpenRouterClient) -> Self {
+    pub fn live(
+        openai: OpenAiCompatibleClient,
+        deepseek: OpenAiCompatibleClient,
+        gemini: GeminiClient,
+        openrouter: OpenRouterClient,
+    ) -> Self {
         Self::Live {
             openai,
+            deepseek,
             gemini,
             openrouter,
         }
@@ -46,10 +53,12 @@ impl LlmChatPort for LlmAdapter {
             Self::Dev(adapter) => adapter.chat(config, request),
             Self::Live {
                 openai,
+                deepseek,
                 gemini,
                 openrouter,
             } => match config.provider {
                 LlmProvider::OpenAi => openai.chat(config, request),
+                LlmProvider::DeepSeek => deepseek.chat(config, request),
                 LlmProvider::Gemini => gemini.chat(config, request),
                 LlmProvider::OpenRouter => openrouter.chat(config, request),
             },

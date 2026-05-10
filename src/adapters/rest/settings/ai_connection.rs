@@ -24,7 +24,7 @@ pub(super) fn merge_ai_connection_config(
     let transient_provider = parse_provider_input(body.selected_provider, || {
         test_ai_agents_connection_response(
             false,
-            "selectedProvider must be one of: openai, gemini, openrouter",
+            "selectedProvider must be one of: openai, gemini, openrouter, deepseek",
             false,
             false,
             false,
@@ -34,6 +34,7 @@ pub(super) fn merge_ai_connection_config(
     let transient_openai_api_key = normalize_string_input(body.openai_api_key);
     let transient_gemini_api_key = normalize_string_input(body.gemini_api_key);
     let transient_openrouter_api_key = normalize_string_input(body.openrouter_api_key);
+    let transient_deepseek_api_key = normalize_string_input(body.deepseek_api_key);
 
     let used_saved_provider =
         used_saved_value(&transient_provider, &current.ai_agents.selected_provider);
@@ -83,6 +84,10 @@ pub(super) fn merge_ai_connection_config(
             transient_openrouter_api_key.clone(),
             current.ai_agents.openrouter_api_key.clone(),
         ),
+        LlmProvider::DeepSeek => apply_field_update(
+            transient_deepseek_api_key.clone(),
+            current.ai_agents.deepseek_api_key.clone(),
+        ),
     };
     let used_saved_api_key = current_api_key_is_saved(provider.clone(), current)
         && selected_key_was_not_provided(
@@ -90,6 +95,7 @@ pub(super) fn merge_ai_connection_config(
             matches!(&transient_openai_api_key, FieldUpdate::Missing),
             matches!(&transient_gemini_api_key, FieldUpdate::Missing),
             matches!(&transient_openrouter_api_key, FieldUpdate::Missing),
+            matches!(&transient_deepseek_api_key, FieldUpdate::Missing),
         );
 
     let Some(model) = model else {
@@ -169,8 +175,7 @@ pub(super) fn build_test_request(user_id: &str) -> LlmChatRequest {
         cache_scope_key: None,
         cache_key: None,
         reusable_cache_id: None,
-        tools: Vec::new(),
-        tool_choice: crate::domain::llm::LlmToolChoice::None,
+        ..Default::default()
     }
 }
 
@@ -208,6 +213,7 @@ fn current_api_key_is_saved(provider: LlmProvider, current: &UserSettings) -> bo
         LlmProvider::OpenAi => current.ai_agents.openai_api_key.is_some(),
         LlmProvider::Gemini => current.ai_agents.gemini_api_key.is_some(),
         LlmProvider::OpenRouter => current.ai_agents.openrouter_api_key.is_some(),
+        LlmProvider::DeepSeek => current.ai_agents.deepseek_api_key.is_some(),
     }
 }
 
@@ -216,10 +222,12 @@ fn selected_key_was_not_provided(
     openai_missing: bool,
     gemini_missing: bool,
     openrouter_missing: bool,
+    deepseek_missing: bool,
 ) -> bool {
     match provider {
         LlmProvider::OpenAi => openai_missing,
         LlmProvider::Gemini => gemini_missing,
         LlmProvider::OpenRouter => openrouter_missing,
+        LlmProvider::DeepSeek => deepseek_missing,
     }
 }

@@ -16,6 +16,8 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['wahoo']>): User
       geminiApiKeySet: false,
       openrouterApiKey: null,
       openrouterApiKeySet: false,
+      deepseekApiKey: null,
+      deepseekApiKeySet: false,
       selectedProvider: null,
       selectedModel: null,
     },

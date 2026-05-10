@@ -9,6 +9,20 @@ pub use maintenance::{
 };
 pub use worker::spawn_task_worker;
 
+pub fn workout_summary_task_worker_config() -> crate::domain::task_scheduler::TaskWorkerConfig {
+    crate::domain::task_scheduler::TaskWorkerConfig {
+        is_leader: false,
+        lease_duration_seconds: crate::domain::workout_summary::COACH_REPLY_LEASE_DURATION_SECONDS,
+        heartbeat_interval: std::time::Duration::from_secs(
+            crate::domain::workout_summary::COACH_REPLY_HEARTBEAT_INTERVAL_SECONDS,
+        ),
+        idle_poll_interval: std::time::Duration::from_millis(
+            crate::domain::workout_summary::COACH_REPLY_WAIT_POLL_INTERVAL_MILLIS,
+        ),
+        max_concurrency: 4,
+    }
+}
+
 pub fn default_task_scheduler_worker_id() -> String {
     resolve_task_scheduler_worker_id(
         std::env::var("TASK_SCHEDULER_WORKER_ID").ok(),

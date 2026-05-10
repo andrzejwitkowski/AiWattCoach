@@ -119,32 +119,25 @@ where
         workout_id: &str,
         user_message_id: &str,
     ) -> Result<ScheduledTask, WorkoutSummaryError> {
-        ScheduledTask::new(
-            NewTask {
-                id: self.ids.new_id("task"),
+        build_scheduled_task(NewScheduledTaskInput {
+            id: self.ids.new_id("task"),
+            user_id: user_id.to_string(),
+            task_type: COACH_REPLY_TASK_TYPE,
+            payload: WorkoutSummaryCoachReplyTaskPayload {
                 user_id: user_id.to_string(),
-                task_type: COACH_REPLY_TASK_TYPE.to_string(),
-                payload: serde_json::to_value(WorkoutSummaryCoachReplyTaskPayload {
-                    user_id: user_id.to_string(),
-                    workout_id: workout_id.to_string(),
-                    user_message_id: user_message_id.to_string(),
-                })
-                .map_err(|error| {
-                    WorkoutSummaryError::Repository(format!(
-                        "failed to serialize workout summary coach reply task payload: {error}"
-                    ))
-                })?,
-                retry_strategy: RetryStrategy::Fixed {
-                    max_attempts: 3,
-                    delay_seconds: 30,
-                },
-                dedupe_key: coach_reply_dedupe_key(user_id, workout_id, user_message_id),
-                execution_timeout_seconds: COACH_REPLY_EXECUTION_TIMEOUT_SECONDS,
-                leader_only: false,
+                workout_id: workout_id.to_string(),
+                user_message_id: user_message_id.to_string(),
             },
-            self.scheduler.now_epoch_seconds(),
-        )
-        .map_err(map_task_scheduler_error)
+            retry_strategy: RetryStrategy::Fixed {
+                max_attempts: 3,
+                delay_seconds: 30,
+            },
+            dedupe_key: coach_reply_dedupe_key(user_id, workout_id, user_message_id),
+            execution_timeout_seconds: COACH_REPLY_EXECUTION_TIMEOUT_SECONDS,
+            leader_only: false,
+            now_epoch_seconds: self.scheduler.now_epoch_seconds(),
+        })
+        .map_err(map_build_scheduled_task_error)
     }
 
     async fn wait_for_coach_reply_result(
@@ -165,6 +158,15 @@ where
                 },
             )
             .await
+    }
+}
+
+fn map_build_scheduled_task_error(error: BuildScheduledTaskError) -> WorkoutSummaryError {
+    match error {
+        BuildScheduledTaskError::SerializePayload(error) => WorkoutSummaryError::Repository(
+            format!("failed to serialize workout summary coach reply task payload: {error}"),
+        ),
+        BuildScheduledTaskError::Scheduler(error) => map_task_scheduler_error(error),
     }
 }
 

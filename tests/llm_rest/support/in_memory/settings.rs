@@ -243,6 +243,9 @@ pub(crate) fn ai_config(
         aiwattcoach::domain::llm::LlmProvider::OpenRouter => {
             config.openrouter_api_key = Some(api_key.to_string())
         }
+        aiwattcoach::domain::llm::LlmProvider::DeepSeek => {
+            config.deepseek_api_key = Some(api_key.to_string())
+        }
     }
     config
 }

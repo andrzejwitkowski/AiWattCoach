@@ -17,6 +17,8 @@ pub enum LlmProvider {
     Gemini,
     #[serde(rename = "openrouter")]
     OpenRouter,
+    #[serde(rename = "deepseek")]
+    DeepSeek,
 }
 
 impl LlmProvider {
@@ -25,6 +27,7 @@ impl LlmProvider {
             Self::OpenAi => "openai",
             Self::Gemini => "gemini",
             Self::OpenRouter => "openrouter",
+            Self::DeepSeek => "deepseek",
         }
     }
 
@@ -33,6 +36,7 @@ impl LlmProvider {
             "openai" => Some(Self::OpenAi),
             "gemini" => Some(Self::Gemini),
             "openrouter" => Some(Self::OpenRouter),
+            "deepseek" => Some(Self::DeepSeek),
             _ => None,
         }
     }
@@ -42,6 +46,7 @@ impl LlmProvider {
             Self::OpenAi => "gpt-4o-mini",
             Self::Gemini => "gemini-2.5-flash",
             Self::OpenRouter => "openai/gpt-4o-mini",
+            Self::DeepSeek => "deepseek-v4-flash",
         }
     }
 }

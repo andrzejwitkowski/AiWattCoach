@@ -10,6 +10,8 @@ export const mockSettings: UserSettingsResponse = {
     geminiApiKeySet: true,
     openrouterApiKey: null,
     openrouterApiKeySet: false,
+    deepseekApiKey: null,
+    deepseekApiKeySet: false,
     selectedProvider: 'openai',
     selectedModel: 'gpt-4o-mini',
   },

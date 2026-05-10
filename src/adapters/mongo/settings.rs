@@ -48,6 +48,7 @@ struct AiAgentsDocument {
     openai_api_key: Option<String>,
     gemini_api_key: Option<String>,
     openrouter_api_key: Option<String>,
+    deepseek_api_key: Option<String>,
     selected_provider: Option<String>,
     selected_model: Option<String>,
 }
@@ -521,6 +522,7 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.openai_api_key": &ai_agents.openai_api_key,
                             "ai_agents.gemini_api_key": &ai_agents.gemini_api_key,
                             "ai_agents.openrouter_api_key": &ai_agents.openrouter_api_key,
+                            "ai_agents.deepseek_api_key": &ai_agents.deepseek_api_key,
                             "ai_agents.selected_provider": ai_agents.selected_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.selected_model": &ai_agents.selected_model,
                             "updated_at_epoch_seconds": updated_at,
@@ -675,6 +677,7 @@ fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, Setting
             openai_api_key: doc.ai_agents.openai_api_key,
             gemini_api_key: doc.ai_agents.gemini_api_key,
             openrouter_api_key: doc.ai_agents.openrouter_api_key,
+            deepseek_api_key: doc.ai_agents.deepseek_api_key,
             selected_provider: doc
                 .ai_agents
                 .selected_provider
@@ -729,6 +732,7 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
             openai_api_key: settings.ai_agents.openai_api_key.clone(),
             gemini_api_key: settings.ai_agents.gemini_api_key.clone(),
             openrouter_api_key: settings.ai_agents.openrouter_api_key.clone(),
+            deepseek_api_key: settings.ai_agents.deepseek_api_key.clone(),
             selected_provider: settings
                 .ai_agents
                 .selected_provider

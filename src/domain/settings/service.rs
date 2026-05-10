@@ -588,6 +588,7 @@ fn should_invalidate_llm_cache(previous: &AiAgentsConfig, updated: &AiAgentsConf
         || previous.openai_api_key != updated.openai_api_key
         || previous.gemini_api_key != updated.gemini_api_key
         || previous.openrouter_api_key != updated.openrouter_api_key
+        || previous.deepseek_api_key != updated.deepseek_api_key
 }
 
 #[cfg(test)]
@@ -1077,6 +1078,34 @@ mod tests {
             .unwrap();
 
         assert!(cache_repository.deleted_users().is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_ai_agents_invalidates_llm_cache_when_deepseek_api_key_changes() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_699_999_000);
+        settings.ai_agents.selected_provider = Some(crate::domain::llm::LlmProvider::DeepSeek);
+        settings.ai_agents.selected_model = Some("deepseek-v4-flash".to_string());
+        settings.ai_agents.deepseek_api_key = Some("sk-old".to_string());
+
+        let repository = InMemoryUserSettingsRepository::with_settings(settings);
+        let cache_repository = Arc::new(RecordingCacheRepository::default());
+        let service = UserSettingsService::new(repository, TestClock)
+            .with_llm_context_cache_repository(cache_repository.clone());
+
+        service
+            .update_ai_agents(
+                "user-1",
+                AiAgentsConfig {
+                    selected_provider: Some(crate::domain::llm::LlmProvider::DeepSeek),
+                    selected_model: Some("deepseek-v4-flash".to_string()),
+                    deepseek_api_key: Some("sk-new".to_string()),
+                    ..AiAgentsConfig::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(cache_repository.deleted_users(), vec!["user-1".to_string()]);
     }
 
     #[tokio::test]

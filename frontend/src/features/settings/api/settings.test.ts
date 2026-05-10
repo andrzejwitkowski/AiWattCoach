@@ -138,6 +138,8 @@ describe('settings api', () => {
         geminiApiKeySet: false,
         openrouterApiKey: null,
         openrouterApiKeySet: false,
+        deepseekApiKey: null,
+        deepseekApiKeySet: false,
         selectedProvider: null,
         selectedModel: null,
       },
@@ -285,6 +287,8 @@ describe('settings api', () => {
         geminiApiKeySet: false,
         openrouterApiKey: null,
         openrouterApiKeySet: false,
+        deepseekApiKey: null,
+        deepseekApiKeySet: false,
         selectedProvider: null,
         selectedModel: null,
       },
@@ -383,6 +387,56 @@ describe('settings api', () => {
     });
   });
 
+  it('posts deepseek test credentials and parses a successful response', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            connected: true,
+            message: 'Connection successful.',
+            usedSavedApiKey: false,
+            usedSavedProvider: false,
+            usedSavedModel: false,
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await testAiAgentsConnection('', {
+      deepseekApiKey: 'sk-ds-key',
+      selectedProvider: 'deepseek',
+      selectedModel: 'deepseek-v4-flash',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents/test', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        deepseekApiKey: 'sk-ds-key',
+        selectedProvider: 'deepseek',
+        selectedModel: 'deepseek-v4-flash',
+      }),
+    });
+    expect(result).toEqual({
+      connected: true,
+      message: 'Connection successful.',
+      usedSavedApiKey: false,
+      usedSavedProvider: false,
+      usedSavedModel: false,
+    });
+  });
+
   it('parses handled ai connection failure responses', async () => {
     global.fetch = vi
       .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
@@ -445,6 +499,40 @@ describe('settings api', () => {
       body: JSON.stringify({
         geminiApiKey: 'gem-key',
         selectedProvider: 'openai',
+      }),
+    });
+  });
+
+  it('includes deepseek api key in update requests', async () => {
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    global.fetch = fetchMock as typeof fetch;
+
+    await updateAiAgents('', {
+      deepseekApiKey: ' sk-ds-key ',
+      selectedProvider: 'deepseek',
+      selectedModel: 'deepseek-v4-flash',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/ai-agents', {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        traceparent: expect.stringMatching(/^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        deepseekApiKey: 'sk-ds-key',
+        selectedProvider: 'deepseek',
+        selectedModel: 'deepseek-v4-flash',
       }),
     });
   });

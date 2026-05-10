@@ -4,9 +4,10 @@ use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
     identity::{Clock, IdGenerator},
     task_scheduler::{
-        BoxFuture, NewTask, RetryStrategy, ScheduledTask, SharedTaskHandler, TaskHandler,
-        TaskRepository, TaskRunOutcome, TaskSchedulerError, TaskSchedulerService,
-        TaskWorkerRepository,
+        build_scheduled_task, scheduled_task_handler, BoxFuture, BuildScheduledTaskError,
+        NewScheduledTaskInput, RetryStrategy, ScheduledTask, ScheduledTaskExecutor,
+        SharedTaskHandler, TaskRepository, TaskRunOutcome, TaskSchedulerError,
+        TaskSchedulerService, TaskWorkerRepository,
     },
     wahoo::WahooError,
     wahoo_fit_files::WahooFitFileRepository,
@@ -65,31 +66,24 @@ where
         completed_workout_id: &str,
         wahoo_workout_id: i64,
     ) -> Result<ScheduledTask, WahooFitEnrichmentError> {
-        ScheduledTask::new(
-            NewTask {
-                id: self.ids.new_id("task"),
-                user_id: user_id.to_string(),
-                task_type: WAHOO_FIT_ENRICHMENT_TASK_TYPE.to_string(),
-                payload: serde_json::to_value(WahooFitEnrichmentTaskPayload {
-                    completed_workout_id: completed_workout_id.to_string(),
-                    wahoo_workout_id,
-                })
-                .map_err(|error| {
-                    WahooFitEnrichmentError::Scheduler(format!(
-                        "failed to serialize Wahoo FIT enrichment task payload: {error}"
-                    ))
-                })?,
-                retry_strategy: RetryStrategy::Fixed {
-                    max_attempts: WAHOO_FIT_ENRICHMENT_RETRY_MAX_ATTEMPTS,
-                    delay_seconds: WAHOO_FIT_ENRICHMENT_RETRY_DELAY_SECONDS,
-                },
-                dedupe_key: wahoo_fit_enrichment_dedupe_key(completed_workout_id),
-                execution_timeout_seconds: WAHOO_FIT_ENRICHMENT_EXECUTION_TIMEOUT_SECONDS,
-                leader_only: false,
+        build_scheduled_task(NewScheduledTaskInput {
+            id: self.ids.new_id("task"),
+            user_id: user_id.to_string(),
+            task_type: WAHOO_FIT_ENRICHMENT_TASK_TYPE,
+            payload: WahooFitEnrichmentTaskPayload {
+                completed_workout_id: completed_workout_id.to_string(),
+                wahoo_workout_id,
             },
-            self.scheduler.now_epoch_seconds(),
-        )
-        .map_err(map_task_scheduler_error)
+            retry_strategy: RetryStrategy::Fixed {
+                max_attempts: WAHOO_FIT_ENRICHMENT_RETRY_MAX_ATTEMPTS,
+                delay_seconds: WAHOO_FIT_ENRICHMENT_RETRY_DELAY_SECONDS,
+            },
+            dedupe_key: wahoo_fit_enrichment_dedupe_key(completed_workout_id),
+            execution_timeout_seconds: WAHOO_FIT_ENRICHMENT_EXECUTION_TIMEOUT_SECONDS,
+            leader_only: false,
+            now_epoch_seconds: self.scheduler.now_epoch_seconds(),
+        })
+        .map_err(map_build_scheduled_task_error)
     }
 }
 
@@ -123,45 +117,54 @@ where
     }
 }
 
-struct WahooFitEnrichmentTaskHandler<Base> {
+struct WahooFitEnrichmentTaskExecutor<Base> {
     base: Arc<Base>,
 }
 
-impl<Base> TaskHandler for WahooFitEnrichmentTaskHandler<Base>
+impl<Base> ScheduledTaskExecutor for WahooFitEnrichmentTaskExecutor<Base>
 where
     Base: WahooFitEnrichmentExecutionUseCases,
 {
+    type Payload = WahooFitEnrichmentTaskPayload;
+    type Output = ();
+    type Error = WahooFitEnrichmentError;
+
     fn task_type(&self) -> &'static str {
         WAHOO_FIT_ENRICHMENT_TASK_TYPE
     }
 
-    fn run(&self, task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
+    fn parse_error(&self, error: serde_json::Error) -> Self::Error {
+        WahooFitEnrichmentError::Scheduler(format!(
+            "invalid Wahoo FIT enrichment task payload: {error}"
+        ))
+    }
+
+    fn run(
+        &self,
+        task: ScheduledTask,
+        payload: Self::Payload,
+    ) -> BoxFuture<Result<Self::Output, Self::Error>> {
         let base = self.base.clone();
         Box::pin(async move {
-            let payload = match parse_task_payload(&task) {
-                Ok(payload) => payload,
-                Err(error) => {
-                    return TaskRunOutcome::Failed {
-                        checkpoint: None,
-                        error_message: error.to_string(),
-                        retryable: false,
-                        retry_delay_seconds: None,
-                    };
-                }
-            };
-
-            match base
-                .enrich_completed_workout(
-                    &task.user_id,
-                    &payload.completed_workout_id,
-                    payload.wahoo_workout_id,
-                )
-                .await
-            {
-                Ok(()) => TaskRunOutcome::Completed { checkpoint: None },
-                Err(error) => map_task_failure(error),
-            }
+            base.enrich_completed_workout(
+                &task.user_id,
+                &payload.completed_workout_id,
+                payload.wahoo_workout_id,
+            )
+            .await
         })
+    }
+
+    fn completed_checkpoint(
+        &self,
+        _task_id: &str,
+        _output: &Self::Output,
+    ) -> Result<Option<serde_json::Value>, Self::Error> {
+        Ok(None)
+    }
+
+    fn failed_outcome(&self, error: Self::Error) -> TaskRunOutcome {
+        map_task_failure(error)
     }
 }
 
@@ -169,17 +172,9 @@ pub fn wahoo_fit_enrichment_task_handler<Base>(base: Arc<Base>) -> SharedTaskHan
 where
     Base: WahooFitEnrichmentExecutionUseCases,
 {
-    Arc::new(WahooFitEnrichmentTaskHandler { base })
-}
-
-fn parse_task_payload(
-    task: &ScheduledTask,
-) -> Result<WahooFitEnrichmentTaskPayload, WahooFitEnrichmentError> {
-    serde_json::from_value(task.payload.clone()).map_err(|error| {
-        WahooFitEnrichmentError::Scheduler(format!(
-            "invalid Wahoo FIT enrichment task payload: {error}"
-        ))
-    })
+    Arc::new(scheduled_task_handler(WahooFitEnrichmentTaskExecutor {
+        base,
+    }))
 }
 
 fn map_task_failure(error: WahooFitEnrichmentError) -> TaskRunOutcome {
@@ -215,6 +210,15 @@ fn map_task_scheduler_error(error: TaskSchedulerError) -> WahooFitEnrichmentErro
     WahooFitEnrichmentError::Scheduler(error.to_string())
 }
 
+fn map_build_scheduled_task_error(error: BuildScheduledTaskError) -> WahooFitEnrichmentError {
+    match error {
+        BuildScheduledTaskError::SerializePayload(error) => WahooFitEnrichmentError::Scheduler(
+            format!("failed to serialize Wahoo FIT enrichment task payload: {error}"),
+        ),
+        BuildScheduledTaskError::Scheduler(error) => map_task_scheduler_error(error),
+    }
+}
+
 impl<Wahoo, Workouts, FitFiles, Parser, Time, Refresh> WahooFitEnrichmentExecutionUseCases
     for super::WahooFitEnrichmentService<Wahoo, Workouts, FitFiles, Parser, Time, Refresh>
 where
@@ -247,10 +251,10 @@ mod tests {
     use crate::domain::{
         identity::{Clock, IdGenerator},
         task_scheduler::{
-            BoxFuture as TaskBoxFuture, ScheduledTask, TaskClaimRequest, TaskCompleteRequest,
-            TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest, TaskListFilter,
-            TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRepository, TaskRetryRequest,
-            TaskSchedulerService, TaskStatus, TaskWorker, TaskWorkerRepository,
+            BoxFuture as TaskBoxFuture, NewTask, ScheduledTask, TaskClaimRequest,
+            TaskCompleteRequest, TaskEnqueueResult, TaskFailRequest, TaskHeartbeatRequest,
+            TaskListFilter, TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRepository,
+            TaskRetryRequest, TaskSchedulerService, TaskStatus, TaskWorker, TaskWorkerRepository,
         },
     };
 

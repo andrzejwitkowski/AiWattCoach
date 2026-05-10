@@ -25,8 +25,11 @@ const POST_PROVIDER_WRITE_ATTEMPTS: usize = 2;
 pub(super) const STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
 
 pub use scheduler::{
-    spawn_workout_summary_coach_reply_task_runner, workout_summary_coach_reply_task_handler,
-    SchedulerBackedWorkoutSummaryService,
+    workout_summary_coach_reply_task_handler, SchedulerBackedWorkoutSummaryService,
+};
+pub(crate) use scheduler::{
+    COACH_REPLY_HEARTBEAT_INTERVAL_SECONDS, COACH_REPLY_LEASE_DURATION_SECONDS,
+    COACH_REPLY_WAIT_POLL_INTERVAL_MILLIS,
 };
 
 pub trait WorkoutSummaryUseCases: Send + Sync {

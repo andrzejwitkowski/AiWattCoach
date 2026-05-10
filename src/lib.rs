@@ -1,5 +1,8 @@
 mod background_task;
 
+#[cfg(test)]
+mod test_support;
+
 pub mod adapters;
 pub mod config;
 pub mod domain;

@@ -2,7 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use aiwattcoach::{
     adapters::llm::{
-        gemini::client::GeminiClient, openai::client::OpenAiClient,
+        gemini::client::GeminiClient,
+        openai_compatible::client::OpenAiCompatibleClient as OpenAiClient,
         openrouter::client::OpenRouterClient,
     },
     domain::llm::{
@@ -209,6 +210,7 @@ impl MockServer {
         let state = MockServerState::default();
         let app = Router::new()
             .route("/v1/chat/completions", post(openai_handler))
+            .route("/chat/completions", post(deepseek_handler))
             .route(
                 "/v1-forbidden/chat/completions",
                 post(openai_forbidden_handler),
@@ -287,6 +289,10 @@ pub(crate) fn openai_client(base_url: &str) -> OpenAiClient {
     OpenAiClient::new(reqwest::Client::new()).with_base_url(format!("{base_url}/v1"))
 }
 
+pub(crate) fn deepseek_client(base_url: &str) -> OpenAiClient {
+    OpenAiClient::new(reqwest::Client::new()).with_base_url(base_url.to_string())
+}
+
 pub(crate) fn openai_forbidden_client(base_url: &str) -> OpenAiClient {
     OpenAiClient::new(reqwest::Client::new()).with_base_url(format!("{base_url}/v1-forbidden"))
 }
@@ -345,6 +351,26 @@ async fn openai_handler(
             "completion_tokens": 20,
             "total_tokens": 120,
             "prompt_tokens_details": { "cached_tokens": 42 }
+        }
+    }))
+}
+
+async fn deepseek_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    capture_request(&state, "/chat/completions", headers, body.clone());
+    Json(json!({
+        "id": "deepseek-req-1",
+        "model": body.get("model").and_then(Value::as_str).unwrap_or("deepseek-v4-flash"),
+        "choices": [{ "message": { "content": "DeepSeek says hi" } }],
+        "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "prompt_cache_hit_tokens": 80,
+            "prompt_cache_miss_tokens": 20
         }
     }))
 }

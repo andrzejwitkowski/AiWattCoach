@@ -187,3 +187,14 @@
 ## Scheduler Error Propagation
 
 - When a scheduler-backed workflow already has typed domain errors like `Llm`, `Validation`, or `NotFound`, persist that typed error in the task checkpoint and restore it in the result handler. Do not collapse every failed task back into `Repository(error_message)`, or websocket/REST layers will surface the wrong public error and hide the real root cause.
+
+## Shared Adapter Clients And Provider Identity
+
+- When a shared adapter client serves multiple providers (e.g., an OpenAI-compatible client used for both OpenAI and DeepSeek), every piece of code that identifies the provider must use the runtime config, not a hardcoded literal. Specifically: response `provider` metadata must come from `config.provider`, log messages must use `config.provider.as_str()` instead of a hardcoded string literal, and error messages must format the provider dynamically.
+- Before promoting an adapter from single-provider to multi-provider, grep for hardcoded provider identifiers in the module: response struct fields, log statements, error message strings, and response metadata.
+- When adding a new provider whose cache tokens come in a different JSON shape than existing providers, add a focused adapter regression that proves the correct path is exercised for that specific provider. Do not assume the existing test covers it.
+
+## New Field Enumeration In Shared Schemas
+
+- When adding a new field to a shared API schema (backend DTO, frontend Zod schema, or request/response type), grep for every place the old fields are enumerated and add the new one. Common places to miss: frontend payload builders, frontend API extraction functions, TypeScript discriminated unions, backend match arms, backend `apply_field_update` calls, test fixture builders, and mock data objects.
+- A schema update alone is not enough if the code that serializes, extracts, or transforms the payload still iterates over the old field set. Add a focused end-to-end test that exercises the new field through the full stack (UI → API → backend → response → UI) to catch gaps in payload plumbing.

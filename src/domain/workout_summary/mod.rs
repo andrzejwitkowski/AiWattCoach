@@ -12,8 +12,12 @@ pub use model::{
 };
 pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
 pub use service::{
-    spawn_workout_summary_coach_reply_task_runner, workout_summary_coach_reply_task_handler,
-    CompletedWorkoutTargetUseCases, LatestCompletedActivityUseCases,
-    ResolvedCompletedWorkoutTarget, SaveSummaryResult, SaveWorkflowResult, SaveWorkflowStatus,
-    SchedulerBackedWorkoutSummaryService, WorkoutSummaryService, WorkoutSummaryUseCases,
+    workout_summary_coach_reply_task_handler, CompletedWorkoutTargetUseCases,
+    LatestCompletedActivityUseCases, ResolvedCompletedWorkoutTarget, SaveSummaryResult,
+    SaveWorkflowResult, SaveWorkflowStatus, SchedulerBackedWorkoutSummaryService,
+    WorkoutSummaryService, WorkoutSummaryUseCases,
+};
+pub(crate) use service::{
+    COACH_REPLY_HEARTBEAT_INTERVAL_SECONDS, COACH_REPLY_LEASE_DURATION_SECONDS,
+    COACH_REPLY_WAIT_POLL_INTERVAL_MILLIS,
 };
