@@ -484,6 +484,7 @@ fn planning_conversation_messages(
             content: message.content.clone(),
             tool_calls: Vec::new(),
             tool_call_id: None,
+            reasoning_content: None,
         })
         .collect()
 }
