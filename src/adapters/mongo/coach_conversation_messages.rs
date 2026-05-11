@@ -29,6 +29,8 @@ struct CoachConversationMessageDocument {
     content: String,
     #[serde(default)]
     tool_call: Option<crate::domain::workout_summary::PublicToolCall>,
+    #[serde(default)]
+    reasoning_content: Option<String>,
     created_at_epoch_seconds: i64,
     #[serde(default)]
     created_at: Option<DateTime>,
@@ -174,6 +176,7 @@ fn map_domain_to_document(message: &CoachConversationMessage) -> CoachConversati
         role: role_as_str(&message.role).to_string(),
         content: message.content.clone(),
         tool_call: message.tool_call.clone(),
+        reasoning_content: message.reasoning_content.clone(),
         created_at_epoch_seconds: message.created_at_epoch_seconds,
         created_at: optional_epoch_seconds_to_bson_datetime(
             Some(message.created_at_epoch_seconds),
@@ -193,6 +196,7 @@ fn map_document_to_domain(
         role: map_role(document.role)?,
         content: document.content,
         tool_call: document.tool_call,
+        reasoning_content: document.reasoning_content,
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             document.created_at,
             Some(document.created_at_epoch_seconds),

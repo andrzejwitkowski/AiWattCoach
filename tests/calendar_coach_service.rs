@@ -822,6 +822,7 @@ async fn calendar_coach_reuses_completed_operation_without_duplicate_llm_call() 
         role: CoachConversationMessageRole::Coach,
         content: "Recovered calendar reply".to_string(),
         tool_call: None,
+        reasoning_content: None,
         created_at_epoch_seconds: 1_700_000_001,
     };
     messages
@@ -969,6 +970,7 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
                 role: CoachConversationMessageRole::User,
                 content: "Need recovery advice".to_string(),
                 tool_call: None,
+                reasoning_content: None,
                 created_at_epoch_seconds: 1,
             },
             CoachConversationMessage {
@@ -983,6 +985,7 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
                     arguments_json: r#"{\"week\":\"2026-W18\"}"#.to_string(),
                     arguments_preview: None,
                 }),
+                reasoning_content: None,
                 created_at_epoch_seconds: 2,
             },
             CoachConversationMessage {
@@ -992,6 +995,7 @@ async fn calendar_coach_follow_up_replays_last_hidden_assistant_tool_calls() {
                 role: CoachConversationMessageRole::Coach,
                 content: "Coach reply".to_string(),
                 tool_call: None,
+                reasoning_content: None,
                 created_at_epoch_seconds: 3,
             },
         ])),
@@ -1091,6 +1095,7 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
                 role: CoachConversationMessageRole::User,
                 content: "First question".to_string(),
                 tool_call: None,
+                reasoning_content: None,
                 created_at_epoch_seconds: 1,
             },
             CoachConversationMessage {
@@ -1100,6 +1105,7 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
                 role: CoachConversationMessageRole::Coach,
                 content: "First answer".to_string(),
                 tool_call: None,
+                reasoning_content: None,
                 created_at_epoch_seconds: 2,
             },
             CoachConversationMessage {
@@ -1109,6 +1115,7 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
                 role: CoachConversationMessageRole::User,
                 content: "Second question".to_string(),
                 tool_call: None,
+                reasoning_content: None,
                 created_at_epoch_seconds: 3,
             },
             CoachConversationMessage {
@@ -1118,6 +1125,7 @@ async fn calendar_coach_follow_up_replays_multiple_hidden_assistant_turns_with_t
                 role: CoachConversationMessageRole::Coach,
                 content: "Second answer".to_string(),
                 tool_call: None,
+                reasoning_content: None,
                 created_at_epoch_seconds: 4,
             },
         ])),

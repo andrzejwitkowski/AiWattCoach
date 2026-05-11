@@ -328,6 +328,7 @@ mod shared {
                     role: CoachConversationMessageRole::User,
                     content,
                     tool_call: None,
+                    reasoning_content: None,
                     created_at_epoch_seconds: 1_700_000_000,
                 };
                 let coach_message = CoachConversationMessage {
@@ -337,6 +338,7 @@ mod shared {
                     role: CoachConversationMessageRole::Coach,
                     content: format!("Coach reply to: {}", user_message.content),
                     tool_call: None,
+                    reasoning_content: None,
                     created_at_epoch_seconds: 1_700_000_001,
                 };
                 stored.messages.push(user_message.clone());
@@ -392,6 +394,7 @@ mod shared {
                     role: CoachConversationMessageRole::User,
                     content,
                     tool_call: None,
+                    reasoning_content: None,
                     created_at_epoch_seconds: 1_700_000_000,
                 };
                 stored.messages.push(user_message.clone());
@@ -462,6 +465,7 @@ mod shared {
                         role: CoachConversationMessageRole::Tool,
                         content: format!("Tool call: {}", tool_call.name),
                         tool_call: Some(tool_call),
+                        reasoning_content: None,
                         created_at_epoch_seconds: 1_700_000_001,
                     });
                 }
@@ -473,6 +477,7 @@ mod shared {
                     role: CoachConversationMessageRole::Coach,
                     content: format!("Coach reply to: {}", user_message.content),
                     tool_call: None,
+                    reasoning_content: None,
                     created_at_epoch_seconds: 1_700_000_001,
                 };
                 stored.messages.push(coach_message.clone());
