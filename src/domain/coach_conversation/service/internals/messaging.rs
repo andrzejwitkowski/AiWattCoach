@@ -35,7 +35,7 @@ where
         let content = if matches!(role, CoachConversationMessageRole::User) {
             validate_conversation_message_content(&content)?
         } else {
-            content
+            content.trim().to_string()
         };
         if matches!(role, CoachConversationMessageRole::User) {
             self.ensure_availability_configured_for_coach(&conversation.user_id)
