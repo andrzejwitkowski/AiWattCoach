@@ -69,7 +69,7 @@ pub(super) fn build_calendar_conversation(
                 content: message.content.clone(),
                 tool_calls: Vec::new(),
                 tool_call_id: None,
-                reasoning_content: None,
+                reasoning_content: message.reasoning_content.clone(),
             }),
             CoachConversationMessageRole::Tool | CoachConversationMessageRole::System => None,
         })

@@ -255,6 +255,7 @@ where
                     content,
                     None,
                     None,
+                    None,
                 )
                 .await?;
             let messages = service.list_messages(&user_id, &conversation_id).await?;
@@ -330,6 +331,7 @@ where
                     coach_content,
                     Some(coach_message_id),
                     None,
+                    llm_output.response.message.reasoning_content.clone(),
                 )
                 .await?;
             let completed_reply =

@@ -126,6 +126,7 @@ where
                 content,
                 Some(coach_message_id),
                 None,
+                None,
             )
             .await?;
         let completed = operation.mark_completed_from_existing_message(

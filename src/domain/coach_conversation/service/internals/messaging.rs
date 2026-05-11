@@ -26,6 +26,7 @@ where
         content: String,
         message_id: Option<String>,
         tool_call: Option<PublicToolCall>,
+        reasoning_content: Option<String>,
     ) -> Result<CoachConversationMessage, CoachConversationError> {
         if conversation.status == CoachConversationStatus::Archived {
             return Err(CoachConversationError::Archived);
@@ -46,6 +47,7 @@ where
                 role,
                 content,
                 tool_call,
+                reasoning_content,
                 created_at_epoch_seconds: self.clock.now_epoch_seconds(),
             })
             .await?;
@@ -72,6 +74,7 @@ where
             format!("Tool call: {}", tool_call.name),
             Some(tool_call.id.clone()),
             Some(tool_call),
+            None,
         )
         .await
     }

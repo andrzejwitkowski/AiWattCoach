@@ -106,6 +106,8 @@ pub struct CoachConversationMessage {
     pub role: CoachConversationMessageRole,
     pub content: String,
     pub tool_call: Option<PublicToolCall>,
+    #[serde(default)]
+    pub reasoning_content: Option<String>,
     pub created_at_epoch_seconds: i64,
 }
 
