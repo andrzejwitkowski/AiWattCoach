@@ -32,7 +32,11 @@ where
             return Err(CoachConversationError::Archived);
         }
 
-        let content = validate_conversation_message_content(&content)?;
+        let content = if matches!(role, CoachConversationMessageRole::User) {
+            validate_conversation_message_content(&content)?
+        } else {
+            content
+        };
         if matches!(role, CoachConversationMessageRole::User) {
             self.ensure_availability_configured_for_coach(&conversation.user_id)
                 .await?;
