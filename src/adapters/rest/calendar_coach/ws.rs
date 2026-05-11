@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::{
     dto::{
-        coach_message, coach_typing_message, error_message, tool_message,
+        coach_message, coach_thinking_message, coach_typing_message, error_message, tool_message,
         CalendarCoachConversationPath, ClientWsMessage,
     },
     error::map_calendar_coach_error,
@@ -24,6 +24,7 @@ use super::{
 };
 
 const MAX_QUEUED_MESSAGES: usize = 4;
+const COACH_REPLY_KEEPALIVE_INTERVAL_SECONDS: u64 = 15;
 
 pub async fn calendar_coach_ws(
     State(state): State<AppState>,
@@ -351,52 +352,90 @@ async fn process_send_message(
                 return true;
             }
 
-            match service
-                .generate_reply(
-                    &user_id,
-                    &conversation_id,
-                    persisted.user_message.id.clone(),
+            let (result_tx, mut result_rx) = tokio::sync::oneshot::channel();
+            let service_clone = service.clone();
+            let uid = user_id.clone();
+            let cid = conversation_id.clone();
+            let umid = persisted.user_message.id.clone();
+            tokio::spawn(async move {
+                let reply_result = service_clone.generate_reply(&uid, &cid, umid).await;
+                let _ = result_tx.send(reply_result);
+            });
+
+            loop {
+                if !connection_open.load(Ordering::Relaxed) {
+                    return true;
+                }
+
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(COACH_REPLY_KEEPALIVE_INTERVAL_SECONDS),
+                    &mut result_rx,
                 )
                 .await
-            {
-                Ok(reply) => {
-                    if !connection_open.load(Ordering::Relaxed) {
-                        return true;
-                    }
+                {
+                    Ok(Ok(Ok(reply))) => {
+                        if !connection_open.load(Ordering::Relaxed) {
+                            return true;
+                        }
 
-                    for message in current_turn_tool_messages(
-                        &reply.messages,
-                        &persisted.user_message.id,
-                        &reply.coach_message.id,
-                    ) {
-                        if send_ws_json(&sender, tool_message(map_message_to_dto(message)))
+                        for message in current_turn_tool_messages(
+                            &reply.messages,
+                            &persisted.user_message.id,
+                            &reply.coach_message.id,
+                        ) {
+                            if send_ws_json(&sender, tool_message(map_message_to_dto(message)))
+                                .await
+                                .is_err()
+                            {
+                                return true;
+                            }
+                        }
+
+                        return send_ws_json(
+                            &sender,
+                            coach_message(
+                                map_message_to_dto(reply.coach_message),
+                                map_conversation_to_dto(reply.conversation),
+                                reply.messages.into_iter().map(map_message_to_dto).collect(),
+                            ),
+                        )
+                        .await
+                        .is_err();
+                    }
+                    Ok(Ok(Err(error))) => {
+                        if send_ws_json(&sender, error_message(client_error_message(&error)))
                             .await
                             .is_err()
                         {
                             return true;
                         }
-                    }
 
-                    send_ws_json(
-                        &sender,
-                        coach_message(
-                            map_message_to_dto(reply.coach_message),
-                            map_conversation_to_dto(reply.conversation),
-                            reply.messages.into_iter().map(map_message_to_dto).collect(),
-                        ),
-                    )
-                    .await
-                    .is_err()
-                }
-                Err(error) => {
-                    if send_ws_json(&sender, error_message(client_error_message(&error)))
+                        return should_close_worker(&error);
+                    }
+                    Ok(Err(_)) => {
+                        // oneshot sender dropped without sending (task panicked)
+                        if send_ws_json(
+                            &sender,
+                            error_message("calendar coach reply task failed unexpectedly"),
+                        )
                         .await
                         .is_err()
-                    {
+                        {
+                            return true;
+                        }
                         return true;
                     }
-
-                    should_close_worker(&error)
+                    Err(_elapsed) => {
+                        // connection_open is not observed while blocked on timeout;
+                        // a closure will be picked up at the start of the next iteration.
+                        if send_ws_json(&sender, coach_thinking_message())
+                            .await
+                            .is_err()
+                        {
+                            return true;
+                        }
+                        continue;
+                    }
                 }
             }
         }

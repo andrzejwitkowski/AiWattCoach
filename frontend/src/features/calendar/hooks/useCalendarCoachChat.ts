@@ -21,6 +21,7 @@ type UseCalendarCoachChatResult = {
   isStartingNewConversation: boolean;
   isConnected: boolean;
   isCoachTyping: boolean;
+  isCoachThinking: boolean;
   error: string | null;
   sendMessage: (content: string) => Promise<boolean>;
   startNewConversation: () => Promise<boolean>;
@@ -83,6 +84,7 @@ export function useCalendarCoachChat({
   const [isStartingNewConversation, setIsStartingNewConversation] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isCoachTyping, setIsCoachTyping] = useState(false);
+  const [isCoachThinking, setIsCoachThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const socketConversationIdRef = useRef<string | null>(null);
@@ -115,6 +117,7 @@ export function useCalendarCoachChat({
     socketConversationIdRef.current = null;
     setIsConnected(false);
     setIsCoachTyping(false);
+    setIsCoachThinking(false);
   }, []);
 
   const handleAuthenticationError = useCallback((errorToCheck: unknown) => {
@@ -206,12 +209,20 @@ export function useCalendarCoachChat({
 
           if (parsed.type === 'coach_typing') {
             setIsCoachTyping(true);
+            setIsCoachThinking(false);
+            return;
+          }
+
+          if (parsed.type === 'coach_thinking') {
+            setIsCoachTyping(true);
+            setIsCoachThinking(true);
             return;
           }
 
           if (parsed.type === 'coach_message') {
             applyConversationResponse(parsed.conversation, parsed.messages);
             setIsCoachTyping(false);
+            setIsCoachThinking(false);
             return;
           }
 
@@ -236,9 +247,11 @@ export function useCalendarCoachChat({
 
           setError(parsed.error);
           setIsCoachTyping(false);
+          setIsCoachThinking(false);
         } catch {
           setError('Received an invalid calendar coach response.');
           setIsCoachTyping(false);
+          setIsCoachThinking(false);
         }
       });
 
@@ -480,6 +493,7 @@ export function useCalendarCoachChat({
 
       setError(sendError instanceof Error ? sendError.message : 'Unable to send your message.');
       setIsCoachTyping(false);
+      setIsCoachThinking(false);
       return false;
     }
   }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError, isCurrentConversation, coachApi]);
@@ -491,12 +505,14 @@ export function useCalendarCoachChat({
     isStartingNewConversation,
     isConnected,
     isCoachTyping,
+    isCoachThinking,
     error,
     sendMessage,
     startNewConversation,
   }), [
     conversation,
     error,
+    isCoachThinking,
     isCoachTyping,
     isConnected,
     isLoading,

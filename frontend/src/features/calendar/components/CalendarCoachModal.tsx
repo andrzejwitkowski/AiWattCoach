@@ -22,6 +22,7 @@ export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps)
     isStartingNewConversation,
     isConnected,
     isCoachTyping,
+    isCoachThinking,
     error,
     sendMessage,
     startNewConversation,
@@ -190,6 +191,18 @@ export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps)
               {hasMessages ? (
                 <div className="rounded-[1.6rem] border border-white/8 bg-[#14181b] shadow-[0_16px_35px_rgba(0,0,0,0.18)]">
                   <ChatMessageList messages={messages} isCoachTyping={isCoachTyping} />
+                  {isCoachThinking ? (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className="border-t border-white/6 px-6 py-4 text-sm text-amber-200/80"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                        {t('calendar.coachThinking')}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex justify-end">

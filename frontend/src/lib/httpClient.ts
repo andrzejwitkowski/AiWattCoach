@@ -34,6 +34,7 @@ export function buildUrl(apiBaseUrl: string, path: string): string {
 
 type RequestOptions = {
   allowedErrorStatuses?: number[];
+  timeoutMs?: number;
 };
 
 async function request<TRes>(
@@ -57,6 +58,9 @@ async function request<TRes>(
     headers,
     credentials: 'include',
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: options?.timeoutMs !== undefined && options.timeoutMs > 0
+      ? AbortSignal.timeout(options.timeoutMs)
+      : undefined,
   });
 
   if (response.status === 401) {
