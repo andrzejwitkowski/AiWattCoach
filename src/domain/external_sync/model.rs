@@ -103,6 +103,7 @@ pub enum ConflictStatus {
 pub enum ExternalSyncStatus {
     Pending,
     Synced,
+    Modified,
     Failed,
     PendingDelete,
 }
@@ -112,6 +113,7 @@ impl ExternalSyncStatus {
         match self {
             Self::Pending => "pending",
             Self::Synced => "synced",
+            Self::Modified => "modified",
             Self::Failed => "failed",
             Self::PendingDelete => "pending_delete",
         }
@@ -172,6 +174,13 @@ impl ExternalSyncState {
         self.sync_status = ExternalSyncStatus::Pending;
         self.last_error = None;
         self.wahoo_plan_external_id = Some(wahoo_plan_external_id);
+        self
+    }
+
+    pub fn mark_modified(mut self, payload_hash: String) -> Self {
+        self.sync_status = ExternalSyncStatus::Modified;
+        self.last_seen_remote_payload_hash = Some(payload_hash);
+        self.last_error = None;
         self
     }
 

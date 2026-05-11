@@ -22,6 +22,7 @@ use aiwattcoach::{
             openai_compatible::client::OpenAiCompatibleClient,
             openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
+            update_planned_workout_data::UpdatePlannedWorkoutDataAdapter,
             workout_summary_coach::LlmWorkoutCoach,
         },
         mongo::{
@@ -531,6 +532,23 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
+    let planned_workout_update_service = Arc::new(
+        aiwattcoach::domain::planned_workouts::PlannedWorkoutUpdateService::new(
+            planned_workout_repository.clone(),
+            external_sync_state_repository.clone(),
+            (*intervals_service).clone(),
+            wahoo_service
+                .clone()
+                .unwrap_or_else(|| Arc::new(aiwattcoach::domain::calendar::NoopWahooUseCases)),
+            settings_repository.clone(),
+            planned_workout_token_repository.clone(),
+            calendar_entry_view_refresh_service.clone(),
+            SystemClock,
+        ),
+    );
+    let planned_workout_update_port = Arc::new(UpdatePlannedWorkoutDataAdapter::new(
+        (*planned_workout_update_service).clone(),
+    ));
 
     let training_context_builder = Arc::new(
         DefaultTrainingContextBuilder::new(
@@ -600,7 +618,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_settings_service(settings_service.clone())
         .with_context_cache_repository(Arc::new(llm_context_cache_repository.clone()))
-        .with_data_port(get_selected_workout_data_port.clone()),
+        .with_data_port(get_selected_workout_data_port.clone())
+        .with_planned_workout_update_port(planned_workout_update_port),
     );
     let training_plan_direct_service = Arc::new(
         TrainingPlanGenerationService::new(

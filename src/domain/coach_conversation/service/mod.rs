@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::{LlmChatPort, LlmContextCacheRepository, UserLlmConfigProvider},
-    llm_tools::GetSelectedWorkoutDataPort,
+    llm_tools::{GetSelectedWorkoutDataPort, UpdatePlannedWorkoutDataPort},
     settings::UserSettingsUseCases,
     training_context::TrainingContextBuilder,
 };
@@ -85,6 +85,7 @@ where
     settings_service: Option<Arc<dyn UserSettingsUseCases>>,
     context_cache_repository: Option<Arc<dyn LlmContextCacheRepository>>,
     data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
+    planned_workout_update_port: Option<Arc<dyn UpdatePlannedWorkoutDataPort>>,
     clock: Time,
     ids: Ids,
 }
@@ -119,6 +120,7 @@ where
             settings_service: None,
             context_cache_repository: None,
             data_port: None,
+            planned_workout_update_port: None,
             clock,
             ids,
         }
@@ -142,6 +144,14 @@ where
 
     pub fn with_data_port(mut self, data_port: Arc<dyn GetSelectedWorkoutDataPort>) -> Self {
         self.data_port = Some(data_port);
+        self
+    }
+
+    pub fn with_planned_workout_update_port(
+        mut self,
+        planned_workout_update_port: Arc<dyn UpdatePlannedWorkoutDataPort>,
+    ) -> Self {
+        self.planned_workout_update_port = Some(planned_workout_update_port);
         self
     }
 }

@@ -8,4 +8,5 @@ pub mod openai_compatible;
 pub mod openrouter;
 pub mod settings_adapter;
 pub mod training_plan_generator;
+pub mod update_planned_workout_data;
 pub mod workout_summary_coach;

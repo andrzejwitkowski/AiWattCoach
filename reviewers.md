@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-11 | self | calendar coach planned-workout update follow-up
+
+- Problem: the new `update_planned_workout` flow had tool-level and enum coverage, but no focused service tests proving the critical orchestration contract: local planned-workout persistence before external side effects, sync-state transition to `Modified`, refresh after success, and local-update durability when Intervals sync fails.
+- Fix: added focused unit tests in `src/domain/planned_workouts/update/tests.rs` with small recording fakes that verify the no-sync-state path, the Intervals modified-then-synced path, and the Intervals failure path while asserting the cross-component operation order.
+- Prevention: when adding a new sync-capable orchestration service, do not stop at parser or tool tests. Add at least one service-level regression that proves the durable local write happens before provider calls, plus one failure-path regression that proves local state survives a downstream provider error.
+
 ### 2026-05-10 | self (second 4-loop review) | DeepSeek integration follow-up fixes
 
 - Problem: the second 4-loop self-review on the same branch found 8 additional issues. (1) `LlmAdapter::Live` field was named `openai_compatible` even though it only served OpenAI, while `deepseek` also used `OpenAiCompatibleClient`, causing confusing naming. (2) `build_test_request` in the REST adapter explicitly set `tools: Vec::new()` and `tool_choice: LlmToolChoice::None` despite domain comments saying those fields are orchestrator-owned, violating the repo's lesson on misleading struct literal placeholders. (3) Frontend `settings.ts` did not extract or send `deepseekApiKey` in `updateAiAgents` or `testAiAgentsConnection`, even though the Zod schema included it, so users could not save or test a DeepSeek key from the UI. (4) No REST integration test proved saving DeepSeek provider/model/key. (5) No REST integration test proved the DeepSeek connection test endpoint. (6) No unit test proved that changing `deepseek_api_key` invalidated the LLM context cache. (7) No frontend test proved DeepSeek model autofill, key field emphasis, or save behavior. (8) No unit test proved `map_settings_to_dto` masked the DeepSeek API key.

@@ -288,6 +288,7 @@ fn sample_context(data_port: TestDataPort) -> ToolExecutionContext {
         },
         today: "2026-05-05".to_string(),
         data_port: Some(Arc::new(data_port)),
+        planned_workout_update_port: None,
     }
 }
 

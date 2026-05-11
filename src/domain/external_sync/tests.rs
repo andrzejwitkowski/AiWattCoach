@@ -101,6 +101,26 @@ fn sync_state_mark_failed_clears_stale_conflict_status() {
     assert_eq!(state.conflict_status, ConflictStatus::Unknown);
 }
 
+#[test]
+fn sync_state_mark_modified_sets_modified_status_and_clears_error() {
+    let state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::PlannedWorkout, "planned-1".to_string()),
+    )
+    .mark_synced("77".to_string(), "hash-1".to_string(), 1_700_000_000)
+    .mark_failed("boom".to_string())
+    .mark_modified("hash-2".to_string());
+
+    assert_eq!(state.sync_status, ExternalSyncStatus::Modified);
+    assert_eq!(state.last_error, None);
+    assert_eq!(
+        state.last_seen_remote_payload_hash.as_deref(),
+        Some("hash-2")
+    );
+    assert_eq!(state.external_id.as_deref(), Some("77"));
+}
+
 fn assert_provider_poll_repository<T: ProviderPollStateRepository>() {}
 
 #[test]

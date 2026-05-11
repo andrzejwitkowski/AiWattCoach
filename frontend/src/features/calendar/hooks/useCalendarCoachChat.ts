@@ -12,6 +12,7 @@ import {
 
 type UseCalendarCoachChatOptions = {
   isOpen: boolean;
+  onPlannedWorkoutUpdated?: () => void;
 };
 
 type UseCalendarCoachChatResult = {
@@ -75,6 +76,7 @@ function appendUniqueMessage(messages: CalendarCoachMessage[], message: Calendar
 
 export function useCalendarCoachChat({
   isOpen,
+  onPlannedWorkoutUpdated,
 }: UseCalendarCoachChatOptions): UseCalendarCoachChatResult {
   const apiBaseUrl = useApiBaseUrl();
   const coachApi = useCalendarCoachApi();
@@ -228,6 +230,9 @@ export function useCalendarCoachChat({
 
           if (parsed.type === 'tool_message') {
             setMessages((current) => appendUniqueMessage(current, parsed.message));
+            if (parsed.message.toolCall?.name === 'update_planned_workout') {
+              onPlannedWorkoutUpdated?.();
+            }
             return;
           }
 
@@ -291,7 +296,7 @@ export function useCalendarCoachChat({
         pendingSocketRef.current = null;
       }
     }
-  }, [apiBaseUrl, applyConversationResponse]);
+  }, [apiBaseUrl, applyConversationResponse, onPlannedWorkoutUpdated]);
 
   const loadConversation = useCallback(async () => {
     if (!isOpenRef.current) {

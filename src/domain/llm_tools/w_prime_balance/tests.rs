@@ -93,6 +93,7 @@ fn test_context(ftp: Option<i32>, weight_kg: Option<f64>) -> ToolExecutionContex
         training_context: tc,
         today: "2026-05-05".to_string(),
         data_port: None,
+        planned_workout_update_port: None,
     }
 }
 

@@ -58,7 +58,7 @@ async function fetchLabelsWithCache(apiBaseUrl: string, range: { oldest: string;
   return data;
 }
 
-type UseCalendarDataOptions = { apiBaseUrl: string };
+type UseCalendarDataOptions = { apiBaseUrl: string; refreshVersion?: number };
 
 type UseCalendarDataResult = {
   state: CalendarDataState;
@@ -77,7 +77,7 @@ type UseCalendarDataResult = {
 type WeekStore = Map<string, CalendarWeek>;
 type PaginationDirection = 'past' | 'future';
 
-export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCalendarDataResult {
+export function useCalendarData({ apiBaseUrl, refreshVersion = 0 }: UseCalendarDataOptions): UseCalendarDataResult {
   const { getActivitiesForRange } = useCompletedWorkouts();
   const [state, setState] = useState<CalendarDataState>('loading');
   const [store, setStore] = useState<WeekStore>(new Map());
@@ -226,6 +226,18 @@ export function useCalendarData({ apiBaseUrl }: UseCalendarDataOptions): UseCale
     setWindowStart(initialStart);
     void prefetchBuffer(initialStart);
   }, [ensureWeeks, prefetchBuffer]);
+
+  useEffect(() => {
+    if (!initializedRef.current) {
+      return;
+    }
+    eventsCacheRef.clear();
+    labelsCacheRef.clear();
+    loadedWeekKeysRef.current.clear();
+    inflightWeekKeysRef.current.clear();
+    setStore(new Map());
+    void prefetchBuffer(windowStartRef.current);
+  }, [prefetchBuffer, refreshVersion]);
 
   useEffect(() => {
     windowStartRef.current = windowStart;

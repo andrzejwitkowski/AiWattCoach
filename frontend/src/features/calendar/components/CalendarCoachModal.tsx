@@ -9,9 +9,10 @@ import { useCalendarCoachChat } from '../hooks/useCalendarCoachChat';
 type CalendarCoachModalProps = {
   isOpen: boolean;
   onClose: () => void;
+  onPlannedWorkoutUpdated?: () => void;
 };
 
-export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps) {
+export function CalendarCoachModal({ isOpen, onClose, onPlannedWorkoutUpdated }: CalendarCoachModalProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -26,7 +27,7 @@ export function CalendarCoachModal({ isOpen, onClose }: CalendarCoachModalProps)
     error,
     sendMessage,
     startNewConversation,
-  } = useCalendarCoachChat({ isOpen });
+  } = useCalendarCoachChat({ isOpen, onPlannedWorkoutUpdated });
 
   useEffect(() => {
     if (!isOpen) {

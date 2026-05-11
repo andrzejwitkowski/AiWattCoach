@@ -239,6 +239,7 @@ where
                 training_context: context.context.clone(),
                 today: training_plan_tool_context_today(&context.context),
                 data_port,
+                planned_workout_update_port: None,
             };
             let system_prompt = with_tool_prompt_guidance(
                 &training_plan_initial_window_system_prompt(
@@ -340,6 +341,7 @@ where
                 training_context: context.context.clone(),
                 today: training_plan_tool_context_today(&context.context),
                 data_port,
+                planned_workout_update_port: None,
             };
             let system_prompt = with_tool_prompt_guidance(
                 &training_plan_correction_system_prompt(
@@ -579,6 +581,7 @@ mod tests {
             },
             today: "2026-05-06".to_string(),
             data_port: None,
+            planned_workout_update_port: None,
         }
     }
 }

@@ -146,6 +146,7 @@ impl PlannedWorkoutRepository for MongoPlannedWorkoutRepository {
             )
             .await?;
             workouts.extend(load_imported_workouts(&imported_collection, &user_id, None).await?);
+            dedupe_prefer_imported_workouts(&mut workouts);
             sort_planned_workouts(&mut workouts);
             Ok(workouts)
         })
@@ -175,6 +176,7 @@ impl PlannedWorkoutRepository for MongoPlannedWorkoutRepository {
                 load_imported_workouts(&imported_collection, &user_id, Some((&oldest, &newest)))
                     .await?,
             );
+            dedupe_prefer_imported_workouts(&mut workouts);
             sort_planned_workouts(&mut workouts);
             Ok(workouts)
         })
@@ -540,6 +542,19 @@ fn sort_planned_workouts(workouts: &mut [PlannedWorkout]) {
     });
 }
 
+fn dedupe_prefer_imported_workouts(workouts: &mut Vec<PlannedWorkout>) {
+    // Projected workouts are always loaded before imported workouts (see callers).
+    // When the same planned_workout_id appears in both collections, the imported
+    // (locally stored) version is a user or AI-coach override and must win,
+    // regardless of whether it carries a name or description. Simply inserting in
+    // order means the last writer (imported) always replaces the first (projected).
+    let mut deduped = HashMap::<String, PlannedWorkout>::new();
+    for workout in workouts.drain(..) {
+        deduped.insert(workout.planned_workout_id.clone(), workout);
+    }
+    *workouts = deduped.into_values().collect();
+}
+
 #[cfg(test)]
 mod tests {
     use crate::domain::planned_workouts::{
@@ -548,9 +563,10 @@ mod tests {
     };
 
     use super::{
-        map_imported_document_to_domain, map_imported_workout_to_document, sort_planned_workouts,
-        ImportedPlannedWorkoutDocument, StoredPlannedWorkoutContentDocument,
-        StoredPlannedWorkoutLineDocument, StoredPlannedWorkoutTargetDocument,
+        dedupe_prefer_imported_workouts, map_imported_document_to_domain,
+        map_imported_workout_to_document, sort_planned_workouts, ImportedPlannedWorkoutDocument,
+        StoredPlannedWorkoutContentDocument, StoredPlannedWorkoutLineDocument,
+        StoredPlannedWorkoutTargetDocument,
     };
 
     #[test]
@@ -639,5 +655,40 @@ mod tests {
         assert_eq!(workouts[0].planned_workout_id, "imported-1");
         assert_eq!(workouts[1].planned_workout_id, "projected-1");
         assert_eq!(workouts[2].planned_workout_id, "imported-2");
+    }
+
+    #[test]
+    fn dedupe_prefer_imported_workouts_keeps_local_override_over_projected_copy() {
+        let projected = PlannedWorkout::new(
+            "training-plan:user-1:w1:2026-05-10".to_string(),
+            "user-1".to_string(),
+            "2026-05-10".to_string(),
+            PlannedWorkoutContent {
+                lines: vec![PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Projected".to_string(),
+                })],
+            },
+        );
+        let imported = PlannedWorkout::new(
+            "training-plan:user-1:w1:2026-05-10".to_string(),
+            "user-1".to_string(),
+            "2026-05-10".to_string(),
+            PlannedWorkoutContent {
+                lines: vec![PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Local Override".to_string(),
+                })],
+            },
+        )
+        .with_event_metadata(
+            Some("Local Override".to_string()),
+            Some("edited".to_string()),
+            None,
+        );
+
+        let mut workouts = vec![projected, imported.clone()];
+
+        dedupe_prefer_imported_workouts(&mut workouts);
+
+        assert_eq!(workouts, vec![imported]);
     }
 }

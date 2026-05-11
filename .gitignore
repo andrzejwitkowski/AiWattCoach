@@ -11,6 +11,7 @@
 .worktrees/
 /frontend/.vite/
 /graphify-out/cache/
+/.sisyphus/
 /.pup/
 /docker-compose-sandbox.yml
 /sandbox-auth-cookie.txt

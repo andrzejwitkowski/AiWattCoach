@@ -255,6 +255,11 @@ fn map_external_sync_states(sync_states: &[ExternalSyncState]) -> Option<super::
         Some("synced".to_string())
     } else if sync_states
         .iter()
+        .any(|state| state.sync_status.as_str() == "modified")
+    {
+        Some("modified".to_string())
+    } else if sync_states
+        .iter()
         .any(|state| state.sync_status.as_str() == "pending")
     {
         Some("pending".to_string())

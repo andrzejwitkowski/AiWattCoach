@@ -505,6 +505,7 @@ fn sync_status_as_str(status: &ExternalSyncStatus) -> &'static str {
     match status {
         ExternalSyncStatus::Pending => "pending",
         ExternalSyncStatus::Synced => "synced",
+        ExternalSyncStatus::Modified => "modified",
         ExternalSyncStatus::Failed => "failed",
         ExternalSyncStatus::PendingDelete => "pending_delete",
     }
@@ -551,6 +552,7 @@ fn map_sync_status(value: &str) -> Result<ExternalSyncStatus, ExternalSyncReposi
     match value {
         "pending" => Ok(ExternalSyncStatus::Pending),
         "synced" => Ok(ExternalSyncStatus::Synced),
+        "modified" => Ok(ExternalSyncStatus::Modified),
         "failed" => Ok(ExternalSyncStatus::Failed),
         "pending_delete" => Ok(ExternalSyncStatus::PendingDelete),
         other => Err(ExternalSyncRepositoryError::CorruptData(format!(

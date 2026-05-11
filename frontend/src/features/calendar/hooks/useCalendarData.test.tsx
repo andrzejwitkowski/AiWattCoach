@@ -80,6 +80,17 @@ function renderCalendarDataHook() {
   });
 }
 
+function renderCalendarDataHookWithProps(refreshVersion = 0) {
+  return renderHook(({ nextRefreshVersion }) => useCalendarData({ apiBaseUrl: '', refreshVersion: nextRefreshVersion }), {
+    initialProps: { nextRefreshVersion: refreshVersion },
+    wrapper: ({ children }) => (
+      <CompletedWorkoutsProvider apiBaseUrl="">
+        {children}
+      </CompletedWorkoutsProvider>
+    ),
+  });
+}
+
 describe('useCalendarData', () => {
   it('defaults unresolved weeks to idle placeholders', () => {
     const deferredEvents = createDeferred<IntervalEvent[]>();
@@ -219,6 +230,28 @@ describe('useCalendarData', () => {
 
     await act(async () => {
       await Promise.all([firstLoad, secondLoad]);
+    });
+  });
+
+  it('reloads visible weeks when refreshVersion changes', async () => {
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
+    mockNoDetailedEvents();
+    mockNoDetailedActivities();
+
+    const { result, rerender } = renderCalendarDataHookWithProps(0);
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    const callCountBeforeRefresh = vi.mocked(listCalendarEvents).mock.calls.length;
+
+    rerender({ nextRefreshVersion: 1 });
+
+    await waitFor(() => {
+      expect(vi.mocked(listCalendarEvents).mock.calls.length).toBeGreaterThan(callCountBeforeRefresh);
     });
   });
 

@@ -3,6 +3,7 @@ mod model;
 mod ports;
 #[cfg(test)]
 mod tests;
+mod update;
 
 pub use authoritative::AuthoritativePlannedWorkoutRepository;
 pub use model::{
@@ -11,6 +12,10 @@ pub use model::{
     PlannedWorkoutText,
 };
 pub use ports::{BoxFuture, PlannedWorkoutRepository};
+pub use update::{
+    PlannedWorkoutUpdateService, UpdatePlannedWorkoutCommand, UpdatePlannedWorkoutError,
+    UpdatePlannedWorkoutOutcome,
+};
 
 pub fn serialize_canonical_planned_workout(workout: &PlannedWorkout) -> String {
     let structured = crate::domain::intervals::PlannedWorkout {
