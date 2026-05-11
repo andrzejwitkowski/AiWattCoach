@@ -233,6 +233,7 @@
     "coachModalStatusReady": "Ready",
     "coachModalStatusConnected": "Connected",
     "coachModalStatusTyping": "Coach typing",
+    "coachThinking": "Analyzing your training data...",
     "coachModalStatusLoading": "Loading conversation",
     "coachModalIntro": "Use this coach to talk through a training day, this week\u2019s load balance, race strategy, fueling, or whether the current block needs a replan.",
     "coachConversationEmptyState": "Start with a question about the calendar. You can ask about today\u2019s workout, the week\u2019s structure, recovery timing, or race preparation.",

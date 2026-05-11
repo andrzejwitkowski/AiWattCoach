@@ -237,6 +237,7 @@
     "coachModalStatusReady": "Gotowy",
     "coachModalStatusConnected": "Połączony",
     "coachModalStatusTyping": "Trener pisze",
+    "coachThinking": "Analizuję Twoje dane treningowe...",
     "coachModalStatusLoading": "Ładowanie rozmowy",
     "coachModalIntro": "Użyj tego coacha, aby omówić trening z danego dnia, balans obciążenia w tygodniu, strategię wyścigu, żywienie albo to, czy bieżący blok wymaga przeplanowania.",
     "coachConversationEmptyState": "Zacznij od pytania o kalendarz. Możesz zapytać o dzisiejszy trening, strukturę tygodnia, timing regeneracji albo przygotowanie do startu.",
