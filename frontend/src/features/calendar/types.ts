@@ -81,12 +81,18 @@ export const calendarCoachErrorWsMessageSchema = z.object({
   error: z.string(),
 });
 
+export const calendarCoachThinkingWsMessageSchema = z.object({
+  type: z.literal('coach_thinking'),
+  message: z.string(),
+});
+
 export const calendarCoachServerWsMessageSchema = z.discriminatedUnion('type', [
   calendarCoachTypingWsMessageSchema,
   calendarCoachMessageWsMessageSchema,
   calendarCoachToolMessageWsMessageSchema,
   calendarCoachSystemMessageWsMessageSchema,
   calendarCoachErrorWsMessageSchema,
+  calendarCoachThinkingWsMessageSchema,
 ]);
 
 export const calendarRaceLabelPayloadSchema = z.object({

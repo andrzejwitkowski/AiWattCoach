@@ -21,6 +21,7 @@ type UseCalendarCoachChatResult = {
   isStartingNewConversation: boolean;
   isConnected: boolean;
   isCoachTyping: boolean;
+  coachThinkingMessage: string | null;
   error: string | null;
   sendMessage: (content: string) => Promise<boolean>;
   startNewConversation: () => Promise<boolean>;
@@ -83,6 +84,7 @@ export function useCalendarCoachChat({
   const [isStartingNewConversation, setIsStartingNewConversation] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isCoachTyping, setIsCoachTyping] = useState(false);
+  const [coachThinkingMessage, setCoachThinkingMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const socketConversationIdRef = useRef<string | null>(null);
@@ -206,6 +208,13 @@ export function useCalendarCoachChat({
 
           if (parsed.type === 'coach_typing') {
             setIsCoachTyping(true);
+            setCoachThinkingMessage(null);
+            return;
+          }
+
+          if (parsed.type === 'coach_thinking') {
+            setIsCoachTyping(true);
+            setCoachThinkingMessage(parsed.message);
             return;
           }
 
@@ -491,11 +500,13 @@ export function useCalendarCoachChat({
     isStartingNewConversation,
     isConnected,
     isCoachTyping,
+    coachThinkingMessage,
     error,
     sendMessage,
     startNewConversation,
   }), [
     conversation,
+    coachThinkingMessage,
     error,
     isCoachTyping,
     isConnected,
