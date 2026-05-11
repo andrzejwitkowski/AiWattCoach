@@ -3,6 +3,7 @@ use crate::domain::llm::{
     resolve_llm_reply_operation, LlmReplyClaimResult, LlmReplyOperation,
     LlmReplyResolutionWorkflow, ResolvedLlmReplyOperation,
 };
+use tracing::info;
 
 use super::{
     super::{
@@ -90,6 +91,12 @@ where
             .persist_post_provider_operation(operation, "persist_provider_response_checkpoint")
             .await?;
 
+        tracing::info!(
+            operation_user_message_id = %operation.user_message_id,
+            provider_transcript_messages = operation.provider_transcript.len(),
+            "calendar coach provider response checkpoint persisted, merging transcript"
+        );
+
         if let Err(error) = self
             .merge_provider_transcript_with_retry(
                 conversation,
@@ -109,6 +116,11 @@ where
             .await?;
             return Err(CoachConversationError::Llm(llm_error));
         }
+
+        tracing::info!(
+            operation_user_message_id = %operation.user_message_id,
+            "calendar coach provider transcript merged successfully"
+        );
 
         Ok(operation)
     }
@@ -279,6 +291,12 @@ where
         let user_id = user_id.to_string();
         let conversation_id = conversation_id.to_string();
         Box::pin(async move {
+            info!(
+                user_id = %user_id,
+                conversation_id = %conversation_id,
+                user_message_id = %user_message_id,
+                "calendar coach generate_reply started"
+            );
             let conversation = service
                 .get_existing_active_conversation(&user_id, &conversation_id)
                 .await?;
@@ -304,6 +322,14 @@ where
                     operation,
                 )
                 .await?;
+
+            tracing::info!(
+                user_id = %conversation.user_id,
+                conversation_id = %conversation.conversation_id,
+                user_message_id = %user_message.id,
+                tool_loop_rounds = llm_output.state.round_count,
+                "calendar coach reply received from LLM, persisting coach message"
+            );
 
             let Some(coach_content) = final_assistant_text(&llm_output.response) else {
                 let error = LlmError::InvalidResponse(
@@ -345,6 +371,13 @@ where
             let messages = service
                 .list_messages(&conversation.user_id, &conversation.conversation_id)
                 .await?;
+
+            tracing::info!(
+                user_id = %conversation.user_id,
+                conversation_id = %conversation.conversation_id,
+                coach_message_id = %coach_message.id,
+                "calendar coach reply persisted, returning to caller"
+            );
 
             Ok(CoachConversationReply {
                 conversation,
