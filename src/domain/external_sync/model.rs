@@ -177,9 +177,8 @@ impl ExternalSyncState {
         self
     }
 
-    pub fn mark_modified(mut self, payload_hash: String) -> Self {
+    pub fn mark_modified(mut self) -> Self {
         self.sync_status = ExternalSyncStatus::Modified;
-        self.last_seen_remote_payload_hash = Some(payload_hash);
         self.last_error = None;
         self
     }

@@ -37,6 +37,8 @@ type LabelsResponse = { labelsByDate: Record<string, Record<string, CalendarLabe
 
 const eventsCacheRef: Map<string, CachedRange<IntervalEvent[]>> = new Map();
 const labelsCacheRef: Map<string, CachedRange<LabelsResponse>> = new Map();
+let eventsCacheEpoch = 0;
+let labelsCacheEpoch = 0;
 
 const isStale = (loadedAt: number) => Date.now() - loadedAt > CACHE_TTL_MS;
 
@@ -44,8 +46,11 @@ async function fetchEventsWithCache(apiBaseUrl: string, range: { oldest: string;
   const key = `${apiBaseUrl}|${range.oldest}|${range.newest}`;
   const cached = eventsCacheRef.get(key);
   if (cached && !isStale(cached.loadedAt)) return cached.data;
+  const epoch = eventsCacheEpoch;
   const data = await listCalendarEvents(apiBaseUrl, range);
-  eventsCacheRef.set(key, { data, loadedAt: Date.now() });
+  if (eventsCacheEpoch === epoch) {
+    eventsCacheRef.set(key, { data, loadedAt: Date.now() });
+  }
   return data;
 }
 
@@ -53,8 +58,11 @@ async function fetchLabelsWithCache(apiBaseUrl: string, range: { oldest: string;
   const key = `${apiBaseUrl}|${range.oldest}|${range.newest}`;
   const cached = labelsCacheRef.get(key);
   if (cached && !isStale(cached.loadedAt)) return cached.data;
+  const epoch = labelsCacheEpoch;
   const data = await listCalendarLabels(apiBaseUrl, range);
-  labelsCacheRef.set(key, { data, loadedAt: Date.now() });
+  if (labelsCacheEpoch === epoch) {
+    labelsCacheRef.set(key, { data, loadedAt: Date.now() });
+  }
   return data;
 }
 
@@ -89,7 +97,9 @@ export function useCalendarData({ apiBaseUrl, refreshVersion = 0 }: UseCalendarD
   const inflightWeekKeysRef = useRef<Set<string>>(new Set());
   const paginationLockRef = useRef(false);
   const initializedRef = useRef(false);
+  const lastRefreshVersionRef = useRef(refreshVersion);
   const windowStartRef = useRef(windowStart);
+  const loadGenerationRef = useRef(0);
 
   const beginPagination = useCallback((direction: PaginationDirection): boolean => {
     if (paginationLockRef.current) return false;
@@ -179,13 +189,20 @@ export function useCalendarData({ apiBaseUrl, refreshVersion = 0 }: UseCalendarD
 
     for (const { startOffset, count: batchCount } of groupContiguousOffsets(missingOffsets)) {
       const batchStart = addWeeks(startMonday, startOffset);
+      const loadGeneration = loadGenerationRef.current;
       markWeeks(batchStart, batchCount, placeholderStatus);
 
       try {
         const { events, activities, labels } = await loadRange(batchStart, batchCount);
+        if (loadGeneration !== loadGenerationRef.current) {
+          continue;
+        }
         hydrateWeeks(batchStart, batchCount, events, activities, labels.labelsByDate, 'loaded');
         setState('ready');
       } catch (error) {
+        if (loadGeneration !== loadGenerationRef.current) {
+          continue;
+        }
         setStore((current) => {
           const retainedWeekKeys = createRetainedWeekKeySet(windowStartRef.current);
           const next = new Map(current);
@@ -231,8 +248,15 @@ export function useCalendarData({ apiBaseUrl, refreshVersion = 0 }: UseCalendarD
     if (!initializedRef.current) {
       return;
     }
+    if (refreshVersion === lastRefreshVersionRef.current) {
+      return;
+    }
+    lastRefreshVersionRef.current = refreshVersion;
     eventsCacheRef.clear();
     labelsCacheRef.clear();
+    eventsCacheEpoch += 1;
+    labelsCacheEpoch += 1;
+    loadGenerationRef.current += 1;
     loadedWeekKeysRef.current.clear();
     inflightWeekKeysRef.current.clear();
     setStore(new Map());
@@ -522,6 +546,8 @@ function pruneWeekKeySet(weekKeys: Set<string>, retainedWeekKeys: Set<string>): 
 export function invalidateCalendarCache() {
   eventsCacheRef.clear();
   labelsCacheRef.clear();
+  eventsCacheEpoch += 1;
+  labelsCacheEpoch += 1;
 }
 
 function invalidateCalendarEventCache(dateKey: string) {

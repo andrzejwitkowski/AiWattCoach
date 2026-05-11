@@ -74,6 +74,16 @@ function appendUniqueMessage(messages: CalendarCoachMessage[], message: Calendar
   return [...messages, message];
 }
 
+function hasNewPlannedWorkoutUpdateToolMessage(
+  previousMessages: CalendarCoachMessage[],
+  nextMessages: CalendarCoachMessage[],
+): boolean {
+  const previousIds = new Set(previousMessages.map((message) => message.id));
+  return nextMessages.some(
+    (message) => !previousIds.has(message.id) && message.toolCall?.name === 'update_planned_workout',
+  );
+}
+
 export function useCalendarCoachChat({
   isOpen,
   onPlannedWorkoutUpdated,
@@ -470,7 +480,11 @@ export function useCalendarCoachChat({
       if (!isCurrentConversation(conversationId)) {
         return false;
       }
+      const shouldRefreshCalendar = hasNewPlannedWorkoutUpdateToolMessage(messages, response.messages);
       applyConversationResponse(response.conversation, response.messages);
+      if (shouldRefreshCalendar) {
+        onPlannedWorkoutUpdated?.();
+      }
       setError(null);
       return true;
     } catch (sendError) {
@@ -501,7 +515,7 @@ export function useCalendarCoachChat({
       setIsCoachThinking(false);
       return false;
     }
-  }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError, isCurrentConversation, coachApi]);
+  }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError, isCurrentConversation, coachApi, messages, onPlannedWorkoutUpdated]);
 
   return useMemo(() => ({
     conversation,

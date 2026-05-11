@@ -78,6 +78,10 @@ where
             .into_iter()
             .find(|day| day.date == request.date)
             .ok_or(CalendarError::NotFound)?;
+        let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
+        let projected_day = self
+            .apply_calendar_override(user_id, &planned_workout_id, projected_day)
+            .await?;
 
         if projected_day.rest_day || projected_day.workout.is_none() {
             return Err(CalendarError::Validation(
@@ -85,7 +89,6 @@ where
             ));
         }
 
-        let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
         let canonical_entity = CanonicalEntityRef::new(
             CanonicalEntityKind::PlannedWorkout,
             planned_workout_id.clone(),
@@ -278,11 +281,9 @@ where
                 .wahoo_workout_token
                 .clone()
                 .unwrap_or_else(|| planned_workout_marker.clone());
-            let plan_file_json = crate::adapters::wahoo::plan_mapping::build_plan_file_json(
-                &projected_day,
-                ftp_watts,
-            )
-            .map_err(CalendarError::Validation)?;
+            let plan_file_json =
+                crate::domain::wahoo::build_plan_file_json(&projected_day, ftp_watts)
+                    .map_err(CalendarError::Validation)?;
             let plan_file_base64 = BASE64_STANDARD.encode(plan_file_json.as_bytes());
             let provider_updated_at = provider_updated_at(now);
             let plan = match resolve_existing_plan(
@@ -444,6 +445,41 @@ where
             .find_by_canonical_entities(user_id, std::slice::from_ref(canonical_entity))
             .await
             .map_err(map_external_sync_error)
+    }
+
+    async fn apply_calendar_override(
+        &self,
+        user_id: &str,
+        planned_workout_id: &str,
+        projected_day: TrainingPlanProjectedDay,
+    ) -> Result<TrainingPlanProjectedDay, CalendarError> {
+        let entries = self
+            .entries
+            .list_by_user_id_and_date_range(user_id, &projected_day.date, &projected_day.date)
+            .await
+            .map_err(|error| CalendarError::Internal(error.to_string()))?;
+        let Some(entry) = entries.into_iter().find(|entry| {
+            entry.entry_kind == crate::domain::calendar_view::CalendarEntryKind::PlannedWorkout
+                && entry.planned_workout_id.as_deref() == Some(planned_workout_id)
+        }) else {
+            return Ok(projected_day);
+        };
+        let Some(raw_workout_doc) = entry.raw_workout_doc.as_deref() else {
+            return Ok(projected_day);
+        };
+        let workout =
+            crate::domain::intervals::parse_planned_workout(raw_workout_doc).map_err(|error| {
+                CalendarError::Validation(format!(
+                    "invalid local planned workout override: {error}"
+                ))
+            })?;
+
+        Ok(TrainingPlanProjectedDay {
+            rest_day: entry.rest_day,
+            rest_day_reason: entry.rest_day_reason,
+            workout: Some(workout),
+            ..projected_day
+        })
     }
 }
 
@@ -729,14 +765,10 @@ fn workout_minutes(projected_day: &TrainingPlanProjectedDay) -> Result<i32, Cale
     let workout = projected_day.workout.as_ref().ok_or_else(|| {
         CalendarError::Validation("planned workout is missing workout body".to_string())
     })?;
-    let total_seconds: i32 = workout
-        .lines
-        .iter()
-        .filter_map(|line| match line {
-            crate::domain::intervals::PlannedWorkoutLine::Step(step) => Some(step.duration_seconds),
-            _ => None,
-        })
-        .sum();
+    let workout_text = crate::domain::intervals::serialize_planned_workout_for_intervals(workout);
+    let total_seconds = crate::domain::intervals::parse_workout_doc(Some(&workout_text), None)
+        .summary
+        .total_duration_seconds;
     if total_seconds <= 0 {
         return Err(CalendarError::Validation(
             "planned workout has no syncable duration".to_string(),

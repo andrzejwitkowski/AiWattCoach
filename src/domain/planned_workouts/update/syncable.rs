@@ -1,0 +1,276 @@
+use crate::domain::{
+    intervals::{parse_planned_workout, Event, EventCategory, UpdateEvent},
+    planned_workouts::{PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine},
+    training_plan::TrainingPlanProjectedDay,
+};
+
+use super::UpdatePlannedWorkoutError;
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct SyncablePlannedWorkout {
+    pub(super) planned_workout_id: String,
+    pub(super) date: String,
+    pub(super) rest_day: bool,
+    pub(super) rest_day_reason: Option<String>,
+    pub(super) name: Option<String>,
+    pub(super) workout: crate::domain::intervals::PlannedWorkout,
+}
+
+pub(super) fn map_intervals_to_canonical_planned_workout_content(
+    workout: &crate::domain::intervals::PlannedWorkout,
+) -> PlannedWorkoutContent {
+    PlannedWorkoutContent {
+        lines: workout
+            .lines
+            .iter()
+            .cloned()
+            .map(|line| match line {
+                crate::domain::intervals::PlannedWorkoutLine::BlankLine => {
+                    PlannedWorkoutLine::BlankLine
+                }
+                crate::domain::intervals::PlannedWorkoutLine::Text(text) => {
+                    PlannedWorkoutLine::Text(crate::domain::planned_workouts::PlannedWorkoutText {
+                        text: text.text,
+                    })
+                }
+                crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => {
+                    PlannedWorkoutLine::Repeat(
+                        crate::domain::planned_workouts::PlannedWorkoutRepeat {
+                            title: repeat.title,
+                            count: repeat.count,
+                        },
+                    )
+                }
+                crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
+                    PlannedWorkoutLine::Step(crate::domain::planned_workouts::PlannedWorkoutStep {
+                        duration_seconds: step.duration_seconds,
+                        kind: match step.kind {
+                            crate::domain::intervals::PlannedWorkoutStepKind::Steady => {
+                                crate::domain::planned_workouts::PlannedWorkoutStepKind::Steady
+                            }
+                            crate::domain::intervals::PlannedWorkoutStepKind::Ramp => {
+                                crate::domain::planned_workouts::PlannedWorkoutStepKind::Ramp
+                            }
+                        },
+                        target: match step.target {
+                            crate::domain::intervals::PlannedWorkoutTarget::PercentFtp {
+                                min,
+                                max,
+                            } => {
+                                crate::domain::planned_workouts::PlannedWorkoutTarget::PercentFtp {
+                                    min,
+                                    max,
+                                }
+                            }
+                            crate::domain::intervals::PlannedWorkoutTarget::WattsRange {
+                                min,
+                                max,
+                            } => {
+                                crate::domain::planned_workouts::PlannedWorkoutTarget::WattsRange {
+                                    min,
+                                    max,
+                                }
+                            }
+                        },
+                    })
+                }
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn map_planned_workout_to_syncable(
+    workout: &PlannedWorkout,
+) -> Result<SyncablePlannedWorkout, UpdatePlannedWorkoutError> {
+    let serialized = crate::domain::planned_workouts::serialize_canonical_planned_workout(workout);
+    let parsed = parse_planned_workout(&serialized).map_err(|error| {
+        UpdatePlannedWorkoutError::Validation(format!("invalid planned workout: {error}"))
+    })?;
+    let name = workout
+        .name
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| planned_workout_name(&parsed));
+    Ok(SyncablePlannedWorkout {
+        planned_workout_id: workout.planned_workout_id.clone(),
+        date: workout.date.clone(),
+        rest_day: workout.rest_day,
+        rest_day_reason: workout.rest_day_reason.clone(),
+        name,
+        workout: parsed,
+    })
+}
+
+impl SyncablePlannedWorkout {
+    pub(super) fn payload_hash(&self) -> String {
+        let workout_text = if self.rest_day {
+            None
+        } else {
+            Some(crate::domain::intervals::serialize_planned_workout_for_intervals(&self.workout))
+        };
+        crate::domain::planned_workouts::planned_workout_payload_hash_parts(
+            &self.date,
+            self.name.as_deref(),
+            comparable_workout_text_for_payload_hash(self.name.as_deref(), workout_text.as_deref())
+                .as_deref(),
+        )
+    }
+
+    pub(super) fn build_intervals_update(&self, existing_event: &Event) -> UpdateEvent {
+        UpdateEvent {
+            category: Some(EventCategory::Workout),
+            start_date_local: Some(format!("{}T00:00:00", self.date)),
+            event_type: existing_event
+                .event_type
+                .clone()
+                .or_else(|| Some("Ride".to_string())),
+            name: self.name.clone(),
+            description: preserve_event_description(
+                existing_event.description.as_deref(),
+                self.sync_body().as_deref(),
+                existing_event.workout_doc.as_deref(),
+            ),
+            indoor: Some(existing_event.indoor),
+            color: existing_event.color.clone(),
+            workout_doc: None,
+            file_upload: None,
+        }
+    }
+
+    pub(super) fn minutes(&self) -> Result<i32, UpdatePlannedWorkoutError> {
+        let workout_text =
+            crate::domain::intervals::serialize_planned_workout_for_intervals(&self.workout);
+        let total_seconds = crate::domain::intervals::parse_workout_doc(Some(&workout_text), None)
+            .summary
+            .total_duration_seconds;
+        if total_seconds <= 0 {
+            return Err(UpdatePlannedWorkoutError::Validation(
+                "planned workout has no syncable duration".to_string(),
+            ));
+        }
+        Ok((total_seconds + 59) / 60)
+    }
+
+    pub(super) fn to_projected_day(
+        &self,
+        user_id: &str,
+        now_epoch_seconds: i64,
+    ) -> TrainingPlanProjectedDay {
+        TrainingPlanProjectedDay {
+            user_id: user_id.to_string(),
+            workout_id: self.planned_workout_id.clone(),
+            operation_key: self
+                .planned_workout_id
+                .split(':')
+                .next()
+                .unwrap_or(&self.planned_workout_id)
+                .to_string(),
+            date: self.date.clone(),
+            rest_day: self.rest_day,
+            rest_day_reason: self.rest_day_reason.clone(),
+            workout: Some(self.workout.clone()),
+            superseded_at_epoch_seconds: None,
+            created_at_epoch_seconds: now_epoch_seconds,
+            updated_at_epoch_seconds: now_epoch_seconds,
+        }
+    }
+
+    fn sync_body(&self) -> Option<String> {
+        if self.rest_day {
+            return None;
+        }
+        let workout_text =
+            crate::domain::intervals::serialize_planned_workout_for_intervals(&self.workout);
+        comparable_workout_text_for_payload_hash(self.name.as_deref(), Some(workout_text.as_str()))
+    }
+}
+
+pub(super) fn planned_workout_name(
+    workout: &crate::domain::intervals::PlannedWorkout,
+) -> Option<String> {
+    workout.lines.iter().find_map(|line| match line {
+        crate::domain::intervals::PlannedWorkoutLine::Text(text) => Some(text.text.clone()),
+        _ => None,
+    })
+}
+
+pub(super) fn preserve_event_description(
+    existing: Option<&str>,
+    projected: Option<&str>,
+    previous_workout_doc: Option<&str>,
+) -> Option<String> {
+    let existing = existing
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| strip_generated_workout_text(value, previous_workout_doc, projected));
+    match (existing.as_deref(), projected) {
+        (None, None) => None,
+        (Some(existing), None) => Some(existing.to_string()),
+        (None, Some(projected)) => Some(projected.to_string()),
+        (Some(existing), Some(projected)) if existing.contains(projected) => {
+            Some(existing.to_string())
+        }
+        (Some(existing), Some(projected)) => Some(format!("{existing}\n\n{projected}")),
+    }
+}
+
+pub(super) fn comparable_workout_text_for_payload_hash(
+    name: Option<&str>,
+    workout_text: Option<&str>,
+) -> Option<String> {
+    let workout_text = workout_text
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let Some(name) = name.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Some(workout_text.to_string());
+    };
+    let mut lines = workout_text.lines();
+    let Some(first_line) = lines.next() else {
+        return Some(workout_text.to_string());
+    };
+    if first_line.trim() != name {
+        return Some(workout_text.to_string());
+    }
+    let body = lines.collect::<Vec<_>>().join("\n");
+    if body.trim().is_empty() {
+        Some(name.to_string())
+    } else {
+        Some(body)
+    }
+}
+
+fn strip_generated_workout_text(
+    existing: &str,
+    previous_workout_doc: Option<&str>,
+    projected: Option<&str>,
+) -> Option<String> {
+    let previous = previous_workout_doc
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| infer_legacy_generated_workout_text(existing, projected));
+    let Some(previous) = previous else {
+        return Some(existing.to_string());
+    };
+    if !existing.contains(previous) {
+        return Some(existing.to_string());
+    }
+    let stripped = existing.replace(previous, "");
+    let normalized = stripped.trim();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized.to_string())
+    }
+}
+
+fn infer_legacy_generated_workout_text<'a>(
+    existing: &'a str,
+    projected: Option<&str>,
+) -> Option<&'a str> {
+    let title = projected?.lines().next()?.trim();
+    if title.is_empty() {
+        return None;
+    }
+    let start_index = existing.find(title)?;
+    Some(existing[start_index..].trim())
+}

@@ -211,6 +211,79 @@ async fn sync_planned_workout_to_intervals_sends_structured_workout_as_descripti
 }
 
 #[tokio::test]
+async fn sync_planned_workout_to_intervals_uses_local_calendar_override_when_retrying_after_update_failure(
+) {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("AI Override".to_string()),
+        category: EventCategory::Workout,
+        description: Some("- 30m 80%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    });
+    let entries = InMemoryCalendarEntryViewRepository::default();
+    entries
+        .upsert(CalendarEntryView {
+            entry_id: "planned:training-plan:user-1:w1:1:2023-11-14".to_string(),
+            user_id: "user-1".to_string(),
+            entry_kind: CalendarEntryKind::PlannedWorkout,
+            date: "2023-11-14".to_string(),
+            start_date_local: Some("2023-11-14T00:00:00".to_string()),
+            title: "AI Override".to_string(),
+            subtitle: None,
+            description: None,
+            rest_day: false,
+            rest_day_reason: None,
+            raw_workout_doc: Some("AI Override\n- 30m 80%".to_string()),
+            planned_workout_id: Some("training-plan:user-1:w1:1:2023-11-14".to_string()),
+            completed_workout_id: None,
+            race_id: None,
+            special_day_id: None,
+            race: None,
+            summary: None,
+            sync: Some(CalendarEntrySync {
+                linked_intervals_event_id: None,
+                sync_status: Some("failed".to_string()),
+            }),
+        })
+        .await
+        .unwrap();
+    let service = CalendarService::new(
+        intervals.clone(),
+        entries,
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Old Projection",
+        )]),
+        InMemoryExternalSyncStateRepository::default(),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    let created = intervals.created_events.lock().unwrap().clone();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].name.as_deref(), Some("AI Override"));
+    assert_eq!(created[0].description.as_deref(), Some("- 30m 80%"));
+}
+
+#[tokio::test]
 async fn sync_planned_workout_to_intervals_updates_existing_event_description() {
     let intervals = FakeIntervalsService::with_created_event(Event {
         id: 77,

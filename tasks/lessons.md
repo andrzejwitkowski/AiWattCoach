@@ -50,6 +50,8 @@
 
 ## Small Review Fixes
 
+- Before changing Intervals event payload field semantics, inspect the OpenAPI schema for the exact endpoint and method. For event create/update, `description` is the string field used by the existing planned-workout sync flow, while documented `workout_doc` is an object and must not be populated with the repo's canonical workout text string just because local DTOs expose that name.
+
 - When a shared logged-body helper is reused across LLM adapters, redact structured JSON before serialization and truncate by char boundary lookup instead of scanning the full string just to decide whether to cut it.
 - For OAuth adapter logging, redact authorization `code` fields explicitly even if the generic sensitive-key helper does not catch that exact name, and avoid logging raw token/userinfo success bodies when size-plus-hash diagnostics are enough.
 - If provider request logs still leave LLM failures opaque, instrument the shared tool loop itself instead of only the outer adapter. For human debugging you usually need the whole sequence: round start, provider assistant message, tool call, tool result, and final assistant turn. If that is too verbose for normal operation, put the full payload logging behind an explicit env flag rather than forcing operators to guess from message counts.

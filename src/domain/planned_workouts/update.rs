@@ -1,5 +1,11 @@
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use sha2::Digest;
+mod syncable;
+
+#[cfg(test)]
+use syncable::{comparable_workout_text_for_payload_hash, preserve_event_description};
+use syncable::{
+    map_intervals_to_canonical_planned_workout_content, map_planned_workout_to_syncable,
+    planned_workout_name, SyncablePlannedWorkout,
+};
 
 use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
@@ -8,13 +14,12 @@ use crate::domain::{
         ExternalSyncStateRepository,
     },
     identity::Clock,
-    intervals::{
-        parse_planned_workout, Event, EventCategory, IntervalsError, IntervalsUseCases, UpdateEvent,
-    },
+    intervals::{parse_planned_workout, IntervalsError, IntervalsUseCases},
     planned_workout_tokens::PlannedWorkoutTokenRepository,
     settings::UserSettingsRepository,
     wahoo::{WahooError, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases},
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 
 use super::{PlannedWorkout, PlannedWorkoutError, PlannedWorkoutRepository};
 
@@ -53,16 +58,6 @@ pub struct UpdatePlannedWorkoutCommand {
 pub struct UpdatePlannedWorkoutOutcome {
     pub planned_workout: PlannedWorkout,
     pub synced_providers: Vec<ExternalProvider>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct SyncablePlannedWorkout {
-    planned_workout_id: String,
-    date: String,
-    rest_day: bool,
-    rest_day_reason: Option<String>,
-    name: Option<String>,
-    workout: crate::domain::intervals::PlannedWorkout,
 }
 
 #[derive(Clone)]
@@ -153,6 +148,7 @@ where
         })?;
         let updated_workout = PlannedWorkout {
             workout: map_intervals_to_canonical_planned_workout_content(&parsed),
+            name: planned_workout_name(&parsed),
             ..existing
         };
         let syncable = map_planned_workout_to_syncable(&updated_workout)?;
@@ -160,7 +156,6 @@ where
             CanonicalEntityKind::PlannedWorkout,
             updated_workout.planned_workout_id.clone(),
         );
-        let payload_hash = syncable.payload_hash();
 
         let persisted = self
             .planned_workouts
@@ -180,7 +175,7 @@ where
             let provider = state.provider.clone();
             let modified_state = self
                 .sync_states
-                .upsert(state.mark_modified(payload_hash.clone()))
+                .upsert(state.mark_modified())
                 .await
                 .map_err(map_sync_state_error)?;
 
@@ -316,12 +311,7 @@ where
             }
         };
         let provider_updated_at = provider_updated_at(self.clock.now_epoch_seconds());
-        // TODO(arch): domain→adapter violation – build_plan_file_json lives in
-        // crate::adapters::wahoo::plan_mapping. cargo_pup only checks `use` declarations,
-        // not fully-qualified path expressions, so verify:arch does not catch this.
-        // Fix in a follow-up PR by introducing a domain-level port or moving the pure
-        // mapping function to the domain layer.
-        let plan_file_json = crate::adapters::wahoo::plan_mapping::build_plan_file_json(
+        let plan_file_json = crate::domain::wahoo::build_plan_file_json(
             &planned_workout.to_projected_day(user_id, self.clock.now_epoch_seconds()),
             ftp_watts,
         )
@@ -444,172 +434,6 @@ fn map_wahoo_error(error: WahooError) -> UpdatePlannedWorkoutError {
     }
 }
 
-fn map_intervals_to_canonical_planned_workout_content(
-    workout: &crate::domain::intervals::PlannedWorkout,
-) -> super::PlannedWorkoutContent {
-    super::PlannedWorkoutContent {
-        lines: workout
-            .lines
-            .iter()
-            .cloned()
-            .map(|line| match line {
-                crate::domain::intervals::PlannedWorkoutLine::BlankLine => {
-                    super::PlannedWorkoutLine::BlankLine
-                }
-                crate::domain::intervals::PlannedWorkoutLine::Text(text) => {
-                    super::PlannedWorkoutLine::Text(super::PlannedWorkoutText { text: text.text })
-                }
-                crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => {
-                    super::PlannedWorkoutLine::Repeat(super::PlannedWorkoutRepeat {
-                        title: repeat.title,
-                        count: repeat.count,
-                    })
-                }
-                crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
-                    super::PlannedWorkoutLine::Step(super::PlannedWorkoutStep {
-                        duration_seconds: step.duration_seconds,
-                        kind: match step.kind {
-                            crate::domain::intervals::PlannedWorkoutStepKind::Steady => {
-                                super::PlannedWorkoutStepKind::Steady
-                            }
-                            crate::domain::intervals::PlannedWorkoutStepKind::Ramp => {
-                                super::PlannedWorkoutStepKind::Ramp
-                            }
-                        },
-                        target: match step.target {
-                            crate::domain::intervals::PlannedWorkoutTarget::PercentFtp {
-                                min,
-                                max,
-                            } => super::PlannedWorkoutTarget::PercentFtp { min, max },
-                            crate::domain::intervals::PlannedWorkoutTarget::WattsRange {
-                                min,
-                                max,
-                            } => super::PlannedWorkoutTarget::WattsRange { min, max },
-                        },
-                    })
-                }
-            })
-            .collect(),
-    }
-}
-
-fn map_planned_workout_to_syncable(
-    workout: &PlannedWorkout,
-) -> Result<SyncablePlannedWorkout, UpdatePlannedWorkoutError> {
-    let serialized = crate::domain::planned_workouts::serialize_canonical_planned_workout(workout);
-    let parsed = parse_planned_workout(&serialized).map_err(|error| {
-        UpdatePlannedWorkoutError::Validation(format!("invalid planned workout: {error}"))
-    })?;
-    let name = workout
-        .name
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| {
-            parsed.lines.iter().find_map(|line| match line {
-                crate::domain::intervals::PlannedWorkoutLine::Text(text) => Some(text.text.clone()),
-                _ => None,
-            })
-        });
-    Ok(SyncablePlannedWorkout {
-        planned_workout_id: workout.planned_workout_id.clone(),
-        date: workout.date.clone(),
-        rest_day: workout.rest_day,
-        rest_day_reason: workout.rest_day_reason.clone(),
-        name,
-        workout: parsed,
-    })
-}
-
-impl SyncablePlannedWorkout {
-    fn payload_hash(&self) -> String {
-        let workout_text = if self.rest_day {
-            None
-        } else {
-            Some(crate::domain::intervals::serialize_planned_workout_for_intervals(&self.workout))
-        };
-        let digest = sha2::Sha256::digest(format!(
-            "{}\n{}\n{}",
-            self.date,
-            self.name.as_deref().unwrap_or_default(),
-            workout_text.as_deref().unwrap_or_default(),
-        ));
-        format!("{digest:x}")
-    }
-
-    fn build_intervals_update(&self, existing_event: &Event) -> UpdateEvent {
-        UpdateEvent {
-            category: Some(EventCategory::Workout),
-            start_date_local: Some(format!("{}T00:00:00", self.date)),
-            event_type: existing_event
-                .event_type
-                .clone()
-                .or_else(|| Some("Ride".to_string())),
-            name: self.name.clone(),
-            description: preserve_event_description(
-                existing_event.description.as_deref(),
-                self.sync_body().as_deref(),
-            ),
-            indoor: Some(existing_event.indoor),
-            color: existing_event.color.clone(),
-            workout_doc: None,
-            file_upload: None,
-        }
-    }
-
-    fn sync_body(&self) -> Option<String> {
-        if self.rest_day {
-            return None;
-        }
-        let workout_text =
-            crate::domain::intervals::serialize_planned_workout_for_intervals(&self.workout);
-        comparable_workout_text_for_payload_hash(self.name.as_deref(), Some(workout_text.as_str()))
-    }
-
-    fn minutes(&self) -> Result<i32, UpdatePlannedWorkoutError> {
-        let total_seconds: i32 = self
-            .workout
-            .lines
-            .iter()
-            .filter_map(|line| match line {
-                crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
-                    Some(step.duration_seconds)
-                }
-                _ => None,
-            })
-            .sum();
-        if total_seconds <= 0 {
-            return Err(UpdatePlannedWorkoutError::Validation(
-                "planned workout has no syncable duration".to_string(),
-            ));
-        }
-        Ok((total_seconds + 59) / 60)
-    }
-
-    fn to_projected_day(
-        &self,
-        user_id: &str,
-        now_epoch_seconds: i64,
-    ) -> crate::domain::training_plan::TrainingPlanProjectedDay {
-        crate::domain::training_plan::TrainingPlanProjectedDay {
-            user_id: user_id.to_string(),
-            workout_id: self.planned_workout_id.clone(),
-            operation_key: self
-                .planned_workout_id
-                .split(':')
-                .next()
-                .unwrap_or(&self.planned_workout_id)
-                .to_string(),
-            date: self.date.clone(),
-            rest_day: self.rest_day,
-            rest_day_reason: self.rest_day_reason.clone(),
-            workout: Some(self.workout.clone()),
-            superseded_at_epoch_seconds: None,
-            created_at_epoch_seconds: now_epoch_seconds,
-            updated_at_epoch_seconds: now_epoch_seconds,
-        }
-    }
-}
-
 async fn ensure_planned_workout_marker<Tokens>(
     tokens: &Tokens,
     user_id: &str,
@@ -652,48 +476,6 @@ where
 {
     if let Err(error) = refresh.refresh_range_for_user(user_id, date, date).await {
         tracing::warn!(%user_id, %date, %error, "planned workout update succeeded but calendar view refresh failed");
-    }
-}
-
-fn preserve_event_description(existing: Option<&str>, projected: Option<&str>) -> Option<String> {
-    match (
-        existing.map(str::trim).filter(|value| !value.is_empty()),
-        projected,
-    ) {
-        (None, None) => None,
-        (Some(existing), None) => Some(existing.to_string()),
-        (None, Some(projected)) => Some(projected.to_string()),
-        (Some(existing), Some(projected)) if existing.contains(projected) => {
-            Some(existing.to_string())
-        }
-        (Some(existing), Some(projected)) => Some(format!("{existing}\n\n{projected}")),
-    }
-}
-
-fn comparable_workout_text_for_payload_hash(
-    name: Option<&str>,
-    workout_text: Option<&str>,
-) -> Option<String> {
-    let workout_text = workout_text
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?;
-    let Some(name) = name.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Some(workout_text.to_string());
-    };
-
-    let mut lines = workout_text.lines();
-    let Some(first_line) = lines.next() else {
-        return Some(workout_text.to_string());
-    };
-    if first_line.trim() != name {
-        return Some(workout_text.to_string());
-    }
-
-    let body = lines.collect::<Vec<_>>().join("\n");
-    if body.trim().is_empty() {
-        Some(name.to_string())
-    } else {
-        Some(body)
     }
 }
 

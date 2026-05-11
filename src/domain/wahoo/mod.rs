@@ -1,5 +1,6 @@
 mod import_mapping;
 mod model;
+mod plan_mapping;
 mod ports;
 mod service;
 #[cfg(test)]
@@ -12,6 +13,7 @@ pub use model::{
     WahooError, WahooFileReference, WahooPlan, WahooToken, WahooUpdatePlan, WahooUpdateWorkout,
     WahooUser, WahooWorkout, WahooWorkoutList, WahooWorkoutSummary,
 };
+pub use plan_mapping::build_plan_file_json;
 pub use ports::{BoxFuture, WahooApiPort, WahooConnectStateRepository, WahooOAuthPort};
 pub use service::{WahooService, WahooUseCases};
 pub use webhook::{

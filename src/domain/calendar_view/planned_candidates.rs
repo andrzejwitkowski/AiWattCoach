@@ -53,23 +53,33 @@ pub trait CalendarPlannedWorkoutSource: Clone + Send + Sync + 'static {
 pub fn select_visible_planned_workout_candidates(
     candidates: Vec<CalendarPlannedWorkoutCandidate>,
 ) -> Vec<CalendarPlannedWorkoutCandidate> {
+    let imported_ids = candidates
+        .iter()
+        .filter(|candidate| candidate.origin == CalendarPlannedWorkoutOrigin::Imported)
+        .map(|candidate| candidate.workout.planned_workout_id.clone())
+        .collect::<HashSet<_>>();
+    let projected_ids = candidates
+        .iter()
+        .filter(|candidate| candidate.origin == CalendarPlannedWorkoutOrigin::Projected)
+        .map(|candidate| candidate.workout.planned_workout_id.clone())
+        .collect::<HashSet<_>>();
     let projected_sync_keys = candidates
         .iter()
         .filter(|candidate| candidate.origin == CalendarPlannedWorkoutOrigin::Projected)
         .flat_map(|candidate| candidate.sync_keys.iter().cloned())
         .collect::<HashSet<_>>();
-
     candidates
         .into_iter()
         .filter(|candidate| {
             if candidate.origin == CalendarPlannedWorkoutOrigin::Projected {
-                return true;
+                return !imported_ids.contains(&candidate.workout.planned_workout_id);
             }
 
-            !candidate
-                .sync_keys
-                .iter()
-                .any(|sync_key| projected_sync_keys.contains(sync_key))
+            projected_ids.contains(&candidate.workout.planned_workout_id)
+                || !candidate
+                    .sync_keys
+                    .iter()
+                    .any(|sync_key| projected_sync_keys.contains(sync_key))
         })
         .collect()
 }

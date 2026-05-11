@@ -115,6 +115,9 @@ describe('CalendarPage', () => {
 
     await user.click(screen.getByRole('button', { name: /open ai coach/i }));
 
-    expect(vi.mocked(useCalendarCoachChat)).toHaveBeenCalledWith({ isOpen: true });
+    expect(vi.mocked(useCalendarCoachChat)).toHaveBeenCalledWith({
+      isOpen: true,
+      onPlannedWorkoutUpdated: expect.any(Function),
+    });
   });
 });

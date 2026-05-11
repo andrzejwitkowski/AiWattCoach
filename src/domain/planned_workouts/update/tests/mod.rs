@@ -9,7 +9,8 @@ use crate::domain::{
     intervals::IntervalsUseCases,
     planned_workout_tokens::{NoopPlannedWorkoutTokenRepository, PlannedWorkoutTokenRepository},
     planned_workouts::{
-        PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutText,
+        PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutRepeat,
+        PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
     },
     settings::{NoopUserSettingsRepository, UserSettingsRepository},
     wahoo::WahooUseCases,
@@ -61,14 +62,46 @@ fn map_planned_workout_to_syncable_preserves_name_and_hashable_body() {
 }
 
 #[test]
+fn syncable_minutes_expand_repeat_blocks() {
+    let workout = PlannedWorkout::new(
+        "training-plan:user-1:w1:2026-05-10".to_string(),
+        "user-1".to_string(),
+        "2026-05-10".to_string(),
+        PlannedWorkoutContent {
+            lines: vec![
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Repeat Session".to_string(),
+                }),
+                PlannedWorkoutLine::Repeat(PlannedWorkoutRepeat {
+                    title: Some("Main Set".to_string()),
+                    count: 3,
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 120,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 80.0,
+                        max: 80.0,
+                    },
+                }),
+            ],
+        },
+    );
+
+    let syncable = map_planned_workout_to_syncable(&workout).expect("syncable workout");
+
+    assert_eq!(syncable.minutes().expect("duration"), 6);
+}
+
+#[test]
 fn preserve_event_description_returns_none_when_both_absent() {
-    assert_eq!(preserve_event_description(None, None), None);
+    assert_eq!(preserve_event_description(None, None, None), None);
 }
 
 #[test]
 fn preserve_event_description_returns_projected_when_existing_is_absent() {
     assert_eq!(
-        preserve_event_description(None, Some("workout body")),
+        preserve_event_description(None, Some("workout body"), None),
         Some("workout body".to_string())
     );
 }
@@ -76,7 +109,7 @@ fn preserve_event_description_returns_projected_when_existing_is_absent() {
 #[test]
 fn preserve_event_description_returns_existing_when_projected_is_absent() {
     assert_eq!(
-        preserve_event_description(Some("coach note"), None),
+        preserve_event_description(Some("coach note"), None, None),
         Some("coach note".to_string())
     );
 }
@@ -84,7 +117,11 @@ fn preserve_event_description_returns_existing_when_projected_is_absent() {
 #[test]
 fn preserve_event_description_returns_existing_when_it_already_contains_projected() {
     assert_eq!(
-        preserve_event_description(Some("coach note\n\nworkout body"), Some("workout body")),
+        preserve_event_description(
+            Some("coach note\n\nworkout body"),
+            Some("workout body"),
+            None
+        ),
         Some("coach note\n\nworkout body".to_string())
     );
 }
@@ -92,8 +129,32 @@ fn preserve_event_description_returns_existing_when_it_already_contains_projecte
 #[test]
 fn preserve_event_description_appends_projected_when_existing_lacks_it() {
     assert_eq!(
-        preserve_event_description(Some("coach note"), Some("workout body")),
+        preserve_event_description(Some("coach note"), Some("workout body"), None),
         Some("coach note\n\nworkout body".to_string())
+    );
+}
+
+#[test]
+fn preserve_event_description_replaces_previous_generated_workout_body() {
+    assert_eq!(
+        preserve_event_description(
+            Some("coach note\n\nOld workout\n- 10m 60%"),
+            Some("New workout\n- 20m 70%"),
+            Some("Old workout\n- 10m 60%"),
+        ),
+        Some("coach note\n\nNew workout\n- 20m 70%".to_string())
+    );
+}
+
+#[test]
+fn preserve_event_description_replaces_legacy_generated_body_when_workout_doc_missing() {
+    assert_eq!(
+        preserve_event_description(
+            Some("coach note\n\nNew workout\n- 10m 60%"),
+            Some("New workout\n- 20m 70%"),
+            None,
+        ),
+        Some("coach note\n\nNew workout\n- 20m 70%".to_string())
     );
 }
 
@@ -229,6 +290,11 @@ async fn update_planned_workout_marks_intervals_state_modified_then_synced_after
         intervals.updated_events()[0].1.name.as_deref(),
         Some("Warmup")
     );
+    assert_eq!(
+        intervals.updated_events()[0].1.description.as_deref(),
+        Some("manual note\n\n- 5m 60%")
+    );
+    assert_eq!(intervals.updated_events()[0].1.workout_doc, None);
     let stored_states = sync_states.stored();
     assert_eq!(stored_states.len(), 1);
     assert_eq!(stored_states[0].sync_status, ExternalSyncStatus::Synced);
@@ -300,6 +366,10 @@ async fn update_planned_workout_keeps_local_change_when_intervals_update_fails()
     assert_eq!(stored_states[0].sync_status, ExternalSyncStatus::Failed);
     assert_eq!(stored_states[0].last_error.as_deref(), Some("boom"));
     assert_eq!(
+        stored_states[0].last_seen_remote_payload_hash,
+        intervals_sync_state().last_seen_remote_payload_hash
+    );
+    assert_eq!(
         shared_log
             .lock()
             .expect("shared log mutex poisoned")
@@ -360,6 +430,10 @@ async fn update_planned_workout_updates_existing_wahoo_plan_and_workout() {
     assert_eq!(wahoo.updated_workouts().len(), 1);
     assert_eq!(wahoo.updated_workouts()[0].0, 6001);
     assert_eq!(wahoo.updated_workouts()[0].1.minutes, Some(5));
+    assert_eq!(
+        wahoo.updated_workouts()[0].1.name.as_deref(),
+        Some("Warmup")
+    );
     assert_eq!(
         wahoo.updated_workouts()[0].1.starts.as_deref(),
         Some("2026-05-10T00:00:00.000Z")

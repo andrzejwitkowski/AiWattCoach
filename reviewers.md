@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-11 | user | calendar coach planned-workout Intervals update payload alignment
+
+- Problem: final pre-commit review incorrectly inferred that `update_planned_workout` should send canonical workout text as a string in Intervals `workout_doc`. Intervals OpenAPI documents both event create and update as `EventEx`, where `description` is a string and `workout_doc` is an object, while the known-working planned-workout create path sends the workout body in `description` and leaves `workout_doc` empty.
+- Fix: restored the planned-workout update payload to mirror the working create path: generated workout text is written to `description` with manual notes preserved, and `workout_doc` is not populated with a string. Updated focused regressions to assert `description` carries the updated body and `workout_doc` stays `None`.
+- Prevention: before changing provider field semantics, inspect the current provider OpenAPI schema for the exact endpoint and method. Do not infer PUT/PATCH/create payload shape from local DTO names or from read-model field names.
+
+### 2026-05-11 | self (final pre-commit review) | calendar coach planned-workout Intervals description cleanup
+
+- Problem: final pre-commit review found that the `update_planned_workout` Intervals update path had moved structured workout content into `workout_doc`, but `preserve_event_description(...)` could still add the generated workout body back into `description` when no user note existed or append it to a manual note. That conflicted with the migration goal of keeping `description` for user notes while removing legacy generated workout text.
+- Fix: changed the update-service description helper to return only the cleaned existing note text after stripping previous/generated workout content, never the new generated workout body. Updated focused regressions so no-note updates keep `description` empty and manual notes remain note-only.
+- Prevention: when moving provider structured content from a legacy free-text field into a dedicated field, verify both the new field is populated and the old field is not repopulated by preservation helpers or fallback paths.
+
+### 2026-05-11 | self (4-loop review) | calendar coach planned-workout update hardening
+
+- Problem: the 4-loop review found remaining correctness and maintainability gaps in `update_planned_workout`: Intervals updates were not sending `workout_doc`, `mark_modified` wrote local hashes into remote-observation fields, REST fallback did not refresh the calendar after update tool messages, Wahoo minutes ignored repeat blocks, stale names could survive replacements, failed sync states projected as `modified`, local overrides could be hidden by projected candidates, legacy generated Intervals descriptions could linger, update-service hashes differed from calendar projection hashes, manual sync retries could use stale projections, and the update module mixed orchestration with mapping/hash helpers.
+- Fix: sent replacement `workout_doc`, kept remote-observation hashes unchanged on local modification, refreshed on new REST fallback update tool messages only, expanded repeat-aware minutes, derived names from replacement docs, projected `failed` before `modified`, preferred imported candidates only for same-id local overrides while keeping duplicate sync-key cleanup, stripped legacy generated description text, centralized planned-workout payload hashing, applied calendar overrides before manual retry sync, and split syncable mapping/hash/description helpers into `src/domain/planned_workouts/update/syncable.rs` with focused regressions.
+- Prevention: for sync-capable local overrides, review the full write/read/retry loop: local persistence, provider payloads, sync-state semantics, read-model projection, frontend cache refresh, and manual retry paths. Keep payload hash helpers shared and split mixed orchestration modules before they become review bottlenecks.
+
 ### 2026-05-11 | self | calendar coach planned-workout update follow-up
 
 - Problem: the new `update_planned_workout` flow had tool-level and enum coverage, but no focused service tests proving the critical orchestration contract: local planned-workout persistence before external side effects, sync-state transition to `Modified`, refresh after success, and local-update durability when Intervals sync fails.

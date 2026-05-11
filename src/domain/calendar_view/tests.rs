@@ -444,6 +444,43 @@ fn planned_workout_projection_marks_entry_modified_when_payload_hash_changed() {
     );
 }
 
+#[test]
+fn planned_workout_projection_prefers_failed_status_over_modified_hash() {
+    let state = sample_planned_sync_state().mark_failed("boom".to_string());
+
+    let entry = project_planned_workout_entry(&sample_planned_workout(), &[state]);
+
+    assert_eq!(
+        entry
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("failed")
+    );
+}
+
+#[test]
+fn planned_workout_projection_marks_synced_when_hash_matches_update_service_hash() {
+    let workout = sample_planned_workout();
+    let payload_hash = crate::domain::planned_workouts::planned_workout_payload_hash(&workout);
+    let state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::PlannedWorkout, "planned-1".to_string()),
+    )
+    .mark_synced("77".to_string(), payload_hash, 1_700_000_000);
+
+    let entry = project_planned_workout_entry(&workout, &[state]);
+
+    assert_eq!(
+        entry
+            .sync
+            .as_ref()
+            .and_then(|sync| sync.sync_status.as_deref()),
+        Some("synced")
+    );
+}
+
 #[tokio::test]
 async fn rebuild_for_user_uses_authoritative_sync_when_view_store_is_empty() {
     let repository = InMemoryCalendarEntryViewRepository::default();
@@ -883,6 +920,64 @@ async fn refresh_range_for_user_uses_external_sync_state_for_imported_planned_wo
             .and_then(|sync| sync.sync_status.as_deref()),
         Some("modified")
     );
+}
+
+#[tokio::test]
+async fn refresh_range_for_user_prefers_imported_planned_workout_override_over_projected_candidate()
+{
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestCalendarPlannedWorkoutSource::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        CanonicalEntityRef::new(CanonicalEntityKind::PlannedWorkout, "planned-1".to_string()),
+    )
+    .mark_synced("144".to_string(), "hash-1".to_string(), 2);
+    let sync_key = CalendarPlannedSyncKey {
+        provider: "intervals".to_string(),
+        external_id: "144".to_string(),
+    };
+    let sync_states = TestExternalSyncStateRepository::with_states(vec![sync_state]);
+
+    planned.upsert(
+        sample_planned_workout(),
+        CalendarPlannedWorkoutOrigin::Projected,
+        vec![sync_key.clone()],
+    );
+    planned.upsert(
+        PlannedWorkout::new(
+            "planned-1".to_string(),
+            "user-1".to_string(),
+            "2026-05-10".to_string(),
+            PlannedWorkoutContent {
+                lines: vec![PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "AI override".to_string(),
+                })],
+            },
+        ),
+        CalendarPlannedWorkoutOrigin::Imported,
+        vec![sync_key],
+    );
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        completed,
+        races,
+        special_days,
+        sync_states,
+    );
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].title, "AI override");
 }
 
 #[tokio::test]

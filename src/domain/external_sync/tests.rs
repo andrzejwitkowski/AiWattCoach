@@ -110,13 +110,13 @@ fn sync_state_mark_modified_sets_modified_status_and_clears_error() {
     )
     .mark_synced("77".to_string(), "hash-1".to_string(), 1_700_000_000)
     .mark_failed("boom".to_string())
-    .mark_modified("hash-2".to_string());
+    .mark_modified();
 
     assert_eq!(state.sync_status, ExternalSyncStatus::Modified);
     assert_eq!(state.last_error, None);
     assert_eq!(
         state.last_seen_remote_payload_hash.as_deref(),
-        Some("hash-2")
+        Some("hash-1")
     );
     assert_eq!(state.external_id.as_deref(), Some("77"));
 }
