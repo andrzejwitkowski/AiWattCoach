@@ -58,7 +58,9 @@ async function request<TRes>(
     headers,
     credentials: 'include',
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal: options?.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
+    signal: options?.timeoutMs !== undefined && options.timeoutMs > 0
+      ? AbortSignal.timeout(options.timeoutMs)
+      : undefined,
   });
 
   if (response.status === 401) {

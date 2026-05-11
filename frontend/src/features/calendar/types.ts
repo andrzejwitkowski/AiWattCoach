@@ -83,7 +83,6 @@ export const calendarCoachErrorWsMessageSchema = z.object({
 
 export const calendarCoachThinkingWsMessageSchema = z.object({
   type: z.literal('coach_thinking'),
-  message: z.string(),
 });
 
 export const calendarCoachServerWsMessageSchema = z.discriminatedUnion('type', [

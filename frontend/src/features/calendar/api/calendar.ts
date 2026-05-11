@@ -62,7 +62,7 @@ export function useCalendarCoachApi() {
         apiBaseUrl,
         `/api/calendar/coach/conversations/${conversationId}/messages`,
         validated,
-        { timeoutMs: 600_000 }, // 10 min — matches scheduler execution timeout
+        { timeoutMs: 600_000 }, // defensive upper bound for long-running LLM tool loops
       );
       return calendarCoachSendMessageResponseSchema.parse(data);
     },

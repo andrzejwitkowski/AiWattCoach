@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::{
     dto::{
-        coach_message, coach_typing_message, error_message, tool_message,
+        coach_message, coach_thinking_message, coach_typing_message, error_message, tool_message,
         CalendarCoachConversationPath, ClientWsMessage,
     },
     error::map_calendar_coach_error,
@@ -24,6 +24,7 @@ use super::{
 };
 
 const MAX_QUEUED_MESSAGES: usize = 4;
+const COACH_REPLY_KEEPALIVE_INTERVAL_SECONDS: u64 = 15;
 
 pub async fn calendar_coach_ws(
     State(state): State<AppState>,
@@ -366,7 +367,11 @@ async fn process_send_message(
                     return true;
                 }
 
-                match tokio::time::timeout(std::time::Duration::from_secs(15), &mut result_rx).await
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(COACH_REPLY_KEEPALIVE_INTERVAL_SECONDS),
+                    &mut result_rx,
+                )
+                .await
                 {
                     Ok(Ok(Ok(reply))) => {
                         if !connection_open.load(Ordering::Relaxed) {
@@ -421,16 +426,11 @@ async fn process_send_message(
                         return true;
                     }
                     Err(_elapsed) => {
-                        // 15s elapsed, send keepalive progress
-                        if send_ws_json(
-                            &sender,
-                            serde_json::json!({
-                                "type": "coach_thinking",
-                                "message": "Analyzing your training data..."
-                            }),
-                        )
-                        .await
-                        .is_err()
+                        // connection_open is not observed while blocked on timeout;
+                        // a closure will be picked up at the start of the next iteration.
+                        if send_ws_json(&sender, coach_thinking_message())
+                            .await
+                            .is_err()
                         {
                             return true;
                         }

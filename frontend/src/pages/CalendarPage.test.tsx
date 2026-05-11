@@ -36,7 +36,7 @@ describe('CalendarPage', () => {
       isStartingNewConversation: false,
       isConnected: false,
   isCoachTyping: false,
-  coachThinkingMessage: null,
+  isCoachThinking: false,
       error: null,
       sendMessage: vi.fn().mockResolvedValue(true),
       startNewConversation: vi.fn().mockResolvedValue(true),

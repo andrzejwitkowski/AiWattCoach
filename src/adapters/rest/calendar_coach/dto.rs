@@ -132,3 +132,14 @@ pub(super) fn error_message(message: impl Into<String>) -> ServerWsMessage {
         error: Some(message.into()),
     }
 }
+
+pub(super) fn coach_thinking_message() -> ServerWsMessage {
+    ServerWsMessage {
+        message_type: "coach_thinking".to_string(),
+        message: None,
+        content: None,
+        conversation: None,
+        messages: None,
+        error: None,
+    }
+}
