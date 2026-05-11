@@ -113,6 +113,7 @@ where
                 .await?;
             return Err(CoachConversationError::Llm(error));
         };
+        let reasoning_content = recovered_reasoning_content(operation);
 
         let coach_message_id = operation.reply_message_id.clone().ok_or_else(|| {
             CoachConversationError::Repository(
@@ -126,7 +127,7 @@ where
                 content,
                 Some(coach_message_id),
                 None,
-                None,
+                reasoning_content,
             )
             .await?;
         let completed = operation.mark_completed_from_existing_message(
@@ -180,4 +181,13 @@ where
 
 fn recovered_assistant_reply_text(operation: &CoachConversationReplyOperation) -> Option<String> {
     last_nonempty_assistant_content(&operation.provider_transcript)
+}
+
+fn recovered_reasoning_content(operation: &CoachConversationReplyOperation) -> Option<String> {
+    operation
+        .provider_transcript
+        .iter()
+        .rev()
+        .find(|m| m.role == LlmMessageRole::Assistant)
+        .and_then(|m| m.reasoning_content.clone())
 }
