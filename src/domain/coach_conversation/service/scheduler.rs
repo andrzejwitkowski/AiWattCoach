@@ -21,7 +21,7 @@ use super::{
 pub(crate) const COACH_CONVERSATION_REPLY_TASK_TYPE: &str = "coach_conversation.reply";
 pub(crate) const COACH_CONVERSATION_REPLY_EXECUTION_TIMEOUT_BUFFER_SECONDS: i64 = 30;
 pub(crate) const COACH_CONVERSATION_REPLY_EXECUTION_TIMEOUT_SECONDS: i64 =
-    (LLM_REQUEST_TIMEOUT_SECONDS as i64 * 2)
+    (LLM_REQUEST_TIMEOUT_SECONDS as i64 * crate::domain::llm_tools::TOOL_LOOP_MAX_ROUNDS as i64)
         + COACH_CONVERSATION_REPLY_EXECUTION_TIMEOUT_BUFFER_SECONDS;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
