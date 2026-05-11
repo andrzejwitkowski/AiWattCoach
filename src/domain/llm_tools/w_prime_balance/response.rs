@@ -62,6 +62,9 @@ fn sample_balance_series(series: &[f64], max_points: usize) -> Vec<f64> {
     if max_points == 0 || series.is_empty() {
         return Vec::new();
     }
+    if max_points == 1 {
+        return vec![round_1(*series.last().unwrap_or(&0.0))];
+    }
     if series.len() <= max_points {
         return series.iter().map(|&v| round_1(v)).collect();
     }

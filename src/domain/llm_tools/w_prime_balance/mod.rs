@@ -221,6 +221,16 @@ fn parse_args(arguments_json: &str) -> Result<WPrimeBalanceArgs, String> {
             args.date
         ));
     }
+    if let Some(cp) = args.cp_watts {
+        if cp <= 0 {
+            return Err(format!("invalid cp_watts: expected > 0, got {cp}"));
+        }
+    }
+    if let Some(wp) = args.w_prime_joules {
+        if wp <= 0 {
+            return Err(format!("invalid w_prime_joules: expected > 0, got {wp}"));
+        }
+    }
     Ok(args)
 }
 
@@ -279,7 +289,7 @@ fn extract_power_samples(workout: &CompletedWorkout) -> Result<Vec<Option<i32>>,
     match series {
         Some(CompletedWorkoutSeries::Integers(values)) => Ok(values
             .iter()
-            .map(|&v| (v >= 0).then_some(v as i32))
+            .map(|&v| (v >= 0 && v <= i32::MAX as i64).then_some(v as i32))
             .collect()),
         Some(CompletedWorkoutSeries::Floats(values)) => Ok(values
             .iter()
@@ -328,7 +338,7 @@ fn compute_w_prime_balance(
     w_prime_joules: i32,
 ) -> (Vec<f64>, f64, f64, f64, f64, u32, u32, u32, u32, bool) {
     let cp = cp_watts as f64;
-    let w_prime = w_prime_joules as f64;
+    let w_prime = (w_prime_joules.max(1)) as f64;
     let mut balance = w_prime;
     let mut series = Vec::with_capacity(power_samples.len());
     let mut min_balance = w_prime;

@@ -124,6 +124,13 @@ fn extract_power_samples_negative_to_none() {
 }
 
 #[test]
+fn extract_power_samples_large_integer_to_none() {
+    let workout = make_workout(vec![i32::MAX as i64 + 1, 250]);
+    let samples = extract_power_samples(&workout).unwrap();
+    assert_eq!(samples, vec![None, Some(250)]);
+}
+
+#[test]
 fn extract_power_samples_no_watts_stream() {
     let workout = make_workout_no_streams();
     let result = extract_power_samples(&workout);
@@ -399,6 +406,20 @@ fn parse_args_invalid_json() {
     let result = parse_args("not json");
     assert!(result.is_err());
     assert!(result.err().unwrap().contains("invalid arguments"));
+}
+
+#[test]
+fn parse_args_rejects_non_positive_cp_watts() {
+    let result = parse_args(r#"{"date":"2026-05-05","cp_watts":0}"#);
+    assert!(result.is_err());
+    assert!(result.err().unwrap().contains("invalid cp_watts"));
+}
+
+#[test]
+fn parse_args_rejects_non_positive_w_prime_joules() {
+    let result = parse_args(r#"{"date":"2026-05-05","w_prime_joules":-1}"#);
+    assert!(result.is_err());
+    assert!(result.err().unwrap().contains("invalid w_prime_joules"));
 }
 
 // ---------------------------------------------------------------------------
