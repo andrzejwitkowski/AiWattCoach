@@ -23,6 +23,9 @@ pub use get_selected_workout::{GetSelectedWorkout, GetSelectedWorkoutDataPort};
 mod selected_workout_power_curve;
 pub use selected_workout_power_curve::SelectedWorkoutPowerCurve;
 
+mod w_prime_balance;
+pub use w_prime_balance::WPrimeBalance;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolScope {
     WorkoutSummaryChat,
@@ -345,6 +348,7 @@ fn all_tools() -> Vec<Box<dyn LlmTool>> {
         Box::new(SimulateForwardLoad),
         Box::new(GetSelectedWorkout),
         Box::new(SelectedWorkoutPowerCurve),
+        Box::new(WPrimeBalance),
     ]
 }
 
@@ -566,6 +570,7 @@ mod tests {
         assert!(prompt.contains("`simulate_forward_load`"));
         assert!(prompt.contains("`get_selected_workout`"));
         assert!(prompt.contains("`selected_workout_power_curve`"));
+        assert!(prompt.contains("`get_w_prime_balance`"));
         assert!(prompt.contains("call it instead of guessing"));
     }
 
@@ -581,6 +586,7 @@ mod tests {
         assert!(prompt.contains("`simulate_forward_load`"));
         assert!(!prompt.contains("`get_selected_workout`"));
         assert!(!prompt.contains("`selected_workout_power_curve`"));
+        assert!(!prompt.contains("`get_w_prime_balance`"));
     }
 
     #[test]
