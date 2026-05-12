@@ -1,6 +1,6 @@
 use crate::domain::{
-    intervals::{parse_planned_workout, Event, EventCategory, UpdateEvent},
-    planned_workouts::{PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine},
+    intervals::{self, parse_planned_workout, Event, EventCategory, UpdateEvent},
+    planned_workouts::{self, PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine},
     training_plan::TrainingPlanProjectedDay,
 };
 
@@ -16,66 +16,61 @@ pub(super) struct SyncablePlannedWorkout {
     pub(super) workout: crate::domain::intervals::PlannedWorkout,
 }
 
+impl From<intervals::PlannedWorkoutStepKind> for planned_workouts::PlannedWorkoutStepKind {
+    fn from(value: intervals::PlannedWorkoutStepKind) -> Self {
+        match value {
+            intervals::PlannedWorkoutStepKind::Steady => Self::Steady,
+            intervals::PlannedWorkoutStepKind::Ramp => Self::Ramp,
+        }
+    }
+}
+
+impl From<intervals::PlannedWorkoutTarget> for planned_workouts::PlannedWorkoutTarget {
+    fn from(value: intervals::PlannedWorkoutTarget) -> Self {
+        match value {
+            intervals::PlannedWorkoutTarget::PercentFtp { min, max } => {
+                Self::PercentFtp { min, max }
+            }
+            intervals::PlannedWorkoutTarget::WattsRange { min, max } => {
+                Self::WattsRange { min, max }
+            }
+        }
+    }
+}
+
+impl From<intervals::PlannedWorkoutStep> for planned_workouts::PlannedWorkoutStep {
+    fn from(value: intervals::PlannedWorkoutStep) -> Self {
+        Self {
+            duration_seconds: value.duration_seconds,
+            kind: value.kind.into(),
+            target: value.target.into(),
+        }
+    }
+}
+
+impl From<intervals::PlannedWorkoutLine> for PlannedWorkoutLine {
+    fn from(value: intervals::PlannedWorkoutLine) -> Self {
+        match value {
+            intervals::PlannedWorkoutLine::BlankLine => Self::BlankLine,
+            intervals::PlannedWorkoutLine::Text(text) => {
+                Self::Text(planned_workouts::PlannedWorkoutText { text: text.text })
+            }
+            intervals::PlannedWorkoutLine::Repeat(repeat) => {
+                Self::Repeat(planned_workouts::PlannedWorkoutRepeat {
+                    title: repeat.title,
+                    count: repeat.count,
+                })
+            }
+            intervals::PlannedWorkoutLine::Step(step) => Self::Step(step.into()),
+        }
+    }
+}
+
 pub(super) fn map_intervals_to_canonical_planned_workout_content(
     workout: &crate::domain::intervals::PlannedWorkout,
 ) -> PlannedWorkoutContent {
     PlannedWorkoutContent {
-        lines: workout
-            .lines
-            .iter()
-            .cloned()
-            .map(|line| match line {
-                crate::domain::intervals::PlannedWorkoutLine::BlankLine => {
-                    PlannedWorkoutLine::BlankLine
-                }
-                crate::domain::intervals::PlannedWorkoutLine::Text(text) => {
-                    PlannedWorkoutLine::Text(crate::domain::planned_workouts::PlannedWorkoutText {
-                        text: text.text,
-                    })
-                }
-                crate::domain::intervals::PlannedWorkoutLine::Repeat(repeat) => {
-                    PlannedWorkoutLine::Repeat(
-                        crate::domain::planned_workouts::PlannedWorkoutRepeat {
-                            title: repeat.title,
-                            count: repeat.count,
-                        },
-                    )
-                }
-                crate::domain::intervals::PlannedWorkoutLine::Step(step) => {
-                    PlannedWorkoutLine::Step(crate::domain::planned_workouts::PlannedWorkoutStep {
-                        duration_seconds: step.duration_seconds,
-                        kind: match step.kind {
-                            crate::domain::intervals::PlannedWorkoutStepKind::Steady => {
-                                crate::domain::planned_workouts::PlannedWorkoutStepKind::Steady
-                            }
-                            crate::domain::intervals::PlannedWorkoutStepKind::Ramp => {
-                                crate::domain::planned_workouts::PlannedWorkoutStepKind::Ramp
-                            }
-                        },
-                        target: match step.target {
-                            crate::domain::intervals::PlannedWorkoutTarget::PercentFtp {
-                                min,
-                                max,
-                            } => {
-                                crate::domain::planned_workouts::PlannedWorkoutTarget::PercentFtp {
-                                    min,
-                                    max,
-                                }
-                            }
-                            crate::domain::intervals::PlannedWorkoutTarget::WattsRange {
-                                min,
-                                max,
-                            } => {
-                                crate::domain::planned_workouts::PlannedWorkoutTarget::WattsRange {
-                                    min,
-                                    max,
-                                }
-                            }
-                        },
-                    })
-                }
-            })
-            .collect(),
+        lines: workout.lines.iter().cloned().map(Into::into).collect(),
     }
 }
 
