@@ -46,6 +46,35 @@ impl Drop for SpawnedApp {
     }
 }
 
+async fn next_text_message_with_fake_time(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    step: Duration,
+    max_steps: usize,
+) -> String {
+    for _ in 0..max_steps {
+        let next_frame = socket.next();
+        tokio::pin!(next_frame);
+
+        tokio::select! {
+            frame = &mut next_frame => {
+                return frame
+                    .expect("socket should stay open while waiting for fake-time frame")
+                    .expect("websocket frame should be readable")
+                    .into_text()
+                    .expect("websocket frame should be text")
+                    .to_string();
+            }
+            _ = advance(step) => {
+                tokio::task::yield_now().await;
+            }
+        }
+    }
+
+    panic!("timed out waiting for websocket frame after advancing fake time");
+}
+
 #[tokio::test]
 async fn websocket_requires_authentication() {
     let app = workout_summary_test_app(
@@ -305,29 +334,8 @@ async fn websocket_repeats_typing_keepalive_while_waiting_for_slow_reply() {
         .unwrap()
         .to_string();
 
-    advance(Duration::from_secs(15)).await;
-    tokio::task::yield_now().await;
-
-    let second = timeout(Duration::from_secs(1), socket.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap()
-        .into_text()
-        .unwrap()
-        .to_string();
-
-    advance(Duration::from_secs(1)).await;
-    tokio::task::yield_now().await;
-
-    let third = timeout(Duration::from_secs(1), socket.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap()
-        .into_text()
-        .unwrap()
-        .to_string();
+    let second = next_text_message_with_fake_time(&mut socket, Duration::from_secs(1), 16).await;
+    let third = next_text_message_with_fake_time(&mut socket, Duration::from_secs(1), 2).await;
 
     assert!(first.contains(r#""type":"coach_typing""#));
     assert!(second.contains(r#""type":"coach_typing""#));
