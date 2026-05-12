@@ -17,7 +17,7 @@ use crate::domain::{
     },
     identity::Clock,
     intervals::{parse_planned_workout, IntervalsError, IntervalsUseCases},
-    planned_workout_tokens::PlannedWorkoutTokenRepository,
+    planned_workout_tokens::{ensure_planned_workout_marker, PlannedWorkoutTokenRepository},
     settings::UserSettingsRepository,
     wahoo::{
         WahooError, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, MISSING_WAHOO_FTP_MESSAGE,
@@ -318,14 +318,13 @@ where
         })?;
         let workout_token = match state.wahoo_workout_token.clone() {
             Some(token) => token,
-            None => {
-                ensure_planned_workout_marker(
-                    &self.planned_workout_tokens,
-                    user_id,
-                    &planned_workout.planned_workout_id,
-                )
-                .await?
-            }
+            None => ensure_planned_workout_marker(
+                &self.planned_workout_tokens,
+                user_id,
+                &planned_workout.planned_workout_id,
+            )
+            .await
+            .map_err(|error| UpdatePlannedWorkoutError::Repository(error.to_string()))?,
         };
         let provider_updated_at = provider_updated_at(self.clock.now_epoch_seconds());
         let plan_file_json = crate::domain::wahoo::build_plan_file_json(
@@ -452,42 +451,6 @@ fn map_wahoo_error(error: WahooError) -> UpdatePlannedWorkoutError {
             UpdatePlannedWorkoutError::Unavailable(message)
         }
     }
-}
-
-async fn ensure_planned_workout_marker<Tokens>(
-    tokens: &Tokens,
-    user_id: &str,
-    planned_workout_id: &str,
-) -> Result<String, UpdatePlannedWorkoutError>
-where
-    Tokens: PlannedWorkoutTokenRepository,
-{
-    let match_token = match tokens
-        .find_by_planned_workout_id(user_id, planned_workout_id)
-        .await
-        .map_err(|error| UpdatePlannedWorkoutError::Repository(error.to_string()))?
-    {
-        Some(token) => token.match_token,
-        None => {
-            let match_token =
-                crate::domain::planned_workout_tokens::build_planned_workout_match_token(
-                    planned_workout_id,
-                );
-            tokens
-                .upsert(
-                    crate::domain::planned_workout_tokens::PlannedWorkoutToken::new(
-                        user_id.to_string(),
-                        planned_workout_id.to_string(),
-                        match_token.clone(),
-                    ),
-                )
-                .await
-                .map_err(|error| UpdatePlannedWorkoutError::Repository(error.to_string()))?;
-            match_token
-        }
-    };
-
-    Ok(crate::domain::planned_workout_tokens::format_planned_workout_marker(&match_token))
 }
 
 async fn refresh_planned_workout_day<Refresh>(refresh: &Refresh, user_id: &str, date: &str)

@@ -5,7 +5,7 @@ use crate::domain::{
     calendar::{CalendarError, CalendarEvent, PlannedWorkoutSyncProvider, SyncPlannedWorkout},
     external_sync::{CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState},
     intervals::{CreateEvent, Event, EventCategory, IntervalsError, UpdateEvent},
-    planned_workout_tokens::{build_planned_workout_match_token, PlannedWorkoutToken},
+    planned_workout_tokens::ensure_planned_workout_marker,
     training_plan::TrainingPlanProjectedDay,
     wahoo::{
         WahooCreatePlan, WahooCreateWorkout, WahooUpdatePlan, WahooUpdateWorkout,
@@ -281,7 +281,8 @@ where
                 user_id,
                 planned_workout_id,
             )
-            .await?;
+            .await
+            .map_err(map_planned_workout_token_error)?;
             let workout_token = pending_state
                 .wahoo_workout_token
                 .clone()
@@ -540,37 +541,6 @@ async fn refresh_planned_workout_day<Refresh>(
             "planned workout sync state persisted but calendar view refresh failed"
         );
     }
-}
-
-async fn ensure_planned_workout_marker<Tokens>(
-    tokens: &Tokens,
-    user_id: &str,
-    planned_workout_id: &str,
-) -> Result<String, CalendarError>
-where
-    Tokens: crate::domain::planned_workout_tokens::PlannedWorkoutTokenRepository,
-{
-    let match_token = match tokens
-        .find_by_planned_workout_id(user_id, planned_workout_id)
-        .await
-        .map_err(map_planned_workout_token_error)?
-    {
-        Some(token) => token.match_token,
-        None => {
-            let match_token = build_planned_workout_match_token(planned_workout_id);
-            tokens
-                .upsert(PlannedWorkoutToken::new(
-                    user_id.to_string(),
-                    planned_workout_id.to_string(),
-                    match_token.clone(),
-                ))
-                .await
-                .map_err(map_planned_workout_token_error)?;
-            match_token
-        }
-    };
-
-    Ok(crate::domain::planned_workout_tokens::format_planned_workout_marker(&match_token))
 }
 
 fn ensure_sync_window<Time>(clock: &Time, date: &str) -> Result<(), CalendarError>
