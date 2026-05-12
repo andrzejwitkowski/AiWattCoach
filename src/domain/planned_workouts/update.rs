@@ -19,12 +19,12 @@ use crate::domain::{
     intervals::{parse_planned_workout, IntervalsError, IntervalsUseCases},
     planned_workout_tokens::PlannedWorkoutTokenRepository,
     settings::UserSettingsRepository,
-    wahoo::{WahooError, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases},
+    wahoo::{
+        WahooError, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases, MISSING_WAHOO_FTP_MESSAGE,
+    },
 };
 
 use super::{PlannedWorkout, PlannedWorkoutError, PlannedWorkoutRepository};
-
-const MISSING_WAHOO_FTP_MESSAGE: &str = "Set your cycling FTP in Settings before syncing to Wahoo";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UpdatePlannedWorkoutError {

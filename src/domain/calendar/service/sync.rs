@@ -7,7 +7,10 @@ use crate::domain::{
     intervals::{CreateEvent, Event, EventCategory, IntervalsError, UpdateEvent},
     planned_workout_tokens::{build_planned_workout_match_token, PlannedWorkoutToken},
     training_plan::TrainingPlanProjectedDay,
-    wahoo::{WahooCreatePlan, WahooCreateWorkout, WahooUpdatePlan, WahooUpdateWorkout},
+    wahoo::{
+        WahooCreatePlan, WahooCreateWorkout, WahooUpdatePlan, WahooUpdateWorkout,
+        MISSING_WAHOO_FTP_MESSAGE,
+    },
 };
 
 use super::{
@@ -23,7 +26,6 @@ use super::{
     CalendarService,
 };
 
-const MISSING_WAHOO_FTP_MESSAGE: &str = "Set your cycling FTP in Settings before syncing to Wahoo";
 const INVALID_PLANNED_WORKOUT_DATE_MESSAGE: &str =
     "planned workout date must be in YYYY-MM-DD format";
 const WAHOO_SYNC_WINDOW_MESSAGE: &str =

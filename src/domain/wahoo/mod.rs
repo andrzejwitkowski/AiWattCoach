@@ -7,6 +7,9 @@ mod service;
 mod tests;
 mod webhook;
 
+pub const MISSING_WAHOO_FTP_MESSAGE: &str =
+    "Set your cycling FTP in Settings before syncing to Wahoo";
+
 pub use import_mapping::map_workout_to_import_command;
 pub use model::{
     WahooAuthExchange, WahooAuthStart, WahooConnectState, WahooCreatePlan, WahooCreateWorkout,
