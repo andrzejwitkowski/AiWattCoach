@@ -24,8 +24,9 @@ pub use model::{
     LlmTokenUsage, LlmToolCall, LlmToolChoice, LlmToolDefinition, LLM_REQUEST_TIMEOUT_SECONDS,
 };
 pub use operation::{
-    CompletedLlmReply, LlmReplyClaimResult, LlmReplyOperation, LlmReplyOperationFailureKind,
-    LlmReplyOperationStatus, PendingLlmReplyCheckpoint,
+    deserialize_llm_error, serialize_llm_error, CompletedLlmReply, LlmReplyClaimResult,
+    LlmReplyOperation, LlmReplyOperationFailureKind, LlmReplyOperationStatus,
+    PendingLlmReplyCheckpoint, SerializedLlmError,
 };
 pub(crate) use orchestrator::{
     resolve_llm_reply_operation, LlmReplyResolutionWorkflow, ResolvedLlmReplyOperation,

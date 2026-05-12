@@ -21,7 +21,7 @@ pub(super) fn map_operation_to_document(
         failure_kind: operation
             .failure_kind
             .as_ref()
-            .map(failure_kind_as_str)
+            .map(LlmReplyOperationFailureKind::as_str)
             .map(str::to_string),
         provider: operation
             .provider
@@ -76,7 +76,13 @@ pub(super) fn map_document_to_operation(
         scope_id: document.scope_id,
         user_message_id: document.user_message_id,
         status: map_status(document.status)?,
-        failure_kind: document.failure_kind.map(map_failure_kind).transpose()?,
+        failure_kind: document
+            .failure_kind
+            .map(|value| {
+                LlmReplyOperationFailureKind::from_kind_str(&value)
+                    .ok_or_else(|| format!("unknown reply operation failure kind: {value}"))
+            })
+            .transpose()?,
         provider: document
             .provider
             .map(|value| {
@@ -137,39 +143,6 @@ fn map_status(value: String) -> Result<LlmReplyOperationStatus, String> {
         "completed" => Ok(LlmReplyOperationStatus::Completed),
         "failed" => Ok(LlmReplyOperationStatus::Failed),
         other => Err(format!("unknown reply operation status: {other}")),
-    }
-}
-
-fn failure_kind_as_str(failure_kind: &LlmReplyOperationFailureKind) -> &'static str {
-    match failure_kind {
-        LlmReplyOperationFailureKind::CredentialsNotConfigured => "credentials_not_configured",
-        LlmReplyOperationFailureKind::ProviderNotConfigured => "provider_not_configured",
-        LlmReplyOperationFailureKind::ModelNotConfigured => "model_not_configured",
-        LlmReplyOperationFailureKind::ContextTooLarge => "context_too_large",
-        LlmReplyOperationFailureKind::UnsupportedProvider => "unsupported_provider",
-        LlmReplyOperationFailureKind::Transport => "transport",
-        LlmReplyOperationFailureKind::ProviderRejected => "provider_rejected",
-        LlmReplyOperationFailureKind::RateLimited => "rate_limited",
-        LlmReplyOperationFailureKind::InvalidResponse => "invalid_response",
-        LlmReplyOperationFailureKind::Checkpoint => "checkpoint",
-        LlmReplyOperationFailureKind::Internal => "internal",
-    }
-}
-
-fn map_failure_kind(value: String) -> Result<LlmReplyOperationFailureKind, String> {
-    match value.as_str() {
-        "credentials_not_configured" => Ok(LlmReplyOperationFailureKind::CredentialsNotConfigured),
-        "provider_not_configured" => Ok(LlmReplyOperationFailureKind::ProviderNotConfigured),
-        "model_not_configured" => Ok(LlmReplyOperationFailureKind::ModelNotConfigured),
-        "context_too_large" => Ok(LlmReplyOperationFailureKind::ContextTooLarge),
-        "unsupported_provider" => Ok(LlmReplyOperationFailureKind::UnsupportedProvider),
-        "transport" => Ok(LlmReplyOperationFailureKind::Transport),
-        "provider_rejected" => Ok(LlmReplyOperationFailureKind::ProviderRejected),
-        "rate_limited" => Ok(LlmReplyOperationFailureKind::RateLimited),
-        "invalid_response" => Ok(LlmReplyOperationFailureKind::InvalidResponse),
-        "checkpoint" => Ok(LlmReplyOperationFailureKind::Checkpoint),
-        "internal" => Ok(LlmReplyOperationFailureKind::Internal),
-        other => Err(format!("unknown reply operation failure kind: {other}")),
     }
 }
 
