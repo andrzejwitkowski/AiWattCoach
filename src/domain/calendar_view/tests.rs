@@ -651,42 +651,6 @@ async fn rebuild_for_user_clears_stale_planned_sync_when_external_state_is_missi
 }
 
 #[tokio::test]
-async fn rebuild_for_user_prefers_failed_planned_sync_over_modified_fallback() {
-    let repository = InMemoryCalendarEntryViewRepository::default();
-    let mut stale_entry = project_planned_workout_entry(&sample_planned_workout(), &[]);
-    stale_entry.sync = Some(super::CalendarEntrySync {
-        linked_intervals_event_id: Some(77),
-        sync_status: Some("synced".to_string()),
-    });
-    repository.upsert(stale_entry).await.unwrap();
-
-    let service = CalendarEntryViewService::new(repository).with_sync_states(
-        TestExternalSyncStateRepository::with_states(vec![
-            sample_planned_sync_state().mark_failed("boom".to_string()),
-            sample_planned_sync_state().mark_modified(),
-        ]),
-    );
-
-    let rebuilt = service
-        .rebuild_for_user("user-1", &[], &[], &[], &[])
-        .await
-        .unwrap();
-
-    let planned = rebuilt
-        .iter()
-        .find(|entry| entry.entry_id == "planned:planned-1")
-        .expect("planned entry after rebuild");
-
-    assert_eq!(
-        planned
-            .sync
-            .as_ref()
-            .and_then(|sync| sync.sync_status.as_deref()),
-        Some("failed")
-    );
-}
-
-#[tokio::test]
 async fn replace_range_for_user_replaces_only_target_range_and_handles_date_moves() {
     let repository = InMemoryCalendarEntryViewRepository::default();
 

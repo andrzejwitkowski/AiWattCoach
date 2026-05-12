@@ -31,6 +31,7 @@
 ## Test Doubles And Shapes
 
 - When a sync workflow adds a discovery or recovery step before the previous happy path, revisit the touched test doubles immediately. A fake that used to be sufficient can silently stop modeling the branch the test name claims to exercise.
+- Before adding a regression for a review-reported fallback branch, verify that the branch is actually reachable in the current production control flow. Do not write a test that depends on entries magically surviving an empty rebuild just to exercise a helper that the real loop never calls.
 - In tests, avoid tuple aliases for multi-field call records when the field meaning matters. Use named structs or named sub-structs so assertions stay self-explanatory.
 - When a function grows past a few distinct phases, split it into small helpers named after each phase instead of leaving one long orchestration block.
 - When a test file grows large, split it by behavior group and extract shared fakes/fixtures into a local `support` module.
