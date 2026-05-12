@@ -111,8 +111,11 @@ impl SyncablePlannedWorkout {
         crate::domain::planned_workouts::planned_workout_payload_hash_parts(
             &self.date,
             self.name.as_deref(),
-            comparable_workout_text_for_payload_hash(self.name.as_deref(), workout_text.as_deref())
-                .as_deref(),
+            crate::domain::planned_workouts::comparable_workout_text_for_payload_hash(
+                self.name.as_deref(),
+                workout_text.as_deref(),
+            )
+            .as_deref(),
         )
     }
 
@@ -181,7 +184,10 @@ impl SyncablePlannedWorkout {
         }
         let workout_text =
             crate::domain::intervals::serialize_planned_workout_for_intervals(&self.workout);
-        comparable_workout_text_for_payload_hash(self.name.as_deref(), Some(workout_text.as_str()))
+        crate::domain::planned_workouts::comparable_workout_text_for_payload_hash(
+            self.name.as_deref(),
+            Some(workout_text.as_str()),
+        )
     }
 }
 
@@ -214,31 +220,6 @@ pub(super) fn preserve_event_description(
     }
 }
 
-pub(super) fn comparable_workout_text_for_payload_hash(
-    name: Option<&str>,
-    workout_text: Option<&str>,
-) -> Option<String> {
-    let workout_text = workout_text
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?;
-    let Some(name) = name.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Some(workout_text.to_string());
-    };
-    let mut lines = workout_text.lines();
-    let Some(first_line) = lines.next() else {
-        return Some(workout_text.to_string());
-    };
-    if first_line.trim() != name {
-        return Some(workout_text.to_string());
-    }
-    let body = lines.collect::<Vec<_>>().join("\n");
-    if body.trim().is_empty() {
-        Some(name.to_string())
-    } else {
-        Some(body)
-    }
-}
-
 fn strip_generated_workout_text(
     existing: &str,
     previous_workout_doc: Option<&str>,
@@ -251,11 +232,18 @@ fn strip_generated_workout_text(
     let Some(previous) = previous else {
         return Some(existing.to_string());
     };
-    if !existing.contains(previous) {
+    let previous = previous.trim();
+    if previous.is_empty() {
         return Some(existing.to_string());
     }
-    let stripped = existing.replace(previous, "");
-    let normalized = stripped.trim();
+    let trimmed_existing = existing.trim_end();
+    let Some(start_index) = trimmed_existing.rfind(previous) else {
+        return Some(existing.to_string());
+    };
+    if trimmed_existing[start_index..].trim() != previous {
+        return Some(existing.to_string());
+    }
+    let normalized = trimmed_existing[..start_index].trim();
     if normalized.is_empty() {
         None
     } else {
@@ -271,6 +259,6 @@ fn infer_legacy_generated_workout_text<'a>(
     if title.is_empty() {
         return None;
     }
-    let start_index = existing.find(title)?;
+    let start_index = existing.rfind(title)?;
     Some(existing[start_index..].trim())
 }

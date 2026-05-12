@@ -686,6 +686,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             settings_repository.clone(),
         )
         .with_planned_workout_tokens(planned_workout_token_repository)
+        .with_planned_workouts(authoritative_planned_workout_repository.clone())
         .with_completed_workouts(authoritative_completed_workout_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );

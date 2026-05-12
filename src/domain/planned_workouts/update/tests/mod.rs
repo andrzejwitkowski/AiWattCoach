@@ -9,16 +9,16 @@ use crate::domain::{
     intervals::IntervalsUseCases,
     planned_workout_tokens::{NoopPlannedWorkoutTokenRepository, PlannedWorkoutTokenRepository},
     planned_workouts::{
-        PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine, PlannedWorkoutRepeat,
-        PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget, PlannedWorkoutText,
+        comparable_workout_text_for_payload_hash, PlannedWorkout, PlannedWorkoutContent,
+        PlannedWorkoutLine, PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind,
+        PlannedWorkoutTarget, PlannedWorkoutText,
     },
     settings::{NoopUserSettingsRepository, UserSettingsRepository},
     wahoo::WahooUseCases,
 };
 
 use super::{
-    comparable_workout_text_for_payload_hash, map_planned_workout_to_syncable,
-    preserve_event_description, PlannedWorkoutUpdateService,
+    map_planned_workout_to_syncable, preserve_event_description, PlannedWorkoutUpdateService,
 };
 
 use fixtures::{

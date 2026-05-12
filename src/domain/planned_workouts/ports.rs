@@ -26,14 +26,42 @@ pub trait PlannedWorkoutRepository: Clone + Send + Sync + 'static {
     ) -> BoxFuture<Result<PlannedWorkout, PlannedWorkoutError>>;
 }
 
+#[derive(Clone, Default)]
+pub struct NoopPlannedWorkoutRepository;
+
+impl PlannedWorkoutRepository for NoopPlannedWorkoutRepository {
+    fn list_by_user_id(
+        &self,
+        _user_id: &str,
+    ) -> BoxFuture<Result<Vec<PlannedWorkout>, PlannedWorkoutError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        _user_id: &str,
+        _oldest: &str,
+        _newest: &str,
+    ) -> BoxFuture<Result<Vec<PlannedWorkout>, PlannedWorkoutError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn upsert(
+        &self,
+        workout: PlannedWorkout,
+    ) -> BoxFuture<Result<PlannedWorkout, PlannedWorkoutError>> {
+        Box::pin(async move { Ok(workout) })
+    }
+}
+
 #[cfg(test)]
 #[derive(Clone, Default)]
-pub struct NoopPlannedWorkoutRepository {
+pub struct InMemoryPlannedWorkoutRepository {
     stored: Arc<Mutex<Vec<PlannedWorkout>>>,
 }
 
 #[cfg(test)]
-impl PlannedWorkoutRepository for NoopPlannedWorkoutRepository {
+impl PlannedWorkoutRepository for InMemoryPlannedWorkoutRepository {
     fn list_by_user_id(
         &self,
         user_id: &str,

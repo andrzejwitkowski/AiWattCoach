@@ -6,7 +6,7 @@ use super::{
 };
 use crate::domain::{
     planned_workouts::{
-        PlannedWorkout, PlannedWorkoutContent, UpdatePlannedWorkoutCommand,
+        PlannedWorkout, PlannedWorkoutContent, ProviderSyncFailure, UpdatePlannedWorkoutCommand,
         UpdatePlannedWorkoutError, UpdatePlannedWorkoutOutcome,
     },
     training_context::TrainingContext,
@@ -42,6 +42,10 @@ impl UpdatePlannedWorkoutDataPort for RecordingPort {
                     PlannedWorkoutContent { lines: Vec::new() },
                 ),
                 synced_providers: Vec::new(),
+                failed_providers: vec![ProviderSyncFailure {
+                    provider: crate::domain::external_sync::ExternalProvider::Wahoo,
+                    error: "wahoo unavailable".to_string(),
+                }],
             })
         })
     }

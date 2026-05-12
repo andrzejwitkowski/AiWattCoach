@@ -1,11 +1,13 @@
 mod syncable;
 
 #[cfg(test)]
-use syncable::{comparable_workout_text_for_payload_hash, preserve_event_description};
+use syncable::preserve_event_description;
 use syncable::{
     map_intervals_to_canonical_planned_workout_content, map_planned_workout_to_syncable,
     planned_workout_name, SyncablePlannedWorkout,
 };
+
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 
 use crate::domain::{
     calendar_view::CalendarEntryViewRefreshPort,
@@ -19,7 +21,6 @@ use crate::domain::{
     settings::UserSettingsRepository,
     wahoo::{WahooError, WahooUpdatePlan, WahooUpdateWorkout, WahooUseCases},
 };
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 
 use super::{PlannedWorkout, PlannedWorkoutError, PlannedWorkoutRepository};
 
@@ -58,6 +59,13 @@ pub struct UpdatePlannedWorkoutCommand {
 pub struct UpdatePlannedWorkoutOutcome {
     pub planned_workout: PlannedWorkout,
     pub synced_providers: Vec<ExternalProvider>,
+    pub failed_providers: Vec<ProviderSyncFailure>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProviderSyncFailure {
+    pub provider: ExternalProvider,
+    pub error: String,
 }
 
 #[derive(Clone)]
@@ -147,6 +155,8 @@ where
             UpdatePlannedWorkoutError::Validation(format!("invalid workoutDoc: {error}"))
         })?;
         let updated_workout = PlannedWorkout {
+            rest_day: false,
+            rest_day_reason: None,
             workout: map_intervals_to_canonical_planned_workout_content(&parsed),
             name: planned_workout_name(&parsed),
             ..existing
@@ -170,6 +180,7 @@ where
             .map_err(map_sync_state_error)?;
 
         let mut synced_providers = Vec::new();
+        let mut failed_providers = Vec::new();
 
         for state in existing_states {
             let provider = state.provider.clone();
@@ -201,10 +212,15 @@ where
                 }
                 Ok(None) => {}
                 Err(error) => {
+                    let error_message = error.to_string();
                     self.sync_states
-                        .upsert(modified_state.mark_failed(error.to_string()))
+                        .upsert(modified_state.mark_failed(error_message.clone()))
                         .await
                         .map_err(map_sync_state_error)?;
+                    failed_providers.push(ProviderSyncFailure {
+                        provider,
+                        error: error_message,
+                    });
                 }
             }
         }
@@ -214,6 +230,7 @@ where
         Ok(UpdatePlannedWorkoutOutcome {
             planned_workout: persisted,
             synced_providers,
+            failed_providers,
         })
     }
 
@@ -338,6 +355,9 @@ where
                 WahooUpdateWorkout {
                     name: planned_workout.name.clone(),
                     workout_token: Some(workout_token.clone()),
+                    // Planned-workout syncs intentionally force the Wahoo workout type to
+                    // Biking (0) on both create and update paths. Manual type changes in
+                    // Wahoo are overwritten on the next sync.
                     workout_type_id: Some(0),
                     starts: Some(projected_workout_start_at(&planned_workout.date)),
                     minutes: Some(planned_workout.minutes()?),

@@ -106,6 +106,7 @@ export function useCalendarCoachChat({
   const currentConversationIdRef = useRef<string | null>(null);
   const isOpenRef = useRef(isOpen);
   const systemMessageCounterRef = useRef(0);
+  const messageIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     isOpenRef.current = isOpen;
@@ -115,6 +116,10 @@ export function useCalendarCoachChat({
     currentConversationIdRef.current = conversation?.conversationId ?? null;
     systemMessageCounterRef.current = 0;
   }, [conversation?.conversationId]);
+
+  useEffect(() => {
+    messageIdsRef.current = new Set(messages.map((message) => message.id));
+  }, [messages]);
 
   const closeSocket = useCallback(() => {
     const pendingSocket = pendingSocketRef.current;
@@ -239,8 +244,9 @@ export function useCalendarCoachChat({
           }
 
           if (parsed.type === 'tool_message') {
+            const isNewMessage = !messageIdsRef.current.has(parsed.message.id);
             setMessages((current) => appendUniqueMessage(current, parsed.message));
-            if (parsed.message.toolCall?.name === 'update_planned_workout') {
+            if (isNewMessage && parsed.message.toolCall?.name === 'update_planned_workout') {
               onPlannedWorkoutUpdated?.();
             }
             return;

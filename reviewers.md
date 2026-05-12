@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | CodeRabbit | calendar coach planned-workout authoritative override and duplicate refresh follow-up in PR #219
+
+- Problem: the remaining PR #219 follow-up still left three correctness gaps. `CalendarService` manual sync used `calendar_view.raw_workout_doc` as the local override source instead of the authoritative planned-workout repository, so stale view rows could drive provider writes. The calendar coach websocket hook called `onPlannedWorkoutUpdated` for duplicate `update_planned_workout` tool messages even though the message list itself was deduplicated. The calendar-view precedence regression claimed to cover imported-vs-projected duplicate sync-key behavior, but both candidates reused the same `planned_workout_id`, so it did not exercise the real cross-id override path.
+- Fix: finished the `CalendarService` dependency wiring with a dedicated planned-workout repository, switched `apply_calendar_override(...)` to reload the authoritative planned workout by id/date and rebuild the projected day from canonical local state, guarded the websocket refresh callback so it fires only for newly appended `update_planned_workout` tool messages, and updated the calendar-view regression to use different projected/imported planned-workout ids that share the same sync key.
+- Prevention: when review feedback says a fallback or override path must use the authoritative repository, verify the read source in the actual runtime service, not just in projections or tests. If a UI path deduplicates displayed messages, check whether side-effect callbacks are deduplicated too. For duplicate-candidate tests, use different entity ids unless the production rule is explicitly same-id-only.
+
 ### 2026-05-12 | CodeRabbit | calendar_view sync-status fallback precedence in PR #219
 
 - Problem: `src/domain/calendar_view/projection.rs` already preferred `failed` over `modified`, but the fallback path in `src/domain/calendar_view/service.rs` still mapped mixed planned-workout sync states as `modified` before `failed` when rebuilding entries from existing view rows without an authoritative local workout. That could hide provider failures behind a modified badge after rebuild.

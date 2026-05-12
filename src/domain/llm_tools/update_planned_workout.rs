@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::domain::{
+    external_sync::ExternalProvider,
     llm::LlmToolDefinition,
     llm_tools::{LlmTool, ToolExecutionContext},
     planned_workouts::{
@@ -123,11 +124,24 @@ async fn update_planned_workout(arguments_json: &str, context: &ToolExecutionCon
                 .synced_providers
                 .into_iter()
                 .map(|provider| match provider {
-                    crate::domain::external_sync::ExternalProvider::Intervals => "intervals",
-                    crate::domain::external_sync::ExternalProvider::Wahoo => "wahoo",
-                    crate::domain::external_sync::ExternalProvider::Strava => "strava",
-                    crate::domain::external_sync::ExternalProvider::Other => "other",
+                    ExternalProvider::Intervals => "intervals",
+                    ExternalProvider::Wahoo => "wahoo",
+                    ExternalProvider::Strava => "strava",
+                    ExternalProvider::Other => "other",
                 })
+                .collect::<Vec<_>>(),
+            "failedProviders": outcome
+                .failed_providers
+                .into_iter()
+                .map(|failure| json!({
+                    "provider": match failure.provider {
+                        ExternalProvider::Intervals => "intervals",
+                        ExternalProvider::Wahoo => "wahoo",
+                        ExternalProvider::Strava => "strava",
+                        ExternalProvider::Other => "other",
+                    },
+                    "error": failure.error,
+                }))
                 .collect::<Vec<_>>(),
             "status": "updated"
         })

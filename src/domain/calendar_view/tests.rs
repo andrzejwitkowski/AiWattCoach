@@ -933,7 +933,10 @@ async fn refresh_range_for_user_prefers_imported_planned_workout_override_over_p
     let sync_state = ExternalSyncState::new(
         "user-1".to_string(),
         ExternalProvider::Intervals,
-        CanonicalEntityRef::new(CanonicalEntityKind::PlannedWorkout, "planned-1".to_string()),
+        CanonicalEntityRef::new(
+            CanonicalEntityKind::PlannedWorkout,
+            "imported-planned-1".to_string(),
+        ),
     )
     .mark_synced("144".to_string(), "hash-1".to_string(), 2);
     let sync_key = CalendarPlannedSyncKey {
@@ -943,13 +946,13 @@ async fn refresh_range_for_user_prefers_imported_planned_workout_override_over_p
     let sync_states = TestExternalSyncStateRepository::with_states(vec![sync_state]);
 
     planned.upsert(
-        sample_planned_workout(),
+        sample_bridged_planned_workout("plan-op-1", "2026-05-10"),
         CalendarPlannedWorkoutOrigin::Projected,
         vec![sync_key.clone()],
     );
     planned.upsert(
         PlannedWorkout::new(
-            "planned-1".to_string(),
+            "imported-planned-1".to_string(),
             "user-1".to_string(),
             "2026-05-10".to_string(),
             PlannedWorkoutContent {

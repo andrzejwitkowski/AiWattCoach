@@ -12,6 +12,7 @@ use crate::domain::{
     identity::Clock,
     intervals::IntervalsUseCases,
     planned_workout_tokens::{NoopPlannedWorkoutTokenRepository, PlannedWorkoutTokenRepository},
+    planned_workouts::{NoopPlannedWorkoutRepository, PlannedWorkoutRepository},
     settings::{NoopUserSettingsRepository, UserSettingsRepository},
     training_plan::TrainingPlanProjectionRepository,
     wahoo::WahooUseCases,
@@ -33,6 +34,7 @@ pub struct CalendarService<
     Settings = NoopUserSettingsRepository,
     Tokens = NoopPlannedWorkoutTokenRepository,
     Refresh = NoopCalendarEntryViewRefresh,
+    Planned = NoopPlannedWorkoutRepository,
     Completed = (),
 > where
     Intervals: IntervalsUseCases + Clone + 'static,
@@ -45,6 +47,7 @@ pub struct CalendarService<
     Settings: UserSettingsRepository + Clone + 'static,
     Tokens: PlannedWorkoutTokenRepository + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
+    Planned: PlannedWorkoutRepository + Clone + 'static,
 {
     intervals: Intervals,
     entries: Entries,
@@ -56,6 +59,7 @@ pub struct CalendarService<
     settings: Settings,
     planned_workout_tokens: Tokens,
     refresh: Refresh,
+    planned_workouts: Planned,
 }
 
 impl crate::domain::wahoo::WahooUseCases for NoopWahooUseCases {
@@ -200,6 +204,7 @@ impl<Intervals, Entries, Projections, SyncStates, Time>
         NoopUserSettingsRepository,
         NoopPlannedWorkoutTokenRepository,
         NoopCalendarEntryViewRefresh,
+        NoopPlannedWorkoutRepository,
         (),
     >
 where
@@ -227,6 +232,7 @@ where
             settings: NoopUserSettingsRepository,
             planned_workout_tokens: NoopPlannedWorkoutTokenRepository::default(),
             refresh: NoopCalendarEntryViewRefresh,
+            planned_workouts: NoopPlannedWorkoutRepository,
         }
     }
 }
@@ -241,6 +247,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
     CalendarService<
@@ -253,6 +260,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
 where
@@ -266,6 +274,7 @@ where
     Settings: UserSettingsRepository + Clone,
     Tokens: PlannedWorkoutTokenRepository + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
+    Planned: PlannedWorkoutRepository + Clone,
 {
     pub fn with_wahoo<NewWahoo, NewSettings>(
         self,
@@ -281,6 +290,7 @@ where
         NewSettings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
     where
@@ -298,6 +308,7 @@ where
             settings,
             planned_workout_tokens: self.planned_workout_tokens,
             refresh: self.refresh,
+            planned_workouts: self.planned_workouts,
         }
     }
 
@@ -314,6 +325,7 @@ where
         Settings,
         NewTokens,
         Refresh,
+        Planned,
         Completed,
     >
     where
@@ -330,6 +342,7 @@ where
             settings: self.settings,
             planned_workout_tokens,
             refresh: self.refresh,
+            planned_workouts: self.planned_workouts,
         }
     }
 
@@ -346,6 +359,7 @@ where
         Settings,
         Tokens,
         NewRefresh,
+        Planned,
         Completed,
     >
     where
@@ -362,6 +376,41 @@ where
             settings: self.settings,
             planned_workout_tokens: self.planned_workout_tokens,
             refresh,
+            planned_workouts: self.planned_workouts,
+        }
+    }
+
+    pub fn with_planned_workouts<NewPlanned>(
+        self,
+        planned_workouts: NewPlanned,
+    ) -> CalendarService<
+        Intervals,
+        Entries,
+        Projections,
+        SyncStates,
+        Time,
+        Wahoo,
+        Settings,
+        Tokens,
+        Refresh,
+        NewPlanned,
+        Completed,
+    >
+    where
+        NewPlanned: PlannedWorkoutRepository + Clone,
+    {
+        CalendarService {
+            intervals: self.intervals,
+            entries: self.entries,
+            completed_workouts: self.completed_workouts,
+            projections: self.projections,
+            sync_states: self.sync_states,
+            clock: self.clock,
+            wahoo: self.wahoo,
+            settings: self.settings,
+            planned_workout_tokens: self.planned_workout_tokens,
+            refresh: self.refresh,
+            planned_workouts,
         }
     }
 
@@ -378,6 +427,7 @@ where
         Settings,
         Tokens,
         Refresh,
+        Planned,
         NewCompleted,
     >
     where
@@ -394,6 +444,7 @@ where
             settings: self.settings,
             planned_workout_tokens: self.planned_workout_tokens,
             refresh: self.refresh,
+            planned_workouts: self.planned_workouts,
         }
     }
 }
@@ -408,6 +459,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     > CalendarUseCases
     for CalendarService<
@@ -420,6 +472,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
 where
@@ -432,6 +485,7 @@ where
     Settings: UserSettingsRepository + Clone,
     Tokens: PlannedWorkoutTokenRepository + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
+    Planned: PlannedWorkoutRepository + Clone,
     Completed: CompletedWorkoutRepository + Clone,
 {
     fn list_events(

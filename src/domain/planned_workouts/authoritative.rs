@@ -706,7 +706,7 @@ mod tests {
 
     #[tokio::test]
     async fn hides_planned_workout_when_authoritative_completed_links_to_it() {
-        let planned_workouts = super::super::ports::NoopPlannedWorkoutRepository::default();
+        let planned_workouts = super::super::ports::InMemoryPlannedWorkoutRepository::default();
         planned_workouts
             .upsert(sample_planned_workout("planned-1", "2026-05-01"))
             .await
@@ -756,7 +756,7 @@ mod tests {
 
     #[tokio::test]
     async fn hides_legacy_externally_imported_planned_workouts() {
-        let planned_workouts = super::super::ports::NoopPlannedWorkoutRepository::default();
+        let planned_workouts = super::super::ports::InMemoryPlannedWorkoutRepository::default();
         planned_workouts
             .upsert(sample_planned_workout("intervals-event:144", "2026-05-01"))
             .await
@@ -775,7 +775,7 @@ mod tests {
 
     #[tokio::test]
     async fn hides_planned_workout_when_link_points_to_authoritative_completed_workout() {
-        let planned_workouts = super::super::ports::NoopPlannedWorkoutRepository::default();
+        let planned_workouts = super::super::ports::InMemoryPlannedWorkoutRepository::default();
         planned_workouts
             .upsert(sample_planned_workout("planned-1", "2026-05-01"))
             .await
@@ -833,7 +833,7 @@ mod tests {
 
     #[tokio::test]
     async fn hides_planned_workout_when_authoritative_completed_workout_crosses_date_boundary() {
-        let planned_workouts = super::super::ports::NoopPlannedWorkoutRepository::default();
+        let planned_workouts = super::super::ports::InMemoryPlannedWorkoutRepository::default();
         planned_workouts
             .upsert(sample_planned_workout("planned-1", "2026-05-01"))
             .await

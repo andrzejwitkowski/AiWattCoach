@@ -39,6 +39,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
     CalendarService<
@@ -51,6 +52,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
 where
@@ -64,6 +66,7 @@ where
     Settings: crate::domain::settings::UserSettingsRepository + Clone,
     Tokens: crate::domain::planned_workout_tokens::PlannedWorkoutTokenRepository + Clone,
     Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort + Clone,
+    Planned: crate::domain::planned_workouts::PlannedWorkoutRepository + Clone,
 {
     pub(super) async fn sync_planned_workout_impl(
         &self,
@@ -80,7 +83,7 @@ where
             .ok_or(CalendarError::NotFound)?;
         let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
         let projected_day = self
-            .apply_calendar_override(user_id, &planned_workout_id, projected_day)
+            .apply_calendar_override(&planned_workout_id, projected_day)
             .await?;
 
         if projected_day.rest_day || projected_day.workout.is_none() {
@@ -449,35 +452,47 @@ where
 
     async fn apply_calendar_override(
         &self,
-        user_id: &str,
         planned_workout_id: &str,
         projected_day: TrainingPlanProjectedDay,
     ) -> Result<TrainingPlanProjectedDay, CalendarError> {
-        let entries = self
-            .entries
-            .list_by_user_id_and_date_range(user_id, &projected_day.date, &projected_day.date)
+        let workouts = self
+            .planned_workouts
+            .list_by_user_id_and_date_range(
+                &projected_day.user_id,
+                &projected_day.date,
+                &projected_day.date,
+            )
             .await
             .map_err(|error| CalendarError::Internal(error.to_string()))?;
-        let Some(entry) = entries.into_iter().find(|entry| {
-            entry.entry_kind == crate::domain::calendar_view::CalendarEntryKind::PlannedWorkout
-                && entry.planned_workout_id.as_deref() == Some(planned_workout_id)
-        }) else {
+        let Some(workout) = workouts
+            .into_iter()
+            .find(|workout| workout.planned_workout_id == planned_workout_id)
+        else {
             return Ok(projected_day);
         };
-        let Some(raw_workout_doc) = entry.raw_workout_doc.as_deref() else {
-            return Ok(projected_day);
-        };
-        let workout =
-            crate::domain::intervals::parse_planned_workout(raw_workout_doc).map_err(|error| {
+
+        if workout.rest_day {
+            return Ok(TrainingPlanProjectedDay {
+                rest_day: true,
+                rest_day_reason: workout.rest_day_reason,
+                workout: None,
+                ..projected_day
+            });
+        }
+
+        let serialized =
+            crate::domain::planned_workouts::serialize_canonical_planned_workout(&workout);
+        let parsed =
+            crate::domain::intervals::parse_planned_workout(&serialized).map_err(|error| {
                 CalendarError::Validation(format!(
                     "invalid local planned workout override: {error}"
                 ))
             })?;
 
         Ok(TrainingPlanProjectedDay {
-            rest_day: entry.rest_day,
-            rest_day_reason: entry.rest_day_reason,
-            workout: Some(workout),
+            rest_day: false,
+            rest_day_reason: None,
+            workout: Some(parsed),
             ..projected_day
         })
     }

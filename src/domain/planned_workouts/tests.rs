@@ -82,7 +82,7 @@ fn planned_workout_repository_trait_is_usable() {
 
 #[tokio::test]
 async fn planned_workout_repository_lists_by_user_and_date_range() {
-    let repository = super::ports::NoopPlannedWorkoutRepository::default();
+    let repository = super::ports::InMemoryPlannedWorkoutRepository::default();
     repository
         .upsert(sample_workout("planned-2", "user-1", "2026-05-02"))
         .await
