@@ -20,6 +20,12 @@ pub use simulate_forward_load::SimulateForwardLoad;
 mod get_selected_workout;
 pub use get_selected_workout::{GetSelectedWorkout, GetSelectedWorkoutDataPort};
 
+mod update_planned_workout;
+use update_planned_workout::UPDATE_PLANNED_WORKOUT_TOOL_NAME;
+pub use update_planned_workout::{UpdatePlannedWorkout, UpdatePlannedWorkoutDataPort};
+#[cfg(test)]
+mod update_planned_workout_tests;
+
 mod selected_workout_power_curve;
 pub use selected_workout_power_curve::SelectedWorkoutPowerCurve;
 
@@ -93,6 +99,7 @@ pub struct ToolExecutionContext {
     pub training_context: TrainingContext,
     pub today: String,
     pub data_port: Option<Arc<dyn GetSelectedWorkoutDataPort>>,
+    pub planned_workout_update_port: Option<Arc<dyn UpdatePlannedWorkoutDataPort>>,
 }
 
 impl std::fmt::Debug for ToolExecutionContext {
@@ -102,6 +109,10 @@ impl std::fmt::Debug for ToolExecutionContext {
             .field("training_context", &self.training_context.redacted_debug())
             .field("today", &self.today)
             .field("data_port", &self.data_port.is_some())
+            .field(
+                "planned_workout_update_port",
+                &self.planned_workout_update_port.is_some(),
+            )
             .finish()
     }
 }
@@ -347,6 +358,7 @@ fn all_tools() -> Vec<Box<dyn LlmTool>> {
     vec![
         Box::new(SimulateForwardLoad),
         Box::new(GetSelectedWorkout),
+        Box::new(UpdatePlannedWorkout),
         Box::new(SelectedWorkoutPowerCurve),
         Box::new(WPrimeBalance),
     ]
@@ -404,10 +416,13 @@ fn logged_message(message: &LlmChatMessage) -> String {
 
 /// Tools exposed for a given scope.  Filters the global registry.
 fn tools_for_scope(scope: ToolScope) -> Vec<Box<dyn LlmTool>> {
-    // When we have tools that are scope-specific, filter here.
-    // Currently all tools are available in every tool-enabled scope.
-    let _ = scope;
     all_tools()
+        .into_iter()
+        .filter(|tool| {
+            matches!(scope, ToolScope::CalendarCoachChat)
+                || tool.name() != UPDATE_PLANNED_WORKOUT_TOOL_NAME
+        })
+        .collect()
 }
 
 fn available_tools_for_scope(
@@ -641,6 +656,7 @@ mod tests {
             data_port: with_data_port.then(|| {
                 Arc::new(NoopGetSelectedWorkoutDataPort) as Arc<dyn GetSelectedWorkoutDataPort>
             }),
+            planned_workout_update_port: None,
         }
     }
 

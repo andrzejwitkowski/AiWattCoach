@@ -23,6 +23,11 @@ use crate::domain::{
         EventCategory, IntervalsError, IntervalsUseCases, UpdateEvent,
     },
     planned_workout_tokens::{NoopPlannedWorkoutTokenRepository, PlannedWorkoutToken},
+    planned_workouts::{
+        PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
+        PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
+        PlannedWorkoutText,
+    },
     settings::{CyclingSettings, SettingsError, UserSettings, UserSettingsRepository, WahooConfig},
     training_plan::{
         BoxFuture as TrainingPlanBoxFuture, TrainingPlanError, TrainingPlanProjectedDay,
@@ -208,6 +213,104 @@ async fn sync_planned_workout_to_intervals_sends_structured_workout_as_descripti
     assert_eq!(created[0].start_date_local, "2023-11-14T00:00:00");
     assert_eq!(created[0].description.as_deref(), Some("- 60m 70%"));
     assert_eq!(created[0].workout_doc, None);
+}
+
+#[tokio::test]
+async fn sync_planned_workout_to_intervals_uses_local_calendar_override_when_retrying_after_update_failure(
+) {
+    let intervals = FakeIntervalsService::with_created_event(Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("AI Override".to_string()),
+        category: EventCategory::Workout,
+        description: Some("- 30m 80%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    });
+    let planned_workouts = TestPlannedWorkoutRepository::default();
+    planned_workouts
+        .upsert(PlannedWorkout::new(
+            "training-plan:user-1:w1:1:2023-11-14".to_string(),
+            "user-1".to_string(),
+            "2023-11-14".to_string(),
+            PlannedWorkoutContent {
+                lines: vec![
+                    PlannedWorkoutLine::Text(PlannedWorkoutText {
+                        text: "AI Override".to_string(),
+                    }),
+                    PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                        duration_seconds: 1_800,
+                        kind: PlannedWorkoutStepKind::Steady,
+                        target: PlannedWorkoutTarget::PercentFtp {
+                            min: 80.0,
+                            max: 80.0,
+                        },
+                    }),
+                ],
+            },
+        ))
+        .await
+        .unwrap();
+    let entries = InMemoryCalendarEntryViewRepository::default();
+    entries
+        .upsert(CalendarEntryView {
+            entry_id: "planned:training-plan:user-1:w1:1:2023-11-14".to_string(),
+            user_id: "user-1".to_string(),
+            entry_kind: CalendarEntryKind::PlannedWorkout,
+            date: "2023-11-14".to_string(),
+            start_date_local: Some("2023-11-14T00:00:00".to_string()),
+            title: "AI Override".to_string(),
+            subtitle: None,
+            description: None,
+            rest_day: false,
+            rest_day_reason: None,
+            raw_workout_doc: Some("AI Override\n- 30m 80%".to_string()),
+            planned_workout_id: Some("training-plan:user-1:w1:1:2023-11-14".to_string()),
+            completed_workout_id: None,
+            race_id: None,
+            special_day_id: None,
+            race: None,
+            summary: None,
+            sync: Some(CalendarEntrySync {
+                linked_intervals_event_id: None,
+                sync_status: Some("failed".to_string()),
+            }),
+        })
+        .await
+        .unwrap();
+    let service = CalendarService::new(
+        intervals.clone(),
+        entries,
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:1",
+            "2023-11-14",
+            "Old Projection",
+        )]),
+        InMemoryExternalSyncStateRepository::default(),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default())
+    .with_planned_workouts(planned_workouts);
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:1".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    let created = intervals.created_events.lock().unwrap().clone();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].name.as_deref(), Some("AI Override"));
+    assert_eq!(created[0].description.as_deref(), Some("- 30m 80%"));
 }
 
 #[tokio::test]
@@ -651,6 +754,71 @@ impl IntervalsUseCases for FakeIntervalsService {
 #[derive(Clone, Default)]
 struct InMemoryExternalSyncStateRepository {
     stored: Arc<Mutex<Vec<ExternalSyncState>>>,
+}
+
+#[derive(Clone, Default)]
+struct TestPlannedWorkoutRepository {
+    stored: Arc<Mutex<Vec<PlannedWorkout>>>,
+}
+
+impl PlannedWorkoutRepository for TestPlannedWorkoutRepository {
+    fn list_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::planned_workouts::BoxFuture<Result<Vec<PlannedWorkout>, PlannedWorkoutError>>
+    {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| workout.user_id == user_id)
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn list_by_user_id_and_date_range(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> crate::domain::planned_workouts::BoxFuture<Result<Vec<PlannedWorkout>, PlannedWorkoutError>>
+    {
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let oldest = oldest.to_string();
+        let newest = newest.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|workout| workout.user_id == user_id)
+                .filter(|workout| workout.date >= oldest && workout.date <= newest)
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn upsert(
+        &self,
+        workout: PlannedWorkout,
+    ) -> crate::domain::planned_workouts::BoxFuture<Result<PlannedWorkout, PlannedWorkoutError>>
+    {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let mut stored = stored.lock().unwrap();
+            stored.retain(|existing| {
+                !(existing.user_id == workout.user_id
+                    && existing.planned_workout_id == workout.planned_workout_id)
+            });
+            stored.push(workout.clone());
+            Ok(workout)
+        })
+    }
 }
 
 #[derive(Clone)]

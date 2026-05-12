@@ -6,6 +6,17 @@ pub enum ExternalProvider {
     Other,
 }
 
+impl ExternalProvider {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Intervals => "intervals",
+            Self::Wahoo => "wahoo",
+            Self::Strava => "strava",
+            Self::Other => "other",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExternalSyncRepositoryError {
     Storage(String),
@@ -103,6 +114,7 @@ pub enum ConflictStatus {
 pub enum ExternalSyncStatus {
     Pending,
     Synced,
+    Modified,
     Failed,
     PendingDelete,
 }
@@ -112,6 +124,7 @@ impl ExternalSyncStatus {
         match self {
             Self::Pending => "pending",
             Self::Synced => "synced",
+            Self::Modified => "modified",
             Self::Failed => "failed",
             Self::PendingDelete => "pending_delete",
         }
@@ -172,6 +185,12 @@ impl ExternalSyncState {
         self.sync_status = ExternalSyncStatus::Pending;
         self.last_error = None;
         self.wahoo_plan_external_id = Some(wahoo_plan_external_id);
+        self
+    }
+
+    pub fn mark_modified(mut self) -> Self {
+        self.sync_status = ExternalSyncStatus::Modified;
+        self.last_error = None;
         self
     }
 

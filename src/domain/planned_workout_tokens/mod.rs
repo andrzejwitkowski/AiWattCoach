@@ -1,3 +1,4 @@
+mod ensure;
 mod model;
 mod ports;
 mod token;
@@ -5,6 +6,7 @@ mod token;
 #[cfg(test)]
 mod tests;
 
+pub use ensure::ensure_planned_workout_marker;
 pub use model::{PlannedWorkoutToken, PlannedWorkoutTokenError};
 pub use ports::{BoxFuture, NoopPlannedWorkoutTokenRepository, PlannedWorkoutTokenRepository};
 pub use token::{

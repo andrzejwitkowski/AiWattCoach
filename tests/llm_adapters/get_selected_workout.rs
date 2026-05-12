@@ -107,6 +107,7 @@ async fn tool_loop_hides_get_selected_workout_without_data_port_and_stops_with_s
             training_context: empty_training_context(),
             today: "2026-05-05".to_string(),
             data_port: None,
+            planned_workout_update_port: None,
         },
         None,
     )
@@ -222,6 +223,7 @@ async fn tool_loop_sends_get_selected_workout_when_data_port_is_available() {
             training_context: empty_training_context(),
             today: "2026-05-05".to_string(),
             data_port: Some(Arc::new(EmptyDataPort)),
+            planned_workout_update_port: None,
         },
         None,
     )
@@ -284,6 +286,7 @@ async fn tool_loop_logs_round_trip_and_tool_execution_details() {
                 training_context: empty_training_context(),
                 today: "2026-05-05".to_string(),
                 data_port: Some(Arc::new(EmptyDataPort)),
+                planned_workout_update_port: None,
             },
             None,
         )

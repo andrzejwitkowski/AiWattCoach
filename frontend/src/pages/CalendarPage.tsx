@@ -11,12 +11,17 @@ type CalendarPageProps = {
 
 export function CalendarPage({ apiBaseUrl }: CalendarPageProps) {
   const [isCoachOpen, setIsCoachOpen] = useState(false);
+  const [calendarRefreshVersion, setCalendarRefreshVersion] = useState(0);
 
   return (
     <ApiBaseUrlProvider value={apiBaseUrl}>
-      <CalendarGrid />
+      <CalendarGrid refreshVersion={calendarRefreshVersion} />
       <CalendarCoachFab onClick={() => setIsCoachOpen(true)} />
-      <CalendarCoachModal isOpen={isCoachOpen} onClose={() => setIsCoachOpen(false)} />
+      <CalendarCoachModal
+        isOpen={isCoachOpen}
+        onClose={() => setIsCoachOpen(false)}
+        onPlannedWorkoutUpdated={() => setCalendarRefreshVersion((current) => current + 1)}
+      />
     </ApiBaseUrlProvider>
   );
 }

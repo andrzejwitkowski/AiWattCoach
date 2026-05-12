@@ -196,12 +196,11 @@ where
                             );
                             planned_sync_states_by_entity.get(&planned_entity).and_then(
                                 |sync_states| {
-                                    planned_workouts_by_id
-                                        .get(planned_workout_id)
-                                        .and_then(|workout| {
+                                    planned_workouts_by_id.get(planned_workout_id).and_then(
+                                        |workout| {
                                             project_planned_workout_entry(workout, sync_states).sync
-                                        })
-                                        .or_else(|| map_external_sync_states(sync_states))
+                                        },
+                                    )
                                 },
                             )
                         });
@@ -239,37 +238,6 @@ fn map_external_sync_state(
     sync_state.map(|state| super::CalendarEntrySync {
         linked_intervals_event_id: linked_intervals_event_id(state),
         sync_status: Some(state.sync_status.as_str().to_string()),
-    })
-}
-
-fn map_external_sync_states(sync_states: &[ExternalSyncState]) -> Option<super::CalendarEntrySync> {
-    if sync_states.is_empty() {
-        return None;
-    }
-
-    let linked_intervals_event_id = sync_states.iter().find_map(linked_intervals_event_id);
-    let sync_status = if sync_states
-        .iter()
-        .any(|state| state.sync_status.as_str() == "synced")
-    {
-        Some("synced".to_string())
-    } else if sync_states
-        .iter()
-        .any(|state| state.sync_status.as_str() == "pending")
-    {
-        Some("pending".to_string())
-    } else if sync_states
-        .iter()
-        .any(|state| state.sync_status.as_str() == "failed")
-    {
-        Some("failed".to_string())
-    } else {
-        None
-    };
-
-    Some(super::CalendarEntrySync {
-        linked_intervals_event_id,
-        sync_status,
     })
 }
 

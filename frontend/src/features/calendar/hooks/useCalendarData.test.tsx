@@ -80,6 +80,50 @@ function renderCalendarDataHook() {
   });
 }
 
+function renderCalendarDataHookWithProps(refreshVersion = 0) {
+  return renderHook(({ nextRefreshVersion }) => useCalendarData({ apiBaseUrl: '', refreshVersion: nextRefreshVersion }), {
+    initialProps: { nextRefreshVersion: refreshVersion },
+    wrapper: ({ children }) => (
+      <CompletedWorkoutsProvider apiBaseUrl="">
+        {children}
+      </CompletedWorkoutsProvider>
+    ),
+  });
+}
+
+function plannedEventFixture(overrides: Partial<IntervalEvent> = {}): IntervalEvent {
+  return {
+    id: 9001,
+    calendarEntryId: 'predicted:training-plan:user-1:w1:2026-05-11',
+    startDateLocal: '2026-05-11T00:00:00',
+    name: 'Planned workout',
+    category: 'WORKOUT',
+    description: null,
+    restDay: false,
+    restDayReason: null,
+    indoor: false,
+    color: null,
+    eventDefinition: {
+      rawWorkoutDoc: 'Planned workout\n- 45m 50%',
+      intervals: [],
+      segments: [],
+      summary: {
+        totalSegments: 0,
+        totalDurationSeconds: 2700,
+        estimatedNormalizedPowerWatts: null,
+        estimatedAveragePowerWatts: null,
+        estimatedIntensityFactor: null,
+        estimatedTrainingStressScore: null,
+      },
+    },
+    actualWorkout: null,
+    plannedSource: 'predicted',
+    syncStatus: 'modified',
+    projectedWorkout: null,
+    ...overrides,
+  };
+}
+
 describe('useCalendarData', () => {
   it('defaults unresolved weeks to idle placeholders', () => {
     const deferredEvents = createDeferred<IntervalEvent[]>();
@@ -220,6 +264,88 @@ describe('useCalendarData', () => {
     await act(async () => {
       await Promise.all([firstLoad, secondLoad]);
     });
+  });
+
+  it('reloads visible weeks when refreshVersion changes', async () => {
+    vi.mocked(listCalendarEvents).mockResolvedValue([] satisfies IntervalEvent[]);
+    vi.mocked(listActivities).mockResolvedValue([] satisfies IntervalActivity[]);
+    mockNoCalendarLabels();
+    mockNoDetailedEvents();
+    mockNoDetailedActivities();
+
+    const { result, rerender } = renderCalendarDataHookWithProps(0);
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    const callCountBeforeRefresh = vi.mocked(listCalendarEvents).mock.calls.length;
+
+    rerender({ nextRefreshVersion: 1 });
+
+    await waitFor(() => {
+      expect(vi.mocked(listCalendarEvents)).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(listCalendarEvents).mock.calls.length).toBeGreaterThan(callCountBeforeRefresh);
+    });
+  });
+
+  it('ignores stale in-flight loads after refreshVersion changes', async () => {
+    const monday = getMondayOfWeek(new Date());
+    const dateKey = toDateKey(monday);
+    const staleEvents = createDeferred<IntervalEvent[]>();
+    const staleActivities = createDeferred<IntervalActivity[]>();
+    const staleLabels = createDeferred<{ labelsByDate: Record<string, Record<string, CalendarLabel>> }>();
+    vi.mocked(listCalendarEvents).mockReturnValueOnce(staleEvents.promise);
+    vi.mocked(listActivities).mockReturnValueOnce(staleActivities.promise);
+    vi.mocked(listCalendarLabels).mockReturnValueOnce(staleLabels.promise);
+    mockNoDetailedEvents();
+    mockNoDetailedActivities();
+
+    const { result, rerender } = renderCalendarDataHookWithProps(0);
+
+    await waitFor(() => {
+      expect(vi.mocked(listCalendarEvents)).toHaveBeenCalledTimes(1);
+    });
+
+    vi.mocked(listCalendarEvents).mockResolvedValueOnce([plannedEventFixture({
+      calendarEntryId: 'fresh-entry',
+      id: 9001,
+      name: 'Fresh workout',
+      startDateLocal: `${dateKey}T00:00:00`,
+    })]);
+    vi.mocked(listActivities).mockResolvedValueOnce([] satisfies IntervalActivity[]);
+    vi.mocked(listCalendarLabels).mockResolvedValueOnce({ labelsByDate: {} });
+
+    rerender({ nextRefreshVersion: 1 });
+
+    await waitFor(() => {
+      expect(vi.mocked(listCalendarEvents)).toHaveBeenCalledTimes(2);
+    });
+    staleActivities.resolve([]);
+
+    await waitFor(() => {
+      expect(result.current.weeks.flatMap((week) => week.days.flatMap((day) => day.events)).map((event) => event.name))
+        .toContain('Fresh workout');
+    });
+
+    staleEvents.resolve([plannedEventFixture({
+      calendarEntryId: 'stale-entry',
+      id: 9002,
+      name: 'Stale workout',
+      startDateLocal: `${dateKey}T00:00:00`,
+    })]);
+    staleLabels.resolve({ labelsByDate: {} });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const eventNames = result.current.weeks.flatMap((week) => week.days.flatMap((day) => day.events)).map((event) => event.name);
+    expect(eventNames).toContain('Fresh workout');
+    expect(eventNames).not.toContain('Stale workout');
   });
 
   it('blocks an opposite-direction load while pagination is in flight', async () => {

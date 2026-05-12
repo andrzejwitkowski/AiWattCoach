@@ -23,7 +23,11 @@ import { WorkoutDetailModal } from './WorkoutDetailModal';
 import { CalendarWeekDayHeader } from './CalendarWeekDayHeader';
 import { CalendarWeekSection } from './CalendarWeekSection';
 
-export function CalendarGrid() {
+type CalendarGridProps = {
+  refreshVersion?: number;
+};
+
+export function CalendarGrid({ refreshVersion = 0 }: CalendarGridProps) {
   const apiBaseUrl = useApiBaseUrl();
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
@@ -37,7 +41,7 @@ export function CalendarGrid() {
     loadMorePast,
     loadMoreFuture,
     replaceEvent,
-  } = useCalendarData({ apiBaseUrl });
+  } = useCalendarData({ apiBaseUrl, refreshVersion });
   const [selection, setSelection] = useState<WorkoutDetailSelection | null>(null);
   const [dayItemsSelection, setDayItemsSelection] = useState<CalendarDayItemsSelection | null>(null);
   const [raceSelection, setRaceSelection] = useState<CalendarRaceLabel | null>(null);

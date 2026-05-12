@@ -21,6 +21,66 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | user | workout-summary websocket long-reply idle disconnect
+
+- Problem: completed-workout coach replies could take 40s+ to return from the LLM, but `src/adapters/rest/workout_summary/ws.rs` sent only one initial `coach_typing` frame and then stayed silent while `generate_coach_reply(...)` blocked. That left the websocket vulnerable to idle proxy/socket timeouts, so the backend could persist the final coach reply while the UI never received it until a manual refresh reloaded the stored summary. The first regression for this used real sleep/timeout durations, and the second tried to drive fake time through a full websocket integration path, which still proved brittle because the timer behavior was not the only moving part.
+- Fix: changed the workout-summary websocket send path to mirror the calendar-coach keepalive pattern. The handler now runs `generate_coach_reply(...)` in a spawned task, waits with a 15-second timeout loop, and emits repeated `coach_typing` frames until the final reply or error arrives. Then extracted the timeout/keepalive wait into a helper and covered that helper with a paused-Tokio unit test instead of a websocket integration timing test.
+- Prevention: whenever a websocket-backed LLM flow can sit idle longer than common proxy timeout thresholds, do not await the full reply in silence after one initial progress frame. Wrap the long-running task in a keepalive loop, and when proving timer behavior, test the timer/loop helper directly under fake time instead of trying to drive full websocket I/O under `advance(...)`.
+
+### 2026-05-12 | user | imported override still filtered out after sync-aware duplicate fix
+
+- Problem: the previous sync-aware duplicate fix removed the projected candidate when an imported workout owned the synced external id, but the imported candidate still hit the old generic `projected_sync_keys` collision rule. That left the calendar refresh with zero visible candidates for the day even though the imported planned workout was the authoritative override.
+- Fix: taught `select_visible_planned_workout_candidates_with_sync_states(...)` to keep an imported candidate when its own sync states match its sync key, so the authoritative imported record survives while the projected duplicate is hidden.
+- Prevention: when a precedence rule is asymmetric, review both filter branches after the change. Do not stop after proving the losing duplicate disappears; verify the winner bypasses any older generic conflict rule too.
+
+### 2026-05-12 | user | follow-up fixes for authoritative override regressions after refactor
+
+- Problem: the first follow-up fix still left three regressions. The calendar retry regression test fixture saved only the override title and no workout step, so the expected Intervals description no longer matched the actual canonical body. The sync-aware planned-workout candidate filter treated any matching sync state as proof of an imported override, which could hide both the projected candidate and the imported one. The refresh path also performed a second batch sync-state lookup after the prefilter step, breaking the batching regression.
+- Fix: expanded the retry fixture to store a real canonical workout step, tightened the imported-override check so only imported candidates with matching sync ownership keep winning the duplicate filter, and reused the first batch sync-state lookup in refresh instead of fetching the same planned states again.
+- Prevention: after tightening duplicate-selection rules around sync ownership, verify one regression where the authoritative record survives and one where lookup batching stays unchanged. For test fixtures that assert outbound provider payload bodies, store a complete canonical workout instead of only a title line.
+
+### 2026-05-12 | user | calendar planned-workout authoritative override regressions after PR #219 follow-up
+
+- Problem: two authoritative-override regressions remained after the PR #219 follow-up. `CalendarService::apply_calendar_override(...)` reloaded the authoritative planned workout body from the local repository, but only replaced `TrainingPlanProjectedDay.workout`, leaving the stale projected title in place so manual Intervals retries could still push the old name. In calendar-view refresh, duplicate planned-workout candidate filtering still ran before sync-state lookup, so an imported workout that owned the synced external id could be dropped just because a projected workout shared the same sync key.
+- Fix: changed the calendar override mapper to rebuild the projected day from the authoritative planned workout payload so name/body stay aligned, updated the focused calendar regression to inject an authoritative planned-workout repository instead of relying on the default noop repo, and made `refresh_range_for_user(...)` resolve planned-workout sync states before duplicate filtering so imported candidates with authoritative sync ownership win over projected duplicates sharing the same external sync key.
+- Prevention: when switching a retry path to authoritative local data, verify every downstream field derived from that model, not just the main body payload. For duplicate-candidate cleanup that depends on sync ownership, do not filter before the code has the sync-state context needed to tell a stale projected duplicate from the authoritative imported record.
+
+### 2026-05-12 | CodeRabbit | calendar coach planned-workout authoritative override and duplicate refresh follow-up in PR #219
+
+- Problem: the remaining PR #219 follow-up still left three correctness gaps. `CalendarService` manual sync used `calendar_view.raw_workout_doc` as the local override source instead of the authoritative planned-workout repository, so stale view rows could drive provider writes. The calendar coach websocket hook called `onPlannedWorkoutUpdated` for duplicate `update_planned_workout` tool messages even though the message list itself was deduplicated. The calendar-view precedence regression claimed to cover imported-vs-projected duplicate sync-key behavior, but both candidates reused the same `planned_workout_id`, so it did not exercise the real cross-id override path.
+- Fix: finished the `CalendarService` dependency wiring with a dedicated planned-workout repository, switched `apply_calendar_override(...)` to reload the authoritative planned workout by id/date and rebuild the projected day from canonical local state, guarded the websocket refresh callback so it fires only for newly appended `update_planned_workout` tool messages, and updated the calendar-view regression to use different projected/imported planned-workout ids that share the same sync key.
+- Prevention: when review feedback says a fallback or override path must use the authoritative repository, verify the read source in the actual runtime service, not just in projections or tests. If a UI path deduplicates displayed messages, check whether side-effect callbacks are deduplicated too. For duplicate-candidate tests, use different entity ids unless the production rule is explicitly same-id-only.
+
+### 2026-05-12 | CodeRabbit | calendar_view sync-status fallback precedence in PR #219
+
+- Problem: `src/domain/calendar_view/projection.rs` already preferred `failed` over `modified`, but the fallback path in `src/domain/calendar_view/service.rs` still mapped mixed planned-workout sync states as `modified` before `failed` when rebuilding entries from existing view rows without an authoritative local workout. That could hide provider failures behind a modified badge after rebuild.
+- Fix: reordered `map_external_sync_states(...)` in `src/domain/calendar_view/service.rs` to check `failed` before `modified`, and added `rebuild_for_user_prefers_failed_planned_sync_over_modified_fallback` in `src/domain/calendar_view/tests.rs` to lock the fallback rebuild behavior.
+- Prevention: when review feedback changes status precedence in a primary projector, grep for sibling fallback/legacy mapping helpers in the same feature and align them too. Do not assume only one path turns sync rows into UI-visible status strings.
+
+### 2026-05-11 | user | calendar coach planned-workout Intervals update payload alignment
+
+- Problem: final pre-commit review incorrectly inferred that `update_planned_workout` should send canonical workout text as a string in Intervals `workout_doc`. Intervals OpenAPI documents both event create and update as `EventEx`, where `description` is a string and `workout_doc` is an object, while the known-working planned-workout create path sends the workout body in `description` and leaves `workout_doc` empty.
+- Fix: restored the planned-workout update payload to mirror the working create path: generated workout text is written to `description` with manual notes preserved, and `workout_doc` is not populated with a string. Updated focused regressions to assert `description` carries the updated body and `workout_doc` stays `None`.
+- Prevention: before changing provider field semantics, inspect the current provider OpenAPI schema for the exact endpoint and method. Do not infer PUT/PATCH/create payload shape from local DTO names or from read-model field names.
+
+### 2026-05-11 | self (final pre-commit review) | calendar coach planned-workout Intervals description cleanup
+
+- Problem: final pre-commit review found that the `update_planned_workout` Intervals update path had moved structured workout content into `workout_doc`, but `preserve_event_description(...)` could still add the generated workout body back into `description` when no user note existed or append it to a manual note. That conflicted with the migration goal of keeping `description` for user notes while removing legacy generated workout text.
+- Fix: changed the update-service description helper to return only the cleaned existing note text after stripping previous/generated workout content, never the new generated workout body. Updated focused regressions so no-note updates keep `description` empty and manual notes remain note-only.
+- Prevention: when moving provider structured content from a legacy free-text field into a dedicated field, verify both the new field is populated and the old field is not repopulated by preservation helpers or fallback paths.
+
+### 2026-05-11 | self (4-loop review) | calendar coach planned-workout update hardening
+
+- Problem: the 4-loop review found remaining correctness and maintainability gaps in `update_planned_workout`: Intervals updates were not sending `workout_doc`, `mark_modified` wrote local hashes into remote-observation fields, REST fallback did not refresh the calendar after update tool messages, Wahoo minutes ignored repeat blocks, stale names could survive replacements, failed sync states projected as `modified`, local overrides could be hidden by projected candidates, legacy generated Intervals descriptions could linger, update-service hashes differed from calendar projection hashes, manual sync retries could use stale projections, and the update module mixed orchestration with mapping/hash helpers.
+- Fix: sent replacement `workout_doc`, kept remote-observation hashes unchanged on local modification, refreshed on new REST fallback update tool messages only, expanded repeat-aware minutes, derived names from replacement docs, projected `failed` before `modified`, preferred imported candidates only for same-id local overrides while keeping duplicate sync-key cleanup, stripped legacy generated description text, centralized planned-workout payload hashing, applied calendar overrides before manual retry sync, and split syncable mapping/hash/description helpers into `src/domain/planned_workouts/update/syncable.rs` with focused regressions.
+- Prevention: for sync-capable local overrides, review the full write/read/retry loop: local persistence, provider payloads, sync-state semantics, read-model projection, frontend cache refresh, and manual retry paths. Keep payload hash helpers shared and split mixed orchestration modules before they become review bottlenecks.
+
+### 2026-05-11 | self | calendar coach planned-workout update follow-up
+
+- Problem: the new `update_planned_workout` flow had tool-level and enum coverage, but no focused service tests proving the critical orchestration contract: local planned-workout persistence before external side effects, sync-state transition to `Modified`, refresh after success, and local-update durability when Intervals sync fails.
+- Fix: added focused unit tests in `src/domain/planned_workouts/update/tests.rs` with small recording fakes that verify the no-sync-state path, the Intervals modified-then-synced path, and the Intervals failure path while asserting the cross-component operation order.
+- Prevention: when adding a new sync-capable orchestration service, do not stop at parser or tool tests. Add at least one service-level regression that proves the durable local write happens before provider calls, plus one failure-path regression that proves local state survives a downstream provider error.
+
 ### 2026-05-10 | self (second 4-loop review) | DeepSeek integration follow-up fixes
 
 - Problem: the second 4-loop self-review on the same branch found 8 additional issues. (1) `LlmAdapter::Live` field was named `openai_compatible` even though it only served OpenAI, while `deepseek` also used `OpenAiCompatibleClient`, causing confusing naming. (2) `build_test_request` in the REST adapter explicitly set `tools: Vec::new()` and `tool_choice: LlmToolChoice::None` despite domain comments saying those fields are orchestrator-owned, violating the repo's lesson on misleading struct literal placeholders. (3) Frontend `settings.ts` did not extract or send `deepseekApiKey` in `updateAiAgents` or `testAiAgentsConnection`, even though the Zod schema included it, so users could not save or test a DeepSeek key from the UI. (4) No REST integration test proved saving DeepSeek provider/model/key. (5) No REST integration test proved the DeepSeek connection test endpoint. (6) No unit test proved that changing `deepseek_api_key` invalidated the LLM context cache. (7) No frontend test proved DeepSeek model autofill, key field emphasis, or save behavior. (8) No unit test proved `map_settings_to_dto` masked the DeepSeek API key.
@@ -882,3 +942,21 @@ Read this file before planning and before implementation.
 - Problem: the repo instructions did not include a durable review-fix loop, so repeated PR and review mistakes were not being logged in a reusable place.
 - Fix: created `reviewers.md`, added the review-fix loop to `AGENTS.md`, and added the reusable lesson to `tasks/lessons.md`.
 - Prevention: before writing a plan or implementing changes, read `reviewers.md` and check whether the current task repeats a known review pattern.
+
+### 2026-05-12 | self | duplicated provider-string match arms
+
+- Problem: the same `match ExternalProvider { Intervals => "intervals", ... }` block was open-coded in five places (one LLM tool and three mongo adapter `provider_as_str` helpers, plus a duplicate inside the same tool), making future provider additions a five-site change.
+- Fix: added `impl ExternalProvider { pub fn as_str(&self) -> &'static str }` next to the enum definition (mirroring `ExternalSyncStatus::as_str`) and replaced every call site with the method.
+- Prevention: when an enum-to-string mapping appears in more than one module, define a single `as_str()` (or `Display`) on the enum and forbid open-coded match arms in adapters or DTO emitters.
+
+### 2026-05-12 | self | inter-domain enum mapping written as a 60-line nested match
+
+- Problem: `map_intervals_to_canonical_planned_workout_content` translated `intervals::PlannedWorkoutLine` -> `planned_workouts::PlannedWorkoutLine` (and the nested `Step`/`Kind`/`Target` cases) inline as one giant match, making it the hardest function in the file to review.
+- Fix: added local `impl From<intervals::*> for planned_workouts::*` blocks for `PlannedWorkoutStepKind`, `PlannedWorkoutTarget`, `PlannedWorkoutStep`, and `PlannedWorkoutLine` in the only call-site module, reducing the helper to `lines.iter().cloned().map(Into::into).collect()`.
+- Prevention: when mapping one domain type to another with field-for-field correspondence, prefer `impl From` (kept in the module that already couples the two types) over inline match arms; keep the mapping next to the call site if it is not pulled into the shared model file.
+
+### 2026-05-12 | self | duplicated marker helper across two services
+
+- Problem: `ensure_planned_workout_marker` was implemented twice (calendar sync, planned-workouts update) with identical look-up-or-create logic, differing only in the error variant (`CalendarError::PlannedWorkoutTokens` vs `UpdatePlannedWorkoutError::Repository`).
+- Fix: extracted the helper into `planned_workout_tokens::ensure_planned_workout_marker`, returning the raw `PlannedWorkoutTokenError`; each caller maps the error to its own variant via `.map_err(...)` at the call site.
+- Prevention: when two service functions share the same orchestration with only the error type differing, push the helper into the upstream domain module and return its native error; let callers map to their adapter-specific error type at the call site.

@@ -204,7 +204,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
     ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let provider = provider_as_str(&provider).to_string();
+        let provider = provider.as_str().to_string();
         let canonical_entity_kind =
             canonical_entity_kind_as_str(&canonical_entity.entity_kind).to_string();
         let canonical_entity_id = canonical_entity.entity_id.clone();
@@ -231,7 +231,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
     ) -> BoxFuture<Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let provider = provider_as_str(&provider).to_string();
+        let provider = provider.as_str().to_string();
         let canonical_entities = canonical_entities.to_vec();
         Box::pin(async move {
             if canonical_entities.is_empty() {
@@ -275,7 +275,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
     ) -> BoxFuture<Result<(), ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let provider = provider_as_str(&provider).to_string();
+        let provider = provider.as_str().to_string();
         let canonical_entity_kind =
             canonical_entity_kind_as_str(&canonical_entity.entity_kind).to_string();
         let canonical_entity_id = canonical_entity.entity_id.clone();
@@ -344,7 +344,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
     ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let provider = provider_as_str(&provider).to_string();
+        let provider = provider.as_str().to_string();
         let external_id = external_id.to_string();
         Box::pin(async move {
             find_unique_sync_state(
@@ -368,7 +368,7 @@ impl ExternalSyncStateRepository for MongoExternalSyncStateRepository {
     ) -> BoxFuture<Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let provider = provider_as_str(&provider).to_string();
+        let provider = provider.as_str().to_string();
         let external_id = external_id.to_string();
         Box::pin(async move {
             find_unique_sync_state(
@@ -393,7 +393,7 @@ fn storage_error(error: mongodb::error::Error) -> ExternalSyncRepositoryError {
 fn map_sync_state_to_document(state: &ExternalSyncState) -> ExternalSyncStateDocument {
     ExternalSyncStateDocument {
         user_id: state.user_id.clone(),
-        provider: provider_as_str(&state.provider).to_string(),
+        provider: state.provider.as_str().to_string(),
         canonical_entity_kind: canonical_entity_kind_as_str(&state.canonical_entity.entity_kind)
             .to_string(),
         canonical_entity_id: state.canonical_entity.entity_id.clone(),
@@ -475,15 +475,6 @@ async fn find_unique_sync_state(
     }
 }
 
-fn provider_as_str(provider: &ExternalProvider) -> &'static str {
-    match provider {
-        ExternalProvider::Intervals => "intervals",
-        ExternalProvider::Wahoo => "wahoo",
-        ExternalProvider::Strava => "strava",
-        ExternalProvider::Other => "other",
-    }
-}
-
 fn canonical_entity_kind_as_str(kind: &CanonicalEntityKind) -> &'static str {
     match kind {
         CanonicalEntityKind::PlannedWorkout => "planned_workout",
@@ -505,6 +496,7 @@ fn sync_status_as_str(status: &ExternalSyncStatus) -> &'static str {
     match status {
         ExternalSyncStatus::Pending => "pending",
         ExternalSyncStatus::Synced => "synced",
+        ExternalSyncStatus::Modified => "modified",
         ExternalSyncStatus::Failed => "failed",
         ExternalSyncStatus::PendingDelete => "pending_delete",
     }
@@ -551,6 +543,7 @@ fn map_sync_status(value: &str) -> Result<ExternalSyncStatus, ExternalSyncReposi
     match value {
         "pending" => Ok(ExternalSyncStatus::Pending),
         "synced" => Ok(ExternalSyncStatus::Synced),
+        "modified" => Ok(ExternalSyncStatus::Modified),
         "failed" => Ok(ExternalSyncStatus::Failed),
         "pending_delete" => Ok(ExternalSyncStatus::PendingDelete),
         other => Err(ExternalSyncRepositoryError::CorruptData(format!(

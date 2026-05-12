@@ -5,9 +5,13 @@ use crate::domain::{
     calendar::{CalendarError, CalendarEvent, PlannedWorkoutSyncProvider, SyncPlannedWorkout},
     external_sync::{CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState},
     intervals::{CreateEvent, Event, EventCategory, IntervalsError, UpdateEvent},
-    planned_workout_tokens::{build_planned_workout_match_token, PlannedWorkoutToken},
+    planned_workout_tokens::ensure_planned_workout_marker,
+    planned_workouts::PlannedWorkout,
     training_plan::TrainingPlanProjectedDay,
-    wahoo::{WahooCreatePlan, WahooCreateWorkout, WahooUpdatePlan, WahooUpdateWorkout},
+    wahoo::{
+        WahooCreatePlan, WahooCreateWorkout, WahooUpdatePlan, WahooUpdateWorkout,
+        MISSING_WAHOO_FTP_MESSAGE,
+    },
 };
 
 use super::{
@@ -23,7 +27,6 @@ use super::{
     CalendarService,
 };
 
-const MISSING_WAHOO_FTP_MESSAGE: &str = "Set your cycling FTP in Settings before syncing to Wahoo";
 const INVALID_PLANNED_WORKOUT_DATE_MESSAGE: &str =
     "planned workout date must be in YYYY-MM-DD format";
 const WAHOO_SYNC_WINDOW_MESSAGE: &str =
@@ -39,6 +42,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
     CalendarService<
@@ -51,6 +55,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
 where
@@ -64,6 +69,7 @@ where
     Settings: crate::domain::settings::UserSettingsRepository + Clone,
     Tokens: crate::domain::planned_workout_tokens::PlannedWorkoutTokenRepository + Clone,
     Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort + Clone,
+    Planned: crate::domain::planned_workouts::PlannedWorkoutRepository + Clone,
 {
     pub(super) async fn sync_planned_workout_impl(
         &self,
@@ -78,6 +84,10 @@ where
             .into_iter()
             .find(|day| day.date == request.date)
             .ok_or(CalendarError::NotFound)?;
+        let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
+        let projected_day = self
+            .apply_calendar_override(&planned_workout_id, projected_day)
+            .await?;
 
         if projected_day.rest_day || projected_day.workout.is_none() {
             return Err(CalendarError::Validation(
@@ -85,7 +95,6 @@ where
             ));
         }
 
-        let planned_workout_id = projected_workout_id(&request.operation_key, &request.date);
         let canonical_entity = CanonicalEntityRef::new(
             CanonicalEntityKind::PlannedWorkout,
             planned_workout_id.clone(),
@@ -273,16 +282,15 @@ where
                 user_id,
                 planned_workout_id,
             )
-            .await?;
+            .await
+            .map_err(map_planned_workout_token_error)?;
             let workout_token = pending_state
                 .wahoo_workout_token
                 .clone()
                 .unwrap_or_else(|| planned_workout_marker.clone());
-            let plan_file_json = crate::adapters::wahoo::plan_mapping::build_plan_file_json(
-                &projected_day,
-                ftp_watts,
-            )
-            .map_err(CalendarError::Validation)?;
+            let plan_file_json =
+                crate::domain::wahoo::build_plan_file_json(&projected_day, ftp_watts)
+                    .map_err(CalendarError::Validation)?;
             let plan_file_base64 = BASE64_STANDARD.encode(plan_file_json.as_bytes());
             let provider_updated_at = provider_updated_at(now);
             let plan = match resolve_existing_plan(
@@ -445,6 +453,58 @@ where
             .await
             .map_err(map_external_sync_error)
     }
+
+    async fn apply_calendar_override(
+        &self,
+        planned_workout_id: &str,
+        projected_day: TrainingPlanProjectedDay,
+    ) -> Result<TrainingPlanProjectedDay, CalendarError> {
+        let workouts = self
+            .planned_workouts
+            .list_by_user_id_and_date_range(
+                &projected_day.user_id,
+                &projected_day.date,
+                &projected_day.date,
+            )
+            .await
+            .map_err(|error| CalendarError::Internal(error.to_string()))?;
+        let Some(workout) = workouts
+            .into_iter()
+            .find(|workout| workout.planned_workout_id == planned_workout_id)
+        else {
+            return Ok(projected_day);
+        };
+
+        if workout.rest_day {
+            return Ok(TrainingPlanProjectedDay {
+                rest_day: true,
+                rest_day_reason: workout.rest_day_reason,
+                workout: None,
+                ..projected_day
+            });
+        }
+
+        map_planned_workout_override(projected_day, &workout)
+    }
+}
+
+fn map_planned_workout_override(
+    projected_day: TrainingPlanProjectedDay,
+    workout: &PlannedWorkout,
+) -> Result<TrainingPlanProjectedDay, CalendarError> {
+    let parsed = crate::domain::planned_workouts::to_intervals_planned_workout(workout).map_err(
+        |error| {
+            CalendarError::Validation(format!("invalid local planned workout override: {error}"))
+        },
+    )?;
+
+    Ok(TrainingPlanProjectedDay {
+        workout_id: workout.planned_workout_id.clone(),
+        rest_day: false,
+        rest_day_reason: None,
+        workout: Some(parsed),
+        ..projected_day
+    })
 }
 
 async fn persist_failed_sync_state<SyncStates>(
@@ -487,37 +547,6 @@ async fn refresh_planned_workout_day<Refresh>(
             "planned workout sync state persisted but calendar view refresh failed"
         );
     }
-}
-
-async fn ensure_planned_workout_marker<Tokens>(
-    tokens: &Tokens,
-    user_id: &str,
-    planned_workout_id: &str,
-) -> Result<String, CalendarError>
-where
-    Tokens: crate::domain::planned_workout_tokens::PlannedWorkoutTokenRepository,
-{
-    let match_token = match tokens
-        .find_by_planned_workout_id(user_id, planned_workout_id)
-        .await
-        .map_err(map_planned_workout_token_error)?
-    {
-        Some(token) => token.match_token,
-        None => {
-            let match_token = build_planned_workout_match_token(planned_workout_id);
-            tokens
-                .upsert(PlannedWorkoutToken::new(
-                    user_id.to_string(),
-                    planned_workout_id.to_string(),
-                    match_token.clone(),
-                ))
-                .await
-                .map_err(map_planned_workout_token_error)?;
-            match_token
-        }
-    };
-
-    Ok(crate::domain::planned_workout_tokens::format_planned_workout_marker(&match_token))
 }
 
 fn ensure_sync_window<Time>(clock: &Time, date: &str) -> Result<(), CalendarError>
@@ -729,14 +758,10 @@ fn workout_minutes(projected_day: &TrainingPlanProjectedDay) -> Result<i32, Cale
     let workout = projected_day.workout.as_ref().ok_or_else(|| {
         CalendarError::Validation("planned workout is missing workout body".to_string())
     })?;
-    let total_seconds: i32 = workout
-        .lines
-        .iter()
-        .filter_map(|line| match line {
-            crate::domain::intervals::PlannedWorkoutLine::Step(step) => Some(step.duration_seconds),
-            _ => None,
-        })
-        .sum();
+    let workout_text = crate::domain::intervals::serialize_planned_workout_for_intervals(workout);
+    let total_seconds = crate::domain::intervals::parse_workout_doc(Some(&workout_text), None)
+        .summary
+        .total_duration_seconds;
     if total_seconds <= 0 {
         return Err(CalendarError::Validation(
             "planned workout has no syncable duration".to_string(),

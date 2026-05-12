@@ -18,6 +18,8 @@
 
 - When changing a function signature, grep every call site including local `#[cfg(test)]` modules in the same file before calling the refactor done. `cargo clippy --all-targets` compiles test targets too, so a missed unit-test call site will still fail CI even if the runtime code builds.
 - For constructors with many positional arguments of the same type, re-check test fixtures against the canonical signature before treating behavior regressions as product bugs. A misordered fixture can silently move a link/id into the wrong field and produce misleading CI failures.
+- When I change candidate-selection logic to depend on sync ownership, I must verify both sides of the filter separately: the losing duplicate should disappear, but the authoritative candidate must still survive. Also, if I preload sync states to guide filtering, I should reuse that batch for later projection instead of paying for a second identical lookup.
+- For duplicate filters with asymmetric precedence, test the winning branch explicitly after each refactor. It is easy to make the loser disappear while still leaving the winner behind an older generic collision rule.
 
 ## Fixture Refactor Verification
 
@@ -31,6 +33,7 @@
 ## Test Doubles And Shapes
 
 - When a sync workflow adds a discovery or recovery step before the previous happy path, revisit the touched test doubles immediately. A fake that used to be sufficient can silently stop modeling the branch the test name claims to exercise.
+- Before adding a regression for a review-reported fallback branch, verify that the branch is actually reachable in the current production control flow. Do not write a test that depends on entries magically surviving an empty rebuild just to exercise a helper that the real loop never calls.
 - In tests, avoid tuple aliases for multi-field call records when the field meaning matters. Use named structs or named sub-structs so assertions stay self-explanatory.
 - When a function grows past a few distinct phases, split it into small helpers named after each phase instead of leaving one long orchestration block.
 - When a test file grows large, split it by behavior group and extract shared fakes/fixtures into a local `support` module.
@@ -49,6 +52,8 @@
 - When a scheduled-task success path must serialize a persisted checkpoint, do not swallow serialization failures with `.ok()`. Convert them into explicit task failure so result handlers surface the real cause.
 
 ## Small Review Fixes
+
+- Before changing Intervals event payload field semantics, inspect the OpenAPI schema for the exact endpoint and method. For event create/update, `description` is the string field used by the existing planned-workout sync flow, while documented `workout_doc` is an object and must not be populated with the repo's canonical workout text string just because local DTOs expose that name.
 
 - When a shared logged-body helper is reused across LLM adapters, redact structured JSON before serialization and truncate by char boundary lookup instead of scanning the full string just to decide whether to cut it.
 - For OAuth adapter logging, redact authorization `code` fields explicitly even if the generic sensitive-key helper does not catch that exact name, and avoid logging raw token/userinfo success bodies when size-plus-hash diagnostics are enough.
@@ -147,6 +152,10 @@
 - If timeout or recovery code publishes in-memory task updates, every producer and waiter must share the same `TaskSchedulerService` instance or clones of it. Reconstructing a fresh service with the same repositories splits `task_waiters` state and breaks notifications.
 - If a Mongo/task mapper validates retry invariants when reading documents back, mirror that validation at the write boundary too so invalid retry strategies cannot be persisted as poison rows.
 - Process-scoped `OnceLock` temp fixtures with deterministic paths should proactively clear stale directories on initialization because `Drop` cleanup will not run at test-binary exit.
+
+- For websocket-backed LLM chats, a single initial typing/progress frame is not enough when the backend can spend tens of seconds waiting on the provider. If the handler then blocks silently on the long-running reply, proxies can drop the socket even though the server eventually persists the final answer. Use a keepalive loop that emits periodic progress frames until the reply task completes.
+- If a test exists only to verify timer-driven behavior like websocket keepalives or delayed retries, do not make it wait on real wall-clock time. Use paused Tokio time (`#[tokio::test(start_paused = true)]`) and explicit `tokio::time::advance(...)` so the test is fast and deterministic.
+- If the behavior under test is a timer loop inside a larger websocket or network flow, prefer extracting that loop into a small helper and fake-time testing the helper directly. Advancing virtual time through full websocket I/O adds unrelated scheduling machinery and can still leave the test brittle.
 
 ## Test Stability Diagnosis
 

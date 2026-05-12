@@ -103,6 +103,7 @@ fn sample_context(port: TestDataPort) -> ToolExecutionContext {
         },
         today: "2026-05-05".to_string(),
         data_port: Some(Arc::new(port)),
+        planned_workout_update_port: None,
     }
 }
 
@@ -492,6 +493,7 @@ fn not_available_when_data_port_missing() {
         },
         today: "2026-05-05".to_string(),
         data_port: None,
+        planned_workout_update_port: None,
     };
 
     let tool = SelectedWorkoutPowerCurve;

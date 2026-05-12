@@ -346,6 +346,100 @@ describe('useCalendarCoachChat', () => {
     });
   });
 
+  it('calls onPlannedWorkoutUpdated when update_planned_workout tool message arrives', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockResolvedValue({
+      conversation: conversationFixture,
+      messages: [],
+    });
+    const onPlannedWorkoutUpdated = vi.fn();
+
+    renderHook(() => useCalendarCoachChat({ isOpen: true, onPlannedWorkoutUpdated }));
+
+    await waitFor(() => {
+      expect(FakeWebSocket.instances).toHaveLength(1);
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'tool_message',
+            message: {
+              id: 'tool-update-1',
+              role: 'tool',
+              content: 'Tool call: update_planned_workout',
+              toolCall: {
+                id: 'tool-update-1',
+                name: 'update_planned_workout',
+                argumentsJson: '{"date":"2026-05-05","plannedWorkoutId":"pw-1","workoutDoc":"Warmup"}',
+                argumentsPreview: 'replace pw-1 on 2026-05-05',
+              },
+              createdAtEpochSeconds: 3,
+            },
+          }),
+        }),
+      );
+    });
+
+    expect(onPlannedWorkoutUpdated).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onPlannedWorkoutUpdated again for duplicate update_planned_workout tool messages', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockResolvedValue({
+      conversation: conversationFixture,
+      messages: [],
+    });
+    const onPlannedWorkoutUpdated = vi.fn();
+
+    renderHook(() => useCalendarCoachChat({ isOpen: true, onPlannedWorkoutUpdated }));
+
+    await waitFor(() => {
+      expect(FakeWebSocket.instances).toHaveLength(1);
+    });
+
+    const duplicateMessage = {
+      id: 'tool-update-1',
+      role: 'tool' as const,
+      content: 'Tool call: update_planned_workout',
+      toolCall: {
+        id: 'tool-update-1',
+        name: 'update_planned_workout',
+        argumentsJson: '{"date":"2026-05-05","plannedWorkoutId":"pw-1","workoutDoc":"Warmup"}',
+        argumentsPreview: 'replace pw-1 on 2026-05-05',
+      },
+      createdAtEpochSeconds: 3,
+    };
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'tool_message',
+            message: duplicateMessage,
+          }),
+        }),
+      );
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'tool_message',
+            message: duplicateMessage,
+          }),
+        }),
+      );
+    });
+
+    expect(onPlannedWorkoutUpdated).toHaveBeenCalledTimes(1);
+  });
+
   it('deduplicates rapid new conversation requests', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     coachApi.getCurrentCalendarCoachConversation.mockRejectedValue(new HttpError(404, 'not found'));
@@ -514,6 +608,111 @@ describe('useCalendarCoachChat', () => {
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[0]?.content).toBe('Can we replan this week?');
     expect(result.current.messages[1]?.content).toBe('Coach reply');
+  });
+
+  it('calls onPlannedWorkoutUpdated when REST fallback response contains update tool message', async () => {
+    global.WebSocket = undefined as unknown as typeof WebSocket;
+    coachApi.getCurrentCalendarCoachConversation.mockResolvedValue({
+      conversation: conversationFixture,
+      messages: [],
+    });
+    coachApi.sendCalendarCoachMessage.mockResolvedValue({
+      conversation: conversationFixture,
+      messages: [
+        {
+          id: 'message-user-1',
+          role: 'user',
+          content: 'Update this workout',
+          createdAtEpochSeconds: 2,
+        },
+        {
+          id: 'tool-update-1',
+          role: 'tool',
+          content: 'Tool call: update_planned_workout',
+          toolCall: {
+            id: 'tool-update-1',
+            name: 'update_planned_workout',
+            argumentsJson: '{"date":"2026-05-05","plannedWorkoutId":"pw-1","workoutDoc":"Warmup"}',
+            argumentsPreview: 'replace pw-1 on 2026-05-05',
+          },
+          createdAtEpochSeconds: 3,
+        },
+        messageFixture,
+      ],
+      userMessage: {
+        id: 'message-user-1',
+        role: 'user',
+        content: 'Update this workout',
+        createdAtEpochSeconds: 2,
+      },
+      coachMessage: messageFixture,
+    });
+    const onPlannedWorkoutUpdated = vi.fn();
+
+    const { result } = renderHook(() => useCalendarCoachChat({ isOpen: true, onPlannedWorkoutUpdated }));
+
+    await waitFor(() => {
+      expect(result.current.conversation?.conversationId).toBe('conversation-1');
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Update this workout');
+    });
+
+    expect(onPlannedWorkoutUpdated).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onPlannedWorkoutUpdated for historical REST fallback update tool messages', async () => {
+    global.WebSocket = undefined as unknown as typeof WebSocket;
+    const historicalToolMessage = {
+      id: 'tool-update-1',
+      role: 'tool' as const,
+      content: 'Tool call: update_planned_workout',
+      toolCall: {
+        id: 'tool-update-1',
+        name: 'update_planned_workout',
+        argumentsJson: '{"date":"2026-05-05","plannedWorkoutId":"pw-1","workoutDoc":"Warmup"}',
+        argumentsPreview: 'replace pw-1 on 2026-05-05',
+      },
+      createdAtEpochSeconds: 3,
+    };
+    coachApi.getCurrentCalendarCoachConversation.mockResolvedValue({
+      conversation: conversationFixture,
+      messages: [historicalToolMessage],
+    });
+    coachApi.sendCalendarCoachMessage.mockResolvedValue({
+      conversation: conversationFixture,
+      messages: [
+        historicalToolMessage,
+        {
+          id: 'message-user-2',
+          role: 'user',
+          content: 'Regular follow-up',
+          createdAtEpochSeconds: 4,
+        },
+        messageFixture,
+      ],
+      userMessage: {
+        id: 'message-user-2',
+        role: 'user',
+        content: 'Regular follow-up',
+        createdAtEpochSeconds: 4,
+      },
+      coachMessage: messageFixture,
+    });
+    const onPlannedWorkoutUpdated = vi.fn();
+
+    const { result } = renderHook(() => useCalendarCoachChat({ isOpen: true, onPlannedWorkoutUpdated }));
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('Regular follow-up');
+    });
+
+    expect(onPlannedWorkoutUpdated).not.toHaveBeenCalled();
   });
 
   it('preserves app path prefixes in websocket urls', () => {

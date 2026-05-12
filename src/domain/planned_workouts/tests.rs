@@ -73,6 +73,35 @@ fn planned_workout_can_represent_rest_day() {
     );
 }
 
+#[test]
+fn to_intervals_planned_workout_round_trips_canonical_workout() {
+    let workout = PlannedWorkout::new(
+        "planned-1".to_string(),
+        "user-1".to_string(),
+        "2026-05-01".to_string(),
+        PlannedWorkoutContent {
+            lines: vec![
+                PlannedWorkoutLine::Text(PlannedWorkoutText {
+                    text: "Warmup".to_string(),
+                }),
+                PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                    duration_seconds: 600,
+                    kind: PlannedWorkoutStepKind::Steady,
+                    target: PlannedWorkoutTarget::PercentFtp {
+                        min: 55.0,
+                        max: 55.0,
+                    },
+                }),
+            ],
+        },
+    );
+
+    let parsed = super::to_intervals_planned_workout(&workout).expect("planned workout parses");
+
+    assert_eq!(parsed.lines.len(), 2);
+    assert_eq!(parsed.lines[0].text(), Some("Warmup"));
+}
+
 fn assert_planned_workout_repository<T: PlannedWorkoutRepository>() {}
 
 #[test]
@@ -82,7 +111,7 @@ fn planned_workout_repository_trait_is_usable() {
 
 #[tokio::test]
 async fn planned_workout_repository_lists_by_user_and_date_range() {
-    let repository = super::ports::NoopPlannedWorkoutRepository::default();
+    let repository = super::ports::InMemoryPlannedWorkoutRepository::default();
     repository
         .upsert(sample_workout("planned-2", "user-1", "2026-05-02"))
         .await

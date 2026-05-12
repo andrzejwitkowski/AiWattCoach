@@ -606,6 +606,7 @@ mod tests {
             training_context,
             today: "2026-05-04".to_string(),
             data_port: None,
+            planned_workout_update_port: None,
         }
     }
 

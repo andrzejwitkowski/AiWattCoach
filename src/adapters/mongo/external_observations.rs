@@ -153,7 +153,7 @@ impl ExternalObservationRepository for MongoExternalObservationRepository {
     ) -> BoxFuture<Result<Option<ExternalObservation>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let provider = provider_as_str(&provider).to_string();
+        let provider = provider.as_str().to_string();
         let external_id = external_id.to_string();
         Box::pin(async move {
             let document = collection
@@ -208,7 +208,7 @@ fn storage_error(error: mongodb::error::Error) -> ExternalSyncRepositoryError {
 fn map_observation_to_document(observation: &ExternalObservation) -> ExternalObservationDocument {
     ExternalObservationDocument {
         user_id: observation.user_id.clone(),
-        provider: provider_as_str(&observation.provider).to_string(),
+        provider: observation.provider.as_str().to_string(),
         external_object_kind: external_object_kind_as_str(&observation.external_object_kind)
             .to_string(),
         external_id: observation.external_id.clone(),
@@ -249,15 +249,6 @@ fn map_document_to_observation(
         )
         .map_err(ExternalSyncRepositoryError::Storage)?,
     })
-}
-
-fn provider_as_str(provider: &ExternalProvider) -> &'static str {
-    match provider {
-        ExternalProvider::Intervals => "intervals",
-        ExternalProvider::Wahoo => "wahoo",
-        ExternalProvider::Strava => "strava",
-        ExternalProvider::Other => "other",
-    }
 }
 
 fn external_object_kind_as_str(kind: &ExternalObjectKind) -> &'static str {

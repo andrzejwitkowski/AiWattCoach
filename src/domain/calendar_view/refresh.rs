@@ -1,7 +1,9 @@
 use chrono::NaiveDate;
 
 use crate::domain::{
-    calendar_view::{select_visible_planned_workout_candidates, CalendarPlannedWorkoutSource},
+    calendar_view::{
+        select_visible_planned_workout_candidates_with_sync_states, CalendarPlannedWorkoutSource,
+    },
     completed_workouts::{CompletedWorkout, CompletedWorkoutRepository},
     external_sync::{
         CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncStateRepository,
@@ -321,11 +323,55 @@ where
                 .map_err(map_planned_error)?
                 .into_iter()
                 .collect::<std::collections::HashSet<_>>();
-            let planned = select_visible_planned_workout_candidates(
-                planned_workouts
-                    .list_candidates_by_user_id_and_date_range(&user_id, &oldest, &newest)
-                    .await
-                    .map_err(map_planned_error)?,
+            let planned_candidates = planned_workouts
+                .list_candidates_by_user_id_and_date_range(&user_id, &oldest, &newest)
+                .await
+                .map_err(map_planned_error)?;
+            let candidate_entities = planned_candidates
+                .iter()
+                .map(|candidate| {
+                    CanonicalEntityRef::new(
+                        CanonicalEntityKind::PlannedWorkout,
+                        candidate.workout.planned_workout_id.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let planned_sync_states_by_entity = sync_states
+                .find_by_canonical_entities(&user_id, &candidate_entities)
+                .await
+                .map_err(map_sync_error)?
+                .into_iter()
+                .fold(
+                    std::collections::HashMap::<
+                        CanonicalEntityRef,
+                        Vec<crate::domain::external_sync::ExternalSyncState>,
+                    >::new(),
+                    |mut acc, state| {
+                        acc.entry(state.canonical_entity.clone())
+                            .or_default()
+                            .push(state);
+                        acc
+                    },
+                );
+            let planned_sync_states_by_id = planned_candidates
+                .iter()
+                .map(|candidate| {
+                    let entity = CanonicalEntityRef::new(
+                        CanonicalEntityKind::PlannedWorkout,
+                        candidate.workout.planned_workout_id.clone(),
+                    );
+                    (
+                        candidate.workout.planned_workout_id.clone(),
+                        planned_sync_states_by_entity
+                            .get(&entity)
+                            .cloned()
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect::<std::collections::HashMap<_, _>>();
+            let planned = select_visible_planned_workout_candidates_with_sync_states(
+                planned_candidates,
+                &planned_sync_states_by_id,
             )
             .into_iter()
             .map(|candidate| candidate.workout)
@@ -435,33 +481,6 @@ where
                 .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
                 .map_err(map_special_day_error)?;
-
-            let planned_entities = planned
-                .iter()
-                .map(|workout| {
-                    CanonicalEntityRef::new(
-                        CanonicalEntityKind::PlannedWorkout,
-                        workout.planned_workout_id.clone(),
-                    )
-                })
-                .collect::<Vec<_>>();
-            let planned_sync_states_by_entity = sync_states
-                .find_by_canonical_entities(&user_id, &planned_entities)
-                .await
-                .map_err(map_sync_error)?
-                .into_iter()
-                .fold(
-                    std::collections::HashMap::<
-                        CanonicalEntityRef,
-                        Vec<crate::domain::external_sync::ExternalSyncState>,
-                    >::new(),
-                    |mut acc, state| {
-                        acc.entry(state.canonical_entity.clone())
-                            .or_default()
-                            .push(state);
-                        acc
-                    },
-                );
 
             let mut projected_planned = Vec::with_capacity(planned.len());
             for workout in &planned {

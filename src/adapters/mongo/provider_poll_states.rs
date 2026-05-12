@@ -84,7 +84,7 @@ impl MongoProviderPollStateRepository {
 
         let collection = self.collection.clone_with_type::<UserIdDocument>();
         collection
-            .find(doc! { "provider": provider_as_str(&provider) })
+            .find(doc! { "provider": provider.as_str() })
             .projection(doc! { "_id": 0, "user_id": 1 })
             .sort(doc! { "user_id": 1 })
             .await
@@ -155,7 +155,7 @@ impl ProviderPollStateRepository for MongoProviderPollStateRepository {
     ) -> BoxFuture<Result<Option<ProviderPollState>, ExternalSyncRepositoryError>> {
         let collection = self.collection.clone();
         let user_id = user_id.to_string();
-        let provider = provider_as_str(&provider).to_string();
+        let provider = provider.as_str().to_string();
         let stream = stream_as_str(&stream).to_string();
         Box::pin(async move {
             let document = collection
@@ -181,7 +181,7 @@ fn map_poll_state_to_document(state: &ProviderPollState) -> ProviderPollStateDoc
 
     ProviderPollStateDocument {
         user_id: state.user_id.clone(),
-        provider: provider_as_str(&state.provider).to_string(),
+        provider: state.provider.as_str().to_string(),
         stream: stream_as_str(&state.stream).to_string(),
         cursor: state.cursor.clone(),
         next_due_at_epoch_seconds: Some(state.next_due_at_epoch_seconds),
@@ -236,15 +236,6 @@ fn map_document_to_poll_state(
 fn datetime_or_panic(epoch_seconds: Option<i64>, field_name: &str) -> Option<DateTime> {
     optional_epoch_seconds_to_bson_datetime(epoch_seconds, field_name)
         .unwrap_or_else(|error| panic!("{error}"))
-}
-
-fn provider_as_str(provider: &ExternalProvider) -> &'static str {
-    match provider {
-        ExternalProvider::Intervals => "intervals",
-        ExternalProvider::Wahoo => "wahoo",
-        ExternalProvider::Strava => "strava",
-        ExternalProvider::Other => "other",
-    }
 }
 
 fn stream_as_str(stream: &ProviderPollStream) -> &'static str {

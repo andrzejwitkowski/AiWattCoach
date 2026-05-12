@@ -29,6 +29,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
     CalendarService<
@@ -41,6 +42,7 @@ impl<
         Settings,
         Tokens,
         Refresh,
+        Planned,
         Completed,
     >
 where
@@ -54,6 +56,7 @@ where
     Settings: crate::domain::settings::UserSettingsRepository + Clone,
     Tokens: crate::domain::planned_workout_tokens::PlannedWorkoutTokenRepository + Clone,
     Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort + Clone,
+    Planned: crate::domain::planned_workouts::PlannedWorkoutRepository + Clone,
 {
     pub(super) async fn list_events_impl(
         &self,

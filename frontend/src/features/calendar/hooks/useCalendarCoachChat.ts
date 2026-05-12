@@ -12,6 +12,7 @@ import {
 
 type UseCalendarCoachChatOptions = {
   isOpen: boolean;
+  onPlannedWorkoutUpdated?: () => void;
 };
 
 type UseCalendarCoachChatResult = {
@@ -73,8 +74,19 @@ function appendUniqueMessage(messages: CalendarCoachMessage[], message: Calendar
   return [...messages, message];
 }
 
+function hasNewPlannedWorkoutUpdateToolMessage(
+  previousMessages: CalendarCoachMessage[],
+  nextMessages: CalendarCoachMessage[],
+): boolean {
+  const previousIds = new Set(previousMessages.map((message) => message.id));
+  return nextMessages.some(
+    (message) => !previousIds.has(message.id) && message.toolCall?.name === 'update_planned_workout',
+  );
+}
+
 export function useCalendarCoachChat({
   isOpen,
+  onPlannedWorkoutUpdated,
 }: UseCalendarCoachChatOptions): UseCalendarCoachChatResult {
   const apiBaseUrl = useApiBaseUrl();
   const coachApi = useCalendarCoachApi();
@@ -94,6 +106,7 @@ export function useCalendarCoachChat({
   const currentConversationIdRef = useRef<string | null>(null);
   const isOpenRef = useRef(isOpen);
   const systemMessageCounterRef = useRef(0);
+  const messageIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     isOpenRef.current = isOpen;
@@ -103,6 +116,10 @@ export function useCalendarCoachChat({
     currentConversationIdRef.current = conversation?.conversationId ?? null;
     systemMessageCounterRef.current = 0;
   }, [conversation?.conversationId]);
+
+  useEffect(() => {
+    messageIdsRef.current = new Set(messages.map((message) => message.id));
+  }, [messages]);
 
   const closeSocket = useCallback(() => {
     const pendingSocket = pendingSocketRef.current;
@@ -227,7 +244,11 @@ export function useCalendarCoachChat({
           }
 
           if (parsed.type === 'tool_message') {
+            const isNewMessage = !messageIdsRef.current.has(parsed.message.id);
             setMessages((current) => appendUniqueMessage(current, parsed.message));
+            if (isNewMessage && parsed.message.toolCall?.name === 'update_planned_workout') {
+              onPlannedWorkoutUpdated?.();
+            }
             return;
           }
 
@@ -291,7 +312,7 @@ export function useCalendarCoachChat({
         pendingSocketRef.current = null;
       }
     }
-  }, [apiBaseUrl, applyConversationResponse]);
+  }, [apiBaseUrl, applyConversationResponse, onPlannedWorkoutUpdated]);
 
   const loadConversation = useCallback(async () => {
     if (!isOpenRef.current) {
@@ -465,7 +486,11 @@ export function useCalendarCoachChat({
       if (!isCurrentConversation(conversationId)) {
         return false;
       }
+      const shouldRefreshCalendar = hasNewPlannedWorkoutUpdateToolMessage(messages, response.messages);
       applyConversationResponse(response.conversation, response.messages);
+      if (shouldRefreshCalendar) {
+        onPlannedWorkoutUpdated?.();
+      }
       setError(null);
       return true;
     } catch (sendError) {
@@ -496,7 +521,7 @@ export function useCalendarCoachChat({
       setIsCoachThinking(false);
       return false;
     }
-  }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError, isCurrentConversation, coachApi]);
+  }, [apiBaseUrl, applyConversationResponse, connectSocket, ensureConversation, handleAuthenticationError, isCurrentConversation, coachApi, messages, onPlannedWorkoutUpdated]);
 
   return useMemo(() => ({
     conversation,

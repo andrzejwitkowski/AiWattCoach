@@ -111,6 +111,7 @@ where
                 training_context: training_context.context.clone(),
                 today: current_date_string(&clock),
                 data_port,
+                planned_workout_update_port: None,
             };
             let system_prompt = with_tool_prompt_guidance(
                 &workout_coach_system_prompt(),
