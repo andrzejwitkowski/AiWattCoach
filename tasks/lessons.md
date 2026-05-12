@@ -155,6 +155,7 @@
 
 - For websocket-backed LLM chats, a single initial typing/progress frame is not enough when the backend can spend tens of seconds waiting on the provider. If the handler then blocks silently on the long-running reply, proxies can drop the socket even though the server eventually persists the final answer. Use a keepalive loop that emits periodic progress frames until the reply task completes.
 - If a test exists only to verify timer-driven behavior like websocket keepalives or delayed retries, do not make it wait on real wall-clock time. Use paused Tokio time (`#[tokio::test(start_paused = true)]`) and explicit `tokio::time::advance(...)` so the test is fast and deterministic.
+- If the behavior under test is a timer loop inside a larger websocket or network flow, prefer extracting that loop into a small helper and fake-time testing the helper directly. Advancing virtual time through full websocket I/O adds unrelated scheduling machinery and can still leave the test brittle.
 
 ## Test Stability Diagnosis
 

@@ -328,6 +328,43 @@ async fn close_ws(
     sender.lock().await.close().await
 }
 
+enum CoachReplyWaitOutcome<Reply, Error> {
+    Completed(Result<Reply, Error>),
+    TaskDropped,
+    ConnectionClosed,
+    KeepaliveSendFailed,
+}
+
+async fn wait_for_coach_reply_result<Reply, Error, Keepalive>(
+    connection_open: Arc<AtomicBool>,
+    result_rx: &mut tokio::sync::oneshot::Receiver<Result<Reply, Error>>,
+    mut send_keepalive: Keepalive,
+) -> CoachReplyWaitOutcome<Reply, Error>
+where
+    Keepalive: FnMut() -> BoxFuture<'static, bool>,
+{
+    loop {
+        if !connection_open.load(Ordering::Relaxed) {
+            return CoachReplyWaitOutcome::ConnectionClosed;
+        }
+
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(COACH_REPLY_KEEPALIVE_INTERVAL_SECONDS),
+            &mut *result_rx,
+        )
+        .await
+        {
+            Ok(Ok(result)) => return CoachReplyWaitOutcome::Completed(result),
+            Ok(Err(_)) => return CoachReplyWaitOutcome::TaskDropped,
+            Err(_elapsed) => {
+                if send_keepalive().await {
+                    return CoachReplyWaitOutcome::KeepaliveSendFailed;
+                }
+            }
+        }
+    }
+}
+
 async fn process_send_message(
     sender: Arc<Mutex<futures::stream::SplitSink<axum::extract::ws::WebSocket, Message>>>,
     connection_open: Arc<AtomicBool>,
@@ -378,74 +415,72 @@ async fn process_send_message(
                 let _ = result_tx.send(reply_result);
             });
 
-            loop {
-                if !connection_open.load(Ordering::Relaxed) {
-                    return true;
-                }
-
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(COACH_REPLY_KEEPALIVE_INTERVAL_SECONDS),
-                    &mut result_rx,
-                )
-                .await
-                {
-                    Ok(Ok(Ok(reply))) => {
-                        if !connection_open.load(Ordering::Relaxed) {
-                            return true;
-                        }
-
-                        for message in current_turn_tool_messages(
-                            &reply.summary,
-                            &persisted.user_message.id,
-                            &reply.coach_message.id,
-                        ) {
-                            if send_ws_json(&sender, tool_message(map_message_to_dto(message)))
-                                .await
-                                .is_err()
-                            {
-                                return true;
-                            }
-                        }
-
-                        return send_ws_json(
-                            &sender,
-                            coach_message(
-                                map_message_to_dto(reply.coach_message),
-                                map_summary_to_dto(reply.summary),
-                            ),
-                        )
-                        .await
-                        .is_err();
+            let keepalive_sender = Arc::clone(&sender);
+            match wait_for_coach_reply_result(
+                Arc::clone(&connection_open),
+                &mut result_rx,
+                move || {
+                    let sender = Arc::clone(&keepalive_sender);
+                    Box::pin(
+                        async move { send_ws_json(&sender, coach_typing_message()).await.is_err() },
+                    )
+                },
+            )
+            .await
+            {
+                CoachReplyWaitOutcome::Completed(Ok(reply)) => {
+                    if !connection_open.load(Ordering::Relaxed) {
+                        return true;
                     }
-                    Ok(Ok(Err(error))) => {
-                        if send_ws_json(&sender, error_message(client_error_message(&error)))
+
+                    for message in current_turn_tool_messages(
+                        &reply.summary,
+                        &persisted.user_message.id,
+                        &reply.coach_message.id,
+                    ) {
+                        if send_ws_json(&sender, tool_message(map_message_to_dto(message)))
                             .await
                             .is_err()
                         {
                             return true;
                         }
-
-                        return should_close_worker(&error);
                     }
-                    Ok(Err(_)) => {
-                        if send_ws_json(
-                            &sender,
-                            error_message("workout summary coach reply task failed unexpectedly"),
-                        )
+
+                    return send_ws_json(
+                        &sender,
+                        coach_message(
+                            map_message_to_dto(reply.coach_message),
+                            map_summary_to_dto(reply.summary),
+                        ),
+                    )
+                    .await
+                    .is_err();
+                }
+                CoachReplyWaitOutcome::Completed(Err(error)) => {
+                    if send_ws_json(&sender, error_message(client_error_message(&error)))
                         .await
                         .is_err()
-                        {
-                            return true;
-                        }
-
+                    {
                         return true;
                     }
-                    Err(_elapsed) => {
-                        if send_ws_json(&sender, coach_typing_message()).await.is_err() {
-                            return true;
-                        }
-                    }
+
+                    should_close_worker(&error)
                 }
+                CoachReplyWaitOutcome::TaskDropped => {
+                    if send_ws_json(
+                        &sender,
+                        error_message("workout summary coach reply task failed unexpectedly"),
+                    )
+                    .await
+                    .is_err()
+                    {
+                        return true;
+                    }
+
+                    true
+                }
+                CoachReplyWaitOutcome::ConnectionClosed
+                | CoachReplyWaitOutcome::KeepaliveSendFailed => true,
             }
         }
         Err(error) => {
@@ -503,4 +538,49 @@ fn should_close_worker(error: &crate::domain::workout_summary::WorkoutSummaryErr
         map_workout_summary_error(error).status().as_u16(),
         404 | 409 | 503
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicUsize;
+    use std::time::Duration;
+
+    use tokio::sync::oneshot;
+    use tokio::time::advance;
+
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn wait_for_coach_reply_result_emits_keepalive_before_completed_reply() {
+        let connection_open = Arc::new(AtomicBool::new(true));
+        let (result_tx, mut result_rx) = oneshot::channel::<Result<&'static str, &'static str>>();
+        let keepalive_count = Arc::new(AtomicUsize::new(0));
+
+        let waiter_connection = Arc::clone(&connection_open);
+        let waiter_keepalive_count = Arc::clone(&keepalive_count);
+        let waiter = tokio::spawn(async move {
+            wait_for_coach_reply_result(waiter_connection, &mut result_rx, move || {
+                let keepalive_count = Arc::clone(&waiter_keepalive_count);
+                Box::pin(async move {
+                    keepalive_count.fetch_add(1, Ordering::Relaxed);
+                    false
+                })
+            })
+            .await
+        });
+
+        tokio::task::yield_now().await;
+        advance(Duration::from_secs(COACH_REPLY_KEEPALIVE_INTERVAL_SECONDS)).await;
+        tokio::task::yield_now().await;
+
+        assert_eq!(keepalive_count.load(Ordering::Relaxed), 1);
+
+        result_tx.send(Ok("reply")).unwrap();
+
+        let outcome = waiter.await.unwrap();
+        match outcome {
+            CoachReplyWaitOutcome::Completed(Ok(reply)) => assert_eq!(reply, "reply"),
+            _ => panic!("expected completed reply outcome"),
+        }
+    }
 }
