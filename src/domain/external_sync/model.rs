@@ -6,6 +6,17 @@ pub enum ExternalProvider {
     Other,
 }
 
+impl ExternalProvider {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Intervals => "intervals",
+            Self::Wahoo => "wahoo",
+            Self::Strava => "strava",
+            Self::Other => "other",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExternalSyncRepositoryError {
     Storage(String),
