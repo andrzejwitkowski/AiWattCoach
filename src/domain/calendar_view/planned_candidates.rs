@@ -77,6 +77,19 @@ pub fn select_visible_planned_workout_candidates_with_sync_states(
         .filter(|candidate| candidate.origin == CalendarPlannedWorkoutOrigin::Projected)
         .flat_map(|candidate| candidate.sync_keys.iter().cloned())
         .collect::<HashSet<_>>();
+    let imported_sync_states_by_planned_id = candidates
+        .iter()
+        .filter(|candidate| candidate.origin == CalendarPlannedWorkoutOrigin::Imported)
+        .map(|candidate| {
+            (
+                candidate.workout.planned_workout_id.clone(),
+                sync_states_by_planned_id
+                    .get(&candidate.workout.planned_workout_id)
+                    .cloned()
+                    .unwrap_or_default(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
     candidates
         .into_iter()
         .filter(|candidate| {
@@ -84,7 +97,7 @@ pub fn select_visible_planned_workout_candidates_with_sync_states(
                 return !imported_ids.contains(&candidate.workout.planned_workout_id)
                     && !has_visible_imported_override_for_sync_key(
                         &candidate.sync_keys,
-                        sync_states_by_planned_id,
+                        &imported_sync_states_by_planned_id,
                     );
             }
 
@@ -103,13 +116,18 @@ fn has_visible_imported_override_for_sync_key(
 ) -> bool {
     sync_states_by_planned_id
         .iter()
-        .any(|(_planned_workout_id, states)| {
+        .any(|(planned_workout_id, states)| {
+            if states.is_empty() {
+                return false;
+            }
+
             states.iter().any(|state| {
-                matches_external_sync_key(
-                    sync_keys,
-                    state.provider.as_str(),
-                    state.external_id.as_deref(),
-                )
+                state.canonical_entity.entity_id == *planned_workout_id
+                    && matches_external_sync_key(
+                        sync_keys,
+                        state.provider.as_str(),
+                        state.external_id.as_deref(),
+                    )
             })
         })
 }

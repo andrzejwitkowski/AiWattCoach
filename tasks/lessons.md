@@ -18,6 +18,7 @@
 
 - When changing a function signature, grep every call site including local `#[cfg(test)]` modules in the same file before calling the refactor done. `cargo clippy --all-targets` compiles test targets too, so a missed unit-test call site will still fail CI even if the runtime code builds.
 - For constructors with many positional arguments of the same type, re-check test fixtures against the canonical signature before treating behavior regressions as product bugs. A misordered fixture can silently move a link/id into the wrong field and produce misleading CI failures.
+- When I change candidate-selection logic to depend on sync ownership, I must verify both sides of the filter separately: the losing duplicate should disappear, but the authoritative candidate must still survive. Also, if I preload sync states to guide filtering, I should reuse that batch for later projection instead of paying for a second identical lookup.
 
 ## Fixture Refactor Verification
 

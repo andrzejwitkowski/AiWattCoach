@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | user | follow-up fixes for authoritative override regressions after refactor
+
+- Problem: the first follow-up fix still left three regressions. The calendar retry regression test fixture saved only the override title and no workout step, so the expected Intervals description no longer matched the actual canonical body. The sync-aware planned-workout candidate filter treated any matching sync state as proof of an imported override, which could hide both the projected candidate and the imported one. The refresh path also performed a second batch sync-state lookup after the prefilter step, breaking the batching regression.
+- Fix: expanded the retry fixture to store a real canonical workout step, tightened the imported-override check so only imported candidates with matching sync ownership keep winning the duplicate filter, and reused the first batch sync-state lookup in refresh instead of fetching the same planned states again.
+- Prevention: after tightening duplicate-selection rules around sync ownership, verify one regression where the authoritative record survives and one where lookup batching stays unchanged. For test fixtures that assert outbound provider payload bodies, store a complete canonical workout instead of only a title line.
+
 ### 2026-05-12 | user | calendar planned-workout authoritative override regressions after PR #219 follow-up
 
 - Problem: two authoritative-override regressions remained after the PR #219 follow-up. `CalendarService::apply_calendar_override(...)` reloaded the authoritative planned workout body from the local repository, but only replaced `TrainingPlanProjectedDay.workout`, leaving the stale projected title in place so manual Intervals retries could still push the old name. In calendar-view refresh, duplicate planned-workout candidate filtering still ran before sync-state lookup, so an imported workout that owned the synced external id could be dropped just because a projected workout shared the same sync key.

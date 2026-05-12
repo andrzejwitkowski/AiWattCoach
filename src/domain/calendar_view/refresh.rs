@@ -482,33 +482,6 @@ where
                 .await
                 .map_err(map_special_day_error)?;
 
-            let planned_entities = planned
-                .iter()
-                .map(|workout| {
-                    CanonicalEntityRef::new(
-                        CanonicalEntityKind::PlannedWorkout,
-                        workout.planned_workout_id.clone(),
-                    )
-                })
-                .collect::<Vec<_>>();
-            let planned_sync_states_by_entity = sync_states
-                .find_by_canonical_entities(&user_id, &planned_entities)
-                .await
-                .map_err(map_sync_error)?
-                .into_iter()
-                .fold(
-                    std::collections::HashMap::<
-                        CanonicalEntityRef,
-                        Vec<crate::domain::external_sync::ExternalSyncState>,
-                    >::new(),
-                    |mut acc, state| {
-                        acc.entry(state.canonical_entity.clone())
-                            .or_default()
-                            .push(state);
-                        acc
-                    },
-                );
-
             let mut projected_planned = Vec::with_capacity(planned.len());
             for workout in &planned {
                 let planned_entity = CanonicalEntityRef::new(

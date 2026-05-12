@@ -25,7 +25,8 @@ use crate::domain::{
     planned_workout_tokens::{NoopPlannedWorkoutTokenRepository, PlannedWorkoutToken},
     planned_workouts::{
         PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutError, PlannedWorkoutLine,
-        PlannedWorkoutRepository, PlannedWorkoutText,
+        PlannedWorkoutRepository, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
+        PlannedWorkoutText,
     },
     settings::{CyclingSettings, SettingsError, UserSettings, UserSettingsRepository, WahooConfig},
     training_plan::{
@@ -235,9 +236,19 @@ async fn sync_planned_workout_to_intervals_uses_local_calendar_override_when_ret
             "user-1".to_string(),
             "2023-11-14".to_string(),
             PlannedWorkoutContent {
-                lines: vec![PlannedWorkoutLine::Text(PlannedWorkoutText {
-                    text: "AI Override".to_string(),
-                })],
+                lines: vec![
+                    PlannedWorkoutLine::Text(PlannedWorkoutText {
+                        text: "AI Override".to_string(),
+                    }),
+                    PlannedWorkoutLine::Step(PlannedWorkoutStep {
+                        duration_seconds: 1_800,
+                        kind: PlannedWorkoutStepKind::Steady,
+                        target: PlannedWorkoutTarget::PercentFtp {
+                            min: 80.0,
+                            max: 80.0,
+                        },
+                    }),
+                ],
             },
         ))
         .await
