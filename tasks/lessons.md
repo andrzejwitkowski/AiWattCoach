@@ -153,6 +153,9 @@
 - If a Mongo/task mapper validates retry invariants when reading documents back, mirror that validation at the write boundary too so invalid retry strategies cannot be persisted as poison rows.
 - Process-scoped `OnceLock` temp fixtures with deterministic paths should proactively clear stale directories on initialization because `Drop` cleanup will not run at test-binary exit.
 
+- For websocket-backed LLM chats, a single initial typing/progress frame is not enough when the backend can spend tens of seconds waiting on the provider. If the handler then blocks silently on the long-running reply, proxies can drop the socket even though the server eventually persists the final answer. Use a keepalive loop that emits periodic progress frames until the reply task completes.
+- If a test exists only to verify timer-driven behavior like websocket keepalives or delayed retries, do not make it wait on real wall-clock time. Use paused Tokio time (`#[tokio::test(start_paused = true)]`) and explicit `tokio::time::advance(...)` so the test is fast and deterministic.
+
 ## Test Stability Diagnosis
 
 - When diagnosing suite-level `SIGKILL` or memory-pressure failures, never launch multiple heavy `cargo test` targets in parallel. Those runs create artificial contention and make the results non-diagnostic.

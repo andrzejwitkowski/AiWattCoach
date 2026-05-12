@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | user | workout-summary websocket long-reply idle disconnect
+
+- Problem: completed-workout coach replies could take 40s+ to return from the LLM, but `src/adapters/rest/workout_summary/ws.rs` sent only one initial `coach_typing` frame and then stayed silent while `generate_coach_reply(...)` blocked. That left the websocket vulnerable to idle proxy/socket timeouts, so the backend could persist the final coach reply while the UI never received it until a manual refresh reloaded the stored summary. The first regression for this used real sleep/timeout durations, which made the test unnecessarily slow and timing-sensitive.
+- Fix: changed the workout-summary websocket send path to mirror the calendar-coach keepalive pattern. The handler now runs `generate_coach_reply(...)` in a spawned task, waits with a 15-second timeout loop, and emits repeated `coach_typing` frames until the final reply or error arrives. Reworked the websocket regression to use `#[tokio::test(start_paused = true)]` plus `tokio::time::advance(...)` instead of real wall-clock waiting.
+- Prevention: whenever a websocket-backed LLM flow can sit idle longer than common proxy timeout thresholds, do not await the full reply in silence after one initial progress frame. Wrap the long-running task in a keepalive loop, and if a test needs to prove timer-driven behavior, use paused Tokio time with explicit `advance(...)` rather than real sleeps or near-threshold timeout windows.
+
 ### 2026-05-12 | user | imported override still filtered out after sync-aware duplicate fix
 
 - Problem: the previous sync-aware duplicate fix removed the projected candidate when an imported workout owned the synced external id, but the imported candidate still hit the old generic `projected_sync_keys` collision rule. That left the calendar refresh with zero visible candidates for the day even though the imported planned workout was the authoritative override.

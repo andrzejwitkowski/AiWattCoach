@@ -5,7 +5,10 @@ use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSumm
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::task::JoinHandle;
-use tokio::{net::TcpListener, time::timeout};
+use tokio::{
+    net::TcpListener,
+    time::{advance, timeout},
+};
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
@@ -268,6 +271,68 @@ async fn websocket_queues_multiple_user_messages_in_order() {
         service.processed_user_messages(),
         vec!["First".to_string(), "Second".to_string()]
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn websocket_repeats_typing_keepalive_while_waiting_for_slow_reply() {
+    let service = TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")])
+        .with_coach_reply_delay(Duration::from_secs(16));
+    let app = workout_summary_test_app(TestIdentityServiceWithSession::default(), service).await;
+
+    let server = SpawnedApp::start(app).await;
+
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    socket
+        .send(Message::Text(
+            r#"{"type":"send_message","content":"Slow reply"}"#.to_string().into(),
+        ))
+        .await
+        .unwrap();
+
+    let first = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+
+    advance(Duration::from_secs(15)).await;
+    tokio::task::yield_now().await;
+
+    let second = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+
+    advance(Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+
+    let third = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+
+    assert!(first.contains(r#""type":"coach_typing""#));
+    assert!(second.contains(r#""type":"coach_typing""#));
+    assert!(third.contains(r#""type":"coach_message""#));
+    assert!(third.contains("Coach reply to: Slow reply"));
 }
 
 #[tokio::test]
