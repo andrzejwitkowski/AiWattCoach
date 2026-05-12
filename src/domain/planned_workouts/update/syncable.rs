@@ -257,3 +257,127 @@ fn infer_legacy_generated_workout_text<'a>(
     let start_index = existing.rfind(title)?;
     Some(existing[start_index..].trim())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{infer_legacy_generated_workout_text, strip_generated_workout_text};
+
+    #[test]
+    fn strip_returns_existing_when_previous_and_projected_absent() {
+        assert_eq!(
+            strip_generated_workout_text("coach note", None, None),
+            Some("coach note".to_string())
+        );
+    }
+
+    #[test]
+    fn strip_returns_existing_when_previous_doc_is_whitespace_only_and_projected_absent() {
+        assert_eq!(
+            strip_generated_workout_text("coach note", Some("   \n  "), None),
+            Some("coach note".to_string())
+        );
+    }
+
+    #[test]
+    fn strip_returns_existing_when_previous_doc_not_found_in_existing() {
+        assert_eq!(
+            strip_generated_workout_text("coach note", Some("something else"), None),
+            Some("coach note".to_string())
+        );
+    }
+
+    #[test]
+    fn strip_removes_previous_workout_doc_suffix() {
+        assert_eq!(
+            strip_generated_workout_text(
+                "coach note\n\nOld workout\n- 10m 60%",
+                Some("Old workout\n- 10m 60%"),
+                None,
+            ),
+            Some("coach note".to_string())
+        );
+    }
+
+    #[test]
+    fn strip_returns_none_when_existing_is_only_previous_workout_doc() {
+        assert_eq!(
+            strip_generated_workout_text(
+                "Old workout\n- 10m 60%",
+                Some("Old workout\n- 10m 60%"),
+                None,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn strip_does_not_remove_when_trailing_text_follows_previous_block() {
+        assert_eq!(
+            strip_generated_workout_text(
+                "coach note\n\nOld workout\n- 10m 60%\n\nfollow up note",
+                Some("Old workout\n- 10m 60%"),
+                None,
+            ),
+            Some("coach note\n\nOld workout\n- 10m 60%\n\nfollow up note".to_string())
+        );
+    }
+
+    #[test]
+    fn strip_uses_last_occurrence_of_previous_block() {
+        assert_eq!(
+            strip_generated_workout_text(
+                "coach note Old workout intro\n\nOld workout",
+                Some("Old workout"),
+                None,
+            ),
+            Some("coach note Old workout intro".to_string())
+        );
+    }
+
+    #[test]
+    fn strip_falls_back_to_legacy_inference_when_previous_doc_missing() {
+        assert_eq!(
+            strip_generated_workout_text(
+                "coach note\n\nNew workout\n- 10m 60%",
+                None,
+                Some("New workout\n- 20m 70%"),
+            ),
+            Some("coach note".to_string())
+        );
+    }
+
+    #[test]
+    fn infer_legacy_returns_none_when_projected_is_none() {
+        assert_eq!(
+            infer_legacy_generated_workout_text("coach note", None),
+            None
+        );
+    }
+
+    #[test]
+    fn infer_legacy_returns_none_when_projected_first_line_is_empty() {
+        assert_eq!(
+            infer_legacy_generated_workout_text("coach note", Some("   \n- 10m 60%")),
+            None
+        );
+    }
+
+    #[test]
+    fn infer_legacy_returns_none_when_title_not_found_in_existing() {
+        assert_eq!(
+            infer_legacy_generated_workout_text("coach note", Some("New workout\n- 10m 60%")),
+            None
+        );
+    }
+
+    #[test]
+    fn infer_legacy_returns_trailing_block_starting_at_last_title_occurrence() {
+        assert_eq!(
+            infer_legacy_generated_workout_text(
+                "intro mentions New workout\n\nNew workout\n- 10m 60%",
+                Some("New workout\n- 20m 70%"),
+            ),
+            Some("New workout\n- 10m 60%")
+        );
+    }
+}
