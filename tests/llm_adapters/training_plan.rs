@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use aiwattcoach::{
     adapters::llm::training_plan_generator::TrainingPlanLlmGenerator,
@@ -7,6 +7,7 @@ use aiwattcoach::{
         BoxFuture as LlmBoxFuture, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse,
         LlmError, LlmFinishReason, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolCall,
     },
+    domain::llm_tools::LlmToolLoopOutput,
     domain::training_context::{
         IntervalsStatusContext, RenderedTrainingContext, TrainingContext,
         TrainingContextBuildResult, TrainingContextBuilder, ATHLETE_SUMMARY_FOCUS_ID,
@@ -14,7 +15,7 @@ use aiwattcoach::{
     },
     domain::training_plan::{
         TrainingPlanConversationMessage, TrainingPlanConversationRole, TrainingPlanGenerator,
-        TrainingPlanPlanningContext,
+        TrainingPlanPlanningContext, TrainingPlanToolLoopCheckpoint,
     },
     domain::workout_summary::WorkoutRecap,
 };
@@ -562,6 +563,146 @@ async fn training_plan_generator_fails_when_llm_returns_blank_assistant_text() {
             "LLM returned no assistant text".to_string(),
         )
     );
+}
+
+#[tokio::test]
+async fn training_plan_generator_checkpoints_final_no_tool_response_before_returning() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+    let checkpoints = Arc::new(Mutex::new(Vec::new()));
+    let checkpoint: TrainingPlanToolLoopCheckpoint = Arc::new({
+        let checkpoints = checkpoints.clone();
+        move |state| {
+            let checkpoints = checkpoints.clone();
+            Box::pin(async move {
+                checkpoints.lock().unwrap().push(state);
+                Ok(())
+            })
+        }
+    });
+
+    let response = generator
+        .generate_initial_plan_window_with_state(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "gemini",
+                "gemini-3.1-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+            None,
+            Some(checkpoint),
+        )
+        .await
+        .unwrap();
+
+    let checkpoints = checkpoints.lock().unwrap();
+    assert_eq!(checkpoints.len(), 1);
+    assert_eq!(
+        checkpoints[0]
+            .completed_response
+            .as_ref()
+            .map(|response| response.message.content.as_str()),
+        Some(response.raw_response.as_str())
+    );
+    assert_eq!(chat_port.requests().len(), 1);
+}
+
+#[tokio::test]
+async fn training_plan_generator_returns_error_when_final_checkpoint_fails() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+    let checkpoint: TrainingPlanToolLoopCheckpoint = Arc::new(|_| {
+        Box::pin(async {
+            Err(
+                aiwattcoach::domain::training_plan::TrainingPlanError::Repository(
+                    "checkpoint write failed".to_string(),
+                ),
+            )
+        })
+    });
+
+    let error = generator
+        .generate_initial_plan_window_with_state(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "gemini",
+                "gemini-3.1-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+            None,
+            Some(checkpoint),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        aiwattcoach::domain::training_plan::TrainingPlanError::Unavailable(
+            "checkpoint write failed".to_string()
+        )
+    );
+    assert_eq!(chat_port.requests().len(), 1);
+}
+
+#[tokio::test]
+async fn training_plan_generator_reuses_completed_tool_loop_state_without_second_chat_call() {
+    let chat_port = Arc::new(CapturingChatPort::default());
+    let generator = TrainingPlanLlmGenerator::new(
+        chat_port.clone(),
+        Arc::new(FixedGeminiConfigProvider),
+        Arc::new(StubTrainingContextBuilder),
+        FixedClock,
+    );
+    let restored_state = LlmToolLoopOutput::from_response(LlmChatResponse {
+        provider: LlmProvider::Gemini,
+        model: "gemini-3.1-pro".to_string(),
+        message: LlmChatMessage::assistant("2023-11-15\nRest Day"),
+        finish_reason: Some(LlmFinishReason::Stop),
+        provider_request_id: Some("req-restored".to_string()),
+        usage: LlmTokenUsage::default(),
+        cache: Default::default(),
+    })
+    .state;
+
+    let response = generator
+        .generate_initial_plan_window_with_state(
+            "user-1",
+            "workout-1",
+            1_700_000_000,
+            &WorkoutRecap::generated(
+                "Recovered well and handled threshold steadily",
+                "gemini",
+                "gemini-3.1-pro",
+                1_700_000_000,
+            ),
+            Some(&sample_planning_context()),
+            Some(restored_state),
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.raw_response, "2023-11-15\nRest Day");
+    assert_eq!(response.tool_loop_state.round_count, 1);
+    assert!(chat_port.requests().is_empty());
 }
 
 #[tokio::test]

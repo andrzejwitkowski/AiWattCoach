@@ -15,6 +15,8 @@ use aiwattcoach::{
             PlannedWorkout, PlannedWorkoutLine, PlannedWorkoutStep, PlannedWorkoutStepKind,
             PlannedWorkoutTarget, PlannedWorkoutText,
         },
+        llm::{LlmChatMessage, LlmChatResponse, LlmFinishReason, LlmProvider, LlmTokenUsage},
+        llm_tools::LlmToolLoopOutput,
         training_plan::{
             TrainingPlanDay, TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
             TrainingPlanGenerationOperationRepository, TrainingPlanProjectedDay,
@@ -83,6 +85,74 @@ async fn training_plan_generation_operation_repository_round_trips_and_reclaims_
         }
         other => panic!("expected reclaimed operation, got {other:?}"),
     }
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn training_plan_generation_operation_repository_round_trips_completed_tool_loop_state() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTrainingPlanGenerationOperationRepository::new(
+        fixture.client.clone(),
+        &fixture.database,
+    );
+    repository.ensure_indexes().await.unwrap();
+
+    let operation_key = "training-plan:user-1:workout-1:1700000000";
+    let completed_tool_loop_state = sample_completed_tool_loop_state();
+    let operation = sample_operation(operation_key)
+        .with_raw_plan_response(
+            "2026-04-06\nRest Day".to_string(),
+            completed_tool_loop_state.clone(),
+            1_700_000_050,
+        )
+        .with_correction_response(
+            "2026-04-07\nEndurance\n- 45m 65%".to_string(),
+            completed_tool_loop_state.clone(),
+            1_700_000_060,
+        );
+    repository.upsert(operation.clone()).await.unwrap();
+
+    let found = repository
+        .find_by_operation_key(operation_key)
+        .await
+        .unwrap()
+        .expect("expected stored operation");
+
+    assert_eq!(
+        found
+            .initial_plan_tool_loop_state
+            .as_ref()
+            .and_then(|state| state.completed_response.as_ref())
+            .map(|response| response.message.content.as_str()),
+        Some("2026-04-06\nRest Day")
+    );
+    assert_eq!(
+        found
+            .correction_tool_loop_state
+            .as_ref()
+            .and_then(|state| state.completed_response.as_ref())
+            .map(|response| response.message.content.as_str()),
+        Some("2026-04-06\nRest Day")
+    );
+    let completed = found
+        .initial_plan_tool_loop_state
+        .as_ref()
+        .and_then(|state| state.completed_response.as_ref())
+        .expect("completed response should round-trip");
+    assert_eq!(completed.provider, LlmProvider::Gemini);
+    assert_eq!(completed.model, "gemini-3.1-pro");
+    assert_eq!(completed.finish_reason, Some(LlmFinishReason::Stop));
+    assert_eq!(completed.provider_request_id.as_deref(), Some("req-mongo"));
+    assert_eq!(
+        found
+            .initial_plan_tool_loop_state
+            .as_ref()
+            .map(|state| state.round_count),
+        Some(1)
+    );
 
     fixture.cleanup().await;
 }
@@ -635,6 +705,19 @@ impl MongoFixture {
     async fn cleanup(self) {
         let _ = self.client.database(&self.database).drop().await;
     }
+}
+
+fn sample_completed_tool_loop_state() -> aiwattcoach::domain::llm_tools::LlmToolLoopState {
+    LlmToolLoopOutput::from_response(LlmChatResponse {
+        provider: LlmProvider::Gemini,
+        model: "gemini-3.1-pro".to_string(),
+        message: LlmChatMessage::assistant("2026-04-06\nRest Day"),
+        finish_reason: Some(LlmFinishReason::Stop),
+        provider_request_id: Some("req-mongo".to_string()),
+        usage: LlmTokenUsage::default(),
+        cache: Default::default(),
+    })
+    .state
 }
 
 fn sample_operation(operation_key: &str) -> TrainingPlanGenerationOperation {

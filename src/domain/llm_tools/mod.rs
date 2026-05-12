@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{
     llm::{
         llm_full_debug_logging_enabled, merge_provider_transcript_entries, truncate_logged_body,
-        LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError, LlmFinishReason,
-        LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition,
+        LlmCacheUsage, LlmChatMessage, LlmChatPort, LlmChatRequest, LlmChatResponse, LlmError,
+        LlmFinishReason, LlmProvider, LlmProviderConfig, LlmTokenUsage, LlmToolChoice,
+        LlmToolDefinition,
     },
     training_context::TrainingContext,
     workout_summary::PublicToolCall,
@@ -62,12 +63,51 @@ pub trait LlmTool: Send + Sync {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompletedLlmToolLoopResponse {
+    pub provider: LlmProvider,
+    pub model: String,
+    pub message: LlmChatMessage,
+    pub finish_reason: Option<LlmFinishReason>,
+    pub provider_request_id: Option<String>,
+    pub usage: LlmTokenUsage,
+    pub cache: LlmCacheUsage,
+}
+
+impl CompletedLlmToolLoopResponse {
+    fn from_response(response: &LlmChatResponse) -> Self {
+        Self {
+            provider: response.provider.clone(),
+            model: response.model.clone(),
+            message: response.message.clone(),
+            finish_reason: response.finish_reason.clone(),
+            provider_request_id: response.provider_request_id.clone(),
+            usage: response.usage.clone(),
+            cache: response.cache.clone(),
+        }
+    }
+
+    fn into_response(self) -> LlmChatResponse {
+        LlmChatResponse {
+            provider: self.provider,
+            model: self.model,
+            message: self.message,
+            finish_reason: self.finish_reason,
+            provider_request_id: self.provider_request_id,
+            usage: self.usage,
+            cache: self.cache,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct LlmToolLoopState {
     pub provider_transcript: Vec<LlmChatMessage>,
     pub finish_reason: Option<LlmFinishReason>,
     pub public_tool_calls: Vec<PublicToolCall>,
     pub round_count: u32,
+    #[serde(default)]
+    pub completed_response: Option<CompletedLlmToolLoopResponse>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -81,6 +121,11 @@ impl LlmToolLoopOutput {
         let message = response.message.clone();
         let finish_reason = response.finish_reason.clone();
 
+        let completed_response = response
+            .tool_calls()
+            .is_empty()
+            .then(|| CompletedLlmToolLoopResponse::from_response(&response));
+
         Self {
             response,
             state: LlmToolLoopState {
@@ -88,6 +133,7 @@ impl LlmToolLoopOutput {
                 finish_reason,
                 public_tool_calls: Vec::new(),
                 round_count: 1,
+                completed_response,
             },
         }
     }
@@ -171,6 +217,18 @@ pub fn run_tool_loop_with_checkpoint(
     Box::pin(async move {
         let mut conversation = request.conversation;
         let mut state = restored_state.unwrap_or_default();
+        if let Some(completed_response) = state.completed_response.clone() {
+            let response = completed_response.into_response();
+            tracing::info!(
+                provider = %response.provider,
+                model = %response.model,
+                scope = %tool_scope_name(scope),
+                restored_round_count = state.round_count,
+                restored_provider_transcript_messages = state.provider_transcript.len(),
+                "restoring completed llm tool loop state without provider call"
+            );
+            return Ok(LlmToolLoopOutput { response, state });
+        }
         if !state.provider_transcript.is_empty() {
             conversation.extend(state.provider_transcript.clone());
         }
@@ -253,14 +311,21 @@ pub fn run_tool_loop_with_checkpoint(
                     final_assistant_message = %logged_message(&response.message),
                     "llm tool loop finished without tool calls"
                 );
+                let state = LlmToolLoopState {
+                    provider_transcript,
+                    finish_reason: response.finish_reason.clone(),
+                    public_tool_calls,
+                    round_count,
+                    completed_response: Some(CompletedLlmToolLoopResponse::from_response(
+                        &response,
+                    )),
+                };
+                if let Some(checkpoint) = checkpoint.as_ref() {
+                    checkpoint(state.clone()).await?;
+                }
                 return Ok(LlmToolLoopOutput {
                     response: response.clone(),
-                    state: LlmToolLoopState {
-                        provider_transcript,
-                        finish_reason: response.finish_reason,
-                        public_tool_calls,
-                        round_count,
-                    },
+                    state,
                 });
             }
 
@@ -322,6 +387,7 @@ pub fn run_tool_loop_with_checkpoint(
                             finish_reason: response.finish_reason.clone(),
                             public_tool_calls,
                             round_count,
+                            completed_response: None,
                         },
                     });
                 }
@@ -332,6 +398,7 @@ pub fn run_tool_loop_with_checkpoint(
                 finish_reason: response.finish_reason.clone(),
                 public_tool_calls,
                 round_count,
+                completed_response: None,
             };
 
             if let Some(checkpoint) = checkpoint.as_ref() {

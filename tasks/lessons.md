@@ -53,6 +53,10 @@
 
 ## Small Review Fixes
 
+- For recovery-critical LLM tool-loop checkpoints, verify three separate boundaries: the terminal state is checkpointed before returning, checkpoint failure prevents a false success, and recovery from the checkpoint avoids a second provider call.
+- When restoring untracked files from `git stash -u`, use the stash's untracked parent (`stash@{n}^3`) and verify the restored file is non-empty before moving on.
+
+
 - Before changing Intervals event payload field semantics, inspect the OpenAPI schema for the exact endpoint and method. For event create/update, `description` is the string field used by the existing planned-workout sync flow, while documented `workout_doc` is an object and must not be populated with the repo's canonical workout text string just because local DTOs expose that name.
 
 - When a shared logged-body helper is reused across LLM adapters, redact structured JSON before serialization and truncate by char boundary lookup instead of scanning the full string just to decide whether to cut it.
