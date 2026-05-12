@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | CodeRabbit | calendar_view sync-status fallback precedence in PR #219
+
+- Problem: `src/domain/calendar_view/projection.rs` already preferred `failed` over `modified`, but the fallback path in `src/domain/calendar_view/service.rs` still mapped mixed planned-workout sync states as `modified` before `failed` when rebuilding entries from existing view rows without an authoritative local workout. That could hide provider failures behind a modified badge after rebuild.
+- Fix: reordered `map_external_sync_states(...)` in `src/domain/calendar_view/service.rs` to check `failed` before `modified`, and added `rebuild_for_user_prefers_failed_planned_sync_over_modified_fallback` in `src/domain/calendar_view/tests.rs` to lock the fallback rebuild behavior.
+- Prevention: when review feedback changes status precedence in a primary projector, grep for sibling fallback/legacy mapping helpers in the same feature and align them too. Do not assume only one path turns sync rows into UI-visible status strings.
+
 ### 2026-05-11 | user | calendar coach planned-workout Intervals update payload alignment
 
 - Problem: final pre-commit review incorrectly inferred that `update_planned_workout` should send canonical workout text as a string in Intervals `workout_doc`. Intervals OpenAPI documents both event create and update as `EventEx`, where `description` is a string and `workout_doc` is an object, while the known-working planned-workout create path sends the workout body in `description` and leaves `workout_doc` empty.

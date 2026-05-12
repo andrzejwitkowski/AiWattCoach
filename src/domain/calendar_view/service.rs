@@ -250,9 +250,9 @@ fn map_external_sync_states(sync_states: &[ExternalSyncState]) -> Option<super::
     let linked_intervals_event_id = sync_states.iter().find_map(linked_intervals_event_id);
     let sync_status = if sync_states
         .iter()
-        .any(|state| state.sync_status.as_str() == "synced")
+        .any(|state| state.sync_status.as_str() == "failed")
     {
-        Some("synced".to_string())
+        Some("failed".to_string())
     } else if sync_states
         .iter()
         .any(|state| state.sync_status.as_str() == "modified")
@@ -260,14 +260,14 @@ fn map_external_sync_states(sync_states: &[ExternalSyncState]) -> Option<super::
         Some("modified".to_string())
     } else if sync_states
         .iter()
+        .any(|state| state.sync_status.as_str() == "synced")
+    {
+        Some("synced".to_string())
+    } else if sync_states
+        .iter()
         .any(|state| state.sync_status.as_str() == "pending")
     {
         Some("pending".to_string())
-    } else if sync_states
-        .iter()
-        .any(|state| state.sync_status.as_str() == "failed")
-    {
-        Some("failed".to_string())
     } else {
         None
     };
