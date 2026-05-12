@@ -492,10 +492,11 @@ fn map_planned_workout_override(
     projected_day: TrainingPlanProjectedDay,
     workout: &PlannedWorkout,
 ) -> Result<TrainingPlanProjectedDay, CalendarError> {
-    let serialized = crate::domain::planned_workouts::serialize_canonical_planned_workout(workout);
-    let parsed = crate::domain::intervals::parse_planned_workout(&serialized).map_err(|error| {
-        CalendarError::Validation(format!("invalid local planned workout override: {error}"))
-    })?;
+    let parsed = crate::domain::planned_workouts::to_intervals_planned_workout(workout).map_err(
+        |error| {
+            CalendarError::Validation(format!("invalid local planned workout override: {error}"))
+        },
+    )?;
 
     Ok(TrainingPlanProjectedDay {
         workout_id: workout.planned_workout_id.clone(),

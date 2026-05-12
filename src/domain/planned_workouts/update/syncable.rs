@@ -1,5 +1,5 @@
 use crate::domain::{
-    intervals::{self, parse_planned_workout, Event, EventCategory, UpdateEvent},
+    intervals::{self, Event, EventCategory, UpdateEvent},
     planned_workouts::{self, PlannedWorkout, PlannedWorkoutContent, PlannedWorkoutLine},
     training_plan::TrainingPlanProjectedDay,
 };
@@ -77,10 +77,9 @@ pub(super) fn map_intervals_to_canonical_planned_workout_content(
 pub(super) fn map_planned_workout_to_syncable(
     workout: &PlannedWorkout,
 ) -> Result<SyncablePlannedWorkout, UpdatePlannedWorkoutError> {
-    let serialized = crate::domain::planned_workouts::serialize_canonical_planned_workout(workout);
-    let parsed = parse_planned_workout(&serialized).map_err(|error| {
-        UpdatePlannedWorkoutError::Validation(format!("invalid planned workout: {error}"))
-    })?;
+    let parsed = crate::domain::planned_workouts::to_intervals_planned_workout(workout).map_err(
+        |error| UpdatePlannedWorkoutError::Validation(format!("invalid planned workout: {error}")),
+    )?;
     let name = workout
         .name
         .clone()

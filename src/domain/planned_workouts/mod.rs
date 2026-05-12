@@ -33,6 +33,16 @@ pub fn serialize_canonical_planned_workout(workout: &PlannedWorkout) -> String {
     crate::domain::intervals::serialize_planned_workout(&structured)
 }
 
+pub fn to_intervals_planned_workout(
+    workout: &PlannedWorkout,
+) -> Result<
+    crate::domain::intervals::PlannedWorkout,
+    crate::domain::intervals::PlannedWorkoutParseError,
+> {
+    let serialized = serialize_canonical_planned_workout(workout);
+    crate::domain::intervals::parse_planned_workout(&serialized)
+}
+
 pub fn planned_workout_payload_hash(workout: &PlannedWorkout) -> String {
     let name = planned_workout_sync_name(workout);
     let body = planned_workout_sync_body(workout);
