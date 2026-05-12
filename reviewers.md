@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | Copilot | PR #222 Mongo round-trip test correction-phase state confusion
+
+- Problem: the new Mongo round-trip test for completed tool-loop state reused the same `LlmToolLoopState` value for initial and correction phases, even though the raw plan/correction texts differed. That made assertions confusing and weakened coverage — a mapper bug that accidentally copies initial state into `correction_tool_loop_state` would not be caught.
+- Fix: replaced the single shared helper with two distinct in-test `LlmToolLoopState` values (different messages, different `provider_request_id` strings), asserted initial and correction `completed_response` fields independently at both content and metadata level, and removed the now-unused generic helper.
+- Prevention: when round-tripping multiple phase-specific fields in a single persistence test, construct distinct input values per phase and assert each phase's output independently. A shared helper that returns the same payload for every phase is a test-design anti-pattern.
+
 ### 2026-05-12 | self (4-loop review) | issue 221 training-plan final no-tool checkpoint hardening
 
 - Problem: the initial issue 221 implementation proved restored completed tool-loop recovery avoided a second provider call, but the review found gaps: Mongo round-trip coverage did not verify completed-response metadata, recovery did not prove raw plan text came from the completed checkpoint, adapter tests did not prove final no-tool checkpointing before return or checkpoint-failure behavior, and the plan doc was accidentally zeroed during stash restore.
