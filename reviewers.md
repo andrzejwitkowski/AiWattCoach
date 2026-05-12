@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | user | imported override still filtered out after sync-aware duplicate fix
+
+- Problem: the previous sync-aware duplicate fix removed the projected candidate when an imported workout owned the synced external id, but the imported candidate still hit the old generic `projected_sync_keys` collision rule. That left the calendar refresh with zero visible candidates for the day even though the imported planned workout was the authoritative override.
+- Fix: taught `select_visible_planned_workout_candidates_with_sync_states(...)` to keep an imported candidate when its own sync states match its sync key, so the authoritative imported record survives while the projected duplicate is hidden.
+- Prevention: when a precedence rule is asymmetric, review both filter branches after the change. Do not stop after proving the losing duplicate disappears; verify the winner bypasses any older generic conflict rule too.
+
 ### 2026-05-12 | user | follow-up fixes for authoritative override regressions after refactor
 
 - Problem: the first follow-up fix still left three regressions. The calendar retry regression test fixture saved only the override title and no workout step, so the expected Intervals description no longer matched the actual canonical body. The sync-aware planned-workout candidate filter treated any matching sync state as proof of an imported override, which could hide both the projected candidate and the imported one. The refresh path also performed a second batch sync-state lookup after the prefilter step, breaking the batching regression.

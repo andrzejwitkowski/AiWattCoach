@@ -102,6 +102,7 @@ pub fn select_visible_planned_workout_candidates_with_sync_states(
             }
 
             projected_ids.contains(&candidate.workout.planned_workout_id)
+                || imported_candidate_owns_sync_key(candidate, &imported_sync_states_by_planned_id)
                 || !candidate
                     .sync_keys
                     .iter()
@@ -129,6 +130,23 @@ fn has_visible_imported_override_for_sync_key(
                         state.external_id.as_deref(),
                     )
             })
+        })
+}
+
+fn imported_candidate_owns_sync_key(
+    candidate: &CalendarPlannedWorkoutCandidate,
+    sync_states_by_planned_id: &HashMap<String, Vec<ExternalSyncState>>,
+) -> bool {
+    sync_states_by_planned_id
+        .get(&candidate.workout.planned_workout_id)
+        .into_iter()
+        .flat_map(|states| states.iter())
+        .any(|state| {
+            matches_external_sync_key(
+                &candidate.sync_keys,
+                state.provider.as_str(),
+                state.external_id.as_deref(),
+            )
         })
 }
 
