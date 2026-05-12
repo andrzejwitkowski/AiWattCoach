@@ -15,6 +15,8 @@ use aiwattcoach::{
             PlannedWorkout, PlannedWorkoutLine, PlannedWorkoutStep, PlannedWorkoutStepKind,
             PlannedWorkoutTarget, PlannedWorkoutText,
         },
+        llm::{LlmChatMessage, LlmChatResponse, LlmFinishReason, LlmProvider, LlmTokenUsage},
+        llm_tools::LlmToolLoopOutput,
         training_plan::{
             TrainingPlanDay, TrainingPlanGenerationClaimResult, TrainingPlanGenerationOperation,
             TrainingPlanGenerationOperationRepository, TrainingPlanProjectedDay,
@@ -83,6 +85,101 @@ async fn training_plan_generation_operation_repository_round_trips_and_reclaims_
         }
         other => panic!("expected reclaimed operation, got {other:?}"),
     }
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
+async fn training_plan_generation_operation_repository_round_trips_completed_tool_loop_state() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTrainingPlanGenerationOperationRepository::new(
+        fixture.client.clone(),
+        &fixture.database,
+    );
+    repository.ensure_indexes().await.unwrap();
+
+    let operation_key = "training-plan:user-1:workout-1:1700000000";
+    let initial_tool_loop_state = LlmToolLoopOutput::from_response(LlmChatResponse {
+        provider: LlmProvider::Gemini,
+        model: "gemini-3.1-pro".to_string(),
+        message: LlmChatMessage::assistant("2026-04-06\nRest Day"),
+        finish_reason: Some(LlmFinishReason::Stop),
+        provider_request_id: Some("req-mongo-initial".to_string()),
+        usage: LlmTokenUsage::default(),
+        cache: Default::default(),
+    })
+    .state;
+    let correction_tool_loop_state = LlmToolLoopOutput::from_response(LlmChatResponse {
+        provider: LlmProvider::Gemini,
+        model: "gemini-3.1-pro".to_string(),
+        message: LlmChatMessage::assistant("2026-04-07\nEndurance\n- 45m 65%"),
+        finish_reason: Some(LlmFinishReason::Stop),
+        provider_request_id: Some("req-mongo-correction".to_string()),
+        usage: LlmTokenUsage::default(),
+        cache: Default::default(),
+    })
+    .state;
+    let operation = sample_operation(operation_key)
+        .with_raw_plan_response(
+            "2026-04-06\nRest Day".to_string(),
+            initial_tool_loop_state.clone(),
+            1_700_000_050,
+        )
+        .with_correction_response(
+            "2026-04-07\nEndurance\n- 45m 65%".to_string(),
+            correction_tool_loop_state.clone(),
+            1_700_000_060,
+        );
+    repository.upsert(operation.clone()).await.unwrap();
+
+    let found = repository
+        .find_by_operation_key(operation_key)
+        .await
+        .unwrap()
+        .expect("expected stored operation");
+
+    let initial_completed = found
+        .initial_plan_tool_loop_state
+        .as_ref()
+        .and_then(|state| state.completed_response.as_ref())
+        .expect("initial completed response should round-trip");
+    assert_eq!(initial_completed.message.content, "2026-04-06\nRest Day");
+    assert_eq!(initial_completed.provider, LlmProvider::Gemini);
+    assert_eq!(initial_completed.model, "gemini-3.1-pro");
+    assert_eq!(initial_completed.finish_reason, Some(LlmFinishReason::Stop));
+    assert_eq!(
+        initial_completed.provider_request_id.as_deref(),
+        Some("req-mongo-initial")
+    );
+
+    let correction_completed = found
+        .correction_tool_loop_state
+        .as_ref()
+        .and_then(|state| state.completed_response.as_ref())
+        .expect("correction completed response should round-trip");
+    assert_eq!(
+        correction_completed.message.content,
+        "2026-04-07\nEndurance\n- 45m 65%"
+    );
+    assert_eq!(correction_completed.provider, LlmProvider::Gemini);
+    assert_eq!(correction_completed.model, "gemini-3.1-pro");
+    assert_eq!(
+        correction_completed.finish_reason,
+        Some(LlmFinishReason::Stop)
+    );
+    assert_eq!(
+        correction_completed.provider_request_id.as_deref(),
+        Some("req-mongo-correction")
+    );
+    assert_eq!(
+        found
+            .initial_plan_tool_loop_state
+            .as_ref()
+            .map(|state| state.round_count),
+        Some(1)
+    );
 
     fixture.cleanup().await;
 }

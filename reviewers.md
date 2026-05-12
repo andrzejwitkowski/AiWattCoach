@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | Copilot | PR #222 Mongo round-trip test correction-phase state confusion
+
+- Problem: the new Mongo round-trip test for completed tool-loop state reused the same `LlmToolLoopState` value for initial and correction phases, even though the raw plan/correction texts differed. That made assertions confusing and weakened coverage — a mapper bug that accidentally copies initial state into `correction_tool_loop_state` would not be caught.
+- Fix: replaced the single shared helper with two distinct in-test `LlmToolLoopState` values (different messages, different `provider_request_id` strings), asserted initial and correction `completed_response` fields independently at both content and metadata level, and removed the now-unused generic helper.
+- Prevention: when round-tripping multiple phase-specific fields in a single persistence test, construct distinct input values per phase and assert each phase's output independently. A shared helper that returns the same payload for every phase is a test-design anti-pattern.
+
+### 2026-05-12 | self (4-loop review) | issue 221 training-plan final no-tool checkpoint hardening
+
+- Problem: the initial issue 221 implementation proved restored completed tool-loop recovery avoided a second provider call, but the review found gaps: Mongo round-trip coverage did not verify completed-response metadata, recovery did not prove raw plan text came from the completed checkpoint, adapter tests did not prove final no-tool checkpointing before return or checkpoint-failure behavior, and the plan doc was accidentally zeroed during stash restore.
+- Fix: restored the plan doc from the untracked stash parent, added issue/negative-checkpoint-test details to the plan, strengthened Mongo assertions for provider/model/finish reason/request id, asserted recovered raw plan text comes from the completed checkpoint, and added adapter regressions for final no-tool checkpoint invocation plus checkpoint-failure propagation.
+- Prevention: for recovery-critical checkpoint changes, prove all three boundaries: checkpoint is written before returning, checkpoint failure blocks downstream success, and recovery consumes the stored final state without another provider call. When restoring untracked files from a stash, read from `stash@{n}^3` and verify non-zero file size before continuing.
+
 ### 2026-05-12 | user | workout-summary websocket long-reply idle disconnect
 
 - Problem: completed-workout coach replies could take 40s+ to return from the LLM, but `src/adapters/rest/workout_summary/ws.rs` sent only one initial `coach_typing` frame and then stayed silent while `generate_coach_reply(...)` blocked. That left the websocket vulnerable to idle proxy/socket timeouts, so the backend could persist the final coach reply while the UI never received it until a manual refresh reloaded the stored summary. The first regression for this used real sleep/timeout durations, and the second tried to drive fake time through a full websocket integration path, which still proved brittle because the timer behavior was not the only moving part.
