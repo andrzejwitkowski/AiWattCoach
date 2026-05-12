@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-12 | user | calendar planned-workout authoritative override regressions after PR #219 follow-up
+
+- Problem: two authoritative-override regressions remained after the PR #219 follow-up. `CalendarService::apply_calendar_override(...)` reloaded the authoritative planned workout body from the local repository, but only replaced `TrainingPlanProjectedDay.workout`, leaving the stale projected title in place so manual Intervals retries could still push the old name. In calendar-view refresh, duplicate planned-workout candidate filtering still ran before sync-state lookup, so an imported workout that owned the synced external id could be dropped just because a projected workout shared the same sync key.
+- Fix: changed the calendar override mapper to rebuild the projected day from the authoritative planned workout payload so name/body stay aligned, updated the focused calendar regression to inject an authoritative planned-workout repository instead of relying on the default noop repo, and made `refresh_range_for_user(...)` resolve planned-workout sync states before duplicate filtering so imported candidates with authoritative sync ownership win over projected duplicates sharing the same external sync key.
+- Prevention: when switching a retry path to authoritative local data, verify every downstream field derived from that model, not just the main body payload. For duplicate-candidate cleanup that depends on sync ownership, do not filter before the code has the sync-state context needed to tell a stale projected duplicate from the authoritative imported record.
+
 ### 2026-05-12 | CodeRabbit | calendar coach planned-workout authoritative override and duplicate refresh follow-up in PR #219
 
 - Problem: the remaining PR #219 follow-up still left three correctness gaps. `CalendarService` manual sync used `calendar_view.raw_workout_doc` as the local override source instead of the authoritative planned-workout repository, so stale view rows could drive provider writes. The calendar coach websocket hook called `onPlannedWorkoutUpdated` for duplicate `update_planned_workout` tool messages even though the message list itself was deduplicated. The calendar-view precedence regression claimed to cover imported-vs-projected duplicate sync-key behavior, but both candidates reused the same `planned_workout_id`, so it did not exercise the real cross-id override path.

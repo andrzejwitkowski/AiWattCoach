@@ -6,6 +6,7 @@ use crate::domain::{
     external_sync::{CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState},
     intervals::{CreateEvent, Event, EventCategory, IntervalsError, UpdateEvent},
     planned_workout_tokens::ensure_planned_workout_marker,
+    planned_workouts::PlannedWorkout,
     training_plan::TrainingPlanProjectedDay,
     wahoo::{
         WahooCreatePlan, WahooCreateWorkout, WahooUpdatePlan, WahooUpdateWorkout,
@@ -483,22 +484,26 @@ where
             });
         }
 
-        let serialized =
-            crate::domain::planned_workouts::serialize_canonical_planned_workout(&workout);
-        let parsed =
-            crate::domain::intervals::parse_planned_workout(&serialized).map_err(|error| {
-                CalendarError::Validation(format!(
-                    "invalid local planned workout override: {error}"
-                ))
-            })?;
-
-        Ok(TrainingPlanProjectedDay {
-            rest_day: false,
-            rest_day_reason: None,
-            workout: Some(parsed),
-            ..projected_day
-        })
+        map_planned_workout_override(projected_day, &workout)
     }
+}
+
+fn map_planned_workout_override(
+    projected_day: TrainingPlanProjectedDay,
+    workout: &PlannedWorkout,
+) -> Result<TrainingPlanProjectedDay, CalendarError> {
+    let serialized = crate::domain::planned_workouts::serialize_canonical_planned_workout(workout);
+    let parsed = crate::domain::intervals::parse_planned_workout(&serialized).map_err(|error| {
+        CalendarError::Validation(format!("invalid local planned workout override: {error}"))
+    })?;
+
+    Ok(TrainingPlanProjectedDay {
+        workout_id: workout.planned_workout_id.clone(),
+        rest_day: false,
+        rest_day_reason: None,
+        workout: Some(parsed),
+        ..projected_day
+    })
 }
 
 async fn persist_failed_sync_state<SyncStates>(

@@ -21,7 +21,8 @@ pub use model::{
     CalendarEntryView, CalendarEntryViewError,
 };
 pub use planned_candidates::{
-    select_visible_planned_workout_candidates, CalendarPlannedSyncKey,
+    select_visible_planned_workout_candidates,
+    select_visible_planned_workout_candidates_with_sync_states, CalendarPlannedSyncKey,
     CalendarPlannedWorkoutCandidate, CalendarPlannedWorkoutOrigin, CalendarPlannedWorkoutSource,
 };
 pub use ports::{BoxFuture, CalendarEntryViewRepository};
