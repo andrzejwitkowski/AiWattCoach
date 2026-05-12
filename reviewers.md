@@ -918,3 +918,21 @@ Read this file before planning and before implementation.
 - Problem: the repo instructions did not include a durable review-fix loop, so repeated PR and review mistakes were not being logged in a reusable place.
 - Fix: created `reviewers.md`, added the review-fix loop to `AGENTS.md`, and added the reusable lesson to `tasks/lessons.md`.
 - Prevention: before writing a plan or implementing changes, read `reviewers.md` and check whether the current task repeats a known review pattern.
+
+### 2026-05-12 | self | duplicated provider-string match arms
+
+- Problem: the same `match ExternalProvider { Intervals => "intervals", ... }` block was open-coded in five places (one LLM tool and three mongo adapter `provider_as_str` helpers, plus a duplicate inside the same tool), making future provider additions a five-site change.
+- Fix: added `impl ExternalProvider { pub fn as_str(&self) -> &'static str }` next to the enum definition (mirroring `ExternalSyncStatus::as_str`) and replaced every call site with the method.
+- Prevention: when an enum-to-string mapping appears in more than one module, define a single `as_str()` (or `Display`) on the enum and forbid open-coded match arms in adapters or DTO emitters.
+
+### 2026-05-12 | self | inter-domain enum mapping written as a 60-line nested match
+
+- Problem: `map_intervals_to_canonical_planned_workout_content` translated `intervals::PlannedWorkoutLine` -> `planned_workouts::PlannedWorkoutLine` (and the nested `Step`/`Kind`/`Target` cases) inline as one giant match, making it the hardest function in the file to review.
+- Fix: added local `impl From<intervals::*> for planned_workouts::*` blocks for `PlannedWorkoutStepKind`, `PlannedWorkoutTarget`, `PlannedWorkoutStep`, and `PlannedWorkoutLine` in the only call-site module, reducing the helper to `lines.iter().cloned().map(Into::into).collect()`.
+- Prevention: when mapping one domain type to another with field-for-field correspondence, prefer `impl From` (kept in the module that already couples the two types) over inline match arms; keep the mapping next to the call site if it is not pulled into the shared model file.
+
+### 2026-05-12 | self | duplicated marker helper across two services
+
+- Problem: `ensure_planned_workout_marker` was implemented twice (calendar sync, planned-workouts update) with identical look-up-or-create logic, differing only in the error variant (`CalendarError::PlannedWorkoutTokens` vs `UpdatePlannedWorkoutError::Repository`).
+- Fix: extracted the helper into `planned_workout_tokens::ensure_planned_workout_marker`, returning the raw `PlannedWorkoutTokenError`; each caller maps the error to its own variant via `.map_err(...)` at the call site.
+- Prevention: when two service functions share the same orchestration with only the error type differing, push the helper into the upstream domain module and return its native error; let callers map to their adapter-specific error type at the call site.
