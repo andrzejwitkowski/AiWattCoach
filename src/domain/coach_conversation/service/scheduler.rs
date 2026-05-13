@@ -4,7 +4,10 @@ use tracing::warn;
 
 use crate::domain::{
     identity::{Clock, IdGenerator},
-    llm::{LlmError, LLM_REQUEST_TIMEOUT_SECONDS},
+    llm::{
+        deserialize_llm_error, serialize_llm_error, LlmError, SerializedLlmError,
+        LLM_REQUEST_TIMEOUT_SECONDS,
+    },
     task_scheduler::{
         build_scheduled_task, scheduled_task_handler, BuildScheduledTaskError,
         NewScheduledTaskInput, ResultTaskHandler, RetryStrategy, ScheduledTask,
@@ -50,8 +53,8 @@ enum SerializedCoachConversationError {
         message: String,
     },
     Llm {
-        error_kind: String,
-        message: Option<String>,
+        #[serde(flatten)]
+        error: SerializedLlmError,
     },
 }
 
@@ -95,33 +98,7 @@ fn serialize_coach_conversation_error(
             }
         }
         CoachConversationError::Llm(error) => SerializedCoachConversationError::Llm {
-            error_kind: match error {
-                LlmError::CredentialsNotConfigured => "credentials_not_configured",
-                LlmError::ProviderNotConfigured => "provider_not_configured",
-                LlmError::ModelNotConfigured => "model_not_configured",
-                LlmError::ContextTooLarge(_) => "context_too_large",
-                LlmError::UnsupportedProvider(_) => "unsupported_provider",
-                LlmError::Transport(_) => "transport",
-                LlmError::ProviderRejected(_) => "provider_rejected",
-                LlmError::RateLimited(_) => "rate_limited",
-                LlmError::InvalidResponse(_) => "invalid_response",
-                LlmError::Checkpoint(_) => "checkpoint",
-                LlmError::Internal(_) => "internal",
-            }
-            .to_string(),
-            message: match error {
-                LlmError::CredentialsNotConfigured
-                | LlmError::ProviderNotConfigured
-                | LlmError::ModelNotConfigured => None,
-                LlmError::ContextTooLarge(message)
-                | LlmError::UnsupportedProvider(message)
-                | LlmError::Transport(message)
-                | LlmError::ProviderRejected(message)
-                | LlmError::RateLimited(message)
-                | LlmError::InvalidResponse(message)
-                | LlmError::Checkpoint(message)
-                | LlmError::Internal(message) => Some(message.clone()),
-            },
+            error: serialize_llm_error(error),
         },
     }
 }
@@ -141,34 +118,9 @@ fn deserialize_coach_conversation_error(
         SerializedCoachConversationError::Validation { message } => {
             CoachConversationError::Validation(message)
         }
-        SerializedCoachConversationError::Llm {
-            error_kind,
-            message,
-        } => CoachConversationError::Llm(match error_kind.as_str() {
-            "credentials_not_configured" => LlmError::CredentialsNotConfigured,
-            "provider_not_configured" => LlmError::ProviderNotConfigured,
-            "model_not_configured" => LlmError::ModelNotConfigured,
-            "context_too_large" => LlmError::ContextTooLarge(
-                message
-                    .unwrap_or_else(|| "packed training context exceeds model limits".to_string()),
-            ),
-            "unsupported_provider" => LlmError::UnsupportedProvider(
-                message.unwrap_or_else(|| "unknown provider".to_string()),
-            ),
-            "transport" => {
-                LlmError::Transport(message.unwrap_or_else(|| "transport error".to_string()))
-            }
-            "provider_rejected" => LlmError::ProviderRejected(
-                message.unwrap_or_else(|| "provider rejected request".to_string()),
-            ),
-            "rate_limited" => LlmError::RateLimited(
-                message.unwrap_or_else(|| "provider rate limited request".to_string()),
-            ),
-            "invalid_response" => LlmError::InvalidResponse(
-                message.unwrap_or_else(|| "invalid provider response".to_string()),
-            ),
-            _ => LlmError::Internal(message.unwrap_or_else(|| "internal llm error".to_string())),
-        }),
+        SerializedCoachConversationError::Llm { error } => {
+            CoachConversationError::Llm(deserialize_llm_error(error))
+        }
     }
 }
 

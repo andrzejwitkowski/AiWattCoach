@@ -76,8 +76,8 @@
     "hash": "99ac42453e694db9f3f3b9ddecabd6ad"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/training_plan_mongo.rs": {
-    "mtime": 1778611482.7195742,
-    "hash": "f1ca9bfd2277c471a46d8d001f390250"
+    "mtime": 1778615026.931072,
+    "hash": "120cd69fb65c7a193e858b76f7fd2bef"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/intervals_workout_analysis.rs": {
     "mtime": 1777651504.5080404,
@@ -104,7 +104,7 @@
     "hash": "d667ffad31d8c6402f2c789e30efd540"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/llm_adapters/training_plan.rs": {
-    "mtime": 1778611606.8535154,
+    "mtime": 1778615026.930072,
     "hash": "429f3617b2e3234f362f0903f1817890"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/workout_summary_service/main.rs": {
@@ -232,7 +232,7 @@
     "hash": "a79bb8de4a4ecd0f2842cb5127c15e90"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/training_plan_service/recovery.rs": {
-    "mtime": 1778611493.5969052,
+    "mtime": 1778615026.931072,
     "hash": "a89f533247f67f91b61d57dc155bfe30"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/training_plan_service/validation.rs": {
@@ -2176,8 +2176,8 @@
     "hash": "ca51e822ea7de136984a69074b8797f6"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/mongo/llm_reply_operations/mapping.rs": {
-    "mtime": 1778178824.8457322,
-    "hash": "0b8285390a838107333863d0ea16d54b"
+    "mtime": 1778615676.1204305,
+    "hash": "cbe3b0f29887fa5367d5ebecc19a7004"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/mongo/llm_reply_operations/mod.rs": {
     "mtime": 1778178824.8457322,
@@ -2420,8 +2420,8 @@
     "hash": "b6e11558b7994d087081b33bd342fc4e"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/service/scheduler/mod.rs": {
-    "mtime": 1778610164.4533944,
-    "hash": "6096cbb0ab649852237c212bda48d2aa"
+    "mtime": 1778615405.1184645,
+    "hash": "9c53a60a15b9f406effc1dacc7e48490"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/service/scheduler/checkpoint.rs": {
     "mtime": 1777106174.204272,
@@ -2480,8 +2480,8 @@
     "hash": "87ba81c413dae61d5a0ceea364814cb5"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/athlete_summary/service/scheduler.rs": {
-    "mtime": 1778610164.446391,
-    "hash": "ce1b9a8f7c33309eafcdf0e8bc5958c2"
+    "mtime": 1778615404.7054665,
+    "hash": "140a5b3a555238fccbde578283ba9521"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/athlete_summary/service/scheduler/tests/support.rs": {
     "mtime": 1778178824.853497,
@@ -2856,7 +2856,7 @@
     "hash": "b83a6109bbed061abb54f8765f02522f"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/llm_tools/mod.rs": {
-    "mtime": 1778610684.4153845,
+    "mtime": 1778615026.930072,
     "hash": "8d4c597e288a98a74c3e14c09b789d4b"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/llm_tools/simulate_forward_load.rs": {
@@ -2924,8 +2924,8 @@
     "hash": "e046c5ba4d8526463e9e234777896ae9"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/llm/mod.rs": {
-    "mtime": 1778610164.4483922,
-    "hash": "60f0e629570cc32bbb85e0014adc74a9"
+    "mtime": 1778615135.2426376,
+    "hash": "f37ee931b549d998866ecee38d060ba5"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/llm/ports.rs": {
     "mtime": 1775675725.0049882,
@@ -2940,8 +2940,8 @@
     "hash": "7fc358f7cb9b1934bdf4643c1c06855f"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/llm/operation.rs": {
-    "mtime": 1778178824.857497,
-    "hash": "a251a68b9b9231dc594b89bd0c150099"
+    "mtime": 1778615404.8814657,
+    "hash": "5f37acb0e89f846903382a075e071025"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/llm/transcript.rs": {
     "mtime": 1778178824.857497,
@@ -3140,8 +3140,8 @@
     "hash": "86fd5b19c0009948fb9b49761d5b0092"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/coach_conversation/service/scheduler.rs": {
-    "mtime": 1778610164.4483922,
-    "hash": "507ac24b6f0cba843731193a5947c86d"
+    "mtime": 1778615404.7924662,
+    "hash": "1528228763e994cc9639bb04f9b47a7b"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/coach_conversation/service/use_cases.rs": {
     "mtime": 1778610164.4483922,
@@ -3344,8 +3344,8 @@
     "hash": "faf4641d60f84eaebcde39d3060c388a"
   },
   "/home/andrzej/Projects/AiWattCoach/reviewers.md": {
-    "mtime": 1778611688.9876034,
-    "hash": "4ba58fdaa20e059ebb78f6159b606877"
+    "mtime": 1778615026.930072,
+    "hash": "9d61ad629b208d62b9f5b2f3ddf23d52"
   },
   "/home/andrzej/Projects/AiWattCoach/docker-compose.yml": {
     "mtime": 1775675724.9767706,
@@ -3364,7 +3364,7 @@
     "hash": "2bbc3892747996176b16ca4b475b564f"
   },
   "/home/andrzej/Projects/AiWattCoach/tasks/lessons.md": {
-    "mtime": 1778611694.7184763,
+    "mtime": 1778615026.930072,
     "hash": "184b2f12fa95c678f2fab23669f33cb6"
   },
   "/home/andrzej/Projects/AiWattCoach/docs/function_calls_exploration_prompt.md": {
@@ -3495,6 +3495,10 @@
     "mtime": 1775675724.9781725,
     "hash": "5bf0479635e89eb894918cefba9dd700"
   },
+  "/home/andrzej/Projects/AiWattCoach/docs/plans/2026-05-12-issue-224-A2-shared-llm-error-checkpoint-serialization.md": {
+    "mtime": 1778615027.6991208,
+    "hash": "c4f171637564963b2801b9bd3e504166"
+  },
   "/home/andrzej/Projects/AiWattCoach/docs/plans/2026-04-03-openrouter-prompt-caching-plan.md": {
     "mtime": 1775675724.9786022,
     "hash": "699c5c665b47efee4677a4e3bc641f35"
@@ -3560,7 +3564,7 @@
     "hash": "9d4305db4218c08d6e4f02002c5283ff"
   },
   "/home/andrzej/Projects/AiWattCoach/docs/plans/2026-05-12-issue-221-training-plan-final-no-tool-checkpoint.md": {
-    "mtime": 1778611674.8849173,
+    "mtime": 1778615026.90007,
     "hash": "e6eb668a0ddb4ec41dddd8002f81a02d"
   },
   "/home/andrzej/Projects/AiWattCoach/docs/plans/2026-03-20-backend-setup-design.md": {

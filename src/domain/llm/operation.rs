@@ -39,6 +39,39 @@ impl LlmReplyOperationFailureKind {
         }
     }
 
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::CredentialsNotConfigured => "credentials_not_configured",
+            Self::ProviderNotConfigured => "provider_not_configured",
+            Self::ModelNotConfigured => "model_not_configured",
+            Self::ContextTooLarge => "context_too_large",
+            Self::UnsupportedProvider => "unsupported_provider",
+            Self::Transport => "transport",
+            Self::ProviderRejected => "provider_rejected",
+            Self::RateLimited => "rate_limited",
+            Self::InvalidResponse => "invalid_response",
+            Self::Checkpoint => "checkpoint",
+            Self::Internal => "internal",
+        }
+    }
+
+    pub fn from_kind_str(value: &str) -> Option<Self> {
+        match value {
+            "credentials_not_configured" => Some(Self::CredentialsNotConfigured),
+            "provider_not_configured" => Some(Self::ProviderNotConfigured),
+            "model_not_configured" => Some(Self::ModelNotConfigured),
+            "context_too_large" => Some(Self::ContextTooLarge),
+            "unsupported_provider" => Some(Self::UnsupportedProvider),
+            "transport" => Some(Self::Transport),
+            "provider_rejected" => Some(Self::ProviderRejected),
+            "rate_limited" => Some(Self::RateLimited),
+            "invalid_response" => Some(Self::InvalidResponse),
+            "checkpoint" => Some(Self::Checkpoint),
+            "internal" => Some(Self::Internal),
+            _ => None,
+        }
+    }
+
     pub fn to_llm_error(&self, message: Option<String>) -> LlmError {
         match self {
             Self::CredentialsNotConfigured => LlmError::CredentialsNotConfigured,
@@ -82,6 +115,47 @@ impl LlmReplyOperationFailureKind {
                 | Self::Internal
         )
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SerializedLlmError {
+    pub error_kind: String,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+pub fn serialize_llm_error(error: &LlmError) -> SerializedLlmError {
+    SerializedLlmError {
+        error_kind: LlmReplyOperationFailureKind::from_llm_error(error)
+            .as_str()
+            .to_string(),
+        message: match error {
+            LlmError::CredentialsNotConfigured
+            | LlmError::ProviderNotConfigured
+            | LlmError::ModelNotConfigured => None,
+            LlmError::ContextTooLarge(message)
+            | LlmError::UnsupportedProvider(message)
+            | LlmError::Transport(message)
+            | LlmError::ProviderRejected(message)
+            | LlmError::RateLimited(message)
+            | LlmError::InvalidResponse(message)
+            | LlmError::Checkpoint(message)
+            | LlmError::Internal(message) => Some(message.clone()),
+        },
+    }
+}
+
+pub fn deserialize_llm_error(error: SerializedLlmError) -> LlmError {
+    let SerializedLlmError {
+        error_kind,
+        message,
+    } = error;
+
+    LlmReplyOperationFailureKind::from_kind_str(&error_kind)
+        .map(|kind| kind.to_llm_error(message.clone()))
+        .unwrap_or_else(|| {
+            LlmError::Internal(message.unwrap_or_else(|| "internal llm error".to_string()))
+        })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -366,6 +440,35 @@ impl LlmReplyOperation {
             attempt_count: self.attempt_count,
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{deserialize_llm_error, serialize_llm_error};
+    use crate::domain::llm::LlmError;
+
+    #[test]
+    fn serialized_llm_error_round_trips_every_variant() {
+        let cases = vec![
+            LlmError::CredentialsNotConfigured,
+            LlmError::ProviderNotConfigured,
+            LlmError::ModelNotConfigured,
+            LlmError::ContextTooLarge("ctx".to_string()),
+            LlmError::UnsupportedProvider("provider".to_string()),
+            LlmError::Transport("transport".to_string()),
+            LlmError::ProviderRejected("rejected".to_string()),
+            LlmError::RateLimited("rate limited".to_string()),
+            LlmError::InvalidResponse("invalid".to_string()),
+            LlmError::Checkpoint("checkpoint".to_string()),
+            LlmError::Internal("internal".to_string()),
+        ];
+
+        for case in cases {
+            let serialized = serialize_llm_error(&case);
+            let deserialized = deserialize_llm_error(serialized);
+            assert_eq!(deserialized, case);
         }
     }
 }
