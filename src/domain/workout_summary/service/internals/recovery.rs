@@ -247,12 +247,13 @@ where
                 .await;
         }
 
-        self.materialize_missing_recovery_tool_messages(user_id, workout_id, operation)
+        let operation = self
+            .materialize_missing_recovery_tool_messages(user_id, workout_id, operation)
             .await?;
 
-        if let Some(content) = recoverable_assistant_content(operation) {
+        if let Some(content) = recoverable_assistant_content(&operation) {
             let coach_message = self
-                .append_recovered_coach_message(user_id, workout_id, operation, content)
+                .append_recovered_coach_message(user_id, workout_id, &operation, content)
                 .await?;
             let completed = operation.mark_completed_from_existing_message(
                 coach_message.id.clone(),
@@ -274,7 +275,7 @@ where
             }));
         }
 
-        self.fail_invalid_provider_transcript_recovery(operation)
+        self.fail_invalid_provider_transcript_recovery(&operation)
             .await
     }
 
@@ -295,7 +296,8 @@ where
         user_id: &str,
         workout_id: &str,
         operation: &CoachReplyOperation,
-    ) -> Result<(), WorkoutSummaryError> {
+    ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
+        let mut operation = operation.clone();
         let public_tool_calls: Vec<_> = operation
             .provider_transcript
             .iter()
@@ -307,7 +309,7 @@ where
         let workout_id = workout_id.to_string();
         let service = self.clone();
 
-        materialize_public_tool_calls_idempotently(
+        operation.public_tool_call_ids = materialize_public_tool_calls_idempotently(
             operation.public_tool_call_ids.clone(),
             &public_tool_calls,
             |tool_call_id| {
@@ -339,7 +341,7 @@ where
         )
         .await?;
 
-        Ok(())
+        Ok(operation)
     }
 
     async fn recovery_tool_call_already_materialized(
@@ -404,7 +406,8 @@ mod tests {
     };
 
     use crate::domain::workout_summary::service::tests::{
-        ExistingMessageSummaryRepository, FixedClock, FixedIds, StubReplyOperations,
+        ExistingMessageSummaryRepository, FixedClock, FixedIds, RecordingReplyOperations,
+        StubReplyOperations,
     };
 
     #[tokio::test]
@@ -463,6 +466,80 @@ mod tests {
         assert_eq!(
             repository.appended_message_ids(),
             vec!["tool-1".to_string(), "tool-2".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn recovery_persists_materialized_tool_call_ids_before_completion() {
+        let repository = ExistingMessageSummaryRepository::with_messages(Vec::new());
+        let reply_operations = RecordingReplyOperations::default();
+        let service = WorkoutSummaryService::with_coach(
+            repository.clone(),
+            reply_operations.clone(),
+            FixedClock,
+            FixedIds,
+            Arc::new(MockWorkoutCoach),
+        );
+        let operation = CoachReplyOperation::pending(
+            "user-1".to_string(),
+            "workout-1".to_string(),
+            "message-1".to_string(),
+            Some("workout-summary:user-1:workout-1".to_string()),
+            "coach-message-1".to_string(),
+            1_700_000_000,
+        )
+        .record_provider_response(PendingLlmReplyCheckpoint {
+            provider: LlmProvider::OpenAi,
+            model: "gpt-4o-mini".to_string(),
+            provider_request_id: None,
+            provider_cache_id: None,
+            token_usage: LlmTokenUsage::default(),
+            cache_usage: LlmCacheUsage::default(),
+            provider_transcript: vec![LlmChatMessage::assistant_with_tool_calls(
+                "Recovered coach reply",
+                vec![
+                    LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "first".to_string(),
+                        arguments_json: "{}".to_string(),
+                    },
+                    LlmToolCall {
+                        id: "tool-2".to_string(),
+                        name: "second".to_string(),
+                        arguments_json: "{}".to_string(),
+                    },
+                ],
+            )],
+            finish_reason: None,
+            updated_at_epoch_seconds: 1_700_000_001,
+        });
+
+        let reply = service
+            .try_recover_pending_operation("user-1", "workout-1", "message-1", &operation)
+            .await
+            .expect("recovery should succeed")
+            .expect("recovery should replay the persisted reply");
+
+        let persisted = reply_operations
+            .last_upserted_operation()
+            .expect("recovery should persist completed operation");
+
+        assert_eq!(
+            persisted.status,
+            crate::domain::llm::LlmReplyOperationStatus::Completed
+        );
+        assert_eq!(
+            persisted.public_tool_call_ids,
+            vec!["tool-1".to_string(), "tool-2".to_string()]
+        );
+        assert_eq!(reply.coach_message.id, "coach-message-1".to_string());
+        assert_eq!(
+            repository.appended_message_ids(),
+            vec![
+                "tool-1".to_string(),
+                "tool-2".to_string(),
+                "coach-message-1".to_string()
+            ]
         );
     }
 }

@@ -103,10 +103,11 @@ where
             return Err(CoachConversationError::Llm(llm_error));
         }
 
-        self.materialize_recovered_tool_messages(conversation, operation)
+        let operation = self
+            .materialize_recovered_tool_messages(conversation, operation)
             .await?;
 
-        let Some(content) = recovered_assistant_reply_text(operation) else {
+        let Some(content) = recovered_assistant_reply_text(&operation) else {
             let error =
                 LlmError::InvalidResponse("assistant reply missing final text message".to_string());
             let failed = operation.mark_failed(&error, self.clock.now_epoch_seconds());
@@ -114,7 +115,7 @@ where
                 .await?;
             return Err(CoachConversationError::Llm(error));
         };
-        let reasoning_content = recovered_reasoning_content(operation);
+        let reasoning_content = recovered_reasoning_content(&operation);
 
         let coach_message_id = operation.reply_message_id.clone().ok_or_else(|| {
             CoachConversationError::Repository(
@@ -153,7 +154,8 @@ where
         &self,
         conversation: &CoachConversation,
         operation: &CoachConversationReplyOperation,
-    ) -> Result<(), CoachConversationError> {
+    ) -> Result<CoachConversationReplyOperation, CoachConversationError> {
+        let mut operation = operation.clone();
         let public_tool_calls: Vec<_> = operation
             .provider_transcript
             .iter()
@@ -164,7 +166,7 @@ where
         let conversation = conversation.clone();
         let service = self.clone();
 
-        materialize_public_tool_calls_idempotently(
+        operation.public_tool_call_ids = materialize_public_tool_calls_idempotently(
             operation.public_tool_call_ids.clone(),
             &public_tool_calls,
             |tool_call_id| {
@@ -190,7 +192,7 @@ where
         )
         .await?;
 
-        Ok(())
+        Ok(operation)
     }
 }
 
@@ -210,7 +212,7 @@ fn recovered_reasoning_content(operation: &CoachConversationReplyOperation) -> O
 #[cfg(test)]
 mod tests {
     use crate::domain::{
-        coach_conversation::CoachConversationReplyOperation,
+        coach_conversation::{CoachConversationError, CoachConversationReplyOperation},
         llm::{
             LlmCacheUsage, LlmChatMessage, LlmProvider, LlmTokenUsage, LlmToolCall,
             PendingLlmReplyCheckpoint,

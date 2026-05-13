@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-13 | Copilot | PR #229 public tool materialization recovery semantics
+
+- Problem: the new shared `materialize_public_tool_calls_idempotently(...)` helper left two recovery correctness gaps. It treated `existing_ids` as already normalized, so duplicate persisted ids would survive forever, and both workout-summary and coach-conversation recovery paths ignored the helper's returned id set. After a crash between appending tool messages and checkpointing `public_tool_call_ids`, recovery could therefore complete the operation with stale or duplicate ids even though the live path persisted the normalized materialized set.
+- Fix: normalized duplicate incoming ids inside `src/domain/public_tool_calls/materialization.rs`, changed both recovery paths to carry the returned updated operation forward before completion/failure persistence, and added focused regressions for helper normalization plus replay persistence of recovered tool-call ids in both workout-summary and coach-conversation flows.
+- Prevention: when extracting a shared idempotency helper that returns updated durable state, audit every caller for whether it persists the returned value or accidentally continues with the stale input. For shared persisted id lists, normalize the incoming stored state as well as deduping newly discovered items, and add at least one recovery-path regression proving the completed checkpoint contains the normalized ids after replay.
+
 ### 2026-05-13 | Copilot | PR #227 parse_required_json_value success-path coverage
 
 - Problem: the extracted `parse_required_json_value(...)` helper had regression coverage for missing and invalid input, but no success-path test proving a valid required checkpoint parses correctly. Because the helper now sits under multiple scheduler-backed flows, that left a small but real coverage gap in the shared wrapper itself.

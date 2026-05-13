@@ -472,6 +472,48 @@ impl CoachReplyOperationRepository for StubReplyOperations {
     }
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct RecordingReplyOperations {
+    operation: Arc<std::sync::Mutex<Option<CoachReplyOperation>>>,
+}
+
+impl RecordingReplyOperations {
+    pub(crate) fn last_upserted_operation(&self) -> Option<CoachReplyOperation> {
+        self.operation.lock().expect("lock should succeed").clone()
+    }
+}
+
+impl CoachReplyOperationRepository for RecordingReplyOperations {
+    fn find_by_user_message_id(
+        &self,
+        _user_id: &str,
+        _workout_id: &str,
+        _user_message_id: &str,
+    ) -> super::BoxFuture<Result<Option<CoachReplyOperation>, WorkoutSummaryError>> {
+        let operation = self.operation.lock().expect("lock should succeed").clone();
+        Box::pin(async move { Ok(operation) })
+    }
+
+    fn claim_pending(
+        &self,
+        _operation: CoachReplyOperation,
+        _stale_before_epoch_seconds: i64,
+    ) -> super::BoxFuture<Result<CoachReplyClaimResult, WorkoutSummaryError>> {
+        Box::pin(async { Err(WorkoutSummaryError::NotFound) })
+    }
+
+    fn upsert(
+        &self,
+        operation: CoachReplyOperation,
+    ) -> super::BoxFuture<Result<CoachReplyOperation, WorkoutSummaryError>> {
+        let state = self.operation.clone();
+        Box::pin(async move {
+            *state.lock().expect("lock should succeed") = Some(operation.clone());
+            Ok(operation)
+        })
+    }
+}
+
 #[derive(Clone)]
 struct NonRepositoryFailingReplyOperations {
     attempts: Arc<AtomicUsize>,

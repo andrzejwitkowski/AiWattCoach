@@ -20,7 +20,15 @@ where
     AppendFn: Fn(PublicToolCall) -> AppendFuture,
     AppendFuture: Future<Output = Result<(), E>>,
 {
-    let mut materialized_ids = existing_ids;
+    let mut materialized_ids = Vec::with_capacity(existing_ids.len() + public_tool_calls.len());
+
+    for existing_id in existing_ids {
+        if materialized_ids.iter().any(|id| id == &existing_id) {
+            continue;
+        }
+
+        materialized_ids.push(existing_id);
+    }
 
     for tool_call in public_tool_calls {
         if materialized_ids.iter().any(|id| id == &tool_call.id) {
@@ -179,6 +187,33 @@ mod tests {
             ]
         );
         assert_eq!(appended.lock().await.clone(), vec!["tool-3".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn materialize_public_tool_calls_idempotently_normalizes_duplicate_existing_ids() {
+        let appended = Arc::new(Mutex::new(Vec::<String>::new()));
+        let calls = vec![tool_call("tool-1", "first"), tool_call("tool-2", "second")];
+
+        let result = super::materialize_public_tool_calls_idempotently(
+            vec!["tool-1".to_string(), "tool-1".to_string()],
+            &calls,
+            |_| async { Ok::<bool, String>(false) },
+            {
+                let appended = appended.clone();
+                move |tool_call| {
+                    let appended = appended.clone();
+                    async move {
+                        appended.lock().await.push(tool_call.id);
+                        Ok::<(), String>(())
+                    }
+                }
+            },
+        )
+        .await
+        .expect("duplicate existing ids should be normalized");
+
+        assert_eq!(result, vec!["tool-1".to_string(), "tool-2".to_string()]);
+        assert_eq!(appended.lock().await.clone(), vec!["tool-2".to_string()]);
     }
 
     #[tokio::test]
