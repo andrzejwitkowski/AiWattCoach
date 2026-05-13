@@ -1,4 +1,5 @@
 use super::*;
+use crate::domain::task_scheduler::{parse_optional_json_value, serialize_json_value};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct CompletedCoachReplyTaskCheckpoint {
@@ -38,30 +39,23 @@ pub(crate) fn parse_terminal_coach_reply_checkpoint(
 pub(crate) fn serialize_completed_coach_reply_checkpoint(
     reply: &CoachReply,
 ) -> Result<serde_json::Value, WorkoutSummaryError> {
-    serde_json::to_value(CompletedCoachReplyTaskCheckpoint {
-        coach_message: reply.coach_message.clone(),
-        athlete_summary_was_regenerated: reply.athlete_summary_was_regenerated,
-    })
-    .map_err(|error| {
-        WorkoutSummaryError::Repository(format!(
-            "failed to serialize completed coach reply checkpoint: {error}"
-        ))
-    })
+    serialize_json_value(
+        &CompletedCoachReplyTaskCheckpoint {
+            coach_message: reply.coach_message.clone(),
+            athlete_summary_was_regenerated: reply.athlete_summary_was_regenerated,
+        },
+        "failed to serialize completed coach reply checkpoint",
+        WorkoutSummaryError::Repository,
+    )
 }
 
 pub(crate) fn parse_terminal_task_error(
     task: &ScheduledTask,
 ) -> Result<Option<WorkoutSummaryError>, WorkoutSummaryError> {
-    task.checkpoint
-        .clone()
-        .map(|value| {
-            serde_json::from_value::<SerializedWorkoutSummaryError>(value)
-                .map(deserialize_workout_summary_error)
-                .map_err(|error| {
-                    WorkoutSummaryError::Repository(format!(
-                        "invalid failed workout summary coach reply checkpoint: {error}"
-                    ))
-                })
-        })
-        .transpose()
+    parse_optional_json_value::<SerializedWorkoutSummaryError, WorkoutSummaryError>(
+        task.checkpoint.clone(),
+        "invalid failed workout summary coach reply checkpoint",
+        WorkoutSummaryError::Repository,
+    )
+    .map(|error| error.map(deserialize_workout_summary_error))
 }

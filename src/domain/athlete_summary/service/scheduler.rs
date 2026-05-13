@@ -8,9 +8,10 @@ use crate::domain::{
         deserialize_llm_error, serialize_llm_error, SerializedLlmError, LLM_REQUEST_TIMEOUT_SECONDS,
     },
     task_scheduler::{
-        build_scheduled_task, scheduled_task_handler, BuildScheduledTaskError,
-        NewScheduledTaskInput, ResultTaskHandler, RetryStrategy, ScheduledTask,
-        ScheduledTaskExecutor, SharedTaskHandler, TaskRepository, TaskRunOutcome,
+        build_scheduled_task, parse_failed_or_error_message, parse_optional_json_value,
+        parse_required_json_value, scheduled_task_handler, serialize_json_value,
+        BuildScheduledTaskError, NewScheduledTaskInput, ResultTaskHandler, RetryStrategy,
+        ScheduledTask, ScheduledTaskExecutor, SharedTaskHandler, TaskRepository, TaskRunOutcome,
         TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
     },
 };
@@ -98,36 +99,15 @@ fn deserialize_athlete_summary_error(error: SerializedAthleteSummaryError) -> At
     }
 }
 
-fn parse_completed_checkpoint(
-    task: &ScheduledTask,
-) -> Result<Option<CompletedAthleteSummaryTaskCheckpoint>, AthleteSummaryError> {
-    task.checkpoint
-        .clone()
-        .map(|value| {
-            serde_json::from_value(value).map_err(|error| {
-                AthleteSummaryError::Repository(format!(
-                    "invalid completed athlete summary checkpoint: {error}"
-                ))
-            })
-        })
-        .transpose()
-}
-
 fn parse_failed_checkpoint(
     task: &ScheduledTask,
 ) -> Result<Option<AthleteSummaryError>, AthleteSummaryError> {
-    task.checkpoint
-        .clone()
-        .map(|value| {
-            serde_json::from_value::<SerializedAthleteSummaryError>(value)
-                .map(deserialize_athlete_summary_error)
-                .map_err(|error| {
-                    AthleteSummaryError::Repository(format!(
-                        "invalid failed athlete summary checkpoint: {error}"
-                    ))
-                })
-        })
-        .transpose()
+    parse_optional_json_value::<SerializedAthleteSummaryError, AthleteSummaryError>(
+        task.checkpoint.clone(),
+        "invalid failed athlete summary checkpoint",
+        AthleteSummaryError::Repository,
+    )
+    .map(|error| error.map(deserialize_athlete_summary_error))
 }
 
 fn build_non_force_dedupe_key(user_id: &str, refresh_window_start_epoch_seconds: i64) -> String {
@@ -139,14 +119,13 @@ fn build_force_dedupe_key(user_id: &str, task_id: &str) -> String {
 }
 
 fn build_completed_checkpoint(user_id: &str) -> Result<serde_json::Value, AthleteSummaryError> {
-    serde_json::to_value(CompletedAthleteSummaryTaskCheckpoint {
-        user_id: user_id.to_string(),
-    })
-    .map_err(|error| {
-        AthleteSummaryError::Repository(format!(
-            "failed to serialize completed athlete summary checkpoint: {error}"
-        ))
-    })
+    serialize_json_value(
+        &CompletedAthleteSummaryTaskCheckpoint {
+            user_id: user_id.to_string(),
+        },
+        "failed to serialize completed athlete summary checkpoint",
+        AthleteSummaryError::Repository,
+    )
 }
 
 struct AthleteSummaryGenerateTaskExecutor<Base> {
@@ -254,24 +233,21 @@ where
     }
 
     fn parse_completed(&self, task: &ScheduledTask) -> Result<Self::Completed, Self::Error> {
-        parse_completed_checkpoint(task)?.ok_or_else(|| {
-            AthleteSummaryError::Repository(
-                "completed athlete summary task missing persisted checkpoint".to_string(),
-            )
-        })
+        parse_required_json_value(
+            task.checkpoint.clone(),
+            "completed athlete summary task missing persisted checkpoint",
+            "invalid completed athlete summary checkpoint",
+            AthleteSummaryError::Repository,
+        )
     }
 
     fn parse_failed(&self, task: &ScheduledTask) -> Result<Self::Error, Self::Error> {
-        Ok(parse_failed_checkpoint(task)?.unwrap_or_else(|| {
-            task.error_message
-                .clone()
-                .map(AthleteSummaryError::Repository)
-                .unwrap_or_else(|| {
-                    AthleteSummaryError::Repository(
-                        "athlete summary task failed without an error message".to_string(),
-                    )
-                })
-        }))
+        Ok(parse_failed_or_error_message(
+            parse_failed_checkpoint(task)?,
+            task.error_message.clone(),
+            "athlete summary task failed without an error message",
+            AthleteSummaryError::Repository,
+        ))
     }
 
     fn finish(&self, _: Self::Completed) -> BoxFuture<Result<Self::Output, Self::Error>> {
