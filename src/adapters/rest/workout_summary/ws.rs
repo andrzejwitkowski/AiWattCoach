@@ -16,8 +16,8 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::{
     dto::{
-        coach_message, coach_typing_message, error_message, system_message, tool_message,
-        ClientWsMessage, WorkoutSummaryPath,
+        coach_message, coach_typing_message, error_message, save_workflow_message, system_message,
+        tool_message, ClientWsMessage, WorkoutSummaryPath,
     },
     error::map_workout_summary_error,
     mapping::{map_message_to_dto, map_summary_to_dto},
@@ -73,6 +73,31 @@ async fn handle_socket(
     let mut processing_message: Option<BoxFuture<'static, bool>> = None;
     let mut buffered_message: Option<Result<Message, axum::Error>> = None;
     let mut socket_closed = false;
+
+    if let Some((notifier, rx)) = state.workout_summary_save_notifier.clone().map(|notifier| {
+        let rx = notifier.register(&user_id, &workout_id);
+        (notifier, rx)
+    }) {
+        if rx.borrow().is_some() {
+            let payload = rx.borrow().clone().unwrap();
+            let _ = send_ws_json(&sender, save_workflow_message(payload)).await;
+            notifier.unregister(&user_id, &workout_id);
+        } else {
+            let sender = Arc::clone(&sender);
+            let user_id = user_id.clone();
+            let workout_id = workout_id.clone();
+            tokio::spawn(async move {
+                let mut rx = rx;
+                if rx.changed().await.is_ok() {
+                    let payload_opt = rx.borrow().clone();
+                    if let Some(payload) = payload_opt {
+                        let _ = send_ws_json(&sender, save_workflow_message(payload)).await;
+                        notifier.unregister(&user_id, &workout_id);
+                    }
+                }
+            });
+        }
+    }
 
     loop {
         tokio::select! {

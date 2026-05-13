@@ -27,7 +27,7 @@ pub use scheduler::{training_plan_generate_task_handler, SchedulerBackedTraining
 
 const TRAINING_PLAN_STALE_PENDING_TIMEOUT_SECONDS: i64 = 300;
 
-pub trait TrainingPlanUseCases: Send + Sync {
+pub trait TrainingPlanUseCases: Send + Sync + 'static {
     fn generate_recap_for_saved_workout(
         &self,
         user_id: &str,

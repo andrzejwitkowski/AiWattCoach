@@ -12,8 +12,10 @@ use crate::shared::{
 use crate::shared::{
     get_json, sample_summary, sample_summary_with_updated_at, session_cookie,
     workout_summary_test_app, workout_summary_test_app_with_settings,
-    TestIdentityServiceWithSession, TestWorkoutSummaryService,
+    workout_summary_test_app_with_settings_and_notifier, TestIdentityServiceWithSession,
+    TestWorkoutSummaryService,
 };
+use aiwattcoach::adapters::rest::WorkoutSummarySaveNotifier;
 use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSummaryService};
 
 #[tokio::test]
@@ -348,6 +350,36 @@ async fn save_summary_requires_rpe() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn save_summary_cleans_save_notifier_after_failed_save() {
+    let mut summary = sample_summary("workout-1");
+    summary.rpe = None;
+    let notifier = WorkoutSummarySaveNotifier::new();
+    let app = workout_summary_test_app_with_settings_and_notifier(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![summary]),
+        None,
+        Some(notifier.clone()),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/workout-summaries/workout-1/state")
+                .header(header::COOKIE, session_cookie("session-1"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"saved":true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(notifier.subscribe("user-1", "workout-1").is_none());
 }
 
 #[tokio::test]

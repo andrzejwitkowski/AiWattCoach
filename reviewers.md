@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-13 | Copilot + CodeRabbit | PR #230 workout-summary background save review follow-up
+
+- Problem: PR review found that background save-flow tests depended on `tokio::task::yield_now()`, background recap/plan generation could run with unbounded active provider work, warning logs used inconsistent field names, and the REST save notifier still had review-risky lifecycle/poisoned-lock handling around `watch` senders.
+- Fix: replaced `yield_now()` assertions with deterministic timeout polling, added a process-level semaphore limiting active background save workflows, kept background warning logs on `user_id`/`workout_id`, made notifier registration reuse existing senders, cloned senders before publishing, recovered poisoned mutex state with structured warning logs, and covered reused registration with a focused notifier unit test.
+- Prevention: for background workflows spawned from request handlers, verify both active concurrency and test synchronization explicitly. For one-shot notifier maps, reuse existing channels for retries/subscribers and avoid mutex-held sends or production `lock().unwrap()` paths.
+
+### 2026-05-13 | user | workout-summary save-flow readability refactor
+
+- Problem: `src/domain/workout_summary/service/use_cases/save.rs` had the background recap/plan orchestration, status mapping, message construction, logging, and HTTP-visible workflow result assembly embedded inside `mark_saved_impl`, making the save path hard to review.
+- Fix: extracted the background save workflow input, async runner, processing/skipped workflow builders, and completion-status/message mapping into focused private helpers while keeping `mark_saved_impl` as the high-level persistence and orchestration path.
+- Prevention: when adding background side effects to an existing service method, split the worker payload, worker execution, and immediate response DTO/domain result construction before the function becomes a mixed-responsibility block.
+
+### 2026-05-13 | self (4-loop review) | PR #230 workout-summary save completion notifications
+
+- Problem: the save-state WebSocket notification path had lifecycle gaps. Failed saves registered notifier channels before validation and did not unregister them, successful one-shot completions could leave subscribed channels in memory, already-open WebSockets did not subscribe until the save endpoint created a channel, and very fast background completions could be missed because the registration receiver was dropped before a WebSocket subscribed. Alias saves also published completion under the storage/preferred workout id while the client subscribed under the requested id.
+- Fix: added explicit notifier unregister support, cleaned registrations on failed `mark_saved`, made WebSockets register channels before completion, changed notifier publishing to retain the completion for late WebSocket subscribers, reused existing channels when the save request registers, removed consumed channels when the WebSocket sends the completion, and published background completion events under the requested workout id while keeping recap/plan side effects on the canonical storage id. Added focused REST, WebSocket, notifier, and alias-domain regressions.
+- Prevention: for one-shot in-memory WebSocket notification bridges, verify all lifecycle edges: validation failure cleanup, already-connected subscribers, no-current-subscriber completion storage, cleanup after delivery, and id/key parity between the HTTP request path and the background publisher.
+
 ### 2026-05-13 | Copilot | PR #227 parse_required_json_value success-path coverage
 
 - Problem: the extracted `parse_required_json_value(...)` helper had regression coverage for missing and invalid input, but no success-path test proving a valid required checkpoint parses correctly. Because the helper now sits under multiple scheduler-backed flows, that left a small but real coverage gap in the shared wrapper itself.

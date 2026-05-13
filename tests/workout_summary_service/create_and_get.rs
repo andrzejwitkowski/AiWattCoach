@@ -1,8 +1,13 @@
 use aiwattcoach::domain::workout_summary::{
-    WorkoutRecap, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
-    WorkoutSummaryUseCases,
+    SaveWorkflowCompletionPort, SaveWorkflowStatus, WorkoutRecap, WorkoutSummaryError,
+    WorkoutSummaryRepository, WorkoutSummaryService, WorkoutSummaryUseCases,
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{sleep, timeout};
 
 use crate::shared::{
     existing_summary, existing_summary_with_finished_conversation,
@@ -18,6 +23,56 @@ use crate::shared::{
 struct RecordingMissingSettingsService {
     find_calls: Arc<Mutex<Vec<String>>>,
     get_calls: Arc<Mutex<Vec<String>>>,
+}
+
+#[derive(Clone, Default)]
+struct RecordingSaveCompletionPort {
+    calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl RecordingSaveCompletionPort {
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl SaveWorkflowCompletionPort for RecordingSaveCompletionPort {
+    fn on_completed(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        recap_status: SaveWorkflowStatus,
+        plan_status: SaveWorkflowStatus,
+        _messages: Vec<String>,
+    ) {
+        self.calls.lock().unwrap().push(format!(
+            "on_completed:{user_id}:{workout_id}:{}:{}",
+            recap_status.as_str(),
+            plan_status.as_str()
+        ));
+    }
+}
+
+async fn wait_until(description: &str, mut condition: impl FnMut() -> bool) {
+    timeout(Duration::from_secs(2), async {
+        loop {
+            if condition() {
+                return;
+            }
+
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("timed out waiting for {description}"));
+}
+
+async fn wait_for_training_plan_calls(
+    training_plan: &RecordingTrainingPlanService,
+    expected: Vec<String>,
+) {
+    wait_until("training plan calls", || training_plan.calls() == expected).await;
+    assert_eq!(training_plan.calls(), expected);
 }
 
 impl RecordingMissingSettingsService {
@@ -273,20 +328,17 @@ async fn mark_saved_generates_recap_only_for_finished_conversation_on_non_latest
 
     let result = service.mark_saved("user-1", "workout-older").await.unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
     assert_eq!(result.workflow.plan_status.as_str(), "skipped");
     assert_eq!(
         result.workflow.messages,
-        vec![
-            "Workout recap generated.".to_string(),
-            "14-day schedule skipped because this is not the latest completed activity."
-                .to_string(),
-        ]
+        vec!["Workout recap is being generated in the background.".to_string(),]
     );
-    assert_eq!(
-        training_plan.calls(),
-        vec!["generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string()]
-    );
+    wait_for_training_plan_calls(
+        &training_plan,
+        vec!["generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string()],
+    )
+    .await;
     assert_eq!(
         latest_activity.calls(),
         vec!["latest_completed_activity_id:user-1".to_string()]
@@ -322,22 +374,23 @@ async fn mark_saved_generates_recap_and_plan_for_latest_completed_activity() {
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
-    assert_eq!(result.workflow.plan_status.as_str(), "generated");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
+    assert_eq!(result.workflow.plan_status.as_str(), "processing");
     assert_eq!(
         result.workflow.messages,
         vec![
-            "Workout recap generated.".to_string(),
-            "14-day schedule generated.".to_string(),
+            "Workout recap is being generated in the background.".to_string(),
+            "14-day schedule is being generated in the background.".to_string(),
         ]
     );
-    assert_eq!(
-        training_plan.calls(),
+    wait_for_training_plan_calls(
+        &training_plan,
         vec![
             "generate_recap_for_saved_workout:user-1:workout-1:1700000000".to_string(),
             "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
-        ]
-    );
+        ],
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -357,13 +410,13 @@ async fn mark_saved_preserves_visible_workflow_with_scheduler_backed_training_pl
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
-    assert_eq!(result.workflow.plan_status.as_str(), "generated");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
+    assert_eq!(result.workflow.plan_status.as_str(), "processing");
     assert_eq!(
         result.workflow.messages,
         vec![
-            "Workout recap generated.".to_string(),
-            "14-day schedule generated.".to_string(),
+            "Workout recap is being generated in the background.".to_string(),
+            "14-day schedule is being generated in the background.".to_string(),
         ]
     );
     training_plan.worker.shutdown().await;
@@ -520,13 +573,14 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
         repository.calls(),
         vec!["set_saved_state:i144331018:Some(1700000000)".to_string()]
     );
-    assert_eq!(
-        training_plan.calls(),
+    wait_for_training_plan_calls(
+        &training_plan,
         vec![
             "generate_recap_for_saved_workout:user-1:i144331018:1700000000".to_string(),
             "generate_for_saved_workout:user-1:i144331018:1700000000".to_string(),
-        ]
-    );
+        ],
+    )
+    .await;
     assert_eq!(
         latest_activity.calls(),
         vec!["latest_completed_activity_id:user-1".to_string()]
@@ -534,6 +588,57 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
     assert_eq!(
         completed_target.calls(),
         vec!["resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_notifies_requested_alias_after_background_work_completes() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "i144331018".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    training_plan.succeed_next(aiwattcoach::domain::training_plan::GeneratedTrainingPlan {
+        snapshot: aiwattcoach::domain::training_plan::TrainingPlanSnapshot {
+            user_id: "user-1".to_string(),
+            workout_id: "i144331018".to_string(),
+            operation_key: "training-plan:user-1:i144331018:1700000000".to_string(),
+            saved_at_epoch_seconds: 1_700_000_000,
+            start_date: "2026-04-06".to_string(),
+            end_date: "2026-04-19".to_string(),
+            days: Vec::new(),
+            created_at_epoch_seconds: 1_700_000_000,
+        },
+        active_projected_days: Vec::new(),
+        was_generated: true,
+    });
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("i144331018"));
+    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
+        "wahoo-workout:450868242",
+        "i144331018",
+        &["i144331018", "wahoo-workout:450868242"],
+    )]);
+    let completion_port = RecordingSaveCompletionPort::default();
+    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+        repository,
+        std::sync::Arc::new(training_plan),
+        std::sync::Arc::new(latest_activity),
+        std::sync::Arc::new(completed_target),
+    )
+    .with_save_completion_port(std::sync::Arc::new(completion_port.clone()));
+
+    service
+        .mark_saved("user-1", "wahoo-workout:450868242")
+        .await
+        .unwrap();
+
+    wait_until("save completion notification", || {
+        completion_port.calls()
+            == vec!["on_completed:user-1:wahoo-workout:450868242:generated:generated".to_string()]
+    })
+    .await;
+    assert_eq!(
+        completion_port.calls(),
+        vec!["on_completed:user-1:wahoo-workout:450868242:generated:generated".to_string()]
     );
 }
 
@@ -605,16 +710,17 @@ async fn mark_saved_treats_stripped_latest_activity_id_as_latest_for_prefixed_co
         .await
         .unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
-    assert_eq!(result.workflow.plan_status.as_str(), "generated");
-    assert_eq!(
-        training_plan.calls(),
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
+    assert_eq!(result.workflow.plan_status.as_str(), "processing");
+    wait_for_training_plan_calls(
+        &training_plan,
         vec![
             "generate_recap_for_saved_workout:user-1:wahoo-workout:450868242:1700000000"
                 .to_string(),
             "generate_for_saved_workout:user-1:wahoo-workout:450868242:1700000000".to_string(),
-        ]
-    );
+        ],
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -822,7 +928,7 @@ async fn persist_workout_recap_updates_existing_equivalent_alias_summary() {
 }
 
 #[tokio::test]
-async fn mark_saved_reports_failed_plan_generation_for_latest_completed_activity() {
+async fn mark_saved_spawns_background_work_when_training_plan_generation_would_fail() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(
         existing_summary_with_finished_conversation(),
     );
@@ -841,22 +947,23 @@ async fn mark_saved_reports_failed_plan_generation_for_latest_completed_activity
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
-    assert_eq!(result.workflow.plan_status.as_str(), "failed");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
+    assert_eq!(result.workflow.plan_status.as_str(), "processing");
     assert_eq!(
         result.workflow.messages,
         vec![
-            "Workout recap generated.".to_string(),
-            "14-day schedule failed.".to_string(),
+            "Workout recap is being generated in the background.".to_string(),
+            "14-day schedule is being generated in the background.".to_string(),
         ]
     );
-    assert_eq!(
-        training_plan.calls(),
+    wait_for_training_plan_calls(
+        &training_plan,
         vec![
             "generate_recap_for_saved_workout:user-1:workout-1:1700000000".to_string(),
             "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
-        ]
-    );
+        ],
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -900,6 +1007,10 @@ async fn mark_saved_triggers_training_plan_generation_after_persisting_saved_sta
         repository.calls(),
         vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]
     );
+    wait_until("training plan service to observe persisted save", || {
+        training_plan.observed_persisted_saved_at()
+    })
+    .await;
     assert!(training_plan.observed_persisted_saved_at());
 }
 

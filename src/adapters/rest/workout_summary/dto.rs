@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub(super) enum SaveWorkflowStatusDto {
+pub enum SaveWorkflowStatusDto {
     Generated,
+    Processing,
     Skipped,
     Failed,
     Unchanged,
@@ -32,8 +33,8 @@ pub(super) struct WorkoutSummaryStateResponse {
     pub workflow: SaveWorkflowDto,
 }
 
-#[derive(Serialize)]
-pub(super) struct SaveWorkflowDto {
+#[derive(Serialize, Clone)]
+pub struct SaveWorkflowDto {
     #[serde(rename = "recapStatus")]
     pub recap_status: SaveWorkflowStatusDto,
     #[serde(rename = "planStatus")]
@@ -117,6 +118,8 @@ pub(super) struct ServerWsMessage {
     pub summary: Option<WorkoutSummaryDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<SaveWorkflowDto>,
 }
 
 pub(super) fn coach_typing_message() -> ServerWsMessage {
@@ -126,6 +129,7 @@ pub(super) fn coach_typing_message() -> ServerWsMessage {
         content: None,
         summary: None,
         error: None,
+        workflow: None,
     }
 }
 
@@ -139,6 +143,7 @@ pub(super) fn coach_message(
         content: None,
         summary: Some(summary),
         error: None,
+        workflow: None,
     }
 }
 
@@ -149,6 +154,7 @@ pub(super) fn tool_message(message: ConversationMessageDto) -> ServerWsMessage {
         content: None,
         summary: None,
         error: None,
+        workflow: None,
     }
 }
 
@@ -159,6 +165,7 @@ pub(super) fn system_message(content: impl Into<String>) -> ServerWsMessage {
         content: Some(content.into()),
         summary: None,
         error: None,
+        workflow: None,
     }
 }
 
@@ -169,5 +176,17 @@ pub(super) fn error_message(message: impl Into<String>) -> ServerWsMessage {
         content: None,
         summary: None,
         error: Some(message.into()),
+        workflow: None,
+    }
+}
+
+pub(super) fn save_workflow_message(workflow: SaveWorkflowDto) -> ServerWsMessage {
+    ServerWsMessage {
+        message_type: "save_workflow_complete".to_string(),
+        message: None,
+        content: None,
+        summary: None,
+        error: None,
+        workflow: Some(workflow),
     }
 }

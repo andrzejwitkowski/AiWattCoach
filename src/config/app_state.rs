@@ -6,6 +6,7 @@ use std::{
 
 use mongodb::Client;
 
+use crate::adapters::rest::WorkoutSummarySaveNotifier;
 use crate::domain::athlete_summary::AthleteSummaryUseCases;
 use crate::domain::calendar::CalendarUseCases;
 use crate::domain::calendar_coach::CalendarCoachUseCases;
@@ -45,6 +46,7 @@ pub struct AppState {
     pub training_load_dashboard_service: Option<Arc<dyn TrainingLoadDashboardReadUseCases>>,
     pub athlete_summary_service: Option<Arc<dyn AthleteSummaryUseCases>>,
     pub workout_summary_service: Option<Arc<dyn WorkoutSummaryUseCases>>,
+    pub workout_summary_save_notifier: Option<WorkoutSummarySaveNotifier>,
     pub llm_chat_service: Option<Arc<dyn LlmChatPort>>,
     pub llm_config_provider: Option<Arc<dyn UserLlmConfigProvider>>,
     pub intervals_connection_tester: Option<Arc<dyn IntervalsConnectionTester>>,
@@ -125,6 +127,7 @@ impl AppState {
             training_load_dashboard_service: None,
             athlete_summary_service: None,
             workout_summary_service: None,
+            workout_summary_save_notifier: None,
             llm_chat_service: None,
             llm_config_provider: None,
             intervals_connection_tester: None,
@@ -219,6 +222,14 @@ impl AppState {
         workout_summary_service: Arc<dyn WorkoutSummaryUseCases>,
     ) -> Self {
         self.workout_summary_service = Some(workout_summary_service);
+        self
+    }
+
+    pub fn with_workout_summary_save_notifier(
+        mut self,
+        notifier: WorkoutSummarySaveNotifier,
+    ) -> Self {
+        self.workout_summary_save_notifier = Some(notifier);
         self
     }
 

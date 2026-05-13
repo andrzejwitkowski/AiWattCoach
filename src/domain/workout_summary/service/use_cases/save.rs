@@ -1,6 +1,18 @@
-use tracing::warn;
+use std::sync::{Arc, OnceLock};
+
+use tokio::sync::Semaphore;
+use tracing::{info, warn};
 
 use super::*;
+
+const BACKGROUND_SAVE_WORKFLOW_CONCURRENCY_LIMIT: usize = 2;
+
+fn background_save_workflow_semaphore() -> Arc<Semaphore> {
+    static SEMAPHORE: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    SEMAPHORE
+        .get_or_init(|| Arc::new(Semaphore::new(BACKGROUND_SAVE_WORKFLOW_CONCURRENCY_LIMIT)))
+        .clone()
+}
 
 #[derive(Clone, PartialEq, Eq)]
 struct RecapSnapshot {
@@ -43,6 +55,176 @@ fn matches_latest_completed_activity_id(latest_activity_id: &str, workout_id: &s
     latest_activity_id == workout_id
         || latest_activity_id
             == crate::domain::completed_workouts::completed_workout_activity_id(workout_id)
+}
+
+struct BackgroundSaveWorkflow {
+    training_plan_service: Arc<dyn TrainingPlanUseCases>,
+    save_completion_port: Option<Arc<dyn SaveWorkflowCompletionPort>>,
+    concurrency: Arc<Semaphore>,
+    user_id: String,
+    storage_workout_id: String,
+    completion_workout_id: String,
+    saved_at_epoch_seconds: i64,
+    is_latest_completed_activity: bool,
+}
+
+fn processing_workflow_result(is_latest_completed_activity: bool) -> SaveWorkflowResult {
+    SaveWorkflowResult {
+        recap_status: SaveWorkflowStatus::Processing,
+        plan_status: if is_latest_completed_activity {
+            SaveWorkflowStatus::Processing
+        } else {
+            SaveWorkflowStatus::Skipped
+        },
+        messages: processing_messages(is_latest_completed_activity),
+    }
+}
+
+fn skipped_generation_workflow_result(is_latest_completed_activity: bool) -> SaveWorkflowResult {
+    SaveWorkflowResult {
+        recap_status: SaveWorkflowStatus::Skipped,
+        plan_status: SaveWorkflowStatus::Skipped,
+        messages: skipped_generation_messages(is_latest_completed_activity),
+    }
+}
+
+fn processing_messages(is_latest_completed_activity: bool) -> Vec<String> {
+    if is_latest_completed_activity {
+        vec![
+            "Workout recap is being generated in the background.".to_string(),
+            "14-day schedule is being generated in the background.".to_string(),
+        ]
+    } else {
+        vec!["Workout recap is being generated in the background.".to_string()]
+    }
+}
+
+fn skipped_generation_messages(is_latest_completed_activity: bool) -> Vec<String> {
+    if is_latest_completed_activity {
+        vec![
+            status_message(
+                &SaveWorkflowStatus::Skipped,
+                "Workout recap generated.",
+                "Workout recap failed.",
+                "Workout recap skipped.",
+            ),
+            status_message(
+                &SaveWorkflowStatus::Skipped,
+                "14-day schedule generated.",
+                "14-day schedule failed.",
+                "14-day schedule skipped.",
+            ),
+        ]
+    } else {
+        vec![
+            status_message(
+                &SaveWorkflowStatus::Skipped,
+                "Workout recap generated.",
+                "Workout recap failed.",
+                "Workout recap skipped.",
+            ),
+            "14-day schedule skipped because this is not the latest completed activity."
+                .to_string(),
+        ]
+    }
+}
+
+fn completion_workflow(
+    recap_ok: bool,
+    plan_ok: Option<bool>,
+) -> (SaveWorkflowStatus, SaveWorkflowStatus, Vec<String>) {
+    let recap_status = if recap_ok {
+        SaveWorkflowStatus::Generated
+    } else {
+        SaveWorkflowStatus::Failed
+    };
+    let plan_status = match plan_ok {
+        Some(true) => SaveWorkflowStatus::Generated,
+        Some(false) => SaveWorkflowStatus::Failed,
+        None => SaveWorkflowStatus::Skipped,
+    };
+    let mut messages = vec![if recap_ok {
+        "Workout recap generated.".to_string()
+    } else {
+        "Workout recap failed.".to_string()
+    }];
+    match plan_ok {
+        Some(true) => messages.push("14-day schedule generated.".to_string()),
+        Some(false) => messages.push("14-day schedule failed.".to_string()),
+        None => {}
+    }
+    (recap_status, plan_status, messages)
+}
+
+async fn run_background_save_workflow(workflow: BackgroundSaveWorkflow) {
+    let Ok(_permit) = workflow.concurrency.acquire_owned().await else {
+        warn!(
+            user_id = %workflow.user_id,
+            workout_id = %workflow.storage_workout_id,
+            "Background save workflow limiter closed before generation started"
+        );
+        return;
+    };
+
+    info!(
+        user_id = %workflow.user_id,
+        workout_id = %workflow.storage_workout_id,
+        saved_at_epoch_seconds = workflow.saved_at_epoch_seconds,
+        is_latest = workflow.is_latest_completed_activity,
+        "Starting background recap and training plan generation"
+    );
+
+    let recap_ok = workflow
+        .training_plan_service
+        .generate_recap_for_saved_workout(
+            &workflow.user_id,
+            &workflow.storage_workout_id,
+            workflow.saved_at_epoch_seconds,
+        )
+        .await;
+    if let Err(ref error) = recap_ok {
+        warn!(
+            user_id = %workflow.user_id,
+            workout_id = %workflow.storage_workout_id,
+            saved_at_epoch_seconds = workflow.saved_at_epoch_seconds,
+            error = %error,
+            "Background recap generation failed"
+        );
+    }
+
+    let plan_ok = if workflow.is_latest_completed_activity {
+        let result = workflow
+            .training_plan_service
+            .generate_for_saved_workout(
+                &workflow.user_id,
+                &workflow.storage_workout_id,
+                workflow.saved_at_epoch_seconds,
+            )
+            .await;
+        if let Err(ref error) = result {
+            warn!(
+                user_id = %workflow.user_id,
+                workout_id = %workflow.storage_workout_id,
+                saved_at_epoch_seconds = workflow.saved_at_epoch_seconds,
+                error = %error,
+                "Background training plan generation failed"
+            );
+        }
+        Some(result.is_ok())
+    } else {
+        None
+    };
+
+    if let Some(port) = workflow.save_completion_port {
+        let (recap_status, plan_status, messages) = completion_workflow(recap_ok.is_ok(), plan_ok);
+        port.on_completed(
+            &workflow.user_id,
+            &workflow.completion_workout_id,
+            recap_status,
+            plan_status,
+            messages,
+        );
+    }
 }
 
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
@@ -118,90 +300,27 @@ where
             .is_latest_completed_activity(user_id, &target.preferred_workout_id)
             .await?;
 
-        let recap_status = if let Some(training_plan_service) = &self.training_plan_service {
-            match training_plan_service
-                .generate_recap_for_saved_workout(user_id, &target.storage_workout_id, now)
-                .await
-            {
-                Ok(_) => SaveWorkflowStatus::Generated,
-                Err(error) => {
-                    warn!(
-                        user_id,
-                        workout_id,
-                        saved_at_epoch_seconds = now,
-                        error = %error,
-                        "Saved workout summary remains persisted after recap generation failure"
-                    );
-                    SaveWorkflowStatus::Failed
-                }
-            }
+        let workflow = if let Some(training_plan_service) = self.training_plan_service.clone() {
+            tokio::spawn(run_background_save_workflow(BackgroundSaveWorkflow {
+                training_plan_service,
+                save_completion_port: self.save_completion_port.clone(),
+                concurrency: background_save_workflow_semaphore(),
+                user_id: user_id.to_string(),
+                storage_workout_id: target.storage_workout_id.clone(),
+                completion_workout_id: target.requested_workout_id.clone(),
+                saved_at_epoch_seconds: now,
+                is_latest_completed_activity,
+            }));
+            processing_workflow_result(is_latest_completed_activity)
         } else {
-            SaveWorkflowStatus::Skipped
-        };
-
-        let plan_status = if is_latest_completed_activity {
-            if let Some(training_plan_service) = &self.training_plan_service {
-                match training_plan_service
-                    .generate_for_saved_workout(user_id, &target.storage_workout_id, now)
-                    .await
-                {
-                    Ok(_) => SaveWorkflowStatus::Generated,
-                    Err(error) => {
-                        warn!(
-                            user_id,
-                            workout_id,
-                            saved_at_epoch_seconds = now,
-                            error = %error,
-                            "Saved workout summary remains persisted after training plan generation failure"
-                        );
-                        SaveWorkflowStatus::Failed
-                    }
-                }
-            } else {
-                SaveWorkflowStatus::Skipped
-            }
-        } else {
-            SaveWorkflowStatus::Skipped
+            skipped_generation_workflow_result(is_latest_completed_activity)
         };
 
         let summary = self
             .get_existing_summary(user_id, &target.storage_workout_id)
             .await?;
         Ok(self.present_save_summary_result(
-            SaveSummaryResult {
-                summary,
-                workflow: SaveWorkflowResult {
-                    recap_status: recap_status.clone(),
-                    plan_status: plan_status.clone(),
-                    messages: if is_latest_completed_activity {
-                        vec![
-                            status_message(
-                                &recap_status,
-                                "Workout recap generated.",
-                                "Workout recap failed.",
-                                "Workout recap skipped.",
-                            ),
-                            status_message(
-                                &plan_status,
-                                "14-day schedule generated.",
-                                "14-day schedule failed.",
-                                "14-day schedule skipped.",
-                            ),
-                        ]
-                    } else {
-                        vec![
-                        status_message(
-                            &recap_status,
-                            "Workout recap generated.",
-                            "Workout recap failed.",
-                            "Workout recap skipped.",
-                        ),
-                        "14-day schedule skipped because this is not the latest completed activity."
-                            .to_string(),
-                    ]
-                    },
-                },
-            },
+            SaveSummaryResult { summary, workflow },
             &target.requested_workout_id,
         ))
     }

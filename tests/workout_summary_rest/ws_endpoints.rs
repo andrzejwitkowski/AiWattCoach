@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, time::Duration};
 
-use aiwattcoach::domain::workout_summary::PublicToolCall;
+use aiwattcoach::adapters::rest::WorkoutSummarySaveNotifier;
+use aiwattcoach::domain::workout_summary::{PublicToolCall, SaveWorkflowStatus};
 use aiwattcoach::domain::workout_summary::{WorkoutSummaryRepository, WorkoutSummaryService};
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
@@ -17,7 +18,8 @@ use crate::shared::{
 };
 use crate::shared::{
     sample_summary, workout_summary_test_app, workout_summary_test_app_with_settings,
-    TestIdentityServiceWithSession, TestWorkoutSummaryService,
+    workout_summary_test_app_with_settings_and_notifier, TestIdentityServiceWithSession,
+    TestWorkoutSummaryService,
 };
 
 struct SpawnedApp {
@@ -317,6 +319,106 @@ async fn websocket_rejects_messages_when_queue_is_full() {
     }
 
     assert!(saw_queue_error);
+}
+
+#[tokio::test]
+async fn websocket_sends_saved_workflow_completion_registered_before_connect() {
+    let notifier = WorkoutSummarySaveNotifier::new();
+    let _registered = notifier.register("user-1", "workout-1");
+    notifier.send(
+        "user-1",
+        "workout-1",
+        SaveWorkflowStatus::Generated,
+        SaveWorkflowStatus::Generated,
+        vec!["Workout recap generated.".to_string()],
+    );
+    let app = workout_summary_test_app_with_settings_and_notifier(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")]),
+        None,
+        Some(notifier.clone()),
+    )
+    .await;
+
+    let server = SpawnedApp::start(app).await;
+
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+
+    let frame = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let payload: Value = serde_json::from_str(&frame).unwrap();
+
+    assert_eq!(
+        payload.get("type").and_then(Value::as_str),
+        Some("save_workflow_complete")
+    );
+    assert_eq!(
+        payload
+            .get("workflow")
+            .and_then(|workflow| workflow.get("recapStatus"))
+            .and_then(Value::as_str),
+        Some("generated")
+    );
+    assert!(notifier.subscribe("user-1", "workout-1").is_none());
+}
+
+#[tokio::test]
+async fn websocket_receives_saved_workflow_completion_when_connected_before_save_finishes() {
+    let notifier = WorkoutSummarySaveNotifier::new();
+    let app = workout_summary_test_app_with_settings_and_notifier(
+        TestIdentityServiceWithSession::default(),
+        TestWorkoutSummaryService::with_summaries(vec![sample_summary("workout-1")]),
+        None,
+        Some(notifier.clone()),
+    )
+    .await;
+
+    let server = SpawnedApp::start(app).await;
+
+    let mut request = format!("ws://{}/api/workout-summaries/workout-1/ws", server.address)
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Cookie", "aiwattcoach_session=session-1".parse().unwrap());
+
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    notifier.send(
+        "user-1",
+        "workout-1",
+        SaveWorkflowStatus::Generated,
+        SaveWorkflowStatus::Generated,
+        vec!["Workout recap generated.".to_string()],
+    );
+
+    let frame = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .into_text()
+        .unwrap()
+        .to_string();
+    let payload: Value = serde_json::from_str(&frame).unwrap();
+
+    assert_eq!(
+        payload.get("type").and_then(Value::as_str),
+        Some("save_workflow_complete")
+    );
+    assert!(notifier.subscribe("user-1", "workout-1").is_none());
 }
 
 #[tokio::test]
