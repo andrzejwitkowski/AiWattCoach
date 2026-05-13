@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-13 | user | workout-summary save-flow readability refactor
+
+- Problem: `src/domain/workout_summary/service/use_cases/save.rs` had the background recap/plan orchestration, status mapping, message construction, logging, and HTTP-visible workflow result assembly embedded inside `mark_saved_impl`, making the save path hard to review.
+- Fix: extracted the background save workflow input, async runner, processing/skipped workflow builders, and completion-status/message mapping into focused private helpers while keeping `mark_saved_impl` as the high-level persistence and orchestration path.
+- Prevention: when adding background side effects to an existing service method, split the worker payload, worker execution, and immediate response DTO/domain result construction before the function becomes a mixed-responsibility block.
+
 ### 2026-05-13 | self (4-loop review) | PR #230 workout-summary save completion notifications
 
 - Problem: the save-state WebSocket notification path had lifecycle gaps. Failed saves registered notifier channels before validation and did not unregister them, successful one-shot completions could leave subscribed channels in memory, already-open WebSockets did not subscribe until the save endpoint created a channel, and very fast background completions could be missed because the registration receiver was dropped before a WebSocket subscribed. Alias saves also published completion under the storage/preferred workout id while the client subscribed under the requested id.
