@@ -9,7 +9,8 @@ use crate::domain::{
         LLM_REQUEST_TIMEOUT_SECONDS,
     },
     task_scheduler::{
-        build_scheduled_task, scheduled_task_handler, BuildScheduledTaskError,
+        build_scheduled_task, parse_failed_or_error_message, parse_optional_json_value,
+        parse_required_json_value, scheduled_task_handler, BuildScheduledTaskError,
         NewScheduledTaskInput, ResultTaskHandler, RetryStrategy, ScheduledTask,
         ScheduledTaskExecutor, SharedTaskHandler, TaskRepository, TaskRunOutcome,
         TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
@@ -127,18 +128,12 @@ fn deserialize_coach_conversation_error(
 fn parse_failed_checkpoint(
     task: &ScheduledTask,
 ) -> Result<Option<CoachConversationError>, CoachConversationError> {
-    task.checkpoint
-        .clone()
-        .map(|value| {
-            serde_json::from_value::<SerializedCoachConversationError>(value)
-                .map(deserialize_coach_conversation_error)
-                .map_err(|error| {
-                    CoachConversationError::Repository(format!(
-                        "invalid failed coach conversation task checkpoint: {error}"
-                    ))
-                })
-        })
-        .transpose()
+    parse_optional_json_value::<SerializedCoachConversationError, CoachConversationError>(
+        task.checkpoint.clone(),
+        "invalid failed coach conversation task checkpoint",
+        CoachConversationError::Repository,
+    )
+    .map(|error| error.map(deserialize_coach_conversation_error))
 }
 
 #[derive(Clone)]
@@ -167,34 +162,21 @@ where
     }
 
     fn parse_completed(&self, task: &ScheduledTask) -> Result<Self::Completed, Self::Error> {
-        task.checkpoint
-            .clone()
-            .ok_or_else(|| {
-                CoachConversationError::Repository(
-                    "completed coach conversation reply task missing persisted checkpoint"
-                        .to_string(),
-                )
-            })
-            .and_then(|value| {
-                serde_json::from_value(value).map_err(|error| {
-                    CoachConversationError::Repository(format!(
-                        "invalid completed coach conversation reply task checkpoint: {error}"
-                    ))
-                })
-            })
+        parse_required_json_value(
+            task.checkpoint.clone(),
+            "completed coach conversation reply task missing persisted checkpoint",
+            "invalid completed coach conversation reply task checkpoint",
+            CoachConversationError::Repository,
+        )
     }
 
     fn parse_failed(&self, task: &ScheduledTask) -> Result<Self::Error, Self::Error> {
-        Ok(parse_failed_checkpoint(task)?.unwrap_or_else(|| {
-            task.error_message
-                .clone()
-                .map(CoachConversationError::Repository)
-                .unwrap_or_else(|| {
-                    CoachConversationError::Repository(
-                        "coach conversation reply task failed without an error message".to_string(),
-                    )
-                })
-        }))
+        Ok(parse_failed_or_error_message(
+            parse_failed_checkpoint(task)?,
+            task.error_message.clone(),
+            "coach conversation reply task failed without an error message",
+            CoachConversationError::Repository,
+        ))
     }
 
     fn finish(&self, completed: Self::Completed) -> BoxFuture<Result<Self::Output, Self::Error>> {
@@ -561,6 +543,65 @@ fn map_build_scheduled_task_error(error: BuildScheduledTaskError) -> CoachConver
 mod tests {
     use super::*;
     use crate::domain::task_scheduler::{RetryStrategy, TaskStatus};
+
+    #[test]
+    fn parse_failed_returns_repository_error_message_when_checkpoint_missing() {
+        let task = ScheduledTask {
+            id: "task-1".to_string(),
+            user_id: "user-1".to_string(),
+            task_type: COACH_CONVERSATION_REPLY_TASK_TYPE.to_string(),
+            status: TaskStatus::Failed,
+            payload: serde_json::json!({}),
+            checkpoint: None,
+            retry_strategy: RetryStrategy::Never,
+            dedupe_key: "dedupe-1".to_string(),
+            error_message: Some("raw failure".to_string()),
+            attempt_count: 1,
+            next_attempt_at_epoch_seconds: 0,
+            claimed_by: None,
+            lease_expires_at_epoch_seconds: None,
+            last_heartbeat_at_epoch_seconds: None,
+            execution_timeout_seconds: 1,
+            timed_out_at_epoch_seconds: None,
+            leader_only: false,
+            created_at_epoch_seconds: 0,
+            updated_at_epoch_seconds: 0,
+            started_at_epoch_seconds: None,
+            finished_at_epoch_seconds: Some(0),
+        };
+
+        let parsed = parse_failed_or_error_message(
+            parse_failed_checkpoint(&task).expect("missing checkpoint should still parse"),
+            task.error_message.clone(),
+            "coach conversation reply task failed without an error message",
+            CoachConversationError::Repository,
+        );
+
+        assert_eq!(
+            parsed,
+            CoachConversationError::Repository("raw failure".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_completed_requires_valid_checkpoint_json() {
+        let error = parse_required_json_value::<
+            CompletedCoachConversationReplyTaskCheckpoint,
+            CoachConversationError,
+        >(
+            Some(serde_json::json!({ "coach_message": "invalid" })),
+            "completed coach conversation reply task missing persisted checkpoint",
+            "invalid completed coach conversation reply task checkpoint",
+            CoachConversationError::Repository,
+        )
+        .expect_err("invalid checkpoint should fail");
+
+        assert!(matches!(
+            error,
+            CoachConversationError::Repository(message)
+                if message.starts_with("invalid completed coach conversation reply task checkpoint: ")
+        ));
+    }
 
     #[test]
     fn parse_failed_restores_serialized_llm_error_from_task_checkpoint() {

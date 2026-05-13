@@ -55,6 +55,8 @@
 
 - For recovery-critical LLM tool-loop checkpoints, verify three separate boundaries: the terminal state is checkpointed before returning, checkpoint failure prevents a false success, and recovery from the checkpoint avoids a second provider call.
 - When restoring untracked files from `git stash -u`, use the stash's untracked parent (`stash@{n}^3`) and verify the restored file is non-empty before moving on.
+- When sending GitHub issue or PR bodies through shell commands, do not embed Markdown backticks inside double-quoted or `$'...'` shell strings. Build the JSON payload with a safe encoder such as `jq --arg` or a file input first, or shell expansion will silently corrupt paths and inline-code text.
+- Before relying on `gh pr create`, verify GitHub CLI auth explicitly and remember that repo hooks may still run extra verification commands. If auth is missing or the hook path is risky on this host, fall back to direct GitHub REST API calls with already-available credentials.
 
 
 - Before changing Intervals event payload field semantics, inspect the OpenAPI schema for the exact endpoint and method. For event create/update, `description` is the string field used by the existing planned-workout sync flow, while documented `workout_doc` is an object and must not be populated with the repo's canonical workout text string just because local DTOs expose that name.

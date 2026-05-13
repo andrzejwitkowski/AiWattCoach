@@ -5,8 +5,9 @@ mod service;
 mod worker;
 
 pub(crate) use handler::{
-    build_scheduled_task, scheduled_task_handler, BuildScheduledTaskError, NewScheduledTaskInput,
-    ScheduledTaskExecutor,
+    build_scheduled_task, parse_failed_or_error_message, parse_optional_json_value,
+    parse_required_json_value, scheduled_task_handler, serialize_json_value,
+    BuildScheduledTaskError, NewScheduledTaskInput, ScheduledTaskExecutor,
 };
 pub use model::{
     NewTask, RetryStrategy, ScheduledTask, TaskCheckpointRequest, TaskClaimRequest,

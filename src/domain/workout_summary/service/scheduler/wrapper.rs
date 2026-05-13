@@ -1,6 +1,6 @@
 use super::checkpoint::{parse_terminal_coach_reply_checkpoint, parse_terminal_task_error};
 use super::*;
-use crate::domain::task_scheduler::ResultTaskHandler;
+use crate::domain::task_scheduler::{parse_failed_or_error_message, ResultTaskHandler};
 use crate::domain::workout_summary::SaveSummaryResult;
 
 #[derive(Clone)]
@@ -37,16 +37,12 @@ where
     }
 
     fn parse_failed(&self, task: &ScheduledTask) -> Result<Self::Error, Self::Error> {
-        Ok(parse_terminal_task_error(task)?.unwrap_or_else(|| {
-            task.error_message
-                .clone()
-                .map(WorkoutSummaryError::Repository)
-                .unwrap_or_else(|| {
-                    WorkoutSummaryError::Repository(
-                        "coach reply task failed without an error message".to_string(),
-                    )
-                })
-        }))
+        Ok(parse_failed_or_error_message(
+            parse_terminal_task_error(task)?,
+            task.error_message.clone(),
+            "coach reply task failed without an error message",
+            WorkoutSummaryError::Repository,
+        ))
     }
 
     fn finish(&self, completed: Self::Completed) -> BoxFuture<Result<Self::Output, Self::Error>> {

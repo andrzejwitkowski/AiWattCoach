@@ -7,9 +7,10 @@ use crate::domain::{
     identity::{Clock, IdGenerator},
     llm::LLM_REQUEST_TIMEOUT_SECONDS,
     task_scheduler::{
-        build_scheduled_task, scheduled_task_handler, BuildScheduledTaskError,
-        NewScheduledTaskInput, ResultTaskHandler, RetryStrategy, ScheduledTask,
-        ScheduledTaskExecutor, SharedTaskHandler, TaskRepository, TaskRunOutcome,
+        build_scheduled_task, parse_failed_or_error_message, parse_optional_json_value,
+        parse_required_json_value, scheduled_task_handler, serialize_json_value,
+        BuildScheduledTaskError, NewScheduledTaskInput, ResultTaskHandler, RetryStrategy,
+        ScheduledTask, ScheduledTaskExecutor, SharedTaskHandler, TaskRepository, TaskRunOutcome,
         TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
     },
     workout_summary::WorkoutRecap,
@@ -90,50 +91,28 @@ fn deserialize_training_plan_error(error: SerializedTrainingPlanError) -> Traini
     }
 }
 
-fn parse_completed_checkpoint(
-    task: &ScheduledTask,
-) -> Result<Option<CompletedTrainingPlanTaskCheckpoint>, TrainingPlanError> {
-    task.checkpoint
-        .clone()
-        .map(|value| {
-            serde_json::from_value(value).map_err(|error| {
-                TrainingPlanError::Repository(format!(
-                    "invalid completed training plan checkpoint: {error}"
-                ))
-            })
-        })
-        .transpose()
-}
-
 fn parse_failed_checkpoint(
     task: &ScheduledTask,
 ) -> Result<Option<TrainingPlanError>, TrainingPlanError> {
-    task.checkpoint
-        .clone()
-        .map(|value| {
-            serde_json::from_value::<SerializedTrainingPlanError>(value)
-                .map(deserialize_training_plan_error)
-                .map_err(|error| {
-                    TrainingPlanError::Repository(format!(
-                        "invalid failed training plan checkpoint: {error}"
-                    ))
-                })
-        })
-        .transpose()
+    parse_optional_json_value::<SerializedTrainingPlanError, TrainingPlanError>(
+        task.checkpoint.clone(),
+        "invalid failed training plan checkpoint",
+        TrainingPlanError::Repository,
+    )
+    .map(|error| error.map(deserialize_training_plan_error))
 }
 
 fn build_completed_checkpoint(
     generated: &GeneratedTrainingPlan,
 ) -> Result<serde_json::Value, TrainingPlanError> {
-    serde_json::to_value(CompletedTrainingPlanTaskCheckpoint {
-        operation_key: generated.snapshot.operation_key.clone(),
-        was_generated: generated.was_generated,
-    })
-    .map_err(|error| {
-        TrainingPlanError::Repository(format!(
-            "failed to serialize completed training plan checkpoint: {error}"
-        ))
-    })
+    serialize_json_value(
+        &CompletedTrainingPlanTaskCheckpoint {
+            operation_key: generated.snapshot.operation_key.clone(),
+            was_generated: generated.was_generated,
+        },
+        "failed to serialize completed training plan checkpoint",
+        TrainingPlanError::Repository,
+    )
 }
 
 struct TrainingPlanGenerateTaskExecutor<Base> {
@@ -267,24 +246,21 @@ where
     }
 
     fn parse_completed(&self, task: &ScheduledTask) -> Result<Self::Completed, Self::Error> {
-        parse_completed_checkpoint(task)?.ok_or_else(|| {
-            TrainingPlanError::Repository(
-                "completed training plan task missing persisted checkpoint".to_string(),
-            )
-        })
+        parse_required_json_value(
+            task.checkpoint.clone(),
+            "completed training plan task missing persisted checkpoint",
+            "invalid completed training plan checkpoint",
+            TrainingPlanError::Repository,
+        )
     }
 
     fn parse_failed(&self, task: &ScheduledTask) -> Result<Self::Error, Self::Error> {
-        Ok(parse_failed_checkpoint(task)?.unwrap_or_else(|| {
-            task.error_message
-                .clone()
-                .map(TrainingPlanError::Repository)
-                .unwrap_or_else(|| {
-                    TrainingPlanError::Repository(
-                        "training plan task failed without an error message".to_string(),
-                    )
-                })
-        }))
+        Ok(parse_failed_or_error_message(
+            parse_failed_checkpoint(task)?,
+            task.error_message.clone(),
+            "training plan task failed without an error message",
+            TrainingPlanError::Repository,
+        ))
     }
 
     fn finish(&self, completed: Self::Completed) -> BoxFuture<Result<Self::Output, Self::Error>> {

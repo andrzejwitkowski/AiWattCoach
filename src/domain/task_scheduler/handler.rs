@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use serde::{de::DeserializeOwned, Serialize};
+use serde_json::Value;
 
 use super::{BoxFuture, NewTask, RetryStrategy, ScheduledTask, TaskHandler, TaskRunOutcome};
 
@@ -80,6 +81,58 @@ where
     .map_err(BuildScheduledTaskError::Scheduler)
 }
 
+pub(crate) fn parse_optional_json_value<T, E>(
+    value: Option<Value>,
+    invalid_message: &str,
+    map_error: fn(String) -> E,
+) -> Result<Option<T>, E>
+where
+    T: DeserializeOwned,
+{
+    value
+        .map(|value| {
+            serde_json::from_value(value)
+                .map_err(|error| map_error(format!("{invalid_message}: {error}")))
+        })
+        .transpose()
+}
+
+pub(crate) fn parse_required_json_value<T, E>(
+    value: Option<Value>,
+    missing_message: &str,
+    invalid_message: &str,
+    map_error: fn(String) -> E,
+) -> Result<T, E>
+where
+    T: DeserializeOwned,
+{
+    parse_optional_json_value(value, invalid_message, map_error)?
+        .ok_or_else(|| map_error(missing_message.to_string()))
+}
+
+pub(crate) fn parse_failed_or_error_message<E>(
+    parsed_error: Option<E>,
+    error_message: Option<String>,
+    missing_error_message: &str,
+    map_error: fn(String) -> E,
+) -> E {
+    parsed_error
+        .or_else(|| error_message.map(map_error))
+        .unwrap_or_else(|| map_error(missing_error_message.to_string()))
+}
+
+pub(crate) fn serialize_json_value<T, E>(
+    value: &T,
+    serialize_error_message: &str,
+    map_error: fn(String) -> E,
+) -> Result<Value, E>
+where
+    T: Serialize,
+{
+    serde_json::to_value(value)
+        .map_err(|error| map_error(format!("{serialize_error_message}: {error}")))
+}
+
 #[derive(Debug)]
 pub(crate) enum BuildScheduledTaskError {
     SerializePayload(serde_json::Error),
@@ -140,6 +193,7 @@ where
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};
+    use serde_json::json;
 
     use super::*;
     use crate::domain::task_scheduler::{RetryStrategy, TaskSchedulerError};
@@ -159,6 +213,11 @@ mod tests {
 
     #[derive(Clone, Deserialize, Serialize)]
     struct StubPayload {
+        value: String,
+    }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+    struct StubCheckpoint {
         value: String,
     }
 
@@ -396,5 +455,148 @@ mod tests {
             BuildScheduledTaskError::Scheduler(TaskSchedulerError::Validation(message))
                 if message == "task id is required"
         ));
+    }
+
+    #[test]
+    fn parse_optional_json_value_returns_none_when_value_missing() {
+        let parsed = parse_optional_json_value::<StubCheckpoint, StubError>(
+            None,
+            "invalid checkpoint",
+            stub_error,
+        )
+        .expect("missing optional value should succeed");
+
+        assert_eq!(parsed, None);
+    }
+
+    #[test]
+    fn parse_optional_json_value_parses_value_when_present() {
+        let parsed = parse_optional_json_value::<StubCheckpoint, StubError>(
+            Some(json!({ "value": "ok" })),
+            "invalid checkpoint",
+            stub_error,
+        )
+        .expect("valid value should parse");
+
+        assert_eq!(
+            parsed,
+            Some(StubCheckpoint {
+                value: "ok".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn parse_optional_json_value_maps_invalid_json_error() {
+        let error = parse_optional_json_value::<StubCheckpoint, StubError>(
+            Some(json!({ "value": 5 })),
+            "invalid checkpoint",
+            stub_error,
+        )
+        .expect_err("invalid value should fail");
+
+        assert!(error.message.starts_with("invalid checkpoint: "));
+    }
+
+    #[test]
+    fn parse_required_json_value_returns_missing_error_when_absent() {
+        let error = parse_required_json_value::<StubCheckpoint, StubError>(
+            None,
+            "missing checkpoint",
+            "invalid checkpoint",
+            stub_error,
+        )
+        .expect_err("missing required value should fail");
+
+        assert_eq!(error.message, "missing checkpoint");
+    }
+
+    #[test]
+    fn parse_required_json_value_parses_value_when_present() {
+        let parsed = parse_required_json_value::<StubCheckpoint, StubError>(
+            Some(json!({ "value": "ok" })),
+            "missing checkpoint",
+            "invalid checkpoint",
+            stub_error,
+        )
+        .expect("valid required value should parse");
+
+        assert_eq!(
+            parsed,
+            StubCheckpoint {
+                value: "ok".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_required_json_value_maps_invalid_json_error() {
+        let error = parse_required_json_value::<StubCheckpoint, StubError>(
+            Some(json!({ "value": 5 })),
+            "missing checkpoint",
+            "invalid checkpoint",
+            stub_error,
+        )
+        .expect_err("invalid required value should fail");
+
+        assert!(error.message.starts_with("invalid checkpoint: "));
+    }
+
+    #[test]
+    fn parse_failed_or_error_message_prefers_parsed_error() {
+        let error = parse_failed_or_error_message::<StubError>(
+            Some(StubError {
+                message: "typed failure".to_string(),
+                retryable: false,
+                retry_delay_seconds: None,
+            }),
+            Some("raw failure".to_string()),
+            "missing failure",
+            stub_error,
+        );
+
+        assert_eq!(error.message, "typed failure");
+    }
+
+    #[test]
+    fn parse_failed_or_error_message_falls_back_to_error_message() {
+        let error = parse_failed_or_error_message::<StubError>(
+            None,
+            Some("raw failure".to_string()),
+            "missing failure",
+            stub_error,
+        );
+
+        assert_eq!(error.message, "raw failure");
+    }
+
+    #[test]
+    fn parse_failed_or_error_message_returns_missing_message_when_empty() {
+        let error =
+            parse_failed_or_error_message::<StubError>(None, None, "missing failure", stub_error);
+
+        assert_eq!(error.message, "missing failure");
+    }
+
+    #[test]
+    fn serialize_json_value_serializes_struct() {
+        let value = serialize_json_value(
+            &StubCheckpoint {
+                value: "ok".to_string(),
+            },
+            "serialize failed",
+            stub_error,
+        )
+        .expect("serializable checkpoint should succeed");
+
+        assert_eq!(value, json!({ "value": "ok" }));
+    }
+
+    fn stub_error(message: String) -> StubError {
+        StubError {
+            message,
+            retryable: false,
+            retry_delay_seconds: None,
+        }
     }
 }
