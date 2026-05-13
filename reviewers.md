@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-13 | self (4-loop review) | PR #230 workout-summary save completion notifications
+
+- Problem: the save-state WebSocket notification path had lifecycle gaps. Failed saves registered notifier channels before validation and did not unregister them, successful one-shot completions could leave subscribed channels in memory, already-open WebSockets did not subscribe until the save endpoint created a channel, and very fast background completions could be missed because the registration receiver was dropped before a WebSocket subscribed. Alias saves also published completion under the storage/preferred workout id while the client subscribed under the requested id.
+- Fix: added explicit notifier unregister support, cleaned registrations on failed `mark_saved`, made WebSockets register channels before completion, changed notifier publishing to retain the completion for late WebSocket subscribers, reused existing channels when the save request registers, removed consumed channels when the WebSocket sends the completion, and published background completion events under the requested workout id while keeping recap/plan side effects on the canonical storage id. Added focused REST, WebSocket, notifier, and alias-domain regressions.
+- Prevention: for one-shot in-memory WebSocket notification bridges, verify all lifecycle edges: validation failure cleanup, already-connected subscribers, no-current-subscriber completion storage, cleanup after delivery, and id/key parity between the HTTP request path and the background publisher.
+
 ### 2026-05-13 | Copilot | PR #227 parse_required_json_value success-path coverage
 
 - Problem: the extracted `parse_required_json_value(...)` helper had regression coverage for missing and invalid input, but no success-path test proving a valid required checkpoint parses correctly. Because the helper now sits under multiple scheduler-backed flows, that left a small but real coverage gap in the shared wrapper itself.

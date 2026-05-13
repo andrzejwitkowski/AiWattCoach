@@ -5,6 +5,7 @@ use std::{
 };
 
 use aiwattcoach::{
+    adapters::rest::WorkoutSummarySaveNotifier,
     build_app_with_frontend_dist,
     config::AppState,
     domain::{
@@ -46,6 +47,21 @@ pub(crate) async fn workout_summary_test_app_with_settings(
     workout_summary_service: impl WorkoutSummaryUseCases + 'static,
     settings_service: Option<Arc<dyn UserSettingsUseCases>>,
 ) -> axum::Router {
+    workout_summary_test_app_with_settings_and_notifier(
+        identity_service,
+        workout_summary_service,
+        settings_service,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn workout_summary_test_app_with_settings_and_notifier(
+    identity_service: impl IdentityUseCases + 'static,
+    workout_summary_service: impl WorkoutSummaryUseCases + 'static,
+    settings_service: Option<Arc<dyn UserSettingsUseCases>>,
+    save_notifier: Option<WorkoutSummarySaveNotifier>,
+) -> axum::Router {
     let settings = Settings::test_defaults();
     let fixture = shared_frontend_fixture();
 
@@ -65,6 +81,10 @@ pub(crate) async fn workout_summary_test_app_with_settings(
 
     if let Some(settings_service) = settings_service {
         app_state = app_state.with_settings_service(settings_service);
+    }
+
+    if let Some(save_notifier) = save_notifier {
+        app_state = app_state.with_workout_summary_save_notifier(save_notifier);
     }
 
     build_app_with_frontend_dist(app_state, fixture.dist_dir())

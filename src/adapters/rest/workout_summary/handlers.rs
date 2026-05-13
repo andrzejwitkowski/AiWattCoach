@@ -162,11 +162,21 @@ pub async fn set_saved_state(
     };
 
     let result = if body.saved {
-        if let Some(notifier) = &state.workout_summary_save_notifier {
-            let _rx: tokio::sync::watch::Receiver<Option<super::dto::SaveWorkflowDto>> =
-                notifier.register(&user_id, &path.workout_id);
+        let registered_save_notifier =
+            state
+                .workout_summary_save_notifier
+                .as_ref()
+                .inspect(|notifier| {
+                    let _rx: tokio::sync::watch::Receiver<Option<super::dto::SaveWorkflowDto>> =
+                        notifier.register(&user_id, &path.workout_id);
+                });
+        let result = service.mark_saved(&user_id, &path.workout_id).await;
+        if result.is_err() {
+            if let Some(notifier) = registered_save_notifier {
+                notifier.unregister(&user_id, &path.workout_id);
+            }
         }
-        service.mark_saved(&user_id, &path.workout_id).await
+        result
     } else {
         service
             .reopen_summary(&user_id, &path.workout_id)

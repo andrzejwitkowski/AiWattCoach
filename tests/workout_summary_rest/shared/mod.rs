@@ -9,6 +9,7 @@ mod workout_summary;
 
 pub(crate) use app::{
     get_json, session_cookie, workout_summary_test_app, workout_summary_test_app_with_settings,
+    workout_summary_test_app_with_settings_and_notifier,
 };
 pub(crate) use clock::TestClock;
 pub(crate) use fixtures::{existing_summary, sample_summary, sample_summary_with_updated_at};

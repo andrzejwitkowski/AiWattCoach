@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -35,12 +36,22 @@ impl WorkoutSummarySaveNotifier {
         user_id: &str,
         workout_id: &str,
     ) -> watch::Receiver<Option<SaveWorkflowDto>> {
-        let (tx, rx) = watch::channel(None);
+        let mut channels = self.channels.lock().unwrap();
+        match channels.entry(Self::key(user_id, workout_id)) {
+            Entry::Occupied(entry) => entry.get().subscribe(),
+            Entry::Vacant(entry) => {
+                let (tx, rx) = watch::channel(None);
+                entry.insert(tx);
+                rx
+            }
+        }
+    }
+
+    pub fn unregister(&self, user_id: &str, workout_id: &str) {
         self.channels
             .lock()
             .unwrap()
-            .insert(Self::key(user_id, workout_id), tx);
-        rx
+            .remove(&Self::key(user_id, workout_id));
     }
 
     pub fn subscribe(
@@ -65,16 +76,14 @@ impl WorkoutSummarySaveNotifier {
         messages: Vec<String>,
     ) {
         let key = Self::key(user_id, workout_id);
-        let mut channels = self.channels.lock().unwrap();
+        let channels = self.channels.lock().unwrap();
         if let Some(tx) = channels.get(&key) {
             let payload = SaveWorkflowDto {
                 recap_status: map_workflow_status_to_dto(recap_status),
                 plan_status: map_workflow_status_to_dto(plan_status),
                 messages,
             };
-            if tx.send(Some(payload)).is_err() {
-                channels.remove(&key);
-            }
+            tx.send_replace(Some(payload));
         }
     }
 }
@@ -89,5 +98,29 @@ impl crate::domain::workout_summary::SaveWorkflowCompletionPort for WorkoutSumma
         messages: Vec<String>,
     ) {
         self.send(user_id, workout_id, recap_status, plan_status, messages);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::workout_summary::SaveWorkflowStatus;
+
+    use super::WorkoutSummarySaveNotifier;
+
+    #[test]
+    fn send_stores_completion_for_late_subscribers() {
+        let notifier = WorkoutSummarySaveNotifier::new();
+        let _registered = notifier.register("user-1", "workout-1");
+
+        notifier.send(
+            "user-1",
+            "workout-1",
+            SaveWorkflowStatus::Generated,
+            SaveWorkflowStatus::Generated,
+            vec!["done".to_string()],
+        );
+
+        let received = notifier.subscribe("user-1", "workout-1").unwrap();
+        assert!(received.borrow().is_some());
     }
 }

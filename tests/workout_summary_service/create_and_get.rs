@@ -1,6 +1,6 @@
 use aiwattcoach::domain::workout_summary::{
-    WorkoutRecap, WorkoutSummaryError, WorkoutSummaryRepository, WorkoutSummaryService,
-    WorkoutSummaryUseCases,
+    SaveWorkflowCompletionPort, SaveWorkflowStatus, WorkoutRecap, WorkoutSummaryError,
+    WorkoutSummaryRepository, WorkoutSummaryService, WorkoutSummaryUseCases,
 };
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +18,34 @@ use crate::shared::{
 struct RecordingMissingSettingsService {
     find_calls: Arc<Mutex<Vec<String>>>,
     get_calls: Arc<Mutex<Vec<String>>>,
+}
+
+#[derive(Clone, Default)]
+struct RecordingSaveCompletionPort {
+    calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl RecordingSaveCompletionPort {
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl SaveWorkflowCompletionPort for RecordingSaveCompletionPort {
+    fn on_completed(
+        &self,
+        user_id: &str,
+        workout_id: &str,
+        recap_status: SaveWorkflowStatus,
+        plan_status: SaveWorkflowStatus,
+        _messages: Vec<String>,
+    ) {
+        self.calls.lock().unwrap().push(format!(
+            "on_completed:{user_id}:{workout_id}:{}:{}",
+            recap_status.as_str(),
+            plan_status.as_str()
+        ));
+    }
 }
 
 impl RecordingMissingSettingsService {
@@ -533,6 +561,53 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
     assert_eq!(
         completed_target.calls(),
         vec!["resolve_completed_workout_target:user-1:wahoo-workout:450868242".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn mark_saved_notifies_requested_alias_after_background_work_completes() {
+    let mut summary = existing_summary_with_finished_conversation();
+    summary.workout_id = "i144331018".to_string();
+    let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
+    let training_plan = RecordingTrainingPlanService::default();
+    training_plan.succeed_next(aiwattcoach::domain::training_plan::GeneratedTrainingPlan {
+        snapshot: aiwattcoach::domain::training_plan::TrainingPlanSnapshot {
+            user_id: "user-1".to_string(),
+            workout_id: "i144331018".to_string(),
+            operation_key: "training-plan:user-1:i144331018:1700000000".to_string(),
+            saved_at_epoch_seconds: 1_700_000_000,
+            start_date: "2026-04-06".to_string(),
+            end_date: "2026-04-19".to_string(),
+            days: Vec::new(),
+            created_at_epoch_seconds: 1_700_000_000,
+        },
+        active_projected_days: Vec::new(),
+        was_generated: true,
+    });
+    let latest_activity = RecordingLatestCompletedActivityService::new(Some("i144331018"));
+    let completed_target = RecordingCompletedWorkoutTargetService::resolving(&[(
+        "wahoo-workout:450868242",
+        "i144331018",
+        &["i144331018", "wahoo-workout:450868242"],
+    )]);
+    let completion_port = RecordingSaveCompletionPort::default();
+    let service = test_service_with_training_plan_latest_activity_and_completed_target(
+        repository,
+        std::sync::Arc::new(training_plan),
+        std::sync::Arc::new(latest_activity),
+        std::sync::Arc::new(completed_target),
+    )
+    .with_save_completion_port(std::sync::Arc::new(completion_port.clone()));
+
+    service
+        .mark_saved("user-1", "wahoo-workout:450868242")
+        .await
+        .unwrap();
+
+    tokio::task::yield_now().await;
+    assert_eq!(
+        completion_port.calls(),
+        vec!["on_completed:user-1:wahoo-workout:450868242:generated:generated".to_string()]
     );
 }
 
