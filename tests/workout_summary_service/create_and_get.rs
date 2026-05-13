@@ -2,7 +2,12 @@ use aiwattcoach::domain::workout_summary::{
     SaveWorkflowCompletionPort, SaveWorkflowStatus, WorkoutRecap, WorkoutSummaryError,
     WorkoutSummaryRepository, WorkoutSummaryService, WorkoutSummaryUseCases,
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{sleep, timeout};
 
 use crate::shared::{
     existing_summary, existing_summary_with_finished_conversation,
@@ -46,6 +51,28 @@ impl SaveWorkflowCompletionPort for RecordingSaveCompletionPort {
             plan_status.as_str()
         ));
     }
+}
+
+async fn wait_until(description: &str, mut condition: impl FnMut() -> bool) {
+    timeout(Duration::from_secs(2), async {
+        loop {
+            if condition() {
+                return;
+            }
+
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("timed out waiting for {description}"));
+}
+
+async fn wait_for_training_plan_calls(
+    training_plan: &RecordingTrainingPlanService,
+    expected: Vec<String>,
+) {
+    wait_until("training plan calls", || training_plan.calls() == expected).await;
+    assert_eq!(training_plan.calls(), expected);
 }
 
 impl RecordingMissingSettingsService {
@@ -307,11 +334,11 @@ async fn mark_saved_generates_recap_only_for_finished_conversation_on_non_latest
         result.workflow.messages,
         vec!["Workout recap is being generated in the background.".to_string(),]
     );
-    tokio::task::yield_now().await;
-    assert_eq!(
-        training_plan.calls(),
-        vec!["generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string()]
-    );
+    wait_for_training_plan_calls(
+        &training_plan,
+        vec!["generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string()],
+    )
+    .await;
     assert_eq!(
         latest_activity.calls(),
         vec!["latest_completed_activity_id:user-1".to_string()]
@@ -356,14 +383,14 @@ async fn mark_saved_generates_recap_and_plan_for_latest_completed_activity() {
             "14-day schedule is being generated in the background.".to_string(),
         ]
     );
-    tokio::task::yield_now().await;
-    assert_eq!(
-        training_plan.calls(),
+    wait_for_training_plan_calls(
+        &training_plan,
         vec![
             "generate_recap_for_saved_workout:user-1:workout-1:1700000000".to_string(),
             "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
-        ]
-    );
+        ],
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -546,14 +573,14 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
         repository.calls(),
         vec!["set_saved_state:i144331018:Some(1700000000)".to_string()]
     );
-    tokio::task::yield_now().await;
-    assert_eq!(
-        training_plan.calls(),
+    wait_for_training_plan_calls(
+        &training_plan,
         vec![
             "generate_recap_for_saved_workout:user-1:i144331018:1700000000".to_string(),
             "generate_for_saved_workout:user-1:i144331018:1700000000".to_string(),
-        ]
-    );
+        ],
+    )
+    .await;
     assert_eq!(
         latest_activity.calls(),
         vec!["latest_completed_activity_id:user-1".to_string()]
@@ -604,7 +631,11 @@ async fn mark_saved_notifies_requested_alias_after_background_work_completes() {
         .await
         .unwrap();
 
-    tokio::task::yield_now().await;
+    wait_until("save completion notification", || {
+        completion_port.calls()
+            == vec!["on_completed:user-1:wahoo-workout:450868242:generated:generated".to_string()]
+    })
+    .await;
     assert_eq!(
         completion_port.calls(),
         vec!["on_completed:user-1:wahoo-workout:450868242:generated:generated".to_string()]
@@ -681,15 +712,15 @@ async fn mark_saved_treats_stripped_latest_activity_id_as_latest_for_prefixed_co
 
     assert_eq!(result.workflow.recap_status.as_str(), "processing");
     assert_eq!(result.workflow.plan_status.as_str(), "processing");
-    tokio::task::yield_now().await;
-    assert_eq!(
-        training_plan.calls(),
+    wait_for_training_plan_calls(
+        &training_plan,
         vec![
             "generate_recap_for_saved_workout:user-1:wahoo-workout:450868242:1700000000"
                 .to_string(),
             "generate_for_saved_workout:user-1:wahoo-workout:450868242:1700000000".to_string(),
-        ]
-    );
+        ],
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -925,14 +956,14 @@ async fn mark_saved_spawns_background_work_when_training_plan_generation_would_f
             "14-day schedule is being generated in the background.".to_string(),
         ]
     );
-    tokio::task::yield_now().await;
-    assert_eq!(
-        training_plan.calls(),
+    wait_for_training_plan_calls(
+        &training_plan,
         vec![
             "generate_recap_for_saved_workout:user-1:workout-1:1700000000".to_string(),
             "generate_for_saved_workout:user-1:workout-1:1700000000".to_string(),
-        ]
-    );
+        ],
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -976,7 +1007,10 @@ async fn mark_saved_triggers_training_plan_generation_after_persisting_saved_sta
         repository.calls(),
         vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]
     );
-    tokio::task::yield_now().await;
+    wait_until("training plan service to observe persisted save", || {
+        training_plan.observed_persisted_saved_at()
+    })
+    .await;
     assert!(training_plan.observed_persisted_saved_at());
 }
 

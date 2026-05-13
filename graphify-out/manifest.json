@@ -116,8 +116,8 @@
     "hash": "7162e983d0c6635c20ebef7ec78c1be0"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/workout_summary_service/create_and_get.rs": {
-    "mtime": 1778693935.6004176,
-    "hash": "a89fde5c9f1f1ea0e9b7e8c57062ab3e"
+    "mtime": 1778695255.8505447,
+    "hash": "80534f5b26702de7c92884a39f92ee7a"
   },
   "/home/andrzej/Projects/AiWattCoach/tests/workout_summary_service/shared/training_plan_scheduler.rs": {
     "mtime": 1778178824.872497,
@@ -1812,8 +1812,8 @@
     "hash": "21a4162580defc07adb6b60be45f848f"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/rest/workout_summary/save_notifier.rs": {
-    "mtime": 1778694337.7140868,
-    "hash": "2403dc0fd8f27809e82076056b73ed15"
+    "mtime": 1778695577.3443506,
+    "hash": "80d10fae1a530d0eb242d941fa4a7b87"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/rest/workout_summary/error.rs": {
     "mtime": 1777106174.1857324,
@@ -2400,8 +2400,8 @@
     "hash": "70831719c74e20c2a784c2c25ad06a83"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/service/use_cases/save.rs": {
-    "mtime": 1778694823.328096,
-    "hash": "ade0a7d5850072436748ac63aeb696a1"
+    "mtime": 1778695184.4873827,
+    "hash": "1e862fb52c1f5d8268d6f2376365e88e"
   },
   "/home/andrzej/Projects/AiWattCoach/src/domain/workout_summary/service/use_cases/read.rs": {
     "mtime": 1777651504.5060406,
@@ -3352,8 +3352,8 @@
     "hash": "faf4641d60f84eaebcde39d3060c388a"
   },
   "/home/andrzej/Projects/AiWattCoach/reviewers.md": {
-    "mtime": 1778694453.2685776,
-    "hash": "aef5c38286660a43b752fe9b8052919b"
+    "mtime": 1778694931.1205144,
+    "hash": "0b07cc482fa9e5b9b54f0499bce14d08"
   },
   "/home/andrzej/Projects/AiWattCoach/docker-compose.yml": {
     "mtime": 1775675724.9767706,
@@ -3372,8 +3372,8 @@
     "hash": "2bbc3892747996176b16ca4b475b564f"
   },
   "/home/andrzej/Projects/AiWattCoach/tasks/lessons.md": {
-    "mtime": 1778689464.0556378,
-    "hash": "e0eacf1d880bbbadfd3d6dcf0240be31"
+    "mtime": 1778694931.1225142,
+    "hash": "b27f3de0a206fae9e5a6ce7a083be581"
   },
   "/home/andrzej/Projects/AiWattCoach/docs/function_calls_exploration_prompt.md": {
     "mtime": 1777651504.4290388,

@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-13 | Copilot + CodeRabbit | PR #230 workout-summary background save review follow-up
+
+- Problem: PR review found that background save-flow tests depended on `tokio::task::yield_now()`, background recap/plan generation could run with unbounded active provider work, warning logs used inconsistent field names, and the REST save notifier still had review-risky lifecycle/poisoned-lock handling around `watch` senders.
+- Fix: replaced `yield_now()` assertions with deterministic timeout polling, added a process-level semaphore limiting active background save workflows, kept background warning logs on `user_id`/`workout_id`, made notifier registration reuse existing senders, cloned senders before publishing, recovered poisoned mutex state with structured warning logs, and covered reused registration with a focused notifier unit test.
+- Prevention: for background workflows spawned from request handlers, verify both active concurrency and test synchronization explicitly. For one-shot notifier maps, reuse existing channels for retries/subscribers and avoid mutex-held sends or production `lock().unwrap()` paths.
+
 ### 2026-05-13 | user | workout-summary save-flow readability refactor
 
 - Problem: `src/domain/workout_summary/service/use_cases/save.rs` had the background recap/plan orchestration, status mapping, message construction, logging, and HTTP-visible workflow result assembly embedded inside `mark_saved_impl`, making the save path hard to review.

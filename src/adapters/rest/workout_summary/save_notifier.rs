@@ -1,8 +1,9 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use tokio::sync::watch;
+use tracing::warn;
 
 use crate::domain::workout_summary::SaveWorkflowStatus;
 
@@ -31,12 +32,26 @@ impl WorkoutSummarySaveNotifier {
         format!("{user_id}:{workout_id}")
     }
 
+    fn channels(
+        &self,
+        operation: &str,
+    ) -> MutexGuard<'_, HashMap<String, watch::Sender<Option<SaveWorkflowDto>>>> {
+        self.channels.lock().unwrap_or_else(|error| {
+            warn!(
+                operation = %operation,
+                error = %error,
+                "Workout summary save notifier lock was poisoned; recovering state"
+            );
+            error.into_inner()
+        })
+    }
+
     pub fn register(
         &self,
         user_id: &str,
         workout_id: &str,
     ) -> watch::Receiver<Option<SaveWorkflowDto>> {
-        let mut channels = self.channels.lock().unwrap();
+        let mut channels = self.channels("register");
         match channels.entry(Self::key(user_id, workout_id)) {
             Entry::Occupied(entry) => entry.get().subscribe(),
             Entry::Vacant(entry) => {
@@ -48,9 +63,7 @@ impl WorkoutSummarySaveNotifier {
     }
 
     pub fn unregister(&self, user_id: &str, workout_id: &str) {
-        self.channels
-            .lock()
-            .unwrap()
+        self.channels("unregister")
             .remove(&Self::key(user_id, workout_id));
     }
 
@@ -60,9 +73,7 @@ impl WorkoutSummarySaveNotifier {
         workout_id: &str,
     ) -> Option<watch::Receiver<Option<SaveWorkflowDto>>> {
         let key = Self::key(user_id, workout_id);
-        self.channels
-            .lock()
-            .unwrap()
+        self.channels("subscribe")
             .get(&key)
             .map(|tx| tx.subscribe())
     }
@@ -76,8 +87,8 @@ impl WorkoutSummarySaveNotifier {
         messages: Vec<String>,
     ) {
         let key = Self::key(user_id, workout_id);
-        let channels = self.channels.lock().unwrap();
-        if let Some(tx) = channels.get(&key) {
+        let tx = self.channels("send").get(&key).cloned();
+        if let Some(tx) = tx {
             let payload = SaveWorkflowDto {
                 recap_status: map_workflow_status_to_dto(recap_status),
                 plan_status: map_workflow_status_to_dto(plan_status),
@@ -122,5 +133,22 @@ mod tests {
 
         let received = notifier.subscribe("user-1", "workout-1").unwrap();
         assert!(received.borrow().is_some());
+    }
+
+    #[test]
+    fn register_reuses_existing_sender_for_current_subscribers() {
+        let notifier = WorkoutSummarySaveNotifier::new();
+        let current = notifier.register("user-1", "workout-1");
+        let _second_registration = notifier.register("user-1", "workout-1");
+
+        notifier.send(
+            "user-1",
+            "workout-1",
+            SaveWorkflowStatus::Generated,
+            SaveWorkflowStatus::Generated,
+            vec!["done".to_string()],
+        );
+
+        assert!(current.borrow().is_some());
     }
 }

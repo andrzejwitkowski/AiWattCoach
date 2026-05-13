@@ -1,8 +1,18 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
+use tokio::sync::Semaphore;
 use tracing::{info, warn};
 
 use super::*;
+
+const BACKGROUND_SAVE_WORKFLOW_CONCURRENCY_LIMIT: usize = 2;
+
+fn background_save_workflow_semaphore() -> Arc<Semaphore> {
+    static SEMAPHORE: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    SEMAPHORE
+        .get_or_init(|| Arc::new(Semaphore::new(BACKGROUND_SAVE_WORKFLOW_CONCURRENCY_LIMIT)))
+        .clone()
+}
 
 #[derive(Clone, PartialEq, Eq)]
 struct RecapSnapshot {
@@ -50,6 +60,7 @@ fn matches_latest_completed_activity_id(latest_activity_id: &str, workout_id: &s
 struct BackgroundSaveWorkflow {
     training_plan_service: Arc<dyn TrainingPlanUseCases>,
     save_completion_port: Option<Arc<dyn SaveWorkflowCompletionPort>>,
+    concurrency: Arc<Semaphore>,
     user_id: String,
     storage_workout_id: String,
     completion_workout_id: String,
@@ -146,6 +157,15 @@ fn completion_workflow(
 }
 
 async fn run_background_save_workflow(workflow: BackgroundSaveWorkflow) {
+    let Ok(_permit) = workflow.concurrency.acquire_owned().await else {
+        warn!(
+            user_id = %workflow.user_id,
+            workout_id = %workflow.storage_workout_id,
+            "Background save workflow limiter closed before generation started"
+        );
+        return;
+    };
+
     info!(
         user_id = %workflow.user_id,
         workout_id = %workflow.storage_workout_id,
@@ -284,6 +304,7 @@ where
             tokio::spawn(run_background_save_workflow(BackgroundSaveWorkflow {
                 training_plan_service,
                 save_completion_port: self.save_completion_port.clone(),
+                concurrency: background_save_workflow_semaphore(),
                 user_id: user_id.to_string(),
                 storage_workout_id: target.storage_workout_id.clone(),
                 completion_workout_id: target.requested_workout_id.clone(),
