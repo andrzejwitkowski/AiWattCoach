@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::domain::llm::next_provider_transcript_updated_at_epoch_seconds;
+use crate::domain::{
+    llm::next_provider_transcript_updated_at_epoch_seconds,
+    public_tool_calls::materialization::materialize_public_tool_calls_idempotently,
+};
 
 use super::super::*;
 use super::{map_settings_error, AppendMessageInput};
@@ -83,26 +86,37 @@ where
         public_tool_calls: &[crate::domain::workout_summary::PublicToolCall],
     ) -> Result<CoachReplyOperation, WorkoutSummaryError> {
         let mut operation = operation;
+        let user_id = user_id.to_string();
+        let workout_id = workout_id.to_string();
+        let service = self.clone();
 
-        for tool_call in public_tool_calls {
-            if self
-                .tool_call_is_already_materialized(user_id, workout_id, &operation, &tool_call.id)
-                .await?
-            {
-                if !operation
-                    .public_tool_call_ids
-                    .iter()
-                    .any(|id| id == &tool_call.id)
-                {
-                    operation.public_tool_call_ids.push(tool_call.id.clone());
+        operation.public_tool_call_ids = materialize_public_tool_calls_idempotently(
+            operation.public_tool_call_ids,
+            public_tool_calls,
+            |tool_call_id| {
+                let service = service.clone();
+                let user_id = user_id.clone();
+                let workout_id = workout_id.clone();
+                let tool_call_id = tool_call_id.to_string();
+                async move {
+                    service
+                        .tool_call_is_already_materialized(&user_id, &workout_id, &tool_call_id)
+                        .await
                 }
-                continue;
-            }
-
-            self.append_tool_message(user_id, workout_id, tool_call.clone())
-                .await?;
-            operation.public_tool_call_ids.push(tool_call.id.clone());
-        }
+            },
+            |tool_call| {
+                let service = service.clone();
+                let user_id = user_id.clone();
+                let workout_id = workout_id.clone();
+                async move {
+                    service
+                        .append_tool_message(&user_id, &workout_id, tool_call)
+                        .await
+                        .map(|_| ())
+                }
+            },
+        )
+        .await?;
 
         Ok(operation)
     }
@@ -218,21 +232,12 @@ where
         }
     }
 
-    async fn tool_call_is_already_materialized(
+    pub(super) async fn tool_call_is_already_materialized(
         &self,
         user_id: &str,
         workout_id: &str,
-        operation: &CoachReplyOperation,
         tool_call_id: &str,
     ) -> Result<bool, WorkoutSummaryError> {
-        if operation
-            .public_tool_call_ids
-            .iter()
-            .any(|id| id == tool_call_id)
-        {
-            return Ok(true);
-        }
-
         match self
             .get_message_by_id(user_id, workout_id, tool_call_id)
             .await

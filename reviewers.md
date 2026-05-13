@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-13 | CodeRabbit | PR #229 shared public tool materialization fresh-response coverage
+
+- Problem: after the recovery-suite split on PR #229, `calendar_coach_marks_fresh_tool_only_response_as_failed` still checked only the failed status and missed the persisted `public_tool_call_ids`, leaving the fresh tool-only path with weaker coverage than the mirrored recovery tests.
+- Fix: added the missing `public_tool_call_ids == ["tool-1"]` assertion in `tests/calendar_coach_service/recovery.rs` so both fresh and recovery tool-only paths prove durable materialized tool-call persistence.
+- Prevention: when you mirror fresh and recovery regressions for the same persistence contract, align the persistence assertions across both tests instead of checking only the terminal status in one branch.
+
+### 2026-05-13 | Copilot | PR #229 public tool materialization recovery semantics
+
+- Problem: the new shared `materialize_public_tool_calls_idempotently(...)` helper left two recovery correctness gaps. It treated `existing_ids` as already normalized, so duplicate persisted ids would survive forever, and both workout-summary and coach-conversation recovery paths ignored the helper's returned id set. After a crash between appending tool messages and checkpointing `public_tool_call_ids`, recovery could therefore complete the operation with stale or duplicate ids even though the live path persisted the normalized materialized set.
+- Fix: normalized duplicate incoming ids inside `src/domain/public_tool_calls/materialization.rs`, changed both recovery paths to carry the returned updated operation forward before completion/failure persistence, and added focused regressions for helper normalization plus replay persistence of recovered tool-call ids in both workout-summary and coach-conversation flows.
+- Prevention: when extracting a shared idempotency helper that returns updated durable state, audit every caller for whether it persists the returned value or accidentally continues with the stale input. For shared persisted id lists, normalize the incoming stored state as well as deduping newly discovered items, and add at least one recovery-path regression proving the completed checkpoint contains the normalized ids after replay.
+
 ### 2026-05-13 | Copilot + CodeRabbit | PR #230 workout-summary background save review follow-up
 
 - Problem: PR review found that background save-flow tests depended on `tokio::task::yield_now()`, background recap/plan generation could run with unbounded active provider work, warning logs used inconsistent field names, and the REST save notifier still had review-risky lifecycle/poisoned-lock handling around `watch` senders.

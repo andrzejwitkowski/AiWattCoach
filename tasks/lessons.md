@@ -13,6 +13,7 @@
 
 - When resolving PR conflicts, fetch the current base branch ref and test the merge against that exact `origin/<base>` immediately before calling the PR conflict-free. A branch can be clean and synced with its remote head branch while still conflicting if the base branch advanced.
 - When resolving conflicts in rolling logs like `reviewers.md` or `tasks/lessons.md`, preserve entries from both branches and restore newest-first ordering instead of picking one side and dropping history.
+- After fetching the base branch, also verify `gh pr view <number> --json mergeStateStatus` before telling the user a PR is conflict-free. A prior local `git merge` result is stale as soon as the base branch moves.
 
 ## Signature Change Verification
 
