@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-13 | Copilot | PR #227 parse_required_json_value success-path coverage
+
+- Problem: the extracted `parse_required_json_value(...)` helper had regression coverage for missing and invalid input, but no success-path test proving a valid required checkpoint parses correctly. Because the helper now sits under multiple scheduler-backed flows, that left a small but real coverage gap in the shared wrapper itself.
+- Fix: added `parse_required_json_value_parses_value_when_present` in `src/domain/task_scheduler/handler.rs` to assert the helper returns the decoded checkpoint for valid JSON input.
+- Prevention: when extracting a shared parse helper that has both optional and required wrappers, cover all three branches in the helper's own tests: missing, invalid, and valid-success input. Do not rely on sibling optional-helper tests to prove the required-success path indirectly.
+
 ### 2026-05-13 | user | issue 226 shell-quoted GitHub REST body corruption and PR creation fallback
 
 - Problem: the first direct REST call that created issue `#226` embedded Markdown with backticks inside a shell-quoted payload, so zsh performed command substitution and stripped inline code and file paths from the posted body. A later `gh pr create` attempt also assumed CLI auth existed and then hit the known host pressure path by triggering extra verification before failing on missing auth.

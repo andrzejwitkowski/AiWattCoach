@@ -512,6 +512,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_required_json_value_parses_value_when_present() {
+        let parsed = parse_required_json_value::<StubCheckpoint, StubError>(
+            Some(json!({ "value": "ok" })),
+            "missing checkpoint",
+            "invalid checkpoint",
+            stub_error,
+        )
+        .expect("valid required value should parse");
+
+        assert_eq!(
+            parsed,
+            StubCheckpoint {
+                value: "ok".to_string(),
+            }
+        );
+    }
+
+    #[test]
     fn parse_required_json_value_maps_invalid_json_error() {
         let error = parse_required_json_value::<StubCheckpoint, StubError>(
             Some(json!({ "value": 5 })),
