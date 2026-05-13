@@ -56,7 +56,7 @@ pub(super) fn unchanged_save_summary_result(summary: WorkoutSummary) -> SaveSumm
     }
 }
 
-fn map_workflow_status_to_dto(status: SaveWorkflowStatus) -> SaveWorkflowStatusDto {
+pub(super) fn map_workflow_status_to_dto(status: SaveWorkflowStatus) -> SaveWorkflowStatusDto {
     match status {
         SaveWorkflowStatus::Generated => SaveWorkflowStatusDto::Generated,
         SaveWorkflowStatus::Processing => SaveWorkflowStatusDto::Processing,

@@ -5,17 +5,8 @@ use tokio::sync::watch;
 
 use crate::domain::workout_summary::SaveWorkflowStatus;
 
-use super::dto::{SaveWorkflowDto, SaveWorkflowStatusDto};
-
-fn map_status_to_dto(status: &SaveWorkflowStatus) -> SaveWorkflowStatusDto {
-    match status {
-        SaveWorkflowStatus::Generated => SaveWorkflowStatusDto::Generated,
-        SaveWorkflowStatus::Processing => SaveWorkflowStatusDto::Processing,
-        SaveWorkflowStatus::Skipped => SaveWorkflowStatusDto::Skipped,
-        SaveWorkflowStatus::Failed => SaveWorkflowStatusDto::Failed,
-        SaveWorkflowStatus::Unchanged => SaveWorkflowStatusDto::Unchanged,
-    }
-}
+use super::dto::SaveWorkflowDto;
+use super::mapping::map_workflow_status_to_dto;
 
 #[derive(Clone)]
 pub struct WorkoutSummarySaveNotifier {
@@ -74,12 +65,16 @@ impl WorkoutSummarySaveNotifier {
         messages: Vec<String>,
     ) {
         let key = Self::key(user_id, workout_id);
-        if let Some(tx) = self.channels.lock().unwrap().get(&key) {
-            let _ = tx.send(Some(SaveWorkflowDto {
-                recap_status: map_status_to_dto(&recap_status),
-                plan_status: map_status_to_dto(&plan_status),
+        let mut channels = self.channels.lock().unwrap();
+        if let Some(tx) = channels.get(&key) {
+            let payload = SaveWorkflowDto {
+                recap_status: map_workflow_status_to_dto(recap_status),
+                plan_status: map_workflow_status_to_dto(plan_status),
                 messages,
-            }));
+            };
+            if tx.send(Some(payload)).is_err() {
+                channels.remove(&key);
+            }
         }
     }
 }
