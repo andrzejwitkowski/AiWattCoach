@@ -282,4 +282,5 @@ async fn calendar_coach_marks_fresh_tool_only_response_as_failed() {
         stored.status,
         aiwattcoach::domain::coach_conversation::CoachConversationReplyOperationStatus::Failed
     );
+    assert_eq!(stored.public_tool_call_ids, vec!["tool-1".to_string()]);
 }
