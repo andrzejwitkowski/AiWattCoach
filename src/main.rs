@@ -690,10 +690,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_completed_workouts(authoritative_completed_workout_repository.clone())
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
+    let save_notifier = Arc::new(aiwattcoach::adapters::rest::WorkoutSummarySaveNotifier::new());
     let workout_summary_direct_service = Arc::new(
         (*workout_summary_direct_service)
             .clone()
-            .with_training_plan_service(training_plan_service.clone()),
+            .with_training_plan_service(training_plan_service.clone())
+            .with_save_completion_port(save_notifier.clone()),
     );
     let athlete_summary_service = Arc::new(SchedulerBackedAthleteSummaryService::new(
         athlete_summary_direct_service.clone(),
@@ -755,6 +757,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_athlete_summary_service(athlete_summary_service)
         .with_llm_services(llm_adapter, llm_config_provider)
         .with_workout_summary_service(workout_summary_service)
+        .with_workout_summary_save_notifier((*save_notifier).clone())
         .with_intervals_service(intervals_service)
         .with_race_service(race_service)
         .with_intervals_connection_tester(Arc::new(intervals_connection_tester));

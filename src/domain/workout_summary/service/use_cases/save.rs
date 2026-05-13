@@ -123,6 +123,7 @@ where
                 let bg_user_id = user_id.to_string();
                 let bg_workout_id = target.storage_workout_id.clone();
                 let is_latest = is_latest_completed_activity;
+                let save_completion_port = self.save_completion_port.clone();
                 tokio::spawn(async move {
                     info!(
                         user_id = %bg_user_id,
@@ -131,10 +132,10 @@ where
                         is_latest,
                         "Starting background recap and training plan generation"
                     );
-                    if let Err(error) = training_plan_service
+                    let recap_ok = training_plan_service
                         .generate_recap_for_saved_workout(&bg_user_id, &bg_workout_id, now)
-                        .await
-                    {
+                        .await;
+                    if let Err(ref error) = recap_ok {
                         warn!(
                             bg_user_id,
                             bg_workout_id,
@@ -143,11 +144,11 @@ where
                             "Background recap generation failed"
                         );
                     }
-                    if is_latest {
-                        if let Err(error) = training_plan_service
+                    let plan_ok = if is_latest {
+                        let result = training_plan_service
                             .generate_for_saved_workout(&bg_user_id, &bg_workout_id, now)
-                            .await
-                        {
+                            .await;
+                        if let Err(ref error) = result {
                             warn!(
                                 bg_user_id,
                                 bg_workout_id,
@@ -156,6 +157,29 @@ where
                                 "Background training plan generation failed"
                             );
                         }
+                        Some(result)
+                    } else {
+                        None
+                    };
+
+                    if let Some(port) = &save_completion_port {
+                        let recap_status = if recap_ok.is_ok() {
+                            SaveWorkflowStatus::Generated
+                        } else {
+                            SaveWorkflowStatus::Failed
+                        };
+                        let (plan_status, plan_msgs) = match plan_ok {
+                            Some(Ok(_)) => (SaveWorkflowStatus::Generated, Vec::new()),
+                            Some(Err(_)) => (SaveWorkflowStatus::Failed, Vec::new()),
+                            None => (SaveWorkflowStatus::Skipped, Vec::new()),
+                        };
+                        port.on_completed(
+                            &bg_user_id,
+                            &bg_workout_id,
+                            recap_status,
+                            plan_status,
+                            plan_msgs,
+                        );
                     }
                 });
                 let msgs = if is_latest_completed_activity {

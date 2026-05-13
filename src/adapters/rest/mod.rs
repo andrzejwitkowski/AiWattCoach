@@ -17,6 +17,8 @@ mod user_auth;
 mod wahoo;
 mod workout_summary;
 
+pub use workout_summary::WorkoutSummarySaveNotifier;
+
 use std::path::PathBuf;
 
 use axum::{

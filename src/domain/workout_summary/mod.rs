@@ -1,6 +1,7 @@
 mod coach;
 mod model;
 mod ports;
+mod save_completion_port;
 mod service;
 
 pub use coach::{MockWorkoutCoach, WorkoutCoach};
@@ -11,6 +12,7 @@ pub use model::{
     PublicToolCall, SendMessageResult, WorkoutRecap, WorkoutSummary, WorkoutSummaryError,
 };
 pub use ports::{BoxFuture, CoachReplyOperationRepository, WorkoutSummaryRepository};
+pub use save_completion_port::{NoopSaveWorkflowCompletionPort, SaveWorkflowCompletionPort};
 pub use service::{
     workout_summary_coach_reply_task_handler, CompletedWorkoutTargetUseCases,
     LatestCompletedActivityUseCases, ResolvedCompletedWorkoutTarget, SaveSummaryResult,
