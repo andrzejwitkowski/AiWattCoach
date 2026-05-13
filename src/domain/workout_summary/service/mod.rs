@@ -150,6 +150,7 @@ pub(super) struct ResolvedWorkoutSummaryTarget {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SaveWorkflowStatus {
     Generated,
+    Processing,
     Skipped,
     Failed,
     Unchanged,
@@ -159,6 +160,7 @@ impl SaveWorkflowStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Generated => "generated",
+            Self::Processing => "processing",
             Self::Skipped => "skipped",
             Self::Failed => "failed",
             Self::Unchanged => "unchanged",

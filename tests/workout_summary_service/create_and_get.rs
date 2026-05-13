@@ -273,16 +273,13 @@ async fn mark_saved_generates_recap_only_for_finished_conversation_on_non_latest
 
     let result = service.mark_saved("user-1", "workout-older").await.unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
     assert_eq!(result.workflow.plan_status.as_str(), "skipped");
     assert_eq!(
         result.workflow.messages,
-        vec![
-            "Workout recap generated.".to_string(),
-            "14-day schedule skipped because this is not the latest completed activity."
-                .to_string(),
-        ]
+        vec!["Workout recap is being generated in the background.".to_string(),]
     );
+    tokio::task::yield_now().await;
     assert_eq!(
         training_plan.calls(),
         vec!["generate_recap_for_saved_workout:user-1:workout-older:1700000000".to_string()]
@@ -322,15 +319,16 @@ async fn mark_saved_generates_recap_and_plan_for_latest_completed_activity() {
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
-    assert_eq!(result.workflow.plan_status.as_str(), "generated");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
+    assert_eq!(result.workflow.plan_status.as_str(), "processing");
     assert_eq!(
         result.workflow.messages,
         vec![
-            "Workout recap generated.".to_string(),
-            "14-day schedule generated.".to_string(),
+            "Workout recap is being generated in the background.".to_string(),
+            "14-day schedule is being generated in the background.".to_string(),
         ]
     );
+    tokio::task::yield_now().await;
     assert_eq!(
         training_plan.calls(),
         vec![
@@ -357,13 +355,13 @@ async fn mark_saved_preserves_visible_workflow_with_scheduler_backed_training_pl
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
-    assert_eq!(result.workflow.plan_status.as_str(), "generated");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
+    assert_eq!(result.workflow.plan_status.as_str(), "processing");
     assert_eq!(
         result.workflow.messages,
         vec![
-            "Workout recap generated.".to_string(),
-            "14-day schedule generated.".to_string(),
+            "Workout recap is being generated in the background.".to_string(),
+            "14-day schedule is being generated in the background.".to_string(),
         ]
     );
     training_plan.worker.shutdown().await;
@@ -520,6 +518,7 @@ async fn mark_saved_uses_preferred_completed_workout_id_for_side_effects() {
         repository.calls(),
         vec!["set_saved_state:i144331018:Some(1700000000)".to_string()]
     );
+    tokio::task::yield_now().await;
     assert_eq!(
         training_plan.calls(),
         vec![
@@ -605,8 +604,9 @@ async fn mark_saved_treats_stripped_latest_activity_id_as_latest_for_prefixed_co
         .await
         .unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
-    assert_eq!(result.workflow.plan_status.as_str(), "generated");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
+    assert_eq!(result.workflow.plan_status.as_str(), "processing");
+    tokio::task::yield_now().await;
     assert_eq!(
         training_plan.calls(),
         vec![
@@ -822,7 +822,7 @@ async fn persist_workout_recap_updates_existing_equivalent_alias_summary() {
 }
 
 #[tokio::test]
-async fn mark_saved_reports_failed_plan_generation_for_latest_completed_activity() {
+async fn mark_saved_spawns_background_work_when_training_plan_generation_would_fail() {
     let repository = InMemoryWorkoutSummaryRepository::with_summary(
         existing_summary_with_finished_conversation(),
     );
@@ -841,15 +841,16 @@ async fn mark_saved_reports_failed_plan_generation_for_latest_completed_activity
 
     let result = service.mark_saved("user-1", "workout-1").await.unwrap();
 
-    assert_eq!(result.workflow.recap_status.as_str(), "generated");
-    assert_eq!(result.workflow.plan_status.as_str(), "failed");
+    assert_eq!(result.workflow.recap_status.as_str(), "processing");
+    assert_eq!(result.workflow.plan_status.as_str(), "processing");
     assert_eq!(
         result.workflow.messages,
         vec![
-            "Workout recap generated.".to_string(),
-            "14-day schedule failed.".to_string(),
+            "Workout recap is being generated in the background.".to_string(),
+            "14-day schedule is being generated in the background.".to_string(),
         ]
     );
+    tokio::task::yield_now().await;
     assert_eq!(
         training_plan.calls(),
         vec![
@@ -900,6 +901,7 @@ async fn mark_saved_triggers_training_plan_generation_after_persisting_saved_sta
         repository.calls(),
         vec!["set_saved_state:workout-1:Some(1700000000)".to_string()]
     );
+    tokio::task::yield_now().await;
     assert!(training_plan.observed_persisted_saved_at());
 }
 
