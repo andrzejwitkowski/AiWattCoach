@@ -3,6 +3,7 @@ use crate::domain::{
         validate_conversation_message_content, CoachConversationMessageRole,
         CoachConversationReplyOperation,
     },
+    public_tool_calls::materialization::materialize_public_tool_calls_idempotently,
     settings::{SettingsError, UserSettings},
     workout_summary::PublicToolCall,
 };
@@ -90,28 +91,34 @@ where
         public_tool_calls: &[PublicToolCall],
     ) -> Result<CoachConversationReplyOperation, CoachConversationError> {
         let mut operation = operation;
+        let conversation = conversation.clone();
+        let service = self.clone();
 
-        for tool_call in public_tool_calls {
-            if operation
-                .public_tool_call_ids
-                .iter()
-                .any(|id| id == &tool_call.id)
-            {
-                continue;
-            }
-
-            if self
-                .tool_message_already_materialized(conversation, &tool_call.id)
-                .await?
-            {
-                operation.public_tool_call_ids.push(tool_call.id.clone());
-                continue;
-            }
-
-            self.append_tool_message(conversation, tool_call.clone())
-                .await?;
-            operation.public_tool_call_ids.push(tool_call.id.clone());
-        }
+        operation.public_tool_call_ids = materialize_public_tool_calls_idempotently(
+            operation.public_tool_call_ids,
+            public_tool_calls,
+            |tool_call_id| {
+                let service = service.clone();
+                let conversation = conversation.clone();
+                let tool_call_id = tool_call_id.to_string();
+                async move {
+                    service
+                        .tool_message_already_materialized(&conversation, &tool_call_id)
+                        .await
+                }
+            },
+            |tool_call| {
+                let service = service.clone();
+                let conversation = conversation.clone();
+                async move {
+                    service
+                        .append_tool_message(&conversation, tool_call)
+                        .await
+                        .map(|_| ())
+                }
+            },
+        )
+        .await?;
 
         Ok(operation)
     }
@@ -164,5 +171,54 @@ fn map_settings_error(error: SettingsError) -> CoachConversationError {
             CoachConversationError::Validation("authentication is required".to_string())
         }
         SettingsError::Validation(message) => CoachConversationError::Validation(message),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::public_tool_calls::materialization::materialize_public_tool_calls_idempotently;
+
+    #[tokio::test]
+    async fn shared_materialization_keeps_existing_ids_before_append() {
+        let tool_calls = vec![
+            PublicToolCall {
+                id: "tool-1".to_string(),
+                name: "first".to_string(),
+                arguments_json: "{}".to_string(),
+                arguments_preview: None,
+            },
+            PublicToolCall {
+                id: "tool-2".to_string(),
+                name: "second".to_string(),
+                arguments_json: "{}".to_string(),
+                arguments_preview: None,
+            },
+        ];
+        let appended = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
+
+        let ids = materialize_public_tool_calls_idempotently(
+            vec!["tool-1".to_string()],
+            &tool_calls,
+            |tool_call_id| {
+                let tool_call_id = tool_call_id.to_string();
+                async move { Ok::<bool, CoachConversationError>(tool_call_id == "tool-2") }
+            },
+            {
+                let appended = appended.clone();
+                move |tool_call| {
+                    let appended = appended.clone();
+                    async move {
+                        appended.lock().await.push(tool_call.id);
+                        Ok::<(), CoachConversationError>(())
+                    }
+                }
+            },
+        )
+        .await
+        .expect("shared materialization should succeed");
+
+        assert_eq!(ids, vec!["tool-1".to_string(), "tool-2".to_string()]);
+        assert!(appended.lock().await.is_empty());
     }
 }

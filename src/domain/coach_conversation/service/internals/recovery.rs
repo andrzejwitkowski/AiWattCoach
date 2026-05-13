@@ -2,6 +2,7 @@ use crate::domain::{
     coach_conversation::{CoachConversationMessageRole, CoachConversationReplyOperation},
     llm::{last_nonempty_assistant_content, LlmError, LlmMessageRole},
     llm_tools::public_tool_call_from_llm,
+    public_tool_calls::materialization::materialize_public_tool_calls_idempotently,
 };
 
 use super::super::*;
@@ -153,27 +154,41 @@ where
         conversation: &CoachConversation,
         operation: &CoachConversationReplyOperation,
     ) -> Result<(), CoachConversationError> {
-        for transcript_message in &operation.provider_transcript {
-            if transcript_message.role != LlmMessageRole::Assistant {
-                continue;
-            }
+        let public_tool_calls: Vec<_> = operation
+            .provider_transcript
+            .iter()
+            .filter(|message| message.role == LlmMessageRole::Assistant)
+            .flat_map(|message| message.tool_calls.iter())
+            .map(public_tool_call_from_llm)
+            .collect();
+        let conversation = conversation.clone();
+        let service = self.clone();
 
-            for tool_call in &transcript_message.tool_calls {
-                if operation
-                    .public_tool_call_ids
-                    .iter()
-                    .any(|id| id == &tool_call.id)
-                    || self
-                        .tool_message_already_materialized(conversation, &tool_call.id)
-                        .await?
-                {
-                    continue;
+        materialize_public_tool_calls_idempotently(
+            operation.public_tool_call_ids.clone(),
+            &public_tool_calls,
+            |tool_call_id| {
+                let service = service.clone();
+                let conversation = conversation.clone();
+                let tool_call_id = tool_call_id.to_string();
+                async move {
+                    service
+                        .tool_message_already_materialized(&conversation, &tool_call_id)
+                        .await
                 }
-
-                self.append_tool_message(conversation, public_tool_call_from_llm(tool_call))
-                    .await?;
-            }
-        }
+            },
+            |tool_call| {
+                let service = service.clone();
+                let conversation = conversation.clone();
+                async move {
+                    service
+                        .append_tool_message(&conversation, tool_call)
+                        .await
+                        .map(|_| ())
+                }
+            },
+        )
+        .await?;
 
         Ok(())
     }
@@ -190,4 +205,110 @@ fn recovered_reasoning_content(operation: &CoachConversationReplyOperation) -> O
         .rev()
         .find(|m| m.role == LlmMessageRole::Assistant)
         .and_then(|m| m.reasoning_content.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::{
+        coach_conversation::CoachConversationReplyOperation,
+        llm::{
+            LlmCacheUsage, LlmChatMessage, LlmProvider, LlmTokenUsage, LlmToolCall,
+            PendingLlmReplyCheckpoint,
+        },
+        public_tool_calls::materialization::materialize_public_tool_calls_idempotently,
+        workout_summary::PublicToolCall,
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn recovered_tool_materialization_stays_idempotent_for_same_transcript() {
+        let operation = CoachConversationReplyOperation::pending(
+            "user-1".to_string(),
+            "conversation-1".to_string(),
+            "message-1".to_string(),
+            Some("calendar-coach:user-1:conversation-1".to_string()),
+            "coach-message-1".to_string(),
+            1_700_000_000,
+        )
+        .record_provider_response(PendingLlmReplyCheckpoint {
+            provider: LlmProvider::OpenAi,
+            model: "gpt-4o-mini".to_string(),
+            provider_request_id: None,
+            provider_cache_id: None,
+            token_usage: LlmTokenUsage::default(),
+            cache_usage: LlmCacheUsage::default(),
+            provider_transcript: vec![LlmChatMessage::assistant_with_tool_calls(
+                "",
+                vec![
+                    LlmToolCall {
+                        id: "tool-1".to_string(),
+                        name: "first".to_string(),
+                        arguments_json: "{}".to_string(),
+                    },
+                    LlmToolCall {
+                        id: "tool-2".to_string(),
+                        name: "second".to_string(),
+                        arguments_json: "{}".to_string(),
+                    },
+                ],
+            )],
+            finish_reason: None,
+            updated_at_epoch_seconds: 1_700_000_001,
+        });
+
+        let public_tool_calls: Vec<PublicToolCall> = operation
+            .provider_transcript
+            .iter()
+            .filter(|message| message.role == LlmMessageRole::Assistant)
+            .flat_map(|message| message.tool_calls.iter())
+            .map(public_tool_call_from_llm)
+            .collect();
+
+        let appended = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
+        let materialized_once = materialize_public_tool_calls_idempotently(
+            operation.public_tool_call_ids.clone(),
+            &public_tool_calls,
+            |_| async { Ok::<bool, CoachConversationError>(false) },
+            {
+                let appended = appended.clone();
+                move |tool_call| {
+                    let appended = appended.clone();
+                    async move {
+                        appended.lock().await.push(tool_call.id);
+                        Ok::<(), CoachConversationError>(())
+                    }
+                }
+            },
+        )
+        .await
+        .expect("first recovery materialization should succeed");
+
+        let materialized_twice = materialize_public_tool_calls_idempotently(
+            materialized_once,
+            &public_tool_calls,
+            |_| async { Ok::<bool, CoachConversationError>(false) },
+            {
+                let appended = appended.clone();
+                move |tool_call| {
+                    let appended = appended.clone();
+                    async move {
+                        appended.lock().await.push(tool_call.id);
+                        Ok::<(), CoachConversationError>(())
+                    }
+                }
+            },
+        )
+        .await
+        .expect("second recovery materialization should stay idempotent");
+
+        assert_eq!(
+            materialized_twice,
+            vec!["tool-1".to_string(), "tool-2".to_string()]
+        );
+        assert_eq!(
+            appended.lock().await.clone(),
+            vec!["tool-1".to_string(), "tool-2".to_string()]
+        );
+    }
 }
