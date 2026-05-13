@@ -13,6 +13,7 @@
 
 - When resolving PR conflicts, fetch the current base branch ref and test the merge against that exact `origin/<base>` immediately before calling the PR conflict-free. A branch can be clean and synced with its remote head branch while still conflicting if the base branch advanced.
 - When resolving conflicts in rolling logs like `reviewers.md` or `tasks/lessons.md`, preserve entries from both branches and restore newest-first ordering instead of picking one side and dropping history.
+- After fetching the base branch, also verify `gh pr view <number> --json mergeStateStatus` before telling the user a PR is conflict-free. A prior local `git merge` result is stale as soon as the base branch moves.
 
 ## Signature Change Verification
 
@@ -36,6 +37,7 @@
 - Before adding a regression for a review-reported fallback branch, verify that the branch is actually reachable in the current production control flow. Do not write a test that depends on entries magically surviving an empty rebuild just to exercise a helper that the real loop never calls.
 - In tests, avoid tuple aliases for multi-field call records when the field meaning matters. Use named structs or named sub-structs so assertions stay self-explanatory.
 - When a function grows past a few distinct phases, split it into small helpers named after each phase instead of leaving one long orchestration block.
+- When adding background work to a service method, keep the public method as a readable high-level flow. Extract the background job payload, async worker body, and visible status/message mapping into small private helpers before review has to reason through one giant nested block.
 - When a test file grows large, split it by behavior group and extract shared fakes/fixtures into a local `support` module.
 - When a service method starts mixing validation, request building, persistence, orchestration, and result interpretation, split it immediately into small helpers. Long public methods in scheduler/service code are hard to review and hide control-flow bugs.
 - When converting a single-task loop into a concurrent worker pool, keep worker-level state in one shared runtime structure. Per-task copies of active-task state lead to lost heartbeats and flaky concurrency behavior.

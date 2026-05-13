@@ -8,10 +8,11 @@ use crate::domain::{
 };
 
 use super::{
-    validate_message_content, validate_rpe, BoxFuture, CoachReply, CoachReplyOperation,
-    CoachReplyOperationRepository, CompletedCoachReply, ConversationMessage, MessageRole,
-    PendingCoachReplyCheckpoint, PersistedUserMessage, SendMessageResult, WorkoutCoach,
-    WorkoutRecap, WorkoutSummary, WorkoutSummaryError, WorkoutSummaryRepository,
+    save_completion_port::SaveWorkflowCompletionPort, validate_message_content, validate_rpe,
+    BoxFuture, CoachReply, CoachReplyOperation, CoachReplyOperationRepository, CompletedCoachReply,
+    ConversationMessage, MessageRole, PendingCoachReplyCheckpoint, PersistedUserMessage,
+    SendMessageResult, WorkoutCoach, WorkoutRecap, WorkoutSummary, WorkoutSummaryError,
+    WorkoutSummaryRepository,
 };
 
 mod internals;
@@ -150,6 +151,7 @@ pub(super) struct ResolvedWorkoutSummaryTarget {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SaveWorkflowStatus {
     Generated,
+    Processing,
     Skipped,
     Failed,
     Unchanged,
@@ -159,6 +161,7 @@ impl SaveWorkflowStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Generated => "generated",
+            Self::Processing => "processing",
             Self::Skipped => "skipped",
             Self::Failed => "failed",
             Self::Unchanged => "unchanged",
@@ -197,6 +200,7 @@ where
     training_plan_service: Option<Arc<dyn TrainingPlanUseCases>>,
     latest_completed_activity_service: Option<Arc<dyn LatestCompletedActivityUseCases>>,
     completed_workout_target_service: Option<Arc<dyn CompletedWorkoutTargetUseCases>>,
+    save_completion_port: Option<Arc<dyn SaveWorkflowCompletionPort>>,
 }
 
 impl<Repo, Ops, Time, Ids> WorkoutSummaryService<Repo, Ops, Time, Ids>
@@ -234,6 +238,7 @@ where
             training_plan_service: None,
             latest_completed_activity_service: None,
             completed_workout_target_service: None,
+            save_completion_port: None,
         }
     }
 
@@ -274,6 +279,14 @@ where
         completed_workout_target_service: Arc<dyn CompletedWorkoutTargetUseCases>,
     ) -> Self {
         self.completed_workout_target_service = Some(completed_workout_target_service);
+        self
+    }
+
+    pub fn with_save_completion_port(
+        mut self,
+        save_completion_port: Arc<dyn SaveWorkflowCompletionPort>,
+    ) -> Self {
+        self.save_completion_port = Some(save_completion_port);
         self
     }
 }
