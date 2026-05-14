@@ -851,9 +851,23 @@ mod tests {
             .upsert(sample_planned_workout("planned-1", "2026-05-01"))
             .await
             .unwrap();
+        let completed_workouts = AuthoritativeCompletedWorkoutRepository::new(
+            TestCompletedWorkouts::default(),
+            TestSyncStates {
+                states: vec![ExternalSyncState::new(
+                    "user-1".to_string(),
+                    ExternalProvider::Intervals,
+                    CanonicalEntityRef::new(
+                        CanonicalEntityKind::PlannedWorkout,
+                        "planned-1".to_string(),
+                    ),
+                )
+                .mark_synced("77".to_string(), "hash".to_string(), 1_700_000_000)],
+            },
+        );
         let repository = AuthoritativePlannedWorkoutRepository::new(
             planned_workouts,
-            TestCompletedWorkouts::default(),
+            completed_workouts,
             TestPlannedCompletedLinks::default(),
         );
 

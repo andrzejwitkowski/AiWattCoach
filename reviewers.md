@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-14 | CodeRabbit | PR #234 split-brain detector guardrails and test realism
+
+- Problem: the new Mongo split-brain script accepted invalid boolean env values by silently treating them as `false`, and its `APPLY=true` repair path deleted stale owner rows from the initial scan snapshot without revalidating the live finding immediately before the write. The new `keeps_planned_workout_visible_when_intervals_sync_state_exists` regression also did not actually seed an Intervals sync-state row, so its name overstated what it covered.
+- Fix: made `readBool(...)` reject invalid values with a clear error, changed the repair path to reload the candidate day and re-run `detectCandidateIssues(...)` before deleting rows so non-repairable live changes are skipped instead of mutated, and updated the planned-workout regression to seed a matching Intervals sync-state row before asserting visibility.
+- Prevention: for operational repair scripts, fail fast on malformed env flags and revalidate live preconditions immediately before any destructive write. When a regression test name claims a specific upstream state exists, seed that exact state in the fixture instead of relying on the no-op path to stand in for it.
+
 ### 2026-05-14 | user | stale orphaned explicit-link regression expectation after split-brain fix
 
 - Problem: after tightening `calendar_view` refresh to delete stale non-heuristic links whose planned workout id is no longer active, the older regression `refresh_range_for_user_preserves_orphaned_explicit_links` still expected the orphaned explicit link and completed backlink to survive. The production behavior was correct, but the stale test contract broke CI.

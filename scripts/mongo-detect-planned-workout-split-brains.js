@@ -105,7 +105,16 @@ function readBool(name, fallbackValue) {
     return fallbackValue;
   }
 
-  return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
+  const normalized = raw.toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  throw new Error(
+    `${name} must be one of: 1,true,yes,on,0,false,no,off; got: ${raw}`,
+  );
 }
 
 function resolveDatabase(databaseName) {
@@ -125,34 +134,66 @@ function loadCandidateDays(projectedDays, userId) {
   const cursor = projectedDays.find(filter, projection).sort({ user_id: 1, date: 1, operation_key: 1 });
 
   while (cursor.hasNext()) {
-    const day = cursor.next();
-    const key = `${day.user_id}|${day.date}`;
-    let entry = grouped.get(key);
-    if (!entry) {
-      entry = {
-        user_id: day.user_id,
-        date: day.date,
-        active_planned_ids: [],
-        stale_planned_ids: [],
-        active_operation_keys: [],
-        stale_operation_keys: [],
-      };
-      grouped.set(key, entry);
-    }
-
-    const plannedWorkoutId = `${day.operation_key}:${day.date}`;
-    if (day.superseded_at_epoch_seconds === null || day.superseded_at_epoch_seconds === undefined) {
-      entry.active_planned_ids.push(plannedWorkoutId);
-      entry.active_operation_keys.push(day.operation_key);
-    } else {
-      entry.stale_planned_ids.push(plannedWorkoutId);
-      entry.stale_operation_keys.push(day.operation_key);
-    }
+    recordProjectedDay(grouped, cursor.next());
   }
 
   return Array.from(grouped.values()).filter(
     (entry) => entry.active_planned_ids.length > 0 && entry.stale_planned_ids.length > 0,
   );
+}
+
+function loadCandidateDay(projectedDays, userId, date) {
+  const grouped = new Map();
+  const cursor = projectedDays
+    .find(
+      { user_id: userId, date },
+      {
+        _id: 0,
+        user_id: 1,
+        date: 1,
+        operation_key: 1,
+        superseded_at_epoch_seconds: 1,
+      },
+    )
+    .sort({ user_id: 1, date: 1, operation_key: 1 });
+
+  while (cursor.hasNext()) {
+    recordProjectedDay(grouped, cursor.next());
+  }
+
+  const candidate = grouped.get(`${userId}|${date}`);
+  if (!candidate) {
+    return null;
+  }
+
+  return candidate.active_planned_ids.length > 0 && candidate.stale_planned_ids.length > 0
+    ? candidate
+    : null;
+}
+
+function recordProjectedDay(grouped, day) {
+  const key = `${day.user_id}|${day.date}`;
+  let entry = grouped.get(key);
+  if (!entry) {
+    entry = {
+      user_id: day.user_id,
+      date: day.date,
+      active_planned_ids: [],
+      stale_planned_ids: [],
+      active_operation_keys: [],
+      stale_operation_keys: [],
+    };
+    grouped.set(key, entry);
+  }
+
+  const plannedWorkoutId = `${day.operation_key}:${day.date}`;
+  if (day.superseded_at_epoch_seconds === null || day.superseded_at_epoch_seconds === undefined) {
+    entry.active_planned_ids.push(plannedWorkoutId);
+    entry.active_operation_keys.push(day.operation_key);
+  } else {
+    entry.stale_planned_ids.push(plannedWorkoutId);
+    entry.stale_operation_keys.push(day.operation_key);
+  }
 }
 
 function detectFindings(collections, userId) {
@@ -337,8 +378,18 @@ function printDetectionReport(title, findings, summary, maxSamples) {
 
 function applyRepairs(collections, findings) {
   const repairable = findings.filter(isRepairableFinding);
-  const skipped = findings.filter((finding) => !isRepairableFinding(finding));
-  const applied = repairable.map((finding) => applyRepair(collections.externalSyncStates, finding));
+  const skipped = findings
+    .filter((finding) => !isRepairableFinding(finding))
+    .map((finding) => ({
+      user_id: finding.user_id,
+      date: finding.date,
+      status: "skipped",
+      reason: "finding_not_repairable",
+      issue_kinds: finding.issue_kinds,
+    }));
+  const outcomes = repairable.map((finding) => applyRepair(collections, finding));
+  const applied = outcomes.filter((outcome) => outcome.status === "applied");
+  skipped.push(...outcomes.filter((outcome) => outcome.status !== "applied"));
 
   return {
     applied,
@@ -352,6 +403,7 @@ function applyRepairs(collections, findings) {
         0,
       ),
       repairedSamples: applied,
+      skippedSamples: skipped,
     },
   };
 }
@@ -365,11 +417,36 @@ function isRepairableFinding(finding) {
   );
 }
 
-function applyRepair(externalSyncStates, finding) {
-  const staleOwnerIds = finding.stale_intervals_sync_owners.map(
+function applyRepair(collections, finding) {
+  const currentCandidate = loadCandidateDay(
+    collections.projectedDays,
+    finding.user_id,
+    finding.date,
+  );
+  if (!currentCandidate) {
+    return {
+      user_id: finding.user_id,
+      date: finding.date,
+      status: "skipped",
+      reason: "candidate_disappeared_before_repair",
+    };
+  }
+
+  const currentFinding = detectCandidateIssues(collections, currentCandidate);
+  if (!isRepairableFinding(currentFinding)) {
+    return {
+      user_id: finding.user_id,
+      date: finding.date,
+      status: "skipped",
+      reason: "finding_no_longer_repairable",
+      issue_kinds: currentFinding.issue_kinds,
+    };
+  }
+
+  const staleOwnerIds = currentFinding.stale_intervals_sync_owners.map(
     (owner) => owner.canonical_entity_id,
   );
-  const deleteResult = externalSyncStates.deleteMany({
+  const deleteResult = collections.externalSyncStates.deleteMany({
     user_id: finding.user_id,
     provider: "intervals",
     canonical_entity_kind: "planned_workout",
@@ -386,7 +463,8 @@ function applyRepair(externalSyncStates, finding) {
   return {
     user_id: finding.user_id,
     date: finding.date,
-    active_planned_id: finding.active_planned_ids[0],
+    status: "applied",
+    active_planned_id: currentFinding.active_planned_ids[0],
     deleted_count: deleteResult.deletedCount,
     deleted_stale_planned_ids: staleOwnerIds,
   };
