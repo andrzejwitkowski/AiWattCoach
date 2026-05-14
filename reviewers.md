@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-14 | user | workout-summary save workflow frontend status drift
+
+- Problem: the backend `SaveWorkflowStatus` enum now returns `Processing` for background recap/training-plan generation, but the frontend `saveWorkoutSummaryResponseSchema` in `frontend/src/features/coach/types.ts` still allowed only `generated | skipped | failed | unchanged`. Saving a new plan therefore failed client-side Zod parsing on `workflow.recapStatus` and `workflow.planStatus` whenever the backend correctly responded with `processing`.
+- Fix: extended the frontend save-workflow status schema to accept `processing`, added a focused API parsing regression for `processing` workflow statuses, and updated the coach page save test matrix to verify `processing` does not trigger calendar/completed-workout cache invalidation reserved for `generated` plans.
+- Prevention: whenever a backend enum gains a new user-visible status string, grep all frontend Zod enums, UI test unions, and status-branch assertions for the old closed set before shipping. Shared DTO names are not enough if the frontend still hardcodes the previous terminal-only states.
+
 ### 2026-05-14 | CodeRabbit | PR #234 split-brain detector guardrails and test realism
 
 - Problem: the new Mongo split-brain script accepted invalid boolean env values by silently treating them as `false`, and its `APPLY=true` repair path deleted stale owner rows from the initial scan snapshot without revalidating the live finding immediately before the write. The new `keeps_planned_workout_visible_when_intervals_sync_state_exists` regression also did not actually seed an Intervals sync-state row, so its name overstated what it covered.
