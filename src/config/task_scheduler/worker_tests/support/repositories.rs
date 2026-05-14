@@ -1,27 +1,14 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
-use tokio::sync::Notify;
-
-use crate::domain::{
-    identity::Clock,
-    task_scheduler::{
-        BoxFuture, ScheduledTask, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult,
-        TaskFailRequest, TaskHandler, TaskHeartbeatRequest, TaskListFilter,
-        TaskMarkTimedOutRequest, TaskRecoverRequest, TaskRepository, TaskRetryRequest,
-        TaskRunOutcome, TaskSchedulerError, TaskStatus, TaskWorker, TaskWorkerRepository,
-    },
+use crate::domain::task_scheduler::{
+    BoxFuture, ScheduledTask, TaskClaimRequest, TaskCompleteRequest, TaskEnqueueResult,
+    TaskFailRequest, TaskHeartbeatRequest, TaskListFilter, TaskMarkTimedOutRequest,
+    TaskRecoverRequest, TaskRepository, TaskRetryRequest, TaskSchedulerError, TaskStatus,
+    TaskWorker, TaskWorkerRepository,
 };
-
-pub async fn wait_for_notify(
-    notify: &Arc<Notify>,
-    timeout_duration: Duration,
-) -> Result<(), tokio::time::error::Elapsed> {
-    tokio::time::timeout(timeout_duration, notify.notified()).await
-}
 
 #[derive(Clone, Default)]
 pub struct InMemoryTaskRepository {
@@ -30,9 +17,14 @@ pub struct InMemoryTaskRepository {
 
 impl InMemoryTaskRepository {
     pub fn only_task(&self) -> ScheduledTask {
-        self.tasks
-            .lock()
-            .expect("task repo mutex poisoned")
+        let tasks = self.tasks.lock().expect("task repo mutex poisoned");
+        assert_eq!(
+            tasks.len(),
+            1,
+            "expected exactly one task in repo, found {}",
+            tasks.len()
+        );
+        tasks
             .values()
             .next()
             .cloned()
@@ -73,7 +65,7 @@ impl TaskRepository for InMemoryTaskRepository {
             let mut tasks = tasks.lock().expect("task repo mutex poisoned");
             let task_id = tasks
                 .values()
-                .find(|task| {
+                .filter(|task| {
                     matches!(task.status, TaskStatus::Queued | TaskStatus::RetryScheduled)
                         && task.next_attempt_at_epoch_seconds <= request.now_epoch_seconds
                         && request
@@ -81,6 +73,15 @@ impl TaskRepository for InMemoryTaskRepository {
                             .iter()
                             .any(|value| value == &task.task_type)
                         && (request.is_leader || !task.leader_only)
+                })
+                .min_by(|left, right| {
+                    left.next_attempt_at_epoch_seconds
+                        .cmp(&right.next_attempt_at_epoch_seconds)
+                        .then_with(|| {
+                            left.created_at_epoch_seconds
+                                .cmp(&right.created_at_epoch_seconds)
+                        })
+                        .then_with(|| left.id.cmp(&right.id))
                 })
                 .map(|task| task.id.clone());
             let Some(task_id) = task_id else {
@@ -288,17 +289,19 @@ impl TaskWorkerRepository for InMemoryTaskWorkerRepository {
         let workers = self.workers.clone();
         let worker_id = worker_id.to_string();
         Box::pin(async move {
+            let mut workers = workers.lock().expect("worker repo mutex poisoned");
+            let active_task_ids = workers
+                .get(&worker_id)
+                .map(|worker| worker.active_task_ids.clone())
+                .unwrap_or_default();
             let worker = TaskWorker {
                 worker_id: worker_id.clone(),
                 is_leader,
                 enabled_task_types,
-                active_task_ids: Vec::new(),
+                active_task_ids,
                 last_heartbeat_at_epoch_seconds,
             };
-            workers
-                .lock()
-                .expect("worker repo mutex poisoned")
-                .insert(worker_id, worker.clone());
+            workers.insert(worker_id, worker.clone());
             Ok(worker)
         })
     }
@@ -315,83 +318,6 @@ impl TaskWorkerRepository for InMemoryTaskWorkerRepository {
                 .expect("worker repo mutex poisoned")
                 .get(&worker_id)
                 .cloned())
-        })
-    }
-}
-
-#[derive(Clone)]
-pub struct TestClock {
-    now_epoch_seconds: Arc<Mutex<i64>>,
-}
-
-impl Default for TestClock {
-    fn default() -> Self {
-        Self::new(1_700_000_000)
-    }
-}
-
-impl TestClock {
-    pub fn new(now_epoch_seconds: i64) -> Self {
-        Self {
-            now_epoch_seconds: Arc::new(Mutex::new(now_epoch_seconds)),
-        }
-    }
-}
-
-impl Clock for TestClock {
-    fn now_epoch_seconds(&self) -> i64 {
-        *self.now_epoch_seconds.lock().expect("clock mutex poisoned")
-    }
-}
-
-pub struct StaticTaskHandler {
-    task_type: &'static str,
-}
-
-impl StaticTaskHandler {
-    pub fn new(task_type: &'static str) -> Arc<Self> {
-        Arc::new(Self { task_type })
-    }
-}
-
-impl TaskHandler for StaticTaskHandler {
-    fn task_type(&self) -> &'static str {
-        self.task_type
-    }
-
-    fn run(&self, _task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
-        Box::pin(async { TaskRunOutcome::Completed { checkpoint: None } })
-    }
-}
-
-pub struct PanicTaskHandler {
-    pub started: Arc<Notify>,
-    pub release: Arc<Notify>,
-}
-
-impl PanicTaskHandler {
-    pub const TASK_TYPE: &'static str = "panic.task";
-
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self {
-            started: Arc::new(Notify::new()),
-            release: Arc::new(Notify::new()),
-        })
-    }
-}
-
-impl TaskHandler for PanicTaskHandler {
-    fn task_type(&self) -> &'static str {
-        Self::TASK_TYPE
-    }
-
-    fn run(&self, _task: ScheduledTask) -> BoxFuture<TaskRunOutcome> {
-        let started = self.started.clone();
-        let release = self.release.clone();
-        Box::pin(async move {
-            started.notify_one();
-            release.notified().await;
-            panic!("panic task handler boom");
         })
     }
 }
