@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-14 | CodeRabbit | PR #233 task scheduler worker review follow-up
+
+- Problem: `src/config/task_scheduler/worker.rs` still carried a large inline `#[cfg(test)]` block mixing production worker logic with in-memory test fakes, and the panic-path worker test waited on `panic_handler.started.notified().await` without any timeout guard. That left the production file harder to review and could hang the test forever when startup synchronization regressed.
+- Fix: moved the worker runtime tests into `src/config/task_scheduler/worker_tests/` with a separate `support.rs` for the in-memory repositories/handlers, leaving `worker.rs` production-only. Replaced the raw `Notify` await in the panic-path test with a timeout-backed `wait_for_notify(...)` helper and added a focused regression that proves the helper fails fast when no notification arrives.
+- Prevention: when a production Rust module picks up more than a small handful of test-only fakes and integration-style worker tests, split them into sibling `#[cfg(test)]` modules or a test-support file before review. Any async test synchronization built on `Notify`, channels, or watch receivers must use an explicit timeout or other bounded wait so regressions fail instead of hanging.
+
+### 2026-05-14 | CodeRabbit | PR #233 worker test support follow-up
+
+- Problem: the extracted `worker_tests/support.rs` still mixed all test doubles into one catch-all file, `InMemoryTaskRepository::only_task()` silently returned the first entry even when multiple tasks existed, `claim_next_due()` depended on `HashMap` iteration order, and `InMemoryTaskWorkerRepository::touch_heartbeat()` recreated workers with `active_task_ids: Vec::new()`, which could hide real regressions in worker-state tests.
+- Fix: split the worker test support into focused `support/{repositories,clock,handlers,notify}.rs` modules with a re-exporting `mod.rs`, tightened `only_task()` to assert exactly one stored task, made `claim_next_due()` deterministic by choosing the earliest due task with stable tie-breakers, and changed `touch_heartbeat()` to preserve existing `active_task_ids` while updating heartbeat metadata. Added focused regressions for the `only_task()` contract, deterministic due-task selection, and heartbeat preservation.
+- Prevention: when extracting test doubles, do not stop at moving code out of the production file; review the doubles for hidden correctness gaps too. Repository helpers that imply singular state must assert that contract explicitly, in-memory schedulers should not depend on `HashMap` iteration order, and heartbeat-style updates must preserve previously stored active state unless the production contract explicitly clears it.
+
 ### 2026-05-14 | CodeRabbit | PR #232 shared provider transcript merge helper
 
 - Problem: the extracted `merge_provider_transcript_with_retry(...)` helper retried retryable `persist_merged(...)` failures but returned immediately on retryable `load_latest()` errors, so a transient repository read failure during transcript reload skipped the intended retry/backoff path.

@@ -1,5 +1,7 @@
 mod maintenance;
 mod worker;
+#[cfg(test)]
+mod worker_tests;
 
 use uuid::Uuid;
 
