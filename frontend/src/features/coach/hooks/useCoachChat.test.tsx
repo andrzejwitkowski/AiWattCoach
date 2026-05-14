@@ -575,6 +575,45 @@ describe('useCoachChat', () => {
     expect(result.current.messages.at(-1)?.content).toBe('14-day schedule failed.');
   });
 
+  it('accepts websocket save workflow completion messages', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'save_workflow_complete',
+            workflow: {
+              recapStatus: 'generated',
+              planStatus: 'processing',
+              messages: [
+                'Workout recap generated.',
+                '14-day schedule is being generated in the background.',
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages.at(-2)?.content).toBe('Workout recap generated.');
+      expect(result.current.messages.at(-1)?.content).toBe(
+        '14-day schedule is being generated in the background.',
+      );
+    });
+
+    expect(result.current.error).toBeNull();
+  });
+
   it('does not treat a system message as completed conversation', async () => {
     global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);

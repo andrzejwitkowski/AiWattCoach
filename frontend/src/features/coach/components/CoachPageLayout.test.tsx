@@ -67,7 +67,7 @@ const availability = [
   { weekday: 'sun', available: false, maxDurationMinutes: null },
 ];
 
-function setupMocks(opts?: { planStatus?: 'generated' | 'skipped' | 'failed' | 'unchanged'; saveSummaryResult?: unknown }) {
+function setupMocks(opts?: { planStatus?: 'generated' | 'processing' | 'skipped' | 'failed' | 'unchanged'; saveSummaryResult?: unknown }) {
   const invalidateCalendarCache = vi.mocked(calendarHooks.invalidateCalendarCache);
   const invalidateAll = vi.fn();
   const refresh = vi.fn().mockResolvedValue(undefined);
@@ -148,6 +148,7 @@ describe('CoachPageLayout', () => {
   });
 
   it.each([
+    ['processing'],
     ['skipped'],
     ['failed'],
     ['unchanged'],

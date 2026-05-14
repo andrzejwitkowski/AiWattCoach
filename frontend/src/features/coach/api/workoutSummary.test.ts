@@ -153,6 +153,34 @@ describe('workoutSummary api', () => {
     ]);
   });
 
+  it('parses processing save workflow statuses', async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        summary: { ...summaryFixture, savedAtEpochSeconds: 1711000300 },
+        workflow: {
+          recapStatus: 'processing',
+          planStatus: 'processing',
+          messages: [
+            'Workout recap is being generated in the background.',
+            '14-day schedule is being generated in the background.',
+          ],
+        },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    const result = await saveWorkoutSummary('', '101');
+
+    expect(result.workflow.recapStatus).toBe('processing');
+    expect(result.workflow.planStatus).toBe('processing');
+    expect(result.workflow.messages).toEqual([
+      'Workout recap is being generated in the background.',
+      '14-day schedule is being generated in the background.',
+    ]);
+  });
+
   it('reopens workout summary', async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({

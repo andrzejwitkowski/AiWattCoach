@@ -303,6 +303,20 @@ export function useCoachChat({ apiBaseUrl, workoutId }: UseCoachChatOptions): Us
             return;
           }
 
+          if (parsed.type === 'save_workflow_complete') {
+            if (parsed.workflow.messages.length > 0) {
+              const startId = localSystemMessageIdRef.current + 1;
+              localSystemMessageIdRef.current += parsed.workflow.messages.length;
+              setMessages((current) => [
+                ...current,
+                ...localSystemMessages(parsed.workflow.messages, startId),
+              ]);
+            }
+            setIsCoachTyping(false);
+            clearReplyProgress();
+            return;
+          }
+
           setError(parsed.error);
           setIsCoachTyping(false);
           clearReplyProgress();

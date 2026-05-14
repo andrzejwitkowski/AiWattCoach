@@ -50,11 +50,13 @@ export const sendMessageResponseSchema = z.object({
 export const saveWorkoutSummaryResponseSchema = z.object({
   summary: workoutSummarySchema,
   workflow: z.object({
-    recapStatus: z.enum(['generated', 'skipped', 'failed', 'unchanged']),
-    planStatus: z.enum(['generated', 'skipped', 'failed', 'unchanged']),
+    recapStatus: z.enum(['generated', 'processing', 'skipped', 'failed', 'unchanged']),
+    planStatus: z.enum(['generated', 'processing', 'skipped', 'failed', 'unchanged']),
     messages: z.array(z.string()),
   }),
 });
+
+const saveWorkflowSchema = saveWorkoutSummaryResponseSchema.shape.workflow;
 
 export const clientWsMessageSchema = z.object({
   type: z.literal('send_message'),
@@ -86,12 +88,18 @@ export const errorWsMessageSchema = z.object({
   error: z.string(),
 });
 
+export const saveWorkflowCompleteWsMessageSchema = z.object({
+  type: z.literal('save_workflow_complete'),
+  workflow: saveWorkflowSchema,
+});
+
 export const serverWsMessageSchema = z.discriminatedUnion('type', [
   coachTypingWsMessageSchema,
   coachMessageWsMessageSchema,
   toolMessageWsMessageSchema,
   systemMessageWsMessageSchema,
   errorWsMessageSchema,
+  saveWorkflowCompleteWsMessageSchema,
 ]);
 
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;

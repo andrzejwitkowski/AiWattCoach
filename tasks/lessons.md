@@ -218,6 +218,8 @@
 
 ## New Field Enumeration In Shared Schemas
 
+- When a backend response enum grows a new serialized variant like `processing`, grep every frontend Zod enum, TypeScript test union, and UI branch that hardcodes the old closed set. Backend DTO parity is not real until the frontend parser and its focused tests accept the new wire value.
+
 - When adding a new field to a shared API schema (backend DTO, frontend Zod schema, or request/response type), grep for every place the old fields are enumerated and add the new one. Common places to miss: frontend payload builders, frontend API extraction functions, TypeScript discriminated unions, backend match arms, backend `apply_field_update` calls, test fixture builders, and mock data objects.
 - A schema update alone is not enough if the code that serializes, extracts, or transforms the payload still iterates over the old field set. Add a focused end-to-end test that exercises the new field through the full stack (UI → API → backend → response → UI) to catch gaps in payload plumbing.
 
