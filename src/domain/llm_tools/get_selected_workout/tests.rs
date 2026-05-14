@@ -392,9 +392,12 @@ fn sample_summary(workout_id: &str) -> WorkoutSummary {
             role: MessageRole::Coach,
             content: "Great threshold work".to_string(),
             tool_call: None,
+            questions: Vec::new(),
             created_at_epoch_seconds: 1,
         }],
-        provider_transcript: vec![LlmChatMessage::assistant("Great threshold work")],
+        provider_transcript: vec![LlmChatMessage::assistant(
+            crate::domain::workout_summary::coach_reply_json("Great threshold work"),
+        )],
         saved_at_epoch_seconds: Some(1),
         workout_recap_text: Some("Strong threshold execution".to_string()),
         workout_recap_provider: Some("openrouter".to_string()),

@@ -293,6 +293,7 @@ async fn mark_saved_skips_recap_and_plan_when_latest_message_is_from_user() {
             role: aiwattcoach::domain::workout_summary::MessageRole::User,
             content: "One more thought before saving".to_string(),
             tool_call: None,
+            questions: Vec::new(),
             created_at_epoch_seconds: 1_700_000_060,
         });
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);

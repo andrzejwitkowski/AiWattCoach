@@ -55,7 +55,9 @@ impl WorkoutCoach for CountingCoach {
             Ok(LlmToolLoopOutput::from_response(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "counting-coach".to_string(),
-                message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
+                message: aiwattcoach::domain::llm::LlmChatMessage::assistant(
+                    aiwattcoach::domain::workout_summary::coach_reply_json(&message),
+                ),
                 finish_reason: None,
                 provider_request_id: Some("counting-req-1".to_string()),
                 usage: LlmTokenUsage::default(),
@@ -82,7 +84,9 @@ impl WorkoutCoach for CapturingAthleteSummaryCoach {
             Ok(LlmToolLoopOutput::from_response(LlmChatResponse {
                 provider: LlmProvider::OpenAi,
                 model: "capturing-coach".to_string(),
-                message: aiwattcoach::domain::llm::LlmChatMessage::assistant(message),
+                message: aiwattcoach::domain::llm::LlmChatMessage::assistant(
+                    aiwattcoach::domain::workout_summary::coach_reply_json(&message),
+                ),
                 finish_reason: None,
                 provider_request_id: Some("capturing-req-1".to_string()),
                 usage: LlmTokenUsage::default(),
@@ -439,9 +443,11 @@ impl WorkoutCoach for OneTimeFailureCoach {
                 Ok(LlmToolLoopOutput::from_response(LlmChatResponse {
                     provider: LlmProvider::OpenAi,
                     model: "recovered-coach".to_string(),
-                    message: aiwattcoach::domain::llm::LlmChatMessage::assistant(format!(
-                        "Recovered reply to: {user_message}"
-                    )),
+                    message: aiwattcoach::domain::llm::LlmChatMessage::assistant(
+                        aiwattcoach::domain::workout_summary::coach_reply_json(format!(
+                            "Recovered reply to: {user_message}"
+                        )),
+                    ),
                     finish_reason: None,
                     provider_request_id: Some("recovered-req".to_string()),
                     usage: LlmTokenUsage::default(),
@@ -910,6 +916,7 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
         role: MessageRole::User,
         content: "Need feedback".to_string(),
         tool_call: None,
+        questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_000,
     };
     let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
@@ -917,6 +924,7 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
         role: MessageRole::Coach,
         content: "Recovered coach reply".to_string(),
         tool_call: None,
+        questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_001,
     };
     summary.messages = vec![user_message.clone(), coach_message.clone()];
@@ -955,7 +963,7 @@ async fn generate_coach_reply_recovers_existing_message_without_losing_provider_
             cache_discount: Some("0.0012".to_string()),
         },
         provider_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
-            "Recovered coach reply",
+            aiwattcoach::domain::workout_summary::coach_reply_json("Recovered coach reply"),
         )],
         finish_reason: None,
         updated_at_epoch_seconds: 1_699_999_000,
@@ -1029,7 +1037,7 @@ async fn generate_coach_reply_replays_persisted_response_message_after_partial_c
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
         provider_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
-            "Persisted before crash",
+            aiwattcoach::domain::workout_summary::coach_reply_json("Persisted before crash"),
         )],
         finish_reason: None,
         updated_at_epoch_seconds: 1_699_999_001,
@@ -1062,6 +1070,7 @@ async fn generate_coach_reply_retries_completion_write_when_recovering_existing_
         role: MessageRole::User,
         content: "Need feedback".to_string(),
         tool_call: None,
+        questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_000,
     };
     let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
@@ -1069,6 +1078,7 @@ async fn generate_coach_reply_retries_completion_write_when_recovering_existing_
         role: MessageRole::Coach,
         content: "Recovered coach reply".to_string(),
         tool_call: None,
+        questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_001,
     };
     summary.messages = vec![user_message.clone(), coach_message.clone()];
@@ -1138,7 +1148,7 @@ async fn generate_coach_reply_retries_completion_write_when_replaying_persisted_
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
         provider_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
-            "Persisted before crash",
+            aiwattcoach::domain::workout_summary::coach_reply_json("Persisted before crash"),
         )],
         finish_reason: None,
         updated_at_epoch_seconds: 1_699_999_001,
@@ -1299,6 +1309,7 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
         role: MessageRole::User,
         content: "Need feedback".to_string(),
         tool_call: None,
+        questions: Vec::new(),
         created_at_epoch_seconds: 1_699_999_000,
     };
     repository
@@ -1322,7 +1333,9 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
         token_usage: LlmTokenUsage::default(),
         cache_usage: LlmCacheUsage::default(),
         provider_transcript: vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
-            "Recovered even though summary was saved",
+            aiwattcoach::domain::workout_summary::coach_reply_json(
+                "Recovered even though summary was saved",
+            ),
         )],
         finish_reason: None,
         updated_at_epoch_seconds: 1_699_999_001,
@@ -1346,7 +1359,7 @@ async fn generate_coach_reply_replays_persisted_response_for_saved_summary() {
 async fn generate_coach_reply_accumulates_provider_transcript_across_turns() {
     let mut summary = existing_summary();
     summary.provider_transcript = vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
-        "Turn 0",
+        aiwattcoach::domain::workout_summary::coach_reply_json("Turn 0"),
     )];
     summary.messages = vec![
         aiwattcoach::domain::workout_summary::ConversationMessage {
@@ -1354,6 +1367,7 @@ async fn generate_coach_reply_accumulates_provider_transcript_across_turns() {
             role: MessageRole::User,
             content: "Initial question".to_string(),
             tool_call: None,
+            questions: Vec::new(),
             created_at_epoch_seconds: 1,
         },
         aiwattcoach::domain::workout_summary::ConversationMessage {
@@ -1361,6 +1375,7 @@ async fn generate_coach_reply_accumulates_provider_transcript_across_turns() {
             role: MessageRole::Coach,
             content: "Turn 0".to_string(),
             tool_call: None,
+            questions: Vec::new(),
             created_at_epoch_seconds: 2,
         },
     ];
@@ -1406,7 +1421,7 @@ async fn generate_coach_reply_accumulates_provider_transcript_across_turns() {
 async fn generate_coach_reply_retries_provider_transcript_write_after_compare_and_set_conflict() {
     let mut summary = existing_summary();
     summary.provider_transcript = vec![aiwattcoach::domain::llm::LlmChatMessage::assistant(
-        "Turn 0",
+        aiwattcoach::domain::workout_summary::coach_reply_json("Turn 0"),
     )];
 
     let repository = InMemoryWorkoutSummaryRepository::with_summary(summary);
@@ -1435,7 +1450,10 @@ async fn generate_coach_reply_retries_provider_transcript_write_after_compare_an
         .map(|message| message.content.as_str())
         .collect::<Vec<_>>();
 
-    assert!(provider_contents.contains(&"Turn 0"));
+    assert!(
+        provider_contents.iter().any(|c| c.contains("Turn 0")),
+        "expected Turn 0 in provider transcript"
+    );
     assert!(provider_contents.contains(&"Concurrent summary update"));
     assert!(provider_contents
         .iter()

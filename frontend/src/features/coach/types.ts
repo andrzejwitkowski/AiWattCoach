@@ -10,11 +10,19 @@ export const toolCallSchema = z.object({
   argumentsPreview: z.string().nullish(),
 });
 
+export const coachQuestionSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  answers: z.array(z.string().trim().min(1)).min(2).max(6),
+  freeTextLabel: z.string().trim().min(1).nullish(),
+});
+
 export const conversationMessageSchema = z.object({
   id: z.string(),
   role: conversationMessageRoleSchema,
   content: z.string(),
   toolCall: toolCallSchema.nullish(),
+  questions: z.array(coachQuestionSchema).nullish(),
   createdAtEpochSeconds: z.number().int(),
 });
 
@@ -103,6 +111,7 @@ export const serverWsMessageSchema = z.discriminatedUnion('type', [
 ]);
 
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
+export type CoachQuestion = z.infer<typeof coachQuestionSchema>;
 export type WorkoutSummary = z.infer<typeof workoutSummarySchema>;
 export type SendMessageResponse = z.infer<typeof sendMessageResponseSchema>;
 export type SaveWorkoutSummaryResponse = z.infer<typeof saveWorkoutSummaryResponseSchema>;

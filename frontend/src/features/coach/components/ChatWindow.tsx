@@ -56,9 +56,14 @@ export function ChatWindow({
           {error}
         </div>
       ) : null}
-      {hasSelectedWorkout ? (
+          {hasSelectedWorkout ? (
         <>
-          <ChatMessageList messages={messages} isCoachTyping={isCoachTyping} progressState={progressState} />
+          <ChatMessageList
+            messages={messages}
+            isCoachTyping={isCoachTyping}
+            progressState={progressState}
+            onSendMessage={onSendMessage}
+          />
           <ChatInput disabled={inputDisabled} onSend={onSendMessage} />
         </>
       ) : (

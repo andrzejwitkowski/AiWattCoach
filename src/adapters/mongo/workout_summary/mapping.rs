@@ -104,6 +104,7 @@ pub(super) fn map_message_to_document(message: ConversationMessage) -> Conversat
         },
         content: message.content,
         tool_call: message.tool_call,
+        questions: message.questions,
         created_at_epoch_seconds: Some(message.created_at_epoch_seconds),
         created_at: optional_epoch_seconds_to_bson_datetime(
             Some(message.created_at_epoch_seconds),
@@ -132,6 +133,7 @@ pub(super) fn map_message_to_domain(
         role,
         content: message.content,
         tool_call: message.tool_call,
+        questions: message.questions,
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             message.created_at,
             message.created_at_epoch_seconds,

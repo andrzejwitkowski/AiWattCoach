@@ -5,6 +5,14 @@ use crate::domain::llm::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoachQuestion {
+    pub id: String,
+    pub question: String,
+    pub answers: Vec<String>,
+    pub free_text_label: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublicToolCall {
     pub id: String,
     pub name: String,
@@ -106,6 +114,7 @@ pub struct ConversationMessage {
     pub role: MessageRole,
     pub content: String,
     pub tool_call: Option<PublicToolCall>,
+    pub questions: Vec<CoachQuestion>,
     pub created_at_epoch_seconds: i64,
 }
 

@@ -80,12 +80,23 @@ pub(super) struct ToolCallDto {
 }
 
 #[derive(Serialize)]
+pub(super) struct CoachQuestionDto {
+    pub id: String,
+    pub question: String,
+    pub answers: Vec<String>,
+    #[serde(rename = "freeTextLabel", skip_serializing_if = "Option::is_none")]
+    pub free_text_label: Option<String>,
+}
+
+#[derive(Serialize)]
 pub(super) struct ConversationMessageDto {
     pub id: String,
     pub role: String,
     pub content: String,
     #[serde(rename = "toolCall", skip_serializing_if = "Option::is_none")]
     pub tool_call: Option<ToolCallDto>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub questions: Vec<CoachQuestionDto>,
     #[serde(rename = "createdAtEpochSeconds")]
     pub created_at_epoch_seconds: i64,
 }

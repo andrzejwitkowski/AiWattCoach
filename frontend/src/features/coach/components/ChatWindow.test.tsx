@@ -146,6 +146,61 @@ describe('ChatWindow', () => {
     });
   });
 
+  it('renders coach questionnaire and submits selected answers', async () => {
+    const onSendMessage = vi.fn().mockResolvedValue(true);
+
+    render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'A few quick follow-ups before I lock this in.',
+            questions: [
+              {
+                id: 'limiter',
+                question: 'What limited you most today?',
+                answers: ['Legs', 'Breathing', 'Fueling'],
+                freeTextLabel: 'Add context if needed',
+              },
+            ],
+            createdAtEpochSeconds: 1711000200,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        error={null}
+        onSendMessage={onSendMessage}
+      />,
+    );
+
+    expect(screen.getByText(/coach check-in/i)).toBeInTheDocument();
+
+    const submitButton = screen.getByRole('button', { name: /send answers to coach/i });
+    expect(submitButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
+    fireEvent.change(screen.getByPlaceholderText(/add context if needed/i), {
+      target: { value: 'Faded late on the final interval.' },
+    });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(onSendMessage).toHaveBeenCalledWith([
+        'Answers to the coach questionnaire:',
+        '1. What limited you most today?',
+        'Selected: Legs',
+        'Details: Faded late on the final interval.',
+      ].join('\n'));
+    });
+
+    expect(screen.getByRole('button', { name: /sending answers/i })).toBeInTheDocument();
+  });
+
   it('renders an empty selection prompt when no workout is selected', () => {
     render(
       <ChatWindow

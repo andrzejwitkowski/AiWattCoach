@@ -245,7 +245,7 @@ where
     }
 }
 
-const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Ask only one focused follow-up question when genuinely needed, gather the minimum information required to adjust the next plan, and move the conversation toward being ready to regenerate workouts. Do not invent details beyond the provided context.";
+const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only with this exact shape: {\"summary\": string, \"questions\": [{\"question\": string, \"answers\": string[], \"freeTextLabel\": string|null}]}. The summary may use markdown. Questions may be an empty array when you are ready. Include at most 6 questions in total. Every question must have 2 to 6 short single-choice answers. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
 
 fn build_stable_context(
     summary: &WorkoutSummary,
@@ -337,6 +337,7 @@ mod tests {
                     role: MessageRole::User,
                     content: "Need feedback".to_string(),
                     tool_call: None,
+                    questions: Vec::new(),
                     created_at_epoch_seconds: 1,
                 },
                 ConversationMessage {
@@ -349,6 +350,7 @@ mod tests {
                         arguments_json: r#"{\"workoutId\":\"workout-1\"}"#.to_string(),
                         arguments_preview: None,
                     }),
+                    questions: Vec::new(),
                     created_at_epoch_seconds: 2,
                 },
                 ConversationMessage {
@@ -356,6 +358,7 @@ mod tests {
                     role: MessageRole::Coach,
                     content: "Coach reply".to_string(),
                     tool_call: None,
+                    questions: Vec::new(),
                     created_at_epoch_seconds: 3,
                 },
             ],
@@ -392,6 +395,7 @@ mod tests {
                     role: MessageRole::User,
                     content: "First question".to_string(),
                     tool_call: None,
+                    questions: Vec::new(),
                     created_at_epoch_seconds: 1,
                 },
                 ConversationMessage {
@@ -399,6 +403,7 @@ mod tests {
                     role: MessageRole::Coach,
                     content: "First answer".to_string(),
                     tool_call: None,
+                    questions: Vec::new(),
                     created_at_epoch_seconds: 2,
                 },
                 ConversationMessage {
@@ -406,6 +411,7 @@ mod tests {
                     role: MessageRole::User,
                     content: "Second question".to_string(),
                     tool_call: None,
+                    questions: Vec::new(),
                     created_at_epoch_seconds: 3,
                 },
                 ConversationMessage {
@@ -413,6 +419,7 @@ mod tests {
                     role: MessageRole::Coach,
                     content: "Second answer".to_string(),
                     tool_call: None,
+                    questions: Vec::new(),
                     created_at_epoch_seconds: 4,
                 },
             ],
