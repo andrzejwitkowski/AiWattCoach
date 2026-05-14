@@ -95,7 +95,32 @@ where
         let ProviderTranscriptSnapshot {
             latest_state,
             provider_transcript,
-        } = load_latest().await?;
+        } = match load_latest().await {
+            Ok(snapshot) => snapshot,
+            Err(error) if is_retryable(&error) => {
+                if attempt == config.max_attempts {
+                    return Err(error);
+                }
+
+                warn!(
+                    scope = %ctx.scope_value,
+                    scope_label = ctx.scope_label,
+                    user_message_id = %ctx.user_message_id,
+                    attempt,
+                    max_attempts = config.max_attempts,
+                    write_label = ctx.write_label,
+                    operation_status = ctx.operation_status,
+                    error = %error,
+                    "retrying write after repository error"
+                );
+                tokio::time::sleep(Duration::from_millis(
+                    config.backoff_base_ms * attempt as u64,
+                ))
+                .await;
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         let merged =
             merge_provider_transcript_entries(provider_transcript, pending_provider_transcript);
 
@@ -321,6 +346,68 @@ mod tests {
         assert_eq!(
             *load_count.lock().expect("load count lock should succeed"),
             1
+        );
+        assert_eq!(
+            *persist_count
+                .lock()
+                .expect("persist count lock should succeed"),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn merge_provider_transcript_with_retry_retries_retryable_load_error() {
+        let load_count = Arc::new(Mutex::new(0usize));
+        let persist_count = Arc::new(Mutex::new(0usize));
+        let load_count_for_loader = load_count.clone();
+        let persist_count_for_persist = persist_count.clone();
+        let ctx = RetryContext {
+            write_label: "merge_provider_transcript_with_retry_test",
+            user_message_id: "message-1".to_string(),
+            scope_label: "scope_id",
+            scope_value: "scope-1".to_string(),
+            operation_status: None,
+        };
+
+        let result: Result<(), TestError> = merge_provider_transcript_with_retry(
+            RetryConfig {
+                max_attempts: 2,
+                backoff_base_ms: 0,
+            },
+            |error| matches!(error, TestError::Retryable(_)),
+            move || {
+                let load_count = load_count_for_loader.clone();
+                Box::pin(async move {
+                    let mut calls = load_count.lock().expect("load count lock should succeed");
+                    *calls += 1;
+                    if *calls == 1 {
+                        return Err(TestError::Retryable("transient load failure"));
+                    }
+                    Ok(ProviderTranscriptSnapshot {
+                        latest_state: (),
+                        provider_transcript: vec![LlmChatMessage::assistant("persisted assistant")],
+                    })
+                })
+            },
+            move |_, _| {
+                let persist_count = persist_count_for_persist.clone();
+                Box::pin(async move {
+                    let mut calls = persist_count
+                        .lock()
+                        .expect("persist count lock should succeed");
+                    *calls += 1;
+                    Ok(())
+                })
+            },
+            &[LlmChatMessage::assistant("pending assistant")],
+            &ctx,
+        )
+        .await;
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *load_count.lock().expect("load count lock should succeed"),
+            2
         );
         assert_eq!(
             *persist_count

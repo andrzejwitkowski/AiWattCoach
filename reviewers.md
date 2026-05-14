@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-14 | CodeRabbit | PR #232 shared provider transcript merge helper
+
+- Problem: the extracted `merge_provider_transcript_with_retry(...)` helper retried retryable `persist_merged(...)` failures but returned immediately on retryable `load_latest()` errors, so a transient repository read failure during transcript reload skipped the intended retry/backoff path.
+- Fix: changed `src/domain/llm/persistence.rs` to route the whole load-merge-persist operation through the existing shared `retry_persist(...)` loop, so retryable `load_latest()` and `persist_merged(...)` errors now share the same retry semantics. Kept the focused regression `merge_provider_transcript_with_retry_retries_retryable_load_error` to lock the bug fix in place.
+- Prevention: when extracting a retry helper around a multi-step optimistic-write flow, verify every fallible step that belongs to one retry attempt stays inside the retry closure. Do not leave `load_latest()` or other preparatory repository reads outside the retry loop if their retryable failures should reload and retry the full write attempt.
+
 ### 2026-05-13 | CodeRabbit | PR #229 shared public tool materialization fresh-response coverage
 
 - Problem: after the recovery-suite split on PR #229, `calendar_coach_marks_fresh_tool_only_response_as_failed` still checked only the failed status and missed the persisted `public_tool_call_ids`, leaving the fresh tool-only path with weaker coverage than the mirrored recovery tests.
