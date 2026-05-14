@@ -16,6 +16,7 @@ pub struct ParsedCoachReply {
 #[serde(deny_unknown_fields)]
 struct CoachReplyEnvelope {
     summary: String,
+    #[serde(default)]
     questions: Vec<CoachQuestionEnvelope>,
 }
 
@@ -42,12 +43,18 @@ pub fn parse_coach_reply(raw: &str) -> Result<ParsedCoachReply, String> {
 fn extract_json_payload(raw: &str) -> &str {
     let trimmed = raw.trim();
 
-    if let Some(stripped) = trimmed.strip_prefix("```json") {
-        return stripped.trim().trim_end_matches("```").trim();
-    }
-
     if let Some(stripped) = trimmed.strip_prefix("```") {
-        return stripped.trim().trim_end_matches("```").trim();
+        let inner = stripped.trim().trim_end_matches("```").trim();
+
+        if inner.starts_with('{') || inner.starts_with('[') {
+            return inner;
+        }
+
+        if let Some((_, rest)) = inner.split_once('\n') {
+            return rest.trim();
+        }
+
+        return inner;
     }
 
     trimmed
@@ -160,6 +167,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_coach_reply_defaults_missing_questions_to_empty() {
+        let parsed = parse_coach_reply(
+            r#"{
+                "summary": "I have everything I need to generate the next plan. Save this summary when you're ready."
+            }"#,
+        )
+        .expect("coach reply without questions field should parse");
+
+        assert!(parsed.questions.is_empty());
+    }
+
+    #[test]
     fn parse_coach_reply_accepts_json_code_fence() {
         let parsed = parse_coach_reply(
             "```json\n{\n  \"summary\": \"Good session.\",\n  \"questions\": []\n}\n```",
@@ -195,6 +214,16 @@ mod tests {
             "```\n{\n  \"summary\": \"Solid ride.\",\n  \"questions\": []\n}\n```",
         )
         .expect("plain code fenced JSON should parse");
+
+        assert_eq!(parsed.content, "Solid ride.");
+    }
+
+    #[test]
+    fn parse_coach_reply_accepts_uppercase_json_code_fence() {
+        let parsed = parse_coach_reply(
+            "```JSON\n{\n  \"summary\": \"Solid ride.\",\n  \"questions\": []\n}\n```",
+        )
+        .expect("uppercase code fenced JSON should parse");
 
         assert_eq!(parsed.content, "Solid ride.");
     }

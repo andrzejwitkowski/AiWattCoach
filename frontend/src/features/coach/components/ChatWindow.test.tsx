@@ -201,6 +201,91 @@ describe('ChatWindow', () => {
     expect(screen.getByRole('button', { name: /sending answers/i })).toBeInTheDocument();
   });
 
+  it('keeps questionnaire submit disabled until every question has a selected answer', () => {
+    render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'A few quick follow-ups before I lock this in.',
+            questions: [
+              {
+                id: 'limiter',
+                question: 'What limited you most today?',
+                answers: ['Legs', 'Breathing', 'Fueling'],
+                freeTextLabel: 'Add context if needed',
+              },
+              {
+                id: 'readiness',
+                question: 'How ready are you for the next two days?',
+                answers: ['Ready', 'Easy only', 'Need rest'],
+                freeTextLabel: null,
+              },
+            ],
+            createdAtEpochSeconds: 1711000200,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        error={null}
+        onSendMessage={async () => true}
+      />,
+    );
+
+    const submitButton = screen.getByRole('button', { name: /send answers to coach/i });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
+    expect(submitButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+    expect(submitButton).toBeEnabled();
+  });
+
+  it('re-enables questionnaire submit when send fails', async () => {
+    const onSendMessage = vi.fn().mockRejectedValue(new Error('network failed'));
+
+    render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'A few quick follow-ups before I lock this in.',
+            questions: [
+              {
+                id: 'limiter',
+                question: 'What limited you most today?',
+                answers: ['Legs', 'Breathing', 'Fueling'],
+                freeTextLabel: 'Add context if needed',
+              },
+            ],
+            createdAtEpochSeconds: 1711000200,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        error={null}
+        onSendMessage={onSendMessage}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
+    fireEvent.click(screen.getByRole('button', { name: /send answers to coach/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /send answers to coach/i })).toBeEnabled();
+    });
+  });
+
   it('renders an empty selection prompt when no workout is selected', () => {
     render(
       <ChatWindow

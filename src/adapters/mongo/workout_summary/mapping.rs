@@ -4,11 +4,11 @@ use crate::{
         resolve_required_epoch_seconds,
     },
     domain::workout_summary::{
-        ConversationMessage, MessageRole, WorkoutSummary, WorkoutSummaryError,
+        CoachQuestion, ConversationMessage, MessageRole, WorkoutSummary, WorkoutSummaryError,
     },
 };
 
-use super::document::{ConversationMessageDocument, WorkoutSummaryDocument};
+use super::document::{CoachQuestionDocument, ConversationMessageDocument, WorkoutSummaryDocument};
 
 pub(super) fn map_document_to_domain(
     document: WorkoutSummaryDocument,
@@ -104,7 +104,11 @@ pub(super) fn map_message_to_document(message: ConversationMessage) -> Conversat
         },
         content: message.content,
         tool_call: message.tool_call,
-        questions: message.questions,
+        questions: message
+            .questions
+            .into_iter()
+            .map(map_question_to_document)
+            .collect(),
         created_at_epoch_seconds: Some(message.created_at_epoch_seconds),
         created_at: optional_epoch_seconds_to_bson_datetime(
             Some(message.created_at_epoch_seconds),
@@ -133,7 +137,11 @@ pub(super) fn map_message_to_domain(
         role,
         content: message.content,
         tool_call: message.tool_call,
-        questions: message.questions,
+        questions: message
+            .questions
+            .into_iter()
+            .map(map_question_to_domain)
+            .collect(),
         created_at_epoch_seconds: resolve_required_epoch_seconds(
             message.created_at,
             message.created_at_epoch_seconds,
@@ -150,4 +158,22 @@ fn map_rpe_to_domain(value: i32) -> Result<u8, WorkoutSummaryError> {
         .ok_or_else(|| {
             WorkoutSummaryError::Repository(format!("invalid workout summary rpe: {value}"))
         })
+}
+
+fn map_question_to_document(question: CoachQuestion) -> CoachQuestionDocument {
+    CoachQuestionDocument {
+        id: question.id,
+        question: question.question,
+        answers: question.answers,
+        free_text_label: question.free_text_label,
+    }
+}
+
+fn map_question_to_domain(question: CoachQuestionDocument) -> CoachQuestion {
+    CoachQuestion {
+        id: question.id,
+        question: question.question,
+        answers: question.answers,
+        free_text_label: question.free_text_label,
+    }
 }

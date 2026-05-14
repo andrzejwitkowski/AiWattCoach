@@ -36,12 +36,8 @@ export function CoachQuestionnaire({ questions, onSubmit }: CoachQuestionnairePr
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canSubmit = useMemo(
-    () => questions.some((question) => {
-      const selected = selectedAnswers[question.id];
-      const freeText = freeTextAnswers[question.id]?.trim();
-      return Boolean(selected || freeText);
-    }),
-    [freeTextAnswers, questions, selectedAnswers],
+    () => questions.every((question) => Boolean(selectedAnswers[question.id])),
+    [questions, selectedAnswers],
   );
 
   async function handleSubmit() {
@@ -51,8 +47,12 @@ export function CoachQuestionnaire({ questions, onSubmit }: CoachQuestionnairePr
 
     setIsSubmitting(true);
     const content = buildQuestionnaireMessage(questions, selectedAnswers, freeTextAnswers);
-    const sent = await onSubmit(content);
-    if (!sent) {
+    try {
+      const sent = await onSubmit(content);
+      if (!sent) {
+        setIsSubmitting(false);
+      }
+    } catch {
       setIsSubmitting(false);
     }
   }

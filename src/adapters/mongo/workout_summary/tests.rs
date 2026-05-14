@@ -1,14 +1,14 @@
 use mongodb::bson::{doc, from_document, Bson, DateTime};
 
 use super::{
-    document::{ConversationMessageDocument, WorkoutSummaryDocument},
+    document::{CoachQuestionDocument, ConversationMessageDocument, WorkoutSummaryDocument},
     lookup::{
         current_workout_id_filter, document_identity_filter, document_is_locked,
         editable_document_identity_filter, legacy_event_id_filter, with_message_append_filter,
     },
     mapping::{map_document_to_domain, map_domain_to_document, map_message_to_domain},
 };
-use crate::domain::workout_summary::{CoachQuestion, WorkoutSummary, WorkoutSummaryError};
+use crate::domain::workout_summary::{WorkoutSummary, WorkoutSummaryError};
 
 #[test]
 fn map_document_to_domain_rejects_out_of_range_rpe() {
@@ -309,7 +309,7 @@ fn map_message_to_domain_round_trips_questions() {
         role: "coach".to_string(),
         content: "Legs were the limiter.".to_string(),
         tool_call: None,
-        questions: vec![CoachQuestion {
+        questions: vec![CoachQuestionDocument {
             id: "question-1".to_string(),
             question: "What limited you most?".to_string(),
             answers: vec![
