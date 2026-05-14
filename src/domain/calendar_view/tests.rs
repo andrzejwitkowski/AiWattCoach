@@ -1423,7 +1423,7 @@ async fn refresh_range_for_user_prefers_wahoo_completed_workout_when_wahoo_has_p
 }
 
 #[tokio::test]
-async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
+async fn refresh_range_for_user_clears_orphaned_explicit_links() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestCalendarPlannedWorkoutSource::default();
     let completed = TestCompletedWorkoutRepository::default();
@@ -1463,9 +1463,82 @@ async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
 
     assert_eq!(refreshed.len(), 1);
     assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::CompletedWorkout);
+    assert_eq!(refreshed[0].planned_workout_id, None);
+
+    let stored_workout = completed
+        .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap()
+        .expect("completed workout remains stored");
+    assert_eq!(stored_workout.planned_workout_id, None);
+
+    let stored_link = planned_completed_links
+        .find_by_completed_workout_id("user-1", "completed-1")
+        .await
+        .unwrap();
+    assert!(stored_link.is_none());
+}
+
+#[tokio::test]
+async fn refresh_range_for_user_replaces_stale_explicit_link_with_current_same_day_planned_workout()
+{
+    let views = InMemoryCalendarEntryViewRepository::default();
+    let planned = TestCalendarPlannedWorkoutSource::default();
+    let completed = TestCompletedWorkoutRepository::default();
+    let races = TestRaceRepository::default();
+    let special_days = TestSpecialDayRepository::default();
+    let sync_states = TestExternalSyncStateRepository::default();
+    let planned_completed_links = TestPlannedCompletedWorkoutLinkRepository::default();
+
+    let mut planned_workout = sample_planned_workout();
+    planned_workout.planned_workout_id = "planned-new".to_string();
+    planned_workout.name = None;
+    planned.upsert(
+        planned_workout,
+        CalendarPlannedWorkoutOrigin::Projected,
+        vec![],
+    );
+
+    let mut workout = sample_completed_workout();
+    workout.start_date_local = "2026-05-10T08:00:00".to_string();
+    workout.planned_workout_id = Some("planned-old".to_string());
+    workout.name = Some("Threshold builder".to_string());
+    completed.upsert(workout).await.unwrap();
+    planned_completed_links
+        .upsert(PlannedCompletedWorkoutLink::new(
+            "user-1".to_string(),
+            "planned-old".to_string(),
+            "completed-1".to_string(),
+            PlannedCompletedWorkoutLinkMatchSource::Explicit,
+            1_700_000_000,
+        ))
+        .await
+        .unwrap();
+
+    let refresher = CalendarEntryViewRefreshService::new(
+        views,
+        planned,
+        completed.clone(),
+        races,
+        special_days,
+        sync_states,
+    )
+    .with_planned_completed_links(planned_completed_links.clone());
+
+    let refreshed = refresher
+        .refresh_range_for_user("user-1", "2026-05-10", "2026-05-10")
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::PlannedWorkout);
     assert_eq!(
         refreshed[0].planned_workout_id.as_deref(),
-        Some("planned-1")
+        Some("planned-new")
+    );
+    assert_eq!(
+        refreshed[0].completed_workout_id.as_deref(),
+        Some("completed-1")
     );
 
     let stored_workout = completed
@@ -1475,18 +1548,20 @@ async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
         .expect("completed workout remains stored");
     assert_eq!(
         stored_workout.planned_workout_id.as_deref(),
-        Some("planned-1")
+        Some("planned-new")
     );
 
     let stored_link = planned_completed_links
         .find_by_completed_workout_id("user-1", "completed-1")
         .await
         .unwrap()
-        .expect("explicit link remains stored");
+        .expect("stale explicit link is replaced by relinked heuristic link");
+    assert_eq!(stored_link.planned_workout_id, "planned-new");
     assert_eq!(
         stored_link.match_source,
-        PlannedCompletedWorkoutLinkMatchSource::Explicit
+        PlannedCompletedWorkoutLinkMatchSource::Heuristic
     );
+    assert_eq!(stored_link.matched_at_epoch_seconds, 1_778_414_400);
 }
 
 #[tokio::test]

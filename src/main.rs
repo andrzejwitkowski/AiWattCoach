@@ -345,7 +345,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         planned_workout_repository.clone(),
         authoritative_completed_workout_repository.clone(),
         planned_completed_link_repository.clone(),
-        external_sync_state_repository.clone(),
     );
     let training_load_recompute_service = Arc::new(TrainingLoadRecomputeService::new(
         authoritative_completed_workout_repository.clone(),

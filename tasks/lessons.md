@@ -21,6 +21,7 @@
 - For constructors with many positional arguments of the same type, re-check test fixtures against the canonical signature before treating behavior regressions as product bugs. A misordered fixture can silently move a link/id into the wrong field and produce misleading CI failures.
 - When I change candidate-selection logic to depend on sync ownership, I must verify both sides of the filter separately: the losing duplicate should disappear, but the authoritative candidate must still survive. Also, if I preload sync states to guide filtering, I should reuse that batch for later projection instead of paying for a second identical lookup.
 - For duplicate filters with asymmetric precedence, test the winning branch explicitly after each refactor. It is easy to make the loser disappear while still leaving the winner behind an older generic collision rule.
+- When I intentionally tighten cleanup behavior for stale links or ownership rows, I must re-read older regressions in the same behavior group and update any test whose name or assertions still encode the superseded preservation contract. A passing new regression does not prove the old expectation was still valid.
 
 ## Fixture Refactor Verification
 

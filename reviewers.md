@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-14 | CodeRabbit | PR #234 split-brain detector guardrails and test realism
+
+- Problem: the new Mongo split-brain script accepted invalid boolean env values by silently treating them as `false`, and its `APPLY=true` repair path deleted stale owner rows from the initial scan snapshot without revalidating the live finding immediately before the write. The new `keeps_planned_workout_visible_when_intervals_sync_state_exists` regression also did not actually seed an Intervals sync-state row, so its name overstated what it covered.
+- Fix: made `readBool(...)` reject invalid values with a clear error, changed the repair path to reload the candidate day and re-run `detectCandidateIssues(...)` before deleting rows so non-repairable live changes are skipped instead of mutated, and updated the planned-workout regression to seed a matching Intervals sync-state row before asserting visibility.
+- Prevention: for operational repair scripts, fail fast on malformed env flags and revalidate live preconditions immediately before any destructive write. When a regression test name claims a specific upstream state exists, seed that exact state in the fixture instead of relying on the no-op path to stand in for it.
+
+### 2026-05-14 | user | stale orphaned explicit-link regression expectation after split-brain fix
+
+- Problem: after tightening `calendar_view` refresh to delete stale non-heuristic links whose planned workout id is no longer active, the older regression `refresh_range_for_user_preserves_orphaned_explicit_links` still expected the orphaned explicit link and completed backlink to survive. The production behavior was correct, but the stale test contract broke CI.
+- Fix: renamed the regression to `refresh_range_for_user_clears_orphaned_explicit_links` and updated it to assert the completed workout backlink is cleared and the orphaned explicit link row is removed when no active planned workout exists for that id.
+- Prevention: when a bug fix intentionally changes stale-data cleanup semantics, grep the neighboring regressions for old preservation wording like `preserves_*` and update those expectations before opening or pushing the branch.
+
 ### 2026-05-14 | CodeRabbit | PR #233 task scheduler worker review follow-up
 
 - Problem: `src/config/task_scheduler/worker.rs` still carried a large inline `#[cfg(test)]` block mixing production worker logic with in-memory test fakes, and the panic-path worker test waited on `panic_handler.started.notified().await` without any timeout guard. That left the production file harder to review and could hang the test forever when startup synchronization regressed.
@@ -38,6 +50,18 @@ Read this file before planning and before implementation.
 - Problem: the extracted `merge_provider_transcript_with_retry(...)` helper retried retryable `persist_merged(...)` failures but returned immediately on retryable `load_latest()` errors, so a transient repository read failure during transcript reload skipped the intended retry/backoff path.
 - Fix: changed `src/domain/llm/persistence.rs` to route the whole load-merge-persist operation through the existing shared `retry_persist(...)` loop, so retryable `load_latest()` and `persist_merged(...)` errors now share the same retry semantics. Kept the focused regression `merge_provider_transcript_with_retry_retries_retryable_load_error` to lock the bug fix in place.
 - Prevention: when extracting a retry helper around a multi-step optimistic-write flow, verify every fallible step that belongs to one retry attempt stays inside the retry closure. Do not leave `load_latest()` or other preparatory repository reads outside the retry loop if their retryable failures should reload and retry the full write attempt.
+
+### 2026-05-14 | user | reusable split-brain detector and guarded stale-owner repair
+
+- Problem: after fixing one concrete planned/completed split-brain day in Mongo, we still needed a reusable way to detect whether other superseded same-day planned workouts had stale Intervals sync ownership. Ad-hoc one-off queries were too fragile to reuse, and there was no safe repo script to repair the narrow stale-owner-only variant without touching more complicated cases that also involve completed backlinks, planned-completed links, or read-model splits.
+- Fix: added `scripts/mongo-detect-planned-workout-split-brains.js` as a read-only detector for stale Intervals sync owners, stale completed backlinks, stale planned-completed links, read-model splits, and duplicate-key resync risk across superseded same-day planned workouts. Then extended it with a guarded `APPLY=true` mode that repairs only the stale-owner-only case by deleting stale Intervals planned-workout sync rows on superseded planned ids, followed by an immediate post-repair detection pass.
+- Prevention: when a production data inconsistency has more than one possible severity level, first codify it as a detector that classifies the shapes separately, then allow automated repair only for the narrow shape whose safety preconditions are explicit in code. Do not ship a broad write script that silently mutates cases with stale completed backlinks or read-model divergence unless those branches are classified and guarded too.
+
+### 2026-05-14 | user | planned/completed split-brain after training-plan regeneration
+
+- Problem: when a projected planned workout for the same day was regenerated, stale Intervals planned-workout ownership in `external_sync_states` and stale non-heuristic links in `planned_completed_workout_links` could keep the completed workout attached to the superseded planned id. That split the day into separate planned and completed calendar entries, hid the current planned workout from selected-day reads, and caused Intervals resync to fail with a duplicate-key conflict on the old external owner row.
+- Fix: stopped `AuthoritativePlannedWorkoutRepository` from hiding current planned workouts solely because an Intervals planned sync-state row exists, taught calendar-view refresh to discard stale non-heuristic links whose planned id is no longer active and relink same-day completions to the current plan, and made Intervals planned-workout sync transfer remote event ownership from an older planned workout before persisting the new synced row. Added focused regressions for planned visibility, stale explicit-link replacement, and remote-event ownership transfer.
+- Prevention: when same-day planned workouts can be superseded, verify all three authoritative stores move together: current projected planned ids, completed-to-planned links, and provider ownership rows. A stale explicit link or stale provider owner row must never outrank the current active planned workout for the same day.
 
 ### 2026-05-13 | CodeRabbit | PR #229 shared public tool materialization fresh-response coverage
 
