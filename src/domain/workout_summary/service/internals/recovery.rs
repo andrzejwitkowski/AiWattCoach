@@ -1,7 +1,10 @@
 use crate::domain::{
     llm::{
-        last_nonempty_assistant_content, merge_provider_transcript_entries,
-        persistence::{retry_persist, RetryConfig, RetryContext},
+        last_nonempty_assistant_content,
+        persistence::{
+            merge_provider_transcript_with_retry, retry_persist, ProviderTranscriptSnapshot,
+            RetryConfig, RetryContext,
+        },
     },
     llm_tools::public_tool_call_from_llm,
     public_tool_calls::materialization::materialize_public_tool_calls_idempotently,
@@ -26,10 +29,10 @@ where
         operation: &CoachReplyOperation,
         write_label: &'static str,
     ) -> Result<(), WorkoutSummaryError> {
-        let service = self.clone();
         let user_id = user_id.to_string();
         let workout_id = workout_id.to_string();
         let provider_transcript = operation.provider_transcript.clone();
+        let service = self.clone();
         let ctx = RetryContext {
             write_label,
             user_message_id: operation.user_message_id.clone(),
@@ -38,7 +41,7 @@ where
             operation_status: None,
         };
 
-        retry_persist(
+        merge_provider_transcript_with_retry(
             RetryConfig {
                 max_attempts: POST_PROVIDER_WRITE_ATTEMPTS,
                 backoff_base_ms: 25,
@@ -48,20 +51,29 @@ where
                 let svc = service.clone();
                 let uid = user_id.clone();
                 let wid = workout_id.clone();
-                let pt = provider_transcript.clone();
                 Box::pin(async move {
                     let summary = svc.get_existing_summary(&uid, &wid).await?;
-                    let merged =
-                        merge_provider_transcript_entries(summary.provider_transcript, &pt);
+                    Ok(ProviderTranscriptSnapshot {
+                        latest_state: summary.updated_at_epoch_seconds,
+                        provider_transcript: summary.provider_transcript,
+                    })
+                })
+            },
+            |expected_updated_at_epoch_seconds, merged| {
+                let svc = service.clone();
+                let uid = user_id.clone();
+                let wid = workout_id.clone();
+                Box::pin(async move {
                     svc.replace_provider_transcript(
                         &uid,
                         &wid,
-                        summary.updated_at_epoch_seconds,
+                        expected_updated_at_epoch_seconds,
                         merged,
                     )
                     .await
                 })
             },
+            &provider_transcript,
             &ctx,
         )
         .await

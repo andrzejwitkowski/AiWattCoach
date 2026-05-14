@@ -1,7 +1,10 @@
 use crate::domain::coach_conversation::CoachConversationReplyOperation;
 use crate::domain::llm::{
-    merge_provider_transcript_entries, next_provider_transcript_updated_at_epoch_seconds,
-    persistence::{retry_persist, RetryConfig, RetryContext},
+    next_provider_transcript_updated_at_epoch_seconds,
+    persistence::{
+        merge_provider_transcript_with_retry, retry_persist, ProviderTranscriptSnapshot,
+        RetryConfig, RetryContext,
+    },
     LlmChatMessage, LlmError,
 };
 
@@ -22,10 +25,10 @@ where
         operation: &CoachConversationReplyOperation,
         write_label: &'static str,
     ) -> Result<(), CoachConversationError> {
-        let service = self.clone();
         let user_id = conversation.user_id.clone();
         let conversation_id = conversation.conversation_id.clone();
         let provider_transcript = operation.provider_transcript.clone();
+        let service = self.clone();
         let ctx = RetryContext {
             write_label,
             user_message_id: operation.user_message_id.clone(),
@@ -34,7 +37,7 @@ where
             operation_status: None,
         };
 
-        retry_persist(
+        merge_provider_transcript_with_retry(
             RetryConfig {
                 max_attempts: POST_PROVIDER_WRITE_ATTEMPTS,
                 backoff_base_ms: 25,
@@ -44,18 +47,24 @@ where
                 let svc = service.clone();
                 let uid = user_id.clone();
                 let cid = conversation_id.clone();
-                let pt = provider_transcript.clone();
                 Box::pin(async move {
                     let latest = svc
                         .conversations
                         .find_by_user_id_and_conversation_id(&uid, &cid)
                         .await?
                         .ok_or(CoachConversationError::NotFound)?;
-                    let merged =
-                        merge_provider_transcript_entries(latest.provider_transcript.clone(), &pt);
-                    svc.replace_provider_transcript(&latest, merged).await
+                    let provider_transcript = latest.provider_transcript.clone();
+                    Ok(ProviderTranscriptSnapshot {
+                        latest_state: latest,
+                        provider_transcript,
+                    })
                 })
             },
+            |latest, merged| {
+                let svc = service.clone();
+                Box::pin(async move { svc.replace_provider_transcript(&latest, merged).await })
+            },
+            &provider_transcript,
             &ctx,
         )
         .await

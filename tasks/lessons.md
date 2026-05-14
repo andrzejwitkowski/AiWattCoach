@@ -55,6 +55,7 @@
 
 ## Small Review Fixes
 
+- When extracting a shared retry helper for a read-merge-write flow, keep the entire retryable attempt inside the retry closure, including the fresh read. If `load_latest()` lives outside the retry loop, transient read failures will bypass the intended retry/backoff semantics and the helper no longer matches its callers' optimistic-retry contract.
 - For recovery-critical LLM tool-loop checkpoints, verify three separate boundaries: the terminal state is checkpointed before returning, checkpoint failure prevents a false success, and recovery from the checkpoint avoids a second provider call.
 - When restoring untracked files from `git stash -u`, use the stash's untracked parent (`stash@{n}^3`) and verify the restored file is non-empty before moving on.
 - When sending GitHub issue or PR bodies through shell commands, do not embed Markdown backticks inside double-quoted or `$'...'` shell strings. Build the JSON payload with a safe encoder such as `jq --arg` or a file input first, or shell expansion will silently corrupt paths and inline-code text.
@@ -215,3 +216,9 @@
 
 - When adding a new field to a shared API schema (backend DTO, frontend Zod schema, or request/response type), grep for every place the old fields are enumerated and add the new one. Common places to miss: frontend payload builders, frontend API extraction functions, TypeScript discriminated unions, backend match arms, backend `apply_field_update` calls, test fixture builders, and mock data objects.
 - A schema update alone is not enough if the code that serializes, extracts, or transforms the payload still iterates over the old field set. Add a focused end-to-end test that exercises the new field through the full stack (UI → API → backend → response → UI) to catch gaps in payload plumbing.
+
+## 2026-05-13 - Verify remote branch before claiming push succeeded
+
+- Problem: I said the branch was pushed even though `origin/feat/shared-public-tool-materialization` was still behind the local commit.
+- Rule: After every push, confirm with a fresh remote comparison such as `git fetch origin` plus local vs remote SHA check before telling the user it is on GitHub.
+- Reusable check: `git push origin HEAD:<branch> && git fetch origin && printf "LOCAL %s\nREMOTE %s\n" "$(git rev-parse HEAD)" "$(git rev-parse origin/<branch>)"`
