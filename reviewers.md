@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-14 | user | stale orphaned explicit-link regression expectation after split-brain fix
+
+- Problem: after tightening `calendar_view` refresh to delete stale non-heuristic links whose planned workout id is no longer active, the older regression `refresh_range_for_user_preserves_orphaned_explicit_links` still expected the orphaned explicit link and completed backlink to survive. The production behavior was correct, but the stale test contract broke CI.
+- Fix: renamed the regression to `refresh_range_for_user_clears_orphaned_explicit_links` and updated it to assert the completed workout backlink is cleared and the orphaned explicit link row is removed when no active planned workout exists for that id.
+- Prevention: when a bug fix intentionally changes stale-data cleanup semantics, grep the neighboring regressions for old preservation wording like `preserves_*` and update those expectations before opening or pushing the branch.
+
 ### 2026-05-14 | CodeRabbit | PR #233 task scheduler worker review follow-up
 
 - Problem: `src/config/task_scheduler/worker.rs` still carried a large inline `#[cfg(test)]` block mixing production worker logic with in-memory test fakes, and the panic-path worker test waited on `panic_handler.started.notified().await` without any timeout guard. That left the production file harder to review and could hang the test forever when startup synchronization regressed.

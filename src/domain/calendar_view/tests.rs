@@ -1423,7 +1423,7 @@ async fn refresh_range_for_user_prefers_wahoo_completed_workout_when_wahoo_has_p
 }
 
 #[tokio::test]
-async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
+async fn refresh_range_for_user_clears_orphaned_explicit_links() {
     let views = InMemoryCalendarEntryViewRepository::default();
     let planned = TestCalendarPlannedWorkoutSource::default();
     let completed = TestCompletedWorkoutRepository::default();
@@ -1463,30 +1463,20 @@ async fn refresh_range_for_user_preserves_orphaned_explicit_links() {
 
     assert_eq!(refreshed.len(), 1);
     assert_eq!(refreshed[0].entry_kind, CalendarEntryKind::CompletedWorkout);
-    assert_eq!(
-        refreshed[0].planned_workout_id.as_deref(),
-        Some("planned-1")
-    );
+    assert_eq!(refreshed[0].planned_workout_id, None);
 
     let stored_workout = completed
         .find_by_user_id_and_completed_workout_id("user-1", "completed-1")
         .await
         .unwrap()
         .expect("completed workout remains stored");
-    assert_eq!(
-        stored_workout.planned_workout_id.as_deref(),
-        Some("planned-1")
-    );
+    assert_eq!(stored_workout.planned_workout_id, None);
 
     let stored_link = planned_completed_links
         .find_by_completed_workout_id("user-1", "completed-1")
         .await
-        .unwrap()
-        .expect("explicit link remains stored");
-    assert_eq!(
-        stored_link.match_source,
-        PlannedCompletedWorkoutLinkMatchSource::Explicit
-    );
+        .unwrap();
+    assert!(stored_link.is_none());
 }
 
 #[tokio::test]
