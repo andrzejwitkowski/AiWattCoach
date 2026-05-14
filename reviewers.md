@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-14 | CodeRabbit | PR #233 task scheduler worker review follow-up
+
+- Problem: `src/config/task_scheduler/worker.rs` still carried a large inline `#[cfg(test)]` block mixing production worker logic with in-memory test fakes, and the panic-path worker test waited on `panic_handler.started.notified().await` without any timeout guard. That left the production file harder to review and could hang the test forever when startup synchronization regressed.
+- Fix: moved the worker runtime tests into `src/config/task_scheduler/worker_tests/` with a separate `support.rs` for the in-memory repositories/handlers, leaving `worker.rs` production-only. Replaced the raw `Notify` await in the panic-path test with a timeout-backed `wait_for_notify(...)` helper and added a focused regression that proves the helper fails fast when no notification arrives.
+- Prevention: when a production Rust module picks up more than a small handful of test-only fakes and integration-style worker tests, split them into sibling `#[cfg(test)]` modules or a test-support file before review. Any async test synchronization built on `Notify`, channels, or watch receivers must use an explicit timeout or other bounded wait so regressions fail instead of hanging.
+
 ### 2026-05-14 | CodeRabbit | PR #232 shared provider transcript merge helper
 
 - Problem: the extracted `merge_provider_transcript_with_retry(...)` helper retried retryable `persist_merged(...)` failures but returned immediately on retryable `load_latest()` errors, so a transient repository read failure during transcript reload skipped the intended retry/backoff path.
