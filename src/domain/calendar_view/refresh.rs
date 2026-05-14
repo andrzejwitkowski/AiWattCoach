@@ -388,6 +388,7 @@ where
 
                 if let Some(link) = existing_link.as_ref().filter(|link| {
                     link.match_source != PlannedCompletedWorkoutLinkMatchSource::Heuristic
+                        && all_planned_ids.contains(&link.planned_workout_id)
                 }) {
                     if workout.planned_workout_id.as_deref()
                         != Some(link.planned_workout_id.as_str())
@@ -437,20 +438,20 @@ where
                 }
 
                 let Some(planned_workout_id) = workout.planned_workout_id.as_deref() else {
+                    if existing_link.as_ref().is_some_and(|link| {
+                        link.match_source != PlannedCompletedWorkoutLinkMatchSource::Heuristic
+                    }) {
+                        planned_completed_links
+                            .delete_by_completed_workout_id(&user_id, &workout.completed_workout_id)
+                            .await
+                            .map_err(map_planned_completed_link_error)?;
+                    }
                     continue;
                 };
                 if all_planned_ids.contains(planned_workout_id) {
                     continue;
                 }
-                let link = existing_link;
-                if matches!(
-                    link.as_ref().map(|link| &link.match_source),
-                    Some(source) if source != &PlannedCompletedWorkoutLinkMatchSource::Heuristic
-                ) {
-                    continue;
-                }
-
-                if link.is_some() {
+                if existing_link.is_some() {
                     planned_completed_links
                         .delete_by_completed_workout_id(&user_id, &workout.completed_workout_id)
                         .await

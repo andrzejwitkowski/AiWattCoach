@@ -4,58 +4,48 @@ use chrono::{Duration, NaiveDate};
 
 use crate::domain::{
     completed_workouts::CompletedWorkoutRepository,
-    external_sync::{
-        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncStateRepository,
-    },
     planned_completed_links::PlannedCompletedWorkoutLinkRepository,
 };
 
 use super::{BoxFuture, PlannedWorkout, PlannedWorkoutError, PlannedWorkoutRepository};
 
 #[derive(Clone)]
-pub struct AuthoritativePlannedWorkoutRepository<Planned, Completed, Links, SyncStates>
+pub struct AuthoritativePlannedWorkoutRepository<Planned, Completed, Links>
 where
     Planned: PlannedWorkoutRepository,
     Completed: CompletedWorkoutRepository,
     Links: PlannedCompletedWorkoutLinkRepository,
-    SyncStates: ExternalSyncStateRepository,
 {
     planned_workouts: Planned,
     completed_workouts: Completed,
     planned_completed_links: Links,
-    sync_states: SyncStates,
 }
 
-impl<Planned, Completed, Links, SyncStates>
-    AuthoritativePlannedWorkoutRepository<Planned, Completed, Links, SyncStates>
+impl<Planned, Completed, Links> AuthoritativePlannedWorkoutRepository<Planned, Completed, Links>
 where
     Planned: PlannedWorkoutRepository,
     Completed: CompletedWorkoutRepository,
     Links: PlannedCompletedWorkoutLinkRepository,
-    SyncStates: ExternalSyncStateRepository,
 {
     pub fn new(
         planned_workouts: Planned,
         completed_workouts: Completed,
         planned_completed_links: Links,
-        sync_states: SyncStates,
     ) -> Self {
         Self {
             planned_workouts,
             completed_workouts,
             planned_completed_links,
-            sync_states,
         }
     }
 }
 
-impl<Planned, Completed, Links, SyncStates> PlannedWorkoutRepository
-    for AuthoritativePlannedWorkoutRepository<Planned, Completed, Links, SyncStates>
+impl<Planned, Completed, Links> PlannedWorkoutRepository
+    for AuthoritativePlannedWorkoutRepository<Planned, Completed, Links>
 where
     Planned: PlannedWorkoutRepository,
     Completed: CompletedWorkoutRepository,
     Links: PlannedCompletedWorkoutLinkRepository,
-    SyncStates: ExternalSyncStateRepository,
 {
     fn list_by_user_id(
         &self,
@@ -101,13 +91,11 @@ where
     }
 }
 
-impl<Planned, Completed, Links, SyncStates>
-    AuthoritativePlannedWorkoutRepository<Planned, Completed, Links, SyncStates>
+impl<Planned, Completed, Links> AuthoritativePlannedWorkoutRepository<Planned, Completed, Links>
 where
     Planned: PlannedWorkoutRepository,
     Completed: CompletedWorkoutRepository,
     Links: PlannedCompletedWorkoutLinkRepository,
-    SyncStates: ExternalSyncStateRepository,
 {
     async fn filter_visible(
         &self,
@@ -119,27 +107,6 @@ where
             return Ok(Vec::new());
         }
 
-        let canonical_entities = workouts
-            .iter()
-            .map(|workout| {
-                CanonicalEntityRef::new(
-                    CanonicalEntityKind::PlannedWorkout,
-                    workout.planned_workout_id.clone(),
-                )
-            })
-            .collect::<Vec<_>>();
-        let externally_owned_ids = self
-            .sync_states
-            .find_by_provider_and_canonical_entities(
-                user_id,
-                ExternalProvider::Intervals,
-                &canonical_entities,
-            )
-            .await
-            .map_err(|error| PlannedWorkoutError::Repository(error.to_string()))?
-            .into_iter()
-            .map(|state| state.canonical_entity.entity_id)
-            .collect::<HashSet<_>>();
         let completed_workouts = match date_range {
             Some((oldest, newest)) => {
                 let (completed_oldest, completed_newest) =
@@ -168,8 +135,7 @@ where
         let candidate_planned_ids = workouts
             .iter()
             .filter(|workout| {
-                !externally_owned_ids.contains(&workout.planned_workout_id)
-                    && !is_legacy_external_planned_workout_id(&workout.planned_workout_id)
+                !is_legacy_external_planned_workout_id(&workout.planned_workout_id)
                     && !planned_ids_with_authoritative_completed
                         .contains(&workout.planned_workout_id)
             })
@@ -185,9 +151,7 @@ where
 
         let mut visible = Vec::with_capacity(workouts.len());
         for workout in workouts {
-            if externally_owned_ids.contains(&workout.planned_workout_id)
-                || is_legacy_external_planned_workout_id(&workout.planned_workout_id)
-            {
+            if is_legacy_external_planned_workout_id(&workout.planned_workout_id) {
                 continue;
             }
 
@@ -746,7 +710,6 @@ mod tests {
             planned_workouts,
             completed_workouts,
             TestPlannedCompletedLinks::default(),
-            sync_states,
         );
 
         let visible = repository.list_by_user_id("user-1").await.unwrap();
@@ -765,7 +728,6 @@ mod tests {
             planned_workouts,
             TestCompletedWorkouts::default(),
             TestPlannedCompletedLinks::default(),
-            TestSyncStates::default(),
         );
 
         let visible = repository.list_by_user_id("user-1").await.unwrap();
@@ -823,7 +785,6 @@ mod tests {
                     1_700_000_000,
                 )],
             },
-            sync_states,
         );
 
         let visible = repository.list_by_user_id("user-1").await.unwrap();
@@ -873,7 +834,6 @@ mod tests {
             planned_workouts,
             completed_workouts,
             TestPlannedCompletedLinks::default(),
-            sync_states,
         );
 
         let visible = repository
@@ -882,5 +842,27 @@ mod tests {
             .unwrap();
 
         assert!(visible.is_empty());
+    }
+
+    #[tokio::test]
+    async fn keeps_planned_workout_visible_when_intervals_sync_state_exists() {
+        let planned_workouts = super::super::ports::InMemoryPlannedWorkoutRepository::default();
+        planned_workouts
+            .upsert(sample_planned_workout("planned-1", "2026-05-01"))
+            .await
+            .unwrap();
+        let repository = AuthoritativePlannedWorkoutRepository::new(
+            planned_workouts,
+            TestCompletedWorkouts::default(),
+            TestPlannedCompletedLinks::default(),
+        );
+
+        let visible = repository
+            .list_by_user_id_and_date_range("user-1", "2026-05-01", "2026-05-01")
+            .await
+            .unwrap();
+
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].planned_workout_id, "planned-1");
     }
 }

@@ -534,6 +534,84 @@ async fn sync_planned_workout_to_intervals_reuses_existing_event_found_by_workou
 }
 
 #[tokio::test]
+async fn sync_planned_workout_to_intervals_transfers_existing_remote_event_ownership() {
+    let existing_event = Event {
+        id: 77,
+        start_date_local: "2023-11-14T00:00:00".to_string(),
+        event_type: Some("Ride".to_string()),
+        name: Some("Build Session".to_string()),
+        category: EventCategory::Workout,
+        description: Some("- 60m 70%".to_string()),
+        indoor: false,
+        color: None,
+        workout_doc: None,
+    };
+    let intervals = FakeIntervalsService::with_listed_events(vec![existing_event.clone()]);
+    let sync_states = InMemoryExternalSyncStateRepository::default();
+    let stale_entity = planned_workout_entity("training-plan:user-1:w1:old", "2023-11-14");
+    let current_entity = planned_workout_entity("training-plan:user-1:w1:new", "2023-11-14");
+    sync_states
+        .upsert(
+            ExternalSyncState::new(
+                "user-1".to_string(),
+                ExternalProvider::Intervals,
+                stale_entity.clone(),
+            )
+            .mark_synced("77".to_string(), "stale-hash".to_string(), 1_700_000_001),
+        )
+        .await
+        .unwrap();
+
+    let service = CalendarService::new(
+        intervals.clone(),
+        InMemoryCalendarEntryViewRepository::default(),
+        FakeProjectionRepository::with_days(vec![projected_day(
+            "user-1",
+            "training-plan:user-1:w1:new",
+            "2023-11-14",
+            "Build Session",
+        )]),
+        sync_states.clone(),
+        FixedClock,
+    )
+    .with_calendar_view_refresh(RecordingCalendarRefresh::default());
+
+    service
+        .sync_planned_workout(
+            "user-1",
+            SyncPlannedWorkout {
+                operation_key: "training-plan:user-1:w1:new".to_string(),
+                date: "2023-11-14".to_string(),
+                provider: PlannedWorkoutSyncProvider::Intervals,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(intervals.created_events.lock().unwrap().is_empty());
+    let updated = intervals.updated_events.lock().unwrap().clone();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].0, existing_event.id);
+
+    let stale_state = sync_states
+        .find_by_provider_and_canonical_entity("user-1", ExternalProvider::Intervals, &stale_entity)
+        .await
+        .unwrap();
+    assert!(stale_state.is_none());
+
+    let current_state = sync_states
+        .find_by_provider_and_canonical_entity(
+            "user-1",
+            ExternalProvider::Intervals,
+            &current_entity,
+        )
+        .await
+        .unwrap()
+        .expect("current planned workout owns the reused remote event");
+    assert_eq!(current_state.external_id.as_deref(), Some("77"));
+}
+
+#[tokio::test]
 async fn sync_planned_workout_returns_credentials_not_configured_when_wahoo_is_not_connected() {
     let sync_states = InMemoryExternalSyncStateRepository::default();
     let service = CalendarService::new(

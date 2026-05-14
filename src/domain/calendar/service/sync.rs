@@ -195,6 +195,12 @@ where
 
         match sync_result {
             Ok(remote_event) => {
+                self.release_existing_intervals_planned_owner(
+                    user_id,
+                    &canonical_entity,
+                    remote_event.id,
+                )
+                .await?;
                 let synced_state = self
                     .sync_states
                     .upsert(pending_state.mark_synced(
@@ -450,6 +456,39 @@ where
     ) -> Result<Vec<ExternalSyncState>, CalendarError> {
         self.sync_states
             .find_by_canonical_entities(user_id, std::slice::from_ref(canonical_entity))
+            .await
+            .map_err(map_external_sync_error)
+    }
+
+    async fn release_existing_intervals_planned_owner(
+        &self,
+        user_id: &str,
+        canonical_entity: &CanonicalEntityRef,
+        remote_event_id: i64,
+    ) -> Result<(), CalendarError> {
+        let Some(existing_owner) = self
+            .sync_states
+            .find_planned_workout_by_provider_and_external_id(
+                user_id,
+                ExternalProvider::Intervals,
+                &remote_event_id.to_string(),
+            )
+            .await
+            .map_err(map_external_sync_error)?
+        else {
+            return Ok(());
+        };
+
+        if existing_owner.canonical_entity == *canonical_entity {
+            return Ok(());
+        }
+
+        self.sync_states
+            .delete_by_provider_and_canonical_entity(
+                user_id,
+                ExternalProvider::Intervals,
+                &existing_owner.canonical_entity,
+            )
             .await
             .map_err(map_external_sync_error)
     }
