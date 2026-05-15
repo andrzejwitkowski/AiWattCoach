@@ -1,3 +1,4 @@
+use schemars::{schema_for, JsonSchema};
 use serde::Deserialize;
 
 use super::CoachQuestion;
@@ -12,25 +13,40 @@ pub struct ParsedCoachReply {
     pub questions: Vec<CoachQuestion>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 struct CoachReplyEnvelope {
     summary: String,
     #[serde(default)]
+    #[schemars(length(max = 6))]
     questions: Vec<CoachQuestionEnvelope>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 struct CoachQuestionEnvelope {
     question: String,
+    #[schemars(length(min = 2, max = 6), inner(length(min = 1)))]
     answers: Vec<String>,
     #[serde(rename = "freeTextLabel")]
+    #[schemars(rename = "freeTextLabel")]
     free_text_label: Option<String>,
 }
 
 pub fn parse_coach_reply(raw: &str) -> Result<ParsedCoachReply, String> {
     let payload = extract_json_payload(raw);
+    if !looks_like_json(payload) {
+        if looks_like_malformed_coach_reply_json(payload) {
+            return Err(
+                "assistant reply looks like malformed JSON for workout summary coach schema"
+                    .to_string(),
+            );
+        }
+        return parse_plain_text_reply(payload);
+    }
+
     let parsed: CoachReplyEnvelope = serde_json::from_str(payload)
         .map_err(|error| format!("assistant reply is not valid JSON: {error}"))?;
 
@@ -38,6 +54,29 @@ pub fn parse_coach_reply(raw: &str) -> Result<ParsedCoachReply, String> {
     let questions = normalize_questions(parsed.questions)?;
 
     Ok(ParsedCoachReply { content, questions })
+}
+
+pub fn workout_summary_coach_reply_json_schema() -> String {
+    serde_json::to_string_pretty(&schema_for!(CoachReplyEnvelope))
+        .expect("workout summary coach reply schema should serialize")
+}
+
+fn parse_plain_text_reply(payload: &str) -> Result<ParsedCoachReply, String> {
+    let content = trim_required_text(payload.to_string(), "assistant reply")?;
+    Ok(ParsedCoachReply {
+        content,
+        questions: Vec::new(),
+    })
+}
+
+fn looks_like_json(payload: &str) -> bool {
+    payload.starts_with('{') || payload.starts_with('[')
+}
+
+fn looks_like_malformed_coach_reply_json(payload: &str) -> bool {
+    let lower = payload.to_ascii_lowercase();
+    let mentions_schema_keys = lower.contains("summary") || lower.contains("questions");
+    mentions_schema_keys && (payload.contains('{') || payload.contains('['))
 }
 
 fn extract_json_payload(raw: &str) -> &str {
@@ -119,7 +158,8 @@ fn trim_required_text(value: String, field_name: &str) -> Result<String, String>
 
 #[cfg(test)]
 mod tests {
-    use super::parse_coach_reply;
+    use super::{parse_coach_reply, workout_summary_coach_reply_json_schema};
+    use serde_json::Value;
 
     #[test]
     fn parse_coach_reply_returns_summary_and_questions() {
@@ -189,10 +229,44 @@ mod tests {
     }
 
     #[test]
-    fn parse_coach_reply_rejects_invalid_json() {
-        let error = parse_coach_reply("not json").unwrap_err();
+    fn parse_coach_reply_rejects_malformed_json() {
+        let error = parse_coach_reply(r#"{"summary":"Missing close""#).unwrap_err();
 
         assert!(error.contains("assistant reply is not valid JSON"));
+    }
+
+    #[test]
+    fn parse_coach_reply_accepts_plain_text_as_summary_without_questions() {
+        let parsed = parse_coach_reply("This was a useful endurance ride. Save the summary.")
+            .expect("plain text coach reply should remain usable");
+
+        assert_eq!(
+            parsed.content,
+            "This was a useful endurance ride. Save the summary."
+        );
+        assert!(parsed.questions.is_empty());
+    }
+
+    #[test]
+    fn parse_coach_reply_rejects_json_like_text_near_schema() {
+        let error = parse_coach_reply(
+            r#"Here is the JSON: {"summary":"Useful ride","questions":[{"question":"Limiter?""#,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("assistant reply looks like malformed JSON"));
+    }
+
+    #[test]
+    fn workout_summary_coach_reply_schema_matches_parser_envelope_shape() {
+        let schema: Value = serde_json::from_str(&workout_summary_coach_reply_json_schema())
+            .expect("schema should be valid JSON");
+
+        assert_eq!(schema["type"], "object");
+        assert_eq!(schema["additionalProperties"], false);
+        assert_eq!(schema["properties"]["summary"]["type"], "string");
+        assert_eq!(schema["properties"]["questions"]["type"], "array");
+        assert_eq!(schema["properties"]["questions"]["maxItems"], 6);
     }
 
     #[test]

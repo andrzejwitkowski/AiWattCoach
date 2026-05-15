@@ -7,7 +7,9 @@ mod service;
 mod test_support;
 
 pub use coach::{MockWorkoutCoach, WorkoutCoach};
-pub use coach_output::{parse_coach_reply, ParsedCoachReply};
+pub use coach_output::{
+    parse_coach_reply, workout_summary_coach_reply_json_schema, ParsedCoachReply,
+};
 pub use model::{
     validate_message_content, validate_rpe, CoachQuestion, CoachReply, CoachReplyClaimResult,
     CoachReplyOperation, CoachReplyOperationFailureKind, CoachReplyOperationStatus,

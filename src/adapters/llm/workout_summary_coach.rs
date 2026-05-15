@@ -16,7 +16,7 @@ use crate::domain::{
         ToolExecutionContext, ToolScope,
     },
     training_context::TrainingContextBuilder,
-    workout_summary::{WorkoutCoach, WorkoutSummary},
+    workout_summary::{workout_summary_coach_reply_json_schema, WorkoutCoach, WorkoutSummary},
 };
 
 #[derive(Clone)]
@@ -245,7 +245,7 @@ where
     }
 }
 
-const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only with this exact shape: {\"summary\": string, \"questions\": [{\"question\": string, \"answers\": string[], \"freeTextLabel\": string|null}]}. The summary may use markdown. Questions may be an empty array when you are ready. Include at most 6 questions in total. Every question must have 2 to 6 short single-choice answers. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
+const WORKOUT_COACH_SYSTEM_PROMPT_BASE: &str = "You are an AI cycling coach helping an athlete reflect on one completed workout. Use the packed training context as factual background. Be direct, adult, and concise. Do not flatter, hedge, or act like a yes-man. Challenge weak reasoning when the context does not support it. Keep the conversation focused and practical rather than digressive. In your first reply after a workout, ask all follow-up questions you genuinely need at once instead of stretching them across many turns. The athlete should still feel coached, not interrogated. Ask concrete questions about the workout limiter, legs, breathing, fueling, sleep, stress, pain, readiness for the next days, and any plan constraints when relevant. Add other questions only when the workout characteristics clearly justify them. You may also ask about nutrition, race strategy, or the desired direction of the next 14 days when that would materially improve the next plan. If you already have enough information to generate the plan, say that clearly and tell the athlete to save the summary. Return your final answer as JSON only matching the workout summary coach reply schema. The summary may use markdown. Questions may be an empty array when you are ready. Do not output any text outside the JSON object. Do not invent details beyond the provided context.";
 
 fn build_stable_context(
     summary: &WorkoutSummary,
@@ -276,7 +276,10 @@ fn build_volatile_context(packed_training_context: &str) -> String {
 }
 
 fn workout_coach_system_prompt() -> String {
-    format!("{WORKOUT_COACH_SYSTEM_PROMPT_BASE} {PACKED_TRAINING_CONTEXT_LEGEND}")
+    format!(
+        "{WORKOUT_COACH_SYSTEM_PROMPT_BASE}\nworkout_summary_coach_reply_schema={}\n{PACKED_TRAINING_CONTEXT_LEGEND}",
+        workout_summary_coach_reply_json_schema()
+    )
 }
 
 fn build_conversation(
@@ -322,11 +325,22 @@ fn build_conversation(
 
 #[cfg(test)]
 mod tests {
-    use super::build_conversation;
+    use super::{build_conversation, workout_coach_system_prompt};
     use crate::domain::{
         llm::{LlmChatMessage, LlmMessageRole, LlmToolCall},
         workout_summary::{ConversationMessage, MessageRole, PublicToolCall},
     };
+
+    #[test]
+    fn workout_coach_system_prompt_includes_schema_from_domain_contract() {
+        let prompt = workout_coach_system_prompt();
+
+        assert!(prompt.contains("workout_summary_coach_reply_schema="));
+        assert!(prompt.contains(r#""summary""#));
+        assert!(prompt.contains(r#""questions""#));
+        assert!(prompt.contains(r#""freeTextLabel""#));
+        assert!(prompt.contains(r#""additionalProperties": false"#));
+    }
 
     #[test]
     fn build_conversation_replays_last_hidden_assistant_tool_calls() {
