@@ -13,6 +13,7 @@ use crate::domain::{
         ScheduledTask, ScheduledTaskExecutor, SharedTaskHandler, TaskRepository, TaskRunOutcome,
         TaskSchedulerError, TaskSchedulerService, TaskWorkerRepository,
     },
+    training_plan_supervisor::TrainingPlanSupervisorScheduler,
     workout_summary::WorkoutRecap,
 };
 
@@ -115,6 +116,48 @@ fn build_completed_checkpoint(
     )
 }
 
+type DirectTrainingPlanService<
+    Snapshots,
+    Projections,
+    Operations,
+    Generator,
+    WorkoutSummary,
+    ServiceTime,
+    Supervisor,
+    Refresh,
+> = TrainingPlanGenerationService<
+    Snapshots,
+    Projections,
+    Operations,
+    Generator,
+    WorkoutSummary,
+    ServiceTime,
+    Supervisor,
+    Refresh,
+>;
+
+type SharedDirectTrainingPlanService<
+    Snapshots,
+    Projections,
+    Operations,
+    Generator,
+    WorkoutSummary,
+    ServiceTime,
+    Supervisor,
+    Refresh,
+> = Arc<
+    DirectTrainingPlanService<
+        Snapshots,
+        Projections,
+        Operations,
+        Generator,
+        WorkoutSummary,
+        ServiceTime,
+        Supervisor,
+        Refresh,
+    >,
+>;
+
 struct TrainingPlanGenerateTaskExecutor<Base> {
     base: Arc<Base>,
 }
@@ -188,6 +231,7 @@ struct TrainingPlanTaskResultHandler<
     Generator,
     WorkoutSummary,
     ServiceTime,
+    Supervisor,
     Refresh,
 > where
     Snapshots: TrainingPlanSnapshotRepository + Clone + 'static,
@@ -196,23 +240,31 @@ struct TrainingPlanTaskResultHandler<
     Generator: TrainingPlanGenerator + Clone + 'static,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone + 'static,
     ServiceTime: Clock + Clone + 'static,
+    Supervisor: TrainingPlanSupervisorScheduler + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
-    base: Arc<
-        TrainingPlanGenerationService<
-            Snapshots,
-            Projections,
-            Operations,
-            Generator,
-            WorkoutSummary,
-            ServiceTime,
-            Refresh,
-        >,
+    base: SharedDirectTrainingPlanService<
+        Snapshots,
+        Projections,
+        Operations,
+        Generator,
+        WorkoutSummary,
+        ServiceTime,
+        Supervisor,
+        Refresh,
     >,
 }
 
-impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, ServiceTime, Refresh>
-    ResultTaskHandler
+impl<
+        Snapshots,
+        Projections,
+        Operations,
+        Generator,
+        WorkoutSummary,
+        ServiceTime,
+        Supervisor,
+        Refresh,
+    > ResultTaskHandler
     for TrainingPlanTaskResultHandler<
         Snapshots,
         Projections,
@@ -220,6 +272,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, ServiceTime,
         Generator,
         WorkoutSummary,
         ServiceTime,
+        Supervisor,
         Refresh,
     >
 where
@@ -229,6 +282,7 @@ where
     Generator: TrainingPlanGenerator + Clone + 'static,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone + 'static,
     ServiceTime: Clock + Clone + 'static,
+    Supervisor: TrainingPlanSupervisorScheduler + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
 {
     type Completed = CompletedTrainingPlanTaskCheckpoint;
@@ -318,6 +372,7 @@ impl<
         Generator,
         WorkoutSummary,
         ServiceTime,
+        Supervisor,
         Refresh,
         Tasks,
         Workers,
@@ -325,13 +380,14 @@ impl<
         Ids,
     >
     SchedulerBackedTrainingPlanService<
-        TrainingPlanGenerationService<
+        DirectTrainingPlanService<
             Snapshots,
             Projections,
             Operations,
             Generator,
             WorkoutSummary,
             ServiceTime,
+            Supervisor,
             Refresh,
         >,
         Tasks,
@@ -346,6 +402,7 @@ where
     Generator: TrainingPlanGenerator + Clone + 'static,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone + 'static,
     ServiceTime: Clock + Clone + 'static,
+    Supervisor: TrainingPlanSupervisorScheduler + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,
@@ -353,16 +410,15 @@ where
     Ids: IdGenerator,
 {
     pub fn new(
-        base: Arc<
-            TrainingPlanGenerationService<
-                Snapshots,
-                Projections,
-                Operations,
-                Generator,
-                WorkoutSummary,
-                ServiceTime,
-                Refresh,
-            >,
+        base: SharedDirectTrainingPlanService<
+            Snapshots,
+            Projections,
+            Operations,
+            Generator,
+            WorkoutSummary,
+            ServiceTime,
+            Supervisor,
+            Refresh,
         >,
         scheduler: TaskSchedulerService<Tasks, Workers, SchedulerTime>,
         ids: Ids,
@@ -460,6 +516,7 @@ impl<
         Generator,
         WorkoutSummary,
         ServiceTime,
+        Supervisor,
         Refresh,
         Tasks,
         Workers,
@@ -474,6 +531,7 @@ impl<
             Generator,
             WorkoutSummary,
             ServiceTime,
+            Supervisor,
             Refresh,
         >,
         Tasks,
@@ -488,6 +546,7 @@ where
     Generator: TrainingPlanGenerator + Clone + 'static,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone + 'static,
     ServiceTime: Clock + Clone + 'static,
+    Supervisor: TrainingPlanSupervisorScheduler + Clone + 'static,
     Refresh: CalendarEntryViewRefreshPort + Clone + 'static,
     Tasks: TaskRepository,
     Workers: TaskWorkerRepository,

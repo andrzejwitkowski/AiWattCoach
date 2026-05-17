@@ -810,6 +810,18 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
             )
         })
     }
+
+    fn update_supervisor_status(
+        &self,
+        _user_id: &str,
+        _operation_key: &str,
+        _supervisor_status: Option<
+            aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+        >,
+        _updated_at_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 fn projected_day(
@@ -826,6 +838,7 @@ fn projected_day(
         rest_day: false,
         rest_day_reason: None,
         workout: Some(build_planned_workout(workout_name)),
+        supervisor_status: None,
         superseded_at_epoch_seconds: None,
         created_at_epoch_seconds: 1_700_000_000,
         updated_at_epoch_seconds: 1_700_000_000,

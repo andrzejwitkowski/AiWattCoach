@@ -2,6 +2,163 @@ use super::support::*;
 use aiwattcoach::domain::calendar_view::{
     CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRefreshPort,
 };
+use aiwattcoach::domain::settings::{
+    AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
+    UserSettings, WahooConfig,
+};
+use aiwattcoach::domain::training_plan_supervisor::{
+    TrainingPlanSupervisorOperationRepository, TrainingPlanSupervisorService,
+    TrainingPlanSupervisorStatus,
+};
+
+#[derive(Clone, Default)]
+struct InMemorySupervisorOperationRepository {
+    operations: std::sync::Arc<
+        std::sync::Mutex<
+            Vec<aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation>,
+        >,
+    >,
+}
+
+impl InMemorySupervisorOperationRepository {
+    fn stored_operations(
+        &self,
+    ) -> Vec<aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation> {
+        self.operations.lock().unwrap().clone()
+    }
+}
+
+impl TrainingPlanSupervisorOperationRepository for InMemorySupervisorOperationRepository {
+    fn find_by_worker_operation_key(
+        &self,
+        worker_operation_key: &str,
+    ) -> aiwattcoach::domain::training_plan_supervisor::BoxFuture<
+        Result<
+            Option<aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation>,
+            TrainingPlanError,
+        >,
+    > {
+        let operations = self.operations.clone();
+        let worker_operation_key = worker_operation_key.to_string();
+        Box::pin(async move {
+            Ok(operations
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|operation| operation.worker_operation_key == worker_operation_key)
+                .cloned())
+        })
+    }
+
+    fn upsert(
+        &self,
+        operation: aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation,
+    ) -> aiwattcoach::domain::training_plan_supervisor::BoxFuture<
+        Result<
+            aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation,
+            TrainingPlanError,
+        >,
+    > {
+        let operations = self.operations.clone();
+        Box::pin(async move {
+            let mut operations = operations.lock().unwrap();
+            operations
+                .retain(|existing| existing.worker_operation_key != operation.worker_operation_key);
+            operations.push(operation.clone());
+            Ok(operation)
+        })
+    }
+}
+
+#[derive(Clone)]
+struct EnabledSettingsService;
+
+impl aiwattcoach::domain::settings::UserSettingsUseCases for EnabledSettingsService {
+    fn find_settings(
+        &self,
+        user_id: &str,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<Option<UserSettings>, aiwattcoach::domain::settings::SettingsError>,
+    > {
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(Some(UserSettings {
+                user_id,
+                ai_agents: AiAgentsConfig {
+                    training_plan_supervisor_enabled: true,
+                    training_plan_supervisor_model: Some("gemini-2.5-pro".to_string()),
+                    ..AiAgentsConfig::default()
+                },
+                intervals: IntervalsConfig::default(),
+                wahoo: WahooConfig::default(),
+                options: AnalysisOptions::default(),
+                availability: AvailabilitySettings::default(),
+                cycling: CyclingSettings::default(),
+                created_at_epoch_seconds: 1,
+                updated_at_epoch_seconds: 1,
+            }))
+        })
+    }
+
+    fn get_settings(
+        &self,
+        _user_id: &str,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<UserSettings, aiwattcoach::domain::settings::SettingsError>,
+    > {
+        unreachable!("get_settings is not used in this test")
+    }
+
+    fn update_ai_agents(
+        &self,
+        _user_id: &str,
+        _ai_agents: AiAgentsConfig,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<UserSettings, aiwattcoach::domain::settings::SettingsError>,
+    > {
+        unreachable!("update_ai_agents is not used in this test")
+    }
+
+    fn update_intervals(
+        &self,
+        _user_id: &str,
+        _intervals: IntervalsConfig,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<UserSettings, aiwattcoach::domain::settings::SettingsError>,
+    > {
+        unreachable!("update_intervals is not used in this test")
+    }
+
+    fn update_options(
+        &self,
+        _user_id: &str,
+        _options: AnalysisOptions,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<UserSettings, aiwattcoach::domain::settings::SettingsError>,
+    > {
+        unreachable!("update_options is not used in this test")
+    }
+
+    fn update_availability(
+        &self,
+        _user_id: &str,
+        _availability: AvailabilitySettings,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<UserSettings, aiwattcoach::domain::settings::SettingsError>,
+    > {
+        unreachable!("update_availability is not used in this test")
+    }
+
+    fn update_cycling(
+        &self,
+        _user_id: &str,
+        _cycling: CyclingSettings,
+    ) -> aiwattcoach::domain::settings::BoxFuture<
+        Result<UserSettings, aiwattcoach::domain::settings::SettingsError>,
+    > {
+        unreachable!("update_cycling is not used in this test")
+    }
+}
 
 #[tokio::test]
 async fn generates_snapshot_and_projected_days_for_saved_workout() {
@@ -59,6 +216,56 @@ async fn generates_snapshot_and_projected_days_for_saved_workout() {
             date_epoch(FIRST_DAY)
         )
     );
+}
+
+#[tokio::test]
+async fn generation_marks_active_projected_days_pending_when_supervisor_enabled() {
+    let call_log = new_call_log();
+    let snapshots = InMemoryTrainingPlanSnapshotRepository::new();
+    let projected_days =
+        InMemoryTrainingPlanProjectedDayRepository::new(snapshots.snapshots.clone());
+    let operations = InMemoryTrainingPlanOperationRepository::new(call_log.clone());
+    let workout_summary = StubWorkoutSummaryPort::new(call_log.clone());
+    let generator = StubTrainingPlanGenerator::new(
+        call_log,
+        vec![Ok(workout_recap())],
+        vec![Ok(valid_plan_window(FIRST_DAY))],
+        vec![],
+    );
+    let supervisor_operations = InMemorySupervisorOperationRepository::default();
+    let service = TrainingPlanGenerationService::new(
+        snapshots.clone(),
+        projected_days.clone(),
+        operations.clone(),
+        generator,
+        workout_summary,
+        FixedClock {
+            now_epoch_seconds: date_epoch(FIRST_DAY),
+        },
+    )
+    .with_training_plan_supervisor(TrainingPlanSupervisorService::new(
+        supervisor_operations.clone(),
+        EnabledSettingsService,
+        FixedClock {
+            now_epoch_seconds: date_epoch(FIRST_DAY),
+        },
+    ));
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert!(result
+        .active_projected_days
+        .iter()
+        .all(|day| day.supervisor_status == Some(TrainingPlanSupervisorStatus::Pending)));
+    assert_eq!(supervisor_operations.stored_operations().len(), 1);
+    assert!(projected_days
+        .stored_days()
+        .iter()
+        .filter(|day| day.superseded_at_epoch_seconds.is_none() && day.date.as_str() > FIRST_DAY)
+        .all(|day| day.supervisor_status == Some(TrainingPlanSupervisorStatus::Pending)));
 }
 
 #[tokio::test]

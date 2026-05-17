@@ -166,6 +166,7 @@ impl SyncablePlannedWorkout {
             rest_day: self.rest_day,
             rest_day_reason: self.rest_day_reason.clone(),
             workout: Some(self.workout.clone()),
+            supervisor_status: None,
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: now_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,

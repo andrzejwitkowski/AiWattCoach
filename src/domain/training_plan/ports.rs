@@ -44,6 +44,16 @@ pub trait TrainingPlanProjectionRepository: Send + Sync + 'static {
         today: &str,
         replaced_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>>;
+
+    fn update_supervisor_status(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+        supervisor_status: Option<
+            crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+        >,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), TrainingPlanError>>;
 }
 
 pub trait TrainingPlanGenerationOperationRepository: Send + Sync + 'static {

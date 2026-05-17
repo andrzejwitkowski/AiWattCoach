@@ -53,6 +53,10 @@ pub(super) struct AiAgentsDto {
     pub(super) selected_provider: Option<String>,
     #[serde(rename = "selectedModel")]
     pub(super) selected_model: Option<String>,
+    #[serde(rename = "trainingPlanSupervisorEnabled")]
+    pub(super) training_plan_supervisor_enabled: bool,
+    #[serde(rename = "trainingPlanSupervisorModel")]
+    pub(super) training_plan_supervisor_model: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -138,6 +142,10 @@ pub(crate) struct UpdateAiAgentsRequest {
     pub(super) selected_provider: OptionalStringInput,
     #[serde(default, rename = "selectedModel")]
     pub(super) selected_model: OptionalStringInput,
+    #[serde(rename = "trainingPlanSupervisorEnabled")]
+    pub(super) training_plan_supervisor_enabled: Option<bool>,
+    #[serde(default, rename = "trainingPlanSupervisorModel")]
+    pub(super) training_plan_supervisor_model: OptionalStringInput,
 }
 
 #[derive(Deserialize)]

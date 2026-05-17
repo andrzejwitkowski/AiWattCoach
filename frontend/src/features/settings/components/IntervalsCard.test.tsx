@@ -27,6 +27,8 @@ function buildSettings(overrides?: Partial<UserSettingsResponse['intervals']>): 
       deepseekApiKeySet: false,
       selectedProvider: null,
       selectedModel: null,
+      trainingPlanSupervisorEnabled: false,
+      trainingPlanSupervisorModel: 'gemini-2.5-pro',
     },
     intervals: {
       apiKey: '***...1234',

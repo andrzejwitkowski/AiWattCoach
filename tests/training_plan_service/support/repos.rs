@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use aiwattcoach::domain::training_plan::TrainingPlanReplacementResult;
+use aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorStatus;
 
 use super::{
     push_call, CallLog, TrainingPlanError, TrainingPlanGenerationClaimResult,
@@ -284,6 +285,30 @@ impl TrainingPlanProjectionRepository for InMemoryTrainingPlanProjectedDayReposi
                 projected_days: projected_days.clone(),
                 superseded_date_range,
             })
+        })
+    }
+
+    fn update_supervisor_status(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+        supervisor_status: Option<TrainingPlanSupervisorStatus>,
+        updated_at_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+        let store = self.projected_days.clone();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            for day in store.lock().unwrap().iter_mut() {
+                if day.user_id == user_id
+                    && day.operation_key == operation_key
+                    && day.superseded_at_epoch_seconds.is_none()
+                {
+                    day.supervisor_status = supervisor_status;
+                    day.updated_at_epoch_seconds = updated_at_epoch_seconds;
+                }
+            }
+            Ok(())
         })
     }
 }

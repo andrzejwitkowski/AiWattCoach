@@ -202,6 +202,20 @@ impl TrainingPlanProjectionRepository for SaveFlowProjectionRepository {
             )
         })
     }
+
+    fn update_supervisor_status(
+        &self,
+        _user_id: &str,
+        _operation_key: &str,
+        _supervisor_status: Option<
+            aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+        >,
+        _updated_at_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<(), aiwattcoach::domain::training_plan::TrainingPlanError>,
+    > {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 #[derive(Clone, Default)]

@@ -86,6 +86,7 @@ async fn builder_anchors_windows_to_focus_activity_date() {
                         rest_day: false,
                         rest_day_reason: None,
                         workout: None,
+                        supervisor_status: None,
                         superseded_at_epoch_seconds: None,
                         created_at_epoch_seconds: 1,
                         updated_at_epoch_seconds: 1,
@@ -98,6 +99,7 @@ async fn builder_anchors_windows_to_focus_activity_date() {
                         rest_day: true,
                         rest_day_reason: Some("Scheduled recovery day".to_string()),
                         workout: None,
+                        supervisor_status: None,
                         superseded_at_epoch_seconds: None,
                         created_at_epoch_seconds: 1,
                         updated_at_epoch_seconds: 1,
@@ -135,6 +137,18 @@ async fn builder_anchors_windows_to_focus_activity_date() {
             Result<crate::domain::training_plan::TrainingPlanReplacementResult, TrainingPlanError>,
         > {
             unreachable!()
+        }
+
+        fn update_supervisor_status(
+            &self,
+            _user_id: &str,
+            _operation_key: &str,
+            _supervisor_status: Option<
+                crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+            >,
+            _updated_at_epoch_seconds: i64,
+        ) -> crate::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+            Box::pin(async { Ok(()) })
         }
     }
 

@@ -35,6 +35,8 @@ function buildSettings(overrides?: SettingsOverrides): UserSettingsResponse {
       deepseekApiKeySet: false,
       selectedProvider: 'openrouter',
       selectedModel: 'google/gemini-3-flash-preview',
+      trainingPlanSupervisorEnabled: false,
+      trainingPlanSupervisorModel: 'gemini-2.5-pro',
       ...overrides?.aiAgents,
     },
     intervals: {

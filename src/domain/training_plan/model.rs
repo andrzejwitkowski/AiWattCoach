@@ -2,6 +2,7 @@ use crate::domain::{
     ai_workflow::{AttemptRecord, ValidationIssue, WorkflowPhase, WorkflowStatus},
     intervals::PlannedWorkout,
     llm_tools::LlmToolLoopState,
+    training_plan_supervisor::TrainingPlanSupervisorStatus,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -85,6 +86,7 @@ pub struct TrainingPlanProjectedDay {
     pub rest_day: bool,
     pub rest_day_reason: Option<String>,
     pub workout: Option<PlannedWorkout>,
+    pub supervisor_status: Option<TrainingPlanSupervisorStatus>,
     pub superseded_at_epoch_seconds: Option<i64>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,

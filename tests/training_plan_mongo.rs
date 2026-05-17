@@ -815,6 +815,7 @@ fn sample_projected_days(
             rest_day: day.rest_day,
             rest_day_reason: day.rest_day_reason.clone(),
             workout: day.workout.clone(),
+            supervisor_status: None,
             superseded_at_epoch_seconds: None,
             created_at_epoch_seconds: snapshot.created_at_epoch_seconds,
             updated_at_epoch_seconds: snapshot.created_at_epoch_seconds,

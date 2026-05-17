@@ -32,6 +32,11 @@ pub(super) fn map_settings_to_dto(
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             selected_model: settings.ai_agents.selected_model.clone(),
+            training_plan_supervisor_enabled: settings.ai_agents.training_plan_supervisor_enabled,
+            training_plan_supervisor_model: settings
+                .ai_agents
+                .training_plan_supervisor_model
+                .clone(),
         },
         intervals: IntervalsDto {
             api_key: mask_sensitive(&settings.intervals.api_key),
@@ -113,6 +118,7 @@ pub(super) fn map_ai_agents_update(
 ) -> Result<AiAgentsConfig, SettingsError> {
     let selected_provider_update = parse_provider_settings_input(body.selected_provider)?;
     let selected_model_update = normalize_string_input(body.selected_model);
+    let supervisor_model_update = normalize_string_input(body.training_plan_supervisor_model);
     let openai_api_key = normalize_string_input(body.openai_api_key);
     let gemini_api_key = normalize_string_input(body.gemini_api_key);
     let openrouter_api_key = normalize_string_input(body.openrouter_api_key);
@@ -153,6 +159,27 @@ pub(super) fn map_ai_agents_update(
         _ => {}
     }
 
+    let training_plan_supervisor_enabled = body
+        .training_plan_supervisor_enabled
+        .unwrap_or(current.ai_agents.training_plan_supervisor_enabled);
+    let training_plan_supervisor_model =
+        validation::validate_training_plan_supervisor_model(apply_field_update(
+            supervisor_model_update,
+            current.ai_agents.training_plan_supervisor_model.clone(),
+        ))?;
+
+    if training_plan_supervisor_enabled
+        && apply_field_update(
+            gemini_api_key.clone(),
+            current.ai_agents.gemini_api_key.clone(),
+        )
+        .is_none()
+    {
+        return Err(SettingsError::Validation(
+            "geminiApiKey is required when trainingPlanSupervisorEnabled is true".to_string(),
+        ));
+    }
+
     Ok(AiAgentsConfig {
         openai_api_key: apply_field_update(
             openai_api_key,
@@ -172,6 +199,8 @@ pub(super) fn map_ai_agents_update(
         ),
         selected_provider: validation::validate_ai_provider(selected_provider)?,
         selected_model,
+        training_plan_supervisor_enabled,
+        training_plan_supervisor_model,
     })
 }
 
@@ -262,7 +291,7 @@ pub(super) fn map_cycling_update(
 
 #[cfg(test)]
 mod tests {
-    use super::{map_intervals_update, map_settings_to_dto};
+    use super::{map_ai_agents_update, map_intervals_update, map_settings_to_dto};
     use crate::adapters::rest::settings::dto::{OptionalStringInput, UpdateIntervalsRequest};
     use crate::domain::settings::UserSettings;
 
@@ -290,6 +319,48 @@ mod tests {
             Some("***...5678")
         );
         assert!(dto.ai_agents.deepseek_api_key_set);
+    }
+
+    #[test]
+    fn map_settings_to_dto_includes_training_plan_supervisor_fields() {
+        let mut settings = UserSettings::new_defaults("user-1".to_string(), 1_700_000_000);
+        settings.ai_agents.training_plan_supervisor_enabled = true;
+        settings.ai_agents.training_plan_supervisor_model = Some("gemini-2.5-pro".to_string());
+
+        let dto = map_settings_to_dto(&settings, false);
+
+        assert!(dto.ai_agents.training_plan_supervisor_enabled);
+        assert_eq!(
+            dto.ai_agents.training_plan_supervisor_model.as_deref(),
+            Some("gemini-2.5-pro")
+        );
+    }
+
+    #[test]
+    fn map_ai_agents_update_requires_gemini_key_when_supervisor_enabled() {
+        let current = UserSettings::new_defaults("user-1".to_string(), 1_700_000_000);
+
+        let error = map_ai_agents_update(
+            crate::adapters::rest::settings::dto::UpdateAiAgentsRequest {
+                openai_api_key: OptionalStringInput::Missing,
+                gemini_api_key: OptionalStringInput::Missing,
+                openrouter_api_key: OptionalStringInput::Missing,
+                deepseek_api_key: OptionalStringInput::Missing,
+                selected_provider: OptionalStringInput::Missing,
+                selected_model: OptionalStringInput::Missing,
+                training_plan_supervisor_enabled: Some(true),
+                training_plan_supervisor_model: OptionalStringInput::Missing,
+            },
+            &current,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            crate::domain::settings::SettingsError::Validation(
+                "geminiApiKey is required when trainingPlanSupervisorEnabled is true".to_string()
+            )
+        );
     }
 
     #[test]

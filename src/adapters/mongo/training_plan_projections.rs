@@ -8,6 +8,7 @@ use crate::domain::training_plan::{
     BoxFuture, TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
     TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
+use crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus;
 
 use super::{
     training_plan_shared::{
@@ -33,6 +34,8 @@ struct TrainingPlanProjectedDayDocument {
     #[serde(default)]
     rest_day_reason: Option<String>,
     workout: Option<PlannedWorkoutDocument>,
+    #[serde(default)]
+    supervisor_status: Option<String>,
     superseded_at_epoch_seconds: Option<i64>,
     created_at_epoch_seconds: i64,
     updated_at_epoch_seconds: i64,
@@ -356,6 +359,38 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
             })
         })
     }
+
+    fn update_supervisor_status(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+        supervisor_status: Option<TrainingPlanSupervisorStatus>,
+        updated_at_epoch_seconds: i64,
+    ) -> BoxFuture<Result<(), TrainingPlanError>> {
+        let collection = self.collection.clone();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        let supervisor_status = supervisor_status.map(|status| status.as_str().to_string());
+        Box::pin(async move {
+            collection
+                .update_many(
+                    doc! {
+                        "user_id": &user_id,
+                        "operation_key": &operation_key,
+                        "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                    },
+                    doc! {
+                        "$set": {
+                            "supervisor_status": supervisor_status,
+                            "updated_at_epoch_seconds": updated_at_epoch_seconds,
+                        }
+                    },
+                )
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            Ok(())
+        })
+    }
 }
 
 async fn load_active_operation_date_range(
@@ -407,6 +442,9 @@ fn map_projected_day_to_document(
             .as_ref()
             .map(map_planned_workout_to_document)
             .transpose()?,
+        supervisor_status: day
+            .supervisor_status
+            .map(|status| status.as_str().to_string()),
         superseded_at_epoch_seconds: day.superseded_at_epoch_seconds,
         created_at_epoch_seconds: day.created_at_epoch_seconds,
         updated_at_epoch_seconds: day.updated_at_epoch_seconds,
@@ -426,6 +464,13 @@ fn map_document_to_projected_day(
         workout: document
             .workout
             .map(map_document_to_planned_workout)
+            .transpose()?,
+        supervisor_status: document
+            .supervisor_status
+            .as_deref()
+            .map(|s| {
+                TrainingPlanSupervisorStatus::try_from(s).map_err(TrainingPlanError::Repository)
+            })
             .transpose()?,
         superseded_at_epoch_seconds: document.superseded_at_epoch_seconds,
         created_at_epoch_seconds: document.created_at_epoch_seconds,

@@ -14,7 +14,7 @@ use crate::domain::training_plan::{
     TrainingPlanWorkoutSummaryPort,
 };
 
-impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refresh>
+impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Supervisor, Refresh>
     TrainingPlanGenerationService<
         Snapshots,
         Projections,
@@ -22,6 +22,7 @@ impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time, Refres
         Generator,
         WorkoutSummary,
         Time,
+        Supervisor,
         Refresh,
     >
 where
@@ -31,6 +32,7 @@ where
     Generator: TrainingPlanGenerator + Clone,
     WorkoutSummary: TrainingPlanWorkoutSummaryPort + Clone,
     Time: Clock + Clone,
+    Supervisor: crate::domain::training_plan_supervisor::TrainingPlanSupervisorScheduler + Clone,
     Refresh: CalendarEntryViewRefreshPort + Clone,
 {
     fn map_parsed_day(day: PlannedWorkoutDay) -> TrainingPlanDay {

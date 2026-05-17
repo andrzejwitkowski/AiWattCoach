@@ -21,7 +21,16 @@ Read this file before planning and before implementation.
 
 ## Entries
 
-### 2026-05-14 | user | workout-summary save workflow frontend status drift
+### 2026-05-17 | self | training-plan-supervisor domain module review
+
+- Problem 1: `TrainingPlanSupervisorStatus` was derived `Clone` but not `Copy`. Callers used `.clone()` on an enum with no fields, producing noise and preventing clippy's `clone_on_copy` from being satisfied after `Copy` was added later. Mongo adapters each had an independent match-arm parser for `"pending"/"accepted"/"replaced"/"failed"`, so adding a new variant required changes in two unrelated files.
+- Fix 1: added `Copy` to the derive list, changed `as_str(&self)` → `as_str(self)`, and removed all resulting `clone_on_copy` violations (`service/mod.rs` and `tests/training_plan_service/support/repos.rs`). Extracted a single canonical `TryFrom<&str> for TrainingPlanSupervisorStatus` in `model.rs`; both Mongo adapters now delegate to it via `.map_err(TrainingPlanError::Repository)`.
+- Prevention: for small enums with no fields, default to `Copy` in the derive list alongside `Clone`. Before adding an identical `match value { "a" => ..., "b" => ... }` block in a second file, check whether the target type already has or should have `TryFrom<&str>` in its domain model.
+
+- Problem 2: the supervisor service tests covered `disabled` and `enabled` settings but not the case where `find_settings` returns `Ok(None)` (user has no settings row). The early-return branch at `service.rs:83-85` was reachable in production but invisible to tests.
+- Fix 2: added `StubUserSettingsService::no_settings()` constructor and a dedicated `supervisor_service_skips_pending_review_when_no_settings` test.
+- Prevention: for any service function that short-circuits on `Option` returned from a repository (`let Some(x) = repo.find(...) else { return Ok(None); }`), include one test case where the repo returns `Ok(None)` in addition to the `Some(disabled)` and `Some(enabled)` cases.
+
 
 - Problem: the backend `SaveWorkflowStatus` enum now returns `Processing` for background recap/training-plan generation, but the frontend `saveWorkoutSummaryResponseSchema` in `frontend/src/features/coach/types.ts` still allowed only `generated | skipped | failed | unchanged`. Saving a new plan therefore failed client-side Zod parsing on `workflow.recapStatus` and `workflow.planStatus` whenever the backend correctly responded with `processing`.
 - Fix: extended the frontend save-workflow status schema to accept `processing`, added a focused API parsing regression for `processing` workflow statuses, and updated the coach page save test matrix to verify `processing` does not trigger calendar/completed-workout cache invalidation reserved for `generated` plans.

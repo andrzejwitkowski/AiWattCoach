@@ -1785,6 +1785,18 @@ impl TrainingPlanProjectionRepository for FakeProjectionRepository {
             })
         })
     }
+
+    fn update_supervisor_status(
+        &self,
+        _user_id: &str,
+        _operation_key: &str,
+        _supervisor_status: Option<
+            crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
+        >,
+        _updated_at_epoch_seconds: i64,
+    ) -> TrainingPlanBoxFuture<Result<(), TrainingPlanError>> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 #[derive(Clone)]
@@ -2634,6 +2646,7 @@ fn projected_day_with_doc(
         rest_day: false,
         rest_day_reason: None,
         workout: Some(parse_planned_workout(workout_doc).expect("planned workout should parse")),
+        supervisor_status: None,
         superseded_at_epoch_seconds: None,
         created_at_epoch_seconds: 1_700_000_000,
         updated_at_epoch_seconds: 1_700_000_000,

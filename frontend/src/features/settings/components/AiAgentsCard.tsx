@@ -16,6 +16,8 @@ type DraftState = {
   deepseekApiKey: string;
   selectedProvider: string;
   selectedModel: string;
+  trainingPlanSupervisorModel: string;
+  trainingPlanSupervisorEnabled: boolean;
 };
 
 type ProviderOption = {
@@ -38,6 +40,8 @@ const PROVIDER_OPTIONS: ProviderOption[] = [
     suggestedModels: ['deepseek-v4-flash', 'deepseek-v4-pro'],
   },
 ];
+
+const SUPERVISOR_MODELS = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3-flash-preview'];
 
 function clearDraftApiKeys(draft: DraftState): DraftState {
   return {
@@ -112,8 +116,15 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       deepseekApiKey: '',
       selectedProvider: aiAgents.selectedProvider ?? '',
       selectedModel: aiAgents.selectedModel ?? '',
+      trainingPlanSupervisorModel: aiAgents.trainingPlanSupervisorModel ?? 'gemini-2.5-pro',
+      trainingPlanSupervisorEnabled: aiAgents.trainingPlanSupervisorEnabled,
     }),
-    [aiAgents.selectedModel, aiAgents.selectedProvider],
+    [
+      aiAgents.selectedModel,
+      aiAgents.selectedProvider,
+      aiAgents.trainingPlanSupervisorEnabled,
+      aiAgents.trainingPlanSupervisorModel,
+    ],
   );
   const [draft, setDraft] = useState<DraftState>(persistedDraft);
   const [cleanDraft, setCleanDraft] = useState<DraftState>(persistedDraft);
@@ -128,6 +139,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     label: string;
     message: string;
   } | null>(null);
+  const [showSupervisorGeminiKeyModal, setShowSupervisorGeminiKeyModal] = useState(false);
   const previousPersistedRef = useRef(persistedDraft);
   const testRunIdRef = useRef(0);
 
@@ -159,6 +171,14 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         current.selectedModel === previousPersisted.selectedModel
           ? persistedDraft.selectedModel
           : current.selectedModel,
+      trainingPlanSupervisorModel:
+        current.trainingPlanSupervisorModel === previousPersisted.trainingPlanSupervisorModel
+          ? persistedDraft.trainingPlanSupervisorModel
+          : current.trainingPlanSupervisorModel,
+      trainingPlanSupervisorEnabled:
+        current.trainingPlanSupervisorEnabled === previousPersisted.trainingPlanSupervisorEnabled
+          ? persistedDraft.trainingPlanSupervisorEnabled
+          : current.trainingPlanSupervisorEnabled,
     }));
     setCleanDraft((current) => ({
       openaiApiKey:
@@ -185,6 +205,14 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         current.selectedModel === previousPersisted.selectedModel
           ? persistedDraft.selectedModel
           : current.selectedModel,
+      trainingPlanSupervisorModel:
+        current.trainingPlanSupervisorModel === previousPersisted.trainingPlanSupervisorModel
+          ? persistedDraft.trainingPlanSupervisorModel
+          : current.trainingPlanSupervisorModel,
+      trainingPlanSupervisorEnabled:
+        current.trainingPlanSupervisorEnabled === previousPersisted.trainingPlanSupervisorEnabled
+          ? persistedDraft.trainingPlanSupervisorEnabled
+          : current.trainingPlanSupervisorEnabled,
     }));
     previousPersistedRef.current = persistedDraft;
   }, [persistedDraft]);
@@ -195,23 +223,28 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     draft.openrouterApiKey !== cleanDraft.openrouterApiKey ||
     draft.deepseekApiKey !== cleanDraft.deepseekApiKey ||
     draft.selectedProvider !== cleanDraft.selectedProvider ||
-    draft.selectedModel !== cleanDraft.selectedModel;
+    draft.selectedModel !== cleanDraft.selectedModel ||
+    draft.trainingPlanSupervisorModel !== cleanDraft.trainingPlanSupervisorModel ||
+    draft.trainingPlanSupervisorEnabled !== cleanDraft.trainingPlanSupervisorEnabled;
   const hasAnyPersistedConnectionValue =
     aiAgents.openaiApiKeySet ||
     aiAgents.geminiApiKeySet ||
     aiAgents.openrouterApiKeySet ||
     aiAgents.deepseekApiKeySet ||
     Boolean(aiAgents.selectedProvider) ||
-    Boolean(aiAgents.selectedModel);
+    Boolean(aiAgents.selectedModel) ||
+    aiAgents.trainingPlanSupervisorEnabled ||
+    Boolean(aiAgents.trainingPlanSupervisorModel);
 
   const visibleRequest = useMemo(() => {
-    const request: Partial<Record<keyof DraftState, string | null>> = {};
+    const request: Partial<Record<keyof DraftState, string | boolean | null>> = {};
     const trimmedOpenai = draft.openaiApiKey.trim();
     const trimmedGemini = draft.geminiApiKey.trim();
     const trimmedOpenrouter = draft.openrouterApiKey.trim();
     const trimmedDeepseek = draft.deepseekApiKey.trim();
     const trimmedProvider = draft.selectedProvider.trim();
     const trimmedModel = draft.selectedModel.trim();
+    const trimmedSupervisorModel = draft.trainingPlanSupervisorModel.trim();
 
     if (trimmedOpenai) {
       request.openaiApiKey = trimmedOpenai;
@@ -233,6 +266,16 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     }
     if (trimmedModel !== persistedDraft.selectedModel && !('selectedModel' in request)) {
       request.selectedModel = trimmedModel.length > 0 ? trimmedModel : '';
+    }
+    if (
+      draft.trainingPlanSupervisorEnabled !== persistedDraft.trainingPlanSupervisorEnabled
+    ) {
+      request.trainingPlanSupervisorEnabled = draft.trainingPlanSupervisorEnabled;
+    }
+    if (trimmedSupervisorModel !== persistedDraft.trainingPlanSupervisorModel) {
+      request.trainingPlanSupervisorModel = trimmedSupervisorModel.length > 0
+        ? trimmedSupervisorModel
+        : '';
     }
 
     return request;
@@ -284,6 +327,15 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
     setDraft((current) => ({ ...current, [field]: value }));
   };
 
+  const updateSupervisorEnabled = (enabled: boolean) => {
+    clearTestStatusIfNeeded();
+    setDraft((current) => ({
+      ...current,
+      trainingPlanSupervisorEnabled: enabled,
+      trainingPlanSupervisorModel: current.trainingPlanSupervisorModel || 'gemini-2.5-pro',
+    }));
+  };
+
   const updateProvider = (value: string) => {
     clearTestStatusIfNeeded();
     setDraft((current) => {
@@ -303,6 +355,10 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
 
   const handleSave = async () => {
     if (!canSave) return;
+    if (draft.trainingPlanSupervisorEnabled && !geminiHasKey) {
+      setShowSupervisorGeminiKeyModal(true);
+      return;
+    }
     setIsSaving(true);
     setStatus({
       tone: 'neutral',
@@ -457,6 +513,53 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
         </div>
       )}
 
+      <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-slate-400">Training Plan Supervisor</p>
+            <p className="mt-2 text-sm text-slate-300">
+              Run an async Gemini review pass after the worker-generated 14-day plan and allow
+              supervised replacement when the reviewed plan is stronger.
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-3 text-sm font-medium text-slate-200">
+            <span>{draft.trainingPlanSupervisorEnabled ? 'Enabled' : 'Disabled'}</span>
+            <input
+              aria-label="Enable training plan supervisor"
+              type="checkbox"
+              className="h-4 w-4 rounded border-white/10 bg-slate-900/60 text-cyan-400 focus:ring-cyan-400/50"
+              checked={draft.trainingPlanSupervisorEnabled}
+              onChange={(event) => updateSupervisorEnabled(event.target.checked)}
+            />
+          </label>
+        </div>
+
+        <div className="mt-4">
+          <label
+            htmlFor="training-plan-supervisor-model"
+            className="mb-2 block text-xs uppercase tracking-widest text-slate-400"
+          >
+            Supervisor Model
+          </label>
+          <select
+            id="training-plan-supervisor-model"
+            aria-label="Training plan supervisor model"
+            className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 focus:border-cyan-400/50 focus:outline-none"
+            value={draft.trainingPlanSupervisorModel}
+            onChange={(event) => updateDraft('trainingPlanSupervisorModel', event.target.value)}
+          >
+            {SUPERVISOR_MODELS.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+          <p className="mt-2 text-xs text-slate-500">
+            Uses your Gemini API key. Default: <code>gemini-2.5-pro</code>.
+          </p>
+        </div>
+      </div>
+
       <div className="mt-6 space-y-4">
         <ApiKeyField
           id="openai-api-key"
@@ -580,6 +683,40 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           )}
         </button>
       </div>
+
+      {showSupervisorGeminiKeyModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#05070a]/78 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setShowSupervisorGeminiKeyModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="supervisor-gemini-key-title"
+            className="w-full max-w-md rounded-[1.75rem] border border-white/8 bg-[linear-gradient(180deg,rgba(28,32,36,0.98),rgba(15,18,20,0.98))] p-6 shadow-[0_40px_120px_rgba(0,0,0,0.58)]"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <h3 id="supervisor-gemini-key-title" className="text-lg font-bold text-white">
+              Gemini API key required
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+              Training plan supervisor uses Gemini Batch API. Add a Gemini API key before enabling
+              the supervisor.
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                onClick={() => setShowSupervisorGeminiKeyModal(false)}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

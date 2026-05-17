@@ -51,6 +51,9 @@ struct AiAgentsDocument {
     deepseek_api_key: Option<String>,
     selected_provider: Option<String>,
     selected_model: Option<String>,
+    #[serde(default)]
+    training_plan_supervisor_enabled: bool,
+    training_plan_supervisor_model: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -525,6 +528,8 @@ impl UserSettingsRepository for MongoUserSettingsRepository {
                             "ai_agents.deepseek_api_key": &ai_agents.deepseek_api_key,
                             "ai_agents.selected_provider": ai_agents.selected_provider.as_ref().map(|provider| provider.as_str()),
                             "ai_agents.selected_model": &ai_agents.selected_model,
+                            "ai_agents.training_plan_supervisor_enabled": ai_agents.training_plan_supervisor_enabled,
+                            "ai_agents.training_plan_supervisor_model": &ai_agents.training_plan_supervisor_model,
                             "updated_at_epoch_seconds": updated_at,
                             "updated_at": optional_epoch_seconds_to_bson_datetime(Some(updated_at), "updated_at")
                                 .map_err(SettingsError::Repository)?,
@@ -684,6 +689,10 @@ fn map_document_to_domain(doc: SettingsDocument) -> Result<UserSettings, Setting
                 .as_deref()
                 .and_then(LlmProvider::parse),
             selected_model: doc.ai_agents.selected_model,
+            training_plan_supervisor_enabled: doc.ai_agents.training_plan_supervisor_enabled,
+            training_plan_supervisor_model: validation::validate_training_plan_supervisor_model(
+                doc.ai_agents.training_plan_supervisor_model,
+            )?,
         },
         intervals: IntervalsConfig {
             api_key: doc.intervals.api_key,
@@ -739,6 +748,11 @@ fn map_domain_to_document(settings: &UserSettings) -> SettingsDocument {
                 .as_ref()
                 .map(|provider| provider.as_str().to_string()),
             selected_model: settings.ai_agents.selected_model.clone(),
+            training_plan_supervisor_enabled: settings.ai_agents.training_plan_supervisor_enabled,
+            training_plan_supervisor_model: settings
+                .ai_agents
+                .training_plan_supervisor_model
+                .clone(),
         },
         intervals: IntervalsDocument {
             api_key: settings.intervals.api_key.clone(),
