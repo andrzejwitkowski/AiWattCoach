@@ -16,11 +16,14 @@ use aiwattcoach::{
             settings_adapter::{IntervalsSettingsAdapter, SettingsIntervalsProvider},
         },
         llm::{
-            adapter::LlmAdapter, athlete_summary_generator::AthleteSummaryLlmGenerator,
-            dev_adapter::DevLlmCoachAdapter, gemini::client::GeminiClient,
+            adapter::LlmAdapter,
+            athlete_summary_generator::AthleteSummaryLlmGenerator,
+            dev_adapter::DevLlmCoachAdapter,
+            gemini::{batch_client::GeminiBatchClient, client::GeminiClient},
             get_selected_workout_data::GetSelectedWorkoutDataAdapter,
             openai_compatible::client::OpenAiCompatibleClient,
-            openrouter::client::OpenRouterClient, settings_adapter::SettingsLlmConfigProvider,
+            openrouter::client::OpenRouterClient,
+            settings_adapter::SettingsLlmConfigProvider,
             training_plan_generator::TrainingPlanLlmGenerator,
             update_planned_workout_data::UpdatePlannedWorkoutDataAdapter,
             workout_summary_coach::LlmWorkoutCoach,
@@ -113,7 +116,10 @@ use aiwattcoach::{
         training_plan_generate_task_handler, SchedulerBackedTrainingPlanService,
         TrainingPlanGenerationService,
     },
-    domain::training_plan_supervisor::TrainingPlanSupervisorService,
+    domain::training_plan_supervisor::{
+        GeminiTrainingPlanSupervisorWebhookService, TrainingPlanSupervisorService,
+        TrainingPlanSupervisorWebhookUseCases,
+    },
     domain::wahoo::{WahooService, WahooWebhookService},
     domain::wahoo_fit_enrichment::{
         wahoo_fit_enrichment_task_handler, SchedulerBackedWahooFitEnrichmentService,
@@ -141,6 +147,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         server,
         mongo,
         auth,
+        gemini_supervisor_webhook_token,
         dev_intervals_enabled,
         dev_llm_coach_enabled,
         client_log_ingestion_enabled,
@@ -654,6 +661,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         shared_task_scheduler.clone(),
         UuidIdGenerator,
     ));
+    let training_plan_supervisor_webhook_service: Arc<dyn TrainingPlanSupervisorWebhookUseCases> =
+        Arc::new(GeminiTrainingPlanSupervisorWebhookService::new(
+            TrainingPlanSupervisorService::new(
+                MongoTrainingPlanSupervisorOperationRepository::new(
+                    mongo_client.clone(),
+                    &mongo_database,
+                ),
+                (*settings_service).clone(),
+                SystemClock,
+            ),
+            training_plan_projection_repository.clone(),
+            GeminiBatchClient::new(reqwest::Client::new()),
+            gemini_supervisor_webhook_token.clone(),
+        ));
     let race_service = Arc::new(
         RaceService::new(
             authoritative_race_repository.clone(),
@@ -771,7 +792,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_workout_summary_save_notifier((*save_notifier).clone())
         .with_intervals_service(intervals_service)
         .with_race_service(race_service)
-        .with_intervals_connection_tester(Arc::new(intervals_connection_tester));
+        .with_intervals_connection_tester(Arc::new(intervals_connection_tester))
+        .with_gemini_supervisor_webhook_token(gemini_supervisor_webhook_token)
+        .with_training_plan_supervisor_webhook_service(training_plan_supervisor_webhook_service);
     let app_state = if let Some(wahoo_service) = wahoo_service {
         let app_state = app_state.with_wahoo_service(wahoo_service);
         if let Some(wahoo_webhook_service) = wahoo_webhook_service {

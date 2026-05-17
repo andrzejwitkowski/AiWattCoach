@@ -1,3 +1,5 @@
+use crate::domain::training_plan::TrainingPlanError;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrainingPlanSupervisorStatus {
     Pending,
@@ -31,6 +33,85 @@ impl TryFrom<&str> for TrainingPlanSupervisorStatus {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrainingPlanSupervisorDecision {
+    Accept,
+    Replace,
+    Fail,
+}
+
+impl TrainingPlanSupervisorDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Accept => "accept",
+            Self::Replace => "replace",
+            Self::Fail => "fail",
+        }
+    }
+
+    pub fn terminal_status(self) -> TrainingPlanSupervisorStatus {
+        match self {
+            Self::Accept => TrainingPlanSupervisorStatus::Accepted,
+            Self::Replace => TrainingPlanSupervisorStatus::Replaced,
+            Self::Fail => TrainingPlanSupervisorStatus::Failed,
+        }
+    }
+}
+
+impl TryFrom<&str> for TrainingPlanSupervisorDecision {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "accept" => Ok(Self::Accept),
+            "replace" => Ok(Self::Replace),
+            "fail" => Ok(Self::Fail),
+            other => Err(format!(
+                "unknown training plan supervisor decision: {other}"
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrainingPlanSupervisorReview {
+    pub decision: TrainingPlanSupervisorDecision,
+    pub reason: String,
+    pub plan: Option<String>,
+}
+
+impl TrainingPlanSupervisorReview {
+    pub fn validate(&self) -> Result<(), TrainingPlanError> {
+        if self.reason.trim().is_empty() {
+            return Err(TrainingPlanError::Validation(
+                "training plan supervisor review reason must not be empty".to_string(),
+            ));
+        }
+
+        if matches!(self.decision, TrainingPlanSupervisorDecision::Replace)
+            && self
+                .plan
+                .as_ref()
+                .map(|plan| plan.trim())
+                .unwrap_or("")
+                .is_empty()
+        {
+            return Err(TrainingPlanError::Validation(
+                "training plan supervisor replacement review must include a replacement plan"
+                    .to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GeminiSupervisorWebhookOutcome {
+    Ignored,
+    Accepted(TrainingPlanSupervisorOperation),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrainingPlanSupervisorOperation {
     pub worker_operation_key: String,
@@ -38,6 +119,7 @@ pub struct TrainingPlanSupervisorOperation {
     pub worker_saved_at_epoch_seconds: i64,
     pub model: String,
     pub status: TrainingPlanSupervisorStatus,
+    pub review: Option<TrainingPlanSupervisorReview>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
 }
@@ -56,8 +138,40 @@ impl TrainingPlanSupervisorOperation {
             worker_saved_at_epoch_seconds,
             model,
             status: TrainingPlanSupervisorStatus::Pending,
+            review: None,
             created_at_epoch_seconds: now_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
         }
+    }
+
+    pub fn complete_review(
+        &self,
+        review: TrainingPlanSupervisorReview,
+        now_epoch_seconds: i64,
+    ) -> Result<Self, TrainingPlanError> {
+        review.validate()?;
+        let status = review.decision.terminal_status();
+
+        if self.status == status && self.review.as_ref() == Some(&review) {
+            return Ok(self.clone());
+        }
+
+        if self.status != TrainingPlanSupervisorStatus::Pending {
+            return Err(TrainingPlanError::Validation(format!(
+                "training plan supervisor review already completed with status {}",
+                self.status.as_str()
+            )));
+        }
+
+        Ok(Self {
+            worker_operation_key: self.worker_operation_key.clone(),
+            user_id: self.user_id.clone(),
+            worker_saved_at_epoch_seconds: self.worker_saved_at_epoch_seconds,
+            model: self.model.clone(),
+            status,
+            review: Some(review),
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
+            updated_at_epoch_seconds: now_epoch_seconds,
+        })
     }
 }

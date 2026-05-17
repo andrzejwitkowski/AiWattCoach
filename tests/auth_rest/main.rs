@@ -1,6 +1,7 @@
 mod admin_routes;
 mod auth_flow;
 mod error_cases;
+mod gemini_supervisor_webhook;
 mod observability;
 mod session_endpoints;
 mod shared;

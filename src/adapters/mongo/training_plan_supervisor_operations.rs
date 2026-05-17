@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{
     training_plan::TrainingPlanError,
     training_plan_supervisor::{
-        BoxFuture, TrainingPlanSupervisorOperation, TrainingPlanSupervisorOperationRepository,
+        BoxFuture, TrainingPlanSupervisorDecision, TrainingPlanSupervisorOperation,
+        TrainingPlanSupervisorOperationRepository, TrainingPlanSupervisorReview,
         TrainingPlanSupervisorStatus,
     },
 };
@@ -21,8 +22,18 @@ struct TrainingPlanSupervisorOperationDocument {
     worker_saved_at_epoch_seconds: i64,
     model: String,
     status: String,
+    #[serde(default)]
+    review: Option<TrainingPlanSupervisorReviewDocument>,
     created_at_epoch_seconds: i64,
     updated_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct TrainingPlanSupervisorReviewDocument {
+    decision: String,
+    reason: String,
+    #[serde(default)]
+    plan: Option<String>,
 }
 
 impl MongoTrainingPlanSupervisorOperationRepository {
@@ -109,6 +120,7 @@ fn map_operation_to_document(
         worker_saved_at_epoch_seconds: operation.worker_saved_at_epoch_seconds,
         model: operation.model.clone(),
         status: operation.status.as_str().to_string(),
+        review: operation.review.as_ref().map(map_review_to_document),
         created_at_epoch_seconds: operation.created_at_epoch_seconds,
         updated_at_epoch_seconds: operation.updated_at_epoch_seconds,
     }
@@ -124,7 +136,29 @@ fn map_document_to_operation(
         model: document.model,
         status: TrainingPlanSupervisorStatus::try_from(document.status.as_str())
             .map_err(TrainingPlanError::Repository)?,
+        review: document.review.map(map_document_to_review).transpose()?,
         created_at_epoch_seconds: document.created_at_epoch_seconds,
         updated_at_epoch_seconds: document.updated_at_epoch_seconds,
+    })
+}
+
+fn map_review_to_document(
+    review: &TrainingPlanSupervisorReview,
+) -> TrainingPlanSupervisorReviewDocument {
+    TrainingPlanSupervisorReviewDocument {
+        decision: review.decision.as_str().to_string(),
+        reason: review.reason.clone(),
+        plan: review.plan.clone(),
+    }
+}
+
+fn map_document_to_review(
+    document: TrainingPlanSupervisorReviewDocument,
+) -> Result<TrainingPlanSupervisorReview, TrainingPlanError> {
+    Ok(TrainingPlanSupervisorReview {
+        decision: TrainingPlanSupervisorDecision::try_from(document.decision.as_str())
+            .map_err(TrainingPlanError::Repository)?,
+        reason: document.reason,
+        plan: document.plan,
     })
 }

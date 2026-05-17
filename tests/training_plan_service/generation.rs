@@ -7,8 +7,8 @@ use aiwattcoach::domain::settings::{
     UserSettings, WahooConfig,
 };
 use aiwattcoach::domain::training_plan_supervisor::{
-    TrainingPlanSupervisorOperationRepository, TrainingPlanSupervisorService,
-    TrainingPlanSupervisorStatus,
+    TrainingPlanSupervisorOperationRepository, TrainingPlanSupervisorReview,
+    TrainingPlanSupervisorService, TrainingPlanSupervisorStatus,
 };
 
 #[derive(Clone, Default)]
@@ -300,6 +300,11 @@ async fn generation_reuses_existing_supervisor_status_for_same_operation() {
             worker_saved_at_epoch_seconds: date_epoch(FIRST_DAY),
             model: "gemini-2.5-pro".to_string(),
             status: TrainingPlanSupervisorStatus::Accepted,
+            review: Some(TrainingPlanSupervisorReview {
+                decision: aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorDecision::Accept,
+                reason: "looks good".to_string(),
+                plan: None,
+            }),
             created_at_epoch_seconds: date_epoch(FIRST_DAY),
             updated_at_epoch_seconds: date_epoch(FIRST_DAY),
         },

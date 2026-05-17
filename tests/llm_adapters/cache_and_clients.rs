@@ -1,12 +1,15 @@
 use aiwattcoach::{
     adapters::llm::gemini::cache::context_hash,
     domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition},
+    domain::training_plan_supervisor::{
+        TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorDecision,
+    },
 };
 
 use crate::shared_support::tracing_capture::capture_tracing_logs;
 use crate::support::{
-    deepseek_client, gemini_client, openai_client, openai_forbidden_client, openrouter_client,
-    sample_request, MockServer,
+    deepseek_client, gemini_batch_client, gemini_client, openai_client, openai_forbidden_client,
+    openrouter_client, sample_request, MockServer,
 };
 
 #[tokio::test]
@@ -225,6 +228,30 @@ async fn gemini_client_accepts_google_prefixed_model_name() {
         .unwrap();
 
     assert_eq!(response.assistant_text(), Some("Gemini says hi"));
+}
+
+#[tokio::test]
+async fn gemini_batch_client_downloads_result_and_maps_review() {
+    let server = MockServer::start().await;
+    let client = gemini_batch_client(&server.base_url);
+
+    let review = client
+        .download_result("gemini-key", "batches/batch-1")
+        .await
+        .unwrap();
+
+    assert_eq!(review.decision, TrainingPlanSupervisorDecision::Accept);
+    assert_eq!(review.reason, "plan is ready");
+    assert_eq!(review.plan, None);
+
+    let requests = server.requests();
+    assert_eq!(requests[0].path, "/v1beta/batches/batch-1");
+    assert_eq!(requests[0].google_api_key.as_deref(), Some("gemini-key"));
+    assert_eq!(
+        requests[1].path,
+        "/download/v1beta/files/result-file-1:download"
+    );
+    assert_eq!(requests[1].google_api_key.as_deref(), Some("gemini-key"));
 }
 
 #[tokio::test]

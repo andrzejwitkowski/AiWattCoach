@@ -2,8 +2,15 @@ mod model;
 mod ports;
 mod service;
 
-pub use model::{TrainingPlanSupervisorOperation, TrainingPlanSupervisorStatus};
-pub use ports::{
-    BoxFuture, TrainingPlanSupervisorOperationRepository, TrainingPlanSupervisorScheduler,
+pub use model::{
+    GeminiSupervisorWebhookOutcome, TrainingPlanSupervisorDecision,
+    TrainingPlanSupervisorOperation, TrainingPlanSupervisorReview, TrainingPlanSupervisorStatus,
 };
-pub use service::{NoopTrainingPlanSupervisorScheduler, TrainingPlanSupervisorService};
+pub use ports::{
+    BoxFuture, TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorOperationRepository,
+    TrainingPlanSupervisorScheduler,
+};
+pub use service::{
+    GeminiTrainingPlanSupervisorWebhookService, NoopTrainingPlanSupervisorScheduler,
+    TrainingPlanSupervisorService, TrainingPlanSupervisorWebhookUseCases,
+};

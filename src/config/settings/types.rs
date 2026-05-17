@@ -11,6 +11,7 @@ pub struct Settings {
     pub server: ServerSettings,
     pub mongo: MongoSettings,
     pub auth: AuthSettings,
+    pub gemini_supervisor_webhook_token: Option<String>,
     pub dev_intervals_enabled: bool,
     pub dev_llm_coach_enabled: bool,
     pub client_log_ingestion_enabled: bool,
