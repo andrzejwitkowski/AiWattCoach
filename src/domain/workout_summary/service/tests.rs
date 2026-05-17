@@ -111,6 +111,7 @@ async fn materialize_public_tool_messages_records_existing_message_without_dupli
                 arguments_json: "{}".to_string(),
                 arguments_preview: None,
             }),
+            questions: Vec::new(),
             created_at_epoch_seconds: 1_700_000_000,
         }]),
         StubReplyOperations,
@@ -157,6 +158,7 @@ async fn materialize_public_tool_messages_appends_only_missing_calls_in_order() 
             arguments_json: "{}".to_string(),
             arguments_preview: None,
         }),
+        questions: Vec::new(),
         created_at_epoch_seconds: 1_700_000_000,
     }]);
     let service = WorkoutSummaryService::with_coach(

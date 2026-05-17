@@ -30,6 +30,7 @@ where
                 content,
                 message_id: None,
                 tool_call: None,
+                questions: Vec::new(),
                 require_open_summary: true,
             },
         )
@@ -50,6 +51,7 @@ where
                 content: format!("Tool call: {}", tool_call.name),
                 message_id: Some(tool_call.id.clone()),
                 tool_call: Some(tool_call),
+                questions: Vec::new(),
                 require_open_summary: false,
             },
         )
@@ -228,6 +230,7 @@ where
             role: input.role,
             content,
             tool_call: input.tool_call,
+            questions: input.questions,
             created_at_epoch_seconds: now,
         }
     }

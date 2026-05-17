@@ -362,6 +362,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 role: MessageRole::User,
                 content,
                 tool_call: None,
+                questions: Vec::new(),
                 created_at_epoch_seconds: 1_700_000_000,
             };
             let coach_message = aiwattcoach::domain::workout_summary::ConversationMessage {
@@ -369,6 +370,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 role: MessageRole::Coach,
                 content: "Thanks, that helps. What stood out most about how the workout felt compared with the plan?".to_string(),
                 tool_call: None,
+                questions: Vec::new(),
                 created_at_epoch_seconds: 1_700_000_000,
             };
 
@@ -434,6 +436,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 role: MessageRole::User,
                 content,
                 tool_call: None,
+                questions: Vec::new(),
                 created_at_epoch_seconds: 1_700_000_000,
             };
 
@@ -510,6 +513,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                         role: MessageRole::Tool,
                         content: format!("Tool call: {}", tool_call.name),
                         tool_call: Some(tool_call),
+                        questions: Vec::new(),
                         created_at_epoch_seconds: 1_700_000_000,
                     });
             }
@@ -520,6 +524,7 @@ impl WorkoutSummaryUseCases for TestWorkoutSummaryService {
                 role: MessageRole::Coach,
                 content: format!("Coach reply to: {user_message_content}"),
                 tool_call: None,
+                questions: Vec::new(),
                 created_at_epoch_seconds: 1_700_000_000,
             };
 

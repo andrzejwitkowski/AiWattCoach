@@ -126,7 +126,7 @@ async fn llm_workout_coach_describes_power_compression_in_system_prompt() {
         .contains("Do not flatter, hedge, or act like a yes-man."));
     assert!(requests[0]
         .system_prompt
-        .contains("ready to regenerate workouts"));
+        .contains("tell the athlete to save the summary"));
     assert!(requests[0].system_prompt.contains("level:seconds"));
     assert!(requests[0]
         .system_prompt

@@ -48,6 +48,44 @@ describe('workoutSummary api', () => {
     expect(global.fetch).toHaveBeenCalledWith('/api/workout-summaries/101', expect.any(Object));
   });
 
+  it('parses coach questionnaire fields on workout summaries', async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        ...summaryFixture,
+        messages: [
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'A few quick follow-ups before I lock this in.',
+            questions: [
+              {
+                id: 'limiter',
+                question: 'What limited you most today?',
+                answers: ['Legs', 'Breathing', 'Fueling'],
+                freeTextLabel: 'Add context if needed',
+              },
+            ],
+            createdAtEpochSeconds: 1711000100,
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ) as typeof fetch;
+
+    const result = await getWorkoutSummary('', '101');
+
+    expect(result.messages[0]?.questions).toEqual([
+      {
+        id: 'limiter',
+        question: 'What limited you most today?',
+        answers: ['Legs', 'Breathing', 'Fueling'],
+        freeTextLabel: 'Add context if needed',
+      },
+    ]);
+  });
+
   it('creates a workout summary', async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(summaryFixture), {

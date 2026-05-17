@@ -21,6 +21,18 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-15 | user | workout-summary polls schemars follow-up
+
+- Problem: Workout-summary poll feedback left three review risks: `CoachQuestionnaire.tsx` carried the whole questionnaire UI in one component, the workout-summary coach prompt duplicated a hand-written JSON reply contract instead of deriving it from the Rust shape being deserialized, and the parser treated plain-text LLM replies as invalid instead of preserving a usable coach reply without questionnaire questions.
+- Fix: split the questionnaire UI into focused local components while keeping its public props and behavior unchanged, added `schemars`-derived JSON schema generation from the workout-summary coach reply envelope and embedded that schema only in the workout-summary coach prompt, and made non-JSON assistant replies parse as summary-only replies while malformed JSON and JSON-like text near the schema still fail validation. Added focused parser/schema and prompt tests.
+- Prevention: for LLM structured-output features, derive the prompt schema from the exact parser DTO when feasible, keep that contract feature-scoped so other coaches do not inherit it accidentally, and define an explicit fallback for usable plain-text model replies without allowing prefixed or partially malformed structured output to masquerade as free text.
+
+### 2026-05-14 | Copilot + CodeRabbit | PR #237 workout-summary questionnaire review follow-up
+
+- Problem: the new questionnaire UI allowed partially answered multi-question submits and could stay permanently disabled when `onSubmit` rejected. The coach reply parser also treated a missing `questions` field as a hard schema failure, only stripped plain or lowercase-`json` code fences, and the Mongo adapter stored `CoachQuestion` using the domain type directly inside document structs.
+- Fix: changed `CoachQuestionnaire` to require a selected single-choice answer for every question before enabling submit, reset `isSubmitting` when `onSubmit` throws, taught `CoachReplyEnvelope.questions` to default to `[]`, made fenced JSON extraction tolerate arbitrary language tags such as ` ```JSON `, and introduced a storage-only `CoachQuestionDocument` with explicit Mongo mapping helpers.
+- Prevention: for structured questionnaires, verify the submit gate matches the intended completeness contract and add a failure-path UI regression so async submit errors cannot leave controls stuck. When a parser accepts fenced payloads from LLMs, make the fence stripping tolerant to language-tag variants and missing optional empty arrays. In Mongo adapters, keep persisted document types separate from domain structs even when the shapes currently match.
+
 ### 2026-05-14 | user | workout-summary save workflow frontend status drift
 
 - Problem: the backend `SaveWorkflowStatus` enum now returns `Processing` for background recap/training-plan generation, but the frontend `saveWorkoutSummaryResponseSchema` in `frontend/src/features/coach/types.ts` still allowed only `generated | skipped | failed | unchanged`. Saving a new plan therefore failed client-side Zod parsing on `workflow.recapStatus` and `workflow.planStatus` whenever the backend correctly responded with `processing`.

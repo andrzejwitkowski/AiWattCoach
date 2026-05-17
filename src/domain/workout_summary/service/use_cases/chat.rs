@@ -4,6 +4,7 @@ use crate::domain::llm::{
     final_assistant_text, resolve_llm_reply_operation, LlmReplyClaimResult, LlmReplyOperation,
     LlmReplyResolutionWorkflow, ResolvedLlmReplyOperation,
 };
+use crate::domain::workout_summary::ParsedCoachReply;
 
 use super::*;
 
@@ -307,11 +308,11 @@ where
         Ok(operation)
     }
 
-    async fn require_final_assistant_text(
+    async fn require_parsed_coach_reply(
         &self,
         operation: &CoachReplyOperation,
         llm_response: &crate::domain::llm::LlmChatResponse,
-    ) -> Result<String, WorkoutSummaryError> {
+    ) -> Result<ParsedCoachReply, WorkoutSummaryError> {
         let Some(coach_content) = final_assistant_text(llm_response) else {
             let error = crate::domain::llm::LlmError::InvalidResponse(
                 "assistant reply missing final text message".to_string(),
@@ -322,7 +323,22 @@ where
             return Err(WorkoutSummaryError::Llm(error));
         };
 
-        Ok(coach_content)
+        let parsed =
+            crate::domain::workout_summary::parse_coach_reply(&coach_content).map_err(|message| {
+                crate::domain::llm::LlmError::InvalidResponse(format!(
+                    "assistant reply did not match workout summary coach schema: {message}"
+                ))
+            });
+
+        match parsed {
+            Ok(parsed) => Ok(parsed),
+            Err(error) => {
+                let failed = operation.mark_failed(&error, self.clock.now_epoch_seconds());
+                self.persist_post_provider_operation(failed, "persist_invalid_response_checkpoint")
+                    .await?;
+                Err(WorkoutSummaryError::Llm(error))
+            }
+        }
     }
 
     async fn append_coach_reply_message(
@@ -332,8 +348,8 @@ where
         operation: &CoachReplyOperation,
         llm_response: &crate::domain::llm::LlmChatResponse,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
-        let coach_content = self
-            .require_final_assistant_text(operation, llm_response)
+        let parsed_reply = self
+            .require_parsed_coach_reply(operation, llm_response)
             .await?;
         let coach_message_id = operation.reply_message_id.clone().ok_or_else(|| {
             WorkoutSummaryError::Repository(
@@ -345,8 +361,9 @@ where
             user_id,
             workout_id,
             crate::domain::workout_summary::service::internals::AppendMessageInput::coach(
-                coach_content,
+                parsed_reply.content,
                 coach_message_id,
+                parsed_reply.questions,
             ),
         )
         .await

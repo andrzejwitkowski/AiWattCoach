@@ -154,10 +154,15 @@ async fn openrouter_handler(
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
     capture_request(&state, "/api/v1/chat/completions", headers, body.clone());
+    let content = json!({
+        "summary": "OpenRouter says hi",
+        "questions": [],
+    })
+    .to_string();
     Json(json!({
         "id": "openrouter-req-1",
         "model": body.get("model").and_then(Value::as_str).unwrap_or("openai/gpt-4o-mini"),
-        "choices": [{ "message": { "content": "OpenRouter says hi" } }],
+        "choices": [{ "message": { "content": content } }],
         "usage": {
             "prompt_tokens": 120,
             "completion_tokens": 25,
@@ -195,11 +200,16 @@ async fn gemini_generate_handler(
         headers,
         body,
     );
+    let content = json!({
+        "summary": "Gemini says hi",
+        "questions": [],
+    })
+    .to_string();
     Json(json!({
         "candidates": [{
             "content": {
                 "role": "model",
-                "parts": [{ "text": "Gemini says hi" }]
+                "parts": [{ "text": content }]
             }
         }],
         "usageMetadata": {

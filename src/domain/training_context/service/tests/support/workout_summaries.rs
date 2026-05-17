@@ -23,6 +23,7 @@ fn summary_for_workout_id(workout_id: &str) -> WorkoutSummary {
             role: MessageRole::User,
             content: "felt controlled".to_string(),
             tool_call: None,
+            questions: Vec::new(),
             created_at_epoch_seconds: 1,
         }],
         provider_transcript: Vec::new(),

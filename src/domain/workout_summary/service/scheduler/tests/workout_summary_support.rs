@@ -397,7 +397,11 @@ impl WorkoutCoach for TestCoach {
                 LlmChatResponse {
                     provider: LlmProvider::OpenAi,
                     model: "test-coach".to_string(),
-                    message: LlmChatMessage::assistant(format!("Coach reply to: {user_message}")),
+                    message: LlmChatMessage::assistant(
+                        crate::domain::workout_summary::coach_reply_json(format!(
+                            "Coach reply to: {user_message}"
+                        )),
+                    ),
                     finish_reason: None,
                     provider_request_id: Some("req-1".to_string()),
                     usage: LlmTokenUsage::default(),
@@ -442,7 +446,11 @@ impl WorkoutCoach for BlockingCoach {
                 LlmChatResponse {
                     provider: LlmProvider::OpenAi,
                     model: "test-coach".to_string(),
-                    message: LlmChatMessage::assistant(format!("Coach reply to: {user_message}")),
+                    message: LlmChatMessage::assistant(
+                        crate::domain::workout_summary::coach_reply_json(format!(
+                            "Coach reply to: {user_message}"
+                        )),
+                    ),
                     finish_reason: None,
                     provider_request_id: Some("req-1".to_string()),
                     usage: LlmTokenUsage::default(),

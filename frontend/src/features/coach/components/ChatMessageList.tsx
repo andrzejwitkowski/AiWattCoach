@@ -8,9 +8,15 @@ type ChatMessageListProps = {
   messages: ConversationMessage[];
   isCoachTyping: boolean;
   progressState?: CoachChatProgressState;
+  onSendMessage?: (content: string) => Promise<boolean>;
 };
 
-export function ChatMessageList({ messages, isCoachTyping, progressState = 'idle' }: ChatMessageListProps) {
+export function ChatMessageList({
+  messages,
+  isCoachTyping,
+  progressState = 'idle',
+  onSendMessage,
+}: ChatMessageListProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const shouldShowProgressIndicator = progressState !== 'idle';
 
@@ -19,10 +25,10 @@ export function ChatMessageList({ messages, isCoachTyping, progressState = 'idle
   }, [isCoachTyping, messages, progressState]);
 
   return (
-    <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-6 py-6">
-      {messages.map((message) => (
-        <ChatMessage key={message.id} message={message} />
-      ))}
+      <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-6 py-6">
+        {messages.map((message) => (
+          <ChatMessage key={message.id} message={message} onSendMessage={onSendMessage} />
+        ))}
       {shouldShowProgressIndicator ? <ChatTypingIndicator progressState={progressState} /> : null}
       {!shouldShowProgressIndicator && isCoachTyping ? <ChatTypingIndicator /> : null}
       <div ref={endRef} />

@@ -381,6 +381,76 @@ describe('useCoachChat', () => {
     });
   });
 
+  it('stores coach questionnaire data from websocket replies', async () => {
+    global.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.mocked(getWorkoutSummary).mockResolvedValue(summaryFixture);
+
+    const { result } = renderHook(() => useCoachChat({ apiBaseUrl: '', workoutId: '101' }));
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit(
+        'message',
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'coach_message',
+            message: {
+              id: 'message-2',
+              role: 'coach',
+              content: 'Tell me what held you back the most.',
+              questions: [
+                {
+                  id: 'limiter',
+                  question: 'What limited you most today?',
+                  answers: ['Legs', 'Breathing', 'Fueling'],
+                  freeTextLabel: 'Add context if needed',
+                },
+              ],
+              createdAtEpochSeconds: 3,
+            },
+            summary: {
+              ...summaryFixture,
+              messages: [
+                {
+                  id: 'message-2',
+                  role: 'coach',
+                  content: 'Tell me what held you back the most.',
+                  questions: [
+                    {
+                      id: 'limiter',
+                      question: 'What limited you most today?',
+                      answers: ['Legs', 'Breathing', 'Fueling'],
+                      freeTextLabel: 'Add context if needed',
+                    },
+                  ],
+                  createdAtEpochSeconds: 3,
+                },
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+      expect(result.current.messages[0]?.questions).toEqual([
+        {
+          id: 'limiter',
+          question: 'What limited you most today?',
+          answers: ['Legs', 'Breathing', 'Fueling'],
+          freeTextLabel: 'Add context if needed',
+        },
+      ]);
+    });
+
+    expect(result.current.progressState).toBe('idle');
+    expect(result.current.hasConversation).toBe(true);
+  });
+
   it('recognizes the backend availability error sentinel', () => {
     expect(isAvailabilityRequiredChatError(availabilityRequiredChatError)).toBe(true);
     expect(isAvailabilityRequiredChatError('Availability must be configured before chatting with coach.')).toBe(true);

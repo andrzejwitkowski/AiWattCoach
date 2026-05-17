@@ -43,9 +43,20 @@ pub(super) struct ConversationMessageDocument {
     pub(super) content: String,
     #[serde(default)]
     pub(super) tool_call: Option<PublicToolCall>,
+    #[serde(default)]
+    pub(super) questions: Vec<CoachQuestionDocument>,
     pub(super) created_at_epoch_seconds: Option<i64>,
     #[serde(default)]
     pub(super) created_at: Option<DateTime>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(super) struct CoachQuestionDocument {
+    pub(super) id: String,
+    pub(super) question: String,
+    pub(super) answers: Vec<String>,
+    #[serde(default)]
+    pub(super) free_text_label: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
