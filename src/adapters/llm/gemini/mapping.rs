@@ -7,7 +7,7 @@ use crate::adapters::llm::context_prelude::non_empty_context_parts;
 
 use super::dto::{
     GeminiContent, GeminiCreateCacheRequest, GeminiGenerateContentRequest,
-    GeminiGenerateContentResponse, GeminiTextPart,
+    GeminiGenerateContentResponse, GeminiGenerationConfig, GeminiTextPart,
 };
 
 pub fn map_generate_request(
@@ -53,7 +53,26 @@ pub fn map_generate_request(
             .collect(),
         system_instruction,
         cached_content,
+        generation_config: map_generation_config(request),
     }
+}
+
+fn map_generation_config(request: &LlmChatRequest) -> Option<GeminiGenerationConfig> {
+    let response_schema = request
+        .response_schema_json
+        .as_deref()
+        .map(serde_json::from_str)
+        .transpose()
+        .expect("response_schema_json should contain valid JSON when provided");
+
+    if request.response_mime_type.is_none() && response_schema.is_none() {
+        return None;
+    }
+
+    Some(GeminiGenerationConfig {
+        response_mime_type: request.response_mime_type.clone(),
+        response_schema,
+    })
 }
 
 pub fn map_create_cache_request(

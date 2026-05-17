@@ -35,6 +35,14 @@ async fn llm_workout_coach_does_not_fail_when_gemini_cache_lookup_errors() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].reusable_cache_id, None);
     assert_eq!(
+        requests[0].response_mime_type.as_deref(),
+        Some("application/json")
+    );
+    assert!(requests[0]
+        .response_schema_json
+        .as_deref()
+        .is_some_and(|schema| schema.contains(r#""summary""#)));
+    assert_eq!(
         requests[0].volatile_context,
         "training_context_volatile={\"volatile\":true}"
     );

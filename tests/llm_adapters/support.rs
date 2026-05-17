@@ -263,6 +263,8 @@ pub(crate) fn sample_request() -> LlmChatRequest {
         cache_scope_key: Some("scope-1".to_string()),
         cache_key: Some("cache-key-1".to_string()),
         reusable_cache_id: None,
+        response_mime_type: None,
+        response_schema_json: None,
         tools: Vec::new(),
         tool_choice: LlmToolChoice::None,
     }

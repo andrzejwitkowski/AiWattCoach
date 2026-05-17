@@ -125,6 +125,14 @@ async fn openai_client_maps_tool_call_response_and_finish_reason() {
 async fn gemini_client_creates_cache_and_reuses_cached_content() {
     let server = MockServer::start().await;
     let client = gemini_client(&server.base_url);
+    let structured_request = aiwattcoach::domain::llm::LlmChatRequest {
+        response_mime_type: Some("application/json".to_string()),
+        response_schema_json: Some(
+            r#"{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}"#
+                .to_string(),
+        ),
+        ..sample_request()
+    };
 
     let first = client
         .chat(
@@ -133,7 +141,7 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
                 model: "gemini-2.5-flash".to_string(),
                 api_key: "gemini-key".to_string(),
             },
-            sample_request(),
+            structured_request.clone(),
         )
         .await
         .unwrap();
@@ -155,7 +163,7 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
             },
             aiwattcoach::domain::llm::LlmChatRequest {
                 reusable_cache_id: Some("cachedContents/cache-1".to_string()),
-                ..sample_request()
+                ..structured_request
             },
         )
         .await
@@ -183,6 +191,17 @@ async fn gemini_client_creates_cache_and_reuses_cached_content() {
     );
     assert_eq!(requests[1].body["cachedContent"], "cachedContents/cache-1");
     assert_eq!(requests[2].body["cachedContent"], "cachedContents/cache-1");
+    assert_eq!(
+        requests[1].body["generationConfig"]["responseMimeType"],
+        "application/json"
+    );
+    assert_eq!(
+        requests[2].body["generationConfig"]["responseMimeType"],
+        "application/json"
+    );
+    assert!(requests[1].body["generationConfig"]["responseSchema"]
+        .get("properties")
+        .is_some());
     assert_eq!(context_hash(&sample_request()).len(), 64);
     assert!(requests[1].body.get("systemInstruction").is_none());
     assert!(requests[2].body.get("systemInstruction").is_none());

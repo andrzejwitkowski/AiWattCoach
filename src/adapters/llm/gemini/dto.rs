@@ -7,6 +7,16 @@ pub struct GeminiGenerateContentRequest {
     pub system_instruction: Option<GeminiContent>,
     #[serde(rename = "cachedContent", skip_serializing_if = "Option::is_none")]
     pub cached_content: Option<String>,
+    #[serde(rename = "generationConfig", skip_serializing_if = "Option::is_none")]
+    pub generation_config: Option<GeminiGenerationConfig>,
+}
+
+#[derive(Serialize)]
+pub struct GeminiGenerationConfig {
+    #[serde(rename = "responseMimeType", skip_serializing_if = "Option::is_none")]
+    pub response_mime_type: Option<String>,
+    #[serde(rename = "responseSchema", skip_serializing_if = "Option::is_none")]
+    pub response_schema: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

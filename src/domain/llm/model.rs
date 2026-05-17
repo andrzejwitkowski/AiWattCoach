@@ -170,6 +170,10 @@ pub struct LlmChatRequest {
     pub cache_scope_key: Option<String>,
     pub cache_key: Option<String>,
     pub reusable_cache_id: Option<String>,
+    #[serde(default)]
+    pub response_mime_type: Option<String>,
+    #[serde(default)]
+    pub response_schema_json: Option<String>,
     /// Populated by the orchestrator (e.g. `run_tool_loop`) based on scope.
     /// Do NOT set this in domain request builders; it is injected at the
     /// transport boundary so the builder is not misleading about whether
@@ -274,6 +278,14 @@ impl std::fmt::Debug for LlmChatRequest {
             .field("cache_scope_key", &self.cache_scope_key)
             .field("cache_key", &self.cache_key)
             .field("reusable_cache_id", &self.reusable_cache_id)
+            .field("response_mime_type", &self.response_mime_type)
+            .field(
+                "response_schema_json_chars",
+                &self
+                    .response_schema_json
+                    .as_ref()
+                    .map(|schema| schema.chars().count()),
+            )
             .finish()
     }
 }
