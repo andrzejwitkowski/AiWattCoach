@@ -10,16 +10,22 @@ pub(super) struct AppendMessageInput {
     content: String,
     message_id: Option<String>,
     tool_call: Option<crate::domain::workout_summary::PublicToolCall>,
+    questions: Vec<crate::domain::workout_summary::CoachQuestion>,
     require_open_summary: bool,
 }
 
 impl AppendMessageInput {
-    pub(super) fn coach(content: String, message_id: String) -> Self {
+    pub(super) fn coach(
+        content: String,
+        message_id: String,
+        questions: Vec<crate::domain::workout_summary::CoachQuestion>,
+    ) -> Self {
         Self {
             role: MessageRole::Coach,
             content,
             message_id: Some(message_id),
             tool_call: None,
+            questions,
             require_open_summary: false,
         }
     }

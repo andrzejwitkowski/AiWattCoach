@@ -26,6 +26,13 @@ impl InMemorySupervisorOperationRepository {
     ) -> Vec<aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation> {
         self.operations.lock().unwrap().clone()
     }
+
+    fn seed_operation(
+        &self,
+        operation: aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation,
+    ) {
+        self.operations.lock().unwrap().push(operation);
+    }
 }
 
 impl TrainingPlanSupervisorOperationRepository for InMemorySupervisorOperationRepository {
@@ -266,6 +273,69 @@ async fn generation_marks_active_projected_days_pending_when_supervisor_enabled(
         .iter()
         .filter(|day| day.superseded_at_epoch_seconds.is_none() && day.date.as_str() > FIRST_DAY)
         .all(|day| day.supervisor_status == Some(TrainingPlanSupervisorStatus::Pending)));
+}
+
+#[tokio::test]
+async fn generation_reuses_existing_supervisor_status_for_same_operation() {
+    let call_log = new_call_log();
+    let snapshots = InMemoryTrainingPlanSnapshotRepository::new();
+    let projected_days =
+        InMemoryTrainingPlanProjectedDayRepository::new(snapshots.snapshots.clone());
+    let operations = InMemoryTrainingPlanOperationRepository::new(call_log.clone());
+    let workout_summary = StubWorkoutSummaryPort::new(call_log.clone());
+    let generator = StubTrainingPlanGenerator::new(
+        call_log,
+        vec![Ok(workout_recap())],
+        vec![Ok(valid_plan_window(FIRST_DAY))],
+        vec![],
+    );
+    let supervisor_operations = InMemorySupervisorOperationRepository::default();
+    supervisor_operations.seed_operation(
+        aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation {
+            worker_operation_key: format!(
+                "training-plan:{USER_ID}:{WORKOUT_ID}:{}",
+                date_epoch(FIRST_DAY)
+            ),
+            user_id: USER_ID.to_string(),
+            worker_saved_at_epoch_seconds: date_epoch(FIRST_DAY),
+            model: "gemini-2.5-pro".to_string(),
+            status: TrainingPlanSupervisorStatus::Accepted,
+            created_at_epoch_seconds: date_epoch(FIRST_DAY),
+            updated_at_epoch_seconds: date_epoch(FIRST_DAY),
+        },
+    );
+    let service = TrainingPlanGenerationService::new(
+        snapshots.clone(),
+        projected_days.clone(),
+        operations.clone(),
+        generator,
+        workout_summary,
+        FixedClock {
+            now_epoch_seconds: date_epoch(FIRST_DAY),
+        },
+    )
+    .with_training_plan_supervisor(TrainingPlanSupervisorService::new(
+        supervisor_operations,
+        EnabledSettingsService,
+        FixedClock {
+            now_epoch_seconds: date_epoch(FIRST_DAY),
+        },
+    ));
+
+    let result = service
+        .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
+        .await
+        .unwrap();
+
+    assert!(result
+        .active_projected_days
+        .iter()
+        .all(|day| day.supervisor_status == Some(TrainingPlanSupervisorStatus::Accepted)));
+    assert!(projected_days
+        .stored_days()
+        .iter()
+        .filter(|day| day.superseded_at_epoch_seconds.is_none() && day.date.as_str() > FIRST_DAY)
+        .all(|day| day.supervisor_status == Some(TrainingPlanSupervisorStatus::Accepted)));
 }
 
 #[tokio::test]

@@ -146,6 +146,146 @@ describe('ChatWindow', () => {
     });
   });
 
+  it('renders coach questionnaire and submits selected answers', async () => {
+    const onSendMessage = vi.fn().mockResolvedValue(true);
+
+    render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'A few quick follow-ups before I lock this in.',
+            questions: [
+              {
+                id: 'limiter',
+                question: 'What limited you most today?',
+                answers: ['Legs', 'Breathing', 'Fueling'],
+                freeTextLabel: 'Add context if needed',
+              },
+            ],
+            createdAtEpochSeconds: 1711000200,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        error={null}
+        onSendMessage={onSendMessage}
+      />,
+    );
+
+    expect(screen.getByText(/coach check-in/i)).toBeInTheDocument();
+
+    const submitButton = screen.getByRole('button', { name: /send answers to coach/i });
+    expect(submitButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
+    fireEvent.change(screen.getByPlaceholderText(/add context if needed/i), {
+      target: { value: 'Faded late on the final interval.' },
+    });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(onSendMessage).toHaveBeenCalledWith([
+        'Answers to the coach questionnaire:',
+        '1. What limited you most today?',
+        'Selected: Legs',
+        'Details: Faded late on the final interval.',
+      ].join('\n'));
+    });
+
+    expect(screen.getByRole('button', { name: /sending answers/i })).toBeInTheDocument();
+  });
+
+  it('keeps questionnaire submit disabled until every question has a selected answer', () => {
+    render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'A few quick follow-ups before I lock this in.',
+            questions: [
+              {
+                id: 'limiter',
+                question: 'What limited you most today?',
+                answers: ['Legs', 'Breathing', 'Fueling'],
+                freeTextLabel: 'Add context if needed',
+              },
+              {
+                id: 'readiness',
+                question: 'How ready are you for the next two days?',
+                answers: ['Ready', 'Easy only', 'Need rest'],
+                freeTextLabel: null,
+              },
+            ],
+            createdAtEpochSeconds: 1711000200,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        error={null}
+        onSendMessage={async () => true}
+      />,
+    );
+
+    const submitButton = screen.getByRole('button', { name: /send answers to coach/i });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
+    expect(submitButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+    expect(submitButton).toBeEnabled();
+  });
+
+  it('re-enables questionnaire submit when send fails', async () => {
+    const onSendMessage = vi.fn().mockRejectedValue(new Error('network failed'));
+
+    render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'message-1',
+            role: 'coach',
+            content: 'A few quick follow-ups before I lock this in.',
+            questions: [
+              {
+                id: 'limiter',
+                question: 'What limited you most today?',
+                answers: ['Legs', 'Breathing', 'Fueling'],
+                freeTextLabel: 'Add context if needed',
+              },
+            ],
+            createdAtEpochSeconds: 1711000200,
+          },
+        ]}
+        isCoachTyping={false}
+        isConnected
+        hasSelectedWorkout
+        isSaved={false}
+        requiresRpe={false}
+        requiresAvailability={false}
+        error={null}
+        onSendMessage={onSendMessage}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
+    fireEvent.click(screen.getByRole('button', { name: /send answers to coach/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /send answers to coach/i })).toBeEnabled();
+    });
+  });
+
   it('renders an empty selection prompt when no workout is selected', () => {
     render(
       <ChatWindow

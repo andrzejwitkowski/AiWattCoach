@@ -14,7 +14,6 @@ use crate::domain::{
     identity::Clock,
     training_plan_supervisor::{
         NoopTrainingPlanSupervisorScheduler, TrainingPlanSupervisorScheduler,
-        TrainingPlanSupervisorStatus,
     },
     workout_summary::WorkoutRecap,
 };
@@ -489,7 +488,7 @@ where
             .await?;
         let supervisor_status = supervisor_operation
             .as_ref()
-            .map(|_| TrainingPlanSupervisorStatus::Pending);
+            .map(|operation| operation.status);
         if supervisor_status.is_some() {
             self.projections
                 .update_supervisor_status(

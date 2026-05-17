@@ -205,16 +205,30 @@ impl TrainingPlanProjectionRepository for SaveFlowProjectionRepository {
 
     fn update_supervisor_status(
         &self,
-        _user_id: &str,
-        _operation_key: &str,
-        _supervisor_status: Option<
+        user_id: &str,
+        operation_key: &str,
+        supervisor_status: Option<
             aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
         >,
-        _updated_at_epoch_seconds: i64,
+        updated_at_epoch_seconds: i64,
     ) -> aiwattcoach::domain::training_plan::BoxFuture<
         Result<(), aiwattcoach::domain::training_plan::TrainingPlanError>,
     > {
-        Box::pin(async { Ok(()) })
+        let days = self.days.clone();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            let mut days = days.lock().unwrap();
+            for day in days.iter_mut().filter(|day| {
+                day.user_id == user_id
+                    && day.operation_key == operation_key
+                    && day.superseded_at_epoch_seconds.is_none()
+            }) {
+                day.supervisor_status = supervisor_status;
+                day.updated_at_epoch_seconds = updated_at_epoch_seconds;
+            }
+            Ok(())
+        })
     }
 }
 

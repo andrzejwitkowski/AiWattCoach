@@ -1,10 +1,13 @@
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+
+import { CoachQuestionnaire } from './CoachQuestionnaire';
 import type { ConversationMessage } from '../types';
 
 type ChatMessageProps = {
   message: ConversationMessage;
+  onSendMessage?: (content: string) => Promise<boolean>;
 };
 
 function formatTimestamp(epochSeconds: number): string {
@@ -60,11 +63,12 @@ const mdComponents: Components = {
   ),
 };
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onSendMessage }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const isTool = message.role === 'tool';
   const isCoach = message.role === 'coach';
+  const questions = message.questions ?? [];
   const toolCallDisplay = message.toolCall?.argumentsPreview ?? message.toolCall?.argumentsJson;
   const containerClassName = ['flex', isUser ? 'justify-end' : 'justify-start'].join(' ');
   const bubbleClassName = [
@@ -94,6 +98,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
             <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>
               {message.content}
             </Markdown>
+            {questions.length > 0 && onSendMessage ? (
+              <CoachQuestionnaire questions={questions} onSubmit={onSendMessage} />
+            ) : null}
           </div>
         ) : (
           <p className="whitespace-pre-wrap text-base leading-7">{message.content}</p>

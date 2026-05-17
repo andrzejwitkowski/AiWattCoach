@@ -1,12 +1,12 @@
 use mongodb::bson::{doc, from_document, Bson, DateTime};
 
 use super::{
-    document::{ConversationMessageDocument, WorkoutSummaryDocument},
+    document::{CoachQuestionDocument, ConversationMessageDocument, WorkoutSummaryDocument},
     lookup::{
         current_workout_id_filter, document_identity_filter, document_is_locked,
         editable_document_identity_filter, legacy_event_id_filter, with_message_append_filter,
     },
-    mapping::{map_document_to_domain, map_domain_to_document},
+    mapping::{map_document_to_domain, map_domain_to_document, map_message_to_domain},
 };
 use crate::domain::workout_summary::{WorkoutSummary, WorkoutSummaryError};
 
@@ -92,6 +92,7 @@ fn workout_summary_document_reads_datetime_fields_without_legacy_epoch() {
             role: "user".to_string(),
             content: "hello".to_string(),
             tool_call: None,
+            questions: Vec::new(),
             created_at_epoch_seconds: None,
             created_at: Some(DateTime::from_millis(1_700_000_000_000)),
         }],
@@ -299,4 +300,58 @@ fn message_append_filter_requires_datetime_mirror_to_be_null() {
         filter.get_document("messages.id").unwrap(),
         &doc! { "$ne": "message-1" }
     );
+}
+
+#[test]
+fn map_message_to_domain_round_trips_questions() {
+    let document = ConversationMessageDocument {
+        id: "msg-1".to_string(),
+        role: "coach".to_string(),
+        content: "Legs were the limiter.".to_string(),
+        tool_call: None,
+        questions: vec![CoachQuestionDocument {
+            id: "question-1".to_string(),
+            question: "What limited you most?".to_string(),
+            answers: vec![
+                "Legs".to_string(),
+                "Breathing".to_string(),
+                "Fueling".to_string(),
+            ],
+            free_text_label: Some("Add detail".to_string()),
+        }],
+        created_at_epoch_seconds: Some(1_700_000_000),
+        created_at: None,
+    };
+
+    let message = map_message_to_domain(document).expect("coach message with questions should map");
+
+    assert_eq!(message.questions.len(), 1);
+    assert_eq!(message.questions[0].id, "question-1");
+    assert_eq!(message.questions[0].question, "What limited you most?");
+    assert_eq!(
+        message.questions[0].answers,
+        vec!["Legs", "Breathing", "Fueling"]
+    );
+    assert_eq!(
+        message.questions[0].free_text_label.as_deref(),
+        Some("Add detail")
+    );
+}
+
+#[test]
+fn map_message_to_domain_defaults_missing_questions_to_empty() {
+    use mongodb::bson::from_document;
+
+    let document: ConversationMessageDocument = from_document(doc! {
+        "id": "msg-old",
+        "role": "coach",
+        "content": "Old message without questions field.",
+        "created_at_epoch_seconds": 1_700_000_000_i64,
+    })
+    .expect("legacy document without questions field should deserialize");
+
+    let message =
+        map_message_to_domain(document).expect("legacy message without questions should map");
+
+    assert!(message.questions.is_empty());
 }

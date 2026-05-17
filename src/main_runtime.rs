@@ -619,6 +619,7 @@ mod tests {
                             role: MessageRole::User,
                             content: "How did I do?".to_string(),
                             tool_call: None,
+                            questions: Vec::new(),
                             created_at_epoch_seconds: 1,
                         },
                         ConversationMessage {
@@ -626,6 +627,7 @@ mod tests {
                             role: MessageRole::Tool,
                             content: "Tool call: lookupWorkout".to_string(),
                             tool_call: None,
+                            questions: Vec::new(),
                             created_at_epoch_seconds: 2,
                         },
                         ConversationMessage {
@@ -633,10 +635,13 @@ mod tests {
                             role: MessageRole::Coach,
                             content: "You faded late.".to_string(),
                             tool_call: None,
+                            questions: Vec::new(),
                             created_at_epoch_seconds: 3,
                         },
                     ],
-                    provider_transcript: vec![LlmChatMessage::assistant("You faded late.")],
+                    provider_transcript: vec![LlmChatMessage::assistant(
+                        crate::domain::workout_summary::coach_reply_json("You faded late."),
+                    )],
                     saved_at_epoch_seconds: None,
                     workout_recap_text: None,
                     workout_recap_provider: None,

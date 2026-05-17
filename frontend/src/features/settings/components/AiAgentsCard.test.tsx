@@ -214,6 +214,45 @@ describe('AiAgentsCard', () => {
 
     expect(updateAiAgentsMock).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog')).toHaveTextContent(/gemini api key required/i);
+    expect(screen.getByRole('button', { name: 'OK' })).toHaveFocus();
+  });
+
+  it('closes supervisor gemini key modal on Escape', async () => {
+    render(
+      <AiAgentsCard
+        settings={buildSettings({ geminiApiKey: null, geminiApiKeySet: false })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(/enable training plan supervisor/i));
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('preserves a persisted custom supervisor model option', () => {
+    render(
+      <AiAgentsCard
+        settings={buildSettings({ trainingPlanSupervisorModel: 'gemini-2.5-pro-exp-custom' })}
+        apiBaseUrl=""
+        onSave={() => {}}
+      />,
+    );
+
+    expect(screen.getByLabelText(/training plan supervisor model/i)).toHaveValue(
+      'gemini-2.5-pro-exp-custom',
+    );
+    expect(
+      screen.getByRole('option', { name: 'gemini-2.5-pro-exp-custom' }),
+    ).toBeInTheDocument();
   });
 
   it('clears plaintext api key fields after a successful save', async () => {

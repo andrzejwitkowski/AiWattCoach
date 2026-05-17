@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Bot, CheckCircle2, Eye, EyeOff, RefreshCw, Save } from 'lucide-react';
+import { useDialogFocusTrap } from '../../../lib/useDialogFocusTrap';
 import type { LlmProvider, TestAiAgentsConnectionResponse, UserSettingsResponse } from '../types';
 import { testAiAgentsConnection, updateAiAgents } from '../api/settings';
 
@@ -142,6 +143,14 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
   const [showSupervisorGeminiKeyModal, setShowSupervisorGeminiKeyModal] = useState(false);
   const previousPersistedRef = useRef(persistedDraft);
   const testRunIdRef = useRef(0);
+  const supervisorDialogRef = useRef<HTMLDivElement>(null);
+  const supervisorDialogCloseButtonRef = useRef<HTMLButtonElement>(null);
+
+  useDialogFocusTrap(
+    showSupervisorGeminiKeyModal,
+    supervisorDialogRef,
+    supervisorDialogCloseButtonRef,
+  );
 
   useEffect(() => {
     const previousPersisted = previousPersistedRef.current;
@@ -283,6 +292,12 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
 
   const selectedProviderOption = getProviderOption(draft.selectedProvider);
   const suggestedModels = selectedProviderOption?.suggestedModels ?? [];
+  const supervisorModelOptions = useMemo(() => {
+    const trimmedValue = draft.trainingPlanSupervisorModel.trim();
+    return trimmedValue && !SUPERVISOR_MODELS.includes(trimmedValue)
+      ? [trimmedValue, ...SUPERVISOR_MODELS]
+      : SUPERVISOR_MODELS;
+  }, [draft.trainingPlanSupervisorModel]);
   const openaiHasKey = aiAgents.openaiApiKeySet || draft.openaiApiKey.trim().length > 0;
   const geminiHasKey = aiAgents.geminiApiKeySet || draft.geminiApiKey.trim().length > 0;
   const openrouterHasKey = aiAgents.openrouterApiKeySet || draft.openrouterApiKey.trim().length > 0;
@@ -352,6 +367,23 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
       };
     });
   };
+
+  useEffect(() => {
+    if (!showSupervisorGeminiKeyModal) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowSupervisorGeminiKeyModal(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showSupervisorGeminiKeyModal]);
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -548,7 +580,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
             value={draft.trainingPlanSupervisorModel}
             onChange={(event) => updateDraft('trainingPlanSupervisorModel', event.target.value)}
           >
-            {SUPERVISOR_MODELS.map((model) => (
+            {supervisorModelOptions.map((model) => (
               <option key={model} value={model}>
                 {model}
               </option>
@@ -690,9 +722,11 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
           onClick={() => setShowSupervisorGeminiKeyModal(false)}
         >
           <div
+            ref={supervisorDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="supervisor-gemini-key-title"
+            tabIndex={-1}
             className="w-full max-w-md rounded-[1.75rem] border border-white/8 bg-[linear-gradient(180deg,rgba(28,32,36,0.98),rgba(15,18,20,0.98))] p-6 shadow-[0_40px_120px_rgba(0,0,0,0.58)]"
             onClick={(event) => {
               event.stopPropagation();
@@ -707,6 +741,7 @@ export function AiAgentsCard({ settings, apiBaseUrl, onSave }: AiAgentsCardProps
             </p>
             <div className="mt-5 flex justify-end">
               <button
+                ref={supervisorDialogCloseButtonRef}
                 type="button"
                 className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
                 onClick={() => setShowSupervisorGeminiKeyModal(false)}

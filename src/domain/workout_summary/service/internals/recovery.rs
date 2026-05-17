@@ -263,9 +263,9 @@ where
             .materialize_missing_recovery_tool_messages(user_id, workout_id, operation)
             .await?;
 
-        if let Some(content) = recoverable_assistant_content(&operation) {
+        if let Some(parsed_reply) = recoverable_assistant_reply(&operation) {
             let coach_message = self
-                .append_recovered_coach_message(user_id, workout_id, &operation, content)
+                .append_recovered_coach_message(user_id, workout_id, &operation, parsed_reply)
                 .await?;
             let completed = operation.mark_completed_from_existing_message(
                 coach_message.id.clone(),
@@ -371,7 +371,7 @@ where
         user_id: &str,
         workout_id: &str,
         operation: &CoachReplyOperation,
-        content: String,
+        parsed_reply: crate::domain::workout_summary::ParsedCoachReply,
     ) -> Result<ConversationMessage, WorkoutSummaryError> {
         let coach_message_id = operation.reply_message_id.clone().ok_or_else(|| {
             WorkoutSummaryError::Repository(
@@ -382,7 +382,11 @@ where
         self.append_message_with_role_and_id(
             user_id,
             workout_id,
-            AppendMessageInput::coach(content, coach_message_id),
+            AppendMessageInput::coach(
+                parsed_reply.content,
+                coach_message_id,
+                parsed_reply.questions,
+            ),
         )
         .await
     }
@@ -401,8 +405,11 @@ where
     }
 }
 
-fn recoverable_assistant_content(operation: &CoachReplyOperation) -> Option<String> {
-    last_nonempty_assistant_content(&operation.provider_transcript)
+fn recoverable_assistant_reply(
+    operation: &CoachReplyOperation,
+) -> Option<crate::domain::workout_summary::ParsedCoachReply> {
+    let content = last_nonempty_assistant_content(&operation.provider_transcript)?;
+    crate::domain::workout_summary::parse_coach_reply(&content).ok()
 }
 
 #[cfg(test)]
@@ -414,7 +421,9 @@ mod tests {
             LlmCacheUsage, LlmChatMessage, LlmProvider, LlmTokenUsage, LlmToolCall,
             PendingLlmReplyCheckpoint,
         },
-        workout_summary::{CoachReplyOperation, MockWorkoutCoach, WorkoutSummaryService},
+        workout_summary::{
+            coach_reply_json, CoachReplyOperation, MockWorkoutCoach, WorkoutSummaryService,
+        },
     };
 
     use crate::domain::workout_summary::service::tests::{
@@ -508,7 +517,7 @@ mod tests {
             token_usage: LlmTokenUsage::default(),
             cache_usage: LlmCacheUsage::default(),
             provider_transcript: vec![LlmChatMessage::assistant_with_tool_calls(
-                "Recovered coach reply",
+                coach_reply_json("Recovered coach reply"),
                 vec![
                     LlmToolCall {
                         id: "tool-1".to_string(),

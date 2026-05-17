@@ -148,7 +148,11 @@ async fn builder_anchors_windows_to_focus_activity_date() {
             >,
             _updated_at_epoch_seconds: i64,
         ) -> crate::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
-            Box::pin(async { Ok(()) })
+            Box::pin(async {
+                Err(TrainingPlanError::Repository(
+                    "focus_and_aliases projection repo should not receive writes".to_string(),
+                ))
+            })
         }
     }
 
