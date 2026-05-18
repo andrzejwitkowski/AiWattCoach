@@ -107,9 +107,17 @@ impl TrainingPlanSupervisorReview {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrainingPlanSupervisorReplacementApplyResult {
+    pub applied_dates: Vec<String>,
+    pub skipped_dates: Vec<String>,
+    pub skipped_synced_dates: Vec<String>,
+    pub applied_at_epoch_seconds: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GeminiSupervisorWebhookOutcome {
     Ignored,
-    Accepted(TrainingPlanSupervisorOperation),
+    Accepted(Box<TrainingPlanSupervisorOperation>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -118,8 +126,11 @@ pub struct TrainingPlanSupervisorOperation {
     pub user_id: String,
     pub worker_saved_at_epoch_seconds: i64,
     pub model: String,
+    pub batch_name: Option<String>,
+    pub batch_submitted_at_epoch_seconds: Option<i64>,
     pub status: TrainingPlanSupervisorStatus,
     pub review: Option<TrainingPlanSupervisorReview>,
+    pub replacement_apply_result: Option<TrainingPlanSupervisorReplacementApplyResult>,
     pub created_at_epoch_seconds: i64,
     pub updated_at_epoch_seconds: i64,
 }
@@ -137,9 +148,28 @@ impl TrainingPlanSupervisorOperation {
             user_id,
             worker_saved_at_epoch_seconds,
             model,
+            batch_name: None,
+            batch_submitted_at_epoch_seconds: None,
             status: TrainingPlanSupervisorStatus::Pending,
             review: None,
+            replacement_apply_result: None,
             created_at_epoch_seconds: now_epoch_seconds,
+            updated_at_epoch_seconds: now_epoch_seconds,
+        }
+    }
+
+    pub fn with_batch_submission(&self, batch_name: String, now_epoch_seconds: i64) -> Self {
+        Self {
+            worker_operation_key: self.worker_operation_key.clone(),
+            user_id: self.user_id.clone(),
+            worker_saved_at_epoch_seconds: self.worker_saved_at_epoch_seconds,
+            model: self.model.clone(),
+            batch_name: Some(batch_name),
+            batch_submitted_at_epoch_seconds: Some(now_epoch_seconds),
+            status: self.status,
+            review: self.review.clone(),
+            replacement_apply_result: self.replacement_apply_result.clone(),
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
         }
     }
@@ -168,10 +198,33 @@ impl TrainingPlanSupervisorOperation {
             user_id: self.user_id.clone(),
             worker_saved_at_epoch_seconds: self.worker_saved_at_epoch_seconds,
             model: self.model.clone(),
+            batch_name: self.batch_name.clone(),
+            batch_submitted_at_epoch_seconds: self.batch_submitted_at_epoch_seconds,
             status,
             review: Some(review),
+            replacement_apply_result: self.replacement_apply_result.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds: now_epoch_seconds,
         })
+    }
+
+    pub fn with_replacement_apply_result(
+        &self,
+        replacement_apply_result: TrainingPlanSupervisorReplacementApplyResult,
+        now_epoch_seconds: i64,
+    ) -> Self {
+        Self {
+            worker_operation_key: self.worker_operation_key.clone(),
+            user_id: self.user_id.clone(),
+            worker_saved_at_epoch_seconds: self.worker_saved_at_epoch_seconds,
+            model: self.model.clone(),
+            batch_name: self.batch_name.clone(),
+            batch_submitted_at_epoch_seconds: self.batch_submitted_at_epoch_seconds,
+            status: self.status,
+            review: self.review.clone(),
+            replacement_apply_result: Some(replacement_apply_result),
+            created_at_epoch_seconds: self.created_at_epoch_seconds,
+            updated_at_epoch_seconds: now_epoch_seconds,
+        }
     }
 }

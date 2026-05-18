@@ -1,4 +1,5 @@
 use crate::domain::{
+    external_sync::ExternalSyncStateRepository,
     identity::Clock,
     settings::UserSettingsUseCases,
     training_plan::{TrainingPlanError, TrainingPlanProjectionRepository},
@@ -21,31 +22,39 @@ pub trait TrainingPlanSupervisorWebhookUseCases: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct GeminiTrainingPlanSupervisorWebhookService<Repo, Settings, Time, Projections, Batch>
-where
+pub struct GeminiTrainingPlanSupervisorWebhookService<
+    Repo,
+    Settings,
+    Time,
+    Projections,
+    Batch,
+    SyncStates,
+> where
     Repo: TrainingPlanSupervisorOperationRepository,
     Settings: UserSettingsUseCases + Clone + 'static,
     Time: Clock,
     Projections: TrainingPlanProjectionRepository + Clone,
     Batch: TrainingPlanSupervisorBatchPort + Clone,
+    SyncStates: ExternalSyncStateRepository + Clone,
 {
-    supervisor: TrainingPlanSupervisorService<Repo, Settings, Time>,
+    supervisor: TrainingPlanSupervisorService<Repo, Settings, Time, Batch, SyncStates>,
     projections: Projections,
     batch: Batch,
     webhook_token: Option<String>,
 }
 
-impl<Repo, Settings, Time, Projections, Batch>
-    GeminiTrainingPlanSupervisorWebhookService<Repo, Settings, Time, Projections, Batch>
+impl<Repo, Settings, Time, Projections, Batch, SyncStates>
+    GeminiTrainingPlanSupervisorWebhookService<Repo, Settings, Time, Projections, Batch, SyncStates>
 where
     Repo: TrainingPlanSupervisorOperationRepository,
     Settings: UserSettingsUseCases + Clone + 'static,
     Time: Clock,
     Projections: TrainingPlanProjectionRepository + Clone,
     Batch: TrainingPlanSupervisorBatchPort + Clone,
+    SyncStates: ExternalSyncStateRepository + Clone,
 {
     pub fn new(
-        supervisor: TrainingPlanSupervisorService<Repo, Settings, Time>,
+        supervisor: TrainingPlanSupervisorService<Repo, Settings, Time, Batch, SyncStates>,
         projections: Projections,
         batch: Batch,
         webhook_token: Option<String>,
@@ -59,14 +68,22 @@ where
     }
 }
 
-impl<Repo, Settings, Time, Projections, Batch> TrainingPlanSupervisorWebhookUseCases
-    for GeminiTrainingPlanSupervisorWebhookService<Repo, Settings, Time, Projections, Batch>
+impl<Repo, Settings, Time, Projections, Batch, SyncStates> TrainingPlanSupervisorWebhookUseCases
+    for GeminiTrainingPlanSupervisorWebhookService<
+        Repo,
+        Settings,
+        Time,
+        Projections,
+        Batch,
+        SyncStates,
+    >
 where
     Repo: TrainingPlanSupervisorOperationRepository,
     Settings: UserSettingsUseCases + Clone + 'static,
     Time: Clock,
     Projections: TrainingPlanProjectionRepository + Clone,
     Batch: TrainingPlanSupervisorBatchPort + Clone,
+    SyncStates: ExternalSyncStateRepository + Clone,
 {
     fn receive_gemini_batch_webhook(
         &self,

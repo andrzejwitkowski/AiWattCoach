@@ -82,6 +82,27 @@ pub(super) struct ParsedPlanWindow {
     pub(super) invalid_day_sections: Vec<String>,
 }
 
+fn snapshot_to_plan_text(snapshot: &TrainingPlanSnapshot) -> String {
+    snapshot
+        .days
+        .iter()
+        .map(|day| {
+            let body = if day.rest_day {
+                day.rest_day_reason
+                    .as_ref()
+                    .map(|reason| format!("Rest Day: {reason}"))
+                    .unwrap_or_else(|| "Rest Day".to_string())
+            } else if let Some(workout) = day.workout.as_ref() {
+                crate::domain::intervals::serialize_planned_workout(workout)
+            } else {
+                "Rest Day".to_string()
+            };
+            format!("{}\n{}", day.date, body)
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
 impl<Snapshots, Projections, Operations, Generator, WorkoutSummary, Time>
     TrainingPlanGenerationService<
         Snapshots,
@@ -478,12 +499,17 @@ where
                 "training plan projection persistence incomplete after replace_window".to_string(),
             ));
         }
+        let supervisor_plan_text = operation
+            .raw_plan_response
+            .clone()
+            .unwrap_or_else(|| snapshot_to_plan_text(&replacement.snapshot));
         let supervisor_operation = self
             .supervisor
             .initialize_pending_review(
                 &replacement.snapshot.user_id,
                 &replacement.snapshot.operation_key,
                 replacement.snapshot.saved_at_epoch_seconds,
+                &supervisor_plan_text,
             )
             .await?;
         let supervisor_status = supervisor_operation

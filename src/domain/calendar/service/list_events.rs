@@ -311,5 +311,6 @@ fn parse_projected_workout(
         source_workout_id: planned_workout_id.to_string(),
         rest_day,
         rest_day_reason: rest_day_reason.map(ToString::to_string),
+        supervisor_status: None,
     })
 }

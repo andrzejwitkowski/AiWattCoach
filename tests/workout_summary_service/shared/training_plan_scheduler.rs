@@ -230,6 +230,15 @@ impl TrainingPlanProjectionRepository for SaveFlowProjectionRepository {
             Ok(())
         })
     }
+
+    fn apply_partial_replacement(
+        &self,
+        _replacement: aiwattcoach::domain::training_plan::TrainingPlanPartialReplacement,
+    ) -> aiwattcoach::domain::training_plan::BoxFuture<
+        Result<(), aiwattcoach::domain::training_plan::TrainingPlanError>,
+    > {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 #[derive(Clone, Default)]

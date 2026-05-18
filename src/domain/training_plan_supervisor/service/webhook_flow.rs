@@ -1,4 +1,5 @@
 use crate::domain::{
+    external_sync::ExternalSyncStateRepository,
     identity::Clock,
     settings::UserSettingsUseCases,
     training_plan::{TrainingPlanError, TrainingPlanProjectionRepository},
@@ -18,11 +19,14 @@ pub(super) struct GeminiBatchWebhookInput {
     pub(super) batch_name: String,
 }
 
-impl<Repo, Settings, Time> TrainingPlanSupervisorService<Repo, Settings, Time>
+impl<Repo, Settings, Time, ServiceBatch, SyncStates>
+    TrainingPlanSupervisorService<Repo, Settings, Time, ServiceBatch, SyncStates>
 where
     Repo: TrainingPlanSupervisorOperationRepository,
     Settings: UserSettingsUseCases + Clone + 'static,
     Time: Clock,
+    ServiceBatch: TrainingPlanSupervisorBatchPort + Clone,
+    SyncStates: ExternalSyncStateRepository + Clone,
 {
     pub(super) fn handle_gemini_batch_webhook<Projections, Batch>(
         &self,
@@ -80,7 +84,9 @@ where
             let completed = service
                 .complete_review(projections, &input.worker_operation_key, review)
                 .await?;
-            Ok(GeminiSupervisorWebhookOutcome::Accepted(completed))
+            Ok(GeminiSupervisorWebhookOutcome::Accepted(Box::new(
+                completed,
+            )))
         })
     }
 }

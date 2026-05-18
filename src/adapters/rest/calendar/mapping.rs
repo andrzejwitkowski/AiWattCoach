@@ -106,6 +106,9 @@ pub(super) fn map_calendar_event_to_dto(event: CalendarEvent) -> CalendarEventDt
             source_workout_id: projected.source_workout_id,
             rest_day: projected.rest_day,
             rest_day_reason: projected.rest_day_reason,
+            supervisor_status: projected
+                .supervisor_status
+                .map(|status| status.as_str().to_string()),
         }),
     }
 }

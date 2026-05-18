@@ -53,7 +53,7 @@ impl TestGeminiSupervisorWebhookService {
             .expect("accepted review should be valid");
 
         Self {
-            result: Ok(GeminiSupervisorWebhookOutcome::Accepted(accepted)),
+            result: Ok(GeminiSupervisorWebhookOutcome::Accepted(Box::new(accepted))),
             calls: Arc::new(Mutex::new(Vec::new())),
         }
     }

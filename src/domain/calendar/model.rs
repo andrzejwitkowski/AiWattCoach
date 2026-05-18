@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::intervals::ActualWorkoutMatch;
+use crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalendarError {
@@ -248,6 +249,7 @@ pub struct CalendarProjectedWorkout {
     pub source_workout_id: String,
     pub rest_day: bool,
     pub rest_day_reason: Option<String>,
+    pub supervisor_status: Option<TrainingPlanSupervisorStatus>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

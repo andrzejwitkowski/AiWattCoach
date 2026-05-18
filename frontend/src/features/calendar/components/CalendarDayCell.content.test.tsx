@@ -416,6 +416,41 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Synced');
   });
 
+  it('shows an independent supervisor status badge for predicted planned workouts', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 17),
+      dateKey: '2026-04-17',
+      events: [
+        makeEvent({
+          id: 9071,
+          name: 'AI Adjusted Session',
+          plannedSource: 'predicted',
+          syncStatus: 'synced',
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-17',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-04-17',
+            sourceWorkoutId: 'w1',
+            supervisorStatus: 'replaced',
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 2700,
+              estimatedTrainingStressScore: 19,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Synced');
+    expect(within(dayCell).getByTestId('supervisor-status')).toHaveAttribute('aria-label', 'AI adjusted');
+    expect(within(dayCell).getByText('AI adjusted')).toBeInTheDocument();
+  });
+
   it('does not show sync visuals for non-predicted planned workouts', () => {
     const day = makeCalendarDay({
       date: new Date(2026, 3, 16),

@@ -2,7 +2,8 @@ use aiwattcoach::{
     adapters::llm::gemini::cache::context_hash,
     domain::llm::{LlmChatPort, LlmProvider, LlmProviderConfig, LlmToolChoice, LlmToolDefinition},
     domain::training_plan_supervisor::{
-        TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorDecision,
+        TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorBatchRequest,
+        TrainingPlanSupervisorDecision,
     },
 };
 
@@ -252,6 +253,51 @@ async fn gemini_batch_client_downloads_result_and_maps_review() {
         "/download/v1beta/files/result-file-1:download"
     );
     assert_eq!(requests[1].google_api_key.as_deref(), Some("gemini-key"));
+}
+
+#[tokio::test]
+async fn gemini_batch_client_submits_supervisor_review_as_structured_inline_request() {
+    let server = MockServer::start().await;
+    let client = gemini_batch_client(&server.base_url);
+
+    let submission = client
+        .submit_review(
+            "gemini-key",
+            TrainingPlanSupervisorBatchRequest {
+                user_id: "user-1".to_string(),
+                worker_operation_key: "training-plan:user-1:w1:1".to_string(),
+                model: "google/gemini-2.5-pro".to_string(),
+                original_plan: "2026-05-18\n- 60m 65%".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(submission.batch_name, "batches/batch-created-1");
+    let requests = server.requests();
+    assert_eq!(
+        requests[0].path,
+        "/v1beta/models/gemini-2.5-pro:batchGenerateContent"
+    );
+    assert_eq!(requests[0].google_api_key.as_deref(), Some("gemini-key"));
+    assert_eq!(
+        requests[0].body["batch"]["display_name"],
+        "aiwattcoach-supervisor-training-plan-user-1-w1-1"
+    );
+    let inline = &requests[0].body["batch"]["input_config"]["requests"]["requests"][0];
+    assert_eq!(inline["metadata"]["key"], "training-plan:user-1:w1:1");
+    assert_eq!(
+        inline["request"]["generationConfig"]["responseMimeType"],
+        "application/json"
+    );
+    assert!(inline["request"]["generationConfig"]["responseSchema"]
+        .get("properties")
+        .is_some());
+    let prompt = inline["request"]["contents"][0]["parts"][0]["text"]
+        .as_str()
+        .unwrap();
+    assert!(prompt.contains("Return only JSON matching the provided schema"));
+    assert!(prompt.contains("2026-05-18\n- 60m 65%"));
 }
 
 #[tokio::test]

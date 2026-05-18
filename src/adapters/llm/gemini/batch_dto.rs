@@ -1,4 +1,52 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+use super::dto::{GeminiContent, GeminiGenerationConfig};
+
+#[derive(Serialize)]
+pub struct GeminiBatchCreateRequest {
+    pub batch: GeminiBatchCreateBody,
+}
+
+#[derive(Serialize)]
+pub struct GeminiBatchCreateBody {
+    #[serde(rename = "display_name")]
+    pub display_name: String,
+    #[serde(rename = "input_config")]
+    pub input_config: GeminiBatchInputConfig,
+}
+
+#[derive(Serialize)]
+pub struct GeminiBatchInputConfig {
+    pub requests: GeminiBatchInlineRequests,
+}
+
+#[derive(Serialize)]
+pub struct GeminiBatchInlineRequests {
+    pub requests: Vec<GeminiBatchInlineRequest>,
+}
+
+#[derive(Serialize)]
+pub struct GeminiBatchInlineRequest {
+    pub request: GeminiBatchGenerateContentRequest,
+    pub metadata: GeminiBatchRequestMetadata,
+}
+
+#[derive(Serialize)]
+pub struct GeminiBatchGenerateContentRequest {
+    pub contents: Vec<GeminiContent>,
+    #[serde(rename = "generationConfig")]
+    pub generation_config: GeminiGenerationConfig,
+}
+
+#[derive(Serialize)]
+pub struct GeminiBatchRequestMetadata {
+    pub key: String,
+}
+
+#[derive(Deserialize)]
+pub struct GeminiBatchCreateResponse {
+    pub name: String,
+}
 
 #[derive(Deserialize)]
 pub struct GeminiBatchGetResponse {

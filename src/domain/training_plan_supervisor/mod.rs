@@ -4,10 +4,12 @@ mod service;
 
 pub use model::{
     GeminiSupervisorWebhookOutcome, TrainingPlanSupervisorDecision,
-    TrainingPlanSupervisorOperation, TrainingPlanSupervisorReview, TrainingPlanSupervisorStatus,
+    TrainingPlanSupervisorOperation, TrainingPlanSupervisorReplacementApplyResult,
+    TrainingPlanSupervisorReview, TrainingPlanSupervisorStatus,
 };
 pub use ports::{
-    BoxFuture, TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorOperationRepository,
+    BoxFuture, TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorBatchRequest,
+    TrainingPlanSupervisorBatchSubmission, TrainingPlanSupervisorOperationRepository,
     TrainingPlanSupervisorScheduler,
 };
 pub use service::{

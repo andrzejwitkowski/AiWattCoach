@@ -9,6 +9,14 @@ use super::{
     TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrainingPlanPartialReplacement {
+    pub snapshot: TrainingPlanSnapshot,
+    pub projected_days: Vec<TrainingPlanProjectedDay>,
+    pub replace_dates: Vec<String>,
+    pub replaced_at_epoch_seconds: i64,
+}
+
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 pub type TrainingPlanToolLoopCheckpoint =
     Arc<dyn Fn(LlmToolLoopState) -> BoxFuture<Result<(), TrainingPlanError>> + Send + Sync>;
@@ -44,6 +52,11 @@ pub trait TrainingPlanProjectionRepository: Send + Sync + 'static {
         today: &str,
         replaced_at_epoch_seconds: i64,
     ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>>;
+
+    fn apply_partial_replacement(
+        &self,
+        replacement: TrainingPlanPartialReplacement,
+    ) -> BoxFuture<Result<(), TrainingPlanError>>;
 
     fn update_supervisor_status(
         &self,
@@ -92,6 +105,13 @@ where
     ) -> BoxFuture<Result<TrainingPlanReplacementResult, TrainingPlanError>> {
         self.as_ref()
             .replace_window(snapshot, projected_days, today, replaced_at_epoch_seconds)
+    }
+
+    fn apply_partial_replacement(
+        &self,
+        replacement: TrainingPlanPartialReplacement,
+    ) -> BoxFuture<Result<(), TrainingPlanError>> {
+        self.as_ref().apply_partial_replacement(replacement)
     }
 
     fn update_supervisor_status(

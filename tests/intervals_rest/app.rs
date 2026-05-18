@@ -332,6 +332,13 @@ impl TrainingPlanProjectionRepository for EmptyTrainingPlanProjectionRepository 
         })
     }
 
+    fn apply_partial_replacement(
+        &self,
+        _replacement: aiwattcoach::domain::training_plan::TrainingPlanPartialReplacement,
+    ) -> TrainingPlanBoxFuture<Result<(), TrainingPlanError>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn update_supervisor_status(
         &self,
         _user_id: &str,

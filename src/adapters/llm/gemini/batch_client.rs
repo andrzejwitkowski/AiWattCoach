@@ -6,12 +6,21 @@ use crate::domain::{
     llm::truncate_logged_body,
     training_plan::TrainingPlanError,
     training_plan_supervisor::{
-        BoxFuture, TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorDecision,
+        BoxFuture, TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorBatchRequest,
+        TrainingPlanSupervisorBatchSubmission, TrainingPlanSupervisorDecision,
         TrainingPlanSupervisorReview,
     },
 };
 
-use super::batch_dto::{GeminiBatchGetResponse, GeminiBatchResultLine};
+use super::{
+    batch_dto::{
+        GeminiBatchCreateBody, GeminiBatchCreateRequest, GeminiBatchCreateResponse,
+        GeminiBatchGenerateContentRequest, GeminiBatchGetResponse, GeminiBatchInlineRequest,
+        GeminiBatchInlineRequests, GeminiBatchInputConfig, GeminiBatchRequestMetadata,
+        GeminiBatchResultLine,
+    },
+    dto::{GeminiContent, GeminiGenerationConfig, GeminiTextPart},
+};
 
 const DEFAULT_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -51,6 +60,70 @@ impl GeminiBatchClient {
 }
 
 impl TrainingPlanSupervisorBatchPort for GeminiBatchClient {
+    fn submit_review(
+        &self,
+        api_key: &str,
+        request: TrainingPlanSupervisorBatchRequest,
+    ) -> BoxFuture<Result<TrainingPlanSupervisorBatchSubmission, TrainingPlanError>> {
+        let client = self.client.clone();
+        let base_url = self.base_url.clone();
+        let api_key = api_key.to_string();
+        Box::pin(async move {
+            let api_model = normalize_gemini_model_name(&request.model);
+            let batch_url = format!("{base_url}/models/{api_model}:batchGenerateContent");
+            let payload = build_supervisor_batch_create_request(&request)?;
+            tracing::info!(
+                url = %batch_url,
+                model = %request.model,
+                worker_operation_key = %request.worker_operation_key,
+                "sending gemini supervisor batch create request"
+            );
+            let response = client
+                .post(batch_url.clone())
+                .header("x-goog-api-key", &api_key)
+                .json(&payload)
+                .send()
+                .await
+                .map_err(|error| {
+                    TrainingPlanError::Repository(format!(
+                        "gemini batch create transport failure: {}",
+                        error.without_url()
+                    ))
+                })?;
+            let status = response.status();
+            let body = response.text().await.map_err(|error| {
+                TrainingPlanError::Repository(format!(
+                    "gemini batch create response body read failed: {}",
+                    error.without_url()
+                ))
+            })?;
+            if !status.is_success() {
+                tracing::warn!(
+                    url = %batch_url,
+                    model = %request.model,
+                    worker_operation_key = %request.worker_operation_key,
+                    status = status.as_u16(),
+                    response_body = %truncate_logged_body(&body),
+                    "gemini batch create request failed"
+                );
+                return Err(map_transport_error(
+                    "gemini batch create request failed",
+                    status,
+                    body,
+                ));
+            }
+            let response: GeminiBatchCreateResponse =
+                serde_json::from_str(&body).map_err(|error| {
+                    TrainingPlanError::Repository(format!(
+                        "gemini batch create json parsing failed: {error}"
+                    ))
+                })?;
+            Ok(TrainingPlanSupervisorBatchSubmission {
+                batch_name: response.name,
+            })
+        })
+    }
+
     fn download_result(
         &self,
         api_key: &str,
@@ -176,6 +249,66 @@ impl TrainingPlanSupervisorBatchPort for GeminiBatchClient {
             parse_result_file(&body)
         })
     }
+}
+
+fn build_supervisor_batch_create_request(
+    request: &TrainingPlanSupervisorBatchRequest,
+) -> Result<GeminiBatchCreateRequest, TrainingPlanError> {
+    let response_schema: serde_json::Value = serde_json::from_str(
+        &GeminiBatchClient::supervisor_reply_json_schema(),
+    )
+    .map_err(|error| {
+        TrainingPlanError::Repository(format!(
+            "gemini supervisor reply schema parsing failed: {error}"
+        ))
+    })?;
+
+    Ok(GeminiBatchCreateRequest {
+        batch: GeminiBatchCreateBody {
+            display_name: format!(
+                "aiwattcoach-supervisor-{}",
+                sanitize_batch_display_name(&request.worker_operation_key)
+            ),
+            input_config: GeminiBatchInputConfig {
+                requests: GeminiBatchInlineRequests {
+                    requests: vec![GeminiBatchInlineRequest {
+                        request: GeminiBatchGenerateContentRequest {
+                            contents: vec![GeminiContent {
+                                role: "user".to_string(),
+                                parts: vec![GeminiTextPart {
+                                    text: supervisor_prompt(&request.original_plan),
+                                }],
+                            }],
+                            generation_config: GeminiGenerationConfig {
+                                response_mime_type: Some("application/json".to_string()),
+                                response_schema: Some(response_schema),
+                            },
+                        },
+                        metadata: GeminiBatchRequestMetadata {
+                            key: request.worker_operation_key.clone(),
+                        },
+                    }],
+                },
+            },
+        },
+    })
+}
+
+fn supervisor_prompt(original_plan: &str) -> String {
+    format!(
+        "You are a second-pass cycling coach supervisor reviewing an already generated 14-day training plan. Return only JSON matching the provided schema. Decide exactly one of: accept, replace, fail. Use accept when the plan is coherent, safe, parser-friendly, and only needs no material change. Use replace when the plan is usable as context but materially violates training logic, availability, recovery, race handling, or workout syntax; in that case return a complete replacement plan in `plan` containing all 14 dated sections, not a diff. Use fail when the input is unusable, incomplete, unsafe to repair confidently, or cannot be converted into the supported workout grammar. For replace plans, output parser-friendly workout-builder text only inside the JSON string: one YYYY-MM-DD section per day, then either Rest Day, Rest Day: <reason>, or workout text where actionable steps start with `- `. Do not include markdown fences. Original plan:\n\n{original_plan}"
+    )
+}
+
+fn normalize_gemini_model_name(model: &str) -> &str {
+    model.strip_prefix("google/").unwrap_or(model)
+}
+
+fn sanitize_batch_display_name(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect()
 }
 
 fn parse_result_file(body: &str) -> Result<TrainingPlanSupervisorReview, TrainingPlanError> {

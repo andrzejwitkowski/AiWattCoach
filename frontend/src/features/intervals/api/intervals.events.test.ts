@@ -98,6 +98,7 @@ describe('intervals api events', () => {
                 operationKey: 'training-plan:user-1:w1:1775719860',
                 date: '2026-04-11',
                 sourceWorkoutId: 'w1',
+                supervisorStatus: 'replaced',
               },
             },
           ]),
@@ -111,6 +112,7 @@ describe('intervals api events', () => {
     expect(result[0]?.id).toBe(5906112577594034);
     expect(result[0]?.plannedSource).toBe('predicted');
     expect(result[0]?.projectedWorkout?.date).toBe('2026-04-11');
+    expect(result[0]?.projectedWorkout?.supervisorStatus).toBe('replaced');
   });
 
   it('creates, updates, loads and deletes interval events', async () => {

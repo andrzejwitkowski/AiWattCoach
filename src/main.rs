@@ -649,11 +649,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             TrainingPlanWorkoutSummaryAdapter::new(workout_summary_direct_service.clone()),
             SystemClock,
         )
-        .with_training_plan_supervisor(TrainingPlanSupervisorService::new(
-            training_plan_supervisor_operation_repository,
-            (*settings_service).clone(),
-            SystemClock,
-        ))
+        .with_training_plan_supervisor(
+            TrainingPlanSupervisorService::new(
+                training_plan_supervisor_operation_repository,
+                (*settings_service).clone(),
+                SystemClock,
+            )
+            .with_batch(GeminiBatchClient::new(reqwest::Client::new()))
+            .with_sync_states(external_sync_state_repository.clone()),
+        )
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
     );
     let training_plan_service = Arc::new(SchedulerBackedTrainingPlanService::new(
@@ -670,7 +674,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 ),
                 (*settings_service).clone(),
                 SystemClock,
-            ),
+            )
+            .with_batch(GeminiBatchClient::new(reqwest::Client::new()))
+            .with_sync_states(external_sync_state_repository.clone()),
             training_plan_projection_repository.clone(),
             GeminiBatchClient::new(reqwest::Client::new()),
             gemini_supervisor_webhook_token.clone(),

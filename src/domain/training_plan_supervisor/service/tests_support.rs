@@ -1,18 +1,24 @@
 use std::sync::{Arc, Mutex};
 
 use crate::domain::{
+    external_sync::{
+        CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError, ExternalSyncState,
+        ExternalSyncStateRepository,
+    },
     identity::Clock,
     settings::{
         AiAgentsConfig, AnalysisOptions, AvailabilitySettings, CyclingSettings, IntervalsConfig,
         SettingsError, UserSettings, UserSettingsUseCases, WahooConfig,
     },
     training_plan::{
-        TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
-        TrainingPlanReplacementResult, TrainingPlanSnapshot,
+        TrainingPlanError, TrainingPlanPartialReplacement, TrainingPlanProjectedDay,
+        TrainingPlanProjectionRepository, TrainingPlanReplacementResult, TrainingPlanSnapshot,
     },
     training_plan_supervisor::{
-        TrainingPlanSupervisorOperation, TrainingPlanSupervisorOperationRepository,
-        TrainingPlanSupervisorReview, TrainingPlanSupervisorStatus,
+        TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorBatchRequest,
+        TrainingPlanSupervisorBatchSubmission, TrainingPlanSupervisorOperation,
+        TrainingPlanSupervisorOperationRepository, TrainingPlanSupervisorReview,
+        TrainingPlanSupervisorStatus,
     },
 };
 
@@ -165,15 +171,26 @@ impl TrainingPlanProjectionRepository for RecordingProjectionRepository {
 
     fn find_active_by_user_id_and_operation_key(
         &self,
-        _user_id: &str,
-        _operation_key: &str,
+        user_id: &str,
+        operation_key: &str,
     ) -> crate::domain::training_plan::BoxFuture<
         Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
     > {
-        Box::pin(async {
-            Err(TrainingPlanError::Repository(
-                "find_active_by_user_id_and_operation_key not implemented in test".to_string(),
-            ))
+        let stored = self.stored.clone();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            Ok(stored
+                .lock()
+                .expect("projection repo mutex poisoned")
+                .iter()
+                .filter(|day| {
+                    day.user_id == user_id
+                        && day.operation_key == operation_key
+                        && day.superseded_at_epoch_seconds.is_none()
+                })
+                .cloned()
+                .collect())
         })
     }
 
@@ -190,6 +207,33 @@ impl TrainingPlanProjectionRepository for RecordingProjectionRepository {
             Err(TrainingPlanError::Repository(
                 "replace_window not implemented in test".to_string(),
             ))
+        })
+    }
+
+    fn apply_partial_replacement(
+        &self,
+        replacement: TrainingPlanPartialReplacement,
+    ) -> crate::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+        let stored = self.stored.clone();
+        Box::pin(async move {
+            let replace_dates = replacement
+                .replace_dates
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>();
+            let mut stored = stored.lock().expect("projection repo mutex poisoned");
+            for replacement_day in replacement.projected_days {
+                if !replace_dates.contains(&replacement_day.date) {
+                    continue;
+                }
+                stored.retain(|existing| {
+                    !(existing.user_id == replacement_day.user_id
+                        && existing.operation_key == replacement_day.operation_key
+                        && existing.date == replacement_day.date
+                        && existing.superseded_at_epoch_seconds.is_none())
+                });
+                stored.push(replacement_day);
+            }
+            Ok(())
         })
     }
 
@@ -265,6 +309,13 @@ impl TrainingPlanProjectionRepository for FailingOnceProjectionRepository {
             .replace_window(snapshot, projected_days, today, replaced_at_epoch_seconds)
     }
 
+    fn apply_partial_replacement(
+        &self,
+        replacement: TrainingPlanPartialReplacement,
+    ) -> crate::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+        self.inner.apply_partial_replacement(replacement)
+    }
+
     fn update_supervisor_status(
         &self,
         user_id: &str,
@@ -322,6 +373,7 @@ impl StubUserSettingsService {
             settings: Some(UserSettings {
                 user_id: "user-1".to_string(),
                 ai_agents: AiAgentsConfig {
+                    gemini_api_key: Some("gem-key".to_string()),
                     training_plan_supervisor_enabled: true,
                     training_plan_supervisor_model: Some(model.to_string()),
                     ..AiAgentsConfig::default()
@@ -435,5 +487,179 @@ impl UserSettingsUseCases for StubUserSettingsService {
                 "update_cycling not implemented in test".to_string(),
             ))
         })
+    }
+}
+
+#[derive(Clone, Default)]
+pub(super) struct RecordingBatchPort {
+    requests: Arc<Mutex<Vec<TrainingPlanSupervisorBatchRequest>>>,
+}
+
+impl RecordingBatchPort {
+    pub(super) fn requests(&self) -> Vec<TrainingPlanSupervisorBatchRequest> {
+        self.requests
+            .lock()
+            .expect("batch requests mutex poisoned")
+            .clone()
+    }
+}
+
+impl TrainingPlanSupervisorBatchPort for RecordingBatchPort {
+    fn submit_review(
+        &self,
+        _api_key: &str,
+        request: TrainingPlanSupervisorBatchRequest,
+    ) -> crate::domain::training_plan_supervisor::BoxFuture<
+        Result<TrainingPlanSupervisorBatchSubmission, TrainingPlanError>,
+    > {
+        let requests = self.requests.clone();
+        Box::pin(async move {
+            requests
+                .lock()
+                .expect("batch requests mutex poisoned")
+                .push(request);
+            Ok(TrainingPlanSupervisorBatchSubmission {
+                batch_name: "batches/supervisor-1".to_string(),
+            })
+        })
+    }
+
+    fn download_result(
+        &self,
+        _api_key: &str,
+        _batch_name: &str,
+    ) -> crate::domain::training_plan_supervisor::BoxFuture<
+        Result<TrainingPlanSupervisorReview, TrainingPlanError>,
+    > {
+        Box::pin(async {
+            Err(TrainingPlanError::Unavailable(
+                "download_result not implemented in test".to_string(),
+            ))
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+pub(super) struct FixedSyncStateRepository {
+    states: Arc<Mutex<Vec<ExternalSyncState>>>,
+}
+
+impl FixedSyncStateRepository {
+    pub(super) fn seed_state(&self, state: ExternalSyncState) {
+        self.states
+            .lock()
+            .expect("sync state mutex poisoned")
+            .push(state);
+    }
+}
+
+impl ExternalSyncStateRepository for FixedSyncStateRepository {
+    fn upsert(
+        &self,
+        state: ExternalSyncState,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<ExternalSyncState, ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async move { Ok(state) })
+    }
+
+    fn find_by_canonical_entities(
+        &self,
+        user_id: &str,
+        canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        let states = self.states.clone();
+        let user_id = user_id.to_string();
+        let entity_ids = canonical_entities
+            .iter()
+            .map(|entity| entity.entity_id.clone())
+            .collect::<std::collections::HashSet<_>>();
+        Box::pin(async move {
+            Ok(states
+                .lock()
+                .expect("sync state mutex poisoned")
+                .iter()
+                .filter(|state| {
+                    state.user_id == user_id
+                        && entity_ids.contains(&state.canonical_entity.entity_id)
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn find_by_provider_and_canonical_entity(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entity: &CanonicalEntityRef,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_provider_and_canonical_entities(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entities: &[CanonicalEntityRef],
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Vec<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn delete_by_provider_and_canonical_entity(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _canonical_entity: &CanonicalEntityRef,
+    ) -> crate::domain::external_sync::BoxFuture<Result<(), ExternalSyncRepositoryError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn find_by_wahoo_plan_id(
+        &self,
+        _user_id: &str,
+        _wahoo_plan_id: i64,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_wahoo_workout_token(
+        &self,
+        _user_id: &str,
+        _wahoo_workout_token: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_by_provider_and_external_id(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _external_id: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn find_planned_workout_by_provider_and_external_id(
+        &self,
+        _user_id: &str,
+        _provider: ExternalProvider,
+        _external_id: &str,
+    ) -> crate::domain::external_sync::BoxFuture<
+        Result<Option<ExternalSyncState>, ExternalSyncRepositoryError>,
+    > {
+        Box::pin(async { Ok(None) })
     }
 }

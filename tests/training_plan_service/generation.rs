@@ -7,8 +7,9 @@ use aiwattcoach::domain::settings::{
     UserSettings, WahooConfig,
 };
 use aiwattcoach::domain::training_plan_supervisor::{
-    TrainingPlanSupervisorOperationRepository, TrainingPlanSupervisorReview,
-    TrainingPlanSupervisorService, TrainingPlanSupervisorStatus,
+    TrainingPlanSupervisorBatchPort, TrainingPlanSupervisorBatchRequest,
+    TrainingPlanSupervisorBatchSubmission, TrainingPlanSupervisorOperationRepository,
+    TrainingPlanSupervisorReview, TrainingPlanSupervisorService, TrainingPlanSupervisorStatus,
 };
 
 #[derive(Clone, Default)]
@@ -109,6 +110,35 @@ impl TrainingPlanSupervisorOperationRepository for InMemorySupervisorOperationRe
     }
 }
 
+#[derive(Clone, Default)]
+struct RecordingBatchPort;
+
+impl TrainingPlanSupervisorBatchPort for RecordingBatchPort {
+    fn submit_review(
+        &self,
+        _api_key: &str,
+        _request: TrainingPlanSupervisorBatchRequest,
+    ) -> aiwattcoach::domain::training_plan_supervisor::BoxFuture<
+        Result<TrainingPlanSupervisorBatchSubmission, TrainingPlanError>,
+    > {
+        Box::pin(async {
+            Ok(TrainingPlanSupervisorBatchSubmission {
+                batch_name: "batches/test-supervisor".to_string(),
+            })
+        })
+    }
+
+    fn download_result(
+        &self,
+        _api_key: &str,
+        _batch_name: &str,
+    ) -> aiwattcoach::domain::training_plan_supervisor::BoxFuture<
+        Result<TrainingPlanSupervisorReview, TrainingPlanError>,
+    > {
+        unreachable!("download_result is not used in this test")
+    }
+}
+
 #[derive(Clone)]
 struct EnabledSettingsService;
 
@@ -124,6 +154,7 @@ impl aiwattcoach::domain::settings::UserSettingsUseCases for EnabledSettingsServ
             Ok(Some(UserSettings {
                 user_id,
                 ai_agents: AiAgentsConfig {
+                    gemini_api_key: Some("gem-key".to_string()),
                     training_plan_supervisor_enabled: true,
                     training_plan_supervisor_model: Some("gemini-2.5-pro".to_string()),
                     ..AiAgentsConfig::default()
@@ -141,11 +172,29 @@ impl aiwattcoach::domain::settings::UserSettingsUseCases for EnabledSettingsServ
 
     fn get_settings(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> aiwattcoach::domain::settings::BoxFuture<
         Result<UserSettings, aiwattcoach::domain::settings::SettingsError>,
     > {
-        unreachable!("get_settings is not used in this test")
+        let user_id = user_id.to_string();
+        Box::pin(async move {
+            Ok(UserSettings {
+                user_id,
+                ai_agents: AiAgentsConfig {
+                    gemini_api_key: Some("gem-key".to_string()),
+                    training_plan_supervisor_enabled: true,
+                    training_plan_supervisor_model: Some("gemini-2.5-pro".to_string()),
+                    ..AiAgentsConfig::default()
+                },
+                intervals: IntervalsConfig::default(),
+                wahoo: WahooConfig::default(),
+                options: AnalysisOptions::default(),
+                availability: AvailabilitySettings::default(),
+                cycling: CyclingSettings::default(),
+                created_at_epoch_seconds: 1,
+                updated_at_epoch_seconds: 1,
+            })
+        })
     }
 
     fn update_ai_agents(
@@ -282,13 +331,16 @@ async fn generation_marks_active_projected_days_pending_when_supervisor_enabled(
             now_epoch_seconds: date_epoch(FIRST_DAY),
         },
     )
-    .with_training_plan_supervisor(TrainingPlanSupervisorService::new(
-        supervisor_operations.clone(),
-        EnabledSettingsService,
-        FixedClock {
-            now_epoch_seconds: date_epoch(FIRST_DAY),
-        },
-    ));
+    .with_training_plan_supervisor(
+        TrainingPlanSupervisorService::new(
+            supervisor_operations.clone(),
+            EnabledSettingsService,
+            FixedClock {
+                now_epoch_seconds: date_epoch(FIRST_DAY),
+            },
+        )
+        .with_batch(RecordingBatchPort),
+    );
 
     let result = service
         .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))
@@ -331,12 +383,15 @@ async fn generation_reuses_existing_supervisor_status_for_same_operation() {
             user_id: USER_ID.to_string(),
             worker_saved_at_epoch_seconds: date_epoch(FIRST_DAY),
             model: "gemini-2.5-pro".to_string(),
+            batch_name: None,
+            batch_submitted_at_epoch_seconds: None,
             status: TrainingPlanSupervisorStatus::Accepted,
             review: Some(TrainingPlanSupervisorReview {
                 decision: aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorDecision::Accept,
                 reason: "looks good".to_string(),
                 plan: None,
             }),
+            replacement_apply_result: None,
             created_at_epoch_seconds: date_epoch(FIRST_DAY),
             updated_at_epoch_seconds: date_epoch(FIRST_DAY),
         },
@@ -351,13 +406,16 @@ async fn generation_reuses_existing_supervisor_status_for_same_operation() {
             now_epoch_seconds: date_epoch(FIRST_DAY),
         },
     )
-    .with_training_plan_supervisor(TrainingPlanSupervisorService::new(
-        supervisor_operations,
-        EnabledSettingsService,
-        FixedClock {
-            now_epoch_seconds: date_epoch(FIRST_DAY),
-        },
-    ));
+    .with_training_plan_supervisor(
+        TrainingPlanSupervisorService::new(
+            supervisor_operations,
+            EnabledSettingsService,
+            FixedClock {
+                now_epoch_seconds: date_epoch(FIRST_DAY),
+            },
+        )
+        .with_batch(RecordingBatchPort),
+    );
 
     let result = service
         .generate_for_saved_workout(USER_ID, WORKOUT_ID, date_epoch(FIRST_DAY))

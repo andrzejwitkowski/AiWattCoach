@@ -5,8 +5,8 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::training_plan::{
-    BoxFuture, TrainingPlanError, TrainingPlanProjectedDay, TrainingPlanProjectionRepository,
-    TrainingPlanReplacementResult, TrainingPlanSnapshot,
+    BoxFuture, TrainingPlanError, TrainingPlanPartialReplacement, TrainingPlanProjectedDay,
+    TrainingPlanProjectionRepository, TrainingPlanReplacementResult, TrainingPlanSnapshot,
 };
 use crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus;
 
@@ -388,6 +388,55 @@ impl TrainingPlanProjectionRepository for MongoTrainingPlanProjectionRepository 
                 )
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            Ok(())
+        })
+    }
+
+    fn apply_partial_replacement(
+        &self,
+        replacement: TrainingPlanPartialReplacement,
+    ) -> BoxFuture<Result<(), TrainingPlanError>> {
+        let collection = self.collection.clone();
+        let snapshot_collection = self.snapshot_repository.collection();
+        Box::pin(async move {
+            let replace_dates = replacement
+                .replace_dates
+                .iter()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>();
+            let snapshot_document = MongoTrainingPlanSnapshotRepository::map_snapshot_to_document(
+                &replacement.snapshot,
+            )?;
+
+            snapshot_collection
+                .replace_one(
+                    doc! { "operation_key": &replacement.snapshot.operation_key },
+                    &snapshot_document,
+                )
+                .upsert(true)
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+
+            for projected_day in replacement
+                .projected_days
+                .iter()
+                .filter(|day| replace_dates.contains(&day.date))
+            {
+                let document = map_projected_day_to_document(projected_day)?;
+                collection
+                    .replace_one(
+                        doc! {
+                            "user_id": &document.user_id,
+                            "operation_key": &document.operation_key,
+                            "date": &document.date,
+                            "superseded_at_epoch_seconds": mongodb::bson::Bson::Null,
+                        },
+                        &document,
+                    )
+                    .await
+                    .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            }
+
             Ok(())
         })
     }

@@ -223,6 +223,10 @@ impl MockServer {
                 axum::routing::get(gemini_batch_get_handler),
             )
             .route(
+                "/v1beta/models/gemini-2.5-pro:batchGenerateContent",
+                post(gemini_batch_create_handler),
+            )
+            .route(
                 "/download/v1beta/files/result-file-1:download",
                 axum::routing::get(gemini_batch_download_handler),
             )
@@ -615,6 +619,20 @@ async fn gemini_batch_get_handler(
         "metadata": { "state": "JOB_STATE_SUCCEEDED" },
         "response": { "responsesFile": "files/result-file-1" }
     }))
+}
+
+async fn gemini_batch_create_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    capture_request(
+        &state,
+        "/v1beta/models/gemini-2.5-pro:batchGenerateContent",
+        headers,
+        body,
+    );
+    Json(json!({ "name": "batches/batch-created-1" }))
 }
 
 async fn gemini_batch_download_handler(

@@ -139,6 +139,13 @@ async fn builder_anchors_windows_to_focus_activity_date() {
             unreachable!()
         }
 
+        fn apply_partial_replacement(
+            &self,
+            _replacement: crate::domain::training_plan::TrainingPlanPartialReplacement,
+        ) -> crate::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+            unreachable!()
+        }
+
         fn update_supervisor_status(
             &self,
             _user_id: &str,

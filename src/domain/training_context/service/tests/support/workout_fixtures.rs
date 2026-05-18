@@ -148,6 +148,13 @@ impl TrainingPlanProjectionRepository for TestTrainingPlanProjectionRepository {
         unreachable!()
     }
 
+    fn apply_partial_replacement(
+        &self,
+        _replacement: crate::domain::training_plan::TrainingPlanPartialReplacement,
+    ) -> crate::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+        unreachable!()
+    }
+
     fn update_supervisor_status(
         &self,
         _user_id: &str,
