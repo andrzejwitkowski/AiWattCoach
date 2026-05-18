@@ -1732,8 +1732,8 @@
     "hash": "9834431a87020f5b4d33ef1b61dce27b"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/llm/gemini/batch_client.rs": {
-    "mtime": 1779131849.7970145,
-    "hash": "ce1fbd0b529ec84cb1f2c0d0deddddcd"
+    "mtime": 1779132868.1417084,
+    "hash": "ebd7b8a36e9e685ee3e43e71d616320e"
   },
   "/home/andrzej/Projects/AiWattCoach/src/adapters/llm/gemini/batch_dto.rs": {
     "mtime": 1779044540.020134,

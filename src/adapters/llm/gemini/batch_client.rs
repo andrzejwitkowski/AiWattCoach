@@ -205,8 +205,8 @@ fn parse_result_file(body: &str) -> Result<TrainingPlanSupervisorReview, Trainin
         .into_iter()
         .filter_map(|candidate| candidate.content)
         .flat_map(|content| content.parts.into_iter())
-        .find_map(|part| part.text.map(|text| text.trim().to_string()))
-        .filter(|text| !text.is_empty())
+        .filter_map(|part| part.text.map(|text| text.trim().to_string()))
+        .find(|text| !text.is_empty())
         .ok_or_else(|| {
             TrainingPlanError::Repository(
                 "gemini batch result returned no supervisor reply text".to_string(),
@@ -275,6 +275,17 @@ mod tests {
 
         assert_eq!(review.decision, TrainingPlanSupervisorDecision::Accept);
         assert_eq!(review.reason, "looks good");
+        assert_eq!(review.plan, None);
+    }
+
+    #[test]
+    fn parse_result_file_skips_empty_text_parts() {
+        let body = r#"{"response":{"candidates":[{"content":{"parts":[{"text":"   "},{"text":" {\"decision\":\"accept\",\"reason\":\"later text\" } "}]}}]}}"#;
+
+        let review = parse_result_file(body).expect("expected parsed review");
+
+        assert_eq!(review.decision, TrainingPlanSupervisorDecision::Accept);
+        assert_eq!(review.reason, "later text");
         assert_eq!(review.plan, None);
     }
 }
