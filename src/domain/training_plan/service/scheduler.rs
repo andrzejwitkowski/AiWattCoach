@@ -75,6 +75,16 @@ fn serialize_training_plan_error(error: &TrainingPlanError) -> SerializedTrainin
         TrainingPlanError::Validation(message) => SerializedTrainingPlanError::Validation {
             message: message.clone(),
         },
+        TrainingPlanError::GeminiSupervisorWebhookNotConfigured => {
+            SerializedTrainingPlanError::Unavailable {
+                message: "Gemini supervisor webhook is not configured".to_string(),
+            }
+        }
+        TrainingPlanError::GeminiSupervisorWebhookUnauthorized => {
+            SerializedTrainingPlanError::Validation {
+                message: "Gemini supervisor webhook token is invalid".to_string(),
+            }
+        }
     }
 }
 

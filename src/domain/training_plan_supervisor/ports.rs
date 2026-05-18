@@ -12,6 +12,13 @@ pub trait TrainingPlanSupervisorOperationRepository: Clone + Send + Sync + 'stat
         worker_operation_key: &str,
     ) -> BoxFuture<Result<Option<TrainingPlanSupervisorOperation>, TrainingPlanError>>;
 
+    fn complete_review_if_pending(
+        &self,
+        worker_operation_key: &str,
+        review: TrainingPlanSupervisorReview,
+        now_epoch_seconds: i64,
+    ) -> BoxFuture<Result<TrainingPlanSupervisorOperation, TrainingPlanError>>;
+
     fn upsert(
         &self,
         operation: TrainingPlanSupervisorOperation,

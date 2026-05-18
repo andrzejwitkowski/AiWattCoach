@@ -203,13 +203,9 @@ fn parse_result_file(body: &str) -> Result<TrainingPlanSupervisorReview, Trainin
         .and_then(|response| response.candidates)
         .unwrap_or_default()
         .into_iter()
-        .find_map(|candidate| candidate.content)
-        .and_then(|content| {
-            content
-                .parts
-                .into_iter()
-                .find_map(|part| part.text.map(|text| text.trim().to_string()))
-        })
+        .filter_map(|candidate| candidate.content)
+        .flat_map(|content| content.parts.into_iter())
+        .find_map(|part| part.text.map(|text| text.trim().to_string()))
         .filter(|text| !text.is_empty())
         .ok_or_else(|| {
             TrainingPlanError::Repository(
@@ -263,5 +259,22 @@ fn map_transport_error(prefix: &str, status: StatusCode, body: String) -> Traini
             TrainingPlanError::Unavailable(format!("{prefix}: unauthorized"))
         }
         _ => TrainingPlanError::Repository(format!("{prefix}: {}", truncate_logged_body(&body))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_result_file;
+    use crate::domain::training_plan_supervisor::TrainingPlanSupervisorDecision;
+
+    #[test]
+    fn parse_result_file_reads_text_from_later_candidate() {
+        let body = r#"{"response":{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"text/plain","data":"ignored"}}]}},{"content":{"parts":[{"text":" {\"decision\":\"accept\",\"reason\":\"looks good\" } "}]}}]}}"#;
+
+        let review = parse_result_file(body).expect("expected parsed review");
+
+        assert_eq!(review.decision, TrainingPlanSupervisorDecision::Accept);
+        assert_eq!(review.reason, "looks good");
+        assert_eq!(review.plan, None);
     }
 }

@@ -10,7 +10,8 @@ use crate::domain::{
 
 use super::{
     tests_support::{
-        FixedClock, InMemorySupervisorOperationRepository, RecordingProjectionRepository,
+        accepted_review, FailingOnceProjectionRepository, FixedClock,
+        InMemorySupervisorOperationRepository, RecordingProjectionRepository,
         StubUserSettingsService,
     },
     TrainingPlanSupervisorService,
@@ -168,27 +169,12 @@ async fn supervisor_service_completes_review_and_updates_active_projected_days()
     );
 
     let completed = service
-        .complete_review(
-            projections.clone(),
-            "worker-op-1",
-            TrainingPlanSupervisorReview {
-                decision: TrainingPlanSupervisorDecision::Accept,
-                reason: "plan already looks good".to_string(),
-                plan: None,
-            },
-        )
+        .complete_review(projections.clone(), "worker-op-1", accepted_review())
         .await
         .unwrap();
 
     assert_eq!(completed.status, TrainingPlanSupervisorStatus::Accepted);
-    assert_eq!(
-        completed.review,
-        Some(TrainingPlanSupervisorReview {
-            decision: TrainingPlanSupervisorDecision::Accept,
-            reason: "plan already looks good".to_string(),
-            plan: None,
-        })
-    );
+    assert_eq!(completed.review, Some(accepted_review()));
     assert_eq!(completed.updated_at_epoch_seconds, 1_700_000_200);
 
     let stored = repository
@@ -218,6 +204,75 @@ async fn supervisor_service_completes_review_and_updates_active_projected_days()
         Some(TrainingPlanSupervisorStatus::Pending)
     );
     assert_eq!(superseded.updated_at_epoch_seconds, 1);
+}
+
+#[tokio::test]
+async fn supervisor_service_retries_same_review_after_projection_failure() {
+    let repository = InMemorySupervisorOperationRepository::default();
+    repository
+        .upsert(TrainingPlanSupervisorOperation::pending(
+            "worker-op-1".to_string(),
+            "user-1".to_string(),
+            1_700_000_000,
+            "gemini-2.5-pro".to_string(),
+            1_700_000_100,
+        ))
+        .await
+        .unwrap();
+    let base_projections = RecordingProjectionRepository::default();
+    base_projections.seed_day(TrainingPlanProjectedDay {
+        user_id: "user-1".to_string(),
+        workout_id: "workout-1".to_string(),
+        operation_key: "worker-op-1".to_string(),
+        date: "2026-05-18".to_string(),
+        rest_day: false,
+        rest_day_reason: None,
+        workout: None,
+        supervisor_status: Some(TrainingPlanSupervisorStatus::Pending),
+        superseded_at_epoch_seconds: None,
+        created_at_epoch_seconds: 1,
+        updated_at_epoch_seconds: 1,
+    });
+    let projections = FailingOnceProjectionRepository::new(base_projections);
+    let service = TrainingPlanSupervisorService::new(
+        repository.clone(),
+        StubUserSettingsService::enabled("gemini-2.5-pro"),
+        FixedClock {
+            now_epoch_seconds: 1_700_000_200,
+        },
+    );
+
+    let first_error = service
+        .complete_review(projections.clone(), "worker-op-1", accepted_review())
+        .await
+        .expect_err("expected first projection update to fail");
+    assert_eq!(
+        first_error,
+        TrainingPlanError::Repository("projection update failed once".to_string())
+    );
+
+    let completed = service
+        .complete_review(projections.clone(), "worker-op-1", accepted_review())
+        .await
+        .expect("expected retry to repair projection state");
+
+    assert_eq!(completed.status, TrainingPlanSupervisorStatus::Accepted);
+    let stored = repository
+        .find_by_worker_operation_key("worker-op-1")
+        .await
+        .unwrap()
+        .expect("expected stored operation");
+    assert_eq!(stored, completed);
+
+    let active = projections
+        .stored_days()
+        .into_iter()
+        .find(|day| day.superseded_at_epoch_seconds.is_none())
+        .expect("expected active day");
+    assert_eq!(
+        active.supervisor_status,
+        Some(TrainingPlanSupervisorStatus::Accepted)
+    );
 }
 
 #[tokio::test]

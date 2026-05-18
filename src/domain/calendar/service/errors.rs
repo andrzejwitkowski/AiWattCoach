@@ -12,6 +12,12 @@ pub(super) fn map_training_plan_error(error: TrainingPlanError) -> CalendarError
         TrainingPlanError::Validation(message) => CalendarError::Validation(message),
         TrainingPlanError::Unavailable(message) => CalendarError::Unavailable(message),
         TrainingPlanError::Repository(message) => CalendarError::Internal(message),
+        TrainingPlanError::GeminiSupervisorWebhookNotConfigured => {
+            CalendarError::Unavailable("Gemini supervisor webhook is not configured".to_string())
+        }
+        TrainingPlanError::GeminiSupervisorWebhookUnauthorized => {
+            CalendarError::Validation("Gemini supervisor webhook token is invalid".to_string())
+        }
     }
 }
 

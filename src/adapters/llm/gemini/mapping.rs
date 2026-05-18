@@ -61,9 +61,7 @@ fn map_generation_config(request: &LlmChatRequest) -> Option<GeminiGenerationCon
     let response_schema = request
         .response_schema_json
         .as_deref()
-        .map(serde_json::from_str)
-        .transpose()
-        .expect("response_schema_json should contain valid JSON when provided");
+        .and_then(|raw| serde_json::from_str(raw).ok());
 
     if request.response_mime_type.is_none() && response_schema.is_none() {
         return None;

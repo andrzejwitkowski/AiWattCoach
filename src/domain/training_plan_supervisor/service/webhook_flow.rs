@@ -37,15 +37,14 @@ where
         let settings = self.settings.clone();
         let service = self.clone();
         Box::pin(async move {
-            let Some(expected_webhook_token) = input.expected_webhook_token else {
-                return Err(TrainingPlanError::Unavailable(
-                    "Gemini supervisor webhook is not configured".to_string(),
-                ));
+            let Some(expected_webhook_token) = input
+                .expected_webhook_token
+                .filter(|token| !token.trim().is_empty())
+            else {
+                return Err(TrainingPlanError::GeminiSupervisorWebhookNotConfigured);
             };
             if expected_webhook_token != input.provided_webhook_token {
-                return Err(TrainingPlanError::Validation(
-                    "Gemini supervisor webhook token is invalid".to_string(),
-                ));
+                return Err(TrainingPlanError::GeminiSupervisorWebhookUnauthorized);
             }
             if input.event_type != "batch.succeeded" {
                 return Ok(GeminiSupervisorWebhookOutcome::Ignored);

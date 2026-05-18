@@ -276,6 +276,55 @@ async fn training_plan_supervisor_operation_repository_round_trips_completed_rev
 }
 
 #[tokio::test]
+async fn training_plan_supervisor_operation_repository_completes_pending_review_idempotently() {
+    let Some(fixture) = mongo_fixture_or_skip().await else {
+        return;
+    };
+    let repository = MongoTrainingPlanSupervisorOperationRepository::new(
+        fixture.client.clone(),
+        &fixture.database,
+    );
+    repository.ensure_indexes().await.unwrap();
+
+    let operation = TrainingPlanSupervisorOperation::pending(
+        "training-plan:user-1:workout-1:1700000000".to_string(),
+        "user-1".to_string(),
+        1_700_000_000,
+        "gemini-2.5-pro".to_string(),
+        1_700_000_050,
+    );
+    repository.upsert(operation).await.unwrap();
+
+    let review = TrainingPlanSupervisorReview {
+        decision: TrainingPlanSupervisorDecision::Accept,
+        reason: "looks good".to_string(),
+        plan: None,
+    };
+
+    let first = repository
+        .complete_review_if_pending(
+            "training-plan:user-1:workout-1:1700000000",
+            review.clone(),
+            1_700_000_100,
+        )
+        .await
+        .unwrap();
+    let second = repository
+        .complete_review_if_pending(
+            "training-plan:user-1:workout-1:1700000000",
+            review,
+            1_700_000_100,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first, second);
+    assert_eq!(first.status, TrainingPlanSupervisorStatus::Accepted);
+
+    fixture.cleanup().await;
+}
+
+#[tokio::test]
 async fn training_plan_snapshot_repository_finds_snapshot_by_operation_key() {
     let Some(fixture) = mongo_fixture_or_skip().await else {
         return;

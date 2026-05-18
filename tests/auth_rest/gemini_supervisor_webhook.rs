@@ -67,18 +67,14 @@ impl TestGeminiSupervisorWebhookService {
 
     fn invalid_token() -> Self {
         Self {
-            result: Err(TrainingPlanError::Validation(
-                "Gemini supervisor webhook token is invalid".to_string(),
-            )),
+            result: Err(TrainingPlanError::GeminiSupervisorWebhookUnauthorized),
             calls: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
     fn not_configured() -> Self {
         Self {
-            result: Err(TrainingPlanError::Unavailable(
-                "Gemini supervisor webhook is not configured".to_string(),
-            )),
+            result: Err(TrainingPlanError::GeminiSupervisorWebhookNotConfigured),
             calls: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -129,7 +125,8 @@ async fn gemini_supervisor_webhook_returns_ok_when_payload_is_accepted() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1/secret-token")
+                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1")
+                .header("x-webhook-token", "secret-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     r#"{
@@ -171,7 +168,8 @@ async fn gemini_supervisor_webhook_returns_ok_when_event_is_ignored() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1/secret-token")
+                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1")
+                .header("x-webhook-token", "secret-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     r#"{
@@ -203,7 +201,8 @@ async fn gemini_supervisor_webhook_returns_401_for_invalid_token() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1/wrong-token")
+                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1")
+                .header("x-webhook-token", "wrong-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     r#"{
@@ -231,7 +230,8 @@ async fn gemini_supervisor_webhook_returns_503_when_not_configured() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1/secret-token")
+                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1")
+                .header("x-webhook-token", "secret-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     r#"{
@@ -259,7 +259,8 @@ async fn gemini_supervisor_webhook_returns_400_for_validation_error() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1/secret-token")
+                .uri("/api/training-plan-supervisor/gemini/webhook/worker-op-1")
+                .header("x-webhook-token", "secret-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     r#"{

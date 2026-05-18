@@ -12,7 +12,7 @@ use crate::domain::{
     },
     training_plan_supervisor::{
         TrainingPlanSupervisorOperation, TrainingPlanSupervisorOperationRepository,
-        TrainingPlanSupervisorStatus,
+        TrainingPlanSupervisorReview, TrainingPlanSupervisorStatus,
     },
 };
 
@@ -65,6 +65,35 @@ impl TrainingPlanSupervisorOperationRepository for InMemorySupervisorOperationRe
             Ok(operation)
         })
     }
+
+    fn complete_review_if_pending(
+        &self,
+        worker_operation_key: &str,
+        review: crate::domain::training_plan_supervisor::TrainingPlanSupervisorReview,
+        now_epoch_seconds: i64,
+    ) -> super::super::BoxFuture<Result<TrainingPlanSupervisorOperation, TrainingPlanError>> {
+        let stored = self.stored.clone();
+        let worker_operation_key = worker_operation_key.to_string();
+        Box::pin(async move {
+            let mut stored = stored
+                .lock()
+                .expect("supervisor operation repo mutex poisoned");
+            let existing = stored
+                .iter()
+                .find(|operation| operation.worker_operation_key == worker_operation_key)
+                .cloned()
+                .ok_or_else(|| {
+                    TrainingPlanError::Repository(format!(
+                        "training plan supervisor operation {worker_operation_key} not found"
+                    ))
+                })?;
+            let completed = existing.complete_review(review, now_epoch_seconds)?;
+            stored
+                .retain(|existing| existing.worker_operation_key != completed.worker_operation_key);
+            stored.push(completed.clone());
+            Ok(completed)
+        })
+    }
 }
 
 #[derive(Clone, Default)]
@@ -85,6 +114,25 @@ impl RecordingProjectionRepository {
             .lock()
             .expect("projection repo mutex poisoned")
             .clone()
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct FailingOnceProjectionRepository {
+    inner: RecordingProjectionRepository,
+    should_fail: Arc<Mutex<bool>>,
+}
+
+impl FailingOnceProjectionRepository {
+    pub(super) fn new(inner: RecordingProjectionRepository) -> Self {
+        Self {
+            inner,
+            should_fail: Arc::new(Mutex::new(true)),
+        }
+    }
+
+    pub(super) fn stored_days(&self) -> Vec<TrainingPlanProjectedDay> {
+        self.inner.stored_days()
     }
 }
 
@@ -171,6 +219,95 @@ impl TrainingPlanProjectionRepository for RecordingProjectionRepository {
             }
             Ok(())
         })
+    }
+}
+
+impl TrainingPlanProjectionRepository for FailingOnceProjectionRepository {
+    fn list_active_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> crate::domain::training_plan::BoxFuture<
+        Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
+    > {
+        self.inner.list_active_by_user_id(user_id)
+    }
+
+    fn find_active_by_operation_key(
+        &self,
+        operation_key: &str,
+    ) -> crate::domain::training_plan::BoxFuture<
+        Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
+    > {
+        self.inner.find_active_by_operation_key(operation_key)
+    }
+
+    fn find_active_by_user_id_and_operation_key(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+    ) -> crate::domain::training_plan::BoxFuture<
+        Result<Vec<TrainingPlanProjectedDay>, TrainingPlanError>,
+    > {
+        self.inner
+            .find_active_by_user_id_and_operation_key(user_id, operation_key)
+    }
+
+    fn replace_window(
+        &self,
+        snapshot: TrainingPlanSnapshot,
+        projected_days: Vec<TrainingPlanProjectedDay>,
+        today: &str,
+        replaced_at_epoch_seconds: i64,
+    ) -> crate::domain::training_plan::BoxFuture<
+        Result<TrainingPlanReplacementResult, TrainingPlanError>,
+    > {
+        self.inner
+            .replace_window(snapshot, projected_days, today, replaced_at_epoch_seconds)
+    }
+
+    fn update_supervisor_status(
+        &self,
+        user_id: &str,
+        operation_key: &str,
+        supervisor_status: Option<TrainingPlanSupervisorStatus>,
+        updated_at_epoch_seconds: i64,
+    ) -> crate::domain::training_plan::BoxFuture<Result<(), TrainingPlanError>> {
+        let should_fail = self.should_fail.clone();
+        let inner = self.inner.clone();
+        let user_id = user_id.to_string();
+        let operation_key = operation_key.to_string();
+        Box::pin(async move {
+            let fail_this_call = {
+                let mut should_fail = should_fail.lock().expect("projection repo mutex poisoned");
+                if *should_fail {
+                    *should_fail = false;
+                    true
+                } else {
+                    false
+                }
+            };
+            if fail_this_call {
+                return Err(TrainingPlanError::Repository(
+                    "projection update failed once".to_string(),
+                ));
+            }
+            inner
+                .update_supervisor_status(
+                    &user_id,
+                    &operation_key,
+                    supervisor_status,
+                    updated_at_epoch_seconds,
+                )
+                .await
+        })
+    }
+}
+
+pub(super) fn accepted_review() -> TrainingPlanSupervisorReview {
+    TrainingPlanSupervisorReview {
+        decision: crate::domain::training_plan_supervisor::TrainingPlanSupervisorDecision::Accept,
+        reason: "plan already looks good".to_string(),
+        plan: None,
     }
 }
 

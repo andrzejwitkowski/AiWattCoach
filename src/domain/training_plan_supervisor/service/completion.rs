@@ -29,16 +29,9 @@ where
         let worker_operation_key = worker_operation_key.to_string();
         let now_epoch_seconds = self.clock.now_epoch_seconds();
         Box::pin(async move {
-            let existing = repository
-                .find_by_worker_operation_key(&worker_operation_key)
-                .await?
-                .ok_or_else(|| {
-                    TrainingPlanError::Repository(format!(
-                        "training plan supervisor operation {worker_operation_key} not found"
-                    ))
-                })?;
-            let completed = existing.complete_review(review, now_epoch_seconds)?;
-            let completed = repository.upsert(completed).await?;
+            let completed = repository
+                .complete_review_if_pending(&worker_operation_key, review, now_epoch_seconds)
+                .await?;
             projections
                 .update_supervisor_status(
                     &completed.user_id,
@@ -47,7 +40,7 @@ where
                     completed.updated_at_epoch_seconds,
                 )
                 .await?;
-            Ok(completed)
+            repository.upsert(completed).await
         })
     }
 }

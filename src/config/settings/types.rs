@@ -5,7 +5,7 @@ use super::{
     parse::{parse_cookie_name, parse_same_site_setting, parse_session_ttl_hours, required},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Settings {
     pub app_name: String,
     pub server: ServerSettings,
@@ -17,6 +17,35 @@ pub struct Settings {
     pub client_log_ingestion_enabled: bool,
     pub legacy_time_stream_cleanup_enabled: bool,
     pub trust_proxy_headers: bool,
+}
+
+impl fmt::Debug for Settings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Settings")
+            .field("app_name", &self.app_name)
+            .field("server", &self.server)
+            .field("mongo", &self.mongo)
+            .field("auth", &self.auth)
+            .field(
+                "gemini_supervisor_webhook_token",
+                &self
+                    .gemini_supervisor_webhook_token
+                    .as_ref()
+                    .map(|_| "<redacted>"),
+            )
+            .field("dev_intervals_enabled", &self.dev_intervals_enabled)
+            .field("dev_llm_coach_enabled", &self.dev_llm_coach_enabled)
+            .field(
+                "client_log_ingestion_enabled",
+                &self.client_log_ingestion_enabled,
+            )
+            .field(
+                "legacy_time_stream_cleanup_enabled",
+                &self.legacy_time_stream_cleanup_enabled,
+            )
+            .field("trust_proxy_headers", &self.trust_proxy_headers)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

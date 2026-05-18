@@ -10,6 +10,8 @@ pub enum TrainingPlanError {
     Unavailable(String),
     Repository(String),
     Validation(String),
+    GeminiSupervisorWebhookNotConfigured,
+    GeminiSupervisorWebhookUnauthorized,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,6 +53,12 @@ impl std::fmt::Display for TrainingPlanError {
             Self::Unavailable(message) => write!(f, "{message}"),
             Self::Repository(message) => write!(f, "{message}"),
             Self::Validation(message) => write!(f, "{message}"),
+            Self::GeminiSupervisorWebhookNotConfigured => {
+                write!(f, "Gemini supervisor webhook is not configured")
+            }
+            Self::GeminiSupervisorWebhookUnauthorized => {
+                write!(f, "Gemini supervisor webhook token is invalid")
+            }
         }
     }
 }

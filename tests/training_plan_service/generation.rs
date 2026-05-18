@@ -75,6 +75,38 @@ impl TrainingPlanSupervisorOperationRepository for InMemorySupervisorOperationRe
             Ok(operation)
         })
     }
+
+    fn complete_review_if_pending(
+        &self,
+        worker_operation_key: &str,
+        review: TrainingPlanSupervisorReview,
+        now_epoch_seconds: i64,
+    ) -> aiwattcoach::domain::training_plan_supervisor::BoxFuture<
+        Result<
+            aiwattcoach::domain::training_plan_supervisor::TrainingPlanSupervisorOperation,
+            TrainingPlanError,
+        >,
+    > {
+        let operations = self.operations.clone();
+        let worker_operation_key = worker_operation_key.to_string();
+        Box::pin(async move {
+            let mut operations = operations.lock().unwrap();
+            let existing = operations
+                .iter()
+                .find(|operation| operation.worker_operation_key == worker_operation_key)
+                .cloned()
+                .ok_or_else(|| {
+                    TrainingPlanError::Repository(format!(
+                        "training plan supervisor operation {worker_operation_key} not found"
+                    ))
+                })?;
+            let completed = existing.complete_review(review, now_epoch_seconds)?;
+            operations
+                .retain(|existing| existing.worker_operation_key != completed.worker_operation_key);
+            operations.push(completed.clone());
+            Ok(completed)
+        })
+    }
 }
 
 #[derive(Clone)]

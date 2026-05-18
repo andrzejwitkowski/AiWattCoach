@@ -1,4 +1,8 @@
-use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
+use mongodb::{
+    bson::doc,
+    options::{IndexOptions, ReturnDocument},
+    Collection, IndexModel,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
@@ -107,6 +111,55 @@ impl TrainingPlanSupervisorOperationRepository for MongoTrainingPlanSupervisorOp
                 .await
                 .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
             Ok(operation)
+        })
+    }
+
+    fn complete_review_if_pending(
+        &self,
+        worker_operation_key: &str,
+        review: TrainingPlanSupervisorReview,
+        now_epoch_seconds: i64,
+    ) -> BoxFuture<Result<TrainingPlanSupervisorOperation, TrainingPlanError>> {
+        let collection = self.collection.clone();
+        let worker_operation_key = worker_operation_key.to_string();
+        Box::pin(async move {
+            review.validate()?;
+            let status = review.decision.terminal_status().as_str().to_string();
+            let review_document = map_review_to_document(&review);
+
+            if let Some(updated) = collection
+                .find_one_and_update(
+                    doc! {
+                        "worker_operation_key": &worker_operation_key,
+                        "status": TrainingPlanSupervisorStatus::Pending.as_str(),
+                    },
+                    doc! {
+                        "$set": {
+                            "status": &status,
+                            "review": mongodb::bson::to_bson(&review_document)
+                                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?,
+                            "updated_at_epoch_seconds": now_epoch_seconds,
+                        },
+                    },
+                )
+                .return_document(ReturnDocument::After)
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+            {
+                return map_document_to_operation(updated);
+            }
+
+            let existing = collection
+                .find_one(doc! { "worker_operation_key": &worker_operation_key })
+                .await
+                .map_err(|error| TrainingPlanError::Repository(error.to_string()))?
+                .ok_or_else(|| {
+                    TrainingPlanError::Repository(format!(
+                        "training plan supervisor operation {worker_operation_key} not found"
+                    ))
+                })?;
+
+            map_document_to_operation(existing)?.complete_review(review, now_epoch_seconds)
         })
     }
 }

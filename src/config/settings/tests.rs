@@ -193,6 +193,22 @@ fn gemini_supervisor_webhook_token_parses_when_present() {
 }
 
 #[test]
+fn settings_debug_redacts_gemini_supervisor_webhook_token() {
+    let mut values = base_values();
+    values.insert(
+        "GEMINI_SUPERVISOR_WEBHOOK_TOKEN".to_string(),
+        "gemini-supervisor-secret".to_string(),
+    );
+
+    let settings = Settings::from_map(&values).expect("settings should parse");
+    let debug = format!("{settings:?}");
+
+    assert!(debug.contains("gemini_supervisor_webhook_token"));
+    assert!(debug.contains("<redacted>"));
+    assert!(!debug.contains("gemini-supervisor-secret"));
+}
+
+#[test]
 fn dev_auth_can_supply_google_oauth_defaults() {
     let mut values = base_values();
     values.remove("GOOGLE_OAUTH_CLIENT_ID");

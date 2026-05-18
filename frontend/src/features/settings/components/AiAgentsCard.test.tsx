@@ -273,6 +273,35 @@ describe('AiAgentsCard', () => {
     expect(openrouterKeyInput.value).toBe('');
   });
 
+  it('ignores draft edits while save is in flight', async () => {
+    let resolveSave: ((value: UserSettingsResponse) => void) | undefined;
+    updateAiAgentsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+
+    render(<AiAgentsCard settings={buildSettings()} apiBaseUrl="" onSave={() => {}} />);
+
+    const modelInput = getMainModelInput() as HTMLInputElement;
+    fireEvent.change(modelInput, {
+      target: { value: 'openai/gpt-4.1-mini' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save ai config$/i }));
+
+    fireEvent.change(modelInput, {
+      target: { value: 'deepseek-v4-pro' },
+    });
+
+    expect(modelInput.value).toBe('openai/gpt-4.1-mini');
+
+    await act(async () => {
+      resolveSave?.(buildSettings({ selectedModel: 'openai/gpt-4.1-mini' }));
+      await Promise.resolve();
+    });
+  });
+
   it('sends explicit provider and model clears on save', async () => {
     updateAiAgentsMock.mockResolvedValue(buildSettings({ selectedProvider: null, selectedModel: null }));
 

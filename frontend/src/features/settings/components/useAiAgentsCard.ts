@@ -181,11 +181,13 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
   };
 
   const updateDraft = (field: keyof DraftState, value: string) => {
+    if (isSaving) return;
     clearTestStatusIfNeeded();
     setDraft((current) => ({ ...current, [field]: value }));
   };
 
   const updateSupervisorEnabled = (enabled: boolean) => {
+    if (isSaving) return;
     clearTestStatusIfNeeded();
     setDraft((current) => ({
       ...current,
@@ -196,6 +198,7 @@ export function useAiAgentsCard({ settings, apiBaseUrl, onSave }: UseAiAgentsCar
   };
 
   const updateProvider = (value: string) => {
+    if (isSaving) return;
     clearTestStatusIfNeeded();
     setDraft((current) => {
       const previousOption = getProviderOption(current.selectedProvider);

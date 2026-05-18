@@ -78,7 +78,7 @@ pub fn router_with_frontend_dist(state: AppState, frontend_dist: PathBuf) -> Rou
         .merge(
             Router::new()
                 .route(
-                    "/api/training-plan-supervisor/gemini/webhook/{worker_operation_key}/{webhook_token}",
+                    "/api/training-plan-supervisor/gemini/webhook/{worker_operation_key}",
                     post(gemini_supervisor_webhook::receive_webhook),
                 )
                 .route_layer(with_log_config(EndpointLogConfig::default())),
@@ -298,7 +298,7 @@ fn make_request_span(request: &Request) -> Span {
             "health_request",
             http.method = %request.method(),
             http.route = %route,
-            http.target = %request.uri().path(),
+            http.target = %route,
             http.status_code = Empty,
             user_id = Empty,
             trace_id = Empty,
@@ -308,7 +308,7 @@ fn make_request_span(request: &Request) -> Span {
             "http_request",
             http.method = %request.method(),
             http.route = %route,
-            http.target = %request.uri().path(),
+            http.target = %route,
             http.status_code = Empty,
             user_id = Empty,
             trace_id = Empty,
