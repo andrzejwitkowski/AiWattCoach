@@ -134,7 +134,7 @@ impl TrainingPlanSupervisorBatchPort for GeminiBatchClient {
         let api_key = api_key.to_string();
         let batch_name = batch_name.to_string();
         Box::pin(async move {
-            let batch_url = format!("{}/{batch_name}", base_url);
+            let batch_url = format!("{base_url}/{batch_name}");
             tracing::info!(url = %batch_url, batch_name = %batch_name, "sending gemini batch get request");
             let response = client
                 .get(batch_url.clone())
@@ -192,15 +192,15 @@ impl TrainingPlanSupervisorBatchPort for GeminiBatchClient {
                         });
                 return Err(TrainingPlanError::Repository(error_message));
             }
-            let responses_file = batch
-                .response
-                .and_then(|response| response.responses_file)
-                .ok_or_else(|| {
-                    TrainingPlanError::Repository(format!(
-                        "Gemini batch {} succeeded without responsesFile",
-                        batch.name
-                    ))
-                })?;
+            let Some(response_body) = batch.response else {
+                return Err(TrainingPlanError::Repository(format!(
+                    "Gemini batch {} succeeded without response body",
+                    batch.name
+                )));
+            };
+            let Some(responses_file) = response_body.responses_file else {
+                return parse_result_lines(response_body.inlined_responses.unwrap_or_default());
+            };
 
             let download_url = format!(
                 "{}/download/v1beta/{}:download?alt=media",
@@ -312,7 +312,7 @@ fn sanitize_batch_display_name(value: &str) -> String {
 }
 
 fn parse_result_file(body: &str) -> Result<TrainingPlanSupervisorReview, TrainingPlanError> {
-    let mut parsed_lines = body
+    let parsed_lines = body
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
@@ -323,7 +323,13 @@ fn parse_result_file(body: &str) -> Result<TrainingPlanSupervisorReview, Trainin
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let line = parsed_lines.drain(..).next().ok_or_else(|| {
+    parse_result_lines(parsed_lines)
+}
+
+fn parse_result_lines(
+    parsed_lines: Vec<GeminiBatchResultLine>,
+) -> Result<TrainingPlanSupervisorReview, TrainingPlanError> {
+    let line = parsed_lines.into_iter().next().ok_or_else(|| {
         TrainingPlanError::Repository("gemini batch result file is empty".to_string())
     })?;
     if let Some(error) = line.error.and_then(|error| error.message) {

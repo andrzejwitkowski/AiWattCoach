@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-19 | CodeRabbit | PR #239 supervisor batch inline results and replacement safety
+
+- Problem: follow-up review found four remaining supervisor-batch gaps: Gemini batch completion only handled `responsesFile` even though inline batch jobs can return `response.inlinedResponses`; replacement application accepted any 14 parsed days even when the dates were shifted away from the current projection window; the protected day boundary was derived solely from the UTC clock date, which could overwrite the first active local-window day when the clock lagged the projected window; and `FixedSyncStateRepository::upsert` returned a state without persisting it for follow-up reads.
+- Fix: added DTO support for `inlinedResponses` and reused the existing result-line parser when no `responsesFile` is present; added replacement date-sequence validation against the active projected window before applying partial replacement; changed replacement protection to use the later of the clock date and first active projected date; and made the fixed sync-state test repository perform an actual in-memory upsert. Added focused regressions for inline batch results, shifted replacement dates, first-active-day protection, and sync-state upsert persistence.
+- Prevention: when integrating provider batch APIs, cover both file-backed and inline result shapes at the adapter boundary. For LLM-generated replacements, validate not only count and parseability but exact entity identity/date alignment before writing projections. When dates come from local user-facing planning windows, do not rely on raw UTC clock dates alone for mutation safety. Test doubles that implement write ports must either mutate state or fail fast.
+
 ### 2026-05-18 | self (4-loop review) | issue #240 supervisor batch replacement and UI status
 
 - Problem: the supervisor replacement flow initially treated provider-owned days as protected but did not exclude today or past active days from replacement application; skipped days were not fully persisted in the apply audit, so only provider-owned skips were visible; the Gemini batch submit payload had only domain-service coverage and no adapter-level assertion for the structured inline request; and the new calendar `supervisorStatus` field had schema/UI code but no focused frontend regression proving parse and badge rendering stayed aligned.

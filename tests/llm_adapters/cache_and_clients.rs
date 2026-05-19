@@ -256,6 +256,26 @@ async fn gemini_batch_client_downloads_result_and_maps_review() {
 }
 
 #[tokio::test]
+async fn gemini_batch_client_reads_inline_supervisor_review_result() {
+    let server = MockServer::start().await;
+    let client = gemini_batch_client(&server.base_url);
+
+    let review = client
+        .download_result("gemini-key", "batches/batch-inline-1")
+        .await
+        .unwrap();
+
+    assert_eq!(review.decision, TrainingPlanSupervisorDecision::Accept);
+    assert_eq!(review.reason, "inline response is ready");
+    assert_eq!(review.plan, None);
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].path, "/v1beta/batches/batch-inline-1");
+    assert_eq!(requests[0].google_api_key.as_deref(), Some("gemini-key"));
+}
+
+#[tokio::test]
 async fn gemini_batch_client_submits_supervisor_review_as_structured_inline_request() {
     let server = MockServer::start().await;
     let client = gemini_batch_client(&server.base_url);

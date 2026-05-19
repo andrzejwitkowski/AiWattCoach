@@ -92,17 +92,18 @@ where
             &operation.worker_operation_key,
         )
         .await?;
-    let today = today_string(now_epoch_seconds);
     let replacement_snapshot =
         parse_replacement_snapshot(operation, replacement_plan, &active_days, now_epoch_seconds)?;
+    validate_replacement_dates_match_active_window(&replacement_snapshot.days, &active_days)?;
     let replacement_days =
         build_replacement_projected_days(&replacement_snapshot, &active_days, now_epoch_seconds);
+    let protected_through_date = replacement_protection_date(&active_days, now_epoch_seconds);
     let eligible_dates = eligible_replacement_dates(
         sync_states,
         &operation.user_id,
         &operation.worker_operation_key,
         &active_days,
-        &today,
+        &protected_through_date,
     )
     .await?;
     projections
@@ -127,6 +128,28 @@ where
         },
         now_epoch_seconds,
     ))
+}
+
+fn validate_replacement_dates_match_active_window(
+    replacement_days: &[TrainingPlanDay],
+    active_days: &[TrainingPlanProjectedDay],
+) -> Result<(), TrainingPlanError> {
+    let replacement_dates = replacement_days
+        .iter()
+        .map(|day| day.date.as_str())
+        .collect::<Vec<_>>();
+    let mut active_dates = active_days
+        .iter()
+        .map(|day| day.date.as_str())
+        .collect::<Vec<_>>();
+    active_dates.sort_unstable();
+    if replacement_dates != active_dates {
+        return Err(TrainingPlanError::Validation(
+            "training plan supervisor replacement dates must match active projection window"
+                .to_string(),
+        ));
+    }
+    Ok(())
 }
 
 struct EligibleReplacementDates {
@@ -275,10 +298,19 @@ fn preserve_non_applied_days_in_snapshot(
     snapshot
 }
 
-fn today_string(now_epoch_seconds: i64) -> String {
-    chrono::DateTime::from_timestamp(now_epoch_seconds, 0)
+fn replacement_protection_date(
+    active_days: &[TrainingPlanProjectedDay],
+    now_epoch_seconds: i64,
+) -> String {
+    let clock_date = chrono::DateTime::from_timestamp(now_epoch_seconds, 0)
         .map(|now| now.date_naive().format("%Y-%m-%d").to_string())
-        .unwrap_or_else(|| "1970-01-01".to_string())
+        .unwrap_or_else(|| "1970-01-01".to_string());
+    active_days
+        .iter()
+        .map(|day| day.date.as_str())
+        .min()
+        .map(|first_active_date| std::cmp::max(clock_date.as_str(), first_active_date).to_string())
+        .unwrap_or(clock_date)
 }
 
 fn planned_workout_entity(operation_key: &str, date: &str) -> CanonicalEntityRef {

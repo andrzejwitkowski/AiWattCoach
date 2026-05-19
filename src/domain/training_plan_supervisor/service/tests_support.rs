@@ -560,7 +560,17 @@ impl ExternalSyncStateRepository for FixedSyncStateRepository {
     ) -> crate::domain::external_sync::BoxFuture<
         Result<ExternalSyncState, ExternalSyncRepositoryError>,
     > {
-        Box::pin(async move { Ok(state) })
+        let states = self.states.clone();
+        Box::pin(async move {
+            let mut states = states.lock().expect("sync state mutex poisoned");
+            states.retain(|existing| {
+                !(existing.user_id == state.user_id
+                    && existing.provider == state.provider
+                    && existing.canonical_entity == state.canonical_entity)
+            });
+            states.push(state.clone());
+            Ok(state)
+        })
     }
 
     fn find_by_canonical_entities(

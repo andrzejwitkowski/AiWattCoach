@@ -223,6 +223,10 @@ impl MockServer {
                 axum::routing::get(gemini_batch_get_handler),
             )
             .route(
+                "/v1beta/batches/batch-inline-1",
+                axum::routing::get(gemini_batch_get_inline_handler),
+            )
+            .route(
                 "/v1beta/models/gemini-2.5-pro:batchGenerateContent",
                 post(gemini_batch_create_handler),
             )
@@ -618,6 +622,31 @@ async fn gemini_batch_get_handler(
         "name": "batches/batch-1",
         "metadata": { "state": "JOB_STATE_SUCCEEDED" },
         "response": { "responsesFile": "files/result-file-1" }
+    }))
+}
+
+async fn gemini_batch_get_inline_handler(
+    State(state): State<MockServerState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    capture_request(&state, "/v1beta/batches/batch-inline-1", headers, json!({}));
+    Json(json!({
+        "name": "batches/batch-inline-1",
+        "metadata": { "state": "JOB_STATE_SUCCEEDED" },
+        "response": {
+            "inlinedResponses": [{
+                "key": "request-1",
+                "response": {
+                    "candidates": [{
+                        "content": {
+                            "parts": [{
+                                "text": "{\"decision\":\"accept\",\"reason\":\"inline response is ready\"}"
+                            }]
+                        }
+                    }]
+                }
+            }]
+        }
     }))
 }
 

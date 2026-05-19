@@ -1,5 +1,8 @@
 use crate::domain::{
-    external_sync::{CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState},
+    external_sync::{
+        CanonicalEntityKind, CanonicalEntityRef, ExternalProvider, ExternalSyncState,
+        ExternalSyncStateRepository,
+    },
     training_plan::{TrainingPlanError, TrainingPlanProjectedDay},
     training_plan_supervisor::{
         NoopTrainingPlanSupervisorScheduler, TrainingPlanSupervisorDecision,
@@ -42,8 +45,7 @@ async fn supervisor_service_applies_replacement_only_to_days_without_sync_state(
         .await
         .unwrap();
     let projections = RecordingProjectionRepository::default();
-    projections.seed_day(projected_day("2026-05-18", "original synced"));
-    projections.seed_day(projected_day("2026-05-19", "original unsynced"));
+    seed_projected_days(&projections);
     let sync_states = FixedSyncStateRepository::default();
     sync_states.seed_state(ExternalSyncState::new(
         "user-1".to_string(),
@@ -88,7 +90,7 @@ async fn supervisor_service_applies_replacement_only_to_days_without_sync_state(
         .expect("expected skipped day");
     assert_eq!(
         skipped.workout.as_ref().unwrap().lines[0].text(),
-        Some("original synced")
+        Some("original day 1")
     );
     let applied = days
         .iter()
@@ -114,9 +116,7 @@ async fn supervisor_service_does_not_apply_replacement_to_today_or_past_days() {
         .await
         .unwrap();
     let projections = RecordingProjectionRepository::default();
-    projections.seed_day(projected_day("2026-05-17", "original past"));
-    projections.seed_day(projected_day("2026-05-18", "original today"));
-    projections.seed_day(projected_day("2026-05-19", "original future"));
+    seed_projected_days_from(&projections, 17);
     let service = TrainingPlanSupervisorService::new(
         repository,
         StubUserSettingsService::enabled("gemini-2.5-pro"),
@@ -132,7 +132,7 @@ async fn supervisor_service_does_not_apply_replacement_to_today_or_past_days() {
             TrainingPlanSupervisorReview {
                 decision: TrainingPlanSupervisorDecision::Replace,
                 reason: "needs safer progression".to_string(),
-                plan: Some(replacement_plan()),
+                plan: Some(replacement_plan_from(17)),
             },
         )
         .await
@@ -158,7 +158,7 @@ async fn supervisor_service_does_not_apply_replacement_to_today_or_past_days() {
         .expect("expected today day");
     assert_eq!(
         today.workout.as_ref().unwrap().lines[0].text(),
-        Some("original today")
+        Some("original day 2")
     );
     let future = days
         .iter()
@@ -166,8 +166,127 @@ async fn supervisor_service_does_not_apply_replacement_to_today_or_past_days() {
         .expect("expected future day");
     assert_eq!(
         future.workout.as_ref().unwrap().lines[0].text(),
-        Some("replacement day 2")
+        Some("replacement day 3")
     );
+}
+
+#[tokio::test]
+async fn supervisor_service_rejects_replacement_with_shifted_dates() {
+    let repository = InMemorySupervisorOperationRepository::default();
+    repository
+        .upsert(TrainingPlanSupervisorOperation::pending(
+            "worker-op-1".to_string(),
+            "user-1".to_string(),
+            1_700_000_000,
+            "gemini-2.5-pro".to_string(),
+            1_700_000_100,
+        ))
+        .await
+        .unwrap();
+    let projections = RecordingProjectionRepository::default();
+    seed_projected_days(&projections);
+    let service = TrainingPlanSupervisorService::new(
+        repository,
+        StubUserSettingsService::enabled("gemini-2.5-pro"),
+        FixedClock {
+            now_epoch_seconds: 1_779_062_400,
+        },
+    );
+
+    let error = service
+        .complete_review(
+            projections,
+            "worker-op-1",
+            TrainingPlanSupervisorReview {
+                decision: TrainingPlanSupervisorDecision::Replace,
+                reason: "shifted dates".to_string(),
+                plan: Some(shifted_replacement_plan()),
+            },
+        )
+        .await
+        .expect_err("expected shifted replacement dates to fail validation");
+
+    assert_eq!(
+        error,
+        TrainingPlanError::Validation(
+            "training plan supervisor replacement dates must match active projection window"
+                .to_string()
+        )
+    );
+}
+
+#[tokio::test]
+async fn supervisor_service_protects_first_active_day_when_clock_date_lags_window() {
+    let repository = InMemorySupervisorOperationRepository::default();
+    repository
+        .upsert(TrainingPlanSupervisorOperation::pending(
+            "worker-op-1".to_string(),
+            "user-1".to_string(),
+            1_700_000_000,
+            "gemini-2.5-pro".to_string(),
+            1_700_000_100,
+        ))
+        .await
+        .unwrap();
+    let projections = RecordingProjectionRepository::default();
+    seed_projected_days(&projections);
+    let service = TrainingPlanSupervisorService::new(
+        repository,
+        StubUserSettingsService::enabled("gemini-2.5-pro"),
+        FixedClock {
+            now_epoch_seconds: 1_778_976_000,
+        },
+    );
+
+    let completed = service
+        .complete_review(
+            projections.clone(),
+            "worker-op-1",
+            TrainingPlanSupervisorReview {
+                decision: TrainingPlanSupervisorDecision::Replace,
+                reason: "needs safer progression".to_string(),
+                plan: Some(replacement_plan()),
+            },
+        )
+        .await
+        .unwrap();
+
+    let apply_result = completed
+        .replacement_apply_result
+        .expect("expected replacement apply result");
+    assert!(!apply_result
+        .applied_dates
+        .contains(&"2026-05-18".to_string()));
+    assert!(apply_result
+        .applied_dates
+        .contains(&"2026-05-19".to_string()));
+    let first_day = projections
+        .stored_days()
+        .into_iter()
+        .find(|day| day.date == "2026-05-18")
+        .expect("expected first active day");
+    assert_eq!(
+        first_day.workout.as_ref().unwrap().lines[0].text(),
+        Some("original day 1")
+    );
+}
+
+#[tokio::test]
+async fn fixed_sync_state_repository_upsert_persists_state_for_follow_up_reads() {
+    let repository = FixedSyncStateRepository::default();
+    let state = ExternalSyncState::new(
+        "user-1".to_string(),
+        ExternalProvider::Intervals,
+        planned_workout_entity("worker-op-1", "2026-05-18"),
+    );
+
+    repository.upsert(state.clone()).await.unwrap();
+
+    let stored = repository
+        .find_by_canonical_entities("user-1", &[state.canonical_entity.clone()])
+        .await
+        .unwrap();
+    assert_eq!(stored, vec![state]);
 }
 
 #[tokio::test]
@@ -496,12 +615,42 @@ fn projected_day(date: &str, name: &str) -> TrainingPlanProjectedDay {
     }
 }
 
+fn seed_projected_days(projections: &RecordingProjectionRepository) {
+    seed_projected_days_from(projections, 18);
+}
+
+fn seed_projected_days_from(projections: &RecordingProjectionRepository, start_day: usize) {
+    for index in 0..14 {
+        projections.seed_day(projected_day(
+            &format!("2026-05-{}", start_day + index),
+            &format!("original day {}", index + 1),
+        ));
+    }
+}
+
 fn replacement_plan() -> String {
+    replacement_plan_from(18)
+}
+
+fn replacement_plan_from(start_day: usize) -> String {
     (0..14)
         .map(|index| {
             format!(
                 "2026-05-{}\nreplacement day {}\n- 60m 70%",
-                18 + index,
+                start_day + index,
+                index + 1
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn shifted_replacement_plan() -> String {
+    (0..14)
+        .map(|index| {
+            format!(
+                "2026-05-{}\nshifted replacement day {}\n- 60m 70%",
+                19 + index,
                 index + 1
             )
         })
