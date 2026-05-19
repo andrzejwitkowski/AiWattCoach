@@ -283,7 +283,7 @@ async fn fixed_sync_state_repository_upsert_persists_state_for_follow_up_reads()
     repository.upsert(state.clone()).await.unwrap();
 
     let stored = repository
-        .find_by_canonical_entities("user-1", &[state.canonical_entity.clone()])
+        .find_by_canonical_entities("user-1", std::slice::from_ref(&state.canonical_entity))
         .await
         .unwrap();
     assert_eq!(stored, vec![state]);
