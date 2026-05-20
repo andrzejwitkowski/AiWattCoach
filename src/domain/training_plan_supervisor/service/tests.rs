@@ -650,7 +650,7 @@ fn shifted_replacement_plan() -> String {
         .map(|index| {
             format!(
                 "2026-05-{}\nshifted replacement day {}\n- 60m 70%",
-                19 + index,
+                17 + index,
                 index + 1
             )
         })

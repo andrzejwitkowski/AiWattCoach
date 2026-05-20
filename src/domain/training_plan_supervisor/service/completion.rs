@@ -134,10 +134,11 @@ fn validate_replacement_dates_match_active_window(
     replacement_days: &[TrainingPlanDay],
     active_days: &[TrainingPlanProjectedDay],
 ) -> Result<(), TrainingPlanError> {
-    let replacement_dates = replacement_days
+    let mut replacement_dates = replacement_days
         .iter()
         .map(|day| day.date.as_str())
         .collect::<Vec<_>>();
+    replacement_dates.sort_unstable();
     let mut active_dates = active_days
         .iter()
         .map(|day| day.date.as_str())
@@ -183,14 +184,17 @@ where
     let mut skipped_dates = Vec::new();
     let mut skipped_synced_dates = Vec::new();
     for day in active_days {
+        let entity_id = planned_workout_entity(operation_key, &day.date).entity_id;
+        let is_synced = owned_entities.contains(&entity_id);
+        if is_synced {
+            skipped_synced_dates.push(day.date.clone());
+        }
         if day.date.as_str() <= today {
             skipped_dates.push(day.date.clone());
             continue;
         }
-        let entity_id = planned_workout_entity(operation_key, &day.date).entity_id;
-        if owned_entities.contains(&entity_id) {
+        if is_synced {
             skipped_dates.push(day.date.clone());
-            skipped_synced_dates.push(day.date.clone());
         } else {
             applied_dates.push(day.date.clone());
         }

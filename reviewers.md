@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-20 | user | training-plan-supervisor replacement date validation and synced skip audit
+
+- Problem: the supervisor replacement apply audit only recorded `skipped_synced_dates` when a synced day was still otherwise eligible for replacement, so a protected first/today day with provider ownership appeared in `skipped_dates` but not in the provider-owned subset. The shifted-date regression fixture also built `2026-05-32`, so parsing failed with the generic 14-day validation before the intended active-window date-match check ran.
+- Fix: changed replacement eligibility to record synced skipped dates independently of the protected-day branch, sorted both replacement and active date lists before comparing the replacement window, and changed the shifted-date test fixture to stay within valid May dates while still shifting the window by one day.
+- Prevention: when one audit field is a subset of another skip list, populate that subset independently from the broader skip-reason ordering. For date-window regressions, keep fixtures on real calendar dates so the test reaches the validation branch it is meant to prove.
+
 ### 2026-05-19 | CodeRabbit | PR #239 supervisor batch inline results and replacement safety
 
 - Problem: follow-up review found four remaining supervisor-batch gaps: Gemini batch completion only handled `responsesFile` even though inline batch jobs can return `response.inlinedResponses`; replacement application accepted any 14 parsed days even when the dates were shifted away from the current projection window; the protected day boundary was derived solely from the UTC clock date, which could overwrite the first active local-window day when the clock lagged the projected window; and `FixedSyncStateRepository::upsert` returned a state without persisting it for follow-up reads.
