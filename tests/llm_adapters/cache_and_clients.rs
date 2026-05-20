@@ -317,6 +317,11 @@ async fn gemini_batch_client_submits_supervisor_review_as_structured_inline_requ
         .as_str()
         .unwrap();
     assert!(prompt.contains("Return only JSON matching the provided schema"));
+    assert!(prompt.contains("Critical rules: Output ONLY the raw workout text."));
+    assert!(prompt.contains("Step syntax: `- [Duration] [Target]`."));
+    assert!(prompt.contains("Ramp syntax: `- [Duration] ramp [Start Target]-[End Target]`."));
+    assert!(prompt.contains("Repeat headers must end with `x`, such as `Main Set 4x`."));
+    assert!(prompt.contains("Do not use cadence, zone targets, inline text cues, hour units, or distance units because the current backend parser does not accept them."));
     assert!(prompt.contains("2026-05-18\n- 60m 65%"));
 }
 

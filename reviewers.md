@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-20 | user | supervisor prompt must carry full training grammar
+
+- Problem: the Gemini supervisor batch prompt only described the replacement-plan format in a shortened prose form, while the worker prompt already had a fuller canonical grammar covering exact step syntax, ramp syntax, repeat headers, supported durations/targets, and forbidden unsupported syntax. That left the supervisor with weaker syntax guidance than the worker for the same parser-backed output format.
+- Fix: extracted the full training-plan output grammar into a shared `src/adapters/llm/training_plan_prompt_grammar.rs` constant, reused it from both the worker generator and the Gemini supervisor batch prompt, and strengthened the adapter test to assert the supervisor prompt carries the full grammar cues.
+- Prevention: when two LLM prompts target the same backend parser format, keep the grammar text in one shared canonical constant or helper instead of maintaining a shortened parallel description in one path.
+
 ### 2026-05-20 | user | training-plan-supervisor replacement date validation and synced skip audit
 
 - Problem: the supervisor replacement apply audit only recorded `skipped_synced_dates` when a synced day was still otherwise eligible for replacement, so a protected first/today day with provider ownership appeared in `skipped_dates` but not in the provider-owned subset. The shifted-date regression fixture also built `2026-05-32`, so parsing failed with the generic 14-day validation before the intended active-window date-match check ran.

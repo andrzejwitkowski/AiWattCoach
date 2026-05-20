@@ -2,6 +2,7 @@ use reqwest::StatusCode;
 use schemars::{schema_for, JsonSchema};
 use serde::Deserialize;
 
+use crate::adapters::llm::training_plan_prompt_grammar::TRAINING_PLAN_OUTPUT_GRAMMAR;
 use crate::domain::{
     llm::truncate_logged_body,
     training_plan::TrainingPlanError,
@@ -296,7 +297,7 @@ fn build_supervisor_batch_create_request(
 
 fn supervisor_prompt(original_plan: &str) -> String {
     format!(
-        "You are a second-pass cycling coach supervisor reviewing an already generated 14-day training plan. Return only JSON matching the provided schema. Decide exactly one of: accept, replace, fail. Use accept when the plan is coherent, safe, parser-friendly, and only needs no material change. Use replace when the plan is usable as context but materially violates training logic, availability, recovery, race handling, or workout syntax; in that case return a complete replacement plan in `plan` containing all 14 dated sections, not a diff. Use fail when the input is unusable, incomplete, unsafe to repair confidently, or cannot be converted into the supported workout grammar. For replace plans, output parser-friendly workout-builder text only inside the JSON string: one YYYY-MM-DD section per day, then either Rest Day, Rest Day: <reason>, or workout text where actionable steps start with `- `. Do not include markdown fences. Original plan:\n\n{original_plan}"
+        "You are a second-pass cycling coach supervisor reviewing an already generated 14-day training plan. Return only JSON matching the provided schema. Decide exactly one of: accept, replace, fail. Use accept when the plan is coherent, safe, parser-friendly, and only needs no material change. Use replace when the plan is usable as context but materially violates training logic, availability, recovery, race handling, or workout syntax; in that case return a complete replacement plan in `plan` containing all 14 dated sections, not a diff. Use fail when the input is unusable, incomplete, unsafe to repair confidently, or cannot be converted into the supported workout grammar. If you choose replace, the `plan` string must follow the full backend-supported workout grammar exactly. {TRAINING_PLAN_OUTPUT_GRAMMAR} Original plan:\n\n{original_plan}"
     )
 }
 
