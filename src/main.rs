@@ -291,8 +291,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let gemini_http_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .expect("gemini http client should build");
+        .build()?;
     let gemini_batch_client = GeminiBatchClient::new(gemini_http_client);
     // These repositories are bootstrapped at startup so their durable collections
     // have indexes in place before background sync workflows start using them.
