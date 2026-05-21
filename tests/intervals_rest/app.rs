@@ -853,6 +853,7 @@ pub(crate) fn sample_calendar_entry(
         race: None,
         summary: None,
         sync: None,
+        supervisor_status: None,
     }
 }
 

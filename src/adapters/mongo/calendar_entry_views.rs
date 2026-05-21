@@ -9,6 +9,7 @@ use crate::domain::calendar_view::{
     CalendarEntrySummary, CalendarEntrySync, CalendarEntryView, CalendarEntryViewError,
     CalendarEntryViewRepository,
 };
+use crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus;
 
 #[derive(Clone)]
 pub struct MongoCalendarEntryViewRepository {
@@ -38,6 +39,8 @@ struct CalendarEntryViewDocument {
     race: Option<CalendarEntryRaceDocument>,
     summary: Option<CalendarEntrySummaryDocument>,
     sync: Option<CalendarEntrySyncDocument>,
+    #[serde(default)]
+    supervisor_status: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -374,6 +377,9 @@ fn map_entry_to_document(
             linked_intervals_event_id: sync.linked_intervals_event_id,
             sync_status: sync.sync_status.clone(),
         }),
+        supervisor_status: entry
+            .supervisor_status
+            .map(|status| status.as_str().to_string()),
     }
 }
 
@@ -410,6 +416,12 @@ fn map_document_to_entry(
             linked_intervals_event_id: sync.linked_intervals_event_id,
             sync_status: sync.sync_status,
         }),
+        supervisor_status: document
+            .supervisor_status
+            .as_deref()
+            .map(TrainingPlanSupervisorStatus::try_from)
+            .transpose()
+            .map_err(CalendarEntryViewError::Repository)?,
     })
 }
 

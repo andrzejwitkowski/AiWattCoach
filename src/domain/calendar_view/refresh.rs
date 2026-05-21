@@ -2,7 +2,8 @@ use chrono::NaiveDate;
 
 use crate::domain::{
     calendar_view::{
-        select_visible_planned_workout_candidates_with_sync_states, CalendarPlannedWorkoutSource,
+        select_visible_planned_workout_candidates_with_sync_states,
+        CalendarPlannedWorkoutCandidate, CalendarPlannedWorkoutSource,
     },
     completed_workouts::{CompletedWorkout, CompletedWorkoutRepository},
     external_sync::{
@@ -18,7 +19,7 @@ use crate::domain::{
 };
 
 use super::{
-    merge_workout_entries, project_planned_workout_entry, project_race_entry,
+    merge_workout_entries, project_planned_workout_entry_with_supervisor, project_race_entry,
     project_special_day_entry, BoxFuture, CalendarEntryView, CalendarEntryViewError,
     CalendarEntryViewRepository,
 };
@@ -372,10 +373,7 @@ where
             let planned = select_visible_planned_workout_candidates_with_sync_states(
                 planned_candidates,
                 &planned_sync_states_by_id,
-            )
-            .into_iter()
-            .map(|candidate| candidate.workout)
-            .collect::<Vec<_>>();
+            );
             let completed = completed_workouts
                 .list_by_user_id_and_date_range(&user_id, &oldest, &newest)
                 .await
@@ -484,7 +482,8 @@ where
                 .map_err(map_special_day_error)?;
 
             let mut projected_planned = Vec::with_capacity(planned.len());
-            for workout in &planned {
+            for candidate in &planned {
+                let workout = &candidate.workout;
                 let planned_entity = CanonicalEntityRef::new(
                     CanonicalEntityKind::PlannedWorkout,
                     workout.planned_workout_id.clone(),
@@ -493,7 +492,11 @@ where
                     .get(&planned_entity)
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);
-                let entry = project_planned_workout_entry(workout, sync_states);
+                let entry = project_planned_workout_entry_with_supervisor(
+                    workout,
+                    sync_states,
+                    candidate.supervisor_status,
+                );
                 projected_planned.push(entry);
             }
             let mut projected = merge_workout_entries(projected_planned, &completed);
@@ -604,7 +607,7 @@ fn map_planned_completed_link_error(
 }
 
 fn resolve_unique_same_day_planned_workout_id(
-    planned_workouts: &[PlannedWorkout],
+    planned_workouts: &[CalendarPlannedWorkoutCandidate],
     completed_workout: &CompletedWorkout,
 ) -> Option<String> {
     let completed_name = normalize_workout_name(completed_workout.name.as_deref())?;
@@ -615,13 +618,13 @@ fn resolve_unique_same_day_planned_workout_id(
 
     let mut matches = planned_workouts
         .iter()
-        .filter(|planned_workout| planned_workout.date == completed_date)
-        .filter(|planned_workout| {
-            normalize_workout_name(planned_workout_match_name(planned_workout).as_deref())
+        .filter(|candidate| candidate.workout.date == completed_date)
+        .filter(|candidate| {
+            normalize_workout_name(planned_workout_match_name(&candidate.workout).as_deref())
                 .as_deref()
                 == Some(completed_name.as_str())
         })
-        .map(|planned_workout| planned_workout.planned_workout_id.clone())
+        .map(|candidate| candidate.workout.planned_workout_id.clone())
         .collect::<Vec<_>>();
     matches.sort();
     matches.dedup();

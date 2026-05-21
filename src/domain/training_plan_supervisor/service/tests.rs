@@ -12,8 +12,8 @@ use crate::domain::{
 use super::{
     tests_support::{
         accepted_review, FailingOnceProjectionRepository, FixedClock, FixedSyncStateRepository,
-        InMemorySupervisorOperationRepository, RecordingBatchPort, RecordingProjectionRepository,
-        StubUserSettingsService,
+        InMemorySupervisorOperationRepository, RecordedCalendarRefresh, RecordingBatchPort,
+        RecordingCalendarRefresh, RecordingProjectionRepository, StubUserSettingsService,
     },
     TrainingPlanSupervisorService,
 };
@@ -354,6 +354,51 @@ async fn supervisor_service_completes_review_and_updates_active_projected_days()
         Some(TrainingPlanSupervisorStatus::Pending)
     );
     assert_eq!(superseded.updated_at_epoch_seconds, 1);
+}
+
+#[tokio::test]
+async fn supervisor_service_refreshes_calendar_view_after_completed_review() {
+    let repository = InMemorySupervisorOperationRepository::default();
+    repository
+        .upsert(TrainingPlanSupervisorOperation::pending(
+            "worker-op-1".to_string(),
+            "user-1".to_string(),
+            1_700_000_000,
+            "gemini-2.5-pro".to_string(),
+            1_700_000_100,
+        ))
+        .await
+        .unwrap();
+    let projections = RecordingProjectionRepository::default();
+    projections.seed_day(projected_day("2026-05-18", "original day 1"));
+    projections.seed_day(projected_day("2026-05-20", "original day 3"));
+    let refresh = RecordingCalendarRefresh::default();
+    let service = TrainingPlanSupervisorService::new(
+        repository,
+        StubUserSettingsService::enabled("gemini-2.5-pro"),
+        FixedClock {
+            now_epoch_seconds: 1_700_000_200,
+        },
+    );
+
+    service
+        .complete_review_and_refresh(
+            projections,
+            refresh.clone(),
+            "worker-op-1",
+            accepted_review(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        refresh.calls(),
+        vec![RecordedCalendarRefresh {
+            user_id: "user-1".to_string(),
+            oldest: "2026-05-18".to_string(),
+            newest: "2026-05-20".to_string(),
+        }]
+    );
 }
 
 #[tokio::test]

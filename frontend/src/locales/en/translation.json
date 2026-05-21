@@ -208,6 +208,7 @@
     "supervisorAccepted": "AI reviewed",
     "supervisorReplaced": "AI adjusted",
     "supervisorFailed": "AI review failed",
+    "supervisorWorkerOnly": "Worker generated",
     "completedWorkout": "Completed Workout",
     "downloadFit": "Download FIT",
     "downloadingFit": "Downloading FIT",

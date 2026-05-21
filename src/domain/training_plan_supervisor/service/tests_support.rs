@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::domain::{
+    calendar_view::{CalendarEntryView, CalendarEntryViewError, CalendarEntryViewRefreshPort},
     external_sync::{
         CanonicalEntityRef, ExternalProvider, ExternalSyncRepositoryError, ExternalSyncState,
         ExternalSyncStateRepository,
@@ -105,6 +106,52 @@ impl TrainingPlanSupervisorOperationRepository for InMemorySupervisorOperationRe
 #[derive(Clone, Default)]
 pub(super) struct RecordingProjectionRepository {
     stored: Arc<Mutex<Vec<TrainingPlanProjectedDay>>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct RecordedCalendarRefresh {
+    pub(super) user_id: String,
+    pub(super) oldest: String,
+    pub(super) newest: String,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct RecordingCalendarRefresh {
+    calls: Arc<Mutex<Vec<RecordedCalendarRefresh>>>,
+}
+
+impl RecordingCalendarRefresh {
+    pub(super) fn calls(&self) -> Vec<RecordedCalendarRefresh> {
+        self.calls
+            .lock()
+            .expect("calendar refresh mutex poisoned")
+            .clone()
+    }
+}
+
+impl CalendarEntryViewRefreshPort for RecordingCalendarRefresh {
+    fn refresh_range_for_user(
+        &self,
+        user_id: &str,
+        oldest: &str,
+        newest: &str,
+    ) -> crate::domain::calendar_view::BoxFuture<
+        Result<Vec<CalendarEntryView>, CalendarEntryViewError>,
+    > {
+        let calls = self.calls.clone();
+        let call = RecordedCalendarRefresh {
+            user_id: user_id.to_string(),
+            oldest: oldest.to_string(),
+            newest: newest.to_string(),
+        };
+        Box::pin(async move {
+            calls
+                .lock()
+                .expect("calendar refresh mutex poisoned")
+                .push(call);
+            Ok(Vec::new())
+        })
+    }
 }
 
 impl RecordingProjectionRepository {

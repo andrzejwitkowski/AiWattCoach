@@ -666,21 +666,24 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         UuidIdGenerator,
     ));
     let training_plan_supervisor_webhook_service: Arc<dyn TrainingPlanSupervisorWebhookUseCases> =
-        Arc::new(GeminiTrainingPlanSupervisorWebhookService::new(
-            TrainingPlanSupervisorService::new(
-                MongoTrainingPlanSupervisorOperationRepository::new(
-                    mongo_client.clone(),
-                    &mongo_database,
-                ),
-                (*settings_service).clone(),
-                SystemClock,
+        Arc::new(
+            GeminiTrainingPlanSupervisorWebhookService::new(
+                TrainingPlanSupervisorService::new(
+                    MongoTrainingPlanSupervisorOperationRepository::new(
+                        mongo_client.clone(),
+                        &mongo_database,
+                    ),
+                    (*settings_service).clone(),
+                    SystemClock,
+                )
+                .with_batch(GeminiBatchClient::new(reqwest::Client::new()))
+                .with_sync_states(external_sync_state_repository.clone()),
+                training_plan_projection_repository.clone(),
+                GeminiBatchClient::new(reqwest::Client::new()),
+                gemini_supervisor_webhook_token.clone(),
             )
-            .with_batch(GeminiBatchClient::new(reqwest::Client::new()))
-            .with_sync_states(external_sync_state_repository.clone()),
-            training_plan_projection_repository.clone(),
-            GeminiBatchClient::new(reqwest::Client::new()),
-            gemini_supervisor_webhook_token.clone(),
-        ));
+            .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+        );
     let race_service = Arc::new(
         RaceService::new(
             authoritative_race_repository.clone(),

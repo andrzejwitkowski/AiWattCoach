@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::domain::external_sync::ExternalSyncState;
+use crate::domain::{
+    external_sync::ExternalSyncState, training_plan_supervisor::TrainingPlanSupervisorStatus,
+};
 
 use crate::domain::planned_workouts::{PlannedWorkout, PlannedWorkoutError};
 
@@ -23,6 +25,7 @@ pub struct CalendarPlannedWorkoutCandidate {
     pub workout: PlannedWorkout,
     pub origin: CalendarPlannedWorkoutOrigin,
     pub sync_keys: Vec<CalendarPlannedSyncKey>,
+    pub supervisor_status: Option<TrainingPlanSupervisorStatus>,
 }
 
 pub trait CalendarPlannedWorkoutSource: Clone + Send + Sync + 'static {

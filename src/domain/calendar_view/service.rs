@@ -180,12 +180,32 @@ where
                     CALENDAR_REBUILD_RANGE_END,
                 )
                 .await?;
-            let sync_by_entry_id = existing_entries
-                .into_iter()
-                .filter_map(|entry| entry.sync.map(|sync| (entry.entry_id, sync)))
-                .collect::<std::collections::HashMap<_, _>>();
+            let (sync_by_entry_id, supervisor_status_by_planned_id) =
+                existing_entries.into_iter().fold(
+                    (
+                        std::collections::HashMap::new(),
+                        std::collections::HashMap::new(),
+                    ),
+                    |(mut sync_by_entry_id, mut supervisor_status_by_planned_id), entry| {
+                        if let Some(sync) = entry.sync {
+                            sync_by_entry_id.insert(entry.entry_id.clone(), sync);
+                        }
+                        if let (Some(planned_workout_id), Some(supervisor_status)) =
+                            (entry.planned_workout_id, entry.supervisor_status)
+                        {
+                            supervisor_status_by_planned_id
+                                .insert(planned_workout_id, supervisor_status);
+                        }
+                        (sync_by_entry_id, supervisor_status_by_planned_id)
+                    },
+                );
             for entry in &mut entries {
                 if entry.entry_kind == CalendarEntryKind::PlannedWorkout {
+                    if let Some(planned_workout_id) = entry.planned_workout_id.as_ref() {
+                        entry.supervisor_status = supervisor_status_by_planned_id
+                            .get(planned_workout_id)
+                            .copied();
+                    }
                     entry.sync = entry
                         .planned_workout_id
                         .as_ref()

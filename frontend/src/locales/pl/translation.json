@@ -210,6 +210,7 @@
     "supervisorAccepted": "AI sprawdziła plan",
     "supervisorReplaced": "AI poprawiła plan",
     "supervisorFailed": "AI nie sprawdziła planu",
+    "supervisorWorkerOnly": "Wygenerowane przez workera",
     "completedWorkout": "Ukończony trening",
     "downloadFit": "Pobierz FIT",
     "downloadingFit": "Pobieranie FIT",

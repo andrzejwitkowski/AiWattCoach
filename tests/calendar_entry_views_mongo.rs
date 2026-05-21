@@ -9,6 +9,7 @@ use aiwattcoach::{
         CalendarEntryKind, CalendarEntrySummary, CalendarEntrySync, CalendarEntryView,
         CalendarEntryViewRepository,
     },
+    domain::training_plan_supervisor::TrainingPlanSupervisorStatus,
     Settings,
 };
 use futures::TryStreamExt;
@@ -75,6 +76,10 @@ async fn calendar_entry_view_repository_lists_mixed_entries_by_date_range() {
 
     assert_eq!(entries.len(), 4);
     assert_eq!(entries[0].entry_id, "planned:1");
+    assert_eq!(
+        entries[0].supervisor_status,
+        Some(TrainingPlanSupervisorStatus::Replaced)
+    );
     assert_eq!(entries[1].entry_id, "completed:1");
     assert_eq!(entries[2].entry_id, "race:1");
     assert_eq!(entries[3].entry_id, "special:1");
@@ -426,5 +431,6 @@ fn sample_entry_for_user(
             linked_intervals_event_id: Some(41),
             sync_status: Some("synced".to_string()),
         }),
+        supervisor_status: Some(TrainingPlanSupervisorStatus::Replaced),
     }
 }
