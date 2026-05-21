@@ -21,6 +21,24 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-20 | user | supervisor prompt must carry full training grammar
+
+- Problem: the Gemini supervisor batch prompt only described the replacement-plan format in a shortened prose form, while the worker prompt already had a fuller canonical grammar covering exact step syntax, ramp syntax, repeat headers, supported durations/targets, and forbidden unsupported syntax. That left the supervisor with weaker syntax guidance than the worker for the same parser-backed output format.
+- Fix: extracted the full training-plan output grammar into a shared `src/adapters/llm/training_plan_prompt_grammar.rs` constant, reused it from both the worker generator and the Gemini supervisor batch prompt, and strengthened the adapter test to assert the supervisor prompt carries the full grammar cues.
+- Prevention: when two LLM prompts target the same backend parser format, keep the grammar text in one shared canonical constant or helper instead of maintaining a shortened parallel description in one path.
+
+### 2026-05-20 | user | training-plan-supervisor replacement date validation and synced skip audit
+
+- Problem: the supervisor replacement apply audit only recorded `skipped_synced_dates` when a synced day was still otherwise eligible for replacement, so a protected first/today day with provider ownership appeared in `skipped_dates` but not in the provider-owned subset. The shifted-date regression fixture also built `2026-05-32`, so parsing failed with the generic 14-day validation before the intended active-window date-match check ran.
+- Fix: changed replacement eligibility to record synced skipped dates independently of the protected-day branch, sorted both replacement and active date lists before comparing the replacement window, and changed the shifted-date test fixture to stay within valid May dates while still shifting the window by one day.
+- Prevention: when one audit field is a subset of another skip list, populate that subset independently from the broader skip-reason ordering. For date-window regressions, keep fixtures on real calendar dates so the test reaches the validation branch it is meant to prove.
+
+### 2026-05-19 | CodeRabbit | PR #239 supervisor batch inline results and replacement safety
+
+- Problem: follow-up review found four remaining supervisor-batch gaps: Gemini batch completion only handled `responsesFile` even though inline batch jobs can return `response.inlinedResponses`; replacement application accepted any 14 parsed days even when the dates were shifted away from the current projection window; the protected day boundary was derived solely from the UTC clock date, which could overwrite the first active local-window day when the clock lagged the projected window; and `FixedSyncStateRepository::upsert` returned a state without persisting it for follow-up reads.
+- Fix: added DTO support for `inlinedResponses` and reused the existing result-line parser when no `responsesFile` is present; added replacement date-sequence validation against the active projected window before applying partial replacement; changed replacement protection to use the later of the clock date and first active projected date; and made the fixed sync-state test repository perform an actual in-memory upsert. Added focused regressions for inline batch results, shifted replacement dates, first-active-day protection, and sync-state upsert persistence.
+- Prevention: when integrating provider batch APIs, cover both file-backed and inline result shapes at the adapter boundary. For LLM-generated replacements, validate not only count and parseability but exact entity identity/date alignment before writing projections. When dates come from local user-facing planning windows, do not rely on raw UTC clock dates alone for mutation safety. Test doubles that implement write ports must either mutate state or fail fast.
+
 ### 2026-05-18 | self (4-loop review) | issue #240 supervisor batch replacement and UI status
 
 - Problem: the supervisor replacement flow initially treated provider-owned days as protected but did not exclude today or past active days from replacement application; skipped days were not fully persisted in the apply audit, so only provider-owned skips were visible; the Gemini batch submit payload had only domain-service coverage and no adapter-level assertion for the structured inline request; and the new calendar `supervisorStatus` field had schema/UI code but no focused frontend regression proving parse and badge rendering stayed aligned.

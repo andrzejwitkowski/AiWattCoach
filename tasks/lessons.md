@@ -140,6 +140,7 @@
 - When one parser reads canonical text produced by another serializer in the same repo, verify structural constructs end to end, not just token-level fields.
 - For repeated workout blocks, add regression tests that assert expanded segment order and total duration so grouped semantics cannot silently collapse back into flat line parsing.
 - If a grouped construct reuses child items parsed by the flat path, preserve child multiplicity too. Outer repeat support is still wrong if inline child repeats are emitted only once per parent iteration.
+- If two LLM paths are expected to emit the same parser-backed workout grammar, do not keep a full grammar in one prompt and a shorthand summary in the other. Extract one canonical grammar string and reuse it so worker and supervisor stay aligned.
 
 ## OpenCode Plugin Wiring
 
@@ -184,6 +185,7 @@
 ## Projection Window Semantics
 
 - If a persisted snapshot exposes `start_date`, `end_date`, and a concrete `days` list, verify whether `start_date` is inclusive before writing bridge readers or tests. Do not silently encode `date > start_date` unless the model explicitly defines `start_date` as an anchor outside the visible plan.
+- When validating that two projected date windows represent the same set of days, normalize both sides the same way before comparing. Also keep shifted-window regression fixtures on valid calendar dates, or the parser may fail early and hide the real alignment bug.
 - When a calendar/read-model row is missing, compare the durable source collection with the first canonical reader that reconstructs domain objects from it before changing refresh or cleanup logic. A missing read-model row can be caused upstream by an over-filtering root adapter, not by the projector itself.
 - Planned-workout rebuild assertions must source sync metadata from `ExternalSyncStateRepository`, not from previously materialized `calendar_view` rows. Existing view sync may still be a fallback for other entry kinds, but planned entries intentionally clear stale view-only sync when authoritative external state is missing.
 

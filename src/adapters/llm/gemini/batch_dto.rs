@@ -65,6 +65,8 @@ pub struct GeminiBatchMetadata {
 pub struct GeminiBatchResponseBody {
     #[serde(rename = "responsesFile")]
     pub responses_file: Option<String>,
+    #[serde(rename = "inlinedResponses")]
+    pub inlined_responses: Option<Vec<GeminiBatchResultLine>>,
 }
 
 #[derive(Deserialize)]

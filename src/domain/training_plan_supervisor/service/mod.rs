@@ -2,8 +2,6 @@ mod completion;
 mod scheduler;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod tests_support;
 mod webhook;
 mod webhook_flow;
 
