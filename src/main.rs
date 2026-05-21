@@ -288,6 +288,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     training_plan_supervisor_operation_repository
         .ensure_indexes()
         .await?;
+    let gemini_http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let gemini_batch_client = GeminiBatchClient::new(gemini_http_client);
     // These repositories are bootstrapped at startup so their durable collections
     // have indexes in place before background sync workflows start using them.
     let external_observation_repository =
@@ -655,7 +660,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 (*settings_service).clone(),
                 SystemClock,
             )
-            .with_batch(GeminiBatchClient::new(reqwest::Client::new()))
+            .with_batch(gemini_batch_client.clone())
             .with_sync_states(external_sync_state_repository.clone()),
         )
         .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
@@ -666,21 +671,24 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         UuidIdGenerator,
     ));
     let training_plan_supervisor_webhook_service: Arc<dyn TrainingPlanSupervisorWebhookUseCases> =
-        Arc::new(GeminiTrainingPlanSupervisorWebhookService::new(
-            TrainingPlanSupervisorService::new(
-                MongoTrainingPlanSupervisorOperationRepository::new(
-                    mongo_client.clone(),
-                    &mongo_database,
-                ),
-                (*settings_service).clone(),
-                SystemClock,
+        Arc::new(
+            GeminiTrainingPlanSupervisorWebhookService::new(
+                TrainingPlanSupervisorService::new(
+                    MongoTrainingPlanSupervisorOperationRepository::new(
+                        mongo_client.clone(),
+                        &mongo_database,
+                    ),
+                    (*settings_service).clone(),
+                    SystemClock,
+                )
+                .with_batch(gemini_batch_client.clone())
+                .with_sync_states(external_sync_state_repository.clone()),
+                training_plan_projection_repository.clone(),
+                gemini_batch_client,
+                gemini_supervisor_webhook_token.clone(),
             )
-            .with_batch(GeminiBatchClient::new(reqwest::Client::new()))
-            .with_sync_states(external_sync_state_repository.clone()),
-            training_plan_projection_repository.clone(),
-            GeminiBatchClient::new(reqwest::Client::new()),
-            gemini_supervisor_webhook_token.clone(),
-        ));
+            .with_calendar_view_refresh(calendar_entry_view_refresh_service.clone()),
+        );
     let race_service = Arc::new(
         RaceService::new(
             authoritative_race_repository.clone(),

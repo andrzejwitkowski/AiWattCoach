@@ -27,8 +27,8 @@ pub use planned_candidates::{
 };
 pub use ports::{BoxFuture, CalendarEntryViewRepository};
 pub use projection::{
-    project_completed_workout_entry, project_planned_workout_entry, project_race_entry,
-    project_special_day_entry,
+    project_completed_workout_entry, project_planned_workout_entry,
+    project_planned_workout_entry_with_supervisor, project_race_entry, project_special_day_entry,
 };
 pub use rebuild::{merge_workout_entries, rebuild_calendar_entries};
 pub use refresh::{

@@ -63,6 +63,45 @@ where
             repository.upsert(completed).await
         })
     }
+
+    pub fn complete_review_and_refresh<Projections, Refresh>(
+        &self,
+        projections: Projections,
+        refresh: Refresh,
+        worker_operation_key: &str,
+        review: TrainingPlanSupervisorReview,
+    ) -> BoxFuture<Result<TrainingPlanSupervisorOperation, TrainingPlanError>>
+    where
+        Projections: TrainingPlanProjectionRepository + Clone,
+        Refresh: crate::domain::calendar_view::CalendarEntryViewRefreshPort + Clone,
+    {
+        let service = self.clone();
+        let worker_operation_key = worker_operation_key.to_string();
+        Box::pin(async move {
+            let completed = service
+                .complete_review(projections.clone(), &worker_operation_key, review)
+                .await?;
+            let active_days = projections
+                .find_active_by_user_id_and_operation_key(
+                    &completed.user_id,
+                    &completed.worker_operation_key,
+                )
+                .await?;
+            if let Some((oldest, newest)) = active_day_range(&active_days) {
+                refresh
+                    .refresh_range_for_user(&completed.user_id, &oldest, &newest)
+                    .await
+                    .map_err(|error| TrainingPlanError::Repository(error.to_string()))?;
+            }
+            Ok(completed)
+        })
+    }
+}
+
+fn active_day_range(active_days: &[TrainingPlanProjectedDay]) -> Option<(String, String)> {
+    let oldest = active_days.iter().map(|day| day.date.as_str()).min()?;
+    let newest = active_days.iter().map(|day| day.date.as_str()).max()?;
+    Some((oldest.to_string(), newest.to_string()))
 }
 
 async fn apply_replacement_review<Projections, SyncStates>(

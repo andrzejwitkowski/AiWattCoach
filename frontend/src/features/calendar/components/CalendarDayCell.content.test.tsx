@@ -416,7 +416,12 @@ describe('CalendarDayCell content', () => {
     expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Synced');
   });
 
-  it('shows an independent supervisor status badge for predicted planned workouts', () => {
+  it.each([
+    ['pending', 'AI review pending'],
+    ['accepted', 'AI reviewed'],
+    ['replaced', 'AI adjusted'],
+    ['failed', 'AI review failed'],
+  ] as const)('shows an independent %s supervisor status badge for predicted planned workouts', (supervisorStatus, label) => {
     const day = makeCalendarDay({
       date: new Date(2026, 3, 17),
       dateKey: '2026-04-17',
@@ -431,7 +436,7 @@ describe('CalendarDayCell content', () => {
             operationKey: 'training-plan:user-1:w1:1',
             date: '2026-04-17',
             sourceWorkoutId: 'w1',
-            supervisorStatus: 'replaced',
+            supervisorStatus,
           },
           eventDefinition: {
             summary: {
@@ -447,8 +452,41 @@ describe('CalendarDayCell content', () => {
     const dayCell = container.firstElementChild as HTMLElement;
 
     expect(within(dayCell).getByTestId('planned-sync-status')).toHaveAttribute('aria-label', 'Synced');
-    expect(within(dayCell).getByTestId('supervisor-status')).toHaveAttribute('aria-label', 'AI adjusted');
-    expect(within(dayCell).getByText('AI adjusted')).toBeInTheDocument();
+    expect(within(dayCell).getByTestId('supervisor-status')).toHaveAttribute('aria-label', label);
+    expect(within(dayCell).getByText(label)).toBeInTheDocument();
+  });
+
+  it('shows worker-generated state when a predicted planned workout has no supervisor status', () => {
+    const day = makeCalendarDay({
+      date: new Date(2026, 3, 17),
+      dateKey: '2026-04-17',
+      events: [
+        makeEvent({
+          id: 9072,
+          name: 'Worker Session',
+          plannedSource: 'predicted',
+          syncStatus: 'unsynced',
+          projectedWorkout: {
+            projectedWorkoutId: 'training-plan:user-1:w1:1:2026-04-17',
+            operationKey: 'training-plan:user-1:w1:1',
+            date: '2026-04-17',
+            sourceWorkoutId: 'w1',
+          },
+          eventDefinition: {
+            summary: {
+              totalDurationSeconds: 1800,
+              estimatedTrainingStressScore: 12,
+            },
+          },
+        }),
+      ],
+    });
+
+    const { container } = render(<CalendarDayCell day={day} isToday={false} />);
+    const dayCell = container.firstElementChild as HTMLElement;
+
+    expect(within(dayCell).queryByTestId('supervisor-status')).not.toBeInTheDocument();
+    expect(within(dayCell).getByText('Worker generated')).toBeInTheDocument();
   });
 
   it('does not show sync visuals for non-predicted planned workouts', () => {

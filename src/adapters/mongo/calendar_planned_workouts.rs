@@ -17,6 +17,7 @@ use crate::domain::planned_workouts::{
     PlannedWorkoutRepeat, PlannedWorkoutStep, PlannedWorkoutStepKind, PlannedWorkoutTarget,
     PlannedWorkoutText,
 };
+use crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus;
 
 #[derive(Clone)]
 pub struct MongoCalendarPlannedWorkoutSource {
@@ -35,6 +36,8 @@ struct ProjectedPlannedWorkoutDocument {
     rest_day: bool,
     #[serde(default)]
     rest_day_reason: Option<String>,
+    #[serde(default)]
+    supervisor_status: Option<String>,
     workout: Option<PlannedWorkoutDocument>,
 }
 
@@ -366,6 +369,12 @@ async fn load_projected_candidates(
         })
         .map(|document| {
             Ok(CalendarPlannedWorkoutCandidate {
+                supervisor_status: document
+                    .supervisor_status
+                    .as_deref()
+                    .map(TrainingPlanSupervisorStatus::try_from)
+                    .transpose()
+                    .map_err(PlannedWorkoutError::Repository)?,
                 workout: map_projected_document_to_domain(document)?,
                 origin: CalendarPlannedWorkoutOrigin::Projected,
                 sync_keys: Vec::new(),
@@ -398,6 +407,7 @@ async fn load_imported_candidates(
                 workout: map_imported_document_to_domain(document)?,
                 origin: CalendarPlannedWorkoutOrigin::Imported,
                 sync_keys: Vec::new(),
+                supervisor_status: None,
             })
         })
         .collect()

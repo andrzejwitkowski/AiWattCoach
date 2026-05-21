@@ -1,4 +1,5 @@
 use crate::domain::{
+    calendar_view::CalendarEntryViewRefreshPort,
     external_sync::ExternalSyncStateRepository,
     identity::Clock,
     settings::UserSettingsUseCases,
@@ -28,15 +29,17 @@ where
     ServiceBatch: TrainingPlanSupervisorBatchPort + Clone,
     SyncStates: ExternalSyncStateRepository + Clone,
 {
-    pub(super) fn handle_gemini_batch_webhook<Projections, Batch>(
+    pub(super) fn handle_gemini_batch_webhook<Projections, Batch, Refresh>(
         &self,
         projections: Projections,
         batch: Batch,
+        refresh: Refresh,
         input: GeminiBatchWebhookInput,
     ) -> BoxFuture<Result<GeminiSupervisorWebhookOutcome, TrainingPlanError>>
     where
         Projections: TrainingPlanProjectionRepository + Clone,
         Batch: TrainingPlanSupervisorBatchPort + Clone,
+        Refresh: CalendarEntryViewRefreshPort + Clone,
     {
         let settings = self.settings.clone();
         let service = self.clone();
@@ -82,7 +85,12 @@ where
                 .download_result(&gemini_api_key, &input.batch_name)
                 .await?;
             let completed = service
-                .complete_review(projections, &input.worker_operation_key, review)
+                .complete_review_and_refresh(
+                    projections,
+                    refresh,
+                    &input.worker_operation_key,
+                    review,
+                )
                 .await?;
             Ok(GeminiSupervisorWebhookOutcome::Accepted(Box::new(
                 completed,

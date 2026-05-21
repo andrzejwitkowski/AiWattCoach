@@ -277,6 +277,7 @@ async fn sync_planned_workout_to_intervals_uses_local_calendar_override_when_ret
                 linked_intervals_event_id: None,
                 sync_status: Some("failed".to_string()),
             }),
+            supervisor_status: None,
         })
         .await
         .unwrap();
@@ -1862,6 +1863,9 @@ async fn list_events_reads_from_calendar_entry_view_only() {
                 linked_intervals_event_id: Some(77),
                 sync_status: Some("synced".to_string()),
             }),
+            supervisor_status: Some(
+                crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus::Accepted,
+            ),
         })
         .await
         .unwrap();
@@ -1900,6 +1904,13 @@ async fn list_events_reads_from_calendar_entry_view_only() {
         events[0].raw_workout_doc.as_deref(),
         Some("Build Session\n- 60m 70%")
     );
+    assert_eq!(
+        events[0]
+            .projected_workout
+            .as_ref()
+            .and_then(|projected| projected.supervisor_status),
+        Some(crate::domain::training_plan_supervisor::TrainingPlanSupervisorStatus::Accepted)
+    );
 }
 
 #[tokio::test]
@@ -1925,6 +1936,7 @@ async fn list_events_skips_completed_entries_even_with_planned_backlink() {
             race: None,
             summary: None,
             sync: None,
+            supervisor_status: None,
         })
         .await
         .unwrap();
@@ -1988,6 +2000,7 @@ async fn list_events_hydrates_actual_workout_from_linked_completed_workout() {
                 linked_intervals_event_id: Some(77),
                 sync_status: Some("synced".to_string()),
             }),
+            supervisor_status: None,
         })
         .await
         .unwrap();

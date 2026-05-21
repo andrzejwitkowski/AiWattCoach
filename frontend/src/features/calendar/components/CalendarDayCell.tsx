@@ -151,6 +151,7 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
   const isSelectable = hasTraining && Boolean(onSelect);
   const plannedSyncVisual = isPredictedPlannedOnly ? getPlannedSyncVisual(plannedSyncStatus, t) : null;
   const supervisorVisual = supervisorStatus ? getSupervisorVisual(supervisorStatus, t) : null;
+  const workerOnlyLabel = isPredictedPlannedOnly && !supervisorStatus ? t('calendar.supervisorWorkerOnly') : null;
   const racePriorityVisual = raceLabel ? getRacePriorityVisual(raceLabel.payload.priority) : null;
   const matchedPlanBadgeLabel = hasMatchedPlannedWorkout ? t('calendar.planMatched') : null;
 
@@ -262,6 +263,11 @@ export function CalendarDayCell({ day, isToday, onSelect }: CalendarDayCellProps
               {supervisorVisual ? (
                 <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${supervisorVisual.textClass}`}>
                   {supervisorVisual.label}
+                </p>
+              ) : null}
+              {workerOnlyLabel ? (
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                  {workerOnlyLabel}
                 </p>
               ) : null}
             </div>

@@ -12,8 +12,8 @@ use super::{
     support::{
         accepted_review, seed_active_pending_day, seed_pending_operation,
         seed_superseded_pending_day, FailingOnceProjectionRepository, FixedClock,
-        InMemorySupervisorOperationRepository, RecordingProjectionRepository,
-        StubUserSettingsService,
+        InMemorySupervisorOperationRepository, RecordingCalendarRefresh,
+        RecordingProjectionRepository, StubUserSettingsService,
     },
 };
 
@@ -169,4 +169,34 @@ async fn supervisor_service_rejects_conflicting_second_terminal_review() {
             "training plan supervisor review already completed with status accepted".to_string()
         )
     );
+}
+
+#[tokio::test]
+async fn supervisor_service_refreshes_calendar_view_after_completed_review() {
+    let repository = InMemorySupervisorOperationRepository::default();
+    seed_pending_operation(&repository).await;
+    let projections = RecordingProjectionRepository::default();
+    seed_active_pending_day(&projections, "2026-05-18");
+    seed_active_pending_day(&projections, "2026-05-20");
+    let refresh = RecordingCalendarRefresh::default();
+    let service = TrainingPlanSupervisorService::new(
+        repository,
+        StubUserSettingsService::enabled("gemini-2.5-pro"),
+        FixedClock {
+            now_epoch_seconds: 1_700_000_200,
+        },
+    );
+
+    service
+        .complete_review_and_refresh(
+            projections,
+            refresh.clone(),
+            "worker-op-1",
+            accepted_review(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(refresh.calls().len(), 1);
+    assert_eq!(refresh.calls()[0].user_id, "user-1");
 }

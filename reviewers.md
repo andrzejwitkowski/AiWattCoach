@@ -21,6 +21,12 @@ Read this file before planning and before implementation.
 
 ## Entries
 
+### 2026-05-21 | Copilot + self (4-loop review) | `src/main.rs` Gemini batch client wiring
+
+- Problem: supervisor startup wiring instantiated multiple `GeminiBatchClient::new(reqwest::Client::new())` values for the same Gemini batch flow, so direct and webhook paths did not share transport settings and had no explicit request/connect timeout. The first follow-up fix also used `expect(...)` when building the shared client, which could panic startup instead of returning an honest initialization error.
+- Fix: built one shared `reqwest::Client` with explicit overall/connect timeouts, wrapped it once in `GeminiBatchClient`, cloned that adapter into both supervisor call sites, and changed client construction to propagate startup failure with `?` instead of panicking.
+- Prevention: when the composition root wires the same provider adapter into multiple services, build one explicitly configured HTTP client and clone the adapter; in startup code prefer propagating construction failures over `expect(...)`.
+
 ### 2026-05-20 | user | supervisor prompt must carry full training grammar
 
 - Problem: the Gemini supervisor batch prompt only described the replacement-plan format in a shortened prose form, while the worker prompt already had a fuller canonical grammar covering exact step syntax, ramp syntax, repeat headers, supported durations/targets, and forbidden unsupported syntax. That left the supervisor with weaker syntax guidance than the worker for the same parser-backed output format.

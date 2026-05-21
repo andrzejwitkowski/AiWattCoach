@@ -1,4 +1,5 @@
 mod batch;
+mod calendar_refresh;
 mod clock;
 mod fixtures;
 mod operation_repository;
@@ -7,6 +8,7 @@ mod settings;
 mod sync_states;
 
 pub(super) use batch::RecordingBatchPort;
+pub(super) use calendar_refresh::RecordingCalendarRefresh;
 pub(super) use clock::FixedClock;
 pub(super) use fixtures::{
     accepted_review, planned_workout_entity, replacement_plan, replacement_plan_from,
